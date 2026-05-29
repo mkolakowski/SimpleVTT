@@ -5447,6 +5447,7 @@
             'metamagic-empowered-spell',
             'arcane-recovery',
             'font-of-magic',
+            'class-feature',
         ]);
         if (d.cast_id && _REFUNDABLE_FEATURE_SOURCES.has(d.source)) {
             featurePills.push(

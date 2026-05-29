@@ -82,8 +82,17 @@ async def test_cunning_action_hide(gm_client, gm_ws, roster):
 
 async def test_channel_divinity_turn_undead(gm_client, gm_ws, roster):
     """Channel Divinity → Turn Undead is an action (not bonus).
-    Tests that the slot resolution per the curated table is correct."""
+    Tests that the slot resolution per the curated table is correct.
+
+    v2.97.7 — /use_feature now atomically decrements the
+    channel-divinity counter. Long-rest first so the counter is full
+    regardless of prior test order.
+    """
     tavik = roster["Brother Tavik Stonebrow"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/rest",
+        json={"type": "long"},
+    )
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_feature",
         json={
@@ -109,6 +118,10 @@ async def test_channel_divinity_sacred_weapon(gm_client, gm_ws, roster):
     options); /use_feature accepts it without subclass filtering
     (filter is client-side in the picker)."""
     caelan = roster["Sir Caelan Lightbringer"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+        json={"type": "long"},
+    )
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_feature",
         json={
@@ -128,6 +141,10 @@ async def test_channel_divinity_sacred_weapon(gm_client, gm_ws, roster):
 async def test_channel_divinity_turn_the_unholy(gm_client, gm_ws, roster):
     """The other Devotion option. Same shape as Sacred Weapon."""
     caelan = roster["Sir Caelan Lightbringer"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+        json={"type": "long"},
+    )
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_feature",
         json={
@@ -150,6 +167,10 @@ async def test_channel_divinity_preserve_life(gm_client, gm_ws, roster):
     server accepts the option regardless. Subclass filtering is the
     client's responsibility."""
     tavik = roster["Brother Tavik Stonebrow"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/rest",
+        json={"type": "long"},
+    )
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_feature",
         json={

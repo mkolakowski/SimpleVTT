@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.7] - 2026-05-29 — "Tithe and Refund"
+
+**Schema version:** 64
+**Commit summary:** **`/use_feature` learns to decrement curated resources atomically + refund them on Undo.** Channel Divinity (8 options across Cleric + Paladin) now spends its `channel-divinity` counter server-side via `/use_feature` instead of the pre-v2.97.7 split path where the JS resource pill PATCHed the counter and the endpoint just announced. The catalog (`_FEATURE_ECONOMY`) gains a `resource_key + amount` pair on entries that opt in, so any future `/use_feature`-routed feature with a counter can join with one line. Each spend stamps a `resource_spend` undo log entry under a fresh `cast_id`; the v2.96.0 ↶ Undo pill picks it up via the `'class-feature'` slug added to `_REFUNDABLE_FEATURE_SOURCES`.
+**Description:** Four edits.
+**(1)** `_FEATURE_ECONOMY["channel-divinity"]` — adds `"resource_key": "channel-divinity"` and `"amount": 1`. New helper `_feature_economy_resource(feature_key, option_key)` resolves the pair, with option-level override semantics matching the existing `_feature_economy_slot` / `_feature_economy_desc` helpers (option dict wins; parent fallback). Features without a `resource_key` return `(None, 0)` and skip the new path entirely — full backward compat for Cunning Action, Divine Sense, Cleansing Touch, Indomitable, Stroke of Luck, Font of Magic, etc.
+**(2)** `/use_feature` — after the existing slot gate passes, look up `(resource_key, amount)` via the new helper. If a key is present:
+  - 409 `missing_resource` if the sheet has no matching `sheet["resources"][i]` row.
+  - 409 `not_enough_uses` if `current < amount`. This is GM-and-player alike (no override bypass) — the action chip is a soft limit, but the resource counter is hard: you can't channel divinity you don't have.
+  - Decrement `current` by `amount`, persist, broadcast `resource_update`.
+  - Mint `cast_id`, stamp `_log_damage_entry(cast_id, {"kind": "resource_spend", ...})`, add `cast_id + remaining + max` to the `feature_used` broadcast + return body.
+**(3)** `sheet_dnd5e.html` Channel Divinity picker — removed the now-duplicate client-side `await postUse(k, -1, false)` decrement. Pre-v2.97.7 the JS PATCHed the counter; that's now the server's job (`resource_update` re-pips the panel). Leaving it in would double-decrement.
+**(4)** `app/static/tabletop.js::_REFUNDABLE_FEATURE_SOURCES` — adds `'class-feature'`. The Undo pill renders only when `d.cast_id` is set on the `feature_used` payload, so this is safe for non-refundable class features too (they don't carry a `cast_id`).
+
+### Added
+- `resource_key` + `amount` on `_FEATURE_ECONOMY["channel-divinity"]` (parent feature; both Cleric and Paladin options share the same 1-use cost so no option override needed).
+- `_feature_economy_resource()` helper resolving (feature, option) → (resource_key, amount).
+- `cast_id` field on `/use_feature`'s `feature_used` broadcast + response when the feature has a curated resource_key.
+- `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_channel_divinity` covers the round-trip — long-rest Tavik, POST `/use_feature channel-divinity/turn-undead`, capture cast_id, undo, assert the CD counter refunded.
+
+### Changed
+- The four `test_use_feature.py` Channel Divinity tests (`turn_undead`, `sacred_weapon`, `turn_the_unholy`, `preserve_life`) now long-rest the relevant character before posting `/use_feature`. Without the long-rest, prior tests in the suite can deplete the CD counter and the new server-side gate fires 409 `not_enough_uses`.
+
+### Notes
+- **PATCH bump** — new validation surface (`409 not_enough_uses` / `409 missing_resource`) but the response shape is a strict superset (existing fields unchanged; new fields opt-in). The contract change is the now-server-side decrement, which the v2.97.7 client correctly skips on the JS side.
+- **Server-side decrement is the win.** Pre-v2.97.7, a player who hit the endpoint directly (curl, malicious client, or a bug in the picker) could announce Channel Divinity without spending a use. The new path closes that gap — every `/use_feature` call that names `channel-divinity` decrements the counter atomically with the announce, or returns 409.
+- The new shape extends naturally: future `_FEATURE_ECONOMY` entries with counters (Divine Sense, Cleansing Touch, Stroke of Luck, Cunning Action options if a future class spends a counter per use, etc.) can opt in by adding `resource_key + amount` to their entry. No further server code changes needed.
+- Audit remaining: item charges via `/use_item` (different resource shape — charges live on inventory entries, not `sheet["resources"]`). Stunning Strike is still in the queue (needs a `feature_used` broadcast first; the v2.97.2 note still stands).
+
+---
+
 ## [2.97.6] - 2026-05-29 — "Trading Posts"
 
 **Schema version:** 64

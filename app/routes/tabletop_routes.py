@@ -138,6 +138,14 @@ _FEATURE_ECONOMY: dict[str, dict] = {
     },
     "channel-divinity": {
         "slot": "action",
+        # v2.97.7: server-side resource decrement. /use_feature looks
+        # up resource_key + amount from this table and atomically
+        # decrements the matching sheet["resources"][i] AND stamps a
+        # resource_spend undo log entry, so the v2.96.0 ↶ Undo pill
+        # works for Channel Divinity (all 6 options share the 1-use
+        # cost, so the cost lives on the parent feature, not options).
+        "resource_key": "channel-divinity",
+        "amount": 1,
         "desc": "Channel divine energy to fuel a class- and subclass-specific effect.",
         # v2.14.3: per-option entries cover both Cleric + Paladin
         # options under the same resource key. The picker filters by
@@ -263,6 +271,34 @@ def _feature_economy_slot(feature_key: str, option_key: str | None) -> str | Non
         if opt and opt.get("slot"):
             return opt["slot"]
     return parent_slot
+
+
+def _feature_economy_resource(
+    feature_key: str, option_key: str | None,
+) -> tuple[str | None, int]:
+    """Resolve (feature, option) to a ``(resource_key, amount)`` pair.
+
+    v2.97.7 — used by /use_feature to drive server-side resource
+    decrement for features whose curated catalog entry carries a
+    ``resource_key`` + ``amount``. Options can override the parent's
+    pair (a future Metamagic spread would put per-option costs here);
+    if the option doesn't carry a resource_key the parent's wins.
+    Returns ``(None, 0)`` when the feature has no curated resource —
+    the endpoint then skips the decrement leg and matches the
+    pre-v2.97.7 announce-only behavior.
+    """
+    feat = _FEATURE_ECONOMY.get((feature_key or "").lower())
+    if not feat:
+        return (None, 0)
+    parent_key = feat.get("resource_key")
+    parent_amount = int(feat.get("amount") or 0)
+    if option_key:
+        opt = (feat.get("options") or {}).get(option_key.lower())
+        if opt and opt.get("resource_key"):
+            return (opt["resource_key"], int(opt.get("amount") or parent_amount or 1))
+    if parent_key:
+        return (parent_key, parent_amount or 1)
+    return (None, 0)
 
 
 def _feature_economy_desc(feature_key: str, option_key: str | None) -> str:
@@ -13014,6 +13050,71 @@ async def use_feature(
             "strict": strict,
         })
 
+    # v2.97.7: server-side resource decrement for curated features.
+    # When the catalog carries a ``resource_key + amount`` (Channel
+    # Divinity today; future _FEATURE_ECONOMY entries can opt in by
+    # adding the same pair), validate the resource has uses available,
+    # decrement, and stamp a resource_spend undo log entry. The
+    # ``cast_id`` minted here rides the feature_used broadcast so the
+    # v2.96.0 ↶ Undo pill renders on the roll-log card.
+    resource_key, amount = _feature_economy_resource(feature_key, option_key)
+    feature_cast_id: str | None = None
+    res_remaining = 0
+    res_max = 0
+    if resource_key and amount > 0:
+        sheet = dict(char.sheet or {})
+        resources = list(sheet.get("resources") or [])
+        idx = next(
+            (i for i, r in enumerate(resources)
+             if (r.get("key") or "").lower() == resource_key),
+            -1,
+        )
+        if idx < 0:
+            return JSONResponse(status_code=409, content={
+                "error": "missing_resource",
+                "resource_key": resource_key,
+                "label": feature_label,
+            })
+        res_row = dict(resources[idx])
+        res_cur = int(res_row.get("current") or 0)
+        res_max = int(res_row.get("max") or 0)
+        if res_cur < amount:
+            return JSONResponse(status_code=409, content={
+                "error": "not_enough_uses",
+                "resource_key": resource_key,
+                "required": amount,
+                "have": res_cur,
+                "label": feature_label,
+            })
+        res_row["current"] = res_cur - amount
+        resources[idx] = res_row
+        sheet["resources"] = resources
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
+        res_remaining = res_cur - amount
+
+        feature_cast_id = uuid.uuid4().hex[:12]
+        _log_damage_entry(feature_cast_id, {
+            "kind": "resource_spend",
+            "campaign_id": campaign_id,
+            "character_id": char.id,
+            "resource_key": resource_key,
+            "amount": amount,
+            "source_label": feature_label,
+        })
+
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": resource_key,
+                "current": res_remaining,
+                "max": res_max,
+            },
+        })
+
     # Resolve display info for the broadcast — same pattern as cast_spell.
     membership = (
         db.query(CampaignMembership)
@@ -13027,20 +13128,23 @@ async def use_feature(
     )
     caster_color = char.color or player_color
 
+    feature_data = {
+        "character_id": char.id,
+        "character_name": char.name,
+        "user_color": caster_color,
+        "feature_name": feature_label,
+        "feature_desc": feature_desc,
+        "source": "class-feature",
+        "remaining": res_remaining,
+        "max": res_max,
+        "over_budget": was_used,
+        "over_budget_slot": slot if was_used else "",
+    }
+    if feature_cast_id:
+        feature_data["cast_id"] = feature_cast_id
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
-        "data": {
-            "character_id": char.id,
-            "character_name": char.name,
-            "user_color": caster_color,
-            "feature_name": feature_label,
-            "feature_desc": feature_desc,
-            "source": "class-feature",
-            "remaining": 0,
-            "max": 0,
-            "over_budget": was_used,
-            "over_budget_slot": slot if was_used else "",
-        },
+        "data": feature_data,
     })
 
     # slot == "free" means the feature doesn't consume an economy slot
@@ -13048,7 +13152,12 @@ async def use_feature(
     # circuits on anything that isn't action/bonus/reaction.
     await _mark_battle_economy(campaign_id, char.id, slot)
 
-    return {"ok": True, "slot": slot, "feature_label": feature_label, "over_budget": was_used}
+    result = {"ok": True, "slot": slot, "feature_label": feature_label, "over_budget": was_used}
+    if feature_cast_id:
+        result["cast_id"] = feature_cast_id
+        result["resource_remaining"] = res_remaining
+        result["resource_max"] = res_max
+    return result
 
 
 # ----------- API: use a consumable inventory item (Phase 4 polish) -----------

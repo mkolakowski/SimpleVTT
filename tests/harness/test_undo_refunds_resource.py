@@ -169,6 +169,55 @@ async def test_undo_refunds_arcane_recovery(gm_client, gm_ws, roster):
     )
 
 
+async def test_undo_refunds_channel_divinity(gm_client, gm_ws, roster):
+    """v2.97.7 — Channel Divinity routes through /use_feature with a
+    new resource_key lookup in _FEATURE_ECONOMY. The endpoint decrements
+    the channel-divinity counter, stamps a resource_spend log entry,
+    and surfaces cast_id on the feature_used broadcast. Undo refunds
+    the use.
+    """
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _long_rest(gm_client, tavik["id"])
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": tavik["id"],
+            "feature_key": "channel-divinity",
+            "option_key": "turn-undead",
+            "label": "Channel Divinity",
+            "override": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_data = cast.json()
+    cast_id = cast_data.get("cast_id")
+    assert cast_id, (
+        f"/use_feature response missing cast_id: {cast_data}"
+    )
+    post_cast_remaining = int(cast_data["resource_remaining"])
+
+    msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    assert msg["data"].get("cast_id") == cast_id
+
+    # Re-mark so wait_for catches only the refund's resource_update.
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    resource_msg = await gm_ws.wait_for("resource_update", timeout=3.0)
+    rd = resource_msg["data"]
+    assert rd["character_id"] == tavik["id"]
+    assert rd["key"] == "channel-divinity"
+    assert rd["current"] == post_cast_remaining + 1, (
+        f"CD use not refunded: post-cast={post_cast_remaining}, "
+        f"post-undo={rd['current']} (expected {post_cast_remaining + 1})"
+    )
+
+
 async def test_undo_refunds_font_of_magic_to_points(gm_client, gm_ws, roster):
     """v2.97.6 — Font of Magic to_points spends a spell slot and gains
     sorcery points. Undo refunds both legs: ``spell_slot_spend`` bumps

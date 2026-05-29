@@ -7591,13 +7591,15 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     subtitle,
                     options: filtered,
                     onPick: async (chosen) => {
-                        // Decrement the counter first (matches the wild-
-                        // shape flow: counter goes down even if the
-                        // follow-up endpoint hiccups, since the player
-                        // committed to spending the CD use).
-                        if (cdRow && (parseInt(cdRow.max, 10) || 0) > 0) {
-                            await postUse(k, -1, false);  // no announce — /use_feature handles it
-                        }
+                        // v2.97.7: server-side /use_feature now atomically
+                        // decrements the channel-divinity counter via the
+                        // _FEATURE_ECONOMY resource_key+amount lookup AND
+                        // stamps a resource_spend undo log entry. The
+                        // resource_update broadcast that fires from the
+                        // endpoint re-pips the resource panel; no
+                        // client-side PATCH needed (pre-v2.97.7 we did an
+                        // extra `await postUse(k, -1, false)` here that
+                        // would now cause a double-decrement).
                         if (typeof _CAMPAIGN_ID === 'undefined' || !_CAMPAIGN_ID) return;
                         try {
                             const resp = await fetch(`/api/campaign/${_CAMPAIGN_ID}/use_feature`, {
