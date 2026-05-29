@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.15] - 2026-05-29 — "The Variant Page"
+
+**Schema version:** 64
+**Commit summary:** **Extends the v2.97.14 baseline suite with four card-state variants.** The roll-log family carries three visibility tints (public / gm-and-roller / gm-only) on `.roll-card`, and the weapon-attack family carries three outcome tints (hit / miss / crit) on the chip pills. v2.97.14 baselined only the public + hit cases; this commit fills in the GM-only + GM-and-roller visibility variants of `.roll-card` and the miss + crit outcome variants of `.weapon-atk-card`. Now any future CSS regression to a visibility tint or an attack outcome chip fails the harness on the variant baseline before merge.
+
+### Added
+- `tests/harness_ui/__snapshots__/roll_card_gm_only.png` (~26 KB) — `.roll-card.vis-gm-only` with the red-tinted total column + red "GM only" badge.
+- `tests/harness_ui/__snapshots__/roll_card_gm_and_roller.png` (~26 KB) — `.roll-card.vis-gm-roller` with the ochre-tinted total column + ochre "GM + you" badge.
+- `tests/harness_ui/__snapshots__/weapon_attack_card_miss.png` (~28 KB) — `.weapon-atk-card` with a `.result-pill.chip-miss` red-bordered Miss pill (no damage, no Undo).
+- `tests/harness_ui/__snapshots__/weapon_attack_card_crit.png` (~33 KB) — `.weapon-atk-card` with `.chip-crit` gold-bordered Crit pill + the doubled damage pill + the Undo button.
+- `tests/harness_ui/test_visual_roll_log_cards.py::_CARD_FIXTURES` — four new HTML fixtures (`roll_card_gm_only`, `roll_card_gm_and_roller`, `weapon_attack_card_miss`, `weapon_attack_card_crit`); the existing parametrized test pattern picks them up automatically.
+
+### Notes
+- **PATCH bump** — test data only; no contract / schema / production-code change.
+- Total visual coverage: **9 baseline snapshots** across the four roll-log card types and their major state variants (spell-cast collapsed/expanded, basic roll public/GM-only/GM+roller, weapon-attack hit/miss/crit, feature-used with Undo).
+- Same local-only constraint as v2.97.13. CI integration still filed for when baselines can be re-captured from a Linux container.
+
+---
+
 ## [2.97.14] - 2026-05-29 — "The Card Catalogue"
 
 **Schema version:** 64

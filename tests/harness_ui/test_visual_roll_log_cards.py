@@ -99,10 +99,116 @@ _FEATURE_USED_CARD_HTML = """
 """
 
 
+# v2.97.15 variants — visibility-tinted roll cards + attack-outcome variants.
+# Same DOM shape as the base versions; the visual difference is which
+# CSS class lights up the total column / header / chips.
+
+_ROLL_CARD_GM_ONLY_HTML = """
+<li>
+  <div class="roll-card vis-gm-only">
+    <div class="roll-card-total-col">
+      <span class="roll-card-total">7</span>
+    </div>
+    <div class="roll-card-right">
+      <div class="roll-card-header">
+        <div class="roll-card-avatar">🎲</div>
+        <span class="roll-card-user">Brother Tavik Stonebrow</span>
+        <span class="roll-card-badge">GM only</span>
+        <span class="roll-card-time">10:42 AM</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="roll-card-note">Insight (private)</div>
+        <div class="result-pills">
+          <span class="result-pill">🎲 1d20+4 → (3)+4 = 7</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</li>
+"""
+
+
+_ROLL_CARD_GM_AND_ROLLER_HTML = """
+<li>
+  <div class="roll-card vis-gm-roller">
+    <div class="roll-card-total-col">
+      <span class="roll-card-total">14</span>
+    </div>
+    <div class="roll-card-right">
+      <div class="roll-card-header">
+        <div class="roll-card-avatar">🎲</div>
+        <span class="roll-card-user">Pip Quickfingers</span>
+        <span class="roll-card-badge">GM + you</span>
+        <span class="roll-card-time">10:42 AM</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="roll-card-note">Perception</div>
+        <div class="result-pills">
+          <span class="result-pill">🎲 1d20+5 → (9)+5 = 14</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</li>
+"""
+
+
+_WEAPON_ATTACK_CARD_MISS_HTML = """
+<li data-attack-id="visual-test-miss">
+  <div class="spell-cast-card weapon-atk-card">
+    <div class="roll-card-header">
+      <div class="roll-card-avatar">🪄</div>
+      <span class="roll-card-user">Garrik Ironside</span>
+      <span class="spell-cast-slot">⚔ Attack</span>
+      <span class="roll-card-time">10:42 AM</span>
+    </div>
+    <div class="spell-cast-body">
+      <div class="spell-cast-name-row">
+        <span class="spell-cast-name">🗡 Greatsword</span>
+        <span class="spell-cast-meta-inline">· slashing</span>
+      </div>
+      <div class="result-pills">
+        <span class="result-pill chip-miss">✗ Miss (12 vs AC 15)</span>
+      </div>
+    </div>
+  </div>
+</li>
+"""
+
+
+_WEAPON_ATTACK_CARD_CRIT_HTML = """
+<li data-attack-id="visual-test-crit">
+  <div class="spell-cast-card weapon-atk-card">
+    <div class="roll-card-header">
+      <div class="roll-card-avatar">🪄</div>
+      <span class="roll-card-user">Garrik Ironside</span>
+      <span class="spell-cast-slot">⚔ Attack</span>
+      <span class="roll-card-time">10:42 AM</span>
+    </div>
+    <div class="spell-cast-body">
+      <div class="spell-cast-name-row">
+        <span class="spell-cast-name">🗡 Greatsword</span>
+        <span class="spell-cast-meta-inline">· slashing</span>
+      </div>
+      <div class="result-pills">
+        <span class="result-pill chip-crit">⭐ Crit! (nat 20)</span>
+        <span class="result-pill chip-damage">⚔ 18 slashing</span>
+        <button type="button" class="result-pill chip-undo weapon-atk-undo">↶ Undo</button>
+      </div>
+    </div>
+  </div>
+</li>
+"""
+
+
 _CARD_FIXTURES = {
     "roll_card_basic": _ROLL_CARD_HTML,
     "weapon_attack_card_hit": _WEAPON_ATTACK_CARD_HTML,
     "feature_used_card_with_undo": _FEATURE_USED_CARD_HTML,
+    "roll_card_gm_only": _ROLL_CARD_GM_ONLY_HTML,
+    "roll_card_gm_and_roller": _ROLL_CARD_GM_AND_ROLLER_HTML,
+    "weapon_attack_card_miss": _WEAPON_ATTACK_CARD_MISS_HTML,
+    "weapon_attack_card_crit": _WEAPON_ATTACK_CARD_CRIT_HTML,
 }
 
 
