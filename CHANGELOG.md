@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.23] - 2026-05-29 — "Empowered No More"
+
+**Schema version:** 64
+**Commit summary:** **Extends the buff-teardown pattern to `/use_metamagic_empowered_spell`.** Same canonical 3-line patch from v2.97.20: snapshot the caster's buffs pre-install, stamp `kind: "buff_install"` under the same `cast_id` as the existing `resource_spend`. The `metamagic-empowered-pending` buff drops on Undo, so a refund of the SP also un-arms the empowered reroll. Pre-v2.97.23, undoing an Empowered cast refunded the SP but left the pending buff installed, meaning the caster got a "free" reroll on their next damaging spell.
+**Description:** Same shape as v2.97.20-v2.97.22. After the resource_spend stamp, snapshot via `_snapshot_target_buffs(db, campaign_id, {"char_id": char.id})`. After `_install_buff`, stamp the buff_install entry. Existing v2.65.0 buff_install undo branch reverts the buff list.
+
+### Added
+- `kind: "buff_install"` log entry stamped by `/use_metamagic_empowered_spell` under the same `cast_id` as the existing `resource_spend` leg.
+- `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_metamagic_empowered_sp_and_buff` — Zara arms Empowered Spell, verifies pending buff installed, undoes, asserts both legs in per_target and buff is gone.
+
+### Notes
+- **PATCH bump** — identical pattern; no new code path.
+- Total harness count: 598 (was 597 in v2.97.22) — one new Metamagic Empowered buff-teardown test.
+- Buff-teardown audit now spans **6 endpoints** (Rage, Indomitable, Patient Defense, Step of the Wind, Flurry of Blows, Metamagic Empowered). Remaining: 5 reaction-cast paths (Shield, Counterspell, Hellish Rebuke, Absorb Elements, Silvery Barbs), Stunning Strike target buff, and the v2.92.0 `spell_slot_spend` leg's pair-up with buff snapshots for cast-spell buffs (Bless / Hex / Sleep — those use buff_install on the spell-cast path but the slot leg isn't paired).
+
+---
+
 ## [2.97.22] - 2026-05-29 — "Three Stances Down"
 
 **Schema version:** 64

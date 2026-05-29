@@ -18064,6 +18064,12 @@ async def use_metamagic_empowered_spell(
             f"PHB p.102 Empowered Spell."
         ),
     }
+    # v2.97.23 — buff teardown: snapshot caster buffs before installing
+    # so Undo can drop the metamagic-empowered-pending buff. Canonical
+    # pattern from v2.97.20.
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
     await _install_buff(campaign_id, char.id, buff)
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
@@ -18075,6 +18081,13 @@ async def use_metamagic_empowered_spell(
         "resource_key": "sorcery-points",
         "amount": 1,
         "source_label": "Metamagic — Empowered Spell",
+    })
+    _log_damage_entry(mm_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": "metamagic-empowered-pending",
     })
 
     await hub.broadcast(campaign_id, {

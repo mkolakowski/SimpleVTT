@@ -875,3 +875,53 @@ async def test_undo_refunds_flurry_of_blows_counter_and_buff(
         f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/buffs"
     )).json().get("buffs", [])
     assert not any((b or {}).get("key") == "flurry-of-blows-active" for b in buffs2)
+
+
+async def test_undo_refunds_metamagic_empowered_sp_and_buff(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.23 — same canonical pattern. Zara casts Empowered Spell,
+    metamagic-empowered-pending lands; undo refunds the SP AND drops
+    the pending buff so the next cast doesn't get free rerolls."""
+    zara = roster["Zara Emberfire"]
+    await _long_rest(gm_client, zara["id"])
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [{
+                "id": f"tok_mm_{zara['id']}",
+                "char_id": zara["id"],
+                "name": zara["name"],
+                "initiative": 10,
+                "hp_current": 30, "hp_max": 30,
+                "buffs": [],
+                "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+            }],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_empowered_spell",
+        json={"character_id": zara["id"]},
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json().get("cast_id")
+    assert cast_id
+
+    buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "metamagic-empowered-pending" for b in buffs)
+
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "resource_refunded" in kinds and "buff_install" in kinds
+
+    buffs2 = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any((b or {}).get("key") == "metamagic-empowered-pending" for b in buffs2)
