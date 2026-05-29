@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.9] - 2026-05-29 — "The Refund Ledger"
+
+**Schema version:** 64
+**Commit summary:** **Wiki page documenting the v2.97.0–v2.97.8 consume-without-refund audit.** Single source of truth for the audit's scope, the 5 refund-relevant undo log kinds (`spell_slot_spend`, `resource_spend`, `slot_restore`, `resource_gain`, `slot_gain`, `inventory_consume`) with what each one stores, what its refund does, and what it broadcasts. Includes the full table of patched endpoints (spell slots / reaction casts / 12 `/use_*` endpoints / 3 cross-resource conversions / catalog-driven `/use_feature` / `/use_item` inventory) plus the filed-for-follow-up list (HP refund, Stunning Strike, buff teardown, other `/use_feature` counters, Metamagic variants beyond Empowered). Surfaced through the wiki landing page + on-disk index per the wiki-discovery rule.
+
+### Added
+- `docs/wiki/consume-without-refund-audit.md` — new reference doc.
+- `app/templates/wiki.html` — "Available guides" table row for the audit doc.
+- `docs/wiki/README.md` — "Available guides" table row matching the wiki landing page.
+
+### Notes
+- **PATCH bump** — doc-only commit. No code change; the wiki rule still requires the version bump (per CLAUDE.md "every commit ships its own version bump"). Container restart still required because `app/version.py` itself changed; the rebuild is fast since no compiled code shifted.
+- Pure `docs/wiki/<slug>.md` files don't need an `_DOC_ALLOWLIST` entry (the wiki router serves them directly from `docs/wiki/`); no harness test required for the auto-served path, per the wiki-discovery table.
+
+---
+
 ## [2.97.8] - 2026-05-29 — "Pocket the Potion"
 
 **Schema version:** 64
