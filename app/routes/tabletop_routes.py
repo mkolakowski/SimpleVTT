@@ -10809,7 +10809,15 @@ async def cast_spell(
             return JSONResponse(status_code=409, content=_range_err)
 
     # Decrement slot when this is a leveled spell (cantrips are free)
+    # v2.92.0 — also stash a ``spell_slot_spend`` snapshot so the roll
+    # log's ↶ Undo button can refund the slot. The snapshot carries
+    # everything ``undo_attack_damage`` needs (character_id, class_slug,
+    # slot_level, the pre-spend used count) — the actual log entry is
+    # appended once ``cast_id`` is generated a few lines down (the slot
+    # decrement happens BEFORE cast_id is minted, so we have to stash
+    # the payload locally and log it once the id exists).
     updated_slot = None
+    _slot_spend_for_undo: dict | None = None
     if spell_level >= 1:
         all_slots = dict(sheet.get("spell_slots") or {})
         per_class = dict(all_slots.get(cslug) or {})
@@ -10838,6 +10846,15 @@ async def cast_spell(
             "level": slot_level,
             "total": total,
             "used": slot["used"],
+        }
+        _slot_spend_for_undo = {
+            "kind": "spell_slot_spend",
+            "campaign_id": campaign_id,
+            "character_id": char.id,
+            "class_slug": cslug,
+            "slot_level": int(slot_level),
+            "used_before": used,
+            "spell_name": spell.get("name", ""),
         }
 
     # v2.6.1: Phase 4 over-budget gate. Compute the economy slot up-front
@@ -10879,6 +10896,14 @@ async def cast_spell(
     caster_color = char.color or player_color
 
     cast_id = uuid.uuid4().hex[:12]
+
+    # v2.92.0 — now that cast_id exists, stamp the spell-slot-spend
+    # snapshot we built at the slot decrement (above) into the per-cast
+    # undo log so the ↶ Undo button can refund the slot later.
+    # ``_log_damage_entry`` is no-op when cast_id is falsy, but cast_id
+    # is always set here.
+    if _slot_spend_for_undo is not None:
+        _log_damage_entry(cast_id, _slot_spend_for_undo)
 
     # v2.22.0 Phase T.1: resolve the target descriptors (any combination
     # of combatant_id / character_id / name) into a canonical pair for
@@ -24852,9 +24877,17 @@ async def undo_attack_damage(
     if not entries:
         raise HTTPException(404, "Damage log entry not found or expired")
 
-    # No-op path: every entry has applied=0 (all misses). Drop the
+    # No-op path: every entry is a miss / nothing applied. Drop the
     # log and return early so the client can render "nothing to undo."
-    if not any(int(e.get("applied") or 0) > 0 or e.get("kind") == "buff_install" for e in entries):
+    # v2.92.0 — also keep going if there's a ``spell_slot_spend`` entry
+    # to refund (leveled-spell cast that hit no one still consumed a
+    # slot; undo should refund it).
+    if not any(
+        int(e.get("applied") or 0) > 0
+        or e.get("kind") == "buff_install"
+        or e.get("kind") == "spell_slot_spend"
+        for e in entries
+    ):
         _attack_damage_log.pop(attack_id, None)
         return {"ok": True, "no_op": True}
 
@@ -24882,6 +24915,56 @@ async def undo_attack_damage(
                 "target_char_id": entry.get("target_char_id"),
                 "buff_key": entry.get("buff_installed_key"),
             })
+            continue
+
+        # v2.92.0 — Phase C: spell-slot refund. Stamped at /cast_spell's
+        # slot-decrement site (level >= 1 only — cantrips never log an
+        # entry). Decrements ``sheet["spell_slots"][cslug][lvl]["used"]``
+        # by 1, clamped to 0, then broadcasts ``spell_slot_update`` so
+        # the sheet's slot row + the over-budget gate both refresh.
+        if kind == "spell_slot_spend":
+            char_id = entry.get("character_id")
+            cslug = (entry.get("class_slug") or "").strip().lower()
+            slot_level_entry = int(entry.get("slot_level") or 0)
+            if char_id and cslug and slot_level_entry >= 1:
+                refund_char = db.query(Character).filter(
+                    Character.id == char_id
+                ).first()
+                if refund_char:
+                    refund_sheet = refund_char.sheet or {}
+                    all_slots = dict(refund_sheet.get("spell_slots") or {})
+                    per_class = dict(all_slots.get(cslug) or {})
+                    slot_key_e = str(slot_level_entry)
+                    slot_e = dict(per_class.get(slot_key_e) or {"total": 0, "used": 0})
+                    used_e = int(slot_e.get("used") or 0)
+                    total_e = int(slot_e.get("total") or 0)
+                    if used_e > 0:
+                        slot_e["used"] = used_e - 1
+                        per_class[slot_key_e] = slot_e
+                        all_slots[cslug] = per_class
+                        refund_sheet["spell_slots"] = all_slots
+                        refund_char.sheet = refund_sheet
+                        db.commit()
+                        await hub.broadcast(
+                            campaign_id,
+                            {
+                                "type": "spell_slot_update",
+                                "data": {
+                                    "character_id": char_id,
+                                    "class_slug": cslug,
+                                    "level": slot_level_entry,
+                                    "total": total_e,
+                                    "used": slot_e["used"],
+                                },
+                            },
+                        )
+                        per_target_undone.append({
+                            "kind": "spell_slot_refunded",
+                            "character_id": char_id,
+                            "class_slug": cslug,
+                            "slot_level": slot_level_entry,
+                            "spell_name": entry.get("spell_name") or "",
+                        })
             continue
 
         applied = int(entry.get("applied") or 0)

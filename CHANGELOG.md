@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.92.0] - 2026-05-28 — "Refund the Magic"
+
+**Schema version:** 64
+**Commit summary:** **Fixes the GM-reported bug: the ↶ Undo button on a spell-cast roll-log card now refunds the consumed spell slot.** Previously Undo reverted HP damage (when `auto_apply_damage` was on) and buff installs (since v2.65.0) but the slot stayed spent — spam-cast → spam-undo was a free-cast exploit, and the routine "wrong-spell misclick" case had no recovery. v2.92.0 plumbs `spell_slot_spend` entries through the existing `_attack_damage_log` machinery so the undo loop refunds the slot as a third entry kind alongside damage and buff_install.
+**Description:** Three edits in `app/routes/tabletop_routes.py` plus a harness test. **(1)** `/cast_spell` at the slot-decrement site: after `slot["used"] += 1`, stash a `_slot_spend_for_undo` dict (`character_id`, `class_slug`, `slot_level`, `used_before`, `spell_name`). The stash is necessary because `cast_id` is minted ~50 lines later — we have to log the entry once the id exists, but we also need the snapshot to be from BEFORE any retargeting / over-budget gate side effects. **(2)** Immediately after `cast_id = uuid.uuid4().hex[:12]`, call `_log_damage_entry(cast_id, _slot_spend_for_undo)` so the new entry joins any damage / heal / buff_install entries the same cast will append later. **(3)** `undo_attack_damage` gets a new `kind == "spell_slot_spend"` branch that decrements `sheet["spell_slots"][cslug][lvl]["used"]` by 1 (clamped at 0), commits, and broadcasts `spell_slot_update` with the standard shape (character_id, class_slug, level, total, used). The "all misses, nothing to undo" early-return guard is extended to recognize `spell_slot_spend` as a non-empty entry, so a cast that missed everyone still gets its slot refunded.
+**(4)** New harness `tests/harness/test_undo_refunds_spell_slot.py` — 2 tests: happy path (long-rest Thalindra, cast Magic Missile, capture post-cast `used`, undo, assert `spell_slot_update` broadcast carries `used - 1`) + unknown-cast-id returns 404. The happy-path test re-marks the WS buffer between the cast and the undo so `wait_for("spell_slot_update")` scoops up the refund's broadcast, not the cast's prior `spell_slot_update`.
+
+### Added
+- `kind == "spell_slot_spend"` entry in `_attack_damage_log`, stamped by `/cast_spell` for every leveled-spell cast (cantrips skipped — they never consume a slot).
+- `undo_attack_damage` refund branch that decrements + broadcasts `spell_slot_update`.
+- `tests/harness/test_undo_refunds_spell_slot.py` — 2 tests covering happy path + unknown-id 404.
+
+### Notes
+- **MINOR bump** — fix is a net-new behavior on a stable surface (Undo now refunds slots; the response body / API contract are unchanged but the side-effect set is broader).
+- Audit follow-up still outstanding: the same consume-without-refund pattern applies to **`/npc_cast_spell`** (NPC slot pools), the Counterspell / Shield / Absorb Elements / Hellish Rebuke reaction-cast paths, and many `/use_*` resource-spending endpoints (Lay on Hands, Bardic Inspiration, Second Wind, Ki, Rage, Action Surge, Indomitable, Channel Divinity, Metamagic, Arcane Recovery, Font of Magic, item charges). The Explore audit catalogued all of them at file+line in the working notes for v2.92.0; each surface deserves its own commit + test rather than a single bulk plumbing. Filed for follow-up.
+- Action-economy chips (action / bonus / reaction slots in the battle hub) remain non-refundable because their state lives in volatile in-memory hub state with no per-cast persistence; recovery there needs a different design (snapshot the economy dict on every cast).
+
+---
+
 ## [2.91.0] - 2026-05-28 — "The Floating Banner"
 
 **Schema version:** 64
