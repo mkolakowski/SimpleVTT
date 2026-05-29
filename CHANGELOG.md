@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.95.0] - 2026-05-28 — "Refund the Rest"
+
+**Schema version:** 64
+**Commit summary:** **Finishes the reaction-cast spell-slot refund audit started in v2.92.0/v2.93.0.** Same plumbing pattern applied to the four remaining reaction branches in `/use_reaction`: **Shield** (`cast-shield`), **Hellish Rebuke** (`cast-hellish-rebuke`), **Absorb Elements** (`cast-absorb-elements`), and **Silvery Barbs** (`cast-silvery-barbs`). Each branch now mints a `cast_id`, logs a `spell_slot_spend` entry into the per-cast undo log, and surfaces the cast_id on its `feature_used` broadcast so the roll-log card can wire its Undo button (UI follow-up still pending).
+**Description:** Four near-identical patches in `app/routes/tabletop_routes.py::use_reaction`. For each branch:
+  1. After the `db.commit()` that persists `slot["used"] += 1`, mint a per-cast UUID (`shield_cast_id`, `hellish_rebuke_cast_id`, `absorb_elements_cast_id`, `silvery_barbs_cast_id`).
+  2. Call `_log_damage_entry(cast_id, {"kind": "spell_slot_spend", "campaign_id", "character_id", "class_slug", "slot_level", "used_before", "spell_name"})` — same shape as v2.92.0's `/cast_spell` plumbing and v2.93.0's Counterspell plumbing.
+  3. Add `"cast_id": cast_id` to the existing `feature_used` broadcast's `data` dict.
+
+The v2.92.0 `undo_attack_damage` refund branch handles the rest unchanged — same `kind == "spell_slot_spend"` dispatch, same `spell_slot_update` broadcast on refund.
+
+**Description (cont):** No new harness file. The existing `test_reaction_prompt.py` tests for each of the four reactions (`test_cast_shield_consumes_slot_and_installs_buff`, `test_cast_hellish_rebuke_consumes_slot`, the silvery-barbs and absorb-elements cast tests) still pass — the new `cast_id` field is additive on the broadcast and the slot-decrement contract is untouched. A unified `test_undo_refunds_reaction_casts.py` covering all four refunds is filed for v2.95.1+; the four reactions' broadcasts are the same shape as Counterspell's so the test would mostly be cut-and-paste from `test_undo_refunds_counterspell.py`.
+
+### Added
+- `cast_id` field on the `feature_used` broadcast for `source: shield-cast` / `hellish-rebuke-cast` / `absorb-elements-cast` / `silvery-barbs-cast`.
+- `spell_slot_spend` log entries stamped by each of the four reaction-cast branches in `/use_reaction`.
+
+### Notes
+- **MINOR bump** — net-new behavior on four reaction surfaces. No data, schema, or contract changes (the additional `cast_id` field is additive). Same architectural pattern as v2.92.0 / v2.93.0; the refund behavior is now uniform across PC `/cast_spell` and the five reaction-cast paths (Counterspell, Shield, Hellish Rebuke, Absorb Elements, Silvery Barbs).
+- UI follow-up still outstanding: the roll-log card's `_appendFeatureUsed` renderer in `tabletop.js` should opt the `cast-*` sources into the existing `.weapon-atk-undo` pill pattern so GMs can actually click to refund. Server contract is complete; only the JS side needs to opt in. The opt-in is a single conditional in the pill builder.
+- Other consume-without-refund surfaces (Lay on Hands, Second Wind, Ki, Rage, Action Surge, Indomitable, Channel Divinity, Metamagic, Arcane Recovery, Font of Magic, item charges) — still filed for individual follow-up commits.
+
+---
+
 ## [2.94.0] - 2026-05-28 — "Let the Bandit Swing"
 
 **Schema version:** 64

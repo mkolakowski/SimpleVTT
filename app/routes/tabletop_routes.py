@@ -13888,6 +13888,18 @@ async def use_reaction(
             sheet["spell_slots"] = all_slots
             watcher_char.sheet = sheet
             db.commit()
+            # v2.95.0 — log the slot spend so /undo_attack_damage can
+            # refund it via the v2.92.0 ``spell_slot_spend`` branch.
+            shield_cast_id = uuid.uuid4().hex[:12]
+            _log_damage_entry(shield_cast_id, {
+                "kind": "spell_slot_spend",
+                "campaign_id": campaign_id,
+                "character_id": int(watcher_char_id),
+                "class_slug": class_slug,
+                "slot_level": int(slot_level),
+                "used_before": used,
+                "spell_name": "Shield",
+            })
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
             )
@@ -13944,6 +13956,7 @@ async def use_reaction(
                     "source": "shield-cast",
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
+                    "cast_id": shield_cast_id,
                 },
             })
         except HTTPException:
@@ -14124,6 +14137,17 @@ async def use_reaction(
             sheet["spell_slots"] = all_slots
             watcher_char.sheet = sheet
             db.commit()
+            # v2.95.0 — log spend for /undo_attack_damage refund.
+            hellish_rebuke_cast_id = uuid.uuid4().hex[:12]
+            _log_damage_entry(hellish_rebuke_cast_id, {
+                "kind": "spell_slot_spend",
+                "campaign_id": campaign_id,
+                "character_id": int(watcher_char_id),
+                "class_slug": class_slug,
+                "slot_level": int(slot_level),
+                "used_before": used,
+                "spell_name": "Hellish Rebuke",
+            })
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
             )
@@ -14151,6 +14175,7 @@ async def use_reaction(
                         f"for half). Consumed 1× L{slot_level} slot."
                     ),
                     "source": "hellish-rebuke-cast",
+                    "cast_id": hellish_rebuke_cast_id,
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
                     "damage_expr": f"{damage_dice}d10",
@@ -14207,6 +14232,17 @@ async def use_reaction(
             sheet["spell_slots"] = all_slots
             watcher_char.sheet = sheet
             db.commit()
+            # v2.95.0 — log spend for /undo_attack_damage refund.
+            absorb_elements_cast_id = uuid.uuid4().hex[:12]
+            _log_damage_entry(absorb_elements_cast_id, {
+                "kind": "spell_slot_spend",
+                "campaign_id": campaign_id,
+                "character_id": int(watcher_char_id),
+                "class_slug": class_slug,
+                "slot_level": int(slot_level),
+                "used_before": used,
+                "spell_name": "Absorb Elements",
+            })
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
             )
@@ -14260,6 +14296,7 @@ async def use_reaction(
                         f"on next melee hit. Consumed 1× L{slot_level} slot."
                     ),
                     "source": "absorb-elements-cast",
+                    "cast_id": absorb_elements_cast_id,
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
                     "damage_type": damage_type,
@@ -14684,6 +14721,17 @@ async def use_reaction(
             sheet["spell_slots"] = all_slots
             watcher_char.sheet = sheet
             db.commit()
+            # v2.95.0 — log spend for /undo_attack_damage refund.
+            silvery_barbs_cast_id = uuid.uuid4().hex[:12]
+            _log_damage_entry(silvery_barbs_cast_id, {
+                "kind": "spell_slot_spend",
+                "campaign_id": campaign_id,
+                "character_id": int(watcher_char_id),
+                "class_slug": class_slug,
+                "slot_level": int(slot_level),
+                "used_before": used,
+                "spell_name": "Silvery Barbs",
+            })
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
             )
@@ -14717,6 +14765,7 @@ async def use_reaction(
                     "source": "silvery-barbs-cast",
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
+                    "cast_id": silvery_barbs_cast_id,
                     "rerolled_target_name": target_name,
                     "rerolled_target_char_id": params.get("target_char_id"),
                     "rerolled_target_combatant_id": params.get("target_combatant_id"),
