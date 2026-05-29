@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.42] - 2026-05-29 — "Above the Mark"
+
+**Schema version:** 64
+**Commit summary:** **Aid extends the effective max-HP clamp.** Closes the other half of the v2.97.40-filed Aid mechanical hook. New `_buff_hp_max_bonus(campaign_id, char_id, combatant=None)` helper walks the target's active buffs for `effects.aid_hp_bonus` and sums the values. Both branches of `_apply_heal_to_combatant` (PC + NPC) now use `base_max + buff_bonus` for the heal clamp instead of just `base_max`. Aid's install-time +5 heal from v2.97.41 now actually pushes current HP above base max for a full-HP target, instead of being absorbed by the clamp. The same buff-driven extension applies to any future heal too — a wounded Pip with Aid can be healed up to `base_max + 5`.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. **(1)** New `_buff_hp_max_bonus` helper near the v2.97.34 attacker-side buff helpers (same dict-effects walk shape). PC path reads via `_get_buffs(campaign_id, char_id)`; NPC path reads `combatant.buffs` directly. **(2)** `_apply_heal_to_combatant` PC branch (line ~4979) — wraps the existing `min(hp_max, hp_cur + heal)` clamp with an effective_max read that adds the buff bonus. **(3)** NPC branch (line ~5034) — same pattern with the NPC-buff lookup. Both wrapped in try/except since `_buff_hp_max_bonus` runs in the heal hot-path; a lookup failure should never block healing.
+
+### Added
+- `_buff_hp_max_bonus(campaign_id, char_id, combatant=None) -> int` helper in `app/routes/tabletop_routes.py`.
+- `tests/harness/test_undo_refunds_resource.py::test_aid_extends_effective_max_hp` — Pip starts at full HP; Caelan casts Aid; asserts the install-time heal pushed her 5 HP above base max (delta=5, source=heal) instead of clamping at 0.
+
+### Changed
+- `_apply_heal_to_combatant` PC + NPC branches — use `base_max + _buff_hp_max_bonus(...)` for the heal clamp.
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.42 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 621 → 622, version stamp v2.97.41 → v2.97.42.
+
+### Notes
+- **PATCH bump** — one helper + two clamp-site wrappings. No new endpoints, no new broadcasts, no schema changes. Same shape as the v2.97.39 AC walk: dict-effects walk, sum, fold into a single read site.
+- **General pattern.** Any future buff carrying `effects.aid_hp_bonus: N` extends the effective HP-max clamp by N. Multiple buffs stack (the helper sums across all of them). Negative values would behave correctly too (capping below base max), though no current buff uses that direction.
+- **Filed: client-side mini-sheet display.** With v2.97.42, a Blessed Pip's mini-sheet renders her HP as `52/47` (current above base max) which looks visually inconsistent. Closing this is a client-side change — the mini-sheet renderer reading the buffs and showing `52/52` when Aid is active. Filed for a future commit when the mini-sheet display layer gets touched anyway.
+- **Filed: other heal-clamp sites.** `_apply_heal_to_combatant` covers the main /cast_spell + /apply_healing + /use_item heal paths. `/use_lay_on_hands` (line ~13668) and the heal-claim path may have their own clamps; the helper exists so adding the walk there is a one-line edit when those sites get touched.
+- Total harness count: 622 (was 621 in v2.97.41) — one new max-HP extension test.
+
+---
+
 ## [2.97.41] - 2026-05-29 — "Quick Salve"
 
 **Schema version:** 64

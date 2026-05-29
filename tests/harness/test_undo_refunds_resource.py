@@ -1728,6 +1728,84 @@ async def test_undo_cast_aid_heals_target_at_install(gm_client, gm_ws, roster):
     )
 
 
+async def test_aid_extends_effective_max_hp(gm_client, gm_ws, roster):
+    """v2.97.42 — Aid now extends the effective max-HP clamp via
+    ``_buff_hp_max_bonus``. Closes the other half of the v2.97.40
+    filed mechanical hook. Pip at full HP cast on with Aid ends
+    5 HP above the base max — the install-time +5 heal from
+    v2.97.41 lands instead of being clamped at base max.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, caelan["id"])
+    await _long_rest(gm_client, pip["id"])
+
+    # Seed Pip in init at full HP. Use her actual max from the roster.
+    pip_max = pip.get("hp_max") or 47  # Pip is Lv 7 → 47 HP
+    pip_tok = f"tok_aidmax_pip_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_aidmax_caelan_{caelan['id']}",
+                    "char_id": caelan["id"],
+                    "name": caelan["name"],
+                    "initiative": 10,
+                    "hp_current": 60, "hp_max": 60,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": pip_tok,
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": pip_max, "hp_max": pip_max,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    gm_ws.mark()
+    AID_INDEX = 5
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": AID_INDEX,
+            "slot_level": 2,
+            "class_slug": "paladin",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+
+    # The install-time heal should push Pip 5 HP above base max
+    # (instead of clamping at base max which would be delta=0).
+    hp_msg = await gm_ws.wait_for("character_hp_update", timeout=3.0)
+    assert hp_msg["data"]["character_id"] == pip["id"]
+    assert hp_msg["data"]["source"] == "heal"
+    assert hp_msg["data"]["delta"] == 5, (
+        f"expected +5 delta (Aid push above base max); got {hp_msg['data']['delta']}"
+    )
+    # hp.current should now be base_max + 5 (regardless of what
+    # base_max is — the assertion is the +5 push above baseline).
+    pip_sheet_max = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json()  # any read works to confirm the character exists; we
+    # rely on the delta + source assertions above for the v2.97.42
+    # mechanical proof. The absolute hp_current value is sensitive
+    # to Pip's evolving level — the +5 delta is the stable invariant.
+
+
 async def test_undo_cast_hunters_mark_slot_and_buff(gm_client, gm_ws, roster):
     """v2.97.32 — /cast_hunters_mark now mints its own cast_id, logs
     ``spell_slot_spend`` + ``buff_install`` under it, and surfaces the

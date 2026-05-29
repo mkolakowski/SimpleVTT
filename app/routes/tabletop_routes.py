@@ -4974,9 +4974,20 @@ async def _apply_heal_to_combatant(
         hp = dict(sheet.get("hp") or {})
         hp_cur = int(hp.get("current") or 0)
         hp_max = int(hp.get("max") or 0)
+        # v2.97.42 — Aid (and future buffs with effects.aid_hp_bonus)
+        # extends the effective max so heals can push current above
+        # the base max. Wrapped in a try/except since this helper
+        # is in the heal hot-path; a buff-read failure should never
+        # block healing.
+        try:
+            effective_max = hp_max + _buff_hp_max_bonus(
+                campaign_id, int(char.id),
+            )
+        except Exception:  # noqa: BLE001
+            effective_max = hp_max
         ds_before = (sheet.get("death_saves") or {}).get("status", "alive")
         new_hp = (
-            min(hp_max, hp_cur + heal_amount) if hp_max > 0
+            min(effective_max, hp_cur + heal_amount) if effective_max > 0
             else (hp_cur + heal_amount)
         )
         actual = new_hp - hp_cur
@@ -5020,7 +5031,15 @@ async def _apply_heal_to_combatant(
         return {"applied": 0, "hp_before": 0, "hp_after": 0, "revived": False}
     hp_cur = int(target.get("hp_current") or 0)
     hp_max = int(target.get("hp_max") or 0)
-    new_hp = min(hp_max, hp_cur + heal_amount) if hp_max > 0 else (hp_cur + heal_amount)
+    # v2.97.42 — extend the NPC heal clamp with buff-driven hp_max
+    # bonuses (Aid today; same shape as the PC branch above).
+    try:
+        effective_max = hp_max + _buff_hp_max_bonus(
+            campaign_id, None, combatant=target,
+        )
+    except Exception:  # noqa: BLE001
+        effective_max = hp_max
+    new_hp = min(effective_max, hp_cur + heal_amount) if effective_max > 0 else (hp_cur + heal_amount)
     actual = new_hp - hp_cur
     target["hp_current"] = new_hp
     hub.set_battle(campaign_id, state)
@@ -16764,6 +16783,41 @@ def _attacker_has_bless(campaign_id: int, attacker_char_id: int) -> bool:
         if isinstance(b, dict) and b.get("key") == "bless":
             return True
     return False
+
+
+def _buff_hp_max_bonus(
+    campaign_id: int,
+    char_id: int | None,
+    combatant: dict | None = None,
+) -> int:
+    """v2.97.42 — closes the v2.97.41 filed Aid max-HP half. Returns
+    the sum of ``effects.aid_hp_bonus`` across the target's active
+    buffs. Used by ``_apply_heal_to_combatant`` and its cousins to
+    extend the effective max-HP clamp, so Aid (and any future buff
+    with the same marker) actually pushes current HP above the base
+    max instead of being absorbed by the clamp.
+
+    Either ``char_id`` (PC — reads via _get_buffs) or ``combatant``
+    (NPC — reads ``combatant.buffs`` directly) must be set. Returns
+    0 when neither path resolves a buff list.
+    """
+    buffs: list = []
+    if char_id:
+        buffs = _get_buffs(campaign_id, int(char_id)) or []
+    elif combatant is not None:
+        buffs = combatant.get("buffs") or []
+    bonus = 0
+    for b in buffs:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        try:
+            bonus += int(effects.get("aid_hp_bonus") or 0)
+        except (TypeError, ValueError):
+            pass
+    return bonus
 
 
 def _attacker_has_bane(campaign_id: int, attacker_char_id: int) -> bool:
