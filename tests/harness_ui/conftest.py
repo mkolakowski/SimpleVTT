@@ -112,3 +112,126 @@ def roster() -> dict:
 def sheet_url(char_id: int) -> str:
     """URL helper for the standalone character-sheet page."""
     return f"{BASE_URL}/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet"
+
+
+def tabletop_url() -> str:
+    """URL helper for the campaign tabletop page (the campaign page IS
+    the tabletop view — there's no ``/tabletop`` suffix)."""
+    return f"{BASE_URL}/campaign/{CAMPAIGN_ID}"
+
+
+# v2.97.13 — Visual regression infrastructure.
+#
+# Pillow-based screenshot diff. The Python Playwright sync API doesn't
+# ship the JS `to_have_screenshot()` assertion, so we roll our own
+# minimal version: take a screenshot of a Locator (or the whole page)
+# into __snapshots__/<test-name>.png; on first run write the file as a
+# baseline, on subsequent runs compare via ImageChops + pixel-diff
+# threshold. Baselines are committed; intentional visual changes get
+# updated by re-running with `--update-snapshots`.
+#
+# Cross-machine determinism caveat: snapshots are sensitive to font
+# rendering / anti-aliasing / OS. For now this is a local-developer
+# tool — CI integration is intentionally deferred so we don't fail on
+# Mac-vs-Linux pixel jitter. When CI integration is wanted, the right
+# move is to bake snapshots inside a Linux Docker stage and run the
+# diff there.
+import shutil
+from pathlib import Path
+
+from playwright.sync_api import Locator, Page
+
+
+SNAPSHOT_DIR = Path(__file__).parent / "__snapshots__"
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--update-snapshots",
+        action="store_true",
+        default=False,
+        help="Update visual-regression baselines instead of comparing.",
+    )
+
+
+@pytest.fixture
+def update_snapshots(request) -> bool:
+    return bool(request.config.getoption("--update-snapshots"))
+
+
+# Stylesheet injected into the page before snapshot capture so CSS
+# transitions / animations don't introduce frame-timing flake.
+_DISABLE_ANIMATIONS_CSS = """
+* { transition: none !important; animation: none !important; }
+*::before, *::after { transition: none !important; animation: none !important; }
+"""
+
+
+def disable_animations(page: Page) -> None:
+    """Inject a stylesheet that nukes CSS transitions + animations.
+    Call after page load (and after any expanding details have been
+    clicked into their final state) before taking a screenshot."""
+    page.add_style_tag(content=_DISABLE_ANIMATIONS_CSS)
+
+
+def assert_visual_match(
+    locator: Locator,
+    name: str,
+    *,
+    update: bool = False,
+    max_diff_fraction: float = 0.01,
+) -> None:
+    """Take a screenshot of the locator and compare it to the baseline
+    at ``__snapshots__/<name>.png``.
+
+    Workflow:
+      - If the baseline doesn't exist OR ``update`` is True, write the
+        current screenshot as the new baseline. (First-run capture.)
+      - Otherwise compare via Pillow ImageChops bbox + pixel count;
+        fail if the fraction of differing pixels exceeds
+        ``max_diff_fraction``.
+
+    ``name`` should be unique across the suite; conventionally
+    ``<test-file>__<test-fn>__<state>``.
+    """
+    from PIL import Image, ImageChops
+
+    SNAPSHOT_DIR.mkdir(exist_ok=True)
+    baseline_path = SNAPSHOT_DIR / f"{name}.png"
+    current_path = SNAPSHOT_DIR / f"{name}.current.png"
+
+    locator.screenshot(path=str(current_path))
+
+    if update or not baseline_path.exists():
+        # First-run capture (or explicit update) — promote current to baseline.
+        shutil.copyfile(current_path, baseline_path)
+        current_path.unlink(missing_ok=True)
+        return
+
+    with Image.open(baseline_path) as base_img, Image.open(current_path) as cur_img:
+        if base_img.size != cur_img.size:
+            raise AssertionError(
+                f"Visual diff: size mismatch for {name!r}. "
+                f"Baseline={base_img.size}, current={cur_img.size}. "
+                f"See {current_path} vs {baseline_path}."
+            )
+        diff = ImageChops.difference(base_img.convert("RGB"), cur_img.convert("RGB"))
+        bbox = diff.getbbox()
+        if bbox is None:
+            current_path.unlink(missing_ok=True)
+            return
+        # Count diffing pixels (any channel non-zero).
+        diff_data = diff.getdata()
+        diff_count = sum(1 for px in diff_data if px != (0, 0, 0))
+        total = base_img.size[0] * base_img.size[1]
+        fraction = diff_count / total if total else 0
+        if fraction > max_diff_fraction:
+            raise AssertionError(
+                f"Visual diff for {name!r}: {diff_count}/{total} pixels "
+                f"({fraction:.2%}) exceed max_diff_fraction "
+                f"({max_diff_fraction:.2%}). "
+                f"See {current_path} vs {baseline_path}. "
+                f"Re-run with --update-snapshots after confirming the "
+                f"intentional change."
+            )
+        current_path.unlink(missing_ok=True)

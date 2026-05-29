@@ -23,6 +23,7 @@ Guides land at `docs/wiki/<slug>.{md,html}`. Plans live at `docs/plans/<slug>.md
 | [Battle & Characters tab sheets](battle-character-sheets-guide.html) | HTML (visual) | Players + GMs + contributors | ✅ shipped (v2.49.182) |
 | [Unified mini-sheet mockups](unified-mini-sheet-mockups.html) | HTML (visual) | Contributors (design review) | ⚪ 3 mockups · companion to design plan (v2.49.186) |
 | [Consume-without-refund audit](consume-without-refund-audit.md) | Markdown (reference) | Contributors | ✅ shipped (v2.97.8) |
+| [Visual regression harness](visual-regression-harness.md) | Markdown (reference) | Contributors | ✅ shipped · local-only (v2.97.13) |
 
 ## Design plans
 

@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.13] - 2026-05-29 — "Snapshot the Wand"
+
+**Schema version:** 64
+**Commit summary:** **Adds a Pillow-based visual-regression harness alongside `tests/harness_ui/` + one proof-of-concept test covering the v2.97.12 spell-card pillification.** The Python Playwright sync API doesn't ship the JS `to_have_screenshot()` assertion, so the harness rolls a minimal version: take a screenshot of a `Locator` into `__snapshots__/<name>.png`; on first run write the file as a baseline; on subsequent runs compare via Pillow `ImageChops` + pixel-count threshold. Baselines are committed PNGs; intentional visual changes get updated via `pytest --update-snapshots`. The proof-of-concept test captures the v2.97.12 spell card in two states: details-pill collapsed (3 meta pills + closed details pill) and details-pill expanded (details body visible with the dashed accent-tinted separator).
+
+### Added
+- `tests/harness_ui/conftest.py` — `disable_animations(page)` helper (injects a CSS rule killing transitions / animations to avoid frame-timing flake), `assert_visual_match(locator, name, *, update, max_diff_fraction)` Pillow-based diff helper, `update_snapshots` fixture, `tabletop_url()` URL helper, `pytest_addoption(--update-snapshots)` CLI flag.
+- `tests/harness_ui/test_visual_spell_card.py` — two parametrized snapshots (`spell_card_collapsed`, `spell_card_expanded`) covering the v2.97.12 spell-card pillification. Sample data is a synthetic Fireball cast injected via DOM mutation; the test exercises the real production CSS stylesheet inside the live tabletop page.
+- `tests/harness_ui/__snapshots__/spell_card_collapsed.png` + `spell_card_expanded.png` — committed PNG baselines (33 KB + 59 KB).
+- `docs/wiki/visual-regression-harness.md` — operator + contributor docs covering the snapshot workflow (`--update-snapshots` to refresh after intentional visual changes), the cross-machine determinism caveat (local-only today; CI integration deferred until baselines can be baked from a Linux Docker stage), and the pattern for adding new visual tests.
+
+### Changed
+- Wiki landing page (`app/templates/wiki.html`) + on-disk index (`docs/wiki/README.md`) — both reference the new visual-regression-harness wiki entry.
+
+### Notes
+- **PATCH bump** — new test infrastructure but no contract or schema change. The new tests don't run in CI (`.github/workflows/test-harness.yml` only runs `tests/harness/`); local-only is intentional so the suite doesn't fail on Mac-vs-Linux font / AA pixel jitter. CI integration is filed for when the baselines can be re-captured from a Linux container.
+- **What the harness catches.** Pixel-level regressions: an accidental margin tweak, a class typo that drops a border, a refactor that silently changes layout. It does NOT validate that an intentional change looks good — that's a human eye on the captured baseline (Claude, GM, contributor).
+- **What's covered today.** One test, two snapshots. Future visual changes that touch the roll-log family (spell cards, feature cards, weapon-attack cards) can each add a snapshot using the same pattern (see the wiki page for the recipe).
+
+---
+
 ## [2.97.12] - 2026-05-29 — "Pill Cabinet"
 
 **Schema version:** 64
