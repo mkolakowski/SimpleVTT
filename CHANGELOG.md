@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.38] - 2026-05-29 — "Faithward"
+
+**Schema version:** 64
+**Commit summary:** **Shield of Faith added to `_SPELL_BUFF_MAP`.** Continues the v2.97.37 catalog-fill pattern. Caelan (the demo Paladin) already has Shield of Faith on his spell list at index 2; today's commit just registers it in the catalog so `/cast_spell` installs the buff on the touched ally via the existing v2.97.31 no-save buff path and stamps `buff_install` under the cast's `cast_id`. Undo refunds the slot AND drops the buff in one POST. The +2 AC mechanical hook is filed; the buff carries `effects.ac_bonus: 2` as a marker for the future `/use_attack` AC-bonus consumer.
+**Description:** One catalog edit in `app/routes/tabletop_routes.py`: `_SPELL_BUFF_MAP["shield-of-faith"]` with key `shield-of-faith`, 🛡️ icon, 100-round duration (10 minutes RAW), `concentration: True` (the SRD JSON has `concentration: false`, same data-layer bug as Bless / Heroism / Bane / Faerie Fire — we override in the catalog). `effects.ac_bonus: 2` is the marker for the filed mechanical hook. Icon collision note: 🛡️ is shared with the v2.56.0 `indomitable-armed` buff. They live on different combatants in practice (Indomitable on the Fighter who armed it; Shield of Faith on whoever was touched), so on-screen collision is rare — both shields on the same combatant would also be on-theme if it ever happened.
+
+### Added
+- `shield-of-faith` entry in `_SPELL_BUFF_MAP` (`app/routes/tabletop_routes.py`).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_shield_of_faith_slot_and_target_buff` — Caelan casts Shield of Faith on Pip; asserts `shield-of-faith` is installed with `effects.ac_bonus == 2`; undoes; asserts BOTH `spell_slot_refunded` and `buff_install` legs in per_target; verifies the buff is gone.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.38 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 617 → 618, version stamp v2.97.37 → v2.97.38.
+
+### Notes
+- **PATCH bump** — catalog-only addition. No new code paths, no helpers, no schema changes. Third entry to `_SPELL_BUFF_MAP` (Bless, Heroism, Shield of Faith).
+- **Filed: +2 AC hook.** `/use_attack`'s hit/miss adjudication reads the target's AC from the combatant dict. Closing the Shield of Faith hook means modifying that read to walk the target's buffs for `effects.ac_bonus` and sum into the effective AC. Same shape as the v2.97.34 attacker-side helpers but on the target-AC side instead of the attacker-bonus side. Filed alongside the Heroism filed hooks (turn-start temp HP grant + Frightened immunity) for a future mechanical-hooks-batch commit.
+- **Pattern keeps proving.** Each new no-save buff spell is now one catalog edit + one harness test. Aid / Sanctuary / Protection from Evil and Good slot in the same way; their mechanical hooks all file separately.
+- Total harness count: 618 (was 617 in v2.97.37) — one new Shield of Faith round-trip test.
+
+---
+
 ## [2.97.37] - 2026-05-29 — "Borrow the Bravery"
 
 **Schema version:** 64

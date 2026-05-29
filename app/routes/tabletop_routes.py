@@ -932,6 +932,34 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Immune to Frightened; gains caster's spellcasting modifier in temp HP at the start of each turn for up to 1 minute.",
     },
+    # v2.97.38 — Shield of Faith (Cleric / Paladin L1). 60 ft, 10
+    # minutes, concentration. The JSON data layer marks it as
+    # concentration: false — same SRD-build bug as Bless / Heroism;
+    # we override here. RAW: +2 to AC for the duration. The +2 AC
+    # mechanical hook is filed: /use_attack's hit/miss adjudication
+    # currently reads the target's `ac` from the combatant dict, so
+    # closing the hook means modifying that read site to also walk
+    # the target's buffs for `effects.ac_bonus`. Marker carries the
+    # bonus value (`ac_bonus: 2`) so the future hook can read it
+    # without touching this commit.
+    #
+    # Icon: 🛡️ is shared with Indomitable Armed — Indomitable lives
+    # on the Fighter's combatant and Shield of Faith on whoever was
+    # touched, so on-screen collision is rare (a fighter casting it
+    # on themselves would show both, which is fine — both shields
+    # is on-theme).
+    "shield-of-faith": {
+        "key": "shield-of-faith",
+        "name": "Shield of Faith",
+        "icon": "🛡️",
+        "duration_rounds": 100,  # 10 minutes RAW
+        "duration_max": 100,
+        "concentration": True,
+        "effects": {
+            "ac_bonus": 2,
+        },
+        "desc": "+2 to AC for up to 10 minutes (concentration).",
+    },
 }
 
 
