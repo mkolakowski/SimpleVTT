@@ -1609,6 +1609,125 @@ async def test_undo_cast_aid_slot_and_target_buff(gm_client, gm_ws, roster):
     ), f"aid still installed after undo: {pip_buffs_after}"
 
 
+async def test_undo_cast_aid_heals_target_at_install(gm_client, gm_ws, roster):
+    """v2.97.41 — Aid now heals each target +5 HP at install time
+    (capped at base max). Closes half of the v2.97.40 filed
+    mechanical hook. Pip starts wounded (30/40); Caelan casts Aid;
+    Pip ends at 35/40. Undo reverses the heal (Pip back to 30/40)
+    AND drops the buff in one POST.
+
+    The max-HP extension (so Aid could push current HP above base
+    max) is filed for a follow-up commit that touches the heal-
+    clamp sites uniformly.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, caelan["id"])
+    await _long_rest(gm_client, pip["id"])
+
+    # Drop Pip's HP to 30 (below max so the +5 heal lands).
+    await _set_hp(gm_client, pip["id"], 30)
+
+    pip_tok = f"tok_aidhp_pip_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_aidhp_caelan_{caelan['id']}",
+                    "char_id": caelan["id"],
+                    "name": caelan["name"],
+                    "initiative": 10,
+                    "hp_current": 60, "hp_max": 60,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": pip_tok,
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": 30, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    # Cast Aid. The install-time heal fires a character_hp_update
+    # broadcast for Pip that we can capture to verify HP changed.
+    gm_ws.mark()
+    AID_INDEX = 5
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": AID_INDEX,
+            "slot_level": 2,
+            "class_slug": "paladin",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json()["id"]
+
+    # The Aid install-time heal fires a character_hp_update broadcast
+    # for Pip. Capture it and verify the HP went from 30 → 35.
+    hp_msg = await gm_ws.wait_for("character_hp_update", timeout=3.0)
+    assert hp_msg["data"]["character_id"] == pip["id"], (
+        f"expected character_hp_update for Pip; got {hp_msg['data']}"
+    )
+    assert hp_msg["data"]["source"] == "heal"
+    assert hp_msg["data"]["delta"] == 5, (
+        f"expected +5 delta from Aid install; got {hp_msg['data']['delta']}"
+    )
+    assert hp_msg["data"]["hp"]["current"] == 35, (
+        f"expected Pip at 35 HP after Aid install heal; "
+        f"got {hp_msg['data']['hp']['current']}"
+    )
+
+    # Undo — should reverse heal AND drop buff.
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+    # The Aid heal undo shows up as a heal-related kind.
+    hp_revert_legs = [e for e in per_target if e.get("kind") in (
+        "heal_reverted", "damage_reverted", "undo_heal", "heal",
+    )]
+    assert hp_revert_legs, (
+        f"expected an HP-revert leg in per_target; got {per_target}"
+    )
+
+    # Capture the post-undo character_hp_update to verify Pip back to 30.
+    hp_msg2 = await gm_ws.wait_for("character_hp_update", timeout=3.0)
+    assert hp_msg2["data"]["character_id"] == pip["id"]
+    assert hp_msg2["data"]["hp"]["current"] == 30, (
+        f"expected Pip back to 30 HP after undo; "
+        f"got {hp_msg2['data']['hp']['current']}"
+    )
+
+    # And no aid buff.
+    pip_buffs_after = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "aid" for b in pip_buffs_after
+    )
+
+
 async def test_undo_cast_hunters_mark_slot_and_buff(gm_client, gm_ws, roster):
     """v2.97.32 — /cast_hunters_mark now mints its own cast_id, logs
     ``spell_slot_spend`` + ``buff_install`` under it, and surfaces the

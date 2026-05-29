@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.41] - 2026-05-29 — "Quick Salve"
+
+**Schema version:** 64
+**Commit summary:** **Aid install-time +5 current HP heal.** Closes half of the v2.97.40-filed Aid mechanical hook. The v2.97.31 `/cast_spell` no-save buff walker now reads the buff template's `effects.aid_hp_bonus` marker (set to 5 by Aid in v2.97.40) and calls `_apply_heal_to_combatant` on the target with that value as the heal amount. Wounded targets get healed (capped at base max); full-HP targets get 0 applied (no above-max buffer in this commit). The heal logs a `heal` entry under the spell's `cast_id` so undo reverses the heal AND drops the buff in a single POST.
+**Description:** One extension to the v2.97.31 walker block in `app/routes/tabletop_routes.py::cast_spell`. After the `buff_install` log entry, read `int(spell_buff_template["effects"]["aid_hp_bonus"] or 0)` — any value > 0 triggers an `_apply_heal_to_combatant(db, campaign_id, {"char_id": target_id}, bonus, cast_id=cast_id)` call. The helper handles death-save state, broadcasts `character_hp_update`, and stamps the heal log. The buff_install entry is stamped first so the per_target order on undo runs `heal` reversal then `buff_install` snapshot restore — both still apply correctly because the heal undo just reads the stored `applied` count and `_install_buff` works idempotently after the snapshot restore.
+
+### Added
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_aid_heals_target_at_install` — Pip starts at 30/40; Caelan casts Aid; captures `character_hp_update` showing `delta=5`, `hp.current=35`, `source="heal"`; undoes; captures the post-undo `character_hp_update` showing `hp.current=30`; asserts the buff is gone.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_spell` v2.97.31 walker — appends Aid install-time heal call after the buff_install log entry.
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.41 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 620 → 621, version stamp v2.97.40 → v2.97.41.
+
+### Notes
+- **PATCH bump** — single-helper call insertion. No new code paths, no new helpers, no schema changes.
+- **Filed: above-max HP buffer.** RAW Aid says "each target's hit point maximum AND current hit points increase by 5." This commit only handles the current-HP half (clamped at base max). The max-HP extension means the heal clamp at three sites (`_apply_heal_to_combatant` line 4979, the equivalent at 5023, and 13668) would need to walk the target's buffs for `effects.aid_hp_bonus` and add it to the effective max. Once that lands, Aid can push current HP above base max (5 HP buffer that survives until concentration/duration ends or buff is undone). Filed as a follow-up — parallels the v2.97.39 AC-bonus walk pattern but applied to HP_max instead of AC.
+- **Heal pipeline reuse.** The existing `_apply_heal_to_combatant` does the dirty work (heal clamping, death-save status, `character_hp_update` broadcast, heal log entry). Aid just calls it with the right amount; no new logic surface.
+- **Marker effect lets other spells opt in.** A future spell with the same shape (Mass Cure Wounds-style flat heal alongside a buff install, higher-level Aid upcasting) can opt in by carrying `effects.aid_hp_bonus: N` on its `_SPELL_BUFF_MAP` entry. The walker handles N=5 today; N=10 (Aid at L3 slot) and beyond would work identically. Today's catalog only has the L2 entry; upcasting is filed.
+- Total harness count: 621 (was 620 in v2.97.40) — one new Aid install-heal round-trip test.
+
+---
+
 ## [2.97.40] - 2026-05-29 — "Stout Hearts"
 
 **Schema version:** 64

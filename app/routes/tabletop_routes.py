@@ -12752,6 +12752,28 @@ async def cast_spell(
                     "buffs_before": _bless_buffs_before,
                     "buff_installed_key": spell_buff_template["key"],
                 })
+                # v2.97.41 — Aid install-time +5 current HP. Closes
+                # half of the v2.97.40 filed mechanical hook. RAW:
+                # "each target's hit point maximum AND current hit
+                # points increase by 5." This commit handles the
+                # current-HP half (capped at base max via
+                # _apply_heal_to_combatant); the max-HP extension is
+                # filed. The marker effect drives the bonus value
+                # so future spells with the same shape (e.g. higher-
+                # level Aid upcasting at +5/level) opt in without
+                # touching this site.
+                _aid_hp_bonus = int(
+                    (spell_buff_template.get("effects") or {}).get(
+                        "aid_hp_bonus"
+                    ) or 0
+                )
+                if _aid_hp_bonus > 0:
+                    await _apply_heal_to_combatant(
+                        db, campaign_id,
+                        {"char_id": _bless_tid},
+                        _aid_hp_bonus,
+                        cast_id=cast_id,
+                    )
 
     # v2.5.5: full-sheet → init chip sync. Slot was derived up-front
     # for the Phase 4 gate; reuse it here so the idempotence in
