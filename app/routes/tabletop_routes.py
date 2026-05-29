@@ -960,6 +960,37 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "+2 to AC for up to 10 minutes (concentration).",
     },
+    # v2.97.40 — Aid (Cleric L2). RAW: 30 ft, 8 hours, NO
+    # concentration (correctly marked in the SRD JSON unlike most of
+    # the other entries here). Each target's hit point maximum and
+    # current hit points increase by 5 for the duration; upcasting
+    # adds +5 per slot level above 2nd. Multi-target up to 3 RAW.
+    #
+    # Install + undo wiring rides the existing v2.97.31 /cast_spell
+    # no-save buff walker (single-target AND AoE multi-target both
+    # supported). The +5 max-HP / +5 current-HP mechanical hook is
+    # filed — that's a new code surface (no existing buff carries
+    # an HP-max modifier today; closing it would extend the same
+    # AC-bonus pattern from v2.97.39 to a new ``effects.hp_max_bonus``
+    # walk at the HP-clamp sites). Marker effect ``aid_hp_bonus: 5``
+    # carries the data for the future hook.
+    #
+    # Duration: RAW 8 hours = 4800 rounds at 6 s/round. We render
+    # the chip text but the buff is dropped by the v2.65.0 buff_install
+    # undo branch or by manual end-buff; the long duration matters
+    # for tracking persistence across multiple short rests.
+    "aid": {
+        "key": "aid",
+        "name": "Aid",
+        "icon": "⚕️",
+        "duration_rounds": 4800,  # 8 hours RAW
+        "duration_max": 4800,
+        "concentration": False,
+        "effects": {
+            "aid_hp_bonus": 5,
+        },
+        "desc": "Hit point maximum and current hit points increase by 5 for 8 hours.",
+    },
 }
 
 

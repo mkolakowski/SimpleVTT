@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.40] - 2026-05-29 — "Stout Hearts"
+
+**Schema version:** 64
+**Commit summary:** **Aid added to `_SPELL_BUFF_MAP`.** Fourth catalog entry to the no-save buff catalog since the plumbing landed in v2.97.31. Caelan (the demo Paladin) already has Aid on his L2 spell list at index 5; today's commit registers it in the catalog so `/cast_spell` installs the buff on the target via the existing v2.97.31 no-save buff path (single-target or AoE multi-target — Aid RAW targets up to 3) and stamps `buff_install` under the cast's `cast_id`. Undo refunds the L2 slot AND drops the buff in one POST. The +5 max-HP / +5 current-HP mechanical hook is filed; the buff carries `effects.aid_hp_bonus: 5` as a marker for the future hook.
+**Description:** One catalog edit in `app/routes/tabletop_routes.py`: `_SPELL_BUFF_MAP["aid"]` with key `aid`, ⚕️ icon, 4800-round duration (8 hours RAW), `concentration: False` (Aid is correctly marked as non-concentration in the SRD JSON, unlike most prior entries — no override needed). `effects.aid_hp_bonus: 5` is the marker for the filed mechanical hook. Notably the first non-concentration entry in `_SPELL_BUFF_MAP` (Bless, Heroism, Shield of Faith are all concentration), exercising the concentration-False branch through the v2.97.31 walker for the first time in catalog form.
+
+### Added
+- `aid` entry in `_SPELL_BUFF_MAP` (`app/routes/tabletop_routes.py`).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_aid_slot_and_target_buff` — Caelan casts Aid on Pip (L2 slot); asserts `aid` is installed with `effects.aid_hp_bonus == 5` and `duration_rounds == 4800`; undoes; asserts BOTH `spell_slot_refunded` and `buff_install` legs in per_target; verifies the buff is gone.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.40 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 619 → 620, version stamp v2.97.39 → v2.97.40.
+
+### Notes
+- **PATCH bump** — catalog-only addition. Fourth `_SPELL_BUFF_MAP` entry; pattern keeps proving (Bless, Heroism, Shield of Faith, Aid all ship as one catalog edit + one harness test).
+- **Filed: +5 max-HP / +5 current-HP hook.** RAW: "each target's hit point maximum and current hit points increase by 5 for the duration." Closing this needs a new walk site at the HP-clamp logic (similar to the v2.97.39 AC walk but for HP_max): when reading `hp.max` on a combatant, sum `effects.aid_hp_bonus` across buffs and add to the effective max. Plus a one-time current-HP bump at install time (handled at cast time, not on every read — same shape as a heal). Filed alongside the other filed mechanical hooks (Heroism temp-HP-per-turn + Frightened immunity, Shield of Faith's AC bonus already shipped in v2.97.39).
+- **Multi-target Aid filed.** RAW: up to 3 creatures. The v2.97.31 walker already supports `target_combatant_ids` AoE multi-target so the multi-cast path works structurally; today's test exercises single-target only for parity with the other catalog tests. A future test seeding three PC combatants and casting Aid with a 3-id AoE list would close the multi-target coverage explicitly.
+- **First non-concentration `_SPELL_BUFF_MAP` entry.** Bless, Heroism, Shield of Faith all set `concentration: True` (RAW-correct per spell despite SRD JSON bugs). Aid is the first with `concentration: False`. The v2.97.31 walker's `_install_buff` call passes the concentration flag through unchanged, so this is a no-op confirming the walker handles both branches.
+- Total harness count: 620 (was 619 in v2.97.39) — one new Aid round-trip test.
+
+---
+
 ## [2.97.39] - 2026-05-29 — "The Sheen Holds"
 
 **Schema version:** 64
