@@ -13009,6 +13009,15 @@ async def place_aoe(
                 await _broadcast_aura_of_protection(
                     campaign_id, _aop_paladin, extra_pc, _aop_bonus,
                 )
+            # v2.97.36 — Bless / Bane save suffix for /place_aoe PC
+            # save site. Closes one of the two save-roll sites the
+            # v2.97.35 commit flagged as filed. Same helper, same
+            # one-line append as the v2.97.35 /cast_spell wiring.
+            _bb_suffix_pc_aoe = _saver_bless_bane_save_suffix(
+                campaign_id, int(extra_pc.id),
+            )
+            if _bb_suffix_pc_aoe:
+                expr = f"{expr}{_bb_suffix_pc_aoe}"
             try:
                 r = dice_mod.roll(expr)
                 rolled = int(r.total)
@@ -13072,6 +13081,14 @@ async def place_aoe(
             npc_sheet, "dnd5e", f"{save_ability.lower()}_save",
         )
         expr = f"1d20{npc_mod:+d}"
+        # v2.97.36 — Bless / Bane save suffix for /place_aoe NPC
+        # save site. Reads the NPC combatant's buff list directly
+        # since NPCs don't have a char_id.
+        _bb_suffix_npc_aoe = _saver_bless_bane_save_suffix(
+            campaign_id, None, extra,
+        )
+        if _bb_suffix_npc_aoe:
+            expr = f"{expr}{_bb_suffix_npc_aoe}"
         try:
             r = dice_mod.roll(expr)
             rolled = int(r.total)

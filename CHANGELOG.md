@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.36] - 2026-05-29 — "Touch the Bonfire"
+
+**Schema version:** 64
+**Commit summary:** **Bless / Bane wiring extended to the two `/place_aoe` save sites flagged in the v2.97.35 notes.** Same `_saver_bless_bane_save_suffix` helper, applied at the PC server-rolled save (line ~13012, alongside the v2.52.0 Danger Sense + v2.53.0 Aura of Protection appends) and the NPC server-rolled save (line ~13084) in `/place_aoe`. After this commit, a Blessed PC caught in a Fireball gets +1d4 on their Dex save; a Baned NPC inside the same circle gets -1d4 on theirs. The two filed save-roll sites listed in the v2.97.35 changelog notes are now closed.
+**Description:** Two edits in `app/routes/tabletop_routes.py::place_aoe`. **(1)** After the Aura of Protection block on the PC branch, call `_saver_bless_bane_save_suffix(campaign_id, int(extra_pc.id))` and append the returned string to `expr`. **(2)** On the NPC branch, after the base `expr = f"1d20{npc_mod:+d}"`, call the helper with `(campaign_id, None, extra)` (NPC reads its buff list directly from the combatant dict) and append. Suffix is empty when no bless/baned buff applies, so this is a no-op for ordinary AoE targets.
+
+### Added
+- `tests/harness/test_buff_attack_hooks.py::test_place_aoe_pc_save_carries_bless_suffix` — Caelan blesses Pip; Thalindra casts Fireball with pending placement; /place_aoe with Pip inside the AoE; asserts Pip's `auto_save_targets[i].breakdown` contains the `+1d4` Bless segment.
+
+### Changed
+- `app/routes/tabletop_routes.py::place_aoe` — appends the bless/bane suffix on both the PC and NPC server-rolled save expressions.
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.36 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 615 → 616, version stamp v2.97.35 → v2.97.36.
+
+### Notes
+- **PATCH bump** — pure helper-call extension to two existing save-roll construction sites. No new code paths, no schema changes.
+- **NPC AoE test still filed.** This commit only adds a PC-side test (Caelan→Bless→Pip→Fireball). NPC-side test would need a way to install Bless on an NPC combatant; the existing `/cast_spell` Bless install path resolves combatant_id → char_id and skips NPCs (which have no char_id). One option is a test-only buff-set endpoint; another is migrating Bless to install on combatants directly. Filed.
+- **Remaining /use_open_hand_technique save site.** The v2.97.35 commit also flagged ~line 19797 as a save-roll site outside /cast_spell. Open Hand Technique's server-rolled CON save would benefit from the same helper for symmetry. One-line append; filed for a future commit when someone is making an Open Hand Technique adjustment anyway.
+- Total harness count: 616 (was 615 in v2.97.35) — one new /place_aoe round-trip test.
+
+---
+
 ## [2.97.35] - 2026-05-29 — "Save Your Breath"
 
 **Schema version:** 64

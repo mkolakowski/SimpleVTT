@@ -440,3 +440,113 @@ async def test_bane_save_subtracts_d4(gm_client, gm_ws, roster):
     assert "-1d4" in base_expr, (
         f"expected '-1d4' (Bane save penalty) in base_expression; got {base_expr!r}"
     )
+
+
+async def test_place_aoe_pc_save_carries_bless_suffix(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.36 — /place_aoe PC save site now appends the v2.97.35
+    Bless/Bane suffix to the d20 save expression. Closes one of the
+    two filed save-roll sites the v2.97.35 commit flagged.
+
+    Caelan blesses Pip; Thalindra casts Fireball with pending
+    placement; /place_aoe resolves Pip in the AoE; the auto_save_targets
+    entry for Pip carries '+1d4' in its breakdown (the Bless die).
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    thal = roster["Thalindra Moonwhisper"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, caelan["id"])
+    await _long_rest(gm_client, thal["id"])
+    await _long_rest(gm_client, pip["id"])
+
+    # Place Thalindra's token (needed for /place_aoe range check).
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
+    by_char = {t.get("character_id"): t for t in r.json()["tokens"]
+               if t.get("character_id")}
+    thal_tok_existing = by_char.get(thal["id"])
+    if not thal_tok_existing:
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{thal['id']}/place-token",
+            json={"x": 100, "y": 100},
+        )
+        r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
+        by_char = {t.get("character_id"): t for t in r.json()["tokens"]
+                   if t.get("character_id")}
+        thal_tok_existing = by_char[thal["id"]]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{thal_tok_existing['id']}/move",
+        json={"x": 100, "y": 100},
+    )
+
+    pip_tok = f"tok_aoe_bless_{pip['id']}"
+    await _seed_battle_with(gm_client, [
+        {"id": caelan["id"], "name": caelan["name"], "tok_id": f"tok_aoe_bless_{caelan['id']}", "hp_max": 60, "initiative": 14},
+        {"id": thal["id"], "name": thal["name"], "tok_id": f"tok_aoe_bless_{thal['id']}", "hp_max": 24, "initiative": 12},
+        {"id": pip["id"], "name": pip["name"], "tok_id": pip_tok, "hp_max": 40, "initiative": 8},
+    ])
+
+    # Caelan casts Bless on Pip.
+    bless = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": 0,
+            "slot_level": 1,
+            "class_slug": "paladin",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert bless.status_code == 200, bless.text
+    # Confirm Bless installed.
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "bless" for b in pip_buffs)
+
+    # Thalindra casts Fireball (no targets — pending placement).
+    # FIREBALL_INDEX on Thalindra is 7 per test_place_aoe_range.py.
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": thal["id"],
+            "spell_index": 7,
+            "slot_level": 3,
+            "class_slug": "wizard",
+            "override": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_data = cast.json()
+    assert cast_data.get("pending_aoe_placement") is True
+    cast_id = cast_data["id"]
+
+    # /place_aoe with Pip as the single target in the AoE.
+    # Place the center near Pip — pick a coordinate within Fireball's 150 ft.
+    placed = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
+        json={
+            "cast_id": cast_id,
+            "target_combatant_ids": [pip_tok],
+            "center": {"x": 200, "y": 200},
+        },
+    )
+    assert placed.status_code == 200, placed.text
+    targets = placed.json().get("auto_save_targets") or []
+    pip_save = next(
+        (t for t in targets
+         if t.get("combatant_id") == pip_tok or t.get("target_name") == pip["name"]),
+        None,
+    )
+    assert pip_save is not None, (
+        f"expected an auto_save_targets entry for Pip; got {targets}"
+    )
+    # The bless suffix renders as " 1d4[N]=N" in the breakdown.
+    assert " 1d4[" in pip_save["breakdown"], (
+        f"expected '+1d4' (Bless save bonus) in Pip's place_aoe save "
+        f"breakdown; got {pip_save['breakdown']!r}"
+    )
