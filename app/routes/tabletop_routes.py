@@ -10619,7 +10619,19 @@ async def respond_roll_request(
                     campaign_id, int(tgt_char_id), buff,
                 )
                 if installed:
-                    _log_damage_entry(str(roll_req.id), {
+                    # v2.97.26 — prefer ctx["cast_id"] when present so
+                    # the buff_install entry rides under the same
+                    # cast_id as the originating endpoint's resource
+                    # leg (Stunning Strike's ki spend, today; future
+                    # save-or-suck endpoints can opt in by populating
+                    # ctx["cast_id"]). Falls back to the legacy
+                    # str(roll_req.id) for backward compatibility with
+                    # /cast_spell save-or-suck spells that don't
+                    # currently thread cast_id through the context.
+                    _buff_install_cast_id = (
+                        ctx.get("cast_id") or str(roll_req.id)
+                    )
+                    _log_damage_entry(_buff_install_cast_id, {
                         "kind": "buff_install",
                         "campaign_id": campaign_id,
                         "target_char_id": int(tgt_char_id),
@@ -19425,6 +19437,12 @@ async def use_stunning_strike(
             "save_ability": "CON",
             "caster_char_id": int(char.id),
             "caster_char_name": char.name,
+            # v2.97.26 — thread ss_cast_id so /respond can stamp the
+            # buff_install under the same cast_id as the resource_spend
+            # (ki spend), so a single Undo POST replays BOTH legs.
+            # Pre-v2.97.26 /respond used str(roll_req.id) as the cast_id
+            # for buff_install, which was separate from the ki spend.
+            "cast_id": ss_cast_id,
         }
     elif target_combatant.get("token_template_id"):
         # NPC target: server rolls the save inline.

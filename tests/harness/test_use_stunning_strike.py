@@ -514,3 +514,96 @@ async def test_stunning_strike_undo_drops_target_stunned_buff(
     assert not any(
         (b or {}).get("key") == "stunned" for b in post_undo_buffs
     ), f"stunned still on bandit post-undo: {post_undo_buffs}"
+
+
+async def test_stunning_strike_pc_target_undo_drops_stunned(
+    gm_client, gm_ws, kael_rested, roster,
+):
+    """v2.97.26 — PC-target Stunning Strike: Kael targets Magnus,
+    Magnus's CON save fails via /respond → Stunned installs. Undo on
+    the ss_cast_id refunds the ki (existing v2.97.19) AND drops the
+    Stunned buff (new v2.97.26 — ctx["cast_id"] threads ss_cast_id
+    through to /respond's buff_install stamp).
+
+    Loops until the save fails (random per cast).
+    """
+    kael = kael_rested
+    magnus = roster["Magnus Hexbinder"]
+
+    cast_id = None
+    for _ in range(20):
+        # Refill ki + clear stunned each iteration.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": magnus["id"], "key": "stunned"},
+        )
+        await _seed_battle(gm_client, [
+            {"id": f"tok_ss_pc_{kael['id']}", "char_id": kael["id"],
+             "name": kael["name"], "initiative": 10,
+             "hp_current": 38, "hp_max": 38, "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            {"id": f"tok_ss_pc_{magnus['id']}", "char_id": magnus["id"],
+             "name": magnus["name"], "initiative": 9,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        ])
+        cast_resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_stunning_strike",
+            json={
+                "character_id": kael["id"],
+                "target_combatant_id": f"tok_ss_pc_{magnus['id']}",
+            },
+        )
+        assert cast_resp.status_code == 200, cast_resp.text
+        cast_data = cast_resp.json()
+        assert cast_data["auto_save_target_kind"] == "pc"
+        prompt_id = cast_data["auto_save_prompt_id"]
+        candidate_cast_id = cast_data["cast_id"]
+
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll_request/{prompt_id}/respond",
+            json={"character_id": magnus["id"]},
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("auto_buff_installed") == "Stunned":
+            cast_id = candidate_cast_id
+            break
+
+    assert cast_id, "no failed save in 20 tries"
+
+    # Verify Stunned is on Magnus pre-undo.
+    pre = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "stunned" for b in pre), (
+        f"expected stunned on Magnus pre-undo; got {pre}"
+    )
+
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "resource_refunded" in kinds, (
+        f"expected resource_refunded leg; per_target={undo.json().get('per_target')}"
+    )
+    assert "buff_install" in kinds, (
+        f"expected buff_install leg under ss_cast_id (v2.97.26 plumbing); "
+        f"per_target={undo.json().get('per_target')}"
+    )
+
+    post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any((b or {}).get("key") == "stunned" for b in post), (
+        f"stunned still on Magnus after undo: {post}"
+    )

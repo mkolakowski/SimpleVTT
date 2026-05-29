@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.26] - 2026-05-29 — "Wake the Other Stunned"
+
+**Schema version:** 64
+**Commit summary:** **Closes the v2.97.25-filed PC-target Stunning Strike gap.** When a PC fails their CON save against Stunning Strike, the Stunned buff installs via `/respond` (not /use_stunning_strike, since the save happens later). Pre-v2.97.26 `/respond` stamped the buff_install entry under `str(roll_req.id)`, which is a DIFFERENT `cast_id` than the `ss_cast_id` the ki spend rode under — so a single Undo POST with `ss_cast_id` refunded the ki but missed the buff_install leg keyed to `roll_req.id`. v2.97.26 threads `ss_cast_id` through `_save_request_context[req.id]["cast_id"]` and `/respond` prefers `ctx["cast_id"]` over the legacy `str(roll_req.id)` fallback when stamping. Both legs now share one cast_id; a single Undo replays both.
+**Description:** Two edits.
+**(1)** `/use_stunning_strike` PC-target path — adds `"cast_id": ss_cast_id` to the `_save_request_context[req.id]` dict.
+**(2)** `/respond` save-or-suck handler — `_buff_install_cast_id = ctx.get("cast_id") or str(roll_req.id)` and uses that as the cast_id key when stamping the buff_install entry. The legacy fallback to `str(roll_req.id)` keeps existing `/cast_spell` save-or-suck spells (Hold Person, Sleep, etc.) working unchanged; they'll get the same buff-leg-paired refund when their /cast_spell paths thread cast_id through the context in a future commit.
+
+### Added
+- `ctx["cast_id"]` field in `_save_request_context` (populated by `/use_stunning_strike` PC-target path; other save-or-suck callers can opt in by populating the same key).
+- `tests/harness/test_use_stunning_strike.py::test_stunning_strike_pc_target_undo_drops_stunned` — loops until Magnus fails his CON save via `/respond`, asserts Stunned is installed, posts undo with `ss_cast_id`, asserts BOTH `resource_refunded` and `buff_install` legs in per_target, and verifies Stunned is gone post-undo.
+
+### Notes
+- **PATCH bump** — fills the v2.97.25 filed gap; no new endpoint, no new undo log kind. Just threads an existing string field through one more level of context. Existing /respond callers (other save-or-suck spells) get the legacy `str(roll_req.id)` cast_id, so nothing changes for them.
+- **The /cast_spell save-or-suck path is the next gap.** Hold Person / Sleep / Suggestion / etc. cast via /cast_spell put their slot spend under one cast_id and their /respond-installed condition under `str(roll_req.id)` — same kind of mismatch v2.97.26 just fixed for Stunning Strike. The fix is the identical 2-line patch (add `"cast_id": cast_id` to the ctx in /cast_spell's prompt-creation code, /respond already prefers it). Filed.
+- Total harness count: 601 (was 600 in v2.97.25) — one new PC-target Stunning Strike test.
+- Buff-teardown audit now spans **10 sites across 8 endpoints** (the new site is /respond's PC-target buff install routed under `ctx["cast_id"]` when populated by Stunning Strike).
+
+---
+
 ## [2.97.25] - 2026-05-29 — "Wake the Stunned"
 
 **Schema version:** 64
