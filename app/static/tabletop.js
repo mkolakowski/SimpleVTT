@@ -5465,6 +5465,8 @@
             'class-feature',
             'item-use',
             'stunning-strike',
+            'hunters-mark',
+            'hex',
         ]);
         if (d.cast_id && _REFUNDABLE_FEATURE_SOURCES.has(d.source)) {
             featurePills.push(

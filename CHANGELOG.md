@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.32] - 2026-05-29 — "Untrack the Mark"
+
+**Schema version:** 64
+**Commit summary:** **Hunter's Mark + Hex buff teardown via direct edits to their dedicated endpoints.** These two concentration-spell endpoints sit outside `/cast_spell` and so neither the v2.92.0 spell-slot refund nor the v2.97.20+ buff-install teardown were wired to them. v2.97.32 plumbs each: mint a `cast_id`, log `spell_slot_spend` after the slot decrement, snapshot the caster's buffs before install, log `buff_install` (best-effort — skipped when `_install_buff` returns False outside combat), and surface `cast_id` on both the `feature_used` broadcast and the JSON response. A single Undo POST now refunds the slot AND drops the caster's concentration buff for either spell.
+**Description:** Symmetric edits to `app/routes/tabletop_routes.py::cast_hunters_mark` and `cast_hex`. After the slot decrement + db.commit, mint `hm_cast_id` / `hex_cast_id`, stamp `spell_slot_spend` with the class slug (ranger / warlock) and pre-decrement `used`. Before the existing `_install_buff(campaign_id, char.id, buff)` call, snapshot via `_snapshot_target_buffs(db, campaign_id, {"char_id": char.id})`; after install, when `_install_buff` returns True, stamp `buff_install` with `target_char_id=char.id` and the snapshot. Both endpoints add `cast_id` to the `feature_used` broadcast `data` dict + to the JSON return, so the client renders the ↶ Undo pill on the roll-log card (matching the v2.97.5+ pattern for /use_lay_on_hands etc.). JS side: `_REFUNDABLE_FEATURE_SOURCES` in `app/static/tabletop.js` gains `'hunters-mark'` and `'hex'`.
+
+### Added
+- `hm_cast_id` minted + logged with `spell_slot_spend` and `buff_install` legs in `/cast_hunters_mark`.
+- `hex_cast_id` minted + logged with `spell_slot_spend` and `buff_install` legs in `/cast_hex`.
+- `'hunters-mark'` and `'hex'` entries in `_REFUNDABLE_FEATURE_SOURCES` (`app/static/tabletop.js`).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_hunters_mark_slot_and_buff` — long-rest Rowan, seed battle with Rowan + Pip, /cast_hunters_mark, assert hunters-mark installed on Rowan, undo, assert BOTH `spell_slot_refunded` and `buff_install` legs in per_target, assert buff gone.
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_hex_slot_and_buff` — symmetric Hex test with Magnus (Warlock) hexing Pip.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_hunters_mark` — adds the cast_id-keyed spell_slot_spend + buff_install logging block.
+- `app/routes/tabletop_routes.py::cast_hex` — adds the same logging block plus `cast_id` on broadcast and return.
+- `app/static/tabletop.js` — `_REFUNDABLE_FEATURE_SOURCES` Set extended.
+- `docs/wiki/consume-without-refund-audit.md` — flipped Hex + Hunter's Mark out of the filed list to ✅ shipped, added a per-endpoint coverage note for the dedicated endpoints, updated header range to v2.97.0 – v2.97.32, added v2.97.32 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 605 → 607, version stamp v2.97.31 → v2.97.32.
+
+### Notes
+- **PATCH bump** — reuses the v2.92.0 spell_slot refund branch + the v2.65.0 buff_install undo branch + the v2.97.20 canonical install/snapshot/log pattern. No new undo log kinds, no new broadcasts, no schema changes.
+- **Why direct edits, not _SPELL_BUFF_MAP.** Both endpoints decrement slots manually (Hunter's Mark via Ranger-only path; Hex via Pact-slot loop with auto-upgrade), validate class/spell list, and pass class-specific configuration (Hex's `ability` parameter for which ability check gets disadvantage). Forcing them through `/cast_spell` would require a bigger refactor. The v2.97.32 patch is local + self-contained.
+- **The +d6 weapon damage hook already exists.** Unlike Sacred Weapon (v2.97.29) / Bardic Inspiration (v2.97.30) / Bless (v2.97.31) — whose attack hooks are filed — Hunter's Mark and Hex were already fully mechanically wired (the buff's `effects.weapon_hit_bonus_dice = "1d6"` is consumed by the v2.20.0 attack-roll intercept). v2.97.32 closes the undo gap, not the mechanical gap.
+- Total harness count: 607 (was 605 in v2.97.31) — two new round-trip tests.
+- Buff-teardown audit now spans **16 sites across 13 endpoints** (the new logical sites are `/cast_hunters_mark` and `/cast_hex`).
+
+---
+
 ## [2.97.31] - 2026-05-29 — "Lift the Blessing"
 
 **Schema version:** 64

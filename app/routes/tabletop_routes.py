@@ -21328,6 +21328,22 @@ async def cast_hunters_mark(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.97.32 — undo plumbing for /cast_hunters_mark. The dedicated
+    # endpoint sits outside /cast_spell's generic v2.92.0 spell_slot_spend
+    # path, so we mint a cast_id here and log the slot consume + the
+    # buff install under it ourselves. Mirrors the canonical v2.97.20
+    # pattern: snapshot caster buffs → install → log buff_install.
+    hm_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(hm_cast_id, {
+        "kind": "spell_slot_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "class_slug": "ranger",
+        "slot_level": int(slot_level),
+        "used_before": used,
+        "spell_name": "Hunter's Mark",
+    })
+
     # Resolve the target.
     target_combatant_id, resolved_name = await _resolve_target_combatant(
         campaign_id,
@@ -21376,8 +21392,23 @@ async def cast_hunters_mark(
             f"checks to find it."
         ),
     }
-    await _install_buff(campaign_id, char.id, buff)
+    # v2.97.32 — snapshot the caster's buffs BEFORE install so the
+    # buff_install undo entry can restore exactly. Install is best-
+    # effort: outside combat _install_buff returns False and we skip
+    # the log entry on that path.
+    _hm_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
+    _hm_buff_installed = await _install_buff(campaign_id, char.id, buff)
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    if _hm_buff_installed:
+        _log_damage_entry(hm_cast_id, {
+            "kind": "buff_install",
+            "campaign_id": campaign_id,
+            "target_char_id": char.id,
+            "buffs_before": _hm_buffs_before,
+            "buff_installed_key": "hunters-mark",
+        })
 
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
@@ -21407,6 +21438,7 @@ async def cast_hunters_mark(
                 f"damage on hits against {display_target}. L{slot_level} slot."
             ),
             "source": "hunters-mark",
+            "cast_id": hm_cast_id,
             "target_character_id": target_character_id,
             "target_name": resolved_name or target_name,
             "over_budget": was_used,
@@ -21427,6 +21459,7 @@ async def cast_hunters_mark(
 
     return {
         "ok": True,
+        "cast_id": hm_cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
@@ -21589,6 +21622,22 @@ async def cast_hex(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.97.32 — undo plumbing for /cast_hex. Mirrors the
+    # /cast_hunters_mark wiring shipped in the same commit. Mint a
+    # cast_id, log the slot consume + the (best-effort) buff install
+    # under it. v2.65.0 buff_install undo branch + v2.92.0 spell_slot
+    # refund branch handle the teardown.
+    hex_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(hex_cast_id, {
+        "kind": "spell_slot_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "class_slug": "warlock",
+        "slot_level": int(slot_level),
+        "used_before": used,
+        "spell_name": "Hex",
+    })
+
     # Resolve target.
     target_combatant_id, resolved_name = await _resolve_target_combatant(
         campaign_id,
@@ -21631,8 +21680,20 @@ async def cast_hex(
             f"hits against {display_target}. Disadvantage on {ability} checks."
         ),
     }
-    await _install_buff(campaign_id, char.id, buff)
+    # v2.97.32 — snapshot before install, log buff_install if it took.
+    _hex_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
+    _hex_buff_installed = await _install_buff(campaign_id, char.id, buff)
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    if _hex_buff_installed:
+        _log_damage_entry(hex_cast_id, {
+            "kind": "buff_install",
+            "campaign_id": campaign_id,
+            "target_char_id": char.id,
+            "buffs_before": _hex_buffs_before,
+            "buff_installed_key": "hex",
+        })
 
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
@@ -21663,6 +21724,7 @@ async def cast_hex(
                 f"checks. L{slot_level} slot."
             ),
             "source": "hex",
+            "cast_id": hex_cast_id,
             "target_character_id": target_character_id,
             "target_name": resolved_name or target_name,
             "ability": ability,
@@ -21684,6 +21746,7 @@ async def cast_hex(
 
     return {
         "ok": True,
+        "cast_id": hex_cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,

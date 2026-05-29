@@ -1314,3 +1314,172 @@ async def test_undo_cast_bless_slot_and_target_buff(gm_client, gm_ws, roster):
         (b or {}).get("key") == "bless"
         for b in pip_buffs_after
     ), f"bless still installed on Pip after undo: {pip_buffs_after}"
+
+
+async def test_undo_cast_hunters_mark_slot_and_buff(gm_client, gm_ws, roster):
+    """v2.97.32 — /cast_hunters_mark now mints its own cast_id, logs
+    ``spell_slot_spend`` + ``buff_install`` under it, and surfaces the
+    cast_id on the feature_used broadcast. Undo refunds the Ranger
+    slot AND drops the hunters-mark concentration buff on the caster
+    in one POST.
+
+    Pre-v2.97.32 the dedicated endpoint was outside the v2.92.0 +
+    v2.97.20 undo paths: the slot it consumed wasn't refundable and
+    the buff it installed wasn't teardown-able. Now both legs ride
+    one cast_id, same shape as /use_rage / /use_indomitable.
+    """
+    rowan = roster["Rowan Quickbow"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, rowan["id"])
+
+    # Seed a battle with Rowan + Pip so _install_buff has somewhere
+    # to attach the caster-side concentration buff.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_hm_rowan_{rowan['id']}",
+                    "char_id": rowan["id"],
+                    "name": rowan["name"],
+                    "initiative": 10,
+                    "hp_current": 44, "hp_max": 44,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": f"tok_hm_pip_{pip['id']}",
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": 40, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_hunters_mark",
+        json={
+            "character_id": rowan["id"],
+            "target_character_id": pip["id"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json().get("cast_id")
+    assert cast_id, f"missing cast_id; payload={cast.json()}"
+
+    # Verify hunters-mark buff installed on Rowan.
+    rowan_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "hunters-mark" for b in rowan_buffs), (
+        f"expected hunters-mark installed on Rowan; got {rowan_buffs}"
+    )
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "spell_slot_refunded" in kinds, (
+        f"expected spell_slot_refunded leg; per_target={per_target}"
+    )
+    assert "buff_install" in kinds, (
+        f"expected buff_install leg; per_target={per_target}"
+    )
+
+    # Verify hunters-mark is gone post-undo.
+    rowan_buffs_after = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "hunters-mark" for b in rowan_buffs_after
+    ), f"hunters-mark still installed after undo: {rowan_buffs_after}"
+
+
+async def test_undo_cast_hex_slot_and_buff(gm_client, gm_ws, roster):
+    """v2.97.32 — mirror of the Hunter's Mark test for the Warlock
+    /cast_hex endpoint. Pre-v2.97.32 the slot consume + buff install
+    rode outside the undo log; v2.97.32 mints a cast_id and logs both
+    under it. Undo refunds the Pact slot AND drops the hex buff on
+    the caster.
+    """
+    magnus = roster["Magnus Hexbinder"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, magnus["id"])
+
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_hex_magnus_{magnus['id']}",
+                    "char_id": magnus["id"],
+                    "name": magnus["name"],
+                    "initiative": 10,
+                    "hp_current": 40, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": f"tok_hex_pip_{pip['id']}",
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": 40, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_hex",
+        json={
+            "character_id": magnus["id"],
+            "target_character_id": pip["id"],
+            "ability": "STR",
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json().get("cast_id")
+    assert cast_id, f"missing cast_id; payload={cast.json()}"
+
+    # Verify hex buff installed on Magnus.
+    magnus_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "hex" for b in magnus_buffs), (
+        f"expected hex installed on Magnus; got {magnus_buffs}"
+    )
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+
+    magnus_buffs_after = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "hex" for b in magnus_buffs_after
+    ), f"hex still installed after undo: {magnus_buffs_after}"
