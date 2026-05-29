@@ -5440,6 +5440,9 @@
             'action-surge',
             'indomitable',
             'rage',
+            'patient-defense',
+            'flurry-of-blows',
+            'wholeness-of-body',
         ]);
         if (d.cast_id && _REFUNDABLE_FEATURE_SOURCES.has(d.source)) {
             featurePills.push(

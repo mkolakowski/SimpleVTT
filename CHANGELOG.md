@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.2] - 2026-05-29 — "Ki and Pool"
+
+**Schema version:** 64
+**Commit summary:** **Three more `/use_*` endpoints plumbed for refund + one queued.** All Monk ki-spend endpoints that have a `feature_used` broadcast (so the v2.96.0 ↶ Undo pill renders cleanly): `/use_patient_defense`, `/use_wholeness_of_body`, `/flurry_of_blows`. The Stunning Strike endpoint is investigated but skipped — it doesn't broadcast `feature_used`, so the Undo pill has nothing to attach to (filed for a follow-up that either switches Stunning Strike to feature_used or adds a roll-card Undo path).
+**Description:** Three resource_spend log entries + cast_id additions to existing feature_used broadcasts (`patient-defense`, `wholeness-of-body`, `flurry-of-blows`). All three drain the `ki` resource_key. Plus a Stunning Strike note explaining the deliberate skip (server logs the resource spend pattern but no UI surface exists — better to leave that endpoint untouched until a UI hook is added). JS `_REFUNDABLE_FEATURE_SOURCES` extended with `patient-defense`, `flurry-of-blows`, `wholeness-of-body`.
+
+### Added
+- `cast_id` field on `feature_used` broadcasts for `source: patient-defense / wholeness-of-body / flurry-of-blows`.
+- `resource_spend` log entries stamped by each of the three endpoints.
+
+### Notes
+- **PATCH bump** — pure replication of v2.97.0 / v2.97.1. No new infrastructure, contract, or schema. Full suite 581/581 green.
+- Stunning Strike skip rationale: the endpoint broadcasts `resource_update` + `roll_request` + `roll` (no `feature_used`), so the v2.96.0 `.feature-cast-undo` pill has nowhere to render. Plumbing the resource_spend log entry without a UI surface would be half-done. Filed.
+- Audit remaining: Channel Divinity (8 variants), Metamagic (4 variants), Arcane Recovery, Font of Magic to_points / to_slot, Stunning Strike (UI work), item charges. Same shape; queued.
+- Stillness of Mind is intentionally excluded: it doesn't decrement a resource counter (just removes a buff + marks action), so the resource_spend pattern doesn't fit. Buff-restore is its own audit case.
+
+---
+
 ## [2.97.1] - 2026-05-29 — "More Pools"
 
 **Schema version:** 64

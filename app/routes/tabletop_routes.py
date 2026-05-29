@@ -18977,6 +18977,13 @@ async def use_stunning_strike(
     sheet["resources"] = resources
     char.sheet = sheet
     db.commit()
+    # v2.97.2 — Stunning Strike has NO feature_used broadcast (only
+    # roll + resource_update + roll_request), so plumbing a
+    # spell_slot_spend / resource_spend log entry here would have no
+    # UI surface — the .feature-cast-undo pill needs a feature_used
+    # card to attach to. Filed for follow-up: switch Stunning Strike
+    # to a feature_used broadcast (or add a roll-card Undo pill that
+    # accepts cast_id off the roll broadcast).
     await hub.broadcast(campaign_id, {
         "type": "resource_update",
         "data": {
@@ -19588,6 +19595,17 @@ async def use_patient_defense(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.97.2 — log the ki spend for /undo_attack_damage refund.
+    pd_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(pd_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "ki",
+        "amount": 1,
+        "source_label": "Patient Defense",
+    })
+
     # Install the Dodging buff on the monk's combatant. RAW lasts
     # "until the start of your next turn" → 1 round. The (B) roll-time
     # intercept reads ``dodging`` to grant disadvantage on attacks
@@ -19627,6 +19645,7 @@ async def use_patient_defense(
                 "with advantage. Lasts until start of next turn."
             ),
             "source": "patient-defense",
+            "cast_id": pd_cast_id,
             "remaining": ki_cur - 1,
             "max": ki_max,
             "over_budget": was_used,
@@ -19911,6 +19930,17 @@ async def use_flurry_of_blows(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.97.2 — log the ki spend for /undo_attack_damage refund.
+    fob_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(fob_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "ki",
+        "amount": 1,
+        "source_label": "Flurry of Blows",
+    })
+
     # Install the Flurry buff. ``unarmed_strikes_available: 2`` is the
     # signal a future commit will read to (a) refund the attack chip
     # for the next two unarmed strikes, and (b) gate the v2.49.57 Open
@@ -19948,6 +19978,7 @@ async def use_flurry_of_blows(
                 "Bonus action, 1 ki. Two unarmed strikes available this turn."
             ),
             "source": "flurry-of-blows",
+            "cast_id": fob_cast_id,
             "remaining": ki_cur - 1,
             "max": ki_max,
             "over_budget": was_used,
@@ -20090,6 +20121,17 @@ async def use_wholeness_of_body(
     hp_result = _apply_hp_change(char, new_hp)
     db.commit()
 
+    # v2.97.2 — log the use-spend for /undo_attack_damage refund.
+    wob_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(wob_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "wholeness-of-body",
+        "amount": 1,
+        "source_label": "Wholeness of Body",
+    })
+
     # Mark the action slot.
     await _mark_battle_economy(campaign_id, char.id, "action")
 
@@ -20120,6 +20162,7 @@ async def use_wholeness_of_body(
             "heal_hp_before": hp_cur,
             "heal_hp_after": hp_result["hp"]["current"],
             "source": "wholeness-of-body",
+            "cast_id": wob_cast_id,
             "remaining": wob_cur - 1,
             "max": wob_max,
             "over_budget": was_used,
