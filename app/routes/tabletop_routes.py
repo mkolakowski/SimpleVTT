@@ -10839,6 +10839,30 @@ async def respond_roll_request(
                             "breakdown": rec.breakdown,
                             "auto_buff_installed": auto_buff_installed,
                         }
+                # v2.97.43 — Heroism (Bard L1) immunity to Frightened.
+                # Same pre-install short-circuit shape as Mindless
+                # Rage and AoD but reads a marker effect off the
+                # target's buff list (``condition_immunity_frightened``)
+                # so future buffs with the same immunity (Calm
+                # Emotions, etc.) opt in by carrying the marker.
+                if _cond_key == "frightened":
+                    if _pc_has_heroism_frightened_immunity(
+                        campaign_id, int(tgt_char_id),
+                    ):
+                        _hero_target = db.query(Character).filter(
+                            Character.id == int(tgt_char_id),
+                        ).first()
+                        await _broadcast_heroism_frightened_immunity(
+                            campaign_id, _hero_target,
+                        )
+                        auto_buff_installed = ""
+                        _save_request_context.pop(roll_req.id, None)
+                        return {
+                            "ok": True,
+                            "total": rec.total,
+                            "breakdown": rec.breakdown,
+                            "auto_buff_installed": auto_buff_installed,
+                        }
                 buff = {
                     "key": cond["key"],
                     "name": cond["name"],
@@ -17543,6 +17567,57 @@ def _pc_has_rage_active_buff(
                 return True
         return False
     return False
+
+
+def _pc_has_heroism_frightened_immunity(
+    campaign_id: int, char_id: int,
+) -> bool:
+    """v2.97.43 — closes one of the v2.97.37-filed Heroism mechanical
+    halves. Returns True when the saver has a buff carrying
+    ``effects.condition_immunity_frightened: True`` — the canonical
+    marker for the Heroism buff in ``_SPELL_BUFF_MAP`` (and any
+    future buff with the same opt-in). Sibling to
+    ``_pc_has_rage_active_buff`` but keyed on the effects dict
+    rather than a hardcoded buff key, so additional buffs with the
+    same immunity (Calm Emotions, Bless Sanctuary, etc.) fold in
+    by just adding the marker to their catalog entry.
+    """
+    for b in _get_buffs(campaign_id, int(char_id)) or []:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        if effects.get("condition_immunity_frightened") is True:
+            return True
+    return False
+
+
+async def _broadcast_heroism_frightened_immunity(
+    campaign_id: int, target: "Character",
+) -> None:
+    """Companion broadcast for ``_pc_has_heroism_frightened_immunity``.
+    Models on ``_broadcast_mindless_rage`` — emits a
+    ``feature_used(source=heroism)`` event naming the target so the
+    chat card surfaces why the failed save didn't install Frightened.
+    """
+    if not target:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": target.id,
+            "character_name": target.name,
+            "user_color": target.color,
+            "feature_name": "💪 Heroism → immune to frightened",
+            "feature_desc": (
+                f"{target.name} is bolstered by Heroism and can't be "
+                f"frightened while the spell holds. The failed save "
+                f"doesn't install Frightened."
+            ),
+            "source": "heroism",
+        },
+    })
 
 
 async def _broadcast_mindless_rage(

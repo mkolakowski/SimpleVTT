@@ -996,6 +996,13 @@ def _bard_sheet(name: str) -> dict:
             # installs the 'baned' debuff via _SPELL_CONDITION_MAP. Appended
             # to preserve existing spell-index assumptions.
             {"name": "Bane", "level": 1, "prepared": True, "_slug": "bane", "casting_time": "1 action"},
+            # v2.97.43 — Fear. RAW Bard L3 spell. WIS save, 1 minute,
+            # concentration. Routed via /cast_spell; failed save installs
+            # the 'frightened' condition via _SPELL_CONDITION_MAP. Lets the
+            # v2.97.43 Heroism Frightened-immunity test exercise the new
+            # gate (Heroism on Pip should now short-circuit a Fear install).
+            # Appended to preserve existing spell-index assumptions.
+            {"name": "Fear", "level": 3, "prepared": True, "_slug": "fear", "casting_time": "1 action"},
         ],
         "spell_slots": {
             "bard": {

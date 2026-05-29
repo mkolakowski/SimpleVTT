@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.43] - 2026-05-29 — "Resolute Heart"
+
+**Schema version:** 64
+**Commit summary:** **Heroism Frightened immunity hook.** Closes one of the two v2.97.37-filed Heroism mechanical halves. New `_pc_has_heroism_frightened_immunity` helper walks the saver's buffs for `effects.condition_immunity_frightened: True` (the marker carried on the v2.97.37 Heroism catalog entry); `/respond` now short-circuits the Frightened install when the marker is present, returns `auto_buff_installed=""`, and emits a `feature_used(source=heroism)` broadcast naming the protected target — same pre-install short-circuit shape as the v2.55.0 Aura of Devotion (Charmed) and v2.57.0 Mindless Rage (Charmed/Frightened) gates. Heroism's RAW Frightened immunity is now genuinely live; future buffs with the same marker (Calm Emotions, etc.) fold in by adding the effect to their catalog entry.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. **(1)** New `_pc_has_heroism_frightened_immunity(campaign_id, char_id)` helper near `_broadcast_mindless_rage`. **(2)** New `_broadcast_heroism_frightened_immunity` companion broadcast emitting `feature_used(source=heroism)` with a 💪 icon and naming the protected target — exactly mirrors `_broadcast_mindless_rage`. **(3)** Gate inserted in `/respond` after the Mindless Rage check, before the buff dict construction: when `cond_key == "frightened"` and `_pc_has_heroism_frightened_immunity` returns True, broadcast + return without installing. Plus one edit in `app/demo_seed.py` appending Fear (Bard L3, Wis save) to Lyra's spell list at index 19 so the harness can exercise the gate.
+
+### Added
+- `_pc_has_heroism_frightened_immunity` helper in `app/routes/tabletop_routes.py`.
+- `_broadcast_heroism_frightened_immunity` broadcast in `app/routes/tabletop_routes.py`.
+- Frightened-install short-circuit in `/respond` for Heroism-buffed targets.
+- Fear appended to Lyra Sunstrider's spell list at index 19 in `app/demo_seed.py`.
+- `tests/harness/test_heroism_frightened_immunity.py::test_heroism_blocks_frightened_install` — Lyra casts Heroism on Pip; Lyra casts Fear on Pip; loops until Wis save fails; asserts `auto_buff_installed == ""` (the gate fired), the Heroism broadcast surfaced, and Pip's buffs do NOT include Frightened.
+
+### Changed
+- `app/routes/tabletop_routes.py::respond` — adds the Heroism Frightened-immunity gate between the v2.57.0 Mindless Rage gate and the buff dict construction.
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.43 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 622 → 623, version stamp v2.97.42 → v2.97.43.
+
+### Notes
+- **PATCH bump** — one helper + one broadcast + one gate insertion. Same shape as the v2.55.0 Aura of Devotion and v2.57.0 Mindless Rage gates; pattern is well-established.
+- **Filed: Heroism temp-HP-per-turn hook.** The v2.97.37 Heroism entry also carries `effects.heroism_temp_hp_per_turn: True`. RAW: "gains temporary hit points equal to your spellcasting ability modifier at the start of each of its turns." Closing this needs a turn-start hook that walks combatants with the Heroism buff, looks up the source caster's spellcasting modifier, and bumps `combatant.hp_temp` (clamped — temp HP doesn't stack with itself, the higher value wins). The turn-start hook would also need to read the buff's `source_char_id` to find the caster. Filed.
+- **Pattern proven for marker-keyed immunities.** Future buffs with `effects.condition_immunity_<key>` (e.g. Protection from Evil and Good's specific creature-type immunity, Calm Emotions' Charmed/Frightened immunity) fold in via copies of this gate pattern at the corresponding `cond_key` branch. The walker's marker-based read means no buff-key lookup tables need to grow.
+- **Lyra's Fear appended at index 19.** Demo spell-index assumptions in other tests are preserved (Fear is the last entry). Demo seed re-runs on boot so the rebuild picks it up.
+- Total harness count: 623 (was 622 in v2.97.42) — one new Heroism immunity round-trip test.
+
+---
+
 ## [2.97.42] - 2026-05-29 — "Above the Mark"
 
 **Schema version:** 64
