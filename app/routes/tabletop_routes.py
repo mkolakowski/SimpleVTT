@@ -11847,6 +11847,14 @@ async def cast_spell(
                 # condition buff if the PC fails. Slug + char_id +
                 # DC give /roll_request/{id}/respond enough to look
                 # the buff up in _SPELL_CONDITION_MAP.
+                # v2.97.27 — also thread cast_id through so /respond
+                # stamps the buff_install entry under the SAME cast_id
+                # as the spell_slot_spend (v2.92.0). Pre-v2.97.27 the
+                # save-or-suck spells (Hold Person, Sleep, Suggestion,
+                # etc.) had their slot leg under cast_id but their
+                # buff leg under str(roll_req.id), so a single undo
+                # POST refunded the slot but missed the buff. Same
+                # 1-line fix as v2.97.26 applied to Stunning Strike.
                 _purge_save_request_context()
                 _save_request_context[req.id] = {
                     "ts": _time.time(),
@@ -11859,6 +11867,7 @@ async def cast_spell(
                     "save_ability": save_ability,
                     "caster_char_id": int(char.id),
                     "caster_char_name": char.name,
+                    "cast_id": cast_id,
                 }
             elif target_combatant.get("token_template_id"):
                 # ---- NPC target → server rolls the save ----

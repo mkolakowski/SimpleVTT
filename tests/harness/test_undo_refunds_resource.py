@@ -925,3 +925,98 @@ async def test_undo_refunds_metamagic_empowered_sp_and_buff(
         f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/buffs"
     )).json().get("buffs", [])
     assert not any((b or {}).get("key") == "metamagic-empowered-pending" for b in buffs2)
+
+
+async def test_undo_cast_spell_save_or_suck_drops_buff(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.27 — /cast_spell now threads cast_id into the save-context
+    so /respond stamps the buff_install under the same cast_id as the
+    spell_slot_spend (v2.92.0). Single Undo drops both.
+
+    Tavik casts Hold Person (L2) at Krieger; loops until Krieger fails
+    his Wis save (Paralyzed installs); undo refunds the slot AND drops
+    Paralyzed.
+    """
+    tavik = roster["Brother Tavik Stonebrow"]
+    krieger = roster["Krieger Stonefist"]
+    HOLD_PERSON_INDEX = 8
+
+    cast_id = None
+    for _ in range(20):
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": krieger["id"], "key": "paralyzed"},
+        )
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={
+                "combatants": [
+                    {"id": f"tok_hp_{tavik['id']}", "char_id": tavik["id"],
+                     "name": tavik["name"], "initiative": 12,
+                     "hp_current": 55, "hp_max": 55, "buffs": [],
+                     "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                    {"id": f"tok_hp_{krieger['id']}", "char_id": krieger["id"],
+                     "name": krieger["name"], "initiative": 8,
+                     "hp_current": 55, "hp_max": 55, "buffs": [],
+                     "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                ],
+                "turn_index": 0, "round": 1, "active": True,
+            },
+        )
+        cast = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": tavik["id"],
+                "spell_index": HOLD_PERSON_INDEX,
+                "slot_level": 2,
+                "class_slug": "cleric",
+                "target_combatant_id": f"tok_hp_{krieger['id']}",
+                "target_character_id": krieger["id"],
+                "target_name": krieger["name"],
+                "override": True,
+            },
+        )
+        assert cast.status_code == 200, cast.text
+        cd = cast.json()
+        prompt_id = cd.get("auto_save_prompt_id")
+        candidate_cast_id = cd["id"]
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll_request/{prompt_id}/respond",
+            json={"character_id": krieger["id"]},
+        )
+        if r.json().get("auto_buff_installed") == "Paralyzed":
+            cast_id = candidate_cast_id
+            break
+
+    assert cast_id, "no failed save in 20 tries"
+
+    pre = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "paralyzed" for b in pre)
+
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds, (
+        f"expected buff_install leg under cast_spell's cast_id (v2.97.27 plumbing); "
+        f"per_target={undo.json().get('per_target')}"
+    )
+
+    post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any((b or {}).get("key") == "paralyzed" for b in post)

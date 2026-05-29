@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.27] - 2026-05-29 — "Hold the Cleric"
+
+**Schema version:** 64
+**Commit summary:** **Extends the v2.97.26 cast_id threading to `/cast_spell` save-or-suck spells.** Before today's commit, casting Hold Person / Sleep / Suggestion on a PC put the spell_slot_spend under one cast_id and the buff_install (stamped by `/respond` after the player fails their save) under `str(roll_req.id)` — two different cast_ids, so a single Undo POST refunded the slot but missed the Paralyzed / Sleep / Charmed buff. v2.97.27 threads `cast_id` through `_save_request_context` at the `/cast_spell` PC-target save-or-suck branch (the AoE branch was already correctly threading it). v2.97.26's `/respond` patch already preferred `ctx["cast_id"]` — so this is just the producer side of the contract.
+**Description:** One-line edit in `/cast_spell`'s single-target PC save-or-suck branch (line 11862): adds `"cast_id": cast_id` to the `_save_request_context[req.id]` dict. The v2.97.26 `/respond` handler picks it up, and the buff_install entry now rides under the spell's cast_id. The AoE branch (line 12103) already had this field from earlier work and continues unchanged.
+
+### Added
+- `ctx["cast_id"]` field in `_save_request_context` for `/cast_spell` single-target PC save-or-suck casts.
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_spell_save_or_suck_drops_buff` — Tavik casts Hold Person at Krieger; loops until the Wis save fails (Paralyzed installs); undo asserts BOTH `spell_slot_refunded` and `buff_install` legs in per_target and Paralyzed is gone post-undo.
+
+### Notes
+- **PATCH bump** — single-line plumbing change; no new code path.
+- This effectively closes the v2.97.26-filed `/cast_spell` save-or-suck gap. Hold Person, Sleep, Suggestion, Tasha's Hideous Laughter, and any other save-or-suck spell routed through this branch now refunds both legs on a single Undo.
+- Total harness count: 602 (was 601 in v2.97.26) — one new save-or-suck round-trip test.
+- Buff-teardown audit now spans **11 sites across 9 endpoints** (the new logical endpoint is `/cast_spell`'s single-target PC save-or-suck branch routed through `/respond`).
+
+---
+
 ## [2.97.26] - 2026-05-29 — "Wake the Other Stunned"
 
 **Schema version:** 64
