@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.90.2] - 2026-05-28 — "Backlog Captured"
+
+**Schema version:** 64
+**Commit summary:** **Captures the GM-authored TODO backlog into the in-repo TODO.md so it's discoverable through the wiki.** GM had been keeping a "Manually Added" list of bugs (Undo not refunding spell slots, NPC action-button regression) + feature wishlist items (up-cast spell UX, button-in-roll-log feature re-roll framework, spell pills polish, campaign-title pill placement, glass-effect Dice Roller, AoE concentration indicators, etc.) in a local copy; this bump pulls them into the canonical TODO.md so they survive context resets and are visible to anyone reading the project on GitHub. Doubles as a release-pipeline smoke test for the per-commit-bump + push workflow.
+**Description:** One edit — `TODO.md`: appends a new `## Manually Added` section with the GM's backlog. 13 items spanning bugs, feature designs (up-cast spells, in-roll-log feature re-roll, AoE concentration markers including Spirit Guardians + Moonbeam), and UX polish (campaign-title glass pill, roll-log left-side height extension, presence-pill repositioning, drawer / dice-roller glass treatment). No code, schema, route, or template changes. Plus the usual `APP_VERSION` + README badge bump.
+
+### Added
+- `TODO.md` — "Manually Added" section with the GM-authored bug + feature backlog (~13 items).
+
+### Notes
+- **PATCH bump** — docs-only addition. No behavior change anywhere.
+- The items in the new section are intentionally raw (the GM's wording, not normalized) so the source intent stays preserved. Refining them into proper plan docs / task-list entries is a follow-up.
+
+---
+
 ## [2.90.1] - 2026-05-27 — "Pills"
 
 **Schema version:** 64
