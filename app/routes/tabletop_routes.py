@@ -842,6 +842,37 @@ _SPELL_CONDITION_MAP = {
 }
 
 
+# v2.97.31 — no-save concentration buff spells (Bless first). Sibling
+# to _SPELL_CONDITION_MAP but for spells that install a positive buff
+# on each target WITHOUT a save. /cast_spell looks up the spell_slug
+# in this map after the spell_cast broadcast, resolves the target list
+# (single-target + AoE multi-target both supported), snapshots each
+# target's buffs, installs via _install_buff, and stamps a buff_install
+# log entry under the same cast_id as the spell_slot_spend. Undo then
+# refunds the slot AND drops the buff on every target in one POST.
+#
+# Each entry's buff dict is intended to be passed verbatim (after a
+# shallow copy + source_char_id stamp) to _install_buff. The
+# ``effects`` dict carries marker flags for future attack/save hooks
+# to read — today the bonus is applied by the GM, but the install +
+# teardown wiring + the data payload are real.
+_SPELL_BUFF_MAP: dict[str, dict] = {
+    "bless": {
+        "key": "bless",
+        "name": "Bless",
+        "icon": "🙏",
+        "duration_rounds": 10,  # 1 minute
+        "duration_max": 10,
+        "concentration": True,  # RAW (PHB p.219)
+        "effects": {
+            "bless_attack_bonus": "d4",
+            "bless_save_bonus": "d4",
+        },
+        "desc": "Add 1d4 to one attack roll or saving throw before the spell ends (RAW: each affected target's roll).",
+    },
+}
+
+
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
 # concentration rules) ends any concentration the affected creature
@@ -12488,6 +12519,63 @@ async def cast_spell(
                 "used": updated_slot["used"],
             },
         })
+
+    # v2.97.31 — no-save buff install (Bless first). When the spell
+    # has a ``_SPELL_BUFF_MAP`` entry, install the buff on each
+    # resolved target and stamp a ``buff_install`` log entry under
+    # the existing ``cast_id``. Supports both single-target casts
+    # (``target_character_id`` / ``target_combatant_id``) and AoE
+    # multi-target casts (``target_combatant_ids``). Install is
+    # best-effort: ``_install_buff`` returns False when there's no
+    # active battle or the target isn't in init, and we skip the
+    # log entry on that path so undo doesn't try to restore an
+    # install that never happened. Source is stamped on every buff
+    # so the concentration walker can drop it from the caster's
+    # anchor if their concentration breaks later.
+    spell_buff_template = _SPELL_BUFF_MAP.get(spell_slug)
+    if spell_buff_template:
+        _bless_target_char_ids: list[int] = []
+        # AoE multi-target list resolves combatant_ids → char_ids
+        # via the current battle state.
+        if target_combatant_ids_in:
+            _battle_state = hub.get_battle(campaign_id) or {}
+            _cb_to_char = {
+                c.get("id"): c.get("char_id")
+                for c in (_battle_state.get("combatants") or [])
+                if c.get("id") and c.get("char_id")
+            }
+            for _cb_id in target_combatant_ids_in:
+                _cb_char_id = _cb_to_char.get(_cb_id)
+                if _cb_char_id:
+                    _bless_target_char_ids.append(int(_cb_char_id))
+        # Single-target fallback: caller passed target_character_id
+        # OR resolution turned the name/combatant_id into a char id.
+        if not _bless_target_char_ids:
+            _single_tid = target_character_id_in
+            if _single_tid:
+                _bless_target_char_ids.append(int(_single_tid))
+
+        for _bless_tid in _bless_target_char_ids:
+            _bless_buffs_before = _snapshot_target_buffs(
+                db, campaign_id, {"char_id": _bless_tid},
+            )
+            _bless_buff = dict(spell_buff_template)
+            _bless_buff["source_char_id"] = char.id
+            _bless_buff_ok = await _install_buff(
+                campaign_id, _bless_tid, _bless_buff,
+            )
+            if _bless_buff_ok:
+                _mirror_buffs_to_sheet(
+                    db, _bless_tid, _get_buffs(campaign_id, _bless_tid),
+                )
+                _log_damage_entry(cast_id, {
+                    "kind": "buff_install",
+                    "campaign_id": campaign_id,
+                    "target_char_id": _bless_tid,
+                    "buffs_before": _bless_buffs_before,
+                    "buff_installed_key": spell_buff_template["key"],
+                })
+
     # v2.5.5: full-sheet → init chip sync. Slot was derived up-front
     # for the Phase 4 gate; reuse it here so the idempotence in
     # _mark_battle_economy keeps an over-budget cast from re-flipping

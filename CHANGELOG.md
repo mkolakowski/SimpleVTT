@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.31] - 2026-05-29 — "Lift the Blessing"
+
+**Schema version:** 64
+**Commit summary:** **No-save spell buff teardown.** Closes the third filed follow-up from the v2.97.28 audit refresh by adding `_SPELL_BUFF_MAP` — a sibling to `_SPELL_CONDITION_MAP` that maps spell slugs to no-save buff dicts. `/cast_spell` now looks up the map after the `spell_cast` broadcast, resolves the target list (single-target via `target_character_id` + AoE multi-target via `target_combatant_ids`), snapshots each target's buffs, installs via `_install_buff`, and stamps `buff_install` under the same `cast_id` as the v2.92.0 `spell_slot_spend`. Bless is the first opt-in: cast it via `/cast_spell`, the target gains the 🙏 `bless` buff (concentration, 10 rounds, `effects.bless_attack_bonus` + `effects.bless_save_bonus` carry "d4" markers for a future attack/save hook), and a single Undo POST refunds the slot AND drops the buff on every target.
+**Description:** Three edits in `app/routes/tabletop_routes.py`.
+**(1)** New `_SPELL_BUFF_MAP` dict near `_SPELL_CONDITION_MAP` (line ~842). Entry for `"bless"`: key `bless`, 🙏 icon, 10-round duration, concentration True (RAW), `effects.bless_attack_bonus` and `effects.bless_save_bonus` set to `"d4"` as marker flags.
+**(2)** `/cast_spell` insert (right after the `spell_slot_update` broadcast, before `_mark_battle_economy`): when `_SPELL_BUFF_MAP.get(spell_slug)` returns a dict, walk the target list (AoE `target_combatant_ids_in` resolved to char_ids via the battle state; falls back to `target_character_id_in` for single-target), then for each target snapshot, install, mirror-to-sheet, and log `buff_install` under the existing `cast_id`. Install is best-effort: `_install_buff` returns False when there's no active battle or the target isn't in init, and the log entry is skipped on that path so undo doesn't try to restore an install that never happened.
+**(3)** Each installed buff carries `source_char_id = char.id` so the concentration walker can drop it from the caster's anchor if their concentration breaks later — same shape as the existing save-or-suck buffs (Hold Person, Sleep, Suggestion).
+
+### Added
+- `_SPELL_BUFF_MAP: dict[str, dict]` in `app/routes/tabletop_routes.py` (~line 845).
+- `bless` entry in `_SPELL_BUFF_MAP` (key, icon, 10-round duration, concentration, `effects.bless_attack_bonus = "d4"`, `effects.bless_save_bonus = "d4"`, descriptive text).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_bless_slot_and_target_buff` — long-rest Caelan, seed battle with Caelan + Pip, /cast_spell Bless at Pip, assert `bless` is on Pip with `effects.bless_attack_bonus == "d4"`, undo with the returned `cast_id`, assert per_target carries BOTH `spell_slot_refunded` and `buff_install` legs, then re-fetch Pip's buffs and assert the bless buff is gone.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_spell` — adds the `_SPELL_BUFF_MAP` lookup + multi-target install/log block after the spell_slot_update broadcast.
+- `docs/wiki/consume-without-refund-audit.md` — flipped "Other /cast_spell buff-installing spells beyond save-or-suck" from filed to ✅ (Bless shipped, others one-line additions to the map); updated header range to v2.97.0 – v2.97.31; expanded the `/cast_spell` row to mention the no-save buff path; appended v2.97.31 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 604 → 605, version stamp v2.97.30 → v2.97.31.
+
+### Notes
+- **PATCH bump** — the spell-side buff install reuses the v2.97.20+ canonical pattern (`_snapshot_target_buffs` → `_install_buff` → `_log_damage_entry`), the v2.65.0 buff_install undo branch, and the v2.92.0 `cast_id` keying. No new undo log kinds, no new broadcasts, no schema changes.
+- **The +d4 attack/save hook is filed.** Today the buff installs with `effects.bless_attack_bonus = "d4"` and `effects.bless_save_bonus = "d4"`, but `/use_attack` and `/respond` don't yet read those markers to prompt the bonus die. When that hook lands (likely paired with the Bardic Inspiration +die hook from v2.97.30 and the Sacred Weapon +CHA hook from v2.97.29), every "buff dict carries a `d4` / `dN` marker" entry closes its mechanical loop in one batch.
+- **The catalog is now extensible.** Adding the next no-save buff spell (Hex, Hunter's Mark, Bane, Faerie Fire, Heroism, Aid, Protection from Evil and Good, Shield of Faith, Aid, etc.) is a one-line edit to `_SPELL_BUFF_MAP`. The /cast_spell loop already handles single-target and AoE; install + teardown both come for free.
+- Total harness count: 605 (was 604 in v2.97.30) — one new Bless round-trip test.
+- Buff-teardown audit now spans **14 sites across 11 endpoints** (the new logical site is `/cast_spell`'s no-save buff path; same endpoint as save-or-suck but a distinct code branch and catalog).
+
+---
+
 ## [2.97.30] - 2026-05-29 — "Reclaim the Inspiration"
 
 **Schema version:** 64

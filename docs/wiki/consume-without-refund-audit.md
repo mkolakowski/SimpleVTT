@@ -1,6 +1,6 @@
-# Undo refund audit (v2.97.0 – v2.97.30)
+# Undo refund audit (v2.97.0 – v2.97.31)
 
-> **Status:** ✅ shipped. Two stacked audits closed: **consume-without-refund** (resources + slots + inventory + HP, v2.97.0 – v2.97.18) and **buff teardown** (buffs from feature use + reaction casts + spell save-or-suck + catalog-driven /use_feature + Bardic Inspiration target buff, v2.97.20 – v2.97.30). Filed follow-ups documented at the bottom.
+> **Status:** ✅ shipped. Two stacked audits closed: **consume-without-refund** (resources + slots + inventory + HP, v2.97.0 – v2.97.18) and **buff teardown** (buffs from feature use + reaction casts + spell save-or-suck + catalog-driven /use_feature + Bardic Inspiration target buff + no-save spell buffs via `_SPELL_BUFF_MAP`, v2.97.20 – v2.97.31). Filed follow-ups documented at the bottom.
 
 ## Why these audits existed
 
@@ -24,7 +24,7 @@ There are eight refund-relevant entry kinds:
 | `resource_gain` | `/use_font_of_magic_to_points` (SP gain leg) | Subtract `amount` from `current` (clamped ≥ 0) — the inverse of `resource_spend` | `resource_update` |
 | `slot_gain` | `/use_font_of_magic_to_slot` (slot gain leg) | If `ephemeral=True`: decrement `total` by 1 and `font_of_magic_extra`. If `ephemeral=False`: increment `used` by 1. | `spell_slot_update` |
 | `inventory_consume` | `/use_item` | Find item by `_slug` or `name`; bump qty by 1, OR re-insert the stored item dict at `inv_idx` | `inventory_update` |
-| `buff_install` (pre-existing v2.65.0; opted into by v2.97.20+) | `/cast_spell` non-cantrip save-or-suck, `/use_reaction` Shield + Absorb Elements, `/use_rage`, `/use_indomitable`, the 3 Monk ki spends, `/use_metamagic_empowered_spell`, `/use_stunning_strike` (NPC target + PC target via `/respond`), `/use_feature` catalog-driven (Sacred Weapon, v2.97.29), `/use_bardic_inspiration` target buff (v2.97.30) | Restore `target.buffs` to pre-install snapshot via `_restore_target_buffs(db, campaign_id, target_char_id, target_combatant_id, buffs_before)` | `buff_update` |
+| `buff_install` (pre-existing v2.65.0; opted into by v2.97.20+) | `/cast_spell` non-cantrip save-or-suck, `/use_reaction` Shield + Absorb Elements, `/use_rage`, `/use_indomitable`, the 3 Monk ki spends, `/use_metamagic_empowered_spell`, `/use_stunning_strike` (NPC target + PC target via `/respond`), `/use_feature` catalog-driven (Sacred Weapon, v2.97.29), `/use_bardic_inspiration` target buff (v2.97.30), `/cast_spell` no-save buff via `_SPELL_BUFF_MAP` (Bless, v2.97.31) | Restore `target.buffs` to pre-install snapshot via `_restore_target_buffs(db, campaign_id, target_char_id, target_combatant_id, buffs_before)` | `buff_update` |
 | `damage` / `heal` (pre-existing) | `/use_attack`, `/cast_spell`, `/apply_healing`, `/use_lay_on_hands`, `/use_second_wind`, `/use_wholeness_of_body`, `/use_item` heal kind, Blessed Healer (Disciple of Life subclass) | Reverse `applied` HP on `target_char_id` | `character_hp_update` |
 
 A single cast can stamp **multiple legs** under one `cast_id`. Examples:
@@ -64,7 +64,7 @@ Spell-cast cards use the existing `spell_cast` source + the v2.92.0 `spell_slot_
 
 ### Spell slots
 
-- `/cast_spell` — all leveled spells (cantrips never log; `slot_level >= 1` is the gate). PC-target save-or-suck spells (Hold Person, Sleep, Suggestion, Tasha's Hideous Laughter, …) also pair a `buff_install` leg via `/respond` (v2.97.27).
+- `/cast_spell` — all leveled spells (cantrips never log; `slot_level >= 1` is the gate). PC-target save-or-suck spells (Hold Person, Sleep, Suggestion, Tasha's Hideous Laughter, …) also pair a `buff_install` leg via `/respond` (v2.97.27). No-save buff spells with a `_SPELL_BUFF_MAP` entry (Bless today; Hex / Hunter's Mark / Bane / Faerie Fire next) install + log inline after the `spell_cast` broadcast (v2.97.31).
 
 ### Reaction casts (5 endpoints, all share the `/use_reaction` dispatcher)
 
@@ -181,10 +181,10 @@ For a harness test, model on `tests/harness/test_undo_refunds_resource.py::test_
 - **`/use_feature` other counters.** Divine Sense (1 + CHA/day), Cleansing Touch (CHA/day), Stroke of Luck (1/short-rest), Cunning Action if a future class adds a counter to it. All can opt in by adding `resource_key + amount` to their `_FEATURE_ECONOMY` entry (one-line change per feature — the v2.97.7 plumbing reads it).
 - **Metamagic variants beyond Empowered.** Twinned / Quickened / Heightened / Subtle / Distant / Extended Spell don't have endpoints yet (only Empowered ships in v2.97.x). When they ship, each gets the same resource_spend + (optional) buff_install patches.
 - ~~**Bardic Inspiration target buff teardown.**~~ ✅ Shipped in **v2.97.30**. `/use_bardic_inspiration` now installs a `bardic-inspiration-die` buff on the recipient (carrying the die size in `effects.bardic_inspiration_die` for a future attack/save hook), snapshots the target's pre-install buffs, and logs `buff_install` under the existing `bi_cast_id`. Undo refunds the BI counter on the bard AND drops the buff on the recipient in one POST. Install is best-effort: outside combat (no active battle / recipient not in init) it stays announce-only and skips the log entry so undo doesn't try to restore an install that never happened.
-- **Other `/cast_spell` buff-installing spells beyond save-or-suck.** Bless, Hex, Hunter's Mark, Haste, etc. — these install a buff on the caster or target without a save. The slot leg refunds today (v2.92.0) but the buff stays. The v2.65.0 buff_install kind exists; just needs `_log_damage_entry(cast_id, ...)` wired alongside the install in each spell's resolution branch.
+- **Other `/cast_spell` buff-installing spells beyond save-or-suck.** ✅ **Bless shipped in v2.97.31** via the new `_SPELL_BUFF_MAP` (single-target + AoE multi-target both supported, install best-effort). Hex / Hunter's Mark / Bane / Faerie Fire / Bardic Inspiration's older _SPELL_CONDITION_MAP-style cousins / Haste / Aid / Heroism / Protection from Evil and Good are all one-line additions to the map — drop a buff dict in and the install + teardown both wire up automatically. The catalog now has the plumbing; this is a content-population follow-up, not an architecture task.
 
 ## Cross-references
 
 - [Realtime broadcasts catalog](realtime-broadcasts-catalog.md) — full payload shapes for `feature_used`, `resource_update`, `spell_slot_update`, `inventory_update`, `buff_update`, etc.
 - [Endpoint catalog](endpoint-catalog.md) — full request/response shapes for every endpoint covered by the audit.
-- CHANGELOG entries v2.92.0 (initial spell-slot refund), v2.97.0 ("Pool Refund"), v2.97.5 ("Recover the Recovery"), v2.97.6 ("Trading Posts"), v2.97.7 ("Tithe and Refund"), v2.97.8 ("Pocket the Potion"), v2.97.16 ("The Effect Rewind"), v2.97.17 ("Claim the Refund"), v2.97.18 ("Heal the Healer"), v2.97.19 ("Strike the Refund"), v2.97.20 ("Calm the Rage"), v2.97.21 ("Disarm the Shield"), v2.97.22 ("Three Stances Down"), v2.97.23 ("Empowered No More"), v2.97.24 ("Lower the Shield"), v2.97.25 ("Wake the Stunned"), v2.97.26 ("Wake the Other Stunned"), v2.97.27 ("Hold the Cleric"), v2.97.28 ("The Updated Ledger"), v2.97.29 ("Sheathe the Sacred Weapon"), v2.97.30 ("Reclaim the Inspiration").
+- CHANGELOG entries v2.92.0 (initial spell-slot refund), v2.97.0 ("Pool Refund"), v2.97.5 ("Recover the Recovery"), v2.97.6 ("Trading Posts"), v2.97.7 ("Tithe and Refund"), v2.97.8 ("Pocket the Potion"), v2.97.16 ("The Effect Rewind"), v2.97.17 ("Claim the Refund"), v2.97.18 ("Heal the Healer"), v2.97.19 ("Strike the Refund"), v2.97.20 ("Calm the Rage"), v2.97.21 ("Disarm the Shield"), v2.97.22 ("Three Stances Down"), v2.97.23 ("Empowered No More"), v2.97.24 ("Lower the Shield"), v2.97.25 ("Wake the Stunned"), v2.97.26 ("Wake the Other Stunned"), v2.97.27 ("Hold the Cleric"), v2.97.28 ("The Updated Ledger"), v2.97.29 ("Sheathe the Sacred Weapon"), v2.97.30 ("Reclaim the Inspiration"), v2.97.31 ("Lift the Blessing").

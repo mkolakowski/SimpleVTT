@@ -1211,3 +1211,106 @@ async def test_undo_refunds_bardic_inspiration_counter_and_buff(
         (b or {}).get("key") == "bardic-inspiration-die"
         for b in pip_buffs_after
     ), f"bardic-inspiration-die still installed on Pip: {pip_buffs_after}"
+
+
+async def test_undo_cast_bless_slot_and_target_buff(gm_client, gm_ws, roster):
+    """v2.97.31 — /cast_spell now installs a target-side ``bless`` buff
+    when the spell has a ``_SPELL_BUFF_MAP`` entry. Sibling to the
+    v2.97.27 save-or-suck plumbing but for no-save buffs: Bless is the
+    first opt-in. Undo refunds the spell slot (v2.92.0) AND drops the
+    bless buff on the target via the v2.65.0 buff_install undo branch.
+
+    Pre-v2.97.31 the slot refunded but the bless buff was never
+    installed; today both legs ride one cast_id.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, caelan["id"])
+
+    # Seed a battle with both Caelan and Pip so _install_buff has a
+    # combatant to attach the buff to. /cast_spell's bless install is
+    # best-effort (skipped when the target isn't in init).
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_bless_caelan_{caelan['id']}",
+                    "char_id": caelan["id"],
+                    "name": caelan["name"],
+                    "initiative": 10,
+                    "hp_current": 60, "hp_max": 60,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": f"tok_bless_pip_{pip['id']}",
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": 40, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    # Caelan's spell list — Bless is at index 0 per the demo seed.
+    BLESS_INDEX = 0
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": BLESS_INDEX,
+            "slot_level": 1,
+            "class_slug": "paladin",
+            "target_character_id": pip["id"],
+            "target_combatant_id": f"tok_bless_pip_{pip['id']}",
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json().get("id")
+    assert cast_id, f"missing cast_id; payload={cast.json()}"
+
+    # Verify bless buff is on PIP (the target).
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    bless_buff = next(
+        (b for b in pip_buffs if (b or {}).get("key") == "bless"),
+        None,
+    )
+    assert bless_buff is not None, (
+        f"expected bless installed on Pip; got {pip_buffs}"
+    )
+    # Buff carries +d4 marker effects for a future attack/save hook.
+    assert (bless_buff.get("effects") or {}).get("bless_attack_bonus") == "d4"
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "spell_slot_refunded" in kinds, (
+        f"expected spell_slot_refunded leg; per_target={per_target}"
+    )
+    assert "buff_install" in kinds, (
+        f"expected buff_install leg; per_target={per_target}"
+    )
+
+    # Verify the bless buff is gone from Pip post-undo.
+    pip_buffs_after = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "bless"
+        for b in pip_buffs_after
+    ), f"bless still installed on Pip after undo: {pip_buffs_after}"
