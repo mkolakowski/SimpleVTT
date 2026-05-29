@@ -1316,6 +1316,106 @@ async def test_undo_cast_bless_slot_and_target_buff(gm_client, gm_ws, roster):
     ), f"bless still installed on Pip after undo: {pip_buffs_after}"
 
 
+async def test_undo_cast_heroism_slot_and_target_buff(gm_client, gm_ws, roster):
+    """v2.97.37 — Heroism added to ``_SPELL_BUFF_MAP``. /cast_spell
+    installs the 'heroism' buff on the touched ally via the v2.97.31
+    no-save buff path, and stamps buff_install under the spell's
+    cast_id. Undo refunds the slot AND drops the buff in one POST.
+
+    The mechanical effects (temp HP grant + Frightened immunity) are
+    filed for follow-up hooks; the buff carries marker effects
+    (``heroism_temp_hp_per_turn``, ``condition_immunity_frightened``)
+    so those future hooks can read it without touching this commit.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, lyra["id"])
+
+    # Seed a battle with Lyra + Pip so the v2.97.31 install path
+    # has somewhere to attach the target buff.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_hero_lyra_{lyra['id']}",
+                    "char_id": lyra["id"],
+                    "name": lyra["name"],
+                    "initiative": 10,
+                    "hp_current": 35, "hp_max": 35,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": f"tok_hero_pip_{pip['id']}",
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": 40, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    # Heroism is Lyra's spell at index 7 — see demo_seed.py
+    # (Vicious Mockery, Mage Hand, Minor Illusion, Prestidigitation,
+    # Healing Word, Cure Wounds, Faerie Fire, Heroism, ...).
+    HEROISM_INDEX = 7
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": lyra["id"],
+            "spell_index": HEROISM_INDEX,
+            "slot_level": 1,
+            "class_slug": "bard",
+            "target_character_id": pip["id"],
+            "target_combatant_id": f"tok_hero_pip_{pip['id']}",
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json().get("id")
+    assert cast_id, f"missing cast_id; payload={cast.json()}"
+
+    # Verify Heroism is on Pip with the marker effects.
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    hero_buff = next(
+        (b for b in pip_buffs if (b or {}).get("key") == "heroism"),
+        None,
+    )
+    assert hero_buff is not None, (
+        f"expected heroism installed on Pip; got {pip_buffs}"
+    )
+    effects = hero_buff.get("effects") or {}
+    assert effects.get("heroism_temp_hp_per_turn") is True
+    assert effects.get("condition_immunity_frightened") is True
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+
+    pip_buffs_after = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "heroism" for b in pip_buffs_after
+    ), f"heroism still installed on Pip after undo: {pip_buffs_after}"
+
+
 async def test_undo_cast_hunters_mark_slot_and_buff(gm_client, gm_ws, roster):
     """v2.97.32 — /cast_hunters_mark now mints its own cast_id, logs
     ``spell_slot_spend`` + ``buff_install`` under it, and surfaces the
@@ -1504,7 +1604,9 @@ async def test_undo_cast_spell_faerie_fire_drops_buff(
     FAERIE_FIRE_INDEX = 6  # See demo_seed.py — Lyra's 7th spell.
 
     cast_id = None
-    for _ in range(20):
+    # v2.97.37 — bumped 20 → 40 because Krieger's Danger Sense
+    # (advantage on Dex saves vs spells) drops fail-rate to ~20%.
+    for _ in range(40):
         await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
             json={"type": "long"},
@@ -1563,7 +1665,7 @@ async def test_undo_cast_spell_faerie_fire_drops_buff(
             cast_id = candidate_cast_id
             break
 
-    assert cast_id, "no failed Dex save in 20 tries"
+    assert cast_id, "no failed Dex save in 40 tries"
 
     pre = (await gm_client.get(
         f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"

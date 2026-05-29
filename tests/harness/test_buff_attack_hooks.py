@@ -222,7 +222,11 @@ async def test_faerie_fire_attack_against_target_has_advantage(gm_client, roster
 
     fired = False
     krieger_tok = f"tok_ff_atk_{krieger['id']}"
-    for _ in range(20):
+    # v2.97.37 — Krieger has Danger Sense (advantage on Dex saves vs
+    # spells), so save-fail probability per iteration is ~20%, not
+    # ~55%. 40 iterations keeps the cumulative miss-rate well under
+    # 0.1% so the test isn't flaky.
+    for _ in range(40):
         await _long_rest(gm_client, lyra["id"])
         await _long_rest(gm_client, krieger["id"])
         await gm_client.post(
@@ -260,7 +264,7 @@ async def test_faerie_fire_attack_against_target_has_advantage(gm_client, roster
             fired = True
             break
 
-    assert fired, "no failed Dex save in 20 tries"
+    assert fired, "no failed Dex save in 40 tries"
 
     # Pip attacks Krieger (the faerie-fired target).
     atk = await gm_client.post(

@@ -908,6 +908,30 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Add 1d4 to one attack roll or saving throw before the spell ends (RAW: each affected target's roll).",
     },
+    # v2.97.37 — Heroism (Bard L1, also Paladin). Touch, 1 minute,
+    # concentration (the JSON data layer marks it as concentration:
+    # false — that's an SRD-build bug, RAW is concentration; we
+    # override in the buff dict). Install + undo wiring rides the
+    # v2.97.31 /cast_spell no-save buff path for free. Mechanical
+    # effects (start-of-turn temp HP grant + immunity to Frightened)
+    # are filed: temp_hp grant needs a turn-start hook similar to
+    # Rage's reset path, and the frightened immunity needs to flow
+    # into the existing condition-install gate (same shape as v2.55.0
+    # Aura of Devotion's Charmed immunity). Marker effects below
+    # carry the data those future hooks will read.
+    "heroism": {
+        "key": "heroism",
+        "name": "Heroism",
+        "icon": "💪",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": True,
+        "effects": {
+            "heroism_temp_hp_per_turn": True,
+            "condition_immunity_frightened": True,
+        },
+        "desc": "Immune to Frightened; gains caster's spellcasting modifier in temp HP at the start of each turn for up to 1 minute.",
+    },
 }
 
 

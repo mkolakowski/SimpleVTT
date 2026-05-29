@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.37] - 2026-05-29 — "Borrow the Bravery"
+
+**Schema version:** 64
+**Commit summary:** **Heroism added to `_SPELL_BUFF_MAP`.** First no-save buff added to the catalog since v2.97.31's Bless landed the plumbing. Lyra (the demo Bard) already has Heroism on her spell list; today's commit just registers it in the catalog so `/cast_spell` installs the buff on the touched ally via the existing v2.97.31 no-save path and stamps `buff_install` under the cast's `cast_id`. Undo refunds the slot AND drops the buff in one POST. The two mechanical halves of Heroism (start-of-turn temp HP grant + immunity to Frightened) are filed for follow-up hooks; the buff dict carries marker `effects` so those hooks can read it without touching this commit.
+**Description:** One catalog edit in `app/routes/tabletop_routes.py`: `_SPELL_BUFF_MAP["heroism"]` with key `heroism`, 💪 icon, 10-round duration (1 minute matching RAW), `concentration: True` (the SRD data layer's `concentration: false` is an SRD-build bug — RAW Heroism is concentration). `effects` carries `heroism_temp_hp_per_turn: True` and `condition_immunity_frightened: True` as markers for the future hooks. The v2.97.31 walker in `/cast_spell` (which already resolves single-target + AoE multi-target, snapshots target buffs, installs, mirrors to sheet, and logs `buff_install` under `cast_id`) does all the work — no new code paths, no new helpers.
+
+### Added
+- `heroism` entry in `_SPELL_BUFF_MAP` (`app/routes/tabletop_routes.py`).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_heroism_slot_and_target_buff` — Lyra casts Heroism on Pip; asserts `heroism` is installed with `effects.heroism_temp_hp_per_turn=True` and `effects.condition_immunity_frightened=True`; undoes; asserts BOTH `spell_slot_refunded` and `buff_install` legs in per_target; verifies the buff is gone.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.37 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 616 → 617, version stamp v2.97.36 → v2.97.37.
+
+### Fixed
+- `tests/harness/test_buff_attack_hooks.py::test_faerie_fire_attack_against_target_has_advantage` and `tests/harness/test_undo_refunds_resource.py::test_undo_cast_spell_faerie_fire_drops_buff` — bumped their `range(20)` dice loops to `range(40)`. Both target Krieger, who has Danger Sense (advantage on Dex saves vs spells), dropping the per-iteration save-fail rate from ~55% to ~20% and making 20-iteration loops flaky (~1% miss-rate). 40 iterations puts the cumulative miss-rate well under 0.1%.
+
+### Notes
+- **PATCH bump** — catalog-only addition + a flake-fix bump on the existing Faerie Fire tests. No new code paths, no helpers, no schema changes.
+- **Filed mechanical hooks (Heroism specifically):**
+  - **Temp HP per turn.** RAW: "gains temporary hit points equal to your spellcasting ability modifier at the start of each of its turns." Needs a turn-start hook (paralleling Rage's per-turn reset) that walks the active battle, finds combatants with the `heroism` buff, looks up the source caster's spellcasting modifier, and bumps `combatant.hp_temp` accordingly (clamped — temp HP doesn't stack with itself). The buff carries `effects.heroism_temp_hp_per_turn: True` as the marker.
+  - **Frightened immunity.** Symmetric to the v2.55.0 Aura of Devotion Charmed-immunity gate at the PC condition-install site. When a Frightened condition is about to install on a target who has the `heroism` buff, short-circuit the install and broadcast a "frightened-immunity" event (same shape as the existing `_broadcast_aura_of_devotion` for the Charmed case). The buff carries `effects.condition_immunity_frightened: True`.
+- **Pattern proven.** The v2.97.31 plumbing (catalog → /cast_spell walker → buff_install undo) ships a new no-save buff in one catalog edit. Future additions (Aid, Shield of Faith, etc.) are the same shape.
+- Total harness count: 617 (was 616 in v2.97.36) — one new Heroism round-trip test.
+
+---
+
 ## [2.97.36] - 2026-05-29 — "Touch the Bonfire"
 
 **Schema version:** 64
