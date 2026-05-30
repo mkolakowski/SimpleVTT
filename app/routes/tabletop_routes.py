@@ -11235,7 +11235,24 @@ async def respond_roll_request(
                     "source_spell": ctx.get("spell_name") or "",
                     "duration_rounds": int(cond.get("duration_rounds", 10)),
                     "duration_max": int(cond.get("duration_rounds", 10)),
-                    "concentration": bool(cond.get("concentration")),
+                    # v2.97.67 — Target-side condition buffs (Frightened
+                    # from Fear, Paralyzed from Hold Person, etc.) must
+                    # NOT carry ``concentration: True``. The caster's
+                    # concentration is tracked via a separate
+                    # ``concentration-<spell>`` anchor on the CASTER
+                    # (installed below); the paired-cleanup helper
+                    # ``_drop_paired_concentration_buffs`` keys on
+                    # ``source_char_id``, NOT on the target buff's
+                    # concentration flag, so RAW concentration-ends-
+                    # the-effect semantics stay intact. Pre-v2.97.67
+                    # the target buff inherited cond.concentration,
+                    # which made the damage-triggered Con-save check
+                    # on the TARGET drop their own Frightened buff
+                    # (treating them as if they were concentrating on
+                    # being frightened). That broke v2.97.65's damage-
+                    # trigger save by removing the buff before the
+                    # hook could fire.
+                    "concentration": False,
                     "effects": list(cond.get("effects", [])),
                     # v2.97.60 — repeated-save plumbing.
                     "repeated_save_ability": str(ctx.get("save_ability") or "").upper()[:3],
@@ -12965,7 +12982,12 @@ async def cast_spell(
                     "source_spell": payload["spell_name"],
                     "duration_rounds": int(cond.get("duration_rounds", 10)),
                     "duration_max": int(cond.get("duration_rounds", 10)),
-                    "concentration": bool(cond.get("concentration")),
+                    # v2.97.67 — NPC target-side buff also gets
+                    # concentration=False per the same RAW reasoning
+                    # as the PC fix. The caster's concentration
+                    # anchor + source_char_id pairing still handle
+                    # spell-end semantics correctly.
+                    "concentration": False,
                     "effects": list(cond.get("effects", [])),
                     # v2.97.66 — repeated-save + damage-trigger plumbing
                     # for NPC targets. Mirrors the PC install stamps.

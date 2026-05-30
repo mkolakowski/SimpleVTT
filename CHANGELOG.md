@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.67] - 2026-05-30 — "The Borrowed Vow"
+
+**Schema version:** 64
+**Commit summary:** **Target-side condition buffs no longer carry concentration=True — fixes v2.97.65 + v2.97.66 damage-trigger save tests.** Root cause: the v2.97.60 install paths (both PC and NPC) copied ``concentration: bool(cond.get("concentration"))`` from the catalog to the target-side condition buff. This was wrong: only the CASTER concentrates; the target just bears the condition. With the flag on, the damage pipeline's ``_maybe_concentration_save`` fired on the TARGET (treating them as if they were concentrating on their own Frightened buff), dropped the buff on a failed Con save, and the v2.97.65 damage-trigger save hook ran against an empty buff list — never firing. Fix: set ``concentration: False`` on the target buff in both PC and NPC install paths. The caster-side concentration anchor (a separate ``concentration-<spell>`` buff installed on the caster) + the source_char_id-keyed paired-cleanup helper still handle RAW concentration-ends-the-effect semantics correctly. The previously-broken v2.97.65 and v2.97.66 damage-trigger tests now pass.
+**Description:** Two edits in ``app/routes/tabletop_routes.py``. **(1)** PC install in /respond (around line 11005): ``concentration: False`` (was ``bool(cond.get("concentration"))``). **(2)** NPC install in /cast_spell (around line 12907): same change. Documenting comments in both spots explain the RAW reasoning + the v2.97.65 test breakage that prompted the fix.
+
+### Changed
+- ``app/routes/tabletop_routes.py::respond`` — PC condition install: ``concentration: False``.
+- ``app/routes/tabletop_routes.py::cast_spell`` (NPC install) — ``concentration: False``.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.67 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — two one-line changes + explanatory comments. No new test (the v2.97.65 + v2.97.66 tests now pass; they were the regression that caught the bug).
+- **The fix is RAW-correct.** Per the v2.38.0 Phase T.3e concentration model, the spell-end-on-caster-concentration-break path goes through ``_drop_paired_concentration_buffs(caster_char_id)``. That helper walks all combatants for buffs whose ``source_char_id`` matches the caster who lost concentration — NOT for buffs with ``concentration=True`` on the target. So removing the target-side flag doesn't break Fear-ends-when-Lyra's-concentration-breaks behavior.
+- **What changes for the player.** A frightened PC no longer fakes-out their own concentration check on damage. Their Frightened buff persists through damage (subject to the v2.97.65 damage-triggered Wis save against the original DC), and only ends RAW via: (a) successful Wis save (v2.97.65 damage-trigger or v2.97.62 end-of-turn), (b) caster's concentration breaking (paired cleanup), (c) Fear's duration timer expiring, (d) external buff-removal action.
+- **Pre-existing data note.** Frightened buffs installed BEFORE this commit's deploy still carry ``concentration: True`` and will continue to fake-out the target's concentration check on damage. Re-casting Fear (or any save-or-suck condition) post-deploy installs with the fix in place. No migration needed — the buffs naturally expire.
+- **Caster-side anchor unchanged.** The ``concentration-fear`` / ``concentration-hold-person`` etc. buffs installed on the caster still carry ``concentration: True``, which is correct.
+- **Companion tests re-run on next commit.** The v2.97.65 and v2.97.66 damage-trigger tests should now pass.
+- Total harness count: 645 (unchanged from v2.97.66) — no new tests, the existing ones are now passing.
+
+---
+
 ## [2.97.66] - 2026-05-30 — "The Bandit Stirs"
 
 **Schema version:** 64
