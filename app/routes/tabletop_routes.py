@@ -1548,36 +1548,70 @@ async def _fire_damage_triggered_saves(
         qualifying.append((b, ab, dc))
     if not qualifying:
         return
-    # For PCs we resolve via the saver's sheet modifier; NPC saves
-    # against their own conditions would need the NPC template
-    # lookup which we don't currently wire here. Filing NPC damage-
-    # trigger saves for follow-up.
-    if not character_id:
-        return
-    char = None
-    if db is not None:
+    # v2.97.66 — extended to handle both PC and NPC saver paths. The
+    # PC path resolves the modifier from char.sheet; the NPC path
+    # builds the sheet from the token template via
+    # ``_monster_template_to_sheet``. PFE&G advantage stays gated on
+    # the saver being a PC (the helper looks up PFE&G via char_id);
+    # NPCs never carry PFE&G in the demo. Bless/Bane suffix is via
+    # the v2.97.35 helper's combatant-fallback branch for NPCs.
+    saver_sheet = None
+    saver_display_name = ""
+    is_pc_saver = False
+    if character_id:
+        is_pc_saver = True
+        if db is None:
+            return
         char = db.query(Character).filter(
             Character.id == int(character_id),
         ).first()
-    if not char or not char.sheet:
-        return
-    sheet = dict(char.sheet)
+        if not char or not char.sheet:
+            return
+        saver_sheet = dict(char.sheet)
+        saver_display_name = char.name
+    else:
+        # NPC saver: look up template via combatant.
+        tmpl_id = target.get("token_template_id")
+        if not tmpl_id or db is None:
+            return
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(tmpl_id),
+        ).first()
+        if not tmpl:
+            return
+        try:
+            saver_sheet = _monster_template_to_sheet(tmpl, campaign_id)
+        except Exception:
+            return
+        saver_display_name = target.get("name") or tmpl.name or "Creature"
+
     for buff, ab, dc in qualifying:
         key = buff.get("key")
         if not key:
             continue
         stat_key = f"{ab.lower()}_save"
-        saver_mod, _ = _resolve_stat_modifier(sheet, "dnd5e", stat_key)
-        source_caster_type = str(
-            buff.get("source_caster_creature_type") or ""
-        ).lower()
-        pfeag_adv = _saver_pfeag_save_advantage(
-            campaign_id, int(character_id), source_caster_type, key,
-        )
+        saver_mod, _ = _resolve_stat_modifier(saver_sheet, "dnd5e", stat_key)
+        # PFE&G advantage only applies to PC savers (the helper reads
+        # the saver's char buffs).
+        pfeag_adv = False
+        if is_pc_saver:
+            source_caster_type = str(
+                buff.get("source_caster_creature_type") or ""
+            ).lower()
+            pfeag_adv = _saver_pfeag_save_advantage(
+                campaign_id, int(character_id), source_caster_type, key,
+            )
         d20 = "2d20kh1" if pfeag_adv else "1d20"
-        bb_suffix = _saver_bless_bane_save_suffix(
-            campaign_id, int(character_id),
-        )
+        # Bless / Bane suffix. PCs use char_id; NPCs use the combatant
+        # dict (the helper's fallback path reads ``combatant.buffs``).
+        if is_pc_saver:
+            bb_suffix = _saver_bless_bane_save_suffix(
+                campaign_id, int(character_id),
+            )
+        else:
+            bb_suffix = _saver_bless_bane_save_suffix(
+                campaign_id, None, target,
+            )
         sign = "+" if saver_mod >= 0 else ""
         expr = f"{d20}{sign}{saver_mod}{bb_suffix}"
         try:
@@ -1591,7 +1625,7 @@ async def _fire_damage_triggered_saves(
         source_spell = buff.get("source_spell") or ""
         adv_note = " · PFE&G advantage" if pfeag_adv else ""
         note = (
-            f"🩸 Damage-triggered save · {char.name} "
+            f"🩸 Damage-triggered save · {saver_display_name} "
             f"{ab} vs {buff_name}"
             f"{adv_note}"
             + (f" ({source_spell})" if source_spell else "")
@@ -1603,33 +1637,55 @@ async def _fire_damage_triggered_saves(
                 "total": total,
                 "breakdown": breakdown,
                 "note": note,
-                "user_name": char.name,
-                "char_name": char.name,
+                "user_name": saver_display_name,
+                "char_name": saver_display_name,
                 "visibility": Visibility.PUBLIC.value,
                 "dc": dc,
             },
         })
         if passed:
-            dropped = await _remove_buff(
-                campaign_id, int(character_id), key,
-            )
-            if dropped:
-                _mirror_buffs_to_sheet(
-                    db, int(character_id),
-                    _get_buffs(campaign_id, int(character_id)),
+            if is_pc_saver:
+                dropped = await _remove_buff(
+                    campaign_id, int(character_id), key,
                 )
-                await hub.broadcast(campaign_id, {
-                    "type": "feature_used",
-                    "data": {
-                        "source": "damage-triggered-save-passed",
-                        "char_name": char.name,
-                        "buff_key": key,
-                        "label": (
-                            f"{char.name} shook off {buff_name} "
-                            f"after taking damage"
-                        ),
-                    },
-                })
+                if dropped:
+                    _mirror_buffs_to_sheet(
+                        db, int(character_id),
+                        _get_buffs(campaign_id, int(character_id)),
+                    )
+            else:
+                # NPC path: remove from combatant buff list in place
+                # and broadcast a combatant-keyed buff_update. The
+                # hub-state mutation persists for subsequent calls.
+                current_state = hub.get_battle(campaign_id) or {}
+                for c in current_state.get("combatants") or []:
+                    if c.get("id") != target.get("id"):
+                        continue
+                    c["buffs"] = [
+                        b for b in (c.get("buffs") or [])
+                        if (b or {}).get("key") != key
+                    ]
+                    hub.set_battle(campaign_id, current_state)
+                    await hub.broadcast(campaign_id, {
+                        "type": "buff_update",
+                        "data": {
+                            "combatant_id": target.get("id"),
+                            "buffs": c["buffs"],
+                        },
+                    })
+                    break
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "source": "damage-triggered-save-passed",
+                    "char_name": saver_display_name,
+                    "buff_key": key,
+                    "label": (
+                        f"{saver_display_name} shook off {buff_name} "
+                        f"after taking damage"
+                    ),
+                },
+            })
 
 
 async def _wake_sleeping_on_damage(
@@ -5064,6 +5120,12 @@ async def _apply_damage_to_combatant(
     })
     # v2.49.61: RAW Sleep — taking damage wakes the sleeper.
     await _wake_sleeping_on_damage(campaign_id, None, target.get("id"), applied)
+    # v2.97.66 — damage-triggered repeated saves on NPCs. The helper
+    # builds the save modifier from the token template's sheet via
+    # _monster_template_to_sheet.
+    await _fire_damage_triggered_saves(
+        campaign_id, None, target.get("id"), applied, db=db,
+    )
     if attack_id:
         _log_damage_entry(attack_id, {
             "kind": "damage",
@@ -12878,6 +12940,22 @@ async def cast_spell(
         ):
             cond = _SPELL_CONDITION_MAP.get(spell_slug)
             if cond:
+                # v2.97.66 — NPC install gets the same v2.97.60 + v2.97.65
+                # stamps as the PC path so /use_repeated_save (manual),
+                # the v2.97.62 end-of-turn auto-fire, and the v2.97.65
+                # damage-trigger auto-fire all work for NPC targets too.
+                # Capture the caster's creature type for PFE&G — defaults
+                # to "" for PCs not carrying a creature_type marker.
+                _caster_cb_for_npc_repeat = None
+                _battle_for_npc_repeat = hub.get_battle(campaign_id)
+                if _battle_for_npc_repeat:
+                    for _c in (_battle_for_npc_repeat.get("combatants") or []):
+                        if _c.get("char_id") == int(char.id):
+                            _caster_cb_for_npc_repeat = _c
+                            break
+                _caster_type_for_npc_repeat = _attacker_creature_type(
+                    db, int(char.id), _caster_cb_for_npc_repeat,
+                )
                 buff = {
                     "key": cond["key"],
                     "name": cond["name"],
@@ -12889,6 +12967,12 @@ async def cast_spell(
                     "duration_max": int(cond.get("duration_rounds", 10)),
                     "concentration": bool(cond.get("concentration")),
                     "effects": list(cond.get("effects", [])),
+                    # v2.97.66 — repeated-save + damage-trigger plumbing
+                    # for NPC targets. Mirrors the PC install stamps.
+                    "repeated_save_ability": save_ability,
+                    "repeated_save_dc": int(auto_save_dc),
+                    "source_caster_creature_type": _caster_type_for_npc_repeat or "",
+                    "save_on_damage": bool(cond.get("save_on_damage")),
                 }
                 installed = await _install_buff_on_combatant_id(
                     campaign_id, target_combatant.get("id"), buff,

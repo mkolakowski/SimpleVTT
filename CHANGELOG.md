@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.66] - 2026-05-30 — "The Bandit Stirs"
+
+**Schema version:** 64
+**Commit summary:** **NPC damage-trigger saves + NPC install-time stamps.** Closes the NPC-side coverage caveat noted in v2.97.65. Two changes: **(1)** /cast_spell's NPC condition-install path (around line 12879) now stamps the same v2.97.60 ``repeated_save_ability`` / ``repeated_save_dc`` / ``source_caster_creature_type`` + v2.97.65 ``save_on_damage`` fields onto NPC-installed condition buffs as the PC install path. **(2)** ``_fire_damage_triggered_saves`` now handles the NPC saver branch: builds the save modifier from the token template's sheet via ``_monster_template_to_sheet``, rolls the save (PFE&G advantage stays PC-only since the helper reads char_id-keyed buffs), broadcasts the same 🩸 "Damage-triggered save" entry, and drops the buff via combatant-keyed buff_update on pass. The hook is wired in ``_apply_damage_to_combatant``'s NPC branch right after the v2.49.61 wake-on-damage call.
+**Description:** Three edits in ``app/routes/tabletop_routes.py``. **(1)** NPC install in /cast_spell — add ``repeated_save_ability`` / ``repeated_save_dc`` / ``source_caster_creature_type`` / ``save_on_damage`` to the buff dict; resolve the caster's creature type via ``_attacker_creature_type`` for the PFE&G stamp (defaults to "" for non-fiend casters). **(2)** ``_fire_damage_triggered_saves`` — branch on character_id: PC path unchanged; NPC path looks up ``token_template_id`` on the combatant, builds the sheet via ``_monster_template_to_sheet``, runs the rest of the resolve+broadcast+drop logic with combatant-keyed buff_update on pass. **(3)** NPC damage branch in ``_apply_damage_to_combatant`` — invoke the helper after the wake-on-damage call.
+
+### Added
+- NPC install-time stamps (``repeated_save_ability``, ``repeated_save_dc``, ``source_caster_creature_type``, ``save_on_damage``) in /cast_spell's NPC condition-install path.
+- NPC saver branch in ``_fire_damage_triggered_saves`` (template stat lookup + combatant-keyed buff_update on pass).
+- ``_apply_damage_to_combatant``'s NPC branch now calls the helper post-damage.
+- ``tests/harness/test_damage_triggered_save_npc.py::test_damage_to_frightened_npc_fires_repeated_save`` — Lyra casts Fear at a bandit; loops to install Frightened (with the v2.97.66 stamps); Krieger attacks the bandit; assert a 🩸 "Damage-triggered save" broadcast fires naming the bandit.
+
+### Changed
+- ``app/routes/tabletop_routes.py::cast_spell`` (NPC install) — adds v2.97.66 stamps.
+- ``app/routes/tabletop_routes.py::_fire_damage_triggered_saves`` — adds the NPC saver branch.
+- ``app/routes/tabletop_routes.py::_apply_damage_to_combatant`` (NPC branch) — adds the helper call.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.66 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 644 → 645, version stamp v2.97.65 → v2.97.66.
+
+### Notes
+- **PATCH bump** — one stamp extension + one helper branch + one wiring call + one harness test.
+- **Closes the Fear lifecycle for NPCs.** Pre-v2.97.66, an NPC frightened by a PC's Fear cast wouldn't auto-roll the save on damage. v2.97.66 fixes that. Same coverage now applies to Hideous Laughter on NPC targets via the shared marker.
+- **PFE&G stays PC-only.** The v2.97.50 ``_saver_pfeag_save_advantage`` helper reads the saver's char-id-keyed buffs; NPCs don't have that surface. A future NPC PFE&G representation would need a parallel path; for now NPC saves are always at straight d20.
+- **Source caster type still captured for NPCs.** Even though the PFE&G helper doesn't use it on NPCs today, the stamp is in place so a future NPC PFE&G implementation can read it without a re-install.
+- **Bless/Bane suffix for NPCs.** The v2.97.35 helper's ``saver_combatant`` fallback path reads the NPC combatant's ``buffs`` list directly — so an NPC carrying a bless / baned buff (e.g. via GM PUT /battle override) still picks up the +1d4 / -1d4 on the damage-trigger save.
+- **End-of-turn auto-fire NPC support is filed.** v2.97.62's hook runs the same logic but for the turn-shift trigger. Extending it to NPC savers is a parallel change to v2.97.66 (same template-stat lookup pattern). Filed as next-priority follow-up.
+- Total harness count: 645 (was 644 in v2.97.65) — one new NPC damage-trigger test.
+
+---
+
 ## [2.97.65] - 2026-05-30 — "The Blood Wakes"
 
 **Schema version:** 64
