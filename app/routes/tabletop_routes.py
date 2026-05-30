@@ -786,6 +786,12 @@ _SPELL_CONDITION_MAP = {
             "can't willingly move closer to caster",
             "drops what it's holding",
         ],
+        # v2.97.65 — Fear RAW (PHB p.240): "AT THE END OF EACH OF
+        # ITS TURNS, AND EACH TIME IT TAKES DAMAGE, the target can
+        # make another Wisdom saving throw." The end-of-turn case
+        # rides the v2.97.62 auto-fire; this marker drives the v2.97.65
+        # damage-trigger path in the damage-application pipeline.
+        "save_on_damage": True,
     },
     "hideous-laughter": {
         "key": "incapacitated",
@@ -798,6 +804,12 @@ _SPELL_CONDITION_MAP = {
             "incapacitated — no actions or reactions",
             "saves again at end of each turn",
         ],
+        # v2.97.65 — Hideous Laughter RAW (PHB p.250): "If the affected
+        # creature takes any damage, it can repeat the saving throw,
+        # ending the effect on a success." Same marker as Fear; the
+        # damage-trigger hook in the apply-damage pipeline fires the
+        # save-or-end resolution.
+        "save_on_damage": True,
     },
     # v2.49.55: Monk Stunning Strike (class feature). Used by the
     # /use_stunning_strike endpoint via the same save-or-suck pipeline
@@ -1472,6 +1484,154 @@ async def _remove_buff(
 # sources (a future Power Word Knockout, etc.) aren't accidentally
 # cleared by stray damage. The dying-at-0-HP state lives on
 # `Character.sheet.death_saves`, NOT in a buff, so it's untouched.
+async def _fire_damage_triggered_saves(
+    campaign_id: int,
+    character_id: int | None,
+    combatant_id: str | None,
+    damage_applied: int,
+    *,
+    db: "Session | None" = None,
+) -> None:
+    """v2.97.65 — companion to ``_wake_sleeping_on_damage``. RAW Fear
+    + Hideous Laughter: a damaged target rolls a fresh save against
+    the original spell's DC; success ends the effect. Reuses the
+    v2.97.60 install-time stamps (``repeated_save_ability``,
+    ``repeated_save_dc``, ``source_caster_creature_type``) plus the
+    v2.97.65 catalog marker ``save_on_damage`` to identify which
+    buffs qualify. Composes the save expression with the v2.97.50
+    PFE&G advantage helper + the v2.97.35 Bless/Bane suffix, rolls,
+    broadcasts a public 🩸 roll log entry, and drops the buff on
+    pass.
+
+    No-op when ``damage_applied <= 0`` (resistance reduced to 0 → no
+    damage → no save trigger, RAW). PC path runs through
+    ``_remove_buff`` so the buff_update broadcast + paired cleanup
+    fire; NPC path mutates the combatant directly and broadcasts
+    ``buff_update`` keyed on combatant_id.
+
+    The DB session is required for the PC path so we can mirror
+    the buff list back to the sheet after drop. NPC path doesn't
+    need it.
+    """
+    if damage_applied <= 0:
+        return
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    target = None
+    for c in state.get("combatants") or []:
+        if character_id and c.get("char_id") == character_id:
+            target = c
+            break
+        if combatant_id and c.get("id") == combatant_id and not character_id:
+            target = c
+            break
+    if target is None:
+        return
+    # Collect qualifying buffs up front (we mutate state during the
+    # loop via _remove_buff / in-place edits).
+    qualifying = []
+    for b in (target.get("buffs") or []):
+        if not isinstance(b, dict):
+            continue
+        if not b.get("save_on_damage"):
+            continue
+        ab = str(b.get("repeated_save_ability") or "").upper()[:3]
+        try:
+            dc = int(b.get("repeated_save_dc") or 0)
+        except (TypeError, ValueError):
+            dc = 0
+        if ab not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+            continue
+        if dc <= 0:
+            continue
+        qualifying.append((b, ab, dc))
+    if not qualifying:
+        return
+    # For PCs we resolve via the saver's sheet modifier; NPC saves
+    # against their own conditions would need the NPC template
+    # lookup which we don't currently wire here. Filing NPC damage-
+    # trigger saves for follow-up.
+    if not character_id:
+        return
+    char = None
+    if db is not None:
+        char = db.query(Character).filter(
+            Character.id == int(character_id),
+        ).first()
+    if not char or not char.sheet:
+        return
+    sheet = dict(char.sheet)
+    for buff, ab, dc in qualifying:
+        key = buff.get("key")
+        if not key:
+            continue
+        stat_key = f"{ab.lower()}_save"
+        saver_mod, _ = _resolve_stat_modifier(sheet, "dnd5e", stat_key)
+        source_caster_type = str(
+            buff.get("source_caster_creature_type") or ""
+        ).lower()
+        pfeag_adv = _saver_pfeag_save_advantage(
+            campaign_id, int(character_id), source_caster_type, key,
+        )
+        d20 = "2d20kh1" if pfeag_adv else "1d20"
+        bb_suffix = _saver_bless_bane_save_suffix(
+            campaign_id, int(character_id),
+        )
+        sign = "+" if saver_mod >= 0 else ""
+        expr = f"{d20}{sign}{saver_mod}{bb_suffix}"
+        try:
+            r = dice_mod.roll(expr)
+            total = int(r.total)
+            breakdown = r.breakdown
+        except dice_mod.DiceParseError:
+            continue
+        passed = total >= dc
+        buff_name = buff.get("name") or key
+        source_spell = buff.get("source_spell") or ""
+        adv_note = " · PFE&G advantage" if pfeag_adv else ""
+        note = (
+            f"🩸 Damage-triggered save · {char.name} "
+            f"{ab} vs {buff_name}"
+            f"{adv_note}"
+            + (f" ({source_spell})" if source_spell else "")
+        )
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": expr,
+                "total": total,
+                "breakdown": breakdown,
+                "note": note,
+                "user_name": char.name,
+                "char_name": char.name,
+                "visibility": Visibility.PUBLIC.value,
+                "dc": dc,
+            },
+        })
+        if passed:
+            dropped = await _remove_buff(
+                campaign_id, int(character_id), key,
+            )
+            if dropped:
+                _mirror_buffs_to_sheet(
+                    db, int(character_id),
+                    _get_buffs(campaign_id, int(character_id)),
+                )
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "source": "damage-triggered-save-passed",
+                        "char_name": char.name,
+                        "buff_key": key,
+                        "label": (
+                            f"{char.name} shook off {buff_name} "
+                            f"after taking damage"
+                        ),
+                    },
+                })
+
+
 async def _wake_sleeping_on_damage(
     campaign_id: int,
     character_id: int | None,
@@ -4778,6 +4938,13 @@ async def _apply_damage_to_combatant(
         })
         # v2.49.61: RAW Sleep — taking damage wakes the sleeper.
         await _wake_sleeping_on_damage(campaign_id, char.id, None, applied, db=db)
+        # v2.97.65 — damage-triggered repeated saves (Fear, Hideous
+        # Laughter). Reuses the v2.97.60 install-time stamps; fires
+        # only when the buff carries the v2.97.65 ``save_on_damage``
+        # marker.
+        await _fire_damage_triggered_saves(
+            campaign_id, char.id, None, applied, db=db,
+        )
         # v2.64.0 — F2 auto-reveal: hidden attacker damages a PC →
         # the target's owner sees the attacker. Fires only when an
         # `attacker_char_id` is supplied (weapon-attack path; spell-
@@ -11012,6 +11179,13 @@ async def respond_roll_request(
                     "repeated_save_ability": str(ctx.get("save_ability") or "").upper()[:3],
                     "repeated_save_dc": int(ctx.get("dc") or 0),
                     "source_caster_creature_type": _caster_type_for_repeat or "",
+                    # v2.97.65 — damage-trigger save plumbing. Copies
+                    # the catalog's top-level ``save_on_damage`` flag
+                    # so the damage-application hook knows whether to
+                    # fire a repeated save after damage lands. Fear
+                    # and Hideous Laughter opt in via the catalog;
+                    # other conditions leave the flag absent.
+                    "save_on_damage": bool(cond.get("save_on_damage")),
                 }
                 # v2.65.0 Phase B — snapshot the target's pre-install
                 # buff list so the undo pipeline can restore it. The

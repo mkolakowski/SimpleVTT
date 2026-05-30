@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.65] - 2026-05-30 — "The Blood Wakes"
+
+**Schema version:** 64
+**Commit summary:** **Damage-triggered repeated saves for Fear + Hideous Laughter.** Closes the RAW Fear ("each time it takes damage") and Hideous Laughter ("if the affected creature takes any damage, it can repeat the saving throw") damage-retrigger hooks. Adds a catalog marker (``save_on_damage``) on the two condition entries, copies it to the installed buff via the v2.97.60 install path, and fires a new ``_fire_damage_triggered_saves`` helper after damage applies in ``_apply_damage_to_combatant`` (PC path). The helper reuses the v2.97.50 PFE&G save-advantage + v2.97.35 Bless/Bane suffix composition from the v2.97.60 endpoint and the v2.97.62 end-of-turn auto-fire, broadcasts a 🩸 "Damage-triggered save" roll entry, and drops the buff on pass via ``_remove_buff``.
+**Description:** Four edits in ``app/routes/tabletop_routes.py``. **(1)** Catalog: add top-level ``save_on_damage: True`` to ``_SPELL_CONDITION_MAP["fear"]`` and ``["hideous-laughter"]``. **(2)** Install-time stamp in /respond's PC condition-install path: copy ``cond.get("save_on_damage")`` to the buff alongside the existing v2.97.60 repeated-save stamps. **(3)** New ``_fire_damage_triggered_saves(campaign_id, char_id, combatant_id, damage_applied, db)`` helper near ``_wake_sleeping_on_damage``: walks the target's buffs for ``save_on_damage`` + valid v2.97.60 stamps, composes the save expression with PFE&G + Bless/Bane, rolls, broadcasts, drops on pass. **(4)** Wiring in ``_apply_damage_to_combatant``'s PC branch immediately after the v2.49.61 wake-on-damage call, so any PC who takes damage with Fear / Hideous Laughter active gets the auto-roll. NPC damage-trigger saves are filed (would need NPC template stat lookup).
+
+### Added
+- ``_fire_damage_triggered_saves`` helper in ``app/routes/tabletop_routes.py``.
+- ``save_on_damage`` catalog marker on fear + hideous-laughter entries.
+- Install-time ``save_on_damage`` stamp on buffs (v2.97.60 install path).
+- Damage-pipeline hook call in ``_apply_damage_to_combatant``'s PC branch.
+- ``tests/harness/test_damage_triggered_save.py::test_damage_to_frightened_pc_fires_repeated_save`` — Lyra (fiend test override) frightens Pip; Krieger deals damage; assert a 🩸 "Damage-triggered save" broadcast fires for Pip's frightened buff.
+
+### Changed
+- ``app/routes/tabletop_routes.py::_SPELL_CONDITION_MAP`` — adds the save_on_damage markers.
+- ``app/routes/tabletop_routes.py::respond`` — adds the install-time stamp.
+- ``app/routes/tabletop_routes.py::_apply_damage_to_combatant`` — adds the post-damage hook call.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.65 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 643 → 644, version stamp v2.97.63 → v2.97.65.
+
+### Notes
+- **PATCH bump** — one helper + one install-time copy + one wiring call + one test.
+- **Closes the RAW Fear lifecycle.** Fear's three RAW save triggers are now all wired: install save (always existed), end-of-turn save (v2.97.62 auto-fire), damage-trigger save (v2.97.65). Hideous Laughter rides the same machinery via the shared marker.
+- **PFE&G advantage layered identically.** Same helper call as v2.97.60 / v2.97.62 — PFE&G is now operative in THREE flows (manual endpoint, end-of-turn auto-fire, damage-trigger auto-fire).
+- **PC-only for now.** The helper short-circuits when ``character_id`` is None (NPC damage), because NPC saves would need template stat lookup which the helper doesn't currently wire. Filing NPC damage-trigger saves for follow-up — when an NPC is Frightened by a PC, the v2.97.65 hook would auto-roll the NPC's Wis save on damage.
+- **Marker-driven, not key-driven.** Future condition catalog entries that want this behavior just add ``save_on_damage: True``. No new helper, no new endpoint. Same generalized pattern as v2.97.49 (PFE&G) and v2.97.60 (repeated-save).
+- **Order matters.** The hook fires AFTER damage applies + character_hp_update broadcasts, so the breakdown / roll log shows: 1) damage dealt, 2) (optional) wake from sleep, 3) (optional) damage-trigger save fires.
+- Total harness count: 644 (was 643 in v2.97.63) — one new damage-trigger test.
+
+---
+
 ## [2.97.64] - 2026-05-30 — "Rise and Shine"
 
 **Schema version:** 64
