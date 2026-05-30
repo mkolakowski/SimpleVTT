@@ -1444,9 +1444,20 @@ async def _drop_paired_concentration_buffs(
         kept = []
         for b in buffs:
             b = b or {}
-            if (
-                b.get("source_char_id") == caster_char_id
-                and bool(b.get("concentration"))
+            # v2.99.1 — match on source_char_id AND
+            # (concentration: True OR _dependent_on_caster_concentration).
+            # Pre-v2.99.1 the check required ``concentration: True``,
+            # which broke the cascade for v2.97.67-fixed target-side
+            # condition buffs (Paralyzed / Frightened / Charmed etc.)
+            # that now carry ``concentration: False`` so the damage-
+            # triggered Con-save check on the target doesn't drop the
+            # buff prematurely. v2.99.1 stamps the new
+            # ``_dependent_on_caster_concentration: True`` marker on
+            # the target buff at install time so the helper still
+            # cascade-drops it when the caster's concentration ends.
+            if b.get("source_char_id") == caster_char_id and (
+                bool(b.get("concentration"))
+                or bool(b.get("_dependent_on_caster_concentration"))
             ):
                 rec = dict(b)
                 rec["_dropped_from_combatant_id"] = c.get("id")
@@ -1498,9 +1509,17 @@ async def _drop_paired_concentration_buffs_npc(
         kept = []
         for b in buffs:
             b = b or {}
+            # v2.99.1 — match on source_combatant_id AND no PC
+            # source_char_id (NPC-sourced gate) AND
+            # (concentration: True OR _dependent_on_caster_concentration).
+            # Same v2.97.67 / v2.99.1 reasoning as the PC helper.
             if (
                 b.get("source_combatant_id") == source_combatant_id
                 and not b.get("source_char_id")
+                and (
+                    bool(b.get("concentration"))
+                    or bool(b.get("_dependent_on_caster_concentration"))
+                )
             ):
                 rec = dict(b)
                 rec["_dropped_from_combatant_id"] = c.get("id")
@@ -11447,6 +11466,12 @@ async def respond_roll_request(
                     # trigger save by removing the buff before the
                     # hook could fire.
                     "concentration": False,
+                    # v2.99.1 — marker for the paired-cleanup helper.
+                    # Set only when the catalog entry is RAW
+                    # concentration (the caster's anchor maintains it);
+                    # cleared otherwise so the helper skips non-
+                    # concentration installs like Bardic Inspiration.
+                    "_dependent_on_caster_concentration": bool(cond.get("concentration")),
                     "effects": list(cond.get("effects", [])),
                     # v2.97.60 — repeated-save plumbing.
                     "repeated_save_ability": str(ctx.get("save_ability") or "").upper()[:3],
@@ -13209,6 +13234,9 @@ async def cast_spell(
                     # anchor + source_char_id pairing still handle
                     # spell-end semantics correctly.
                     "concentration": False,
+                    # v2.99.1 — marker for paired-cleanup (same as
+                    # /respond install at line ~11468).
+                    "_dependent_on_caster_concentration": bool(cond.get("concentration")),
                     "effects": list(cond.get("effects", [])),
                     # v2.97.66 — repeated-save + damage-trigger plumbing
                     # for NPC targets. Mirrors the PC install stamps.
@@ -27937,6 +27965,9 @@ async def use_npc_cast_spell(
                     # concentration: False; the caster's anchor below
                     # handles the concentration semantics.
                     "concentration": False,
+                    # v2.99.1 — marker for paired-cleanup helper
+                    # (_drop_paired_concentration_buffs_npc).
+                    "_dependent_on_caster_concentration": bool(cond.get("concentration")),
                     "effects": list(cond.get("effects", [])),
                     "repeated_save_ability": save_ability,
                     "repeated_save_dc": int(save_dc),

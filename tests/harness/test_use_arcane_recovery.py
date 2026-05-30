@@ -96,20 +96,26 @@ async def test_arcane_recovery_happy_path(gm_client, gm_ws, thalindra_clean):
 
 
 async def test_arcane_recovery_allowance(gm_client, thalindra_clean):
-    """Requesting 4 levels at Lv 5 (allowance = ⌈5/2⌉ = 3) should 409."""
+    """Requesting 5 levels at Lv 7 (allowance = ⌈7/2⌉ = 4) should 409.
+
+    v2.99.1: Thalindra was bumped from Lv 5 → Lv 7 in v2.97.72; this
+    test's slot-count was stuck on the old allowance (3 at Lv 5) and
+    the 2×L2=4-levels request stopped exceeding the new Lv 7 allowance
+    of 4. Bumped to 1×L5=5 levels so the exceeds-allowance gate fires.
+    """
     thalindra = thalindra_clean
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_arcane_recovery",
         json={
             "character_id": thalindra["id"],
-            "slots": [{"level": 2, "count": 2}],  # 2×2 = 4 levels, over allowance
+            "slots": [{"level": 5, "count": 1}],  # 1×5 = 5 levels, over allowance 4
         },
     )
     assert resp.status_code == 409
     body = resp.json()
     assert body.get("error") == "exceeds_allowance"
-    assert body.get("allowance") == 3
-    assert body.get("requested") == 4
+    assert body.get("allowance") == 4
+    assert body.get("requested") == 5
 
 
 async def test_arcane_recovery_l6_rejected(gm_client, thalindra_clean):

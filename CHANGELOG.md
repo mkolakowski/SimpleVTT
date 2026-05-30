@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.1] - 2026-05-30 — "Three Stale Fixtures"
+
+**Schema version:** 64
+**Commit summary:** **Fix three pre-existing stale test fixtures revealed by the v2.99.0 full-suite regression sweep + close the v2.97.67 paired-cleanup regression.** (1) ``test_use_arcane_recovery::test_arcane_recovery_allowance`` was pinned to Thalindra Lv 5 (allowance 3); v2.97.72 bumped her to Lv 7 (allowance 4), so the test's 4-level request stopped exceeding the allowance and hit the `insufficient_used_slots` branch instead. Bumped the test to 5 levels. (2) ``test_incapacitation_drops_concentration::test_source_caster_concentration_still_cascades`` revealed that v2.97.67 dropped ``concentration: True`` from target-side condition buffs but the paired-cleanup helpers (``_drop_paired_concentration_buffs`` and v2.98.0's NPC equivalent) still required the flag — so dropping a caster's concentration stopped cascading-removing the target's Paralyzed/Frightened/Charmed buffs. v2.99.1 adds a ``_dependent_on_caster_concentration: True`` marker on the target buff at install time (stamped only when the catalog entry's ``concentration: True``) and extends the helpers to drop buffs matching ``source_char_id + (concentration OR _dependent_on_caster_concentration)``. (3) ``test_undo_multi_entry::test_condition_install_undo_restores_buffs`` was using the roll_request id as the cast_id; v2.97.26 made the install path prefer ``ctx["cast_id"]`` (the spell's own cast_id) when stamping the buff_install log entry. Updated the test to use the cast_resp's `id` field.
+**Description:** Three test/code edits. Code change is the v2.97.67-cascade fix (helper + 3 install sites); test changes update fixture numbers.
+
+### Fixed
+- ``_drop_paired_concentration_buffs`` / ``_drop_paired_concentration_buffs_npc`` — now also match buffs carrying the new ``_dependent_on_caster_concentration`` marker, closing the v2.97.67 cascade regression.
+- ``tests/harness/test_use_arcane_recovery.py::test_arcane_recovery_allowance`` — pins to Thalindra Lv 7's allowance (4) instead of stale Lv 5 (3).
+- ``tests/harness/test_undo_multi_entry.py::test_condition_install_undo_restores_buffs`` — uses cast_resp's `id` instead of the roll_request id.
+
+### Added
+- ``_dependent_on_caster_concentration: True`` stamp on target-side condition buffs installed via /respond, /cast_spell NPC-target, and /npc_cast_spell NPC-target paths (when the catalog entry's ``concentration: True``).
+
+### Changed
+- ``app/routes/tabletop_routes.py`` — three install-site stamps + two helper relaxations.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.99.1 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — three discrete fixes, all closing pre-existing regressions that the v2.99.0 sweep surfaced. No new features.
+- **The v2.97.67 cascade fix is the load-bearing change.** Pre-v2.99.1, ending a caster's Hold Person concentration LEFT the target Paralyzed because the helper's hardcoded ``bool(b.get("concentration"))`` check skipped the post-v2.97.67 target buff (which carries ``concentration: False``). The marker pattern is symmetric with v2.99.0's ``wakeable_by_action`` — both convert hardcoded checks into explicit catalog-driven opt-ins.
+- **Why a marker instead of dropping the concentration check entirely.** Other PC-installed buffs (Bardic Inspiration, etc.) carry ``source_char_id`` of the caster but ARE NOT paired to concentration. Dropping the check would over-eagerly remove them when the caster's concentration ends.
+- **Suite now 658/658.** All three stale-fixture failures resolved against the live v2.99.1 container.
+- Total harness count: 658 (unchanged from v2.99.0).
+
+---
+
 ## [2.99.0] - 2026-05-30 — "Wake the Other Sleepers"
 
 **Schema version:** 64

@@ -199,7 +199,7 @@ async def test_condition_install_undo_restores_buffs(
     # Drive saves until one fails — re-seeding battle each iteration
     # so the auto-broadcast machinery + save context state reset.
     target_tok = f"tok_undo_{krieger['id']}"
-    last_pending_id = None
+    last_cast_id = None
     for _ in range(20):
         await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
@@ -230,6 +230,11 @@ async def test_condition_install_undo_restores_buffs(
         assert cast_resp.status_code == 200, cast_resp.text
         cast_data = cast_resp.json()
         pending_id = cast_data.get("auto_save_prompt_id")
+        # v2.99.1: prefer the cast's own cast_id over the roll_request
+        # id. The v2.97.26 install path stamps buff_install entries
+        # under ctx["cast_id"] (the spell's cast_id), not under
+        # str(roll_req.id), so the undo lookup needs to match.
+        cast_id = cast_data.get("id") or cast_data.get("cast_id")
         assert isinstance(pending_id, int)
         respond = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/roll_request/{pending_id}/respond",
@@ -237,9 +242,9 @@ async def test_condition_install_undo_restores_buffs(
         )
         assert respond.status_code == 200, respond.text
         if respond.json().get("auto_buff_installed"):
-            last_pending_id = pending_id
+            last_cast_id = cast_id
             break
-    assert last_pending_id is not None, (
+    assert last_cast_id is not None, (
         "could not land a Suggestion save-fail on Krieger in 20 tries"
     )
 
@@ -249,10 +254,10 @@ async def test_condition_install_undo_restores_buffs(
         f"expected Charmed on Krieger after save-fail; got {buffs_after_fail}"
     )
 
-    # Undo using the roll_request id as the cast_id.
+    # Undo using the spell's cast_id.
     undo_resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
-        json={"attack_id": str(last_pending_id)},
+        json={"attack_id": str(last_cast_id)},
     )
     assert undo_resp.status_code == 200, undo_resp.text
     undo = undo_resp.json()
