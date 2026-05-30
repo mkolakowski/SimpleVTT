@@ -28189,6 +28189,13 @@ async def use_npc_cast_spell(
         # broadcast payload above (line ~27744-27745); the endpoint
         # response wrapper omitted it.
         "auto_save_prompt_id": auto_save_prompt_id,
+        # v2.98.5 — surface the NPC-target install fields so callers
+        # can detect when a condition landed without parsing the
+        # broadcast payload.
+        "auto_save_buff_key": auto_save_buff_key,
+        "auto_save_buff_name": auto_save_buff_name,
+        "auto_save_buff_icon": auto_save_buff_icon,
+        "auto_save_buff_duration": auto_save_buff_duration,
         "target_combatant_id": target_combatant_id or "",
         "target_name": target_name_resolved,
         "auto_applied": bool(campaign.auto_apply_damage),

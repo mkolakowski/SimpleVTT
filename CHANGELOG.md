@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.98.6] - 2026-05-30 — "Surface the Hostile Spell"
+
+**Schema version:** 64
+**Commit summary:** **Fix v2.98.5 by surfacing ``auto_save_buff_*`` on /npc_cast_spell's HTTP response.** v2.98.5 added the install block + the broadcast payload fields, but the endpoint's HTTP return dict omitted them — the v2.98.5 harness test failed at the response-level assertion even though the broadcast was correct. Same shape as the v2.97.76 fix that did this for ``auto_save_prompt_id``. v2.98.6 adds the four ``auto_save_buff_*`` fields to the return dict so callers see them.
+**Description:** Four-line addition to the ``/npc_cast_spell`` HTTP return dict at line ~28189: surface ``auto_save_buff_key``, ``auto_save_buff_name``, ``auto_save_buff_icon``, ``auto_save_buff_duration`` alongside the existing ``auto_save_prompt_id``. Also removes two debug print statements left in from the v2.98.5 investigation.
+
+### Fixed
+- ``/npc_cast_spell`` HTTP response now carries ``auto_save_buff_*`` fields on the return dict (was only in the broadcast).
+- ``tests/harness/test_npc_cast_npc_target_install.py`` now passes on the live container.
+
+### Changed
+- ``app/routes/tabletop_routes.py::use_npc_cast_spell`` (return dict) — adds the four buff fields.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.98.6 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — one-line response surfacing fix that closes the v2.98.5 regression. No new logic.
+- **Same shape as v2.97.76.** That was the prior "broadcast carries it, response doesn't" pattern (for ``auto_save_prompt_id``). This is the same issue for a different field. Filing as a follow-up: a small audit comparing the broadcast payload field list to the response dict field list to catch any other gaps.
+- Total harness count: 657 (unchanged from v2.98.5).
+
+---
+
 ## [2.98.5] - 2026-05-30 — "The Hostile Spell on a Hostile Mind"
 
 **Schema version:** 64
