@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.3] - 2026-05-30 — "The Patient Wait"
+
+**Schema version:** 64
+**Commit summary:** **Fix v2.99.2's remaining test_npc_concentration flake — bump WS wait_for timeout 3.0s → 10.0s.** v2.99.2's cleanup got the test past the attack loop but the WS ``wait_for("concentration_save", timeout=3.0)`` was still timing out under suite contention (the WSCollector recv_loop competes with all other ongoing tests' WS traffic). v2.99.3 bumps the timeout to 10s — plenty of margin even under contention while still failing fast on a real broadcast miss.
+
+### Fixed
+- ``tests/harness/test_npc_concentration.py`` — WS timeout bumped 3.0 → 10.0 so the concentration_save broadcast has more margin to arrive under suite contention.
+
+### Notes
+- **PATCH bump** — single-number test edit. No code change.
+- Total harness count: 658 (unchanged from v2.99.2).
+
+---
+
 ## [2.99.2] - 2026-05-30 — "Clean Slate for the Halfling"
 
 **Schema version:** 64

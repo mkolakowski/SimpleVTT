@@ -206,8 +206,9 @@ async def test_npc_concentration_anchor_installs_and_breaks_on_damage(
     )
 
     # v2.98.0 contract: a concentration_save event fires for the
-    # Archmage's combatant_id.
-    conc_save = await gm_ws.wait_for("concentration_save", timeout=3.0)
+    # Archmage's combatant_id. v2.99.3 — bumped timeout 3.0 → 10.0
+    # so the WS recv_loop has more margin under suite contention.
+    conc_save = await gm_ws.wait_for("concentration_save", timeout=10.0)
     cs_data = conc_save.get("data") or {}
     assert cs_data.get("combatant_id") == archmage_tok, (
         f"concentration_save fired but for the wrong combatant: "
