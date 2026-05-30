@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.74] - 2026-05-30 — "The Tower's Edict"
+
+**Schema version:** 64
+**Commit summary:** **Add SRD Archmage to the demo token-template catalog.** The SRD Archmage (CR 12, Lv 18 spellcaster) is already shipped at ``app/data/local/dnd5e/monsters/archmage.json`` and lists Banishment among its 4th-level spells. This commit registers it as a demo TokenTemplate so it's available to drag-spawn from the Templates tab for set-piece encounters and harness tests. NOT placed in the demo battle by default (would clutter the bandit-encounter scene with a high-CR caster). Closes the Banishment cast-loop for the demo: Caelan (Paladin Lv 7) carries the spell as a known/preparable entry (v2.97.73), and the Archmage (Lv 18 wizard) actually has the L4 slots to cast it.
+**Description:** One-line edit in ``app/demo_seed.py::seed_token_templates``: appends ``("archmage", "Archmage")`` to the specs list. The ``_npc_sheet`` helper builds the minimal monster_slug-pointer sheet; ``_monster_template_to_sheet`` resolves the full SRD stat block at view / cast time. No new homebrew JSON needed — the SRD archmage.json is the authoritative source.
+
+### Added
+- ``Archmage`` entry in ``seed_token_templates`` specs (slug "archmage").
+- ``tests/harness/test_archmage_template_registered.py`` — fetches the campaign's templates list, asserts the Archmage is registered with the expected name and resolves via the SRD slug; confirms the SRD JSON's actions / spell list includes Banishment.
+
+### Changed
+- ``app/demo_seed.py::seed_token_templates`` — appends the archmage to the specs.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.74 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 650 → 651, version stamp v2.97.73 → v2.97.74.
+
+### Notes
+- **PATCH bump** — single line of demo content + one harness test. The SRD stat block is already shipped.
+- **Why register without placing.** A Lv 18 archmage in the demo's bandit scene would change the encounter narrative drastically. The template is available to drag-spawn from the GM's Templates tab when wanted; otherwise stays out of sight. Same pattern as a future "Beholder" or "Lich" template would follow.
+- **Bandit-list vs. archmage-list.** The Archmage's SRD JSON includes Banishment, Cone of Cold, Mind Blank, Time Stop — every staple high-level wizard spell. Demonstrates the catalog → demo bridge for not just Banishment but the whole Lv 4-9 spell range.
+- **No actual cast in this commit.** Closing the full /npc_cast_spell → Banishment → /respond install path requires more work (NPC save-or-suck install plumbing on /npc_cast_spell, which today only emits the save-roll-prompt for the GM to resolve manually). Filed as a future commit; the Archmage template is the foundation.
+- Total harness count: 651 (was 650 in v2.97.73) — one new template-registration test.
+
+---
+
 ## [2.97.73] - 2026-05-30 — "The Vow of Distant Lands"
 
 **Schema version:** 64

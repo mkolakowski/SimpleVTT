@@ -2625,6 +2625,16 @@ def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate
         # NPC strike flows: attack-roll → /npc_attack picker; save-DC
         # → 📋 Save announce.
         ("cult-acolyte", "Cult Acolyte"),
+        # v2.97.74 — SRD Archmage Lv 18. Resolves via the shipped
+        # SRD JSON ``app/data/local/dnd5e/monsters/archmage.json``,
+        # which lists Banishment among its 4th-level spells. Gives
+        # the demo a high-CR caster who CAN actually cast Banishment
+        # at slot_level=4 (Caelan still can't until Lv 13 — that's
+        # filed). The template isn't placed on the demo map by
+        # default (would clutter the bandit-encounter scene with
+        # a CR 12 caster), but a GM can drag-spawn it from the
+        # Templates tab for set-piece encounters or for testing.
+        ("archmage", "Archmage"),
     ]
     out: dict[str, TokenTemplate] = {}
     for slug, label in specs:
