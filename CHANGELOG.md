@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.46] - 2026-05-29 — "The Six Wards"
+
+**Schema version:** 64
+**Commit summary:** **Protection from Evil and Good added to `_SPELL_BUFF_MAP`.** Sixth catalog entry to the no-save buff catalog (Bless, Heroism, Shield of Faith, Aid, Sanctuary, Protection from Evil and Good). Caelan (the demo Paladin) already has it on his spell list at index 3 as an action; today's commit registers it in the catalog so `/cast_spell` installs the 🛐 `protection-from-evil-and-good` buff on the warded ally via the existing v2.97.31 walker and stamps `buff_install` under the cast's `cast_id`. Undo refunds the L1 slot AND drops the buff in one POST. Three RAW-defined mechanical halves are filed (one per benefit).
+**Description:** One catalog edit in `app/routes/tabletop_routes.py`: `_SPELL_BUFF_MAP["protection-from-evil-and-good"]` with key `protection-from-evil-and-good`, 🛐 icon, 100-round duration (10 minutes RAW), `concentration: True` (the SRD JSON marks it false, same data-layer bug as Bless/Heroism/Shield of Faith). Marker effects carry the protected creature types list (`pfeag_protected_types: ["aberration", "celestial", "elemental", "fey", "fiend", "undead"]`) plus three boolean flags for the three RAW benefits — `pfeag_attackers_have_disadvantage`, `pfeag_immune_to_charm_frighten_possess`, `pfeag_advantage_on_saves_vs_types`. The future hooks read these markers (no key-based lookups), so a future Protection from Energy / Mind Blank / etc. with the same `pfeag_protected_types` shape can opt into the same hooks by carrying the marker.
+
+### Added
+- `protection-from-evil-and-good` entry in `_SPELL_BUFF_MAP` (`app/routes/tabletop_routes.py`).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_pfeag_slot_and_target_buff` — Caelan casts PFE&G on Pip (L1 slot, action); asserts `protection-from-evil-and-good` is installed with the 6-element `pfeag_protected_types` list and all three benefit-flag markers (`pfeag_attackers_have_disadvantage`, `pfeag_immune_to_charm_frighten_possess`, `pfeag_advantage_on_saves_vs_types`); undoes; asserts BOTH `spell_slot_refunded` and `buff_install` legs in per_target; verifies the buff is gone.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.46 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 625 → 626, version stamp v2.97.45 → v2.97.46.
+
+### Notes
+- **PATCH bump** — catalog-only addition. Sixth `_SPELL_BUFF_MAP` entry; pattern fully proven (catalog edit + harness test ships a new spell with install + undo wiring for free).
+- **Three filed mechanical hooks (one per RAW benefit).**
+  - **Attacker-side disadvantage** — `/use_attack` extension: detect target carries PFE&G, check attacker's `creature_type` against the buff's `pfeag_protected_types` list, layer disadvantage on the d20 (same idiom as v2.49.115 Patient Defense). Capturing the attacker's creature_type means walking the attacker's sheet/template for the `creature_type` field (today's demo NPC bandits are humanoids; future templates that mark themselves as fiend/undead/etc. would trigger).
+  - **Type-aware condition immunity** — extension of the v2.97.43 `_pc_has_heroism_frightened_immunity` gate to also fire for PFE&G targets when the install would land Charmed / Frightened / Possessed AND the source caster's creature_type is in the protected list. Same `_respond` branch.
+  - **Type-aware save advantage** — extension of the v2.97.35 `_saver_bless_bane_save_suffix` helper to also flip `base_expression` to `2d20kh1` when the save is vs an ongoing effect from a protected type. Needs the save context to track the spell's source type.
+- **Pattern keeps proving.** Sixth catalog entry; each one continues to ship as one data edit + one harness test. The plumbing in v2.97.31 plus the v2.65.0 buff_install undo branch absorb the cost.
+- Total harness count: 626 (was 625 in v2.97.45) — one new PFE&G round-trip test.
+
+---
+
 ## [2.97.45] - 2026-05-29 — "Don't Look Here"
 
 **Schema version:** 64

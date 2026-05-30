@@ -1609,6 +1609,111 @@ async def test_undo_cast_sanctuary_slot_and_target_buff(gm_client, gm_ws, roster
     ), f"sanctuary still installed after undo: {pip_buffs_after}"
 
 
+async def test_undo_cast_pfeag_slot_and_target_buff(gm_client, gm_ws, roster):
+    """v2.97.46 — Protection from Evil and Good added to
+    ``_SPELL_BUFF_MAP``. Caelan casts it as an action; /cast_spell
+    installs the 'protection-from-evil-and-good' buff on Pip via
+    the v2.97.31 walker and stamps buff_install under the spell's
+    cast_id. Undo refunds the L1 slot AND drops the buff.
+
+    Marker effects carry the protected creature types (aberration,
+    celestial, elemental, fey, fiend, undead) plus three flag
+    markers for the filed mechanical hooks.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, caelan["id"])
+
+    pip_tok = f"tok_pfeag_pip_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_pfeag_caelan_{caelan['id']}",
+                    "char_id": caelan["id"],
+                    "name": caelan["name"],
+                    "initiative": 10,
+                    "hp_current": 60, "hp_max": 60,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": pip_tok,
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": 40, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    # PFE&G is Caelan's spell index 3.
+    PFEAG_INDEX = 3
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": PFEAG_INDEX,
+            "slot_level": 1,
+            "class_slug": "paladin",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json()["id"]
+
+    # Verify PFE&G is on Pip with the marker effects.
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    pfeag = next(
+        (b for b in pip_buffs if (b or {}).get("key") == "protection-from-evil-and-good"),
+        None,
+    )
+    assert pfeag is not None, (
+        f"expected protection-from-evil-and-good installed on Pip; got {pip_buffs}"
+    )
+    effects = pfeag.get("effects") or {}
+    # The protected types list rides through with all 6 entries.
+    protected = effects.get("pfeag_protected_types") or []
+    assert set(protected) == {
+        "aberration", "celestial", "elemental",
+        "fey", "fiend", "undead",
+    }, f"unexpected protected_types: {protected}"
+    # Each of the three benefit-flag markers carries through.
+    assert effects.get("pfeag_attackers_have_disadvantage") is True
+    assert effects.get("pfeag_immune_to_charm_frighten_possess") is True
+    assert effects.get("pfeag_advantage_on_saves_vs_types") is True
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+
+    pip_buffs_after = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "protection-from-evil-and-good"
+        for b in pip_buffs_after
+    ), f"protection-from-evil-and-good still installed after undo: {pip_buffs_after}"
+
+
 async def test_undo_cast_aid_slot_and_target_buff(gm_client, gm_ws, roster):
     """v2.97.40 — Aid added to ``_SPELL_BUFF_MAP``. Caelan (Paladin)
     casts it on Pip via /cast_spell; the v2.97.31 no-save buff path

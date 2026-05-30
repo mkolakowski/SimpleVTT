@@ -1021,6 +1021,48 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Attackers must Wis-save vs caster's DC or pick a new target. AoE bypasses. Ends if warded creature attacks or harms an enemy.",
     },
+    # v2.97.46 — Protection from Evil and Good (Cleric / Paladin /
+    # Warlock / Wizard L1). Touch, up to 10 minutes (concentration —
+    # the SRD JSON marks it false, same data-layer bug as Bless /
+    # Heroism / etc.; we override here). RAW: vs aberrations,
+    # celestials, elementals, fey, fiends, and undead, the warded
+    # creature gets THREE benefits:
+    # 1. Those creature types have DISADVANTAGE on attack rolls
+    #    against the target.
+    # 2. The target can't be charmed, frightened, or possessed
+    #    BY THOSE TYPES.
+    # 3. If already so afflicted, ADVANTAGE on new saves vs
+    #    ongoing effects from those types.
+    #
+    # Three filed mechanical hooks (one per RAW benefit):
+    # 1. Pre-attack walk in /use_attack: if target carries PFE&G
+    #    AND attacker's creature_type is in the protected list,
+    #    layer disadvantage on the d20.
+    # 2. Type-aware variant of the v2.97.43 condition-immunity gate
+    #    in /respond: if the install would land Charmed / Frightened
+    #    / Possessed AND the source is a protected creature type,
+    #    short-circuit.
+    # 3. Type-aware variant of the save-roll suffix in /respond:
+    #    if the save is vs an ongoing effect from a protected type,
+    #    flip base_expression to 2d20kh1.
+    "protection-from-evil-and-good": {
+        "key": "protection-from-evil-and-good",
+        "name": "Protection from Evil and Good",
+        "icon": "🛐",  # place of worship — sacred protection
+        "duration_rounds": 100,  # 10 minutes
+        "duration_max": 100,
+        "concentration": True,  # RAW
+        "effects": {
+            "pfeag_protected_types": [
+                "aberration", "celestial", "elemental",
+                "fey", "fiend", "undead",
+            ],
+            "pfeag_attackers_have_disadvantage": True,
+            "pfeag_immune_to_charm_frighten_possess": True,
+            "pfeag_advantage_on_saves_vs_types": True,
+        },
+        "desc": "Aberrations/celestials/elementals/fey/fiends/undead have disadvantage to attack the target. Target immune to their charm/frighten/possess; advantage on new saves vs ongoing effects from those types. 10 min concentration.",
+    },
 }
 
 
