@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.70] - 2026-05-30 — "One Bell to Ring Them All"
+
+**Schema version:** 64
+**Commit summary:** **Refactor: extract `_resolve_repeated_save_for_buff` shared helper, collapse five duplicated save-resolution paths into one.** The save expression + PFE&G/Bless-Bane composition + broadcast + drop logic was being copy-pasted across (1) the v2.97.60 `/use_repeated_save` endpoint, (2) the v2.97.62 PC end-of-turn auto-fire in PUT /battle, (3) the v2.97.69 NPC end-of-turn auto-fire (same block), (4) the v2.97.65 PC damage-trigger in `_fire_damage_triggered_saves`, and (5) the v2.97.66 NPC damage-trigger (same function). Five sites, ~400 lines of duplication. v2.97.70 introduces one async helper taking ``(campaign_id, db, saver_dict, buff, note_prefix, feature_used_source)`` and refactors all three call sites to use it. PC/NPC branching is via ``saver["kind"]``; PFE&G advantage stays PC-only; bless/bane suffix uses char_id or combatant fallback as appropriate. Public roll-log notes and feature_used source strings preserved — no contract change for the harness tests or the UI banners.
+**Description:** Four edits in ``app/routes/tabletop_routes.py``. **(1)** New ``_resolve_repeated_save_for_buff(campaign_id, db, saver, buff, note_prefix, feature_used_source)`` async helper right after ``_saver_bless_bane_save_suffix`` — single source of truth for the save expression composition + broadcast + drop. **(2)** ``/use_repeated_save`` endpoint reduced to validation + saver assembly + helper call; preserves the response shape (``passed``, ``total``, ``breakdown``, ``save_dc``, ``save_ability``, ``buff_dropped``, ``pfeag_advantage_applied``). **(3)** ``_fire_damage_triggered_saves`` PC + NPC saver-construction kept; the per-buff loop now just calls the helper. **(4)** PUT /battle's v2.97.62/69 end-of-turn block: same shape — saver assembly in the block, helper call per buff.
+
+### Changed
+- ``app/routes/tabletop_routes.py`` — extracts ``_resolve_repeated_save_for_buff``; refactors `/use_repeated_save`, ``_fire_damage_triggered_saves``, and PUT /battle's end-of-turn block to use it.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.70 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — pure refactor. No behavior change for: (a) public roll-log note format (preserved across all three sites: ``🔁 End-of-turn save · …``, ``🩸 Damage-triggered save · …``, ``🔁 Repeated save · …``), (b) feature_used source strings (``repeated-save-passed`` / ``repeated-save-passed-auto`` / ``damage-triggered-save-passed`` preserved), (c) the endpoint's response shape.
+- **Why now.** With the v2.97.69 NPC end-of-turn extension, five duplicated sites had been added across the v2.97.60-69 arc. The next ongoing-effect mechanic (Confusion's per-turn save, Banishment's per-turn save, etc.) would have either been a sixth copy or required this refactor anyway. Better to do it now while the contract is fresh.
+- **Net diff.** Helper adds ~150 lines; deletions across the three call sites total ~350 lines. Net ~200 line reduction in the routes file while making future single-site changes (new note formats, new feature_used sources, additional save-modifier hooks like Counterspell-style advantage) into one-line edits.
+- **Saver dict shape.** Documented in the helper docstring. Future code adding new save flows just builds the dict and calls the helper.
+- **Tests unchanged.** All 26 tests across the affected suites still pass with the refactor. The contract surface (response fields + broadcast formats) is preserved by design.
+- Total harness count: 646 (unchanged from v2.97.69) — refactor commit, no new tests.
+
+---
+
 ## [2.97.69] - 2026-05-30 — "The Watch Turns"
 
 **Schema version:** 64

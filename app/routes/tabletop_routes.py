@@ -1548,18 +1548,13 @@ async def _fire_damage_triggered_saves(
         qualifying.append((b, ab, dc))
     if not qualifying:
         return
-    # v2.97.66 — extended to handle both PC and NPC saver paths. The
-    # PC path resolves the modifier from char.sheet; the NPC path
-    # builds the sheet from the token template via
-    # ``_monster_template_to_sheet``. PFE&G advantage stays gated on
-    # the saver being a PC (the helper looks up PFE&G via char_id);
-    # NPCs never carry PFE&G in the demo. Bless/Bane suffix is via
-    # the v2.97.35 helper's combatant-fallback branch for NPCs.
-    saver_sheet = None
-    saver_display_name = ""
-    is_pc_saver = False
+    # v2.97.70 — delegate to the shared
+    # ``_resolve_repeated_save_for_buff`` helper. PC + NPC saver
+    # construction stays here; the save resolution + broadcast +
+    # drop loop is shared with /use_repeated_save and the v2.97.62 /
+    # v2.97.69 PUT /battle end-of-turn auto-fire.
+    saver = None
     if character_id:
-        is_pc_saver = True
         if db is None:
             return
         char = db.query(Character).filter(
@@ -1567,10 +1562,13 @@ async def _fire_damage_triggered_saves(
         ).first()
         if not char or not char.sheet:
             return
-        saver_sheet = dict(char.sheet)
-        saver_display_name = char.name
+        saver = {
+            "kind": "pc",
+            "char_id": int(character_id),
+            "char_name": char.name,
+            "sheet": dict(char.sheet),
+        }
     else:
-        # NPC saver: look up template via combatant.
         tmpl_id = target.get("token_template_id")
         if not tmpl_id or db is None:
             return
@@ -1580,112 +1578,22 @@ async def _fire_damage_triggered_saves(
         if not tmpl:
             return
         try:
-            saver_sheet = _monster_template_to_sheet(tmpl, campaign_id)
+            npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
         except Exception:
             return
-        saver_display_name = target.get("name") or tmpl.name or "Creature"
+        saver = {
+            "kind": "npc",
+            "char_name": target.get("name") or tmpl.name or "Creature",
+            "sheet": npc_sheet,
+            "combatant": target,
+        }
 
-    for buff, ab, dc in qualifying:
-        key = buff.get("key")
-        if not key:
-            continue
-        stat_key = f"{ab.lower()}_save"
-        saver_mod, _ = _resolve_stat_modifier(saver_sheet, "dnd5e", stat_key)
-        # PFE&G advantage only applies to PC savers (the helper reads
-        # the saver's char buffs).
-        pfeag_adv = False
-        if is_pc_saver:
-            source_caster_type = str(
-                buff.get("source_caster_creature_type") or ""
-            ).lower()
-            pfeag_adv = _saver_pfeag_save_advantage(
-                campaign_id, int(character_id), source_caster_type, key,
-            )
-        d20 = "2d20kh1" if pfeag_adv else "1d20"
-        # Bless / Bane suffix. PCs use char_id; NPCs use the combatant
-        # dict (the helper's fallback path reads ``combatant.buffs``).
-        if is_pc_saver:
-            bb_suffix = _saver_bless_bane_save_suffix(
-                campaign_id, int(character_id),
-            )
-        else:
-            bb_suffix = _saver_bless_bane_save_suffix(
-                campaign_id, None, target,
-            )
-        sign = "+" if saver_mod >= 0 else ""
-        expr = f"{d20}{sign}{saver_mod}{bb_suffix}"
-        try:
-            r = dice_mod.roll(expr)
-            total = int(r.total)
-            breakdown = r.breakdown
-        except dice_mod.DiceParseError:
-            continue
-        passed = total >= dc
-        buff_name = buff.get("name") or key
-        source_spell = buff.get("source_spell") or ""
-        adv_note = " · PFE&G advantage" if pfeag_adv else ""
-        note = (
-            f"🩸 Damage-triggered save · {saver_display_name} "
-            f"{ab} vs {buff_name}"
-            f"{adv_note}"
-            + (f" ({source_spell})" if source_spell else "")
+    for buff, _ab, _dc in qualifying:
+        await _resolve_repeated_save_for_buff(
+            campaign_id, db, saver, buff,
+            note_prefix="🩸 Damage-triggered save",
+            feature_used_source="damage-triggered-save-passed",
         )
-        await hub.broadcast(campaign_id, {
-            "type": "roll",
-            "data": {
-                "expression": expr,
-                "total": total,
-                "breakdown": breakdown,
-                "note": note,
-                "user_name": saver_display_name,
-                "char_name": saver_display_name,
-                "visibility": Visibility.PUBLIC.value,
-                "dc": dc,
-            },
-        })
-        if passed:
-            if is_pc_saver:
-                dropped = await _remove_buff(
-                    campaign_id, int(character_id), key,
-                )
-                if dropped:
-                    _mirror_buffs_to_sheet(
-                        db, int(character_id),
-                        _get_buffs(campaign_id, int(character_id)),
-                    )
-            else:
-                # NPC path: remove from combatant buff list in place
-                # and broadcast a combatant-keyed buff_update. The
-                # hub-state mutation persists for subsequent calls.
-                current_state = hub.get_battle(campaign_id) or {}
-                for c in current_state.get("combatants") or []:
-                    if c.get("id") != target.get("id"):
-                        continue
-                    c["buffs"] = [
-                        b for b in (c.get("buffs") or [])
-                        if (b or {}).get("key") != key
-                    ]
-                    hub.set_battle(campaign_id, current_state)
-                    await hub.broadcast(campaign_id, {
-                        "type": "buff_update",
-                        "data": {
-                            "combatant_id": target.get("id"),
-                            "buffs": c["buffs"],
-                        },
-                    })
-                    break
-            await hub.broadcast(campaign_id, {
-                "type": "feature_used",
-                "data": {
-                    "source": "damage-triggered-save-passed",
-                    "char_name": saver_display_name,
-                    "buff_key": key,
-                    "label": (
-                        f"{saver_display_name} shook off {buff_name} "
-                        f"after taking damage"
-                    ),
-                },
-            })
 
 
 async def _wake_sleeping_on_damage(
@@ -15159,96 +15067,35 @@ async def use_repeated_save(
             "label": "Buff has no repeated-save data stamped",
         })
 
-    sheet = dict(char.sheet or {})
-    stat_key = f"{save_ability_raw.lower()}_save"
-    saver_mod, _saver_label = _resolve_stat_modifier(sheet, "dnd5e", stat_key)
-
-    # v2.97.60 — PFE&G save advantage. Reads source_caster_creature_type
-    # stamped on the buff at install time. Helper returns True only for
-    # charmed / frightened keys, matching RAW's "any new saving throw
-    # against the relevant effect" applying only to those conditions.
-    source_caster_type = str(target_buff.get("source_caster_creature_type") or "").lower()
-    pfeag_adv = _saver_pfeag_save_advantage(
-        campaign_id,
-        int(char.id),
-        source_caster_type,
-        buff_key,
-    )
-
-    # Build d20 piece. Advantage uses kh1 keep-highest of two rolls.
-    if pfeag_adv:
-        d20_part = "2d20kh1"
-        adv_note = " · PFE&G advantage"
-    else:
-        d20_part = "1d20"
-        adv_note = ""
-
-    bless_bane_suffix = _saver_bless_bane_save_suffix(
-        campaign_id, int(char.id),
-    )
-
-    sign = "+" if saver_mod >= 0 else ""
-    expr = f"{d20_part}{sign}{saver_mod}{bless_bane_suffix}"
-    try:
-        roll_result = dice_mod.roll(expr)
-        total = int(roll_result.total)
-        breakdown = roll_result.breakdown
-    except dice_mod.DiceParseError:
-        raise HTTPException(400, f"Invalid save expression: {expr}")
-
-    passed = total >= save_dc
-
-    # Broadcast the save roll publicly so the table sees the result.
-    source_spell = target_buff.get("source_spell") or ""
-    note_label = (
-        f"🔁 {char.name} repeated {save_ability_raw} save vs "
-        f"{(target_buff.get('name') or buff_key).strip()}"
-        f"{adv_note}"
-        + (f" ({source_spell})" if source_spell else "")
-    )
-    await hub.broadcast(campaign_id, {
-        "type": "roll",
-        "data": {
-            "expression": expr,
-            "total": total,
-            "breakdown": breakdown,
-            "note": note_label,
-            "user_name": char.name,
+    # v2.97.70 — delegate the save resolution + broadcast + drop to
+    # the shared helper. Endpoint stays a thin wrapper over the
+    # validation + saver assembly.
+    result = await _resolve_repeated_save_for_buff(
+        campaign_id, db,
+        saver={
+            "kind": "pc",
+            "char_id": int(char.id),
             "char_name": char.name,
-            "visibility": Visibility.PUBLIC.value,
-            "dc": save_dc,
+            "sheet": dict(char.sheet or {}),
         },
-    })
-
-    dropped = False
-    if passed:
-        dropped = await _remove_buff(campaign_id, int(char.id), buff_key)
-        if dropped:
-            _mirror_buffs_to_sheet(
-                db, int(char.id), _get_buffs(campaign_id, int(char.id)),
-            )
-            await hub.broadcast(campaign_id, {
-                "type": "feature_used",
-                "data": {
-                    "source": "repeated-save-passed",
-                    "char_name": char.name,
-                    "buff_key": buff_key,
-                    "label": (
-                        f"{char.name} shook off "
-                        f"{target_buff.get('name') or buff_key}"
-                    ),
-                },
-            })
+        buff=target_buff,
+        note_prefix="🔁 Repeated save",
+        feature_used_source="repeated-save-passed",
+    )
+    if result is None:
+        # The helper returned None — typically a dice_mod parse error
+        # on a malformed save_ability / DC combo.
+        raise HTTPException(400, "Could not resolve save expression")
 
     return {
         "ok": True,
-        "passed": passed,
-        "total": total,
-        "breakdown": breakdown,
-        "save_dc": save_dc,
-        "save_ability": save_ability_raw,
-        "buff_dropped": dropped,
-        "pfeag_advantage_applied": bool(pfeag_adv),
+        "passed": result["passed"],
+        "total": result["total"],
+        "breakdown": result["breakdown"],
+        "save_dc": result["save_dc"],
+        "save_ability": result["save_ability"],
+        "buff_dropped": result["buff_dropped"],
+        "pfeag_advantage_applied": result["pfeag_advantage_applied"],
     }
 
 
@@ -18082,6 +17929,167 @@ def _saver_bless_bane_save_suffix(
     if has_bane:
         suffix += "-1d4"
     return suffix
+
+
+async def _resolve_repeated_save_for_buff(
+    campaign_id: int,
+    db: "Session | None",
+    saver: dict,
+    buff: dict,
+    note_prefix: str,
+    feature_used_source: str,
+) -> dict | None:
+    """v2.97.70 — shared save-resolution path. Used by the v2.97.60
+    ``/use_repeated_save`` endpoint, the v2.97.62 / v2.97.69 PUT
+    /battle end-of-turn auto-fire (PC + NPC), and the v2.97.65 /
+    v2.97.66 ``_fire_damage_triggered_saves`` (PC + NPC). Five
+    independent sites collapsed into one.
+
+    ``saver`` is a dict with one of two shapes:
+    - PC: ``{"kind": "pc", "char_id": int, "char_name": str, "sheet": dict}``
+    - NPC: ``{"kind": "npc", "char_name": str, "sheet": dict, "combatant": dict}``
+
+    ``note_prefix`` is the human-facing label for the roll log entry
+    (e.g. ``"🔁 End-of-turn save"`` / ``"🩸 Damage-triggered save"`` /
+    ``"🔁 Repeated save"``). ``feature_used_source`` is the durable
+    machine label on the ``feature_used`` broadcast (e.g.
+    ``"repeated-save-passed-auto"`` / ``"damage-triggered-save-passed"``).
+
+    The helper:
+    - Validates that the buff carries ``repeated_save_ability`` +
+      positive ``repeated_save_dc`` (returns None if not).
+    - Composes ``{d20_or_2d20kh1}{saver_mod}{bless_bane_suffix}``.
+      PFE&G advantage stays PC-only (the v2.97.50 helper reads char-
+      id-keyed buffs); NPC savers run straight d20.
+    - Rolls via ``dice_mod.roll``.
+    - Broadcasts a ``roll`` event with the composed note + breakdown.
+    - On pass: drops the buff via ``_remove_buff`` (PC) or combatant-
+      keyed buff_update (NPC). Broadcasts ``feature_used`` with
+      ``feature_used_source``.
+
+    Returns ``{passed, total, breakdown, save_dc, save_ability,
+    pfeag_advantage_applied, buff_dropped}`` or None if the buff
+    didn't qualify.
+    """
+    ab = str(buff.get("repeated_save_ability") or "").upper()[:3]
+    try:
+        dc = int(buff.get("repeated_save_dc") or 0)
+    except (TypeError, ValueError):
+        dc = 0
+    if ab not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} or dc <= 0:
+        return None
+
+    saver_sheet = saver.get("sheet") or {}
+    stat_key = f"{ab.lower()}_save"
+    saver_mod, _ = _resolve_stat_modifier(saver_sheet, "dnd5e", stat_key)
+
+    is_pc = saver.get("kind") == "pc"
+    saver_char_id = saver.get("char_id") if is_pc else None
+    combatant = saver.get("combatant")
+    saver_name = saver.get("char_name") or "Creature"
+    key = buff.get("key")
+
+    pfeag_adv = False
+    if is_pc and saver_char_id:
+        source_caster_type = str(
+            buff.get("source_caster_creature_type") or ""
+        ).lower()
+        pfeag_adv = _saver_pfeag_save_advantage(
+            campaign_id, int(saver_char_id),
+            source_caster_type, key or "",
+        )
+    d20 = "2d20kh1" if pfeag_adv else "1d20"
+    if is_pc and saver_char_id:
+        bb_suffix = _saver_bless_bane_save_suffix(
+            campaign_id, int(saver_char_id),
+        )
+    else:
+        bb_suffix = _saver_bless_bane_save_suffix(
+            campaign_id, None, combatant,
+        )
+    sign = "+" if saver_mod >= 0 else ""
+    expr = f"{d20}{sign}{saver_mod}{bb_suffix}"
+    try:
+        roll_result = dice_mod.roll(expr)
+        total = int(roll_result.total)
+        breakdown = roll_result.breakdown
+    except dice_mod.DiceParseError:
+        return None
+
+    passed = total >= dc
+    buff_name = buff.get("name") or key or ""
+    source_spell = buff.get("source_spell") or ""
+    adv_note = " · PFE&G advantage" if pfeag_adv else ""
+    note = (
+        f"{note_prefix} · {saver_name} {ab} vs {buff_name}{adv_note}"
+        + (f" ({source_spell})" if source_spell else "")
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": expr,
+            "total": total,
+            "breakdown": breakdown,
+            "note": note,
+            "user_name": saver_name,
+            "char_name": saver_name,
+            "visibility": Visibility.PUBLIC.value,
+            "dc": dc,
+        },
+    })
+
+    buff_dropped = False
+    if passed and key:
+        if is_pc and saver_char_id:
+            buff_dropped = await _remove_buff(
+                campaign_id, int(saver_char_id), key,
+            )
+            if buff_dropped and db is not None:
+                _mirror_buffs_to_sheet(
+                    db, int(saver_char_id),
+                    _get_buffs(campaign_id, int(saver_char_id)),
+                )
+        elif combatant is not None:
+            cb_id = combatant.get("id")
+            if cb_id:
+                state = hub.get_battle(campaign_id) or {}
+                for c in state.get("combatants") or []:
+                    if c.get("id") != cb_id:
+                        continue
+                    c["buffs"] = [
+                        b for b in (c.get("buffs") or [])
+                        if (b or {}).get("key") != key
+                    ]
+                    hub.set_battle(campaign_id, state)
+                    await hub.broadcast(campaign_id, {
+                        "type": "buff_update",
+                        "data": {
+                            "combatant_id": cb_id,
+                            "buffs": c["buffs"],
+                        },
+                    })
+                    buff_dropped = True
+                    break
+        if buff_dropped:
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "source": feature_used_source,
+                    "char_name": saver_name,
+                    "buff_key": key,
+                    "label": f"{saver_name} shook off {buff_name}",
+                },
+            })
+
+    return {
+        "passed": passed,
+        "total": total,
+        "breakdown": breakdown,
+        "save_dc": dc,
+        "save_ability": ab,
+        "pfeag_advantage_applied": pfeag_adv,
+        "buff_dropped": buff_dropped,
+    }
 
 
 def _rogue_level_from_sheet(sheet: dict) -> int:
@@ -28665,25 +28673,25 @@ async def update_battle(
         _prev_active = None
         if 0 <= _prev_active_idx < len(_new_combs):
             _prev_active = _new_combs[_prev_active_idx]
-        # v2.97.69 — extended to handle both PC and NPC savers. PC
-        # path resolves the modifier from char.sheet; NPC path builds
-        # the sheet from the token template via
-        # ``_monster_template_to_sheet``. Same dual-path pattern as
-        # the v2.97.66 damage-trigger NPC extension.
+        # v2.97.70 — delegate to the shared
+        # ``_resolve_repeated_save_for_buff`` helper. Saver assembly
+        # stays here (PC vs NPC sheet lookup); the save resolution +
+        # broadcast + drop loop is shared with /use_repeated_save and
+        # the v2.97.65/66 damage-trigger hook.
         if _prev_active:
-            _is_pc_saver = bool(_prev_active.get("char_id"))
-            _prev_saver_sheet = None
-            _prev_saver_name = _prev_active.get("name") or "Creature"
-            _prev_char = None
-            _prev_char_id = 0
-            if _is_pc_saver:
+            _saver_for_eot = None
+            if _prev_active.get("char_id"):
                 _prev_char_id = int(_prev_active["char_id"])
                 _prev_char = db.query(Character).filter(
                     Character.id == _prev_char_id,
                 ).first()
-                if _prev_char:
-                    _prev_saver_sheet = dict(_prev_char.sheet or {})
-                    _prev_saver_name = _prev_char.name
+                if _prev_char and _prev_char.sheet:
+                    _saver_for_eot = {
+                        "kind": "pc",
+                        "char_id": _prev_char_id,
+                        "char_name": _prev_char.name,
+                        "sheet": dict(_prev_char.sheet),
+                    }
             else:
                 _tmpl_id_for_eot = _prev_active.get("token_template_id")
                 if _tmpl_id_for_eot:
@@ -28692,133 +28700,33 @@ async def update_battle(
                     ).first()
                     if _tmpl_for_eot:
                         try:
-                            _prev_saver_sheet = _monster_template_to_sheet(
+                            _npc_sheet_eot = _monster_template_to_sheet(
                                 _tmpl_for_eot, campaign_id,
                             )
+                            _saver_for_eot = {
+                                "kind": "npc",
+                                "char_name": (
+                                    _prev_active.get("name")
+                                    or _tmpl_for_eot.name
+                                    or "Creature"
+                                ),
+                                "sheet": _npc_sheet_eot,
+                                "combatant": _prev_active,
+                            }
                         except Exception:
-                            _prev_saver_sheet = None
-            if _prev_saver_sheet is not None:
-                # Snapshot the buff list because _remove_buff mutates
+                            _saver_for_eot = None
+            if _saver_for_eot is not None:
+                # Snapshot the buff list because the helper mutates
                 # state during the loop.
                 _rs_buffs = list(_prev_active.get("buffs") or [])
                 for _rs_buff in _rs_buffs:
                     if not isinstance(_rs_buff, dict):
                         continue
-                    _rs_key = _rs_buff.get("key")
-                    if not _rs_key:
-                        continue
-                    _rs_ab = str(
-                        _rs_buff.get("repeated_save_ability") or ""
-                    ).upper()[:3]
-                    try:
-                        _rs_dc = int(_rs_buff.get("repeated_save_dc") or 0)
-                    except (TypeError, ValueError):
-                        _rs_dc = 0
-                    if _rs_ab not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
-                        continue
-                    if _rs_dc <= 0:
-                        continue
-                    _rs_stat_key = f"{_rs_ab.lower()}_save"
-                    _rs_saver_mod, _ = _resolve_stat_modifier(
-                        _prev_saver_sheet, "dnd5e", _rs_stat_key,
+                    await _resolve_repeated_save_for_buff(
+                        campaign_id, db, _saver_for_eot, _rs_buff,
+                        note_prefix="🔁 End-of-turn save",
+                        feature_used_source="repeated-save-passed-auto",
                     )
-                    _rs_source_type = str(
-                        _rs_buff.get("source_caster_creature_type") or ""
-                    ).lower()
-                    # PFE&G advantage stays PC-only (helper reads
-                    # char-id-keyed buffs). NPC savers run straight d20.
-                    _rs_pfeag_adv = False
-                    if _is_pc_saver:
-                        _rs_pfeag_adv = _saver_pfeag_save_advantage(
-                            campaign_id, _prev_char_id, _rs_source_type, _rs_key,
-                        )
-                    _rs_d20 = "2d20kh1" if _rs_pfeag_adv else "1d20"
-                    # Bless/Bane: PCs use char_id, NPCs use combatant
-                    # fallback (helper reads combatant.buffs).
-                    if _is_pc_saver:
-                        _rs_bb = _saver_bless_bane_save_suffix(
-                            campaign_id, _prev_char_id,
-                        )
-                    else:
-                        _rs_bb = _saver_bless_bane_save_suffix(
-                            campaign_id, None, _prev_active,
-                        )
-                    _rs_sign = "+" if _rs_saver_mod >= 0 else ""
-                    _rs_expr = (
-                        f"{_rs_d20}{_rs_sign}{_rs_saver_mod}{_rs_bb}"
-                    )
-                    try:
-                        _rs_r = dice_mod.roll(_rs_expr)
-                        _rs_total = int(_rs_r.total)
-                        _rs_breakdown = _rs_r.breakdown
-                    except dice_mod.DiceParseError:
-                        continue
-                    _rs_passed = _rs_total >= _rs_dc
-                    _rs_buff_name = (
-                        _rs_buff.get("name") or _rs_key
-                    )
-                    _rs_source_spell = _rs_buff.get("source_spell") or ""
-                    _rs_adv_note = " · PFE&G advantage" if _rs_pfeag_adv else ""
-                    _rs_note = (
-                        f"🔁 End-of-turn save · {_prev_saver_name} "
-                        f"{_rs_ab} vs {_rs_buff_name}"
-                        f"{_rs_adv_note}"
-                        + (f" ({_rs_source_spell})" if _rs_source_spell else "")
-                    )
-                    await hub.broadcast(campaign_id, {
-                        "type": "roll",
-                        "data": {
-                            "expression": _rs_expr,
-                            "total": _rs_total,
-                            "breakdown": _rs_breakdown,
-                            "note": _rs_note,
-                            "user_name": _prev_saver_name,
-                            "char_name": _prev_saver_name,
-                            "visibility": Visibility.PUBLIC.value,
-                            "dc": _rs_dc,
-                        },
-                    })
-                    if _rs_passed:
-                        if _is_pc_saver:
-                            _dropped = await _remove_buff(
-                                campaign_id, _prev_char_id, _rs_key,
-                            )
-                            if _dropped:
-                                _mirror_buffs_to_sheet(
-                                    db, _prev_char_id,
-                                    _get_buffs(campaign_id, _prev_char_id),
-                                )
-                        else:
-                            # NPC: mutate combatant + buff_update.
-                            _current_state = hub.get_battle(campaign_id) or {}
-                            for _c in _current_state.get("combatants") or []:
-                                if _c.get("id") != _prev_active.get("id"):
-                                    continue
-                                _c["buffs"] = [
-                                    _b for _b in (_c.get("buffs") or [])
-                                    if (_b or {}).get("key") != _rs_key
-                                ]
-                                hub.set_battle(campaign_id, _current_state)
-                                await hub.broadcast(campaign_id, {
-                                    "type": "buff_update",
-                                    "data": {
-                                        "combatant_id": _prev_active.get("id"),
-                                        "buffs": _c["buffs"],
-                                    },
-                                })
-                                break
-                        await hub.broadcast(campaign_id, {
-                            "type": "feature_used",
-                            "data": {
-                                "source": "repeated-save-passed-auto",
-                                "char_name": _prev_saver_name,
-                                "buff_key": _rs_key,
-                                "label": (
-                                    f"{_prev_saver_name} shook off "
-                                    f"{_rs_buff_name} at end of turn"
-                                ),
-                            },
-                        })
 
     # v2.19.2 Phase C.3: mirror each PC's buff list to their sheet so
     # the full-sheet Active Effects panel reflects auto-expire ticks
