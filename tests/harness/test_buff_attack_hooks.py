@@ -446,6 +446,107 @@ async def test_bane_save_subtracts_d4(gm_client, gm_ws, roster):
     )
 
 
+async def test_pfeag_blocks_protected_creature_type_attacker(
+    gm_client, roster,
+):
+    """v2.97.48 — Protection from Evil and Good attacker-disadvantage
+    hook. Caelan casts PFE&G on Pip. A separate attacker whose
+    combatant carries ``creature_type: "fiend"`` (test override via
+    PUT /battle) attacks Pip. The /use_attack d20 expression gains
+    disadvantage (``2d20kl1`` shape).
+
+    Demonstrates the type-aware lookup pattern. The same hook fires
+    for any of the 6 PFE&G-protected types.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    krieger = roster["Krieger Stonefist"]  # used as the attacker
+    pip = roster["Pip Quickfingers"]
+
+    await _long_rest(gm_client, caelan["id"])
+    await _long_rest(gm_client, krieger["id"])
+
+    pip_tok = f"tok_pfeag_atk_pip_{pip['id']}"
+    krieger_tok = f"tok_pfeag_atk_krieger_{krieger['id']}"
+
+    # Seed battle. Krieger's combatant gets the test creature_type
+    # override so the v2.97.48 helper resolves him as a fiend.
+    await _seed_battle_with(gm_client, [
+        {"id": caelan["id"], "name": caelan["name"], "tok_id": f"tok_pfeag_atk_caelan_{caelan['id']}", "hp_max": 60, "initiative": 14},
+        {"id": pip["id"], "name": pip["name"], "tok_id": pip_tok, "hp_max": 40, "initiative": 8},
+    ])
+    # Re-PUT with Krieger added carrying creature_type="fiend".
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {"id": f"tok_pfeag_atk_caelan_{caelan['id']}", "char_id": caelan["id"],
+                 "name": caelan["name"], "initiative": 14,
+                 "hp_current": 60, "hp_max": 60, "buffs": [],
+                 "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                {"id": krieger_tok, "char_id": krieger["id"],
+                 "name": krieger["name"], "initiative": 12,
+                 "hp_current": 55, "hp_max": 55, "buffs": [],
+                 # Test override: pretend Krieger is a fiend for the
+                 # PFE&G hook lookup.
+                 "creature_type": "fiend",
+                 "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                {"id": pip_tok, "char_id": pip["id"],
+                 "name": pip["name"], "initiative": 8,
+                 "hp_current": 40, "hp_max": 40, "buffs": [],
+                 "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    # Caelan casts PFE&G on Pip.
+    pfeag_cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": 3,  # PFE&G
+            "slot_level": 1,
+            "class_slug": "paladin",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert pfeag_cast.status_code == 200, pfeag_cast.text
+
+    # Verify PFE&G installed on Pip.
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any(
+        (b or {}).get("key") == "protection-from-evil-and-good"
+        for b in pip_buffs
+    )
+
+    # Krieger (now flagged fiend) attacks Pip. Expect disadvantage.
+    atk = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": krieger["id"],
+            "attack_index": 0,
+            "target_combatant_id": pip_tok,
+            "target_character_id": pip["id"],
+            "target_name": pip["name"],
+            "override": True,
+        },
+    )
+    assert atk.status_code == 200, atk.text
+    data = atk.json()
+    state = data.get("attack_roll_state_applied", "") or ""
+    breakdown = data.get("attack_breakdown", "")
+    assert "disadvantage" in state or "2d20kl1" in breakdown, (
+        f"expected PFE&G disadvantage on fiend attacker; "
+        f"state={state}, breakdown={breakdown}"
+    )
+
+
 async def test_shield_of_faith_adds_ac_bonus_to_target(gm_client, roster):
     """v2.97.39 — closes the v2.97.38 filed Shield of Faith mechanical
     hook. ``_read_target_ac`` now sums ``effects.ac_bonus`` across the

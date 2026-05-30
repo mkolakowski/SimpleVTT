@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.48] - 2026-05-29 — "The Sacred Veil"
+
+**Schema version:** 64
+**Commit summary:** **PFE&G attacker-disadvantage mechanical hook.** Closes the first of three v2.97.46-filed Protection from Evil and Good hooks. Two new helpers — `_attacker_creature_type` (resolves attacker's creature type by walking combatant override → char.sheet → NPC template) and `_target_pfeag_blocks_attacker_type` (checks target's PFE&G buff against attacker's type) — feed a new `target_pfeag_blocks_type` flag into `/use_attack`'s d20 expression construction. Disadvantage layers in via the same cancel logic as v2.49.115 Patient Defense (`target_dodging`), so the existing advantage-cancels-disadvantage RAW (PHB p.173) still works correctly. After this commit, an aberration / celestial / elemental / fey / fiend / undead attacker rolling against a PFE&G-warded target rolls with disadvantage.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. **(1)** `_attacker_creature_type(db, attacker_char_id, attacker_combatant)` returns the lowercased creature type, checking combatant.creature_type first (runtime override — test-friendly + GM-editable), then char.sheet["creature_type"], then template.sheet["type"]. **(2)** `_target_pfeag_blocks_attacker_type(campaign_id, target_combatant_id, attacker_creature_type)` walks the target combatant's buffs for the `protection-from-evil-and-good` key and checks attacker's type against the buff's `effects.pfeag_protected_types` list. **(3)** `/use_attack` extension: resolve attacker's combatant + creature type once after target_grants_advantage; compute `target_pfeag_blocks_type` against the target; refactor the existing has_adv/has_dis cancel branch to use a generalized `has_dis = target_dodging or target_pfeag_blocks_type` with a `dis_label` that names the source (dodging / pfeag).
+
+### Added
+- `_attacker_creature_type` helper in `app/routes/tabletop_routes.py`.
+- `_target_pfeag_blocks_attacker_type` helper.
+- PFE&G disadvantage layering in `/use_attack`'s d20 construction (both bonused and bonusless branches via the shared variable).
+- `tests/harness/test_buff_attack_hooks.py::test_pfeag_blocks_protected_creature_type_attacker` — Caelan casts PFE&G on Pip; Krieger's combatant gets `creature_type: "fiend"` via PUT /battle test override; Krieger attacks Pip; asserts the response's `attack_roll_state_applied` contains "disadvantage" OR the breakdown contains "2d20kl1".
+
+### Changed
+- `/use_attack` d20 expression construction — refactored cancel-on-both-sources logic to support PFE&G as a second disadvantage source alongside Patient Defense's `target_dodging`. The `attack_roll_state_applied` string now names which source (e.g. `disadvantage_pfeag`).
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.48 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 627 → 628, version stamp v2.97.47 → v2.97.48.
+
+### Notes
+- **PATCH bump** — two helpers + one wiring extension. Reuses the existing `target_dodging` cancel-logic shape. No new endpoints, no broadcasts, no schema changes.
+- **Creature type lookup is layered for flexibility.** Tests set the type via PUT /battle's combatant payload; GMs can do the same at runtime. PCs without a creature_type field default to "" (no PFE&G trigger). NPCs use their TokenTemplate's `type` field (the demo's goblin-captain has `type: "humanoid"`). A future template that marks itself `type: "fiend"` automatically picks up the v2.97.48 disadvantage when attacking a PFE&G target.
+- **Two more PFE&G hooks still filed.** Type-aware condition immunity (Charmed/Frightened/Possessed from protected types) and type-aware save advantage (advantage on saves vs ongoing effects from protected types). Both follow the same `_attacker_creature_type` resolution pattern; closing them is parallel work.
+- **Pattern: the v2.97.48 helpers generalize.** Any future buff with `effects.X_protected_types` can lift the same helper shape (read combatant override / sheet / template, intersect against a buff's protected list). The pattern also generalizes to other type-aware effects — e.g. Bane's "if you can see only its silhouette" RAW (PHB p.216) could use the same lookup chain.
+- Total harness count: 628 (was 627 in v2.97.47) — one new PFE&G round-trip test.
+
+---
+
 ## [2.97.47] - 2026-05-29 — "Three Stout Hearts"
 
 **Schema version:** 64

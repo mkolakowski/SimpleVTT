@@ -16962,6 +16962,84 @@ def _buff_hp_max_bonus(
     return bonus
 
 
+def _attacker_creature_type(
+    db: Session,
+    attacker_char_id: int | None,
+    attacker_combatant: dict | None,
+) -> str:
+    """v2.97.48 — resolve an attacker's creature type for type-aware
+    immunity / hook checks. Resolution order:
+    1. ``attacker_combatant["creature_type"]`` (runtime override —
+       set in tests or by GM via PUT /battle).
+    2. PC: ``character.sheet["creature_type"]``.
+    3. NPC: ``token_template.sheet["type"]`` (the demo NPC catalog
+       stores creature type as ``type``, e.g. ``"humanoid"`` /
+       ``"fiend"`` / ``"undead"``).
+    Returns lowercased string, or "" when no source has a value.
+    """
+    if attacker_combatant is not None:
+        c_type = (attacker_combatant.get("creature_type") or "").strip().lower()
+        if c_type:
+            return c_type
+    if attacker_char_id:
+        char = db.query(Character).filter(
+            Character.id == int(attacker_char_id),
+        ).first()
+        if char:
+            sheet_type = ((char.sheet or {}).get("creature_type") or "").strip().lower()
+            if sheet_type:
+                return sheet_type
+    if attacker_combatant is not None:
+        tmpl_id = attacker_combatant.get("token_template_id")
+        if tmpl_id:
+            tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(tmpl_id),
+            ).first()
+            if tmpl:
+                tmpl_type = ((tmpl.sheet or {}).get("type") or "").strip().lower()
+                if tmpl_type:
+                    return tmpl_type
+    return ""
+
+
+def _target_pfeag_blocks_attacker_type(
+    campaign_id: int,
+    target_combatant_id: str | None,
+    attacker_creature_type: str,
+) -> bool:
+    """v2.97.48 — closes the first of the v2.97.46-filed PFE&G hooks.
+    Returns True if the target carries the
+    ``protection-from-evil-and-good`` buff AND the attacker's
+    creature type is in the buff's ``effects.pfeag_protected_types``
+    list. The /use_attack flow then layers disadvantage on the d20
+    via the same idiom as v2.49.115 Patient Defense + v2.49.238
+    Reckless Attack.
+    """
+    if not target_combatant_id or not attacker_creature_type:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if b.get("key") != "protection-from-evil-and-good":
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            protected = effects.get("pfeag_protected_types") or []
+            if not isinstance(protected, list):
+                continue
+            if attacker_creature_type in [str(t).lower() for t in protected]:
+                return True
+        return False
+    return False
+
+
 def _attacker_has_bane(campaign_id: int, attacker_char_id: int) -> bool:
     """v2.97.34 — closes the v2.97.33 Bane attack-roll mechanical hook.
     Returns True if the attacker has the ``baned`` buff installed
@@ -24697,6 +24775,25 @@ async def use_attack(
     target_grants_advantage = _target_grants_advantage_to_attackers(
         campaign_id, target_combatant_id,
     )
+    # v2.97.48 — Protection from Evil and Good attacker-disadvantage.
+    # If the target carries PFE&G AND the attacker's creature type
+    # is in the buff's protected list (aberration / celestial /
+    # elemental / fey / fiend / undead), the d20 attack roll gets
+    # disadvantage. Folds into the same cancel logic as
+    # target_dodging. Lookups: the attacker's combatant (for the
+    # runtime creature_type override set in tests + by GM via
+    # PUT /battle), then char.sheet, then NPC template.
+    _attacker_cb = None
+    _atk_state = hub.get_battle(campaign_id)
+    if _atk_state:
+        for _c in (_atk_state.get("combatants") or []):
+            if _c.get("char_id") == char.id:
+                _attacker_cb = _c
+                break
+    _attacker_type = _attacker_creature_type(db, char.id, _attacker_cb)
+    target_pfeag_blocks_type = _target_pfeag_blocks_attacker_type(
+        campaign_id, target_combatant_id, _attacker_type,
+    )
 
     # v2.97.34 — buff-driven attack-roll modifiers. Sacred Weapon
     # (v2.97.29) adds +CHA mod, Bless (v2.97.31) adds +1d4, Bane
@@ -24749,14 +24846,21 @@ async def use_attack(
             "rage" if rage_advantage else
             "reckless" if target_grants_advantage else ""
         )
-        if has_adv and target_dodging:
-            attack_roll_state_applied = f"canceled_{adv_label}_vs_dodging"
+        # v2.97.48 — fold target_pfeag_blocks_type into the
+        # disadvantage source set alongside target_dodging.
+        has_dis = target_dodging or target_pfeag_blocks_type
+        dis_label = (
+            "dodging" if target_dodging else
+            "pfeag" if target_pfeag_blocks_type else ""
+        )
+        if has_adv and has_dis:
+            attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
         elif has_adv and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
             attack_roll_state_applied = f"advantage_{adv_label}"
-        elif target_dodging and "kh1" not in atk_expr and "kl1" not in atk_expr:
+        elif has_dis and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kl1", 1)
-            attack_roll_state_applied = "disadvantage_dodging"
+            attack_roll_state_applied = f"disadvantage_{dis_label}"
         try:
             r = dice_mod.roll(atk_expr)
             attack_total = r.total
@@ -24780,14 +24884,21 @@ async def use_attack(
             "rage" if rage_advantage else
             "reckless" if target_grants_advantage else ""
         )
-        if has_adv and target_dodging:
-            attack_roll_state_applied = f"canceled_{adv_label}_vs_dodging"
+        # v2.97.48 — fold target_pfeag_blocks_type into the
+        # disadvantage source set alongside target_dodging.
+        has_dis = target_dodging or target_pfeag_blocks_type
+        dis_label = (
+            "dodging" if target_dodging else
+            "pfeag" if target_pfeag_blocks_type else ""
+        )
+        if has_adv and has_dis:
+            attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
         elif has_adv and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
             attack_roll_state_applied = f"advantage_{adv_label}"
-        elif target_dodging and "kh1" not in atk_expr and "kl1" not in atk_expr:
+        elif has_dis and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kl1", 1)
-            attack_roll_state_applied = "disadvantage_dodging"
+            attack_roll_state_applied = f"disadvantage_{dis_label}"
         try:
             r = dice_mod.roll(atk_expr)
             attack_total = r.total
