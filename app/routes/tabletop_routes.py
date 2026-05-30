@@ -20830,11 +20830,22 @@ async def use_open_hand_technique(
         # entry so /respond's install branch is a no-op and the GM
         # observes the save result in the log.
         auto_save_target_kind = "pc"
+        # v2.97.51 — Bless / Bane save suffix for the PC save branch in
+        # /use_open_hand_technique. Closes the v2.97.35/36 save-roll
+        # sweep at the final filed save site. Append +1d4 (bless) /
+        # -1d4 (baned) to the base d20 expression so the player's
+        # /roll_request/respond rolls the d4 alongside the d20.
+        _oht_base = "1d20"
+        _bb_suffix_oht_pc = _saver_bless_bane_save_suffix(
+            campaign_id, int(tgt_char.id),
+        )
+        if _bb_suffix_oht_pc:
+            _oht_base = f"{_oht_base}{_bb_suffix_oht_pc}"
         req = RollRequest(
             campaign_id=campaign_id,
             created_by_user_id=user.id,
             label=note_label,
-            base_expression="1d20",
+            base_expression=_oht_base,
             stat_key=stat_key,
             dc=save_dc,
             visibility=Visibility.PUBLIC,
@@ -20882,6 +20893,16 @@ async def use_open_hand_technique(
             npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
             npc_mod, _ = _resolve_stat_modifier(npc_sheet, "dnd5e", stat_key)
             expr = f"1d20{npc_mod:+d}"
+            # v2.97.51 — Bless / Bane save suffix on the NPC save side
+            # in /use_open_hand_technique. Reads the NPC combatant's
+            # buff list directly via the helper since NPCs don't have
+            # a char_id. Closes the v2.97.35/36 save-roll sweep at the
+            # final filed save site.
+            _bb_suffix_oht_npc = _saver_bless_bane_save_suffix(
+                campaign_id, None, target_combatant,
+            )
+            if _bb_suffix_oht_npc:
+                expr = f"{expr}{_bb_suffix_oht_npc}"
             try:
                 _r = dice_mod.roll(expr)
                 auto_save_rolled = int(_r.total)

@@ -738,3 +738,90 @@ async def test_place_aoe_pc_save_carries_bless_suffix(
         f"expected '+1d4' (Bless save bonus) in Pip's place_aoe save "
         f"breakdown; got {pip_save['breakdown']!r}"
     )
+
+
+async def test_oht_npc_save_picks_up_bless_suffix(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.51 — closes the v2.97.35/36 save-roll sweep at its final
+    filed save site: ``/use_open_hand_technique``'s NPC save branch.
+    Kael uses Open Hand (prone mode) on a bandit token whose combatant
+    payload carries a pre-seeded ``bless`` buff. The server rolls the
+    bandit's DEX save inline; the broadcast ``roll`` event's expression
+    should contain ``+1d4`` (the Bless suffix appended by the
+    v2.97.35 ``_saver_bless_bane_save_suffix`` helper, now wired into
+    OHT in v2.97.51).
+    """
+    kael = roster["Kael Brightleaf"]
+    await _long_rest(gm_client, kael["id"])
+
+    # Look up bandit template (same shape as test_use_open_hand_technique).
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+
+    bandit_tok = f"tok_oht_bless_{kael['id']}"
+    # Seed the bandit combatant with a Bless buff in its buffs list so
+    # the v2.97.35 helper (saver_combatant fallback path) picks it up.
+    bless_buff = {
+        "key": "bless",
+        "name": "Bless",
+        "icon": "✨",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": True,
+        "source_char_id": kael["id"],
+        "source_char_name": kael["name"],
+        "source_spell": "Bless",
+        "effects": {"bless_save_bonus": True},
+    }
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {"id": f"tok_oht_bless_kael_{kael['id']}", "char_id": kael["id"],
+                 "name": kael["name"], "initiative": 10,
+                 "hp_current": 38, "hp_max": 38, "buffs": [],
+                 "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                {"id": bandit_tok, "char_id": None,
+                 "token_template_id": bandit_tmpl["id"],
+                 "name": bandit_tmpl["name"], "initiative": 7,
+                 "hp_current": 11, "hp_max": 11, "buffs": [bless_buff],
+                 "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_open_hand_technique",
+        json={
+            "character_id": kael["id"],
+            "target_combatant_id": bandit_tok,
+            "mode": "prone",
+            "override_trigger": True,
+            "override_range": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "prone"
+    assert body["auto_save_target_kind"] == "npc"
+
+    # Capture the broadcast roll event (single-target NPC save fires
+    # exactly one `roll` for the save).
+    roll_msg = await gm_ws.wait_for("roll", timeout=3.0)
+    expression = (roll_msg.get("data") or {}).get("expression", "")
+    breakdown = (roll_msg.get("data") or {}).get("breakdown", "")
+    assert "+1d4" in expression, (
+        f"expected '+1d4' (Bless suffix) in OHT NPC save expression; "
+        f"got expression={expression!r}, breakdown={breakdown!r}"
+    )
+    # Sanity: the breakdown should also contain a d4 contribution.
+    assert "1d4[" in breakdown, (
+        f"expected '1d4[' in OHT NPC save breakdown; got {breakdown!r}"
+    )

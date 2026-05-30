@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.51] - 2026-05-29 — "Open Hands, Open Books"
+
+**Schema version:** 64
+**Commit summary:** **Bless / Bane save suffix wired into `/use_open_hand_technique`.** Closes the v2.97.35/36 save-roll sweep at the final filed save site. The Monk Open Hand Technique's prone-mode (DEX save) and push-mode (STR save) flows both construct a save d20 expression — the PC flow through `RollRequest.base_expression`, the NPC flow through an inline `expr = f"1d20{npc_mod:+d}"`. After v2.97.51, both append `+1d4` (Bless) / `-1d4` (Bane) via the v2.97.35 `_saver_bless_bane_save_suffix` helper. A blessed target now actually gets to roll a d4 on its OHT save; a baned target eats a -1d4. Same pattern as the v2.97.35 single-target /cast_spell wiring.
+**Description:** Two edits in `app/routes/tabletop_routes.py::use_open_hand_technique`. **(1)** PC save branch (~line 20832): build `_oht_base = "1d20"`, call `_saver_bless_bane_save_suffix(campaign_id, int(tgt_char.id))`, append if non-empty, pass `_oht_base` as the `RollRequest.base_expression` (was the literal `"1d20"`). **(2)** NPC save branch (~line 20884): after `expr = f"1d20{npc_mod:+d}"`, call `_saver_bless_bane_save_suffix(campaign_id, None, target_combatant)` and concatenate. Both sites match the v2.97.35 `/cast_spell` pattern exactly.
+
+### Added
+- Bless / Bane save suffix wiring in `/use_open_hand_technique`'s PC and NPC save branches (`app/routes/tabletop_routes.py`).
+- `tests/harness/test_buff_attack_hooks.py::test_oht_npc_save_picks_up_bless_suffix` — Krieger gets a `bless` buff seeded on his combatant; Kael uses Open Hand Technique (prone mode) on Krieger; asserts the broadcast `roll`'s expression contains `+1d4` (Bless suffix) AND the breakdown contains a positive d4 contribution.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.51 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 629 → 630, version stamp v2.97.50 → v2.97.51.
+
+### Notes
+- **PATCH bump** — one helper call appended at two construction sites + one harness test.
+- **Closes the v2.97.35/36 save-roll suffix sweep.** v2.97.35 wired Bless/Bane into single-target /cast_spell; v2.97.36 wired the AoE /cast_spell + /place_aoe save sites; v2.97.51 wires the last filed save site — `/use_open_hand_technique`. Every save-roll construction site in the codebase now consumes `_saver_bless_bane_save_suffix`.
+- **Why two-site edit, not replace_all.** The two save branches are conceptually different — PC routes through `RollRequest.base_expression` (so the suffix needs to be inside the expression assigned to `req.base_expression`), NPC routes through inline `expr` that gets passed to `dice_mod.roll`. They share the v2.97.35 helper call shape but the surrounding code is distinct.
+- **Push-mode + prone-mode both covered.** The wiring sits before the mode-specific branch, so both DEX (prone) and STR (push) saves get the suffix. RAW: Bless applies to "a saving throw," not a specific stat — both qualify.
+- Total harness count: 630 (was 629 in v2.97.50) — one new OHT-with-Bless test on the NPC branch.
+
+---
+
 ## [2.97.50] - 2026-05-29 — "Tools for the Vigil"
 
 **Schema version:** 64
