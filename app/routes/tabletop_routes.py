@@ -28203,6 +28203,124 @@ async def update_battle(
                     })
                 break  # one Heroism buff per character RAW
 
+        # v2.97.62 — auto-fire repeated end-of-turn saves for the
+        # PREVIOUS active combatant. RAW (Hold Person / Fear / etc.):
+        # "at the end of each of its turns, the target can make
+        # another <ability> saving throw." Fires for the combatant
+        # whose turn just ended, walks their buffs for any carrying
+        # the v2.97.60 install-time stamps (``repeated_save_ability``
+        # + ``repeated_save_dc``), rolls each save with the same
+        # v2.97.50 PFE&G advantage + v2.97.35 Bless/Bane suffix
+        # composition as the v2.97.60 manual endpoint. On a passed
+        # save the buff is dropped via ``_remove_buff``. The v2.97.61
+        # manual panel still works post-auto-fire for edge cases (a
+        # GM rewinding initiative, a player wanting to roll mid-turn
+        # for a non-RAW reason).
+        try:
+            _prev_active_idx = int(_prev_turn)
+        except (TypeError, ValueError):
+            _prev_active_idx = -1
+        _prev_active = None
+        if 0 <= _prev_active_idx < len(_new_combs):
+            _prev_active = _new_combs[_prev_active_idx]
+        if _prev_active and _prev_active.get("char_id"):
+            _prev_char_id = int(_prev_active["char_id"])
+            _prev_char = db.query(Character).filter(
+                Character.id == _prev_char_id,
+            ).first()
+            if _prev_char:
+                _prev_sheet = dict(_prev_char.sheet or {})
+                # Snapshot the buff list because _remove_buff mutates
+                # state during the loop.
+                _rs_buffs = list(_prev_active.get("buffs") or [])
+                for _rs_buff in _rs_buffs:
+                    if not isinstance(_rs_buff, dict):
+                        continue
+                    _rs_key = _rs_buff.get("key")
+                    if not _rs_key:
+                        continue
+                    _rs_ab = str(
+                        _rs_buff.get("repeated_save_ability") or ""
+                    ).upper()[:3]
+                    try:
+                        _rs_dc = int(_rs_buff.get("repeated_save_dc") or 0)
+                    except (TypeError, ValueError):
+                        _rs_dc = 0
+                    if _rs_ab not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+                        continue
+                    if _rs_dc <= 0:
+                        continue
+                    _rs_stat_key = f"{_rs_ab.lower()}_save"
+                    _rs_saver_mod, _ = _resolve_stat_modifier(
+                        _prev_sheet, "dnd5e", _rs_stat_key,
+                    )
+                    _rs_source_type = str(
+                        _rs_buff.get("source_caster_creature_type") or ""
+                    ).lower()
+                    _rs_pfeag_adv = _saver_pfeag_save_advantage(
+                        campaign_id, _prev_char_id, _rs_source_type, _rs_key,
+                    )
+                    _rs_d20 = "2d20kh1" if _rs_pfeag_adv else "1d20"
+                    _rs_bb = _saver_bless_bane_save_suffix(
+                        campaign_id, _prev_char_id,
+                    )
+                    _rs_sign = "+" if _rs_saver_mod >= 0 else ""
+                    _rs_expr = (
+                        f"{_rs_d20}{_rs_sign}{_rs_saver_mod}{_rs_bb}"
+                    )
+                    try:
+                        _rs_r = dice_mod.roll(_rs_expr)
+                        _rs_total = int(_rs_r.total)
+                        _rs_breakdown = _rs_r.breakdown
+                    except dice_mod.DiceParseError:
+                        continue
+                    _rs_passed = _rs_total >= _rs_dc
+                    _rs_buff_name = (
+                        _rs_buff.get("name") or _rs_key
+                    )
+                    _rs_source_spell = _rs_buff.get("source_spell") or ""
+                    _rs_adv_note = " · PFE&G advantage" if _rs_pfeag_adv else ""
+                    _rs_note = (
+                        f"🔁 End-of-turn save · {_prev_char.name} "
+                        f"{_rs_ab} vs {_rs_buff_name}"
+                        f"{_rs_adv_note}"
+                        + (f" ({_rs_source_spell})" if _rs_source_spell else "")
+                    )
+                    await hub.broadcast(campaign_id, {
+                        "type": "roll",
+                        "data": {
+                            "expression": _rs_expr,
+                            "total": _rs_total,
+                            "breakdown": _rs_breakdown,
+                            "note": _rs_note,
+                            "user_name": _prev_char.name,
+                            "char_name": _prev_char.name,
+                            "visibility": Visibility.PUBLIC.value,
+                            "dc": _rs_dc,
+                        },
+                    })
+                    if _rs_passed:
+                        _dropped = await _remove_buff(
+                            campaign_id, _prev_char_id, _rs_key,
+                        )
+                        if _dropped:
+                            _mirror_buffs_to_sheet(
+                                db, _prev_char_id,
+                                _get_buffs(campaign_id, _prev_char_id),
+                            )
+                            await hub.broadcast(campaign_id, {
+                                "type": "feature_used",
+                                "data": {
+                                    "source": "repeated-save-passed-auto",
+                                    "char_name": _prev_char.name,
+                                    "buff_key": _rs_key,
+                                    "label": (
+                                        f"{_prev_char.name} shook off "
+                                        f"{_rs_buff_name} at end of turn"
+                                    ),
+                                },
+                            })
+
     # v2.19.2 Phase C.3: mirror each PC's buff list to their sheet so
     # the full-sheet Active Effects panel reflects auto-expire ticks
     # done client-side by the GM's nextTurn handler. PUT /battle is

@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.62] - 2026-05-30 — "The Bell Rings Itself"
+
+**Schema version:** 64
+**Commit summary:** **Auto-fire repeated saves at end of turn.** Extends the v2.97.58 PUT /battle turn-shift hook to roll v2.97.60 repeated saves automatically for the combatant whose turn just ended, instead of requiring a click on the v2.97.61 manual panel. RAW (Hold Person / Fear / Confusion / Suggestion): "at the end of each of its turns, the target can make another <ability> saving throw." The hook walks the previous active combatant's buffs for any carrying ``repeated_save_ability`` + positive ``repeated_save_dc``, composes the save expression with the same v2.97.50 PFE&G advantage + v2.97.35 Bless/Bane suffix layering as the manual endpoint, rolls, broadcasts a public "🔁 End-of-turn save" entry, drops the buff on pass. The v2.97.61 manual panel still appears for non-RAW edge cases (a player wanting to roll mid-turn, a GM rewinding initiative).
+**Description:** One edit in ``app/routes/tabletop_routes.py::update_battle``. After the existing v2.97.58 Heroism start-of-turn block, a new branch fires at end-of-turn for the prior combatant: look up the combatant at ``prev_turn_index`` in the new state's combatants array, walk their buffs, for each buff with valid repeated-save data compose ``{d20_or_2d20kh1}{saver_mod}{bless_bane_suffix}`` (PFE&G advantage via the v2.97.50 helper, suffix via the v2.97.35 helper), roll via ``dice_mod.roll``, broadcast a ``roll`` event with the "🔁 End-of-turn save" note + DC + breakdown, and on ``total >= dc`` drop the buff via ``_remove_buff`` + broadcast ``feature_used(source=repeated-save-passed-auto)``.
+
+### Added
+- End-of-turn repeated-save auto-fire branch in ``app/routes/tabletop_routes.py::update_battle`` (right after the v2.97.58 Heroism turn-start block).
+- ``tests/harness/test_repeated_save_end_of_turn.py::test_end_of_turn_auto_fires_repeated_save`` — Lyra (fiend test override) frightens Pip; PUT /battle advances turn from Pip to Lyra; assert at least one ``roll`` broadcast with "🔁 End-of-turn save" note for Pip's frightened buff fires.
+
+### Changed
+- ``app/routes/tabletop_routes.py::update_battle`` — adds the v2.97.62 auto-fire block.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.62 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 639 → 640, version stamp v2.97.60 → v2.97.62.
+
+### Notes
+- **PATCH bump** — one wiring extension + one harness test.
+- **Closes the v2.97.60 RAW-correctness caveat.** Pre-v2.97.62, repeated saves required a manual button click — RAW says they're automatic at end of turn. v2.97.62 makes them automatic. The v2.97.61 manual panel still works for cases the auto-fire doesn't cover (GM rewinding initiative, player wanting to roll early via house rule).
+- **PCs and NPCs both auto-fire.** Both have ``char_id`` populated when they're PCs; NPCs (no char_id) are skipped — RAW NPC ongoing effects are typically tracked elsewhere and the v2.97.60 install-time stamps don't reach NPC combatants today. A future commit could extend stamping + auto-fire to NPC combatants.
+- **No double-fire risk with the v2.97.61 panel.** The panel renders based on current buff state — if the auto-fire drops the buff, the buff_update broadcast re-runs ``_renderRepeatedSavePanel`` which hides the row. If the auto-fire's save fails, the buff stays and the row stays.
+- **PFE&G advantage layered identically.** Same helper call (``_saver_pfeag_save_advantage``) so the v2.97.50 hook fires through this path the same way as the v2.97.60 manual endpoint. PFE&G is now operative in BOTH manual and auto-fire flows.
+- **Closes the Sanctuary + Heroism + PFE&G + repeated-save patches.** v2.97.45 → v2.97.62 form the complete buff/save lifecycle: catalog install, attacker disadvantage, install immunity, install temp HP grant, per-turn temp HP recurrence, manual repeated save endpoint, UI panel, end-of-turn auto-fire. The pattern is now durable for future buff-condition spells.
+- **Auto-fire is silent on bag-of-buffs-with-no-repeated-data.** If the prev combatant has, say, only a Bless / Heroism buff (no repeated_save fields), the loop skips them. So the new block is a no-op cost for non-condition combatants — cheap to leave on always.
+- Total harness count: 640 (was 639 in v2.97.61) — one new end-of-turn auto-fire test.
+
+---
+
 ## [2.97.61] - 2026-05-30 — "Tolling Loose the Chain"
 
 **Schema version:** 64
