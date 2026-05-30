@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.76] - 2026-05-30 — "Surface the Verdict"
+
+**Schema version:** 64
+**Commit summary:** **Fix v2.97.75 by surfacing ``auto_save_prompt_id`` on /npc_cast_spell's HTTP response.** The endpoint's broadcast payload at line ~27744 included ``auto_save_prompt_id``, but the HTTP return dict at line ~27790 omitted it. Callers (like the v2.97.75 archmage Banishment test) couldn't wait on the PC's save resolution because the prompt id was never surfaced. v2.97.76 adds the field to the return dict so the v2.97.75 wiring is actually usable from the harness + UI.
+
+### Added
+- ``auto_save_prompt_id`` field on ``/npc_cast_spell``'s HTTP return dict.
+
+### Changed
+- ``app/routes/tabletop_routes.py::use_npc_cast_spell`` (return dict) — adds ``auto_save_prompt_id``.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.76 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — one line of response field surfacing. No new logic.
+- **Why the field was missing pre-v2.97.76.** Pre-v2.97.75 only the broadcast payload needed the prompt id (for the UI to render the cast card with the pending-save chip). v2.97.75 introduced the spell_slug body param so the harness + a future programmatic caller could exercise the install path; that exposed the gap.
+- **v2.97.75 test should now pass.** The Archmage → Caelan → Banishment install round-trip uses the prompt id to forward the PC's save response back to /respond.
+- Total harness count: 652 (unchanged from v2.97.75) — same test, now actually runnable.
+
+---
+
 ## [2.97.75] - 2026-05-30 — "The Verdict on the Other Side"
 
 **Schema version:** 64

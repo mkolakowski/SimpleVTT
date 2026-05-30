@@ -27801,6 +27801,11 @@ async def use_npc_cast_spell(
         "auto_save_damage_rolled": auto_save_damage_rolled,
         "auto_save_damage_applied": auto_save_damage_applied,
         "auto_save_prompted": auto_save_prompted,
+        # v2.97.75 — surface the prompt id so callers can wait on the
+        # PC's save resolution. Pre-v2.97.75 the field was only on the
+        # broadcast payload above (line ~27744-27745); the endpoint
+        # response wrapper omitted it.
+        "auto_save_prompt_id": auto_save_prompt_id,
         "target_combatant_id": target_combatant_id or "",
         "target_name": target_name_resolved,
         "auto_applied": bool(campaign.auto_apply_damage),
