@@ -12950,6 +12950,24 @@ async def cast_spell(
                     spell_buff_template.get("effects") or {}
                 )
                 _bless_buff["effects"]["dc"] = 8 + _sanc_prof + _sanc_mod
+            # v2.97.58 — Heroism install-time temp HP amount capture.
+            # Stamps the caster's spellcasting modifier on the buff so
+            # the v2.97.58 turn-start recurrence hook (PUT /battle) can
+            # re-grant the same temp HP at the start of every turn
+            # the warded creature has the buff active. The install-
+            # time grant in v2.97.44 is unchanged; this just adds the
+            # amount field so future ticks know what to grant.
+            if (
+                spell_buff_template.get("key") == "heroism"
+                and char.sheet
+            ):
+                _hero_amount = _caster_spellcasting_mod(char.sheet)
+                _bless_buff["effects"] = dict(
+                    _bless_buff.get("effects")
+                    or spell_buff_template.get("effects")
+                    or {}
+                )
+                _bless_buff["effects"]["heroism_temp_hp_amount"] = _hero_amount
             _bless_buff_ok = await _install_buff(
                 campaign_id, _bless_tid, _bless_buff,
             )
@@ -27906,8 +27924,87 @@ async def update_battle(
     if not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
     state = await request.json()
+    # v2.97.58 — Heroism per-turn temp HP recurrence. Detect a turn
+    # advance (prev_turn_index != new_turn_index) and re-grant temp HP
+    # to the new active combatant if they carry the v2.97.58 install-
+    # time-stamped ``effects.heroism_temp_hp_amount`` marker. RAW
+    # (PHB p.250): "gains temporary hit points equal to your
+    # spellcasting ability modifier at the start of each of its turns."
+    # Compute before set_battle so prev_state still has the old
+    # turn_index. Apply after set_battle so the buff list seen by the
+    # hook matches the new state (in case the client trimmed expired
+    # buffs alongside the turn shift). Temp HP RAW does NOT stack with
+    # itself — the higher value wins, so the grant is conditional on
+    # ``amount > existing_temp``.
+    _prev_battle = hub.get_battle(campaign_id) or {}
+    _prev_turn = _prev_battle.get("turn_index") if _prev_battle else None
+    _new_turn = state.get("turn_index")
     hub.set_battle(campaign_id, state)
     await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    if (
+        bool(state.get("active"))
+        and _prev_turn is not None
+        and _new_turn is not None
+        and _prev_turn != _new_turn
+    ):
+        _new_combs = state.get("combatants") or []
+        try:
+            _active = _new_combs[int(_new_turn)] if (
+                0 <= int(_new_turn) < len(_new_combs)
+            ) else None
+        except (TypeError, ValueError):
+            _active = None
+        if _active and _active.get("char_id"):
+            _active_buffs = _active.get("buffs") or []
+            for _b in _active_buffs:
+                if not isinstance(_b, dict):
+                    continue
+                if _b.get("key") != "heroism":
+                    continue
+                _hero_eff = _b.get("effects") or {}
+                try:
+                    _hero_amount = int(_hero_eff.get("heroism_temp_hp_amount") or 0)
+                except (TypeError, ValueError):
+                    _hero_amount = 0
+                if _hero_amount <= 0:
+                    continue
+                _hero_char = db.query(Character).filter(
+                    Character.id == int(_active["char_id"]),
+                ).first()
+                if not _hero_char or not _hero_char.sheet:
+                    continue
+                _hero_sheet = dict(_hero_char.sheet)
+                _hero_hp = dict(_hero_sheet.get("hp") or {})
+                _pre_temp = int(_hero_hp.get("temp") or 0)
+                if _hero_amount > _pre_temp:
+                    _hero_hp["temp"] = _hero_amount
+                    _hero_sheet["hp"] = _hero_hp
+                    _hero_char.sheet = _hero_sheet
+                    from sqlalchemy.orm.attributes import flag_modified as _fm
+                    _fm(_hero_char, "sheet")
+                    db.commit()
+                    await hub.broadcast(campaign_id, {
+                        "type": "character_hp_update",
+                        "data": {
+                            "character_id": _hero_char.id,
+                            "hp": _hero_hp,
+                            "delta": 0,
+                            "source": "heroism-temp-hp-turn-start",
+                        },
+                    })
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "source": "heroism-turn-start-temp-hp",
+                            "char_name": _hero_char.name,
+                            "granted": _hero_amount,
+                            "label": (
+                                f"Heroism: +{_hero_amount} temp HP "
+                                f"at start of {_hero_char.name}'s turn"
+                            ),
+                        },
+                    })
+                break  # one Heroism buff per character RAW
 
     # v2.19.2 Phase C.3: mirror each PC's buff list to their sheet so
     # the full-sheet Active Effects panel reflects auto-expire ticks

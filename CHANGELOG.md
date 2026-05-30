@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.58] - 2026-05-29 — "The Daybreak Tally"
+
+**Schema version:** 64
+**Commit summary:** **Heroism per-turn temp HP recurrence.** Closes the v2.97.44-filed turn-start hook. When the active turn advances on PUT /battle, the server now walks the new active combatant's buffs for ``heroism`` carrying the v2.97.58 install-time-stamped ``effects.heroism_temp_hp_amount`` marker. If present and the amount exceeds the warded creature's current temp HP (RAW: temp HP doesn't stack — higher value wins), the server bumps temp to the granted amount, broadcasts ``character_hp_update(source=heroism-temp-hp-turn-start)`` for the mini-sheet refresh, and emits ``feature_used(source=heroism-turn-start-temp-hp)`` for the roll log. The grant is idempotent on PUT /battle calls that don't advance the turn (no-op when prev_turn_index == new_turn_index), so duration ticks / buff drops / out-of-band PUT /battles don't trigger spurious grants.
+**Description:** Two edits in ``app/routes/tabletop_routes.py``. **(1)** Install-time stamp in the v2.97.31 walker: when ``spell_buff_template.key == "heroism"``, deep-copy effects and inject ``effects["heroism_temp_hp_amount"] = _caster_spellcasting_mod(char.sheet)``. Same shape as the v2.97.52 Sanctuary DC injection. The v2.97.44 install-time first grant is unchanged — this just stamps the amount for future recurrences. **(2)** Turn-start hook in PUT /battle: before ``hub.set_battle``, read prev battle to capture prev_turn_index. After set_battle + broadcast, if active=True AND prev_turn_index != new_turn_index, look up the new active combatant by index, walk their buffs for heroism with the marker, re-grant temp HP via the same ``max(existing, amount)`` semantics as the v2.97.44 install grant. Broadcasts character_hp_update + feature_used. Skips NPC combatants (no char_id) — RAW Heroism targets willing creatures but NPCs in the demo don't carry it.
+
+### Added
+- Install-time ``effects.heroism_temp_hp_amount`` injection on Heroism buffs in /cast_spell walker.
+- Per-turn Heroism temp HP recurrence hook in PUT /battle.
+- ``tests/harness/test_heroism_per_turn_temp_hp.py::test_heroism_recurs_on_turn_advance`` — Tavik casts Heroism on Pip; Pip's initial temp HP set to 0 via /battle; turn_index advances to Pip's slot; assert Pip's hp.temp grew to the caster's spellcasting mod via the ``character_hp_update(source=heroism-temp-hp-turn-start)`` broadcast.
+
+### Changed
+- ``app/routes/tabletop_routes.py::cast_spell`` — adds Heroism amount injection branch alongside the v2.97.52 Sanctuary DC branch.
+- ``app/routes/tabletop_routes.py::update_battle`` — adds the turn-shift detection + Heroism recurrence block.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.58 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 635 → 636, version stamp v2.97.57 → v2.97.58.
+
+### Notes
+- **PATCH bump** — one install-time stamp + one turn-start hook + one harness test.
+- **Closes the Heroism v2.97.43-shipped mechanical pair.** v2.97.43 wired the Frightened immunity gate + install-time temp HP grant; v2.97.58 wires the per-turn recurrence so the warded creature gets the grant on every turn-start RAW (not just the install turn). Combined: Heroism is fully RAW-active.
+- **Turn-shift detection is index-based.** A PUT /battle with the same turn_index doesn't fire the hook — covers cases like duration ticks, mid-turn buff drops, out-of-band map updates. A PUT /battle that goes from turn 0 → turn 1 fires the hook for the combatant at index 1.
+- **Temp HP doesn't stack RAW.** The grant only fires when ``amount > existing_temp`` — so if Pip already has 8 temp HP from a different source, a +3 Heroism grant is a no-op. Same idiom as the v2.97.44 install grant.
+- **Logging not yet wired for undo.** The turn-start grant doesn't currently log a ``heroism_temp_hp_grant`` entry because the turn-start happens outside a cast_id flow. A future commit could add a per-turn log keyed by something like ``"battle-turn-{round}-{turn_index}"`` to support undo across the per-turn ticks. For now, undoing a Heroism cast still reverses the v2.97.44 install grant via the v2.97.44 ``heroism_temp_hp_grant`` log entry; per-turn ticks are not undoable. Acceptable tradeoff: temp HP is ephemeral and resets on long rest anyway.
+- **No NPC support today.** The hook checks for ``_active.get("char_id")`` so NPC combatants (without a char_id) skip the grant. RAW Heroism can target NPCs but the demo doesn't ship a scenario where it matters; future work if needed.
+- Total harness count: 636 (was 635 in v2.97.57) — one new turn-start Heroism recurrence test.
+
+---
+
 ## [2.97.57] - 2026-05-29 — "Tap the Verse"
 
 **Schema version:** 64
