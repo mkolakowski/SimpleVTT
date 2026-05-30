@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.98.1] - 2026-05-30 — "Two Tower Spells"
+
+**Schema version:** 64
+**Commit summary:** **Symmetric Hold Person → Caelan coverage via the v2.97.75 /npc_cast_spell install path.** Pure test addition mirroring ``test_npc_archmage_banishment``: the Archmage NPC casts Hold Person at Caelan, the save-fail loop walks until Paralyzed lands, and the test asserts the target buff carries the v2.97.71 catalog shape (key="paralyzed", source_spell="Hold Person", concentration=False from v2.97.67, repeated-save stamps from v2.97.60) AND the v2.98.0 NPC anchor lives on the Archmage with concentration=True + source_combatant_id=archmage_tok. Closes the "is the v2.97.75 install path Banishment-specific?" implicit question.
+**Description:** New file ``tests/harness/test_npc_archmage_hold_person.py`` — single test, ~140 lines, structurally identical to ``test_npc_archmage_banishment.py`` swapping Banishment/Banished for Hold Person/Paralyzed. The per-spell assertion shifts cover the catalog stamps unique to Hold Person (WIS save, DC 17, source_spell="Hold Person") plus the v2.98.0 anchor stamps on the NPC caster.
+
+### Added
+- ``tests/harness/test_npc_archmage_hold_person.py::test_archmage_hold_person_at_caelan_installs_paralyzed`` — Archmage casts Hold Person at Caelan; loop until Paralyzed lands; verify catalog stamps on the target buff + v2.98.0 anchor on the Archmage.
+
+### Changed
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.98.1 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — test-only addition. No code change. The mechanic was shipped by v2.97.75 + v2.98.0; v2.98.1 just adds coverage.
+- **Why both Hold Person and Banishment in the harness.** Two distinct spells exercising the same install path catches a future regression where the path accidentally specializes on a single spell's catalog shape (e.g. one save ability hardcoded). The v2.97.75 Banishment test covered Banishment + Caelan + CHA save; v2.98.1 covers Hold Person + Caelan + WIS save → the path is exercised against two save abilities AND two condition keys.
+- Total harness count: 655 (was 654 in v2.98.0).
+
+---
+
 ## [2.98.0] - 2026-05-30 — "The Caster Loses Focus"
 
 **Schema version:** 64
