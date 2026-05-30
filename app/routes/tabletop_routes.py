@@ -1474,6 +1474,184 @@ async def _drop_paired_concentration_buffs(
     return removed
 
 
+async def _drop_paired_concentration_buffs_npc(
+    campaign_id: int, source_combatant_id: str,
+) -> list[dict]:
+    """v2.97.80 — NPC equivalent of ``_drop_paired_concentration_buffs``.
+    Mirror logic: when an NPC caster's concentration drops, walk every
+    combatant and remove buffs sourced from this NPC. Target-side
+    buffs installed by an NPC caster carry ``source_combatant_id:
+    <caster_combatant_id>`` (set by the v2.97.80 install path); this
+    helper matches on that field.
+
+    Returns the list of removed buff dicts; broadcasts one
+    ``battle_update`` covering all removals. AoE-marker cleanup is
+    PC-only for now (NPCs don't place persistent AoEs).
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return []
+    removed: list[dict] = []
+    dirty = False
+    for c in state.get("combatants") or []:
+        buffs = c.get("buffs") or []
+        kept = []
+        for b in buffs:
+            b = b or {}
+            if (
+                b.get("source_combatant_id") == source_combatant_id
+                and not b.get("source_char_id")
+            ):
+                rec = dict(b)
+                rec["_dropped_from_combatant_id"] = c.get("id")
+                removed.append(rec)
+                continue
+            kept.append(b)
+        if len(kept) != len(buffs):
+            c["buffs"] = kept
+            dirty = True
+    if dirty:
+        hub.set_battle(campaign_id, state)
+        await hub.broadcast(campaign_id, {
+            "type": "battle_update",
+            "data": state,
+            "force_gm_sync": True,
+        })
+    return removed
+
+
+def _npc_concentration_buff_for(
+    campaign_id: int, combatant_id: str,
+) -> dict | None:
+    """v2.97.80 — NPC equivalent of ``_concentration_buff_for``. Returns
+    the (single) concentration buff active on an NPC combatant, or
+    None. NPCs don't have a Character row so we key on combatant id
+    instead of char_id.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            for b in (c.get("buffs") or []):
+                if (b or {}).get("concentration"):
+                    return b
+            return None
+    return None
+
+
+async def _maybe_npc_concentration_save(
+    campaign_id: int, target_combatant: dict, damage_amount: int,
+    db: "Session | None" = None,
+) -> dict | None:
+    """v2.97.80 — NPC equivalent of ``_maybe_concentration_save``. When
+    an NPC combatant carrying a concentration anchor takes damage,
+    roll a CON save (DC = max(10, dmg // 2)). On fail, drop the
+    anchor + every target-side buff sourced from this NPC (via
+    ``_drop_paired_concentration_buffs_npc``).
+
+    Returns ``{rolled, total, dc, passed, dropped_key}`` or None when
+    no concentration anchor is on this NPC. Broadcasts a
+    ``concentration_save`` event identical in shape to the PC
+    version, with ``combatant_id`` instead of ``character_id``.
+    """
+    if damage_amount <= 0:
+        return None
+    cb_id = target_combatant.get("id")
+    if not cb_id:
+        return None
+    buff = _npc_concentration_buff_for(campaign_id, cb_id)
+    if buff is None:
+        return None
+
+    # CON modifier from the NPC's template sheet. The template's
+    # ``abilities.CON`` (score, not modifier) drives the roll. NPCs
+    # don't currently get proficient CON saves wired through the
+    # template; filed as a follow-up.
+    npc_mod = 0
+    tmpl_id = target_combatant.get("token_template_id")
+    if tmpl_id and db is not None:
+        try:
+            tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(tmpl_id),
+            ).first()
+            if tmpl is not None:
+                npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
+                npc_mod, _ = _resolve_stat_modifier(
+                    npc_sheet, "dnd5e", "con_save",
+                )
+        except Exception:
+            npc_mod = 0
+
+    dc = max(10, damage_amount // 2)
+    hp_after = int(target_combatant.get("hp_current") or 0)
+    forced_drop_on_zero_hp = hp_after <= 0
+
+    try:
+        result = dice_mod.roll(
+            f"1d20+{npc_mod}" if npc_mod >= 0 else f"1d20{npc_mod}"
+        )
+        total = int(result.total)
+        raw = total - npc_mod
+    except dice_mod.DiceParseError:
+        raw = 10
+        total = 10 + npc_mod
+
+    passed = (total >= dc) and not forced_drop_on_zero_hp
+    dropped_key = None
+    if not passed:
+        dropped_key = buff.get("key")
+        if dropped_key:
+            # Drop the anchor on the NPC.
+            state = hub.get_battle(campaign_id)
+            if state:
+                for c in state.get("combatants") or []:
+                    if c.get("id") != cb_id:
+                        continue
+                    c["buffs"] = [
+                        b for b in (c.get("buffs") or [])
+                        if (b or {}).get("key") != dropped_key
+                    ]
+                    hub.set_battle(campaign_id, state)
+                    await hub.broadcast(campaign_id, {
+                        "type": "buff_update",
+                        "data": {
+                            "combatant_id": cb_id,
+                            "buffs": c["buffs"],
+                            "removed_key": dropped_key,
+                        },
+                    })
+                    break
+            # Drop paired target-side buffs sourced from this NPC.
+            await _drop_paired_concentration_buffs_npc(campaign_id, cb_id)
+
+    await hub.broadcast(campaign_id, {
+        "type": "concentration_save",
+        "data": {
+            "combatant_id": cb_id,
+            "character_name": target_combatant.get("name") or "Creature",
+            "buff_key": buff.get("key"),
+            "buff_name": buff.get("name"),
+            "damage_amount": damage_amount,
+            "dc": dc,
+            "rolled": raw,
+            "bonus": npc_mod,
+            "total": total,
+            "passed": passed,
+            "forced_drop_on_zero_hp": forced_drop_on_zero_hp,
+            "dropped_key": dropped_key,
+            "war_caster_advantage": False,
+        },
+    })
+    return {
+        "rolled": raw,
+        "total": total,
+        "dc": dc,
+        "passed": passed,
+        "dropped_key": dropped_key,
+    }
+
+
 async def _remove_buff(
     campaign_id: int, character_id: int, key: str,
 ) -> bool:
@@ -5080,6 +5258,14 @@ async def _apply_damage_to_combatant(
     await _fire_damage_triggered_saves(
         campaign_id, None, target.get("id"), applied, db=db,
     )
+    # v2.97.80 — NPC concentration save. Mirror of the PC branch at
+    # line ~4938. NPCs concentrating on a spell (Hold Person, Fear,
+    # etc.) roll CON against DC max(10, damage // 2); fail drops the
+    # anchor + every target-side buff sourced from this NPC.
+    if applied > 0:
+        await _maybe_npc_concentration_save(
+            campaign_id, target, applied, db=db,
+        )
     if attack_id:
         _log_damage_entry(attack_id, {
             "kind": "damage",
@@ -11180,6 +11366,18 @@ async def respond_roll_request(
                 _caster_type_for_repeat = _attacker_creature_type(
                     db, _caster_id_for_repeat, _caster_cb_for_repeat,
                 ) if _caster_id_for_repeat else ""
+                # v2.97.80 — NPC caster anchor plumbing. When the
+                # cast came from /npc_cast_spell (caster_char_id == 0
+                # sentinel + caster_combatant_id set), stamp
+                # ``source_combatant_id`` on the target buff so the
+                # NPC paired-cleanup helper at
+                # ``_drop_paired_concentration_buffs_npc`` can find
+                # it when the NPC's concentration drops. PC casts
+                # leave the field empty.
+                _npc_caster_cb_id = (
+                    ctx.get("caster_combatant_id") or ""
+                    if not _caster_id_for_repeat else ""
+                )
                 buff = {
                     "key": cond["key"],
                     "name": cond["name"],
@@ -11187,6 +11385,8 @@ async def respond_roll_request(
                     "source_char_id": _caster_id_for_repeat,
                     "source_char_name": ctx.get("caster_char_name") or "",
                     "source_spell": ctx.get("spell_name") or "",
+                    # v2.97.80 — NPC caster combatant id for paired cleanup.
+                    "source_combatant_id": _npc_caster_cb_id,
                     "duration_rounds": int(cond.get("duration_rounds", 10)),
                     "duration_max": int(cond.get("duration_rounds", 10)),
                     # v2.97.67 — Target-side condition buffs (Frightened
@@ -11284,6 +11484,33 @@ async def respond_roll_request(
                                 ],
                             }
                             await _install_buff(campaign_id, caster_id, caster_buff)
+                        else:
+                            # v2.97.80 — NPC caster anchor. caster_char_id
+                            # is 0 (the /npc_cast_spell sentinel) but the
+                            # combatant id was threaded into ctx by the
+                            # endpoint at line ~27557. Install via the
+                            # NPC-friendly buff installer so the v2.97.80
+                            # damage-triggered concentration-save hook
+                            # can find it.
+                            _npc_caster_cb = ctx.get("caster_combatant_id") or ""
+                            if _npc_caster_cb:
+                                npc_caster_buff = {
+                                    "key": f"concentration-{ctx.get('spell_slug') or 'spell'}",
+                                    "name": f"Concentrating: {ctx.get('spell_name') or 'Spell'}",
+                                    "icon": "🌀",
+                                    "source_combatant_id": _npc_caster_cb,
+                                    "source_char_name": ctx.get("caster_char_name") or "",
+                                    "source_spell": ctx.get("spell_name") or "",
+                                    "duration_rounds": int(cond.get("duration_rounds", 10)),
+                                    "duration_max": int(cond.get("duration_rounds", 10)),
+                                    "concentration": True,
+                                    "effects": [
+                                        f"Concentrating on {ctx.get('spell_name') or 'spell'}",
+                                    ],
+                                }
+                                await _install_buff_on_combatant_id(
+                                    campaign_id, _npc_caster_cb, npc_caster_buff,
+                                )
         # v2.47.0 Phase T.5d: AoE PC saves apply save-for-half damage
         # and broadcast a per-target update so the cast card's pill
         # row repaints. The condition-buff path above stays scoped to
@@ -27568,6 +27795,12 @@ async def use_npc_cast_spell(
                     "caster_char_id": 0,
                     "caster_char_name": caster_name,
                     "cast_id": cast_id,
+                    # v2.97.80 — thread the NPC caster's combatant id so
+                    # /respond's install path can install a
+                    # concentration anchor on the NPC + stamp
+                    # ``source_combatant_id`` on the target buff.
+                    # caster_char_id=0 is the NPC-caster sentinel.
+                    "caster_combatant_id": combatant_id,
                 }
         elif target_combatant.get("token_template_id"):
             # NPC target — roll the save server-side from the monster's

@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.98.0] - 2026-05-30 — "The Caster Loses Focus"
+
+**Schema version:** 64
+**Commit summary:** **NPC concentration tracking v1.** When an NPC caster casts a concentration save-or-suck spell (Hold Person, Fear, Confusion, Banishment, Suggestion, Bane, …) v2.98.0 installs a ``concentration-<spell>`` anchor on the NPC's combatant. When the NPC then takes damage, ``_maybe_npc_concentration_save`` rolls a CON save (DC max(10, dmg // 2)); on fail the anchor drops AND every target-side buff sourced from this NPC drops via the new ``_drop_paired_concentration_buffs_npc`` helper. The full PC-side cleanup pipeline (v2.38.0 / v2.49.48 / v2.49.50) is mirrored for NPCs: same broadcast shape (``concentration_save`` event), same paired-cleanup semantics, same 0-HP forced-drop behavior.
+**Description:** Three new helpers in ``app/routes/tabletop_routes.py``: (1) ``_drop_paired_concentration_buffs_npc(campaign_id, source_combatant_id)`` — walks every combatant and drops buffs whose ``source_combatant_id`` matches and ``source_char_id`` is unset (NPC-sourced); (2) ``_npc_concentration_buff_for(campaign_id, combatant_id)`` — returns the (single) concentration buff on an NPC combatant; (3) ``_maybe_npc_concentration_save(campaign_id, target_combatant, damage_amount, db)`` — mirrors ``_maybe_concentration_save`` but reads CON modifier from the NPC's template sheet via ``_monster_template_to_sheet``. Wiring: the NPC branch of ``_apply_damage_to_combatant`` now calls the new save helper after damage lands; ``/npc_cast_spell`` threads ``caster_combatant_id`` into ``_save_request_context``; ``/respond``'s install path now installs an NPC anchor (via ``_install_buff_on_combatant_id``) when ``caster_char_id == 0`` and ``caster_combatant_id`` is set, and stamps ``source_combatant_id`` on the target buff so the paired cleanup can find it.
+
+### Added
+- ``_drop_paired_concentration_buffs_npc(campaign_id, source_combatant_id)`` — NPC equivalent of v2.38.0's paired-cleanup helper, keyed on combatant id instead of char id.
+- ``_npc_concentration_buff_for(campaign_id, combatant_id)`` — NPC equivalent of ``_concentration_buff_for``.
+- ``_maybe_npc_concentration_save(campaign_id, target_combatant, damage_amount, db)`` — NPC equivalent of ``_maybe_concentration_save``; broadcasts ``concentration_save`` with ``combatant_id`` instead of ``character_id``.
+- ``caster_combatant_id`` field on ``_save_request_context`` (threaded by ``/npc_cast_spell``).
+- ``source_combatant_id`` field on target-side condition buffs installed via the NPC-caster path.
+- ``tests/harness/test_npc_concentration.py::test_npc_concentration_anchor_installs_and_breaks_on_damage`` — Archmage casts Hold Person at Caelan; verify anchor installs on Archmage; Pip attacks Archmage until damage lands; verify either save-pass (anchor + Paralyzed stay) or save-fail (anchor + Paralyzed both drop).
+
+### Changed
+- ``app/routes/tabletop_routes.py::_apply_damage_to_combatant`` (NPC branch) — calls ``_maybe_npc_concentration_save`` after damage lands.
+- ``app/routes/tabletop_routes.py::use_npc_cast_spell`` — threads ``caster_combatant_id`` into the save-request context.
+- ``app/routes/tabletop_routes.py::respond`` (install path) — installs NPC anchor when ``caster_char_id == 0`` and ``caster_combatant_id`` is set; stamps ``source_combatant_id`` on the target buff.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.98.0 to the cross-reference list.
+
+### Notes
+- **MINOR bump** — new mechanic surface (NPC concentration → damage save → paired cleanup). Matches the v2.52.0 / v2.53.0 / v2.55.0 MINOR pattern for new RAW mechanics.
+- **PC parity.** The PC concentration pipeline (v2.38.0 Phase T.3e through v2.83.0 War Caster) is mirrored for NPCs except: (1) NPCs don't get War Caster advantage (no per-template feat data yet); (2) NPCs don't have a "Resilient (CON)" feat hook; (3) the NPC paired cleanup doesn't clear persistent AoE markers (only PC casters place ``_clear_caster_concentration_aoes``-tracked AoEs today). All three are filed for follow-ups.
+- **Source-keying invariant.** PC casters stamp ``source_char_id`` on target buffs; NPC casters stamp ``source_combatant_id``. The paired-cleanup helpers match on the respective field so cross-contamination (PC anchor dropping NPC-sourced buffs or vice versa) can't happen.
+- **NPC target install still PC-caster-only.** ``/cast_spell`` (PC caster) installs Paralyzed + anchor on NPC targets inline (the v2.38.0 Phase T.3c path at line ~12895); ``/npc_cast_spell`` against NPC targets doesn't currently install conditions or anchors (target-NPC + caster-NPC is filed). The v2.98.0 install path covers the most common case: NPC casts save-or-suck at a PC.
+- **0-HP forced drop carries over.** When an NPC's HP reaches 0 (e.g. Pip crits the Archmage out), the v2.49.48 RAW "drops to 0 HP → concentration ends" rule fires for NPCs too: the save is still rolled for telemetry but the anchor is force-dropped regardless of pass/fail.
+- **No new endpoints.** Pure plumbing edit — no schema migration, no new route. The mechanic surfaces through the existing ``concentration_save`` WS broadcast (the chat-card roll-log entry already renders both PC and NPC variants).
+- Total harness count: 654 (was 653 in v2.97.79).
+
+---
+
 ## [2.97.79] - 2026-05-30 — "The Undo Pill Returns"
 
 **Schema version:** 64
