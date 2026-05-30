@@ -14631,6 +14631,132 @@ async def use_bardic_inspiration(
     }
 
 
+# ----------- API: Consume Bardic Inspiration die (v2.97.56) -----------
+
+
+@router.post("/api/campaign/{campaign_id}/use_bardic_inspiration_die")
+async def use_bardic_inspiration_die(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.97.56 — closes the v2.97.30-filed Bardic Inspiration die
+    consumption endpoint. A character with a ``bardic-inspiration-die``
+    buff (granted by a Bard ally's ``/use_bardic_inspiration``)
+    consumes the die: server rolls ``1d<die_size>``, broadcasts the
+    result, drops the buff (one-use per RAW), and returns the rolled
+    value so the client can append it to the most recent roll's
+    displayed total.
+
+    Body: ``{character_id, context?}``. ``context`` is one of
+    ``"attack"``, ``"save"``, ``"check"`` — used as a label in the
+    public roll-log entry for transparency. Server does not validate
+    against actual roll state because RAW lets the player decide
+    AFTER seeing the d20 whether to use the die.
+
+    RAW (PHB p.53): the BI die "can be added to one ability check,
+    attack roll, or saving throw [the bonus-action target] makes".
+
+    Errors:
+    - 400 ``character_id`` missing or 0
+    - 400 ``context`` not in the accepted set
+    - 403 Not your character
+    - 404 Character not found
+    - 409 ``no_bi_die`` — no Bardic Inspiration buff on this character
+    - 409 ``no_die_size`` — buff missing the ``effects.bardic_inspiration_die`` field
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    context = (body.get("context") or "").strip().lower()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if context not in ("attack", "save", "check", ""):
+        raise HTTPException(400, "context must be one of: attack, save, check, or empty")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    buffs = _get_buffs(campaign_id, int(char.id))
+    bi_buff = next(
+        (
+            b for b in buffs
+            if isinstance(b, dict)
+            and b.get("key") == "bardic-inspiration-die"
+        ),
+        None,
+    )
+    if bi_buff is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_bi_die",
+            "label": "No Bardic Inspiration die active",
+        })
+
+    effects = bi_buff.get("effects") or {}
+    die = (effects.get("bardic_inspiration_die") or "").strip()
+    if not die:
+        return JSONResponse(status_code=409, content={
+            "error": "no_die_size",
+            "label": "Bardic Inspiration buff missing die size",
+        })
+
+    expr = f"1{die}" if not die.startswith("1") else die
+    try:
+        _r = dice_mod.roll(expr)
+        rolled = int(_r.total)
+        breakdown = _r.breakdown
+    except dice_mod.DiceParseError:
+        raise HTTPException(400, f"Invalid BI die expression: {die}")
+
+    # RAW one-use: drop the buff on consumption. _remove_buff fires its
+    # own buff_update broadcast so the client mini-sheet refreshes.
+    await _remove_buff(campaign_id, int(char.id), "bardic-inspiration-die")
+    _mirror_buffs_to_sheet(
+        db, int(char.id), _get_buffs(campaign_id, int(char.id)),
+    )
+
+    context_label = {
+        "attack": "attack roll",
+        "save": "saving throw",
+        "check": "ability check",
+        "": "roll",
+    }.get(context, "roll")
+    bonus_label = bi_buff.get("source_char_name") or ""
+    source_hint = f" (from {bonus_label})" if bonus_label else ""
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": expr,
+            "total": rolled,
+            "breakdown": breakdown,
+            "note": (
+                f"✨ {char.name} consumes Bardic Inspiration {die} "
+                f"on {context_label}{source_hint}"
+            ),
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    return {
+        "ok": True,
+        "die": die,
+        "rolled": rolled,
+        "breakdown": breakdown,
+        "context": context,
+    }
+
+
 # ----------- API: Cutting Words (Lore Bard Lv 3) -----------
 
 # v2.67.0 Phase 1 — Reactions automation foundation.

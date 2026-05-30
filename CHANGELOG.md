@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.56] - 2026-05-29 — "The Whisper Lands"
+
+**Schema version:** 64
+**Commit summary:** **Server-side Bardic Inspiration die consumption endpoint.** Closes the API half of the v2.97.30-filed BI die UI work. New ``POST /api/campaign/{cid}/use_bardic_inspiration_die`` endpoint: a character carrying the v2.97.30 ``bardic-inspiration-die`` buff (granted by an ally Bard's ``/use_bardic_inspiration``) can now consume it. The server rolls ``1d<size>`` (size lives in ``effects.bardic_inspiration_die``), drops the buff via ``_remove_buff`` (RAW one-use), broadcasts a public roll-log entry naming the source bard and the context (attack / save / check), and returns the rolled value to the caller. The client UI prompt (button on attack/save result cards) is filed for follow-up — the API surface lands first so the harness can exercise the contract independently.
+**Description:** One new endpoint in ``app/routes/tabletop_routes.py`` between ``/use_bardic_inspiration`` and ``/use_reaction`` (around line 14634). Body: ``{character_id, context?}`` where ``context`` is one of ``"attack" / "save" / "check" / ""``. Validates ownership + buff presence + die-size marker, rolls the die, drops the buff, broadcasts, returns. 409 ``no_bi_die`` when the buff isn't installed; 409 ``no_die_size`` when the buff lacks the effects marker; 400 on bad body fields. Public roll-log broadcast carries a "consumes Bardic Inspiration {die} on {context_label} (from {bard_name})" note so the table sees who's spending what and when.
+
+### Added
+- ``POST /api/campaign/{cid}/use_bardic_inspiration_die`` endpoint in ``app/routes/tabletop_routes.py``.
+- ``tests/harness/test_use_bardic_inspiration_die.py`` — two tests covering happy path (Lyra inspires Pip; Pip consumes the die; response carries ``rolled`` in range and buff drops) + error path (no buff → 409 ``no_bi_die``).
+
+### Changed
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.56 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 633 → 635, version stamp v2.97.55 → v2.97.56.
+
+### Notes
+- **PATCH bump** — one new endpoint + two harness tests + doc updates.
+- **Server-first.** The harness contract is the durable thing; the UI button is a follow-up that consumes this endpoint. Future commits can wire the prompt into the attack/save result cards in ``app/static/tabletop.js`` (likely a ``+BI Die`` button that appears when ``character_id``'s buff list contains ``bardic-inspiration-die`` and the most-recent roll is an attack / save / check).
+- **One-use RAW.** The buff drops on the first successful POST. A second POST returns 409 ``no_bi_die``. Matches RAW's "until you finish a long rest, OR until you use the die" timing.
+- **Context label is cosmetic.** The server doesn't validate that the player actually made an attack / save / check before consuming the die — RAW lets the player decide after seeing the d20, so the trust model is "GM enforces in chat if abused." A future Phase 4-style strict mode could lock down the context to match an active roll.
+- **Roll-log note names the source bard.** The buff's ``source_char_name`` field (stamped at install time) drives the "(from {bard_name})" suffix, so the table sees the chain: "Lyra → Pip → +6 on attack". This is the same idiom the Bless / Heroism roll-log notes use.
+- Total harness count: 635 (was 633 in v2.97.55) — two new BI die consume tests.
+
+---
+
 ## [2.97.55] - 2026-05-29 — "The Spell Breaks the Vow"
 
 **Schema version:** 64
