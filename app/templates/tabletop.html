@@ -7518,6 +7518,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             combatant.buffs = Array.isArray(data.buffs) ? data.buffs : [];
             saveBattle();
             renderBattle();
+            // v2.97.57 — refresh the Bardic Inspiration die prompt
+            // banner whenever any combatant's buff list changes. Cheap
+            // to call (early-return when no qualifying buff exists).
+            if (typeof window._renderBIDiePrompt === 'function') {
+                window._renderBIDiePrompt();
+            }
             return;
         }
         // v2.3.19: keep ``allTokens`` reactive so the GM's "From Map"
@@ -8026,6 +8032,112 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c])
         );
     }
+
+    // v2.97.57 — Bardic Inspiration die consume UI. When a combatant
+    // owned by the current user (or any combatant for the GM) carries
+    // a ``bardic-inspiration-die`` buff, surface a floating bottom-
+    // right banner with the die size + a context picker (Attack /
+    // Save / Check). Clicking a context button POSTs the v2.97.56
+    // endpoint which rolls the die, drops the buff, and broadcasts
+    // ``buff_update`` — the buff_update handler re-calls this
+    // function which then hides the banner.
+    window._renderBIDiePrompt = function () {
+        const HOST_ID = '_bi_die_prompt';
+        let host = document.getElementById(HOST_ID);
+
+        // Find the highest-priority eligible combatant: one whose
+        // owner is ME (or any if I'm GM) AND who carries the BI buff.
+        const combs = (typeof battle !== 'undefined' && battle.combatants)
+            ? battle.combatants : [];
+        let match = null;
+        for (const c of combs) {
+            if (!c || !Array.isArray(c.buffs)) continue;
+            const owned = (typeof ME !== 'undefined') && (
+                ME.isGm || (_initChars || []).some(
+                    ch => ch && ch.id === c.char_id && ch.owner_user_id === ME.id
+                )
+            );
+            if (!owned) continue;
+            const bi = (c.buffs || []).find(
+                b => b && b.key === 'bardic-inspiration-die'
+            );
+            if (bi) {
+                match = { combatant: c, buff: bi };
+                break;
+            }
+        }
+
+        if (!match) {
+            if (host) host.remove();
+            return;
+        }
+
+        if (!host) {
+            host = document.createElement('div');
+            host.id = HOST_ID;
+            host.style.cssText = (
+                'position:fixed;bottom:18px;right:18px;z-index:9000;'
+                + 'background:rgba(28,24,18,0.88);color:#f4e8c8;'
+                + 'border:2px solid #c8a04a;border-radius:10px;'
+                + 'padding:10px 14px;min-width:240px;font-size:14px;'
+                + 'box-shadow:0 6px 18px rgba(0,0,0,0.45);'
+                + 'backdrop-filter:blur(6px);'
+            );
+            document.body.appendChild(host);
+        }
+
+        const die = ((match.buff.effects || {}).bardic_inspiration_die || '');
+        const charName = match.combatant.name || 'Character';
+        const sourceName = match.buff.source_char_name || '';
+        host.innerHTML = (
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+            + '<span style="font-size:18px;">✨</span>'
+            + '<strong>Bardic Inspiration ' + _escH(die) + '</strong>'
+            + '</div>'
+            + '<div style="opacity:0.85;font-size:12px;margin-bottom:8px;">'
+            + _escH(charName) + (sourceName ? ' · from ' + _escH(sourceName) : '')
+            + '</div>'
+            + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+            + '<button class="_bi_die_btn" data-context="attack" style="flex:1;min-width:64px;">Attack</button>'
+            + '<button class="_bi_die_btn" data-context="save" style="flex:1;min-width:64px;">Save</button>'
+            + '<button class="_bi_die_btn" data-context="check" style="flex:1;min-width:64px;">Check</button>'
+            + '</div>'
+        );
+
+        const charId = match.combatant.char_id;
+        host.querySelectorAll('._bi_die_btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const ctx = btn.getAttribute('data-context') || '';
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+                try {
+                    const r = await fetch(
+                        '/api/campaign/' + CAMPAIGN_ID + '/use_bardic_inspiration_die',
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                character_id: charId,
+                                context: ctx,
+                            }),
+                        }
+                    );
+                    if (!r.ok) {
+                        const txt = await r.text();
+                        console.warn('BI die consume failed:', txt);
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                    }
+                    // On success, the server emits buff_update which
+                    // re-calls _renderBIDiePrompt → banner hides.
+                } catch (err) {
+                    console.warn('BI die consume error:', err);
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }
+            });
+        });
+    };
 
     function _conSaveExpr(charId) {
         const ch = _initChars.find(c => c.id === charId);

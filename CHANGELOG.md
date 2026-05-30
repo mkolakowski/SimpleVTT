@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.57] - 2026-05-29 — "Tap the Verse"
+
+**Schema version:** 64
+**Commit summary:** **Bardic Inspiration die client-side UI banner.** Closes the v2.97.30-filed UI half (the API half shipped in v2.97.56). When a combatant owned by the current viewer (or any combatant when viewing as GM) carries a ``bardic-inspiration-die`` buff, a floating bottom-right banner appears showing the die size, the bestowing bard's name, and three context buttons — Attack / Save / Check. Clicking any button POSTs ``/use_bardic_inspiration_die`` with that context, the server rolls the die and drops the buff, the resulting ``buff_update`` broadcast re-fires the renderer which hides the banner. Self-contained additive JS — no changes to existing render paths.
+**Description:** Two edits in ``app/templates/tabletop.html``. **(1)** New ``window._renderBIDiePrompt()`` function near ``_escH``: walks ``battle.combatants`` for the first combatant owned by the user (GM bypasses) that carries the ``bardic-inspiration-die`` buff. If found, creates / updates a fixed-position ``#_bi_die_prompt`` banner with three Attack / Save / Check buttons. Each button POSTs the v2.97.56 endpoint with ``context``. If no eligible combatant, removes the banner from DOM. **(2)** Hook in the existing ``buff_update`` WS handler: after the standard ``saveBattle`` + ``renderBattle`` calls, invoke ``window._renderBIDiePrompt()`` so the banner state stays in sync. Banner styling uses inline CSS for minimal footprint — backdrop-blur glass styling matches the existing tabletop chrome.
+
+### Added
+- ``_renderBIDiePrompt`` JS function in ``app/templates/tabletop.html``.
+- ``buff_update`` hook calling the renderer in the existing WS handler.
+
+### Changed
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.57 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — UI-only addition. No production server change. Re-uses the v2.97.56 endpoint contract.
+- **Manual verification required (browser-side).** Per the CLAUDE.md "UI changes need browser verification" rule: the JS adds a new DOM element on receipt of a ``buff_update`` that includes ``bardic-inspiration-die``. To test in the live container: (1) open ``http://localhost:8013`` as Lyra's owner (or as GM viewing the same campaign); (2) have Lyra ``/use_bardic_inspiration`` on a target combatant; (3) banner should appear bottom-right for the target's owner; (4) click any context button → server rolls + drops the buff → banner disappears. The harness from v2.97.56 already validates the server contract.
+- **No harness test.** The banner is JS DOM rendering — outside the harness's HTTP+WS reach. ``test_use_bardic_inspiration_die.py`` from v2.97.56 covers the endpoint contract end-to-end (the only thing the banner does is POST the endpoint with a context value).
+- **Self-contained additive scope.** The new function is ``window._renderBIDiePrompt`` and the banner element is ``#_bi_die_prompt`` — no naming conflicts with existing code. The only existing-code edit is one new call inside the ``buff_update`` handler (no behavior change to the existing handler).
+- **44×44 px tap targets.** The three context buttons inherit ``min-height: 44px`` from the global ``button`` rule in ``app/static/style.css``. ``min-width: 64px`` is set inline so the labels don't collapse on narrow viewports.
+- **No-op when no buff.** ``_renderBIDiePrompt`` early-returns and removes the banner when no eligible combatant carries the buff, so the function is safe to call on every buff_update.
+- **GM-bypass behavior.** A GM viewer sees the banner for ANY combatant that has the BI buff (not just owned ones) since GMs often play multiple PCs / NPCs and may want to consume on behalf of an inspired ally. Player viewers only see the banner for their own characters.
+- Total harness count: 635 (unchanged from v2.97.56) — no new harness tests in this UI commit.
+
+---
+
 ## [2.97.56] - 2026-05-29 — "The Whisper Lands"
 
 **Schema version:** 64
