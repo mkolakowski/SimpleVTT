@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.44] - 2026-05-29 — "Steady Breath"
+
+**Schema version:** 64
+**Commit summary:** **Heroism install-time temp HP grant.** Closes the OTHER v2.97.37-filed Heroism mechanical half. The v2.97.31 `/cast_spell` no-save buff walker now reads the buff template's `effects.heroism_temp_hp_per_turn` marker and, if present, computes the caster's spellcasting modifier via `_caster_spellcasting_mod(char.sheet)` and bumps the target's `hp.temp` to the higher of (existing temp, mod) — RAW temp HP doesn't stack with itself; the higher value wins. The bump fires a `character_hp_update(source=heroism-temp-hp)` broadcast and stamps a new `heroism_temp_hp_grant` undo log entry carrying the pre-grant temp value. The undo handler restores that pre-grant value cleanly. The per-turn RECURRENCE (RAW: "at the start of each of its turns") is still filed — that needs a turn-start hook on `PUT /battle` since the server doesn't have a dedicated next-turn endpoint.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. **(1)** Walker extension after the v2.97.41 Aid heal block: when `effects.heroism_temp_hp_per_turn` is True AND the caster has a positive spellcasting mod, look up the target Character, read its `sheet["hp"]["temp"]`, and update only if the new value exceeds the existing temp. Mutates the sheet directly (no helper exists for temp-HP delta), commits, and broadcasts `character_hp_update` with `source="heroism-temp-hp"`. **(2)** Log entry: stamps `kind: "heroism_temp_hp_grant"` carrying `pre_temp` for undo. **(3)** New undo branch in `undo_attack_damage` that restores `hp.temp` to `pre_temp` and broadcasts `character_hp_update(source="undo_heroism_temp_hp")`.
+
+### Added
+- Walker extension for the Heroism install-time temp HP grant.
+- New undo log kind `heroism_temp_hp_grant` (write side) + `heroism_temp_hp_reverted` (read side from per_target).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_heroism_grants_temp_hp_and_reverses` — Lyra casts Heroism on Pip; asserts a `character_hp_update(source=heroism-temp-hp)` broadcast with positive `hp.temp`; undoes; asserts a `heroism_temp_hp_reverted` leg in per_target and a `character_hp_update(source=undo_heroism_temp_hp)` with `hp.temp == 0`.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_spell` v2.97.31 walker — adds the Heroism temp HP grant after the Aid heal block.
+- `app/routes/tabletop_routes.py::undo_attack_damage` — adds the `heroism_temp_hp_grant` undo branch.
+- `tests/harness/test_heroism_frightened_immunity.py` — bumped per-iteration buff cleanup to clear all known catalog buffs (Bless, Aid, Shield of Faith, Sacred Weapon, Bardic Inspiration die, Baned, Faerie-fired, Paralyzed) on Pip in addition to Heroism/Frightened. Sweep isolation found that prior tests' lingering concentration anchors on Pip occasionally interfered with the Heroism→Fear concentration-swap logic in `/respond`.
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.44 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 623 → 624, version stamp v2.97.43 → v2.97.44.
+
+### Notes
+- **PATCH bump** — walker extension + one new undo kind + harness test isolation fix. No new endpoints, no new helpers (uses the existing `_caster_spellcasting_mod`), no schema changes.
+- **Filed: per-turn recurrence.** RAW: "at the start of each of its turns." Server doesn't have a turn-advance endpoint today (turn changes flow through generic `PUT /battle`). Closing this needs either (a) a turn-detection diff inside `PUT /battle` that walks combatants for the Heroism buff and re-grants temp HP when `turn_index` changes, or (b) a dedicated `/next_turn` endpoint that does the same work. Either approach has the same shape; the data the hook needs is already on the buff (`source_char_id`).
+- **RAW temp HP semantics.** Temp HP doesn't stack with itself — the higher value wins. We implement this by checking `_heroism_mod > _pre_temp` and only writing if so. If a Pip already has 8 temp HP from some other source and Heroism would grant 4, the existing 8 stays.
+- **Sweep isolation fix in the v2.97.43 test.** The pre-existing test occasionally failed in sweep order when prior tests left concentration anchors on Pip. The fix is purely additive in the test fixture (no production code change for the isolation): clear a broader set of known buffs each iteration. Standalone runs of the test were unaffected.
+- Total harness count: 624 (was 623 in v2.97.43) — one new Heroism temp HP round-trip test.
+
+---
+
 ## [2.97.43] - 2026-05-29 — "Resolute Heart"
 
 **Schema version:** 64

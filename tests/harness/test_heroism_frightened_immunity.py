@@ -51,15 +51,20 @@ async def test_heroism_blocks_frightened_install(gm_client, gm_ws, roster):
         await _long_rest(gm_client, caelan["id"])
         await _long_rest(gm_client, lyra["id"])
         await _long_rest(gm_client, pip["id"])
-        # Clear stale buffs.
-        await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
-            json={"character_id": pip["id"], "key": "heroism"},
-        )
-        await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
-            json={"character_id": pip["id"], "key": "frightened"},
-        )
+        # Clear stale buffs aggressively — any prior test may have
+        # left Pip with concentration anchors (Bless, Aid, Heroism,
+        # Sacred Weapon, …) that interfere with the Heroism→Fear
+        # concentration-swap logic in /respond. End everything we
+        # know about.
+        for _stale_key in (
+            "heroism", "frightened", "bless", "aid", "shield-of-faith",
+            "sacred-weapon", "bardic-inspiration-die", "baned",
+            "faerie-fired", "paralyzed",
+        ):
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+                json={"character_id": pip["id"], "key": _stale_key},
+            )
         await gm_client.put(
             f"/api/campaign/{CAMPAIGN_ID}/battle",
             json={
@@ -131,6 +136,24 @@ async def test_heroism_blocks_frightened_install(gm_client, gm_ws, roster):
         prompt_id = fear_cast.json().get("auto_save_prompt_id")
         if not prompt_id:
             continue
+        # Debug — check Pip's buffs right before /respond. Heroism
+        # should still be there with the immunity marker.
+        pip_buffs_mid = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+        )).json().get("buffs", [])
+        hero_mid = next(
+            (b for b in pip_buffs_mid if (b or {}).get("key") == "heroism"),
+            None,
+        )
+        assert hero_mid is not None, (
+            f"Heroism dropped between cast and respond; "
+            f"got {pip_buffs_mid}"
+        )
+        assert (hero_mid.get("effects") or {}).get(
+            "condition_immunity_frightened"
+        ) is True, (
+            f"Heroism missing immunity marker; got {hero_mid}"
+        )
         # Pip responds to the save prompt.
         resp = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/roll_request/{prompt_id}/respond",
@@ -159,6 +182,10 @@ async def test_heroism_blocks_frightened_install(gm_client, gm_ws, roster):
         "no failed Wis save in 30 tries; couldn't confirm Heroism "
         "immunity gate fired"
     )
+
+    # Give async broadcasts a beat to land in the buffer.
+    import asyncio as _asy
+    await _asy.sleep(0.3)
 
     # Verify the broadcast surfaced the immunity.
     msgs = gm_ws.buffered("feature_used")

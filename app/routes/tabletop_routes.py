@@ -12817,6 +12817,52 @@ async def cast_spell(
                         _aid_hp_bonus,
                         cast_id=cast_id,
                     )
+                # v2.97.44 — Heroism install-time temp HP grant. RAW:
+                # "gains temporary hit points equal to your spellcasting
+                # ability modifier at the start of each of its turns."
+                # This commit handles the install-time / first-turn
+                # grant; the per-turn recurrence is filed (needs a
+                # turn-start hook on PUT /battle). Temp HP RAW does
+                # NOT stack with itself — the higher value wins, so
+                # we max(existing_temp, mod) and skip when the existing
+                # temp is already ≥ the grant. The pre-grant value is
+                # logged so undo can restore it cleanly.
+                _heroism_marker = (
+                    spell_buff_template.get("effects") or {}
+                ).get("heroism_temp_hp_per_turn")
+                if _heroism_marker and char.sheet:
+                    _heroism_mod = _caster_spellcasting_mod(char.sheet)
+                    if _heroism_mod > 0:
+                        _hero_target = db.query(Character).filter(
+                            Character.id == _bless_tid,
+                        ).first()
+                        if _hero_target and _hero_target.sheet:
+                            _hero_sheet = dict(_hero_target.sheet)
+                            _hero_hp = dict(_hero_sheet.get("hp") or {})
+                            _pre_temp = int(_hero_hp.get("temp") or 0)
+                            if _heroism_mod > _pre_temp:
+                                _hero_hp["temp"] = _heroism_mod
+                                _hero_sheet["hp"] = _hero_hp
+                                _hero_target.sheet = _hero_sheet
+                                from sqlalchemy.orm.attributes import flag_modified as _fm
+                                _fm(_hero_target, "sheet")
+                                db.commit()
+                                _log_damage_entry(cast_id, {
+                                    "kind": "heroism_temp_hp_grant",
+                                    "campaign_id": campaign_id,
+                                    "target_char_id": _bless_tid,
+                                    "pre_temp": _pre_temp,
+                                    "granted": _heroism_mod,
+                                })
+                                await hub.broadcast(campaign_id, {
+                                    "type": "character_hp_update",
+                                    "data": {
+                                        "character_id": _hero_target.id,
+                                        "hp": _hero_hp,
+                                        "delta": 0,
+                                        "source": "heroism-temp-hp",
+                                    },
+                                })
 
     # v2.5.5: full-sheet → init chip sync. Slot was derived up-front
     # for the Phase 4 gate; reuse it here so the idempotence in
@@ -26401,6 +26447,44 @@ async def undo_attack_damage(
                 "kind": "buff_install",
                 "target_char_id": entry.get("target_char_id"),
                 "buff_key": entry.get("buff_installed_key"),
+            })
+            continue
+
+        # v2.97.44 — Heroism temp-HP grant. Stamped by the
+        # /cast_spell v2.97.31 walker when installing a buff whose
+        # template carries ``effects.heroism_temp_hp_per_turn``.
+        # Restores the target's hp_temp to the pre-grant value the
+        # log captured. Broadcasts character_hp_update so any open
+        # mini-sheet repaints.
+        if kind == "heroism_temp_hp_grant":
+            _hg_char_id = entry.get("target_char_id")
+            _hg_pre = int(entry.get("pre_temp") or 0)
+            if _hg_char_id:
+                _hg_char = db.query(Character).filter(
+                    Character.id == int(_hg_char_id),
+                ).first()
+                if _hg_char and _hg_char.sheet:
+                    _hg_sheet = dict(_hg_char.sheet)
+                    _hg_hp = dict(_hg_sheet.get("hp") or {})
+                    _hg_hp["temp"] = _hg_pre
+                    _hg_sheet["hp"] = _hg_hp
+                    _hg_char.sheet = _hg_sheet
+                    from sqlalchemy.orm.attributes import flag_modified as _fm_undo
+                    _fm_undo(_hg_char, "sheet")
+                    db.commit()
+                    await hub.broadcast(campaign_id, {
+                        "type": "character_hp_update",
+                        "data": {
+                            "character_id": _hg_char.id,
+                            "hp": _hg_hp,
+                            "delta": 0,
+                            "source": "undo_heroism_temp_hp",
+                        },
+                    })
+            per_target_undone.append({
+                "kind": "heroism_temp_hp_reverted",
+                "target_char_id": _hg_char_id,
+                "restored_temp": _hg_pre,
             })
             continue
 

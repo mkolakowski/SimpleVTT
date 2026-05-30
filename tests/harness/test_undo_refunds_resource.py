@@ -1728,6 +1728,129 @@ async def test_undo_cast_aid_heals_target_at_install(gm_client, gm_ws, roster):
     )
 
 
+async def test_undo_cast_heroism_grants_temp_hp_and_reverses(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.44 — Heroism now grants the target temp HP equal to the
+    caster's spellcasting modifier at install time. RAW: "gains
+    temporary hit points equal to your spellcasting ability modifier
+    at the start of each of its turns." This commit handles the
+    install-time / first-turn grant; per-turn recurrence is filed.
+
+    Lyra (Bard, CHA-based) casts Heroism on Pip. Pip's hp_temp should
+    bump to Lyra's CHA mod. Undo restores Pip's hp_temp to 0.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, lyra["id"])
+    await _long_rest(gm_client, pip["id"])
+
+    pip_tok = f"tok_htemp_pip_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_htemp_lyra_{lyra['id']}",
+                    "char_id": lyra["id"],
+                    "name": lyra["name"],
+                    "initiative": 10,
+                    "hp_current": 35, "hp_max": 35,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": pip_tok,
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": 40, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    gm_ws.mark()
+    # Heroism is Lyra's spell at index 7.
+    HEROISM_INDEX = 7
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": lyra["id"],
+            "spell_index": HEROISM_INDEX,
+            "slot_level": 1,
+            "class_slug": "bard",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json()["id"]
+
+    # The install-time temp HP grant fires a character_hp_update
+    # broadcast for Pip carrying source="heroism-temp-hp".
+    # Lyra's CHA is 18 (CHA mod +4) in the demo.
+    found_temp_grant = False
+    granted_amount = 0
+    # Drain a few broadcasts since other events (buff_update, etc.)
+    # also fire after the cast.
+    import asyncio as _asy
+    await _asy.sleep(0.3)
+    for msg in gm_ws.buffered("character_hp_update"):
+        d = msg.get("data") or {}
+        if d.get("character_id") != pip["id"]:
+            continue
+        if d.get("source") == "heroism-temp-hp":
+            found_temp_grant = True
+            granted_amount = int(d.get("hp", {}).get("temp") or 0)
+            break
+
+    assert found_temp_grant, (
+        "expected a character_hp_update with source=heroism-temp-hp"
+    )
+    # Lyra is Bard CHA-based. The demo Lyra has CHA 18 → +4 mod.
+    assert granted_amount >= 1, (
+        f"expected Pip's temp HP to bump by Lyra's CHA mod; got temp={granted_amount}"
+    )
+
+    # Undo — should reverse temp HP grant AND drop buff.
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+    assert "heroism_temp_hp_reverted" in kinds, (
+        f"expected heroism_temp_hp_reverted leg in per_target; got {per_target}"
+    )
+
+    # Capture the post-undo character_hp_update.
+    await _asy.sleep(0.2)
+    found_revert = False
+    for msg in gm_ws.buffered("character_hp_update"):
+        d = msg.get("data") or {}
+        if d.get("character_id") != pip["id"]:
+            continue
+        if d.get("source") == "undo_heroism_temp_hp":
+            # hp.temp should be back to 0 (Pip's pre-cast value).
+            assert int(d.get("hp", {}).get("temp") or 0) == 0
+            found_revert = True
+            break
+    assert found_revert, (
+        "expected a character_hp_update with source=undo_heroism_temp_hp"
+    )
+
+
 async def test_aid_extends_effective_max_hp(gm_client, gm_ws, roster):
     """v2.97.42 — Aid now extends the effective max-HP clamp via
     ``_buff_hp_max_bonus``. Closes the other half of the v2.97.40
