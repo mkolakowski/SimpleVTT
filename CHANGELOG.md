@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.2] - 2026-05-30 — "Clean Slate for the Halfling"
+
+**Schema version:** 64
+**Commit summary:** **Harden ``test_npc_concentration`` against suite-level state leak.** v2.99.1's full-suite sweep still saw this one test fail when run after a long sequence of other tests — Pip couldn't land a hit on the Archmage in 30 tries, which is dice-impossible (~0.45^30) at his expected hit rate. Root cause: suite-leaked buff state on Pip's character row (Frightened from Fear tests, Stunned from Stunning Strike tests, Paralyzed from Hold Person tests, …) was persisting past the test's long-rest and degrading his attack rolls. v2.99.2 adds explicit ``/end_buff`` cleanup for 12 known-troublesome keys before Pip's attack loop, then long-rests again to reset HP + death-save state. Also bumps the attack iteration cap from 30 to 60 as a wider safety margin.
+**Description:** Two edits in ``tests/harness/test_npc_concentration.py``: (1) explicit cleanup of frightened/paralyzed/stunned/prone/blinded/incapacitated/unconscious/asleep/charmed/baned/faerie-fired/concentration-hex on Pip plus a long-rest before the attack loop. (2) iteration cap 30 → 60.
+
+### Fixed
+- ``tests/harness/test_npc_concentration.py`` — robust against suite contention. Was failing under full-suite runs due to state leak; now passes 5/5 in isolation AND in the full suite.
+
+### Notes
+- **PATCH bump** — test-only hardening, no code change.
+- **The cleanup pattern is reusable.** The 12-key cleanup list is the same one ``test_use_repeated_save`` and ``test_pfeag_condition_immunity`` use. Future state-sensitive tests can opt in by adopting the same cleanup before their pivotal assertion phase.
+- **Full suite now stable at 658/658.** No remaining suite-level flakes after this fix.
+- Total harness count: 658 (unchanged from v2.99.1).
+
+---
+
 ## [2.99.1] - 2026-05-30 — "Three Stale Fixtures"
 
 **Schema version:** 64

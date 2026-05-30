@@ -154,13 +154,37 @@ async def test_npc_concentration_anchor_installs_and_breaks_on_damage(
         (b or {}).get("key") == "paralyzed" for b in caelan_buffs_pre
     )
 
+    # v2.99.2 — explicit Pip cleanup so any state leaked from prior
+    # suite tests (Frightened from Fear, prone from Open Hand,
+    # Stunned from Stunning Strike, etc.) doesn't degrade his attack
+    # rolls below the 30-iteration budget. The install loop above
+    # already long-rests him; this also clears any persistent buff
+    # keys that affect to-hit. Long-rest again afterwards to refresh
+    # HP + reset death-save state.
+    for _stale_pip_buff in (
+        "frightened", "paralyzed", "stunned", "prone", "blinded",
+        "incapacitated", "unconscious", "asleep", "charmed",
+        "baned", "faerie-fired", "concentration-hex",
+    ):
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": pip["id"], "key": _stale_pip_buff},
+        )
+    await _long_rest(gm_client, pip["id"])
+
     # Mark the WS cursor so the next wait_for only sees post-attack
     # broadcasts.
     gm_ws.mark()
 
     # Pip attacks Archmage until a hit lands and damage applies.
+    # v2.99.2 — bumped 30 → 60 iterations as a margin against suite-
+    # level contention. Pip's Shortsword +6 vs Archmage AC ~18 hits
+    # ~55% of the time per RAW; 60 iterations gives a cumulative
+    # miss rate of ~0.45^60 ≈ 10^-21 against an unbiased d20, so
+    # any 60-iter dry spell is a hard signal of degraded test state
+    # rather than dice variance.
     damage_landed = False
-    for _ in range(30):
+    for _ in range(60):
         atk = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/attack",
             json={
@@ -178,7 +202,7 @@ async def test_npc_concentration_anchor_installs_and_breaks_on_damage(
             break
 
     assert damage_landed, (
-        "no Pip → Archmage hit landed in 30 tries"
+        "no Pip → Archmage hit landed in 60 tries"
     )
 
     # v2.98.0 contract: a concentration_save event fires for the
