@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.72] - 2026-05-30 — "The Sage Steps Forward"
+
+**Schema version:** 64
+**Commit summary:** **Bump Thalindra Lv 5 → 7 + append Confusion and Banishment to her wizard spell list.** The v2.97.71 catalog entries needed a demo character who could actually cast the new save-or-suck spells through `/cast_spell`. Wizard Lv 7 unlocks Lv 4 spell slots (1 slot) which gates both spells. Bumps her sheet: level 5 → 7, hit_dice 5 → 7, HP 27 → 37, spell_slots adds `"4": {"total": 1, "used": 0}`. Spell list appends **Confusion** (Wis save, AoE 10-ft sphere, end-of-turn save) and **Banishment** (Cha save, single target, no end-of-turn save). Both are appended at the END so existing spell_index assertions in the harness (`FIREBALL_INDEX = 7`, etc.) stay valid. The v2.97.71 catalog entries handle the buff installation; the v2.97.62/69 + v2.97.70 auto-fire infrastructure handles the end-of-turn save for Confusion.
+**Description:** Two edits in `app/demo_seed.py`. **(1)** `_wizard_sheet`: level 5→7, hp 27→37, hit_dice 5→7, spell_slots add `"4": {"total": 1, "used": 0}`. **(2)** Append Confusion (index 12) and Banishment (index 13) to Thalindra's spell list with appropriate `_slug`, `save_ability`, and `desc` fields. Both flagged as Lv 4 spells routing through the standard `/cast_spell` save-or-suck pipeline.
+
+### Added
+- Confusion (index 12) and Banishment (index 13) on Thalindra's wizard spell list.
+- ``tests/harness/test_cast_confusion_npc.py::test_thalindra_casts_confusion_on_bandit_npc`` — Thalindra casts Confusion at a bandit; bandit fails inline save → Confused installs with v2.97.71 stamps; advance the turn → 🔁 End-of-turn save broadcast fires for the bandit via the v2.97.62/70 auto-fire.
+
+### Changed
+- ``app/demo_seed.py::_wizard_sheet`` — Lv 5 → 7, HP 27 → 37, hit_dice 5 → 7, L4 slot added.
+- ``app/demo_seed.py::_wizard_sheet["spells"]`` — appended Confusion + Banishment.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.72 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 648 → 649, version stamp v2.97.71 → v2.97.72.
+
+### Notes
+- **PATCH bump** — demo seed content + one harness test. No new code in the routes / catalog layers.
+- **Why bump Thalindra's level.** Wizard L4 slots aren't accessible at Lv 5 RAW. Bumping to Lv 7 unlocks them and keeps the rest of her sheet RAW-consistent. HP and hit_dice bumped to match. Saving throws + proficiency_bonus unchanged (still WIS+INT, +3 prof).
+- **Backwards compat.** All existing harness tests that hardcoded Thalindra's HP (e.g. ``hp_current=24`` in test_cast_spell_aoe.py / test_danger_sense.py / test_broadcast_payload_shapes.py) seed their own combatants and don't read from the demo. Sheet-driven tests (test_concentration_buffs.py, test_use_font_of_magic.py) use her ID but don't assert on HP/level numbers. No test should break from the bump.
+- **Spell index preservation.** FIREBALL_INDEX = 7, COUNTERSPELL = 9, SLEEP_INDEX = 10 (per existing comments) all stay valid because new spells append at the end of the list.
+- **End-of-turn auto-fire test.** Closes the loop: Thalindra casts → NPC fails install save → buff lands with v2.97.71 catalog stamps + v2.97.70 helper plumbing → turn shifts → broadcast fires. Same shape as v2.97.66's NPC damage-trigger test + v2.97.69's NPC end-of-turn test, now with the actual `/cast_spell` flow exercising the full path.
+- Total harness count: 649 (was 648 in v2.97.71) — one new Confusion NPC round-trip test.
+
+---
+
 ## [2.97.71] - 2026-05-30 — "Two More to the Bell"
 
 **Schema version:** 64

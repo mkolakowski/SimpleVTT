@@ -408,21 +408,28 @@ def _rogue_sheet(name: str) -> dict:
 
 
 def _wizard_sheet(name: str) -> dict:
-    """Minimal D&D 5e Wizard 5 sheet."""
+    """Minimal D&D 5e Wizard 7 sheet.
+
+    v2.97.72 — bumped Lv 5 → 7 so Thalindra has Lv 4 spell slots.
+    Unlocks ``Confusion`` and ``Banishment`` (both Lv 4 wizard
+    spells) on her list, which exercises the v2.97.62/69 end-of-
+    turn auto-fire infrastructure (Confusion has end-of-turn Wis
+    save RAW; Banishment doesn't, and the catalog reflects that).
+    """
     return {
         "class": "Wizard",
         "subclass": "School of Evocation",
-        "level": 5,
+        "level": 7,
         "race": "Elf",
         "alignment": "Neutral Good",
         "background": "Sage",
         "abilities": {"STR": 8, "DEX": 14, "CON": 13, "INT": 16, "WIS": 12, "CHA": 10},
         "ac": 12,
         "speed": 30,
-        "hp": {"current": 27, "max": 27, "temp": 0},
+        "hp": {"current": 37, "max": 37, "temp": 0},
         "initiative_bonus": 2,
         "proficiency_bonus": 3,
-        "hit_dice": {"current": 5, "max": 5},
+        "hit_dice": {"current": 7, "max": 7},
         "class_hit_die": "d6",
         "class_spellcasting": "INT",
         "saving_throws": {"INT": True, "WIS": True},
@@ -483,12 +490,24 @@ def _wizard_sheet(name: str) -> dict:
             {"name": "Silvery Barbs", "level": 1, "prepared": True, "_slug": "silvery-barbs",
              "casting_time": "1 reaction",
              "desc": "Reaction (when a creature within 60 ft succeeds on a d20 roll): they reroll and take the lower. You may also grant advantage to a different creature within 60 ft on its next attack/check/save within 1 minute."},
+            # v2.97.72 — appended at the END of the spell list so
+            # existing spell_index assertions stay valid. Both are
+            # Lv 4 wizard spells with save-or-suck flows that route
+            # through /respond's PC install path; the v2.97.71 catalog
+            # entries handle the buff installation.
+            {"name": "Confusion", "level": 4, "prepared": True, "_slug": "confusion",
+             "casting_time": "1 action", "save_ability": "WIS",
+             "desc": "10-ft-radius sphere within 90 ft. WIS save DC 14 or be Confused (d10 random behavior). Concentration up to 1 min. End-of-turn Wis save to shake off (RAW)."},
+            {"name": "Banishment", "level": 4, "prepared": True, "_slug": "banishment",
+             "casting_time": "1 action", "save_ability": "CHA",
+             "desc": "60 ft single target. CHA save DC 14 or be Banished (incapacitated on harmless demiplane). Concentration up to 1 min. NO end-of-turn save RAW."},
         ],
         "spell_slots": {
             "wizard": {
                 "1": {"total": 4, "used": 0},
                 "2": {"total": 3, "used": 0},
-                "3": {"total": 2, "used": 0},
+                "3": {"total": 3, "used": 0},
+                "4": {"total": 1, "used": 0},
             },
         },
         # v2.4.13: rich inventory items (was bare strings). See the
