@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.98.3] - 2026-05-30 — "Read the Spell off the Wire"
+
+**Schema version:** 64
+**Commit summary:** **Fix the v2.98.0 harness test that referenced a non-existent ``GET /battle`` endpoint.** The shipped v2.98.0 test for NPC concentration tracking polled ``GET /api/campaign/{cid}/battle`` to read post-install NPC buff state, but the routes module only exposes ``PUT /battle`` — ``GET`` returns 405. The test failed on every run with ``assert None is not None`` when it tried to find the Archmage in the (empty) response. v2.98.3 rewrites the test to read battle state out of the buffered ``battle_update`` WebSocket broadcasts (the canonical pattern other NPC tests use), which is the actual transport the v2.98.0 install path uses anyway.
+**Description:** Single edit to ``tests/harness/test_npc_concentration.py``: replace two ``GET /battle`` calls with ``gm_ws.buffered("battle_update")[-1]`` snapshots, and add a tiny ``_find_combatant(battle_msg, id)`` helper. Same assertion shape, same coverage, same v2.98.0 contract; just the right transport.
+
+### Fixed
+- ``tests/harness/test_npc_concentration.py::test_npc_concentration_anchor_installs_and_breaks_on_damage`` — now reads NPC buff state via ``battle_update`` broadcasts instead of the non-existent ``GET /battle``.
+
+### Changed
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.98.3 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — test-only fix. No code change. The v2.98.0 mechanic ships unchanged; v2.98.3 just makes the harness actually exercise it.
+- **Why this slipped past v2.98.0.** The bad test was added in the same commit as the new helpers; it was run-tested manually but the manual run was against a now-lost gm_ws refactor that never got committed. The shipped commit (013ce65) carried the GET-/battle version. v2.98.3 closes the gap.
+- **No new endpoint added.** The ``GET /battle`` endpoint the v2.98.0 test imagined doesn't exist on purpose — battle state is intentionally a WS-only surface, since the GM client maintains a local copy and the test should observe the same broadcasts the production UI does.
+- Total harness count: 656 (unchanged from v2.98.2).
+
+---
+
 ## [2.98.2] - 2026-05-30 — "Read the Tower's Type"
 
 **Schema version:** 64
