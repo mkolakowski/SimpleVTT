@@ -7524,6 +7524,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (typeof window._renderBIDiePrompt === 'function') {
                 window._renderBIDiePrompt();
             }
+            // v2.97.61 — same pattern for the repeated-save panel.
+            if (typeof window._renderRepeatedSavePanel === 'function') {
+                window._renderRepeatedSavePanel();
+            }
             return;
         }
         // v2.3.19: keep ``allTokens`` reactive so the GM's "From Map"
@@ -8132,6 +8136,134 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     // re-calls _renderBIDiePrompt → banner hides.
                 } catch (err) {
                     console.warn('BI die consume error:', err);
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }
+            });
+        });
+    };
+
+    // v2.97.61 — Repeated-save panel. Surfaces a "🔁 Save again"
+    // button per owned combatant + repeatable condition buff (any
+    // buff carrying ``repeated_save_ability`` + ``repeated_save_dc``
+    // stamped at install time by v2.97.60). Click → POST to the
+    // v2.97.60 endpoint. On a passed save the server drops the buff
+    // via _remove_buff, the buff_update broadcast re-runs this
+    // renderer, and the row disappears. On a failed save the buff
+    // stays — the next end-of-turn lets the player click again.
+    window._renderRepeatedSavePanel = function () {
+        const HOST_ID = '_repeated_save_panel';
+        let host = document.getElementById(HOST_ID);
+
+        const combs = (typeof battle !== 'undefined' && battle.combatants)
+            ? battle.combatants : [];
+        // Collect all (combatant, buff) pairs the viewer can act on.
+        // GMs see all; players see only their own combatants.
+        const rows = [];
+        for (const c of combs) {
+            if (!c || !Array.isArray(c.buffs)) continue;
+            const owned = (typeof ME !== 'undefined') && (
+                ME.isGm || (_initChars || []).some(
+                    ch => ch && ch.id === c.char_id && ch.owner_user_id === ME.id
+                )
+            );
+            if (!owned) continue;
+            for (const b of (c.buffs || [])) {
+                if (!b || !b.key) continue;
+                const ab = String(b.repeated_save_ability || '').toUpperCase();
+                const dc = parseInt(b.repeated_save_dc || 0, 10);
+                if (!ab || !(dc > 0)) continue;
+                rows.push({ combatant: c, buff: b, ability: ab, dc: dc });
+            }
+        }
+
+        if (!rows.length) {
+            if (host) host.remove();
+            return;
+        }
+
+        if (!host) {
+            host = document.createElement('div');
+            host.id = HOST_ID;
+            // Positioned above the BI die banner (BI sits at bottom:18px),
+            // stacked at bottom-right.
+            host.style.cssText = (
+                'position:fixed;bottom:140px;right:18px;z-index:9000;'
+                + 'background:rgba(28,24,18,0.88);color:#f4e8c8;'
+                + 'border:2px solid #a06e3e;border-radius:10px;'
+                + 'padding:10px 14px;min-width:260px;max-width:320px;'
+                + 'font-size:14px;box-shadow:0 6px 18px rgba(0,0,0,0.45);'
+                + 'backdrop-filter:blur(6px);'
+            );
+            document.body.appendChild(host);
+        }
+
+        const header = (
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+            + '<span style="font-size:18px;">🔁</span>'
+            + '<strong>Repeated saves</strong>'
+            + '</div>'
+        );
+        const rowHtml = rows.map((r, idx) => {
+            const buffName = _escH(r.buff.name || r.buff.key);
+            const charName = _escH(r.combatant.name || 'Character');
+            const sourceSpell = _escH(r.buff.source_spell || '');
+            const sourceHint = sourceSpell ? ' · ' + sourceSpell : '';
+            return (
+                '<div style="margin-bottom:8px;padding-bottom:8px;'
+                + 'border-bottom:1px solid rgba(255,255,255,0.12);">'
+                + '<div style="font-size:12px;opacity:0.85;margin-bottom:6px;">'
+                + charName + ' · ' + buffName + ' · ' + r.ability + ' DC ' + r.dc + sourceHint
+                + '</div>'
+                + '<button class="_rs_btn" data-char-id="' + r.combatant.char_id
+                + '" data-buff-key="' + _escH(r.buff.key) + '" data-row-idx="' + idx
+                + '" style="width:100%;">Save vs ' + buffName + '</button>'
+                + '</div>'
+            );
+        }).join('');
+        host.innerHTML = header + rowHtml;
+
+        host.querySelectorAll('._rs_btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const charId = parseInt(btn.getAttribute('data-char-id'), 10);
+                const buffKey = btn.getAttribute('data-buff-key') || '';
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+                try {
+                    const r = await fetch(
+                        '/api/campaign/' + CAMPAIGN_ID + '/use_repeated_save',
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                character_id: charId,
+                                buff_key: buffKey,
+                            }),
+                        }
+                    );
+                    if (!r.ok) {
+                        const txt = await r.text();
+                        console.warn('Repeated save failed:', txt);
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                        return;
+                    }
+                    const data = await r.json();
+                    if (!data.passed) {
+                        // Save failed — buff stays. Re-enable button so
+                        // the player can try again next end-of-turn.
+                        // Show a small inline outcome hint.
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                        btn.textContent = (
+                            'Failed (' + data.total + ' vs DC ' + data.save_dc
+                            + ') — try again next turn'
+                        );
+                    }
+                    // On pass, buff_update fires → renderer re-runs →
+                    // row disappears.
+                } catch (err) {
+                    console.warn('Repeated save error:', err);
                     btn.disabled = false;
                     btn.style.opacity = '1';
                 }

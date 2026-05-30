@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.61] - 2026-05-30 — "Tolling Loose the Chain"
+
+**Schema version:** 64
+**Commit summary:** **Repeated-save panel UI consumes the v2.97.60 endpoint.** Closes the UI half of the v2.97.60 ongoing-save flow. A floating bottom-right panel (positioned above the v2.97.57 BI die banner) now lists every repeatable condition buff on combatants the viewer can act on (owned-by-player or GM-sees-all). Each row carries a "Save vs <buff>" button that POSTs ``/use_repeated_save``. On a passed save, the server drops the buff via ``_remove_buff`` and the resulting ``buff_update`` broadcast re-runs the renderer → row disappears. On a failed save, the row updates with "Failed (<total> vs DC <N>) — try again next turn" so the player knows to wait for the next end-of-turn.
+**Description:** Two edits in ``app/templates/tabletop.html``. **(1)** New ``window._renderRepeatedSavePanel()`` function right after the v2.97.57 BI die renderer: walks ``battle.combatants`` for owned (or any if GM) and collects all buffs with non-empty ``repeated_save_ability`` + positive ``repeated_save_dc``. If non-empty, renders a fixed-position ``#_repeated_save_panel`` showing one row per buff with the source spell, the save ability, the DC, and a "Save vs <buff>" button. Each button POSTs ``/use_repeated_save`` with the buff_key. **(2)** Existing ``buff_update`` WS handler now calls ``_renderRepeatedSavePanel()`` alongside the v2.97.57 BI die renderer — so install (Hold Person / Fear / etc.) immediately surfaces the row, and a passed save (which fires its own buff_update via ``_remove_buff``) immediately hides it.
+
+### Added
+- ``_renderRepeatedSavePanel`` JS function in ``app/templates/tabletop.html``.
+- ``buff_update`` hook calling ``_renderRepeatedSavePanel()`` (same site as the v2.97.57 BI hook).
+
+### Changed
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.61 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — UI-only addition. No production server change. Re-uses the v2.97.60 endpoint contract.
+- **Manual verification required.** Per the CLAUDE.md UI rule: (1) cast Fear on a PC via /cast_spell; (2) the PC fails the install save → Frightened lands with v2.97.60 stamps; (3) the panel should appear bottom-right above the BI die banner showing "<Char> · Frightened · WIS DC <N>" with a "Save vs Frightened" button; (4) clicking → either the row disappears (passed) OR the button changes to "Failed (<total> vs DC <N>) — try again next turn". The endpoint contract is harness-validated by the v2.97.60 tests independently.
+- **Multi-buff support.** A character carrying multiple repeatable conditions (e.g. Frightened + Paralyzed from a future Hold Person stack) gets a row per buff. Each row's button is independent — clicking one doesn't affect the others.
+- **Position stacking.** The panel sits at ``bottom:140px`` so it doesn't collide with the v2.97.57 BI die banner at ``bottom:18px``. If a future banner needs to stack above this one, increment the bottom offset.
+- **No-op when no eligible buff.** The renderer early-returns and removes the panel when no owned combatant carries a repeatable buff — safe to call on every buff_update.
+- **Failed-save UX.** The button label changes to surface the outcome ("Failed (12 vs DC 14) — try again next turn"). The player can re-click after the next buff_update (e.g. the GM advances initiative, the renderer re-runs, the row is rebuilt with the original button label).
+- **GM-bypass behavior** same as the v2.97.57 BI panel: GMs see all eligible buffs across all combatants; players see only their own characters.
+- **44×44 px tap targets.** Buttons inherit ``min-height: 44px`` from the global ``button`` rule. ``width: 100%`` so the labels don't collapse on narrow viewports.
+- Total harness count: 639 (unchanged from v2.97.60) — no new harness tests in this UI commit.
+
+---
+
 ## [2.97.60] - 2026-05-30 — "The Second Bell"
 
 **Schema version:** 64
