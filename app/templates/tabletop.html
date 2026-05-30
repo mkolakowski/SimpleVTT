@@ -7528,6 +7528,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (typeof window._renderRepeatedSavePanel === 'function') {
                 window._renderRepeatedSavePanel();
             }
+            // v2.97.64 — same pattern for the wake-sleeper panel.
+            if (typeof window._renderSleeperWakePanel === 'function') {
+                window._renderSleeperWakePanel();
+            }
             return;
         }
         // v2.3.19: keep ``allTokens`` reactive so the GM's "From Map"
@@ -8264,6 +8268,140 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     // row disappears.
                 } catch (err) {
                     console.warn('Repeated save error:', err);
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }
+            });
+        });
+    };
+
+    // v2.97.64 — Sleeper wake panel. Lists every combatant currently
+    // carrying a Sleep-sourced ``unconscious`` / ``asleep`` buff, with
+    // a "🌅 Wake X" button per. Clicking POSTs ``/wake_sleeper`` using
+    // the first owned PC in the battle as the waker (RAW: anyone can
+    // shake the sleeper — for the demo's common case where the viewer
+    // owns one PC, that's the right waker). On a successful wake the
+    // server drops the buff via _remove_buff (PC path) or combatant-
+    // keyed buff_update (NPC path); the buff_update broadcast re-runs
+    // this renderer and the row disappears.
+    window._renderSleeperWakePanel = function () {
+        const HOST_ID = '_sleeper_wake_panel';
+        let host = document.getElementById(HOST_ID);
+
+        const combs = (typeof battle !== 'undefined' && battle.combatants)
+            ? battle.combatants : [];
+
+        // Find an owned PC waker (the first PC the viewer owns in the
+        // active battle). GMs can use any PC; for the demo's GM-owned
+        // setup, this naturally picks Garrik / Pip / etc. as the
+        // first matching PC.
+        let waker = null;
+        for (const c of combs) {
+            if (!c || !c.char_id) continue;
+            const ch = (_initChars || []).find(x => x && x.id === c.char_id);
+            if (!ch) continue;
+            if (typeof ME !== 'undefined' && (ME.isGm || ch.owner_user_id === ME.id)) {
+                waker = c;
+                break;
+            }
+        }
+
+        // Find every sleeper (any combatant with a Sleep-sourced unconscious /
+        // asleep buff). Excludes the waker themselves — the waker can't shake
+        // themselves awake RAW.
+        const sleepers = [];
+        for (const c of combs) {
+            if (!c || !Array.isArray(c.buffs)) continue;
+            if (waker && c.id === waker.id) continue;
+            for (const b of (c.buffs || [])) {
+                if (!b || !b.key) continue;
+                const k = String(b.key).toLowerCase();
+                if (k !== 'unconscious' && k !== 'asleep') continue;
+                if ((b.source_spell || '') !== 'Sleep') continue;
+                sleepers.push({ combatant: c, buff: b });
+                break;  // one Sleep buff per combatant is enough
+            }
+        }
+
+        if (!sleepers.length || !waker) {
+            if (host) host.remove();
+            return;
+        }
+
+        if (!host) {
+            host = document.createElement('div');
+            host.id = HOST_ID;
+            // Stacked above the v2.97.61 repeated-save panel (at 140px)
+            // and the v2.97.57 BI die banner (at 18px).
+            host.style.cssText = (
+                'position:fixed;bottom:270px;right:18px;z-index:9000;'
+                + 'background:rgba(28,24,18,0.88);color:#f4e8c8;'
+                + 'border:2px solid #6a8acc;border-radius:10px;'
+                + 'padding:10px 14px;min-width:260px;max-width:320px;'
+                + 'font-size:14px;box-shadow:0 6px 18px rgba(0,0,0,0.45);'
+                + 'backdrop-filter:blur(6px);'
+            );
+            document.body.appendChild(host);
+        }
+
+        const header = (
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+            + '<span style="font-size:18px;">🌅</span>'
+            + '<strong>Sleepers</strong>'
+            + '</div>'
+        );
+        const rowHtml = sleepers.map((s, idx) => {
+            const sleeperName = _escH(s.combatant.name || 'Sleeper');
+            const wakerName = _escH(waker.name || 'Waker');
+            return (
+                '<div style="margin-bottom:8px;padding-bottom:8px;'
+                + 'border-bottom:1px solid rgba(255,255,255,0.12);">'
+                + '<div style="font-size:12px;opacity:0.85;margin-bottom:6px;">'
+                + sleeperName + ' · asleep'
+                + '</div>'
+                + '<button class="_sw_btn" data-target-id="' + _escH(s.combatant.id)
+                + '" data-target-char-id="' + (s.combatant.char_id || '')
+                + '" data-row-idx="' + idx
+                + '" style="width:100%;">🌅 Wake ' + sleeperName
+                + ' with ' + wakerName + '</button>'
+                + '</div>'
+            );
+        }).join('');
+        host.innerHTML = header + rowHtml;
+
+        const wakerCharId = waker.char_id;
+        host.querySelectorAll('._sw_btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const targetId = btn.getAttribute('data-target-id') || '';
+                const targetCharIdRaw = btn.getAttribute('data-target-char-id') || '';
+                const targetCharId = targetCharIdRaw
+                    ? parseInt(targetCharIdRaw, 10) : null;
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+                try {
+                    const body = {
+                        character_id: wakerCharId,
+                        target_combatant_id: targetId,
+                    };
+                    if (targetCharId) body.target_character_id = targetCharId;
+                    const r = await fetch(
+                        '/api/campaign/' + CAMPAIGN_ID + '/wake_sleeper',
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body),
+                        }
+                    );
+                    if (!r.ok) {
+                        const txt = await r.text();
+                        console.warn('Wake sleeper failed:', txt);
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                    }
+                    // On success, server emits buff_update → renderer
+                    // re-runs → row disappears.
+                } catch (err) {
+                    console.warn('Wake sleeper error:', err);
                     btn.disabled = false;
                     btn.style.opacity = '1';
                 }

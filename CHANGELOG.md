@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.64] - 2026-05-30 — "Rise and Shine"
+
+**Schema version:** 64
+**Commit summary:** **Wake-sleeper UI panel.** Closes the UI half of v2.97.63. A new floating bottom-right panel (positioned above the v2.97.61 repeated-save panel) lists every combatant currently carrying a Sleep-sourced unconscious / asleep buff. Each row carries a "🌅 Wake X with <waker>" button that POSTs ``/wake_sleeper`` using the first owned PC in the active battle as the waker (RAW: anyone in arm's reach can shake the sleeper — for the demo's common case where the viewer owns one PC, that's the right waker). On a successful wake the buff drops and the buff_update broadcast re-runs the renderer → row disappears.
+**Description:** Two edits in ``app/templates/tabletop.html``. **(1)** New ``window._renderSleeperWakePanel()`` after the v2.97.61 ``_renderRepeatedSavePanel`` function: finds the first owned PC in ``battle.combatants`` (GM-owned for the GM viewer), then walks the rest for any Sleep-sourced unconscious / asleep buff. Renders a fixed-position ``#_sleeper_wake_panel`` with one row per sleeper. **(2)** Existing ``buff_update`` WS handler now calls ``_renderSleeperWakePanel()`` alongside the v2.97.57 BI die + v2.97.61 repeated-save renderers — install (Sleep cast) immediately surfaces the row, and a successful wake (which fires its own buff_update via _remove_buff or in-state mutation) immediately hides it.
+
+### Added
+- ``_renderSleeperWakePanel`` JS function in ``app/templates/tabletop.html``.
+- ``buff_update`` hook calling ``_renderSleeperWakePanel()`` (same site as the v2.97.57 BI + v2.97.61 repeated-save hooks).
+
+### Changed
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.64 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — UI-only addition. No production server change. Re-uses the v2.97.63 endpoint contract.
+- **Manual verification required.** Per CLAUDE.md UI rule: (1) cast Sleep on a low-HP combatant via /cast_sleep; (2) the panel should appear bottom-right ABOVE the repeated-save panel (at ``bottom:270px``) showing "<Sleeper> · asleep" with a "🌅 Wake <Sleeper> with <Waker>" button; (3) clicking → the row disappears once the server emits buff_update. The endpoint contract is harness-validated by the v2.97.63 tests independently.
+- **Self-wake guard.** A waker can't wake themselves — RAW someone OTHER than the sleeper has to do the shaking. The renderer excludes the waker's own combatant from the sleeper list.
+- **Position stacking.** Bottom positions: v2.97.57 BI die at 18px, v2.97.61 repeated-save at 140px, v2.97.64 sleepers at 270px. Each banner is independent and stacks above the previous.
+- **No-op when no sleepers.** Renderer early-returns and removes the panel when no eligible sleeper exists.
+- **GM-bypass behavior** matches the other banners: GMs see all sleepers, players see only those they can wake (i.e. they own a PC who can serve as the waker).
+- **No new harness tests.** UI commit — the endpoint contract from v2.97.63 covers the server side E2E.
+- Total harness count: 643 (unchanged from v2.97.63) — no new tests in this UI commit.
+
+---
+
 ## [2.97.63] - 2026-05-30 — "Shake the Sleeper"
 
 **Schema version:** 64
