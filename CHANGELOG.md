@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.53] - 2026-05-29 — "Vow Broken"
+
+**Schema version:** 64
+**Commit summary:** **Sanctuary ends-on-offense trigger mechanical hook.** Closes the second of the v2.97.45-filed Sanctuary mechanical halves. RAW (PHB p.272): "The spell ends if the warded creature attacks or casts a spell that affects an enemy creature." When a Sanctuary-warded ally calls ``/attack``, the helper now walks the attacker's own buff list for the ``sanctuary`` key + the ``effects.sanctuary_ends_on_offense`` marker, drops the buff via ``_remove_buff`` (firing a ``buff_update``), and broadcasts ``feature_used(source=sanctuary-ended-on-offense)`` so the roll log surfaces the trigger. The drop fires whether or not the attack itself lands — RAW the action of attacking ends the spell, regardless of outcome. Pairs cleanly with the v2.97.52 attacker-Wis-save gate: the warded attacker's own Sanctuary ends first, then the target's Sanctuary (if any) fires the save gate. With both v2.97.52 + v2.97.53 shipped, Sanctuary is now fully RAW-active in the codebase.
+**Description:** Two edits in ``app/routes/tabletop_routes.py``. **(1)** New ``_drop_attacker_sanctuary_on_offense(campaign_id, attacker_char_id, attacker_name)`` async helper near the v2.97.52 ``_target_sanctuary_dc`` helper. Walks the attacker's buffs for ``key == "sanctuary"`` AND the ``effects.sanctuary_ends_on_offense`` marker (so future Sanctuary-like buffs can opt out of the ends-on-offense behavior by leaving the marker off). On match, calls ``_remove_buff`` (RAW concentration cleanup runs as a side-effect) and broadcasts the feature_used event. **(2)** Wiring at the top of ``/use_attack``, before the v2.97.52 target-Sanctuary gate. The drop fires once per attack (idempotent: a second call after the buff is gone is a silent no-op).
+
+### Added
+- ``_drop_attacker_sanctuary_on_offense`` helper in ``app/routes/tabletop_routes.py``.
+- Sanctuary ends-on-offense trigger in ``/use_attack`` (pre-v2.97.52 gate).
+- ``tests/harness/test_buff_attack_hooks.py::test_sanctuary_ends_when_warded_attacker_strikes`` — Tavik casts Sanctuary on Caelan; Caelan attacks Krieger with his longsword; asserts Caelan's Sanctuary buff is gone after the attack (via /buffs read) and the broadcast ``feature_used(source=sanctuary-ended-on-offense)`` fires.
+
+### Changed
+- ``app/routes/tabletop_routes.py::use_attack`` — adds the ends-on-offense drop before the v2.97.52 target-Sanctuary gate.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.53 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 631 → 632, version stamp v2.97.52 → v2.97.53.
+
+### Notes
+- **PATCH bump** — one helper + one wiring call + one harness test.
+- **Closes the Sanctuary mechanical trilogy.** v2.97.45 added the catalog entry (no-save buff install). v2.97.52 wired the attacker-Wis-save gate (target side). v2.97.53 wires the ends-on-offense trigger (attacker side). All RAW behavior modeled.
+- **Coverage caveat.** v2.97.53 covers ``/use_attack`` only. ``/cast_spell`` is the other "harmful action" surface RAW: a Sanctuary-warded ally casting an attack spell or save-or-suck should also end the buff. Same helper applies — filing the ``/cast_spell`` wiring for a future commit since it adds touchpoints to a longer endpoint and the test pattern is the same.
+- **Marker-gated drop.** The ``effects.sanctuary_ends_on_offense`` marker on the catalog entry (already present from v2.97.45) drives the drop. Future Sanctuary-like buffs can stack the same key with the marker off to model "ward that persists through offense" (Mantle of the Hidden Steps, etc.).
+- **Concentration cleanup is automatic.** ``_remove_buff`` walks paired concentration buffs and drops them too. Sanctuary isn't concentration RAW, but the helper handles the case correctly if a future catalog edit flips the flag.
+- Total harness count: 632 (was 631 in v2.97.52) — one new Sanctuary ends-on-offense test.
+
+---
+
 ## [2.97.52] - 2026-05-29 — "The Inviolate Ward"
 
 **Schema version:** 64

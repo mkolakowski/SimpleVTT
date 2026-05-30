@@ -928,3 +928,134 @@ async def test_sanctuary_blocks_attack_on_failed_wis_save(
         "no failed Wis save in 20 tries; couldn't confirm Sanctuary "
         "attacker-save gate fired"
     )
+
+
+async def test_sanctuary_ends_when_warded_attacker_strikes(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.53 — Sanctuary ends-on-offense trigger. Tavik casts
+    Sanctuary on Caelan; Caelan then attacks Krieger (a target who
+    does NOT carry Sanctuary, so the v2.97.52 target-save gate
+    doesn't fire). The v2.97.53 hook walks Caelan's own buffs at the
+    top of /use_attack, finds the sanctuary key + ends-on-offense
+    marker, drops the buff via _remove_buff, and broadcasts a
+    feature_used(source=sanctuary-ended-on-offense) event.
+
+    Assertions: Caelan's buffs no longer contain `sanctuary` after
+    the attack; the WS broadcast carries the expected source string.
+    """
+    tavik = roster["Tavik Brightheart"]
+    caelan = roster["Sir Caelan Lightbringer"]
+    krieger = roster["Krieger Stonefist"]
+
+    await _long_rest(gm_client, tavik["id"])
+    await _long_rest(gm_client, caelan["id"])
+    await _long_rest(gm_client, krieger["id"])
+
+    tavik_tok = f"tok_sancend_tavik_{tavik['id']}"
+    caelan_tok = f"tok_sancend_caelan_{caelan['id']}"
+    krieger_tok = f"tok_sancend_krieger_{krieger['id']}"
+
+    # Aggressive cleanup so prior test state can't leave a stale
+    # sanctuary buff lying around on either attacker or target.
+    for _stale_key in ("sanctuary", "bless", "heroism",
+                       "shield-of-faith", "aid", "protection-from-evil-and-good"):
+        for _cid in (tavik["id"], caelan["id"], krieger["id"]):
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+                json={"character_id": _cid, "key": _stale_key},
+            )
+
+    await _seed_battle_with(gm_client, [
+        {"id": tavik["id"], "name": tavik["name"], "tok_id": tavik_tok, "hp_max": 50, "initiative": 14},
+        {"id": caelan["id"], "name": caelan["name"], "tok_id": caelan_tok, "hp_max": 60, "initiative": 12},
+        {"id": krieger["id"], "name": krieger["name"], "tok_id": krieger_tok, "hp_max": 55, "initiative": 8},
+    ])
+
+    # Tavik casts Sanctuary on Caelan. Tavik's Sanctuary index — find it.
+    # In test_undo_refunds_resource.py the sanctuary cast uses Tavik's
+    # spell list. Look up the index by name from the sheet read.
+    sheet_resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet"
+    )
+    spells = (sheet_resp.json().get("spells") or [])
+    sanc_idx = next(
+        (i for i, s in enumerate(spells)
+         if (s or {}).get("_slug") == "sanctuary"
+         or (s or {}).get("name", "").lower() == "sanctuary"),
+        None,
+    )
+    assert sanc_idx is not None, (
+        f"Sanctuary not on Tavik's spell list; got {[s.get('name') for s in spells]}"
+    )
+
+    sanc_cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": sanc_idx,
+            "slot_level": 1,
+            "class_slug": "cleric",
+            "target_character_id": caelan["id"],
+            "target_combatant_id": caelan_tok,
+            "target_name": caelan["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert sanc_cast.status_code == 200, sanc_cast.text
+
+    # Verify the buff installed on Caelan with the ends-on-offense marker.
+    caelan_buffs_pre = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/buffs"
+    )).json().get("buffs", [])
+    sanc_buff_pre = next(
+        (b for b in caelan_buffs_pre if (b or {}).get("key") == "sanctuary"),
+        None,
+    )
+    assert sanc_buff_pre is not None, (
+        f"Sanctuary not installed on Caelan; got {caelan_buffs_pre}"
+    )
+    _eff = (sanc_buff_pre or {}).get("effects") or {}
+    assert _eff.get("sanctuary_ends_on_offense") is True
+
+    gm_ws.mark()
+    # Caelan attacks Krieger (NOT a Sanctuary target). The v2.97.53
+    # hook should drop Caelan's own Sanctuary buff.
+    atk = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": caelan["id"],
+            "attack_index": 0,  # Longsword
+            "target_combatant_id": krieger_tok,
+            "target_character_id": krieger["id"],
+            "target_name": krieger["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert atk.status_code == 200, atk.text
+
+    # Caelan's Sanctuary should now be gone.
+    caelan_buffs_post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "sanctuary" for b in caelan_buffs_post
+    ), (
+        f"Sanctuary still on Caelan after offensive /attack; "
+        f"buffs={caelan_buffs_post}"
+    )
+
+    import asyncio as _asy
+    await _asy.sleep(0.3)
+    # The feature_used broadcast names the trigger.
+    msgs = gm_ws.buffered("feature_used")
+    end_msgs = [
+        m for m in msgs
+        if (m.get("data") or {}).get("source") == "sanctuary-ended-on-offense"
+    ]
+    assert end_msgs, (
+        f"expected a feature_used(source=sanctuary-ended-on-offense) "
+        f"broadcast; got sources={[(m.get('data') or {}).get('source') for m in msgs]}"
+    )

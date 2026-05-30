@@ -17109,6 +17109,60 @@ def _target_pfeag_blocks_attacker_type(
     return False
 
 
+async def _drop_attacker_sanctuary_on_offense(
+    campaign_id: int,
+    attacker_char_id: int,
+    attacker_name: str,
+) -> bool:
+    """v2.97.53 — closes the second of the v2.97.45-filed Sanctuary
+    mechanical halves. RAW (PHB p.272): "The spell ends if the warded
+    creature attacks or casts a spell that affects an enemy creature."
+
+    Walks the attacker's own buff list for the ``sanctuary`` key; if
+    present AND the buff carries the ``effects.sanctuary_ends_on_offense``
+    marker, drops the buff via ``_remove_buff`` and broadcasts a
+    ``feature_used(source=sanctuary-ended-on-offense)`` event so the
+    roll log surfaces the trigger. Returns True when the drop
+    happened (False when no Sanctuary, or when the marker is absent —
+    future Sanctuary-like buffs that opt out of the ends-on-offense
+    behavior leave the marker off the catalog entry).
+
+    Wired at the top of ``/use_attack`` (before the v2.97.52 attacker-
+    Wis-save gate against the TARGET's Sanctuary), so a warded
+    attacker's own Sanctuary ends regardless of whether the attack
+    lands. This matches RAW: the action of attacking ends the spell,
+    even if the attack itself fizzles.
+    """
+    buffs = _get_buffs(campaign_id, attacker_char_id)
+    for b in buffs:
+        if not isinstance(b, dict):
+            continue
+        if b.get("key") != "sanctuary":
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        if not effects.get("sanctuary_ends_on_offense"):
+            return False
+        dropped = await _remove_buff(
+            campaign_id, attacker_char_id, "sanctuary",
+        )
+        if dropped:
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "source": "sanctuary-ended-on-offense",
+                    "char_name": attacker_name,
+                    "label": (
+                        f"Sanctuary ended on {attacker_name}'s "
+                        f"offensive action"
+                    ),
+                },
+            })
+        return dropped
+    return False
+
+
 def _target_sanctuary_dc(
     campaign_id: int,
     target_combatant_id: str | None,
@@ -25026,6 +25080,22 @@ async def use_attack(
     target_pfeag_blocks_type = _target_pfeag_blocks_attacker_type(
         campaign_id, target_combatant_id, _attacker_type,
     )
+
+    # v2.97.53 — Sanctuary ends-on-offense trigger. Closes the second
+    # of the v2.97.45-filed Sanctuary mechanical halves. RAW: "The
+    # spell ends if the warded creature attacks or casts a spell that
+    # affects an enemy creature." We drop the attacker's own Sanctuary
+    # buff before the v2.97.52 target-Sanctuary gate fires, since RAW
+    # the action of attacking ends the spell — whether or not the
+    # attack itself lands. The drop also clears the catalog marker so
+    # subsequent attacks in the same turn don't fire the broadcast a
+    # second time.
+    try:
+        await _drop_attacker_sanctuary_on_offense(
+            campaign_id, char.id, char.name,
+        )
+    except Exception:
+        pass
 
     # v2.97.52 — Sanctuary attacker-Wis-save gate. Closes the first of
     # the v2.97.45-filed Sanctuary mechanical hooks. If the target
