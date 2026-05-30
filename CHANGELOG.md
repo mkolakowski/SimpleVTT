@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.45] - 2026-05-29 — "Don't Look Here"
+
+**Schema version:** 64
+**Commit summary:** **Sanctuary added to `_SPELL_BUFF_MAP`.** Fifth catalog entry to the no-save buff catalog (Bless, Heroism, Shield of Faith, Aid, Sanctuary). Caelan (the demo Paladin) already has Sanctuary on his spell list at index 4 as a bonus action; today's commit registers it in the catalog so `/cast_spell` installs the 🕊️ `sanctuary` buff on the warded ally via the existing v2.97.31 walker and stamps `buff_install` under the cast's `cast_id`. Undo refunds the L1 slot AND drops the buff in one POST. Two mechanical halves are filed: the attacker-must-Wis-save gate on `/use_attack` and the "warded creature attacks → buff drops" trigger.
+**Description:** One catalog edit in `app/routes/tabletop_routes.py`: `_SPELL_BUFF_MAP["sanctuary"]` with key `sanctuary`, 🕊️ icon, 10-round duration (1 minute RAW), `concentration: False` (Sanctuary is correctly marked as non-concentration in the SRD JSON, unlike Bless/Heroism/Shield of Faith). Marker effects `sanctuary_attacker_must_save: True` and `sanctuary_ends_on_offense: True` carry the data the filed mechanical hooks will read. Bonus-action casting time is RAW; the existing `/cast_spell` action-economy gate handles it correctly.
+
+### Added
+- `sanctuary` entry in `_SPELL_BUFF_MAP` (`app/routes/tabletop_routes.py`).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_sanctuary_slot_and_target_buff` — Caelan casts Sanctuary on Pip (bonus action, L1 slot); asserts `sanctuary` is installed with `effects.sanctuary_attacker_must_save == True` and `effects.sanctuary_ends_on_offense == True`; undoes; asserts BOTH `spell_slot_refunded` and `buff_install` legs in per_target; verifies the buff is gone.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.45 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 624 → 625, version stamp v2.97.44 → v2.97.45.
+
+### Notes
+- **PATCH bump** — catalog-only addition. Fifth `_SPELL_BUFF_MAP` entry; pattern keeps proving (one catalog edit + one harness test per spell).
+- **Filed: attacker-must-save gate.** RAW: "any creature who targets the warded creature with an attack or a harmful spell must first make a wisdom saving throw." Closing this needs a pre-attack walk in `/use_attack` that detects the target carries the `sanctuary` buff, captures the caster's spell save DC from the buff dict (would need to add `effects.dc` at install time, set from `_compute_caster_dc(char.sheet)`), inserts a Wis save for the attacker, and either skips the attack (on fail) or proceeds (on pass). The skip path also needs to refund the attacker's action chip if they had to "lose the attack." More involved than the v2.97.39 AC walk because it changes attack flow control, not just a single read.
+- **Filed: ends-on-offense trigger.** RAW: "If the warded creature makes an attack or casts a spell that affects an enemy creature, this spell ends." Closing this needs `/use_attack` (and `/cast_spell` for harmful spells) to walk the attacker/caster's buffs for `sanctuary` and drop it if the action is offensive. Filed alongside the attacker-save gate as a single follow-up.
+- **AoE bypass is automatic.** Sanctuary doesn't protect from AoE per RAW; the v2.97.31 walker installs the buff as a normal target buff, and `/place_aoe` doesn't read the buff key for its damage logic. So a Fireball that catches a sanctuary-warded creature deals normal damage. No code change needed for this — RAW correctness is the default.
+- Total harness count: 625 (was 624 in v2.97.44) — one new Sanctuary round-trip test.
+
+---
+
 ## [2.97.44] - 2026-05-29 — "Steady Breath"
 
 **Schema version:** 64

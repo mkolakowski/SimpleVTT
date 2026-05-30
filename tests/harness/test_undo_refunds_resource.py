@@ -1514,6 +1514,101 @@ async def test_undo_cast_shield_of_faith_slot_and_target_buff(
     ), f"shield-of-faith still installed after undo: {pip_buffs_after}"
 
 
+async def test_undo_cast_sanctuary_slot_and_target_buff(gm_client, gm_ws, roster):
+    """v2.97.45 — Sanctuary added to ``_SPELL_BUFF_MAP``. Caelan casts
+    it as a bonus action; /cast_spell installs the 'sanctuary' buff on
+    Pip via the v2.97.31 walker and stamps buff_install under the
+    spell's cast_id. Undo refunds the L1 slot AND drops the buff.
+
+    Marker effects (`sanctuary_attacker_must_save`,
+    `sanctuary_ends_on_offense`) carried for filed mechanical hooks
+    in /use_attack.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, caelan["id"])
+
+    pip_tok = f"tok_sanc_pip_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_sanc_caelan_{caelan['id']}",
+                    "char_id": caelan["id"],
+                    "name": caelan["name"],
+                    "initiative": 10,
+                    "hp_current": 60, "hp_max": 60,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": pip_tok,
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": 40, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    # Sanctuary is Caelan's spell index 4.
+    SANCTUARY_INDEX = 4
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": SANCTUARY_INDEX,
+            "slot_level": 1,
+            "class_slug": "paladin",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json()["id"]
+
+    # Verify Sanctuary is on Pip with the marker effects.
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    sanc = next(
+        (b for b in pip_buffs if (b or {}).get("key") == "sanctuary"),
+        None,
+    )
+    assert sanc is not None, (
+        f"expected sanctuary installed on Pip; got {pip_buffs}"
+    )
+    effects = sanc.get("effects") or {}
+    assert effects.get("sanctuary_attacker_must_save") is True
+    assert effects.get("sanctuary_ends_on_offense") is True
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+
+    pip_buffs_after = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "sanctuary" for b in pip_buffs_after
+    ), f"sanctuary still installed after undo: {pip_buffs_after}"
+
+
 async def test_undo_cast_aid_slot_and_target_buff(gm_client, gm_ws, roster):
     """v2.97.40 — Aid added to ``_SPELL_BUFF_MAP``. Caelan (Paladin)
     casts it on Pip via /cast_spell; the v2.97.31 no-save buff path

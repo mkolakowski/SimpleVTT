@@ -991,6 +991,36 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Hit point maximum and current hit points increase by 5 for 8 hours.",
     },
+    # v2.97.45 — Sanctuary (Cleric L1, also Paladin). Bonus action,
+    # 30 ft, 1 minute. NOT concentration (correctly marked in the
+    # SRD JSON, like Aid). Warded creature: attackers must make a
+    # Wis save vs the caster's spell save DC; on fail, the attacker
+    # picks a new target or loses the attack. AoE bypasses. Spell
+    # ends if the warded creature attacks or casts a harmful spell.
+    #
+    # Two filed mechanical hooks:
+    # 1. ``sanctuary_attacker_must_save`` — needs a pre-attack walk
+    #    on /use_attack that detects the target carries Sanctuary
+    #    and inserts a Wis save against the caster's DC for the
+    #    attacker. Requires capturing the original caster's DC at
+    #    install time (carried on the buff dict as ``effects.dc``).
+    # 2. ``sanctuary_ends_on_offense`` — needs /use_attack to walk
+    #    the attacker's buffs for Sanctuary and drop it if the
+    #    attacker (the warded creature) is making an offensive
+    #    attack. Filed alongside hook #1.
+    "sanctuary": {
+        "key": "sanctuary",
+        "name": "Sanctuary",
+        "icon": "🕊️",  # dove of peace
+        "duration_rounds": 10,  # 1 minute
+        "duration_max": 10,
+        "concentration": False,  # RAW (not concentration)
+        "effects": {
+            "sanctuary_attacker_must_save": True,
+            "sanctuary_ends_on_offense": True,
+        },
+        "desc": "Attackers must Wis-save vs caster's DC or pick a new target. AoE bypasses. Ends if warded creature attacks or harms an enemy.",
+    },
 }
 
 
