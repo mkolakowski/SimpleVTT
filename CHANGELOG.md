@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.60] - 2026-05-30 — "The Second Bell"
+
+**Schema version:** 64
+**Commit summary:** **End-of-turn repeated-save endpoint + PFE&G save-advantage wiring.** Closes the v2.97.50-filed PFE&G save-advantage hook by shipping the ongoing-effect repeated-save infrastructure the helper needed. New ``POST /api/campaign/{cid}/use_repeated_save`` resolves a fresh save against a buff installed by /respond's save-or-suck path (Hold Person, Fear, Confusion, Suggestion, Hideous Laughter). The endpoint reads ``repeated_save_ability``, ``repeated_save_dc``, and ``source_caster_creature_type`` stamped on the buff at install time (newly added in this commit), calls the v2.97.50 ``_saver_pfeag_save_advantage`` helper, flips the d20 to ``2d20kh1`` when PFE&G applies, also picks up the v2.97.35 Bless/Bane suffix, rolls, and drops the buff on success via ``_remove_buff``.
+**Description:** Two edits in ``app/routes/tabletop_routes.py``. **(1)** Install-time stamp in /respond's save-or-suck condition-install path (around line 10981): new ``repeated_save_ability`` / ``repeated_save_dc`` / ``source_caster_creature_type`` fields on the installed buff dict, sourced from ``ctx.save_ability`` / ``ctx.dc`` / ``_attacker_creature_type(caster_combatant)`` respectively. **(2)** New ``/use_repeated_save`` endpoint after ``/use_bardic_inspiration_die``: validates buff presence + repeated-save data, computes saver's modifier via ``_resolve_stat_modifier``, layers PFE&G advantage (2d20kh1) when the helper returns True, appends the Bless/Bane suffix, rolls, broadcasts a public "🔁 repeated save" roll entry, drops the buff on pass + broadcasts ``feature_used(source=repeated-save-passed)``, returns ``{passed, total, save_dc, buff_dropped, pfeag_advantage_applied}``.
+
+### Added
+- ``_install_buff`` install-time stamps (``repeated_save_ability``, ``repeated_save_dc``, ``source_caster_creature_type``) in /respond's PC condition-install path.
+- ``POST /api/campaign/{cid}/use_repeated_save`` endpoint in ``app/routes/tabletop_routes.py``.
+- ``tests/harness/test_use_repeated_save.py`` — three tests: (a) Lyra (test creature_type="fiend") frightens Pip; Caelan wards Pip with PFE&G; Pip calls /use_repeated_save with buff_key="frightened" → response carries ``pfeag_advantage_applied: True``; (b) same setup, no PFE&G ward → ``pfeag_advantage_applied: False``; (c) error path: no buff on character → 409 ``no_buff``.
+
+### Changed
+- ``app/routes/tabletop_routes.py::respond`` — adds the v2.97.60 install-time stamps.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.60 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 636 → 639, version stamp v2.97.59 → v2.97.60.
+
+### Notes
+- **PATCH bump** — one endpoint + install-time stamp extension + three harness tests. Reuses v2.97.50 helper as-is.
+- **Closes the v2.97.50 wiring caveat.** The helper has been on disk since v2.97.50 but unwired because no flow consumed it. v2.97.60 builds the minimum flow that does: a button-driven repeated save against a stamped buff. Future hooks (auto-fire at end of turn via PUT /battle, integrate with the turn-shift hook from v2.97.58) can extend this without re-touching the helper.
+- **Closes the PFE&G mechanical sweep.** v2.97.48 attacker-disadvantage, v2.97.49 type-aware install immunity, v2.97.50 save-advantage helper (filed), v2.97.60 save-advantage wired. All four PFE&G RAW behaviors now active.
+- **Coverage scope.** The endpoint covers any v2.97.60-installed condition buff. Pre-v2.97.60 installs (Suggestion, Hold Person etc. cast before this commit's deploy) don't carry the stamps — they return 409 ``no_repeated_save``. Re-casting the spell post-deploy re-installs with the stamps and unlocks the repeated save.
+- **No UI wiring yet.** A future commit can add a "🔁 Save again" button to mini-sheet condition badges (similar to the v2.97.57 BI die banner pattern). The endpoint is harness-validatable independently of the UI.
+- **PFE&G applies to charmed / frightened only.** Helper is keyed on those condition keys per RAW. A future RAW extension to "possessed" can extend the helper without touching the endpoint.
+- **Heuristic: drop on pass.** RAW spell-end semantics on a passed end-of-turn save differ by spell — Hold Person ends the paralysis for that one target, Fear ends the frightened condition. For all current PC-side conditions in ``_SPELL_CONDITION_MAP``, "drop the buff" is the right RAW response. Future spells that pass-save → partial-effect can carry a marker to override.
+- Total harness count: 639 (was 636 in v2.97.59) — three new repeated-save tests.
+
+---
+
 ## [2.97.59] - 2026-05-29 — "Verse in the Right Slot"
 
 **Schema version:** 64

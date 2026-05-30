@@ -10978,17 +10978,40 @@ async def respond_roll_request(
                             "breakdown": rec.breakdown,
                             "auto_buff_installed": auto_buff_installed,
                         }
+                # v2.97.60 — stamp the repeated-save context on the
+                # buff so the /use_repeated_save endpoint can resolve a
+                # fresh end-of-turn save without re-deriving the spell's
+                # ability + DC from the catalog. Also captures the
+                # source caster's creature type via the v2.97.48 helper
+                # so the v2.97.50 _saver_pfeag_save_advantage check
+                # has the type it needs at save time.
+                _caster_id_for_repeat = int(ctx.get("caster_char_id") or 0)
+                _caster_cb_for_repeat = None
+                if _caster_id_for_repeat:
+                    _battle_for_repeat = hub.get_battle(campaign_id)
+                    if _battle_for_repeat:
+                        for _c in (_battle_for_repeat.get("combatants") or []):
+                            if _c.get("char_id") == _caster_id_for_repeat:
+                                _caster_cb_for_repeat = _c
+                                break
+                _caster_type_for_repeat = _attacker_creature_type(
+                    db, _caster_id_for_repeat, _caster_cb_for_repeat,
+                ) if _caster_id_for_repeat else ""
                 buff = {
                     "key": cond["key"],
                     "name": cond["name"],
                     "icon": cond.get("icon", "💫"),
-                    "source_char_id": int(ctx.get("caster_char_id") or 0),
+                    "source_char_id": _caster_id_for_repeat,
                     "source_char_name": ctx.get("caster_char_name") or "",
                     "source_spell": ctx.get("spell_name") or "",
                     "duration_rounds": int(cond.get("duration_rounds", 10)),
                     "duration_max": int(cond.get("duration_rounds", 10)),
                     "concentration": bool(cond.get("concentration")),
                     "effects": list(cond.get("effects", [])),
+                    # v2.97.60 — repeated-save plumbing.
+                    "repeated_save_ability": str(ctx.get("save_ability") or "").upper()[:3],
+                    "repeated_save_dc": int(ctx.get("dc") or 0),
+                    "source_caster_creature_type": _caster_type_for_repeat or "",
                 }
                 # v2.65.0 Phase B — snapshot the target's pre-install
                 # buff list so the undo pipeline can restore it. The
@@ -14772,6 +14795,180 @@ async def use_bardic_inspiration_die(
         "rolled": rolled,
         "breakdown": breakdown,
         "context": context,
+    }
+
+
+# ----------- API: end-of-turn repeated save (v2.97.60) -----------
+
+
+@router.post("/api/campaign/{campaign_id}/use_repeated_save")
+async def use_repeated_save(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.97.60 — minimal ongoing-effect repeated-save flow. Many
+    save-or-suck spells (Hold Person, Fear, Confusion, Suggestion)
+    give the affected creature an end-of-turn save against the spell's
+    original DC. Success ends the effect (the buff drops). This
+    endpoint resolves that save against a buff installed via the
+    v2.97.60-extended /respond install (which now stamps
+    ``repeated_save_ability``, ``repeated_save_dc``, and
+    ``source_caster_creature_type`` on the buff).
+
+    Body: ``{character_id, buff_key}``.
+
+    Save expression construction reuses the existing buff-aware
+    helpers:
+    - v2.97.50 ``_saver_pfeag_save_advantage`` flips d20 → 2d20kh1
+      when the saver carries PFE&G and the source caster's creature
+      type is in the protected list AND the buff key is charmed /
+      frightened.
+    - v2.97.35 ``_saver_bless_bane_save_suffix`` appends +1d4 / -1d4.
+
+    On a successful save the buff is dropped via ``_remove_buff``.
+    On a failed save the buff stays (the player tries again next
+    end of turn).
+
+    Errors:
+    - 400 missing character_id or buff_key
+    - 403 not your character / not a campaign member
+    - 404 character not found
+    - 409 ``no_buff`` — the named buff isn't on the character
+    - 409 ``no_repeated_save`` — the buff exists but doesn't carry
+      ``repeated_save_ability`` / ``repeated_save_dc`` (older buffs
+      pre-v2.97.60 or buffs that don't model an ongoing save).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    buff_key = (body.get("buff_key") or "").strip().lower()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not buff_key:
+        raise HTTPException(400, "buff_key is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    buffs = _get_buffs(campaign_id, int(char.id))
+    target_buff = next(
+        (b for b in buffs if isinstance(b, dict) and b.get("key") == buff_key),
+        None,
+    )
+    if target_buff is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_buff",
+            "label": f"No {buff_key} buff active",
+        })
+
+    save_ability_raw = str(target_buff.get("repeated_save_ability") or "").upper()[:3]
+    save_dc = int(target_buff.get("repeated_save_dc") or 0)
+    if save_ability_raw not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} or save_dc <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "no_repeated_save",
+            "label": "Buff has no repeated-save data stamped",
+        })
+
+    sheet = dict(char.sheet or {})
+    stat_key = f"{save_ability_raw.lower()}_save"
+    saver_mod, _saver_label = _resolve_stat_modifier(sheet, "dnd5e", stat_key)
+
+    # v2.97.60 — PFE&G save advantage. Reads source_caster_creature_type
+    # stamped on the buff at install time. Helper returns True only for
+    # charmed / frightened keys, matching RAW's "any new saving throw
+    # against the relevant effect" applying only to those conditions.
+    source_caster_type = str(target_buff.get("source_caster_creature_type") or "").lower()
+    pfeag_adv = _saver_pfeag_save_advantage(
+        campaign_id,
+        int(char.id),
+        source_caster_type,
+        buff_key,
+    )
+
+    # Build d20 piece. Advantage uses kh1 keep-highest of two rolls.
+    if pfeag_adv:
+        d20_part = "2d20kh1"
+        adv_note = " · PFE&G advantage"
+    else:
+        d20_part = "1d20"
+        adv_note = ""
+
+    bless_bane_suffix = _saver_bless_bane_save_suffix(
+        campaign_id, int(char.id),
+    )
+
+    sign = "+" if saver_mod >= 0 else ""
+    expr = f"{d20_part}{sign}{saver_mod}{bless_bane_suffix}"
+    try:
+        roll_result = dice_mod.roll(expr)
+        total = int(roll_result.total)
+        breakdown = roll_result.breakdown
+    except dice_mod.DiceParseError:
+        raise HTTPException(400, f"Invalid save expression: {expr}")
+
+    passed = total >= save_dc
+
+    # Broadcast the save roll publicly so the table sees the result.
+    source_spell = target_buff.get("source_spell") or ""
+    note_label = (
+        f"🔁 {char.name} repeated {save_ability_raw} save vs "
+        f"{(target_buff.get('name') or buff_key).strip()}"
+        f"{adv_note}"
+        + (f" ({source_spell})" if source_spell else "")
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": expr,
+            "total": total,
+            "breakdown": breakdown,
+            "note": note_label,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+            "dc": save_dc,
+        },
+    })
+
+    dropped = False
+    if passed:
+        dropped = await _remove_buff(campaign_id, int(char.id), buff_key)
+        if dropped:
+            _mirror_buffs_to_sheet(
+                db, int(char.id), _get_buffs(campaign_id, int(char.id)),
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "source": "repeated-save-passed",
+                    "char_name": char.name,
+                    "buff_key": buff_key,
+                    "label": (
+                        f"{char.name} shook off "
+                        f"{target_buff.get('name') or buff_key}"
+                    ),
+                },
+            })
+
+    return {
+        "ok": True,
+        "passed": passed,
+        "total": total,
+        "breakdown": breakdown,
+        "save_dc": save_dc,
+        "save_ability": save_ability_raw,
+        "buff_dropped": dropped,
+        "pfeag_advantage_applied": bool(pfeag_adv),
     }
 
 
