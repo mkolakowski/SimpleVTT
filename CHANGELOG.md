@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.0] - 2026-05-30 — "Wake the Other Sleepers"
+
+**Schema version:** 64
+**Commit summary:** **Generic ``wakeable_by_action`` marker replaces the v2.97.63-era hardcoded ``source_spell == "Sleep"`` check.** Three sites (``_wake_sleeping_on_damage`` damage hook, ``/wake_sleeper`` action endpoint, ``/shake_awake`` legacy endpoint) previously gated on the literal source_spell string, which meant only Sleep itself would respond to "take damage → wake" or "use action → shake awake." v2.99.0 introduces a generic ``_buff_is_wakeable_by_action(buff)`` helper that checks for a top-level ``wakeable_by_action: True`` marker (preferred) OR the legacy combo (back-compat for any pre-v2.99.0 buff persisted on a sheet). The Sleep install path now stamps the marker; future content (Hypnotic Pattern, Power Word Knockout, Symbol, etc.) can opt in with the same one-line catalog edit.
+**Description:** Two edits in ``app/routes/tabletop_routes.py``: **(1)** new helper ``_buff_is_wakeable_by_action(buff)`` defined just above ``_wake_sleeping_on_damage``. **(2)** four call-sites refactored to use the helper instead of the hardcoded check. **(3)** Sleep buff install dict at ``/cast_sleep`` extended with ``wakeable_by_action: True``. New harness test ``test_wakeable_marker.py`` exercises a synthetic non-Sleep buff with the marker; Tavik attacks Pip; the buff drops via the wake-on-damage hook.
+
+### Added
+- ``_buff_is_wakeable_by_action(buff: dict) -> bool`` helper.
+- ``wakeable_by_action: True`` stamp on the Sleep buff install.
+- ``tests/harness/test_wakeable_marker.py::test_marker_drops_on_damage_when_source_not_sleep`` — synthetic "Hypnotic Pattern"-sourced Unconscious buff with the marker drops when Pip takes 1 HP of damage.
+
+### Changed
+- ``app/routes/tabletop_routes.py::_wake_sleeping_on_damage`` — uses the helper (was inline hardcoded check, two sites: PC + NPC).
+- ``app/routes/tabletop_routes.py::wake_sleeper`` — uses the helper (two sites: gate + NPC remove).
+- ``app/routes/tabletop_routes.py::shake_awake`` — uses the helper (two sites: gate + NPC remove).
+- ``app/routes/tabletop_routes.py::cast_sleep`` — stamps the new marker on install.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.99.0 to the cross-reference list.
+
+### Notes
+- **MINOR bump** — new mechanic surface (the marker convention). Future content opts in by stamping ``wakeable_by_action: True``; legacy code paths stay back-compatible via the OR check in the helper.
+- **Back-compat.** Any Sleep-sourced buff installed before v2.99.0 that lives in a persisted PC sheet still satisfies the helper via the legacy ``key + source_spell`` combo. So an upgrade doesn't strand any in-flight Unconscious buffs.
+- **Future opt-in is one line.** Imagine adding Power Word Knockout: its install dict gets ``wakeable_by_action: True`` and the three sites automatically pick it up. No new helper call, no new branch.
+- **Why not put the marker in ``effects``.** The existing ``effects`` field is mixed-shape: sometimes a list of descriptive strings, sometimes a dict of structured markers (Bardic Inspiration die, Heroism temp HP). Putting wakeable in a third shape would muddy the convention. Top-level boolean on the buff is the cleanest and matches how ``concentration: True``, ``save_on_damage: True``, and ``wakeable_by_action: True`` all sit at peer level.
+- Total harness count: 658 (was 657 in v2.98.6).
+
+---
+
 ## [2.98.6] - 2026-05-30 — "Surface the Hostile Spell"
 
 **Schema version:** 64

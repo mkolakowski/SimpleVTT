@@ -1820,6 +1820,34 @@ async def _fire_damage_triggered_saves(
         )
 
 
+def _buff_is_wakeable_by_action(buff: dict) -> bool:
+    """v2.99.0 — generic marker check for "is this buff cleared by
+    taking damage or by someone shaking the sleeper awake?"
+    Returns True when the buff carries a ``wakeable_by_action: True``
+    field at the top level (v2.99.0+ install paths stamp this) OR
+    when the legacy v2.49.x check matches (``key`` in
+    ``{unconscious, asleep}`` AND ``source_spell == "Sleep"``). The
+    legacy path covers any pre-v2.99.0 buff that lives in a
+    persisted PC sheet at upgrade time.
+
+    Use this in place of the hardcoded ``source_spell == "Sleep"``
+    check at:
+    - ``_wake_sleeping_on_damage`` (the v2.49.61 damage-clears-sleep hook)
+    - ``/wake_sleeper`` (the v2.97.63 shake-action endpoint)
+    - ``/shake_awake`` (the legacy GM action endpoint)
+    """
+    if not isinstance(buff, dict):
+        return False
+    if buff.get("wakeable_by_action"):
+        return True
+    if (
+        buff.get("key") in ("unconscious", "asleep")
+        and buff.get("source_spell") == "Sleep"
+    ):
+        return True
+    return False
+
+
 async def _wake_sleeping_on_damage(
     campaign_id: int,
     character_id: int | None,
@@ -1853,10 +1881,13 @@ async def _wake_sleeping_on_damage(
     if target is None:
         return
     buffs = list(target.get("buffs") or [])
+    # v2.99.0 — use the generic wakeable-by-action marker instead of
+    # hardcoding source_spell == "Sleep". Future buffs (Hypnotic Pattern,
+    # Power Word Knockout, etc.) opt in by stamping
+    # ``wakeable_by_action: True`` on their install dict.
     sleep_keys = [
         b.get("key") for b in buffs
-        if (b or {}).get("key") in ("unconscious", "asleep")
-        and (b or {}).get("source_spell") == "Sleep"
+        if _buff_is_wakeable_by_action(b or {})
     ]
     if not sleep_keys:
         return
@@ -1879,10 +1910,7 @@ async def _wake_sleeping_on_damage(
         # HP-damage pattern in _apply_damage_to_combatant).
         new_list = [
             b for b in buffs
-            if not (
-                (b or {}).get("key") in ("unconscious", "asleep")
-                and (b or {}).get("source_spell") == "Sleep"
-            )
+            if not _buff_is_wakeable_by_action(b or {})
         ]
         target["buffs"] = new_list
         hub.set_battle(campaign_id, state)
@@ -15485,17 +15513,18 @@ async def wake_sleeper(
     if target is None:
         raise HTTPException(404, "Target combatant not found")
 
-    # Validate the target carries a Sleep-sourced unconscious / asleep buff.
+    # v2.99.0 — generic wakeable-by-action gate. Pre-v2.99.0 the
+    # check was hardcoded to source_spell == "Sleep"; now any buff
+    # stamped with ``wakeable_by_action: True`` is in scope.
     buffs = list(target.get("buffs") or [])
     sleep_keys = [
         b.get("key") for b in buffs
-        if (b or {}).get("key") in ("unconscious", "asleep")
-        and (b or {}).get("source_spell") == "Sleep"
+        if _buff_is_wakeable_by_action(b or {})
     ]
     if not sleep_keys:
         return JSONResponse(status_code=409, content={
             "error": "no_sleep_buff",
-            "label": "Target isn't asleep from a Sleep spell",
+            "label": "Target isn't asleep from a wakeable buff",
         })
 
     target_char_id = target.get("char_id")
@@ -15511,10 +15540,7 @@ async def wake_sleeper(
         # NPC path: remove from the combatant's buff list directly.
         target["buffs"] = [
             b for b in buffs
-            if not (
-                (b or {}).get("key") in ("unconscious", "asleep")
-                and (b or {}).get("source_spell") == "Sleep"
-            )
+            if not _buff_is_wakeable_by_action(b or {})
         ]
         hub.set_battle(campaign_id, state)
         await hub.broadcast(campaign_id, {
@@ -24141,6 +24167,11 @@ async def cast_sleep(
                 "duration_rounds": sleep_duration_rounds,
                 "duration_max": sleep_duration_rounds,
                 "concentration": False,
+                # v2.99.0 — generic marker for "wake on damage" + the
+                # /wake_sleeper + /shake_awake action endpoints. Future
+                # content that imposes a wakeable unconscious / asleep
+                # state can opt in by stamping this field.
+                "wakeable_by_action": True,
                 "effects": [
                     "incapacitated — no actions or reactions",
                     "drops what it's holding + falls prone",
@@ -24321,18 +24352,18 @@ async def shake_awake(
     if not target_combatant:
         raise HTTPException(404, "Target combatant not found")
 
-    # Verify the target has a Sleep-sourced Unconscious buff.
+    # v2.99.0 — generic wakeable-by-action gate (was hardcoded
+    # ``source_spell == "Sleep"`` pre-v2.99.0).
     target_buffs = list(target_combatant.get("buffs") or [])
     sleep_buff_keys = [
         b.get("key") for b in target_buffs
-        if (b or {}).get("key") in ("unconscious", "asleep")
-        and (b or {}).get("source_spell") == "Sleep"
+        if _buff_is_wakeable_by_action(b or {})
     ]
     if not sleep_buff_keys:
         return JSONResponse(status_code=409, content={
             "error": "not_asleep",
             "target_name": target_combatant.get("name") or "",
-            "reason": "target has no Sleep-sourced Unconscious buff",
+            "reason": "target has no wakeable-by-action buff",
         })
 
     # Phase 4 over-budget gate (action slot).
@@ -24372,10 +24403,7 @@ async def shake_awake(
                     continue
                 new_list = [
                     b for b in (c.get("buffs") or [])
-                    if not (
-                        (b or {}).get("key") in ("unconscious", "asleep")
-                        and (b or {}).get("source_spell") == "Sleep"
-                    )
+                    if not _buff_is_wakeable_by_action(b or {})
                 ]
                 if len(new_list) != len(c.get("buffs") or []):
                     removed_count = len(c.get("buffs") or []) - len(new_list)
