@@ -15142,6 +15142,11 @@ async def use_repeated_save(
         "save_ability": result["save_ability"],
         "buff_dropped": result["buff_dropped"],
         "pfeag_advantage_applied": result["pfeag_advantage_applied"],
+        # v2.97.77 — surface the helper's per-drop undo handle so the
+        # caller (UI / harness) can POST /undo_attack_damage with it.
+        # Empty string when no drop happened (save failed or NPC
+        # combatant out of state).
+        "undo_cast_id": result.get("undo_cast_id") or "",
     }
 
 
@@ -18085,7 +18090,21 @@ async def _resolve_repeated_save_for_buff(
     })
 
     buff_dropped = False
+    undo_cast_id = ""
     if passed and key:
+        # v2.97.77 — snapshot the pre-drop buff list so the v2.97.77
+        # undo branch can restore the dropped condition. Snapshot
+        # BEFORE _remove_buff / in-state mutation so the captured
+        # list still contains the buff that's about to drop.
+        _target_combatant_for_snapshot = (
+            {"char_id": int(saver_char_id)}
+            if is_pc and saver_char_id
+            else (combatant or {})
+        )
+        _pre_drop_buffs = _snapshot_target_buffs(
+            db, campaign_id, _target_combatant_for_snapshot,
+        ) if db is not None else []
+
         if is_pc and saver_char_id:
             buff_dropped = await _remove_buff(
                 campaign_id, int(saver_char_id), key,
@@ -18117,6 +18136,29 @@ async def _resolve_repeated_save_for_buff(
                     buff_dropped = True
                     break
         if buff_dropped:
+            # v2.97.77 — stamp an undo log entry under a fresh cast_id
+            # so the GM (or the player who got hit by the original
+            # save) can restore the dropped condition via the
+            # /undo_attack_damage path. The cast_id is surfaced on
+            # the feature_used broadcast so the UI can render an
+            # "undo this save-pass" button on the roll log entry.
+            undo_cast_id = uuid.uuid4().hex[:12]
+            _log_damage_entry(undo_cast_id, {
+                "kind": "buff_drop_from_save",
+                "campaign_id": campaign_id,
+                "target_char_id": (
+                    int(saver_char_id)
+                    if is_pc and saver_char_id else None
+                ),
+                "target_combatant_id": (
+                    (combatant or {}).get("id")
+                    if not (is_pc and saver_char_id) else None
+                ),
+                "buffs_before": _pre_drop_buffs,
+                "buff_dropped_key": key,
+                "buff_dropped_name": buff_name,
+                "saver_name": saver_name,
+            })
             await hub.broadcast(campaign_id, {
                 "type": "feature_used",
                 "data": {
@@ -18124,6 +18166,8 @@ async def _resolve_repeated_save_for_buff(
                     "char_name": saver_name,
                     "buff_key": key,
                     "label": f"{saver_name} shook off {buff_name}",
+                    # v2.97.77 — cast_id for the per-event undo handle.
+                    "cast_id": undo_cast_id,
                 },
             })
 
@@ -18135,6 +18179,10 @@ async def _resolve_repeated_save_for_buff(
         "save_ability": ab,
         "pfeag_advantage_applied": pfeag_adv,
         "buff_dropped": buff_dropped,
+        # v2.97.77 — undo handle for the buff drop. Empty when the
+        # save failed (no drop, no undo to surface) or when the drop
+        # didn't actually happen (e.g. NPC combatant not in state).
+        "undo_cast_id": undo_cast_id,
     }
 
 
@@ -27903,6 +27951,27 @@ async def undo_attack_damage(
                 "kind": "buff_install",
                 "target_char_id": entry.get("target_char_id"),
                 "buff_key": entry.get("buff_installed_key"),
+            })
+            continue
+
+        # v2.97.77 — buff_drop_from_save entries restore the target's
+        # buff list to the pre-drop snapshot. Same restore mechanism
+        # as buff_install (the snapshot was taken BEFORE the drop, so
+        # it includes the dropped buff); semantically distinct so the
+        # per_target_undone payload labels it correctly for the UI.
+        if kind == "buff_drop_from_save":
+            await _restore_target_buffs(
+                db, campaign_id,
+                entry.get("target_char_id"),
+                entry.get("target_combatant_id"),
+                entry.get("buffs_before") or [],
+            )
+            per_target_undone.append({
+                "kind": "buff_drop_from_save_reverted",
+                "target_char_id": entry.get("target_char_id"),
+                "target_combatant_id": entry.get("target_combatant_id"),
+                "buff_key": entry.get("buff_dropped_key"),
+                "buff_name": entry.get("buff_dropped_name"),
             })
             continue
 

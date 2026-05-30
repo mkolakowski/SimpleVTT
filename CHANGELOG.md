@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.77] - 2026-05-30 — "Take it Back"
+
+**Schema version:** 64
+**Commit summary:** **Undo-log support for condition-buff drops from passed saves.** Currently when an end-of-turn save (v2.97.62/69) or damage-trigger save (v2.97.65/66) passes and the condition buff is dropped, the drop is silent — there's no log entry, so the GM can't /undo_attack_damage to restore the dropped condition. v2.97.77 adds: (1) a pre-drop snapshot of the buff list in ``_resolve_repeated_save_for_buff``; (2) a fresh ``cast_id`` (uuid) minted per drop and stamped into ``_attack_damage_log`` with kind ``"buff_drop_from_save"``; (3) the cast_id surfaced on the helper's return + the ``feature_used`` broadcast so the UI / harness can offer an undo button; (4) a matching undo branch in ``/undo_attack_damage`` that restores the snapshot via ``_restore_target_buffs``. PC + NPC paths both supported.
+**Description:** Two edits in ``app/routes/tabletop_routes.py``. **(1)** ``_resolve_repeated_save_for_buff``: before the buff drop, snapshot via ``_snapshot_target_buffs`` (passing a synthetic ``{char_id: ...}`` for PCs or the combatant dict for NPCs). After successful drop, mint a uuid cast_id, stamp ``_log_damage_entry(cast_id, {kind: "buff_drop_from_save", target_char_id?, target_combatant_id?, buffs_before, buff_dropped_key, buff_dropped_name, saver_name})``. Include the cast_id on the feature_used broadcast and the helper's return dict. **(2)** ``/undo_attack_damage`` (the reverse-walk loop): add a ``kind == "buff_drop_from_save"`` branch that calls ``_restore_target_buffs`` with the snapshot — same restore mechanism as ``buff_install`` since the snapshot pre-dates the drop and therefore contains the buff. The per_target_undone payload labels it ``"buff_drop_from_save_reverted"`` for client clarity.
+
+### Added
+- ``buffs_before`` snapshot + ``cast_id`` + log entry in ``_resolve_repeated_save_for_buff``.
+- ``undo_cast_id`` field on the helper's return dict.
+- ``cast_id`` field on the ``feature_used`` broadcast for save-pass drops.
+- ``kind == "buff_drop_from_save"`` branch in ``/undo_attack_damage``.
+- ``tests/harness/test_undo_buff_drop_from_save.py::test_passing_repeated_save_can_be_undone`` — Lyra (fiend) frightens Pip; Pip POSTs ``/use_repeated_save`` until a pass drops the Frightened buff; assert the response carries ``undo_cast_id`` (non-empty when buff_dropped); POST ``/undo_attack_damage`` with that cast_id; verify Pip's Frightened buff is restored.
+
+### Changed
+- ``app/routes/tabletop_routes.py::_resolve_repeated_save_for_buff`` — adds the v2.97.77 snapshot + log + undo handle.
+- ``app/routes/tabletop_routes.py::undo_attack_damage`` — adds the v2.97.77 reverse branch.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.77 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 652 → 653, version stamp v2.97.76 → v2.97.77.
+
+### Notes
+- **PATCH bump** — snapshot + log + undo branch + one harness test.
+- **Closes the silent-drop coverage gap.** The v2.97.62/65/69/66 save-pass paths previously dropped buffs without an audit trail. v2.97.77 puts every drop on the same /undo_attack_damage path that buff_install + heal + damage entries already use.
+- **One drop = one cast_id = one undo handle.** Each save-pass mints its own cast_id; multiple drops in one turn produce multiple independent undo handles. This matches the "one cast_id per chat-card" convention from v2.65.0 Phase A.
+- **PC + NPC both supported.** Snapshot helper handles both. Restore helper handles both. Tested via the harness for PCs; NPCs follow the same code path with target_combatant_id instead of target_char_id.
+- **UI integration filed.** The feature_used broadcast now carries cast_id; a future commit can render an undo button on the save-pass roll log entry that POSTs /undo_attack_damage with that cast_id. v1 of this commit is server-side only — exercised via the harness.
+- **No double-undo guard yet.** The existing undo_attack_damage pops the log entry after the undo runs, so a second undo on the same cast_id returns 404 ``no_op``. RAW-correct: one undo per drop.
+- Total harness count: 653 (was 652 in v2.97.76) — one new undo-of-save-pass test.
+
+---
+
 ## [2.97.76] - 2026-05-30 — "Surface the Verdict"
 
 **Schema version:** 64
