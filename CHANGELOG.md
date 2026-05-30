@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.54] - 2026-05-29 — "The Caster Steps Up"
+
+**Schema version:** 64
+**Commit summary:** **Fix v2.97.53 Sanctuary ends-on-offense harness test — Caelan self-casts instead of looking up nonexistent Tavik Sanctuary.** The v2.97.53 test was authored under the mistaken assumption that Tavik (the demo Cleric) carried Sanctuary on his spell list. He does not — Caelan (Paladin Oath of Devotion) is the only demo character with Sanctuary, granted by his subclass. The test failed under sweep with ``KeyError: 'Tavik Brightheart'`` (also wrong name — the actual demo Tavik is "Brother Tavik Stonebrow") and then a follow-on failure because looking up Sanctuary by slug in a sheet without it returned empty. Restructures the test to have Caelan self-cast Sanctuary (spell_index 4, L1 paladin slot) — RAW Sanctuary's target is "a creature within range" and the caster qualifies — then attacks Krieger so the v2.97.53 ends-on-offense gate fires. Same assertions: buff gone post-attack + broadcast carries ``source=sanctuary-ended-on-offense``.
+**Description:** Two edits in ``tests/harness/test_buff_attack_hooks.py::test_sanctuary_ends_when_warded_attacker_strikes``. **(1)** Drop the Tavik character lookup + the spell-list scan (``sheet_resp.json().get("spells")`` returned ``[]`` for Tavik because the demo Tavik has no Sanctuary). **(2)** Have Caelan self-cast Sanctuary via the standard cast_spell payload (target = self), then attack Krieger normally. No production code change — the v2.97.53 hook is unchanged; only the test is corrected.
+
+### Changed
+- ``tests/harness/test_buff_attack_hooks.py::test_sanctuary_ends_when_warded_attacker_strikes`` — drops the Tavik scaffolding; Caelan self-casts Sanctuary, then attacks Krieger.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.54 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — pure test fix. No production code change. v2.97.53's helper + wiring + catalog marker are all unchanged.
+- **Lesson noted.** Future "warded ally casts Sanctuary on caster" test scaffolding should grep ``app/demo_seed.py`` for the spell name first to confirm which demo character carries it, instead of assuming based on class. The Bless / Heroism / Shield of Faith / Aid / PFE&G catalog entries are spread across Caelan + Tavik depending on class — Sanctuary is Caelan-only because of the Oath of Devotion subclass-grant pattern.
+- Total harness count: 632 (unchanged from v2.97.53) — same test, now correctly wired.
+
+---
+
 ## [2.97.53] - 2026-05-29 — "Vow Broken"
 
 **Schema version:** 64

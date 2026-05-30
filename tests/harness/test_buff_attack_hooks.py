@@ -933,26 +933,25 @@ async def test_sanctuary_blocks_attack_on_failed_wis_save(
 async def test_sanctuary_ends_when_warded_attacker_strikes(
     gm_client, gm_ws, roster,
 ):
-    """v2.97.53 — Sanctuary ends-on-offense trigger. Tavik casts
-    Sanctuary on Caelan; Caelan then attacks Krieger (a target who
-    does NOT carry Sanctuary, so the v2.97.52 target-save gate
-    doesn't fire). The v2.97.53 hook walks Caelan's own buffs at the
-    top of /use_attack, finds the sanctuary key + ends-on-offense
-    marker, drops the buff via _remove_buff, and broadcasts a
+    """v2.97.53 — Sanctuary ends-on-offense trigger. Caelan casts
+    Sanctuary on himself; Caelan then attacks Krieger. The v2.97.53
+    hook walks Caelan's own buffs at the top of /use_attack, finds
+    the sanctuary key + ends-on-offense marker, drops the buff via
+    _remove_buff, and broadcasts a
     feature_used(source=sanctuary-ended-on-offense) event.
+
+    Caelan is the only demo character with Sanctuary on his spell
+    list (Paladin Oath of Devotion subclass grant, spell_index 4).
 
     Assertions: Caelan's buffs no longer contain `sanctuary` after
     the attack; the WS broadcast carries the expected source string.
     """
-    tavik = roster["Tavik Brightheart"]
     caelan = roster["Sir Caelan Lightbringer"]
     krieger = roster["Krieger Stonefist"]
 
-    await _long_rest(gm_client, tavik["id"])
     await _long_rest(gm_client, caelan["id"])
     await _long_rest(gm_client, krieger["id"])
 
-    tavik_tok = f"tok_sancend_tavik_{tavik['id']}"
     caelan_tok = f"tok_sancend_caelan_{caelan['id']}"
     krieger_tok = f"tok_sancend_krieger_{krieger['id']}"
 
@@ -960,42 +959,25 @@ async def test_sanctuary_ends_when_warded_attacker_strikes(
     # sanctuary buff lying around on either attacker or target.
     for _stale_key in ("sanctuary", "bless", "heroism",
                        "shield-of-faith", "aid", "protection-from-evil-and-good"):
-        for _cid in (tavik["id"], caelan["id"], krieger["id"]):
+        for _cid in (caelan["id"], krieger["id"]):
             await gm_client.post(
                 f"/api/campaign/{CAMPAIGN_ID}/end_buff",
                 json={"character_id": _cid, "key": _stale_key},
             )
 
     await _seed_battle_with(gm_client, [
-        {"id": tavik["id"], "name": tavik["name"], "tok_id": tavik_tok, "hp_max": 50, "initiative": 14},
-        {"id": caelan["id"], "name": caelan["name"], "tok_id": caelan_tok, "hp_max": 60, "initiative": 12},
+        {"id": caelan["id"], "name": caelan["name"], "tok_id": caelan_tok, "hp_max": 60, "initiative": 14},
         {"id": krieger["id"], "name": krieger["name"], "tok_id": krieger_tok, "hp_max": 55, "initiative": 8},
     ])
 
-    # Tavik casts Sanctuary on Caelan. Tavik's Sanctuary index — find it.
-    # In test_undo_refunds_resource.py the sanctuary cast uses Tavik's
-    # spell list. Look up the index by name from the sheet read.
-    sheet_resp = await gm_client.get(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet"
-    )
-    spells = (sheet_resp.json().get("spells") or [])
-    sanc_idx = next(
-        (i for i, s in enumerate(spells)
-         if (s or {}).get("_slug") == "sanctuary"
-         or (s or {}).get("name", "").lower() == "sanctuary"),
-        None,
-    )
-    assert sanc_idx is not None, (
-        f"Sanctuary not on Tavik's spell list; got {[s.get('name') for s in spells]}"
-    )
-
+    # Caelan self-casts Sanctuary (spell_index 4, L1 slot, Paladin).
     sanc_cast = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
         json={
-            "character_id": tavik["id"],
-            "spell_index": sanc_idx,
+            "character_id": caelan["id"],
+            "spell_index": 4,
             "slot_level": 1,
-            "class_slug": "cleric",
+            "class_slug": "paladin",
             "target_character_id": caelan["id"],
             "target_combatant_id": caelan_tok,
             "target_name": caelan["name"],
