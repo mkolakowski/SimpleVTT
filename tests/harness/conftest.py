@@ -166,7 +166,7 @@ _LEAKABLE_BUFF_KEYS = (
 )
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(autouse=True)
 async def clean_pcs(
     gm_client: httpx.AsyncClient, roster: dict[str, dict],
 ) -> dict[str, dict]:
@@ -175,6 +175,13 @@ async def clean_pcs(
     test reset gate. Returns the roster dict so callers can chain
     ``roster = clean_pcs`` in their signature without an extra
     fixture request.
+
+    v2.99.6 — ``autouse=True``. The fixture now runs before every
+    test that has access to gm_client + roster (which is most of
+    the harness suite). Adds ~1s per test for the 12 long-rests +
+    end_buff calls, but eliminates cross-test state leak at the
+    cost of suite runtime (~5.5 min → ~17 min). The trade-off is
+    deterministic test pass rates over speed.
     """
     for char in roster.values():
         char_id = char["id"]

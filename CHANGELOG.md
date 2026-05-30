@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.6] - 2026-05-30 — "Roster Reset For Everyone"
+
+**Schema version:** 64
+**Commit summary:** **Flip ``clean_pcs`` to ``autouse=True`` so every harness test starts from a known-clean PC state.** v2.99.5 added the opt-in fixture; v2.99.6 makes it apply to the entire suite. Trades suite runtime (~5.5 min → ~17 min) for deterministic pass rates: no more "passes in isolation, fails in full suite" flakes from cumulative buff state leak across tests.
+**Description:** Single-line decorator change — ``@pytest_asyncio.fixture`` → ``@pytest_asyncio.fixture(autouse=True)`` — plus a v2.99.6 docstring note in conftest.py explaining the trade-off.
+
+### Changed
+- ``tests/harness/conftest.py::clean_pcs`` — now ``autouse=True``.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.99.6 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — test infrastructure decorator flip.
+- **Why this is the right time to flip.** v2.99.5 proved the fixture works. v2.99.6 ships it for everyone before the next test added to the suite has to discover the cleanup pattern from scratch.
+- **CI runtime tradeoff.** The GitHub Actions test-harness workflow now runs longer per push, but the failures it catches are real failures, not state-leak artifacts. The team can re-evaluate if push frequency outpaces CI cycle time.
+- Total harness count: 658 (unchanged).
+
+---
+
 ## [2.99.5] - 2026-05-30 — "Wash the Roster"
 
 **Schema version:** 64
