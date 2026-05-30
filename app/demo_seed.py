@@ -820,6 +820,22 @@ def _paladin_sheet(name: str) -> dict:
              "_subclass_granted": True, "_granted_by": "Oath of Devotion"},
             {"name": "Zone of Truth", "level": 2, "prepared": True, "_slug": "zone-of-truth", "casting_time": "1 action",
              "_subclass_granted": True, "_granted_by": "Oath of Devotion"},
+            # v2.97.73 — Banishment appended to Caelan's known paladin
+            # spell list. RAW: Banishment is on the Paladin class list
+            # at Lv 4. RAW paladin L4 slots unlock at class Lv 13 (half
+            # caster progression); Caelan is currently Lv 7 so he can
+            # PREPARE Banishment but cannot CAST it until levelup (or
+            # via the v2.49.124 metamagic / Sorcery Points flexible
+            # casting routes — neither of which Caelan has). The entry
+            # documents the spell as a known / preparable spell rather
+            # than as a currently-castable one. /cast_spell will return
+            # 409 ``no_slot`` for slot_level=4 without an L4 pool —
+            # which is RAW-correct behavior at Caelan's current level.
+            # Future Caelan Lv 13 bump would just add ``"4": {"total":
+            # 1, "used": 0}`` to spell_slots.paladin.
+            {"name": "Banishment", "level": 4, "prepared": True, "_slug": "banishment",
+             "casting_time": "1 action", "save_ability": "CHA",
+             "desc": "60 ft single target. CHA save DC 14 or be Banished (incapacitated on harmless demiplane). Concentration up to 1 min. NO end-of-turn save RAW. L4 slot — preparable today, castable once Caelan reaches Paladin Lv 13."},
         ],
         "spell_slots": {
             "paladin": {

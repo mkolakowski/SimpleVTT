@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.73] - 2026-05-30 — "The Vow of Distant Lands"
+
+**Schema version:** 64
+**Commit summary:** **Append Banishment to Caelan's paladin spell list as a Lv 4 known/preparable spell.** Per RAW Banishment is on the Paladin class spell list at Lv 4. Caelan is currently Paladin Lv 7, which is below the L4 slot threshold (paladin L4 slots unlock at class Lv 13 per half-caster progression). So the entry documents Banishment as a known preparable spell on Caelan's sheet; ``/cast_spell`` will return 409 ``no_slot`` for ``slot_level=4`` calls until a future Caelan-to-Lv-13 bump adds the L4 slot pool. This is the same RAW-correct sheet shape as a Lv 7 paladin who knows their class list but hasn't unlocked the slots yet.
+**Description:** One edit in ``app/demo_seed.py::_paladin_sheet``. Appends a new spell entry at the end of Caelan's spell list: ``{"name": "Banishment", "level": 4, "prepared": True, "_slug": "banishment", "casting_time": "1 action", "save_ability": "CHA", "desc": "..."}``. The desc field documents the L4 slot requirement explicitly. No change to ``spell_slots`` (so 409 ``no_slot`` fires on attempted cast). No level / HP / proficiency bump (avoids the test churn that a Lv 7 → Lv 13 bump would cause).
+
+### Added
+- ``Banishment`` entry on Caelan's spell list (Lv 4, CHA save, prepared but not currently castable).
+- ``tests/harness/test_caelan_banishment_listed.py::test_caelan_has_banishment_known_but_cant_cast_yet`` — fetches Caelan's roster + sheet, asserts Banishment appears in his spell list with level=4; attempts ``/cast_spell`` at slot_level=4 → asserts 409 ``no_slot`` (or equivalent) because Caelan has no L4 slot pool at his current level.
+
+### Changed
+- ``app/demo_seed.py::_paladin_sheet["spells"]`` — appended Banishment entry.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.73 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 649 → 650, version stamp v2.97.72 → v2.97.73.
+
+### Notes
+- **PATCH bump** — pure demo content addition + one harness test.
+- **Why no level bump.** Bumping Caelan Lv 7 → Lv 13 would affect HP, hit_dice, proficiency_bonus (+3 → +5), attack bonuses (+6 → +8), Lay on Hands pool (35 → 65), Channel Divinity uses, plus unlocks Extra Attack II / Improved Divine Smite / etc. — would break ~20 tests that assume the Lv 7 stats. Out of scope for one demo-content commit.
+- **Future Caelan Lv 13 bump.** A future commit can take the bump on with a dedicated effort, updating every Caelan-dependent test. The Banishment cast then naturally becomes castable once the L4 slot lands.
+- **Documents the catalog → demo content path.** v2.97.71 added the catalog; v2.97.72 wired it to a wizard caster; v2.97.73 surfaces it on a second class's spell list (paladin). Same Confusion + Banishment shipped as both wizard L4 + paladin L4 (RAW class lists).
+- Total harness count: 650 (was 649 in v2.97.72) — one new Banishment-on-Caelan demo test.
+
+---
+
 ## [2.97.72] - 2026-05-30 — "The Sage Steps Forward"
 
 **Schema version:** 64
