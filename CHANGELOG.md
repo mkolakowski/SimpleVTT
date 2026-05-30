@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.69] - 2026-05-30 — "The Watch Turns"
+
+**Schema version:** 64
+**Commit summary:** **Extend v2.97.62 end-of-turn auto-fire to NPC savers.** Closes the last NPC ongoing-effect gap noted in v2.97.62. The PUT /battle turn-shift hook now handles NPC savers via the same dual-path pattern as v2.97.66's damage-trigger NPC extension: looks up the previous active combatant's token template, builds the sheet via ``_monster_template_to_sheet``, resolves the save modifier, rolls the same v2.97.60 expression (with PFE&G advantage gated to PC savers since the helper reads char-id-keyed buffs), broadcasts the 🔁 "End-of-turn save" entry, and drops the buff via combatant-keyed buff_update on pass. A frightened bandit now auto-rolls its end-of-turn Wis save when its turn ends, matching RAW + the PC behavior.
+**Description:** One edit in ``app/routes/tabletop_routes.py::update_battle``. The existing v2.97.62 block (post-Heroism, end-of-turn save auto-fire) had a single ``if _prev_active and _prev_active.get("char_id"):`` gate that skipped NPCs. Refactored to branch on ``is_pc_saver``: PC path unchanged; NPC path looks up the token_template_id, builds the sheet, runs the same save resolution + broadcast logic. NPC buff drop uses the combatant-keyed in-state mutation + buff_update broadcast (same pattern as v2.97.66's damage-trigger NPC drop). PFE&G advantage stays PC-only.
+
+### Added
+- NPC saver branch in PUT /battle's v2.97.62 end-of-turn auto-fire block.
+- ``tests/harness/test_repeated_save_end_of_turn_npc.py::test_end_of_turn_auto_fires_for_frightened_npc`` — Lyra frightens a bandit; PUT /battle advances turn from bandit to Lyra; assert a 🔁 "End-of-turn save" broadcast fires naming the bandit.
+
+### Changed
+- ``app/routes/tabletop_routes.py::update_battle`` — extends the v2.97.62 block with the NPC saver branch.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.69 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 645 → 646, version stamp v2.97.66 → v2.97.69.
+
+### Notes
+- **PATCH bump** — one branch refactor + one harness test.
+- **Closes the NPC ongoing-effect gap.** Now both PC and NPC savers have BOTH triggers wired: end-of-turn (v2.97.62 PC, v2.97.69 NPC) and damage-trigger (v2.97.65 PC, v2.97.66 NPC). NPC condition lifecycles are fully RAW-active.
+- **Pattern consolidation.** v2.97.66 + v2.97.69 share the same dual-path shape (PC reads char.sheet, NPC reads template via _monster_template_to_sheet). A future refactor could extract a shared helper; for now the duplication is contained.
+- **PFE&G advantage stays PC-only.** Both NPC paths run straight d20. RAW NPC PFE&G is theoretically possible but the codebase doesn't model NPC-side PFE&G casts today.
+- Total harness count: 646 (was 645 in v2.97.66) — one new NPC end-of-turn test.
+
+---
+
 ## [2.97.68] - 2026-05-30 — "The Right Question"
 
 **Schema version:** 64

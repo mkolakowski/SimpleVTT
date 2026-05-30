@@ -28665,13 +28665,39 @@ async def update_battle(
         _prev_active = None
         if 0 <= _prev_active_idx < len(_new_combs):
             _prev_active = _new_combs[_prev_active_idx]
-        if _prev_active and _prev_active.get("char_id"):
-            _prev_char_id = int(_prev_active["char_id"])
-            _prev_char = db.query(Character).filter(
-                Character.id == _prev_char_id,
-            ).first()
-            if _prev_char:
-                _prev_sheet = dict(_prev_char.sheet or {})
+        # v2.97.69 — extended to handle both PC and NPC savers. PC
+        # path resolves the modifier from char.sheet; NPC path builds
+        # the sheet from the token template via
+        # ``_monster_template_to_sheet``. Same dual-path pattern as
+        # the v2.97.66 damage-trigger NPC extension.
+        if _prev_active:
+            _is_pc_saver = bool(_prev_active.get("char_id"))
+            _prev_saver_sheet = None
+            _prev_saver_name = _prev_active.get("name") or "Creature"
+            _prev_char = None
+            _prev_char_id = 0
+            if _is_pc_saver:
+                _prev_char_id = int(_prev_active["char_id"])
+                _prev_char = db.query(Character).filter(
+                    Character.id == _prev_char_id,
+                ).first()
+                if _prev_char:
+                    _prev_saver_sheet = dict(_prev_char.sheet or {})
+                    _prev_saver_name = _prev_char.name
+            else:
+                _tmpl_id_for_eot = _prev_active.get("token_template_id")
+                if _tmpl_id_for_eot:
+                    _tmpl_for_eot = db.query(TokenTemplate).filter(
+                        TokenTemplate.id == int(_tmpl_id_for_eot),
+                    ).first()
+                    if _tmpl_for_eot:
+                        try:
+                            _prev_saver_sheet = _monster_template_to_sheet(
+                                _tmpl_for_eot, campaign_id,
+                            )
+                        except Exception:
+                            _prev_saver_sheet = None
+            if _prev_saver_sheet is not None:
                 # Snapshot the buff list because _remove_buff mutates
                 # state during the loop.
                 _rs_buffs = list(_prev_active.get("buffs") or [])
@@ -28694,18 +28720,29 @@ async def update_battle(
                         continue
                     _rs_stat_key = f"{_rs_ab.lower()}_save"
                     _rs_saver_mod, _ = _resolve_stat_modifier(
-                        _prev_sheet, "dnd5e", _rs_stat_key,
+                        _prev_saver_sheet, "dnd5e", _rs_stat_key,
                     )
                     _rs_source_type = str(
                         _rs_buff.get("source_caster_creature_type") or ""
                     ).lower()
-                    _rs_pfeag_adv = _saver_pfeag_save_advantage(
-                        campaign_id, _prev_char_id, _rs_source_type, _rs_key,
-                    )
+                    # PFE&G advantage stays PC-only (helper reads
+                    # char-id-keyed buffs). NPC savers run straight d20.
+                    _rs_pfeag_adv = False
+                    if _is_pc_saver:
+                        _rs_pfeag_adv = _saver_pfeag_save_advantage(
+                            campaign_id, _prev_char_id, _rs_source_type, _rs_key,
+                        )
                     _rs_d20 = "2d20kh1" if _rs_pfeag_adv else "1d20"
-                    _rs_bb = _saver_bless_bane_save_suffix(
-                        campaign_id, _prev_char_id,
-                    )
+                    # Bless/Bane: PCs use char_id, NPCs use combatant
+                    # fallback (helper reads combatant.buffs).
+                    if _is_pc_saver:
+                        _rs_bb = _saver_bless_bane_save_suffix(
+                            campaign_id, _prev_char_id,
+                        )
+                    else:
+                        _rs_bb = _saver_bless_bane_save_suffix(
+                            campaign_id, None, _prev_active,
+                        )
                     _rs_sign = "+" if _rs_saver_mod >= 0 else ""
                     _rs_expr = (
                         f"{_rs_d20}{_rs_sign}{_rs_saver_mod}{_rs_bb}"
@@ -28723,7 +28760,7 @@ async def update_battle(
                     _rs_source_spell = _rs_buff.get("source_spell") or ""
                     _rs_adv_note = " · PFE&G advantage" if _rs_pfeag_adv else ""
                     _rs_note = (
-                        f"🔁 End-of-turn save · {_prev_char.name} "
+                        f"🔁 End-of-turn save · {_prev_saver_name} "
                         f"{_rs_ab} vs {_rs_buff_name}"
                         f"{_rs_adv_note}"
                         + (f" ({_rs_source_spell})" if _rs_source_spell else "")
@@ -28735,33 +28772,53 @@ async def update_battle(
                             "total": _rs_total,
                             "breakdown": _rs_breakdown,
                             "note": _rs_note,
-                            "user_name": _prev_char.name,
-                            "char_name": _prev_char.name,
+                            "user_name": _prev_saver_name,
+                            "char_name": _prev_saver_name,
                             "visibility": Visibility.PUBLIC.value,
                             "dc": _rs_dc,
                         },
                     })
                     if _rs_passed:
-                        _dropped = await _remove_buff(
-                            campaign_id, _prev_char_id, _rs_key,
-                        )
-                        if _dropped:
-                            _mirror_buffs_to_sheet(
-                                db, _prev_char_id,
-                                _get_buffs(campaign_id, _prev_char_id),
+                        if _is_pc_saver:
+                            _dropped = await _remove_buff(
+                                campaign_id, _prev_char_id, _rs_key,
                             )
-                            await hub.broadcast(campaign_id, {
-                                "type": "feature_used",
-                                "data": {
-                                    "source": "repeated-save-passed-auto",
-                                    "char_name": _prev_char.name,
-                                    "buff_key": _rs_key,
-                                    "label": (
-                                        f"{_prev_char.name} shook off "
-                                        f"{_rs_buff_name} at end of turn"
-                                    ),
-                                },
-                            })
+                            if _dropped:
+                                _mirror_buffs_to_sheet(
+                                    db, _prev_char_id,
+                                    _get_buffs(campaign_id, _prev_char_id),
+                                )
+                        else:
+                            # NPC: mutate combatant + buff_update.
+                            _current_state = hub.get_battle(campaign_id) or {}
+                            for _c in _current_state.get("combatants") or []:
+                                if _c.get("id") != _prev_active.get("id"):
+                                    continue
+                                _c["buffs"] = [
+                                    _b for _b in (_c.get("buffs") or [])
+                                    if (_b or {}).get("key") != _rs_key
+                                ]
+                                hub.set_battle(campaign_id, _current_state)
+                                await hub.broadcast(campaign_id, {
+                                    "type": "buff_update",
+                                    "data": {
+                                        "combatant_id": _prev_active.get("id"),
+                                        "buffs": _c["buffs"],
+                                    },
+                                })
+                                break
+                        await hub.broadcast(campaign_id, {
+                            "type": "feature_used",
+                            "data": {
+                                "source": "repeated-save-passed-auto",
+                                "char_name": _prev_saver_name,
+                                "buff_key": _rs_key,
+                                "label": (
+                                    f"{_prev_saver_name} shook off "
+                                    f"{_rs_buff_name} at end of turn"
+                                ),
+                            },
+                        })
 
     # v2.19.2 Phase C.3: mirror each PC's buff list to their sheet so
     # the full-sheet Active Effects panel reflects auto-expire ticks
