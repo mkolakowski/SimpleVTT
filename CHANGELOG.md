@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.75] - 2026-05-30 — "The Verdict on the Other Side"
+
+**Schema version:** 64
+**Commit summary:** **Wire /npc_cast_spell save-or-suck install path for PC targets.** Closes the loop on NPC casters of catalog spells (Banishment, Fear, Hold Person, Confusion, etc.) targeting PCs. Adds an optional ``spell_slug`` body param to ``/npc_cast_spell``; when set + the target is a PC + the save_ability is present, the endpoint stashes a ``_save_request_context`` entry with caster_char_id=0 (NPC caster sentinel). The PC's ``/respond`` handler then fires the standard condition install path on a failed save — same code that PC-vs-PC saves use. Catalog stamps (v2.97.60 repeated-save + v2.97.65 save-on-damage + v2.97.67 concentration=False) all land on the installed buff. Archmage casting Banishment at Caelan now actually installs the Banished condition when Caelan fails the CHA save.
+**Description:** Two edits in ``app/routes/tabletop_routes.py::use_npc_cast_spell``. **(1)** Add ``spell_slug`` body param at the top of the handler (defaults to empty when caller doesn't pass it — keeps backwards compat). **(2)** In the PC-target save branch after the RollRequest creation, when ``spell_slug`` is non-empty, stash a ``_save_request_context`` entry shaped like the v2.37.0 PC-vs-PC convention but with ``caster_char_id=0`` to signal NPC caster. ``/respond``'s install path (line ~11030+) reads caster_char_id with ``int(ctx.get("caster_char_id") or 0)``, which gracefully handles the 0 sentinel — the buff installs but the caster-side concentration anchor at line ~11042 skips (no PC caster to anchor concentration on). RAW NPC concentration is GM-tracked separately.
+
+### Added
+- Optional ``spell_slug`` body param on ``/api/campaign/{cid}/npc_cast_spell``.
+- ``_save_request_context`` stash in the PC-target save branch when spell_slug is provided.
+- ``tests/harness/test_npc_archmage_banishment.py::test_archmage_banishment_at_caelan_installs_banished`` — places an Archmage NPC + Caelan in battle; archmage calls ``/npc_cast_spell`` with ``spell_slug="banishment"``; loops the save response until Caelan fails; asserts Banished installs on Caelan with v2.97.71 catalog stamps.
+
+### Changed
+- ``app/routes/tabletop_routes.py::use_npc_cast_spell`` — adds the spell_slug body param + save-context stash.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.75 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 651 → 652, version stamp v2.97.74 → v2.97.75.
+
+### Notes
+- **PATCH bump** — one body param + one context stash + one harness test.
+- **Closes the NPC caster → PC target → condition install loop for ALL save-or-suck catalog spells.** Not just Banishment — Confusion, Fear, Hold Person, Hideous Laughter, Sleep, Suggestion, Charm Person, Stunning Strike, Open Hand Prone, Bane, Faerie Fire all flow through the same /respond path. v2.97.75 unlocks NPC casters for the entire catalog in one wire.
+- **Why caster_char_id=0 is safe.** /respond's install reads ``int(ctx.get("caster_char_id") or 0)``. With 0, the buff's ``source_char_id`` is 0 (not a valid char_id), and the caster-side concentration anchor block at line ~11042 (``if caster_id:``) skips. The buff installs without an anchor. RAW NPC concentration is GM-managed — they manually end the spell when the NPC takes damage or loses concentration. Future commit can layer NPC concentration tracking on top.
+- **No PFE&G source_caster_creature_type yet.** The v2.97.60 install stamps include source_caster_creature_type for PFE&G save-advantage. For NPC casters we'd look it up via the NPC's combatant/template. v1 of this wire stamps "" (no type) — a future commit can extend by looking up the caster's template type. Doesn't affect Banishment / Confusion (PFE&G only protects vs aberration / celestial / elemental / fey / fiend / undead).
+- **Backwards-compatible.** Callers (existing UI / tests) that don't pass spell_slug get the pre-v2.97.75 behavior (save roll prompt, no auto-install) — same as v2.97.74 and before.
+- Total harness count: 652 (was 651 in v2.97.74) — one new Archmage → Caelan → Banishment round-trip test.
+
+---
+
 ## [2.97.74] - 2026-05-30 — "The Tower's Edict"
 
 **Schema version:** 64

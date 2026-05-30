@@ -27304,6 +27304,13 @@ async def use_npc_cast_spell(
     spell_name = str(body.get("spell_name") or "Spell").strip()[:100]
     spell_level = int(body.get("spell_level") or 0)
     spell_range = str(body.get("spell_range") or "").strip()[:50]
+    # v2.97.75 — optional spell_slug body param for save-or-suck
+    # condition install on PC targets. When set + the spell has a
+    # ``_SPELL_CONDITION_MAP`` entry + the target is a PC, the v2.97.75
+    # ``_save_request_context`` stash makes /respond's existing
+    # condition install path fire on a failed save. Mirrors the
+    # caster_char_id=0 NPC-caster convention.
+    spell_slug = str(body.get("spell_slug") or "").strip().lower()
     damage_expr_raw = str(body.get("damage") or "").strip()
     damage_type = str(body.get("damage_type") or "").strip()
     save_ability = str(body.get("save_ability") or "").strip().upper()
@@ -27491,6 +27498,29 @@ async def use_npc_cast_spell(
             })
             auto_save_prompted = True
             auto_save_prompt_id = req.id
+            # v2.97.75 — stash the save context so /respond can install
+            # the condition buff on a failed save (Banishment →
+            # Banished, Confusion → Confused, etc.). caster_char_id = 0
+            # signals NPC caster — /respond's install handles 0
+            # gracefully (the caster-side concentration anchor at
+            # line ~11042 skips when caster_id is falsy). The spell_slug
+            # body param drives the catalog lookup; absent slug → no
+            # condition install (matches the pre-v2.97.75 behavior).
+            if spell_slug:
+                _purge_save_request_context()
+                _save_request_context[req.id] = {
+                    "ts": _time.time(),
+                    "campaign_id": campaign_id,
+                    "spell_slug": spell_slug,
+                    "spell_name": spell_name,
+                    "target_character_id": int(tgt_char.id),
+                    "target_name": tgt_char.name,
+                    "dc": int(save_dc),
+                    "save_ability": save_ability,
+                    "caster_char_id": 0,
+                    "caster_char_name": caster_name,
+                    "cast_id": cast_id,
+                }
         elif target_combatant.get("token_template_id"):
             # NPC target — roll the save server-side from the monster's
             # ability mods. Reuses _resolve_stat_modifier on the resolved
