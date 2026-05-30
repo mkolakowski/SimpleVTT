@@ -1041,3 +1041,121 @@ async def test_sanctuary_ends_when_warded_attacker_strikes(
         f"expected a feature_used(source=sanctuary-ended-on-offense) "
         f"broadcast; got sources={[(m.get('data') or {}).get('source') for m in msgs]}"
     )
+
+
+async def test_sanctuary_ends_when_warded_caster_casts_offensive_spell(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.55 — Sanctuary ends-on-offense extension to /cast_spell.
+    Caelan casts Sanctuary on Tavik; Tavik casts Sacred Flame (a
+    DEX-save cantrip with 1d8 radiant damage — clearly offensive
+    via both save_ability and the action's damage field) on
+    Krieger. The v2.97.55 hook fires the v2.97.53 helper from
+    inside /cast_spell, drops Tavik's own Sanctuary buff, and
+    broadcasts feature_used(source=sanctuary-ended-on-offense).
+
+    Sacred Flame is Tavik's spell at index 0 (cantrip, slot_level 0).
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    krieger = roster["Krieger Stonefist"]
+
+    await _long_rest(gm_client, caelan["id"])
+    await _long_rest(gm_client, tavik["id"])
+    await _long_rest(gm_client, krieger["id"])
+
+    caelan_tok = f"tok_sanccast_caelan_{caelan['id']}"
+    tavik_tok = f"tok_sanccast_tavik_{tavik['id']}"
+    krieger_tok = f"tok_sanccast_krieger_{krieger['id']}"
+
+    # Aggressive cleanup so stale Sanctuary from prior tests doesn't
+    # bleed in.
+    for _stale_key in ("sanctuary", "bless", "heroism",
+                       "shield-of-faith", "aid",
+                       "protection-from-evil-and-good"):
+        for _cid in (caelan["id"], tavik["id"], krieger["id"]):
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+                json={"character_id": _cid, "key": _stale_key},
+            )
+
+    await _seed_battle_with(gm_client, [
+        {"id": caelan["id"], "name": caelan["name"], "tok_id": caelan_tok, "hp_max": 60, "initiative": 14},
+        {"id": tavik["id"], "name": tavik["name"], "tok_id": tavik_tok, "hp_max": 50, "initiative": 12},
+        {"id": krieger["id"], "name": krieger["name"], "tok_id": krieger_tok, "hp_max": 55, "initiative": 8},
+    ])
+
+    # Caelan casts Sanctuary on Tavik (Caelan's spell_index 4).
+    sanc_cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": 4,
+            "slot_level": 1,
+            "class_slug": "paladin",
+            "target_character_id": tavik["id"],
+            "target_combatant_id": tavik_tok,
+            "target_name": tavik["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert sanc_cast.status_code == 200, sanc_cast.text
+
+    # Verify Tavik has Sanctuary with the ends-on-offense marker.
+    tavik_buffs_pre = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/buffs"
+    )).json().get("buffs", [])
+    sanc_buff_pre = next(
+        (b for b in tavik_buffs_pre if (b or {}).get("key") == "sanctuary"),
+        None,
+    )
+    assert sanc_buff_pre is not None, (
+        f"Sanctuary not installed on Tavik; got {tavik_buffs_pre}"
+    )
+    _eff = (sanc_buff_pre or {}).get("effects") or {}
+    assert _eff.get("sanctuary_ends_on_offense") is True
+
+    gm_ws.mark()
+    # Tavik casts Sacred Flame on Krieger. Sacred Flame is Tavik's
+    # first spell (index 0, cantrip, slot_level 0). It's a DEX-save
+    # cantrip with 1d8 radiant damage — both markers (save_ability +
+    # damage in the action) qualify as offensive.
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": 0,
+            "slot_level": 0,
+            "class_slug": "cleric",
+            "target_character_id": krieger["id"],
+            "target_combatant_id": krieger_tok,
+            "target_name": krieger["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+
+    # Tavik's Sanctuary should now be gone.
+    tavik_buffs_post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "sanctuary" for b in tavik_buffs_post
+    ), (
+        f"Sanctuary still on Tavik after offensive /cast_spell; "
+        f"buffs={tavik_buffs_post}"
+    )
+
+    import asyncio as _asy
+    await _asy.sleep(0.3)
+    msgs = gm_ws.buffered("feature_used")
+    end_msgs = [
+        m for m in msgs
+        if (m.get("data") or {}).get("source") == "sanctuary-ended-on-offense"
+    ]
+    assert end_msgs, (
+        f"expected a feature_used(source=sanctuary-ended-on-offense) "
+        f"broadcast; got sources={[(m.get('data') or {}).get('source') for m in msgs]}"
+    )

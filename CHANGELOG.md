@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.55] - 2026-05-29 — "The Spell Breaks the Vow"
+
+**Schema version:** 64
+**Commit summary:** **Sanctuary ends-on-offense extended to ``/cast_spell``.** Closes the RAW coverage caveat noted in v2.97.53. The v2.97.53 helper ``_drop_attacker_sanctuary_on_offense`` now fires in ``/cast_spell`` too: when a Sanctuary-warded caster casts a spell that is OFFENSIVE — defined as carrying a ``save_ability`` OR a ``damage`` expression (root or first action) — their own Sanctuary buff drops via ``_remove_buff`` and a ``feature_used(source=sanctuary-ended-on-offense)`` broadcast fires. Pure utility / heal / buff casts (Cure Wounds, Bless, Shield of Faith, Sanctuary, Aid) leave the buff intact. With v2.97.55 shipped, Sanctuary's RAW "ends when warded creature acts offensively" trigger covers both ``/use_attack`` (v2.97.53) and ``/cast_spell`` (v2.97.55) — the two surfaces a warded creature can make a hostile action through.
+**Description:** One edit in ``app/routes/tabletop_routes.py::cast_spell``. Right after ``save_ability`` is computed (near line 12086), scan the spell payload for an offensive marker: ``save_ability`` non-empty OR ``spell["damage"]`` non-empty OR any ``spell["actions"][*]["damage"]`` non-empty (catches the SRD action-list shape used by Sacred Flame / Inflict Wounds / etc.). When offensive, call the v2.97.53 helper to drop the caster's own Sanctuary buff. The helper is idempotent (silent no-op when no Sanctuary present) so the call is cheap on every cast.
+
+### Added
+- Sanctuary ends-on-offense trigger in ``/cast_spell`` (post-save_ability computation).
+- ``tests/harness/test_buff_attack_hooks.py::test_sanctuary_ends_when_warded_caster_casts_offensive_spell`` — Caelan casts Sanctuary on Tavik; Tavik casts Sacred Flame (DEX save, 1d8 radiant) on Krieger; asserts Tavik's Sanctuary is gone post-cast and the broadcast carries ``source=sanctuary-ended-on-offense``.
+
+### Changed
+- ``app/routes/tabletop_routes.py::cast_spell`` — adds the offensive-cast Sanctuary drop.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.55 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 632 → 633, version stamp v2.97.54 → v2.97.55.
+
+### Notes
+- **PATCH bump** — one wiring extension + one harness test. The v2.97.53 helper is unchanged.
+- **Offensive heuristic.** ``save_ability OR damage`` is the simplest reliable signal RAW-wise. The walk over ``spell.actions`` catches the SRD JSON shape where damage lives in an action entry (Sacred Flame, Inflict Wounds, etc.). Pure buffs (Bless, Aid, Heroism, Shield of Faith) carry neither marker and skip the drop. Pure heals (Cure Wounds, Healing Word) carry neither marker and skip the drop. Sanctuary itself has no save_ability and no damage, so re-casting Sanctuary doesn't drop the prior buff (still subject to the v2.97.31 walker's overwrite semantics).
+- **Edge case: AoE save spells.** Fireball, Burning Hands, Shatter etc. all carry save_ability + damage; ``/place_aoe`` is the resolution path but ``/cast_spell`` (where the warded creature initiates the cast) is what fires the v2.97.55 hook. The cast that goes pending placement still trips the drop, which matches RAW: the warded creature is initiating an attack-spell, even if placement hasn't resolved yet.
+- **Closes the Sanctuary mechanical quad.** v2.97.45 (catalog install), v2.97.52 (attacker-Wis-save gate vs warded target), v2.97.53 (ends-on-offense via /use_attack), v2.97.55 (ends-on-offense via /cast_spell). All four RAW behaviors now active.
+- **Marker-driven.** The helper still gates on ``effects.sanctuary_ends_on_offense`` so future Sanctuary-like buffs that opt out of the trigger (e.g. a hypothetical "Aggressive Ward" homebrew) can leave the marker off.
+- Total harness count: 633 (was 632 in v2.97.54) — one new ``/cast_spell`` offensive round-trip test.
+
+---
+
 ## [2.97.54] - 2026-05-29 — "The Caster Steps Up"
 
 **Schema version:** 64

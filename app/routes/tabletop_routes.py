@@ -12084,6 +12084,34 @@ async def cast_spell(
         "",
     )
     save_ability = (save_ability_raw or "").strip().upper()[:3]
+    # v2.97.55 — Sanctuary ends-on-offense extension to /cast_spell.
+    # Mirrors the v2.97.53 hook in /use_attack. RAW (PHB p.272): "the
+    # spell ends if the warded creature attacks or casts a spell that
+    # affects an enemy creature." If the caster currently carries the
+    # ``sanctuary`` buff AND this cast is offensive (has a save_ability
+    # OR carries a damage expression at the spell root or in an
+    # action's damage field), drop the caster's own Sanctuary via the
+    # v2.97.53 helper. The check is intentionally conservative: pure
+    # buffs / heals / utility (no save, no damage) leave Sanctuary
+    # intact, matching the RAW "affects an enemy" intent.
+    _spell_root_damage = (spell.get("damage") or "").strip()
+    _spell_action_damage = ""
+    for _action in (spell.get("actions") or []):
+        _ad = ((_action or {}).get("damage") or "").strip()
+        if _ad:
+            _spell_action_damage = _ad
+            break
+    _spell_is_offensive = bool(
+        save_ability or _spell_root_damage or _spell_action_damage
+    )
+    if _spell_is_offensive:
+        try:
+            await _drop_attacker_sanctuary_on_offense(
+                campaign_id, int(char.id), char.name,
+            )
+        except Exception:
+            pass
+
     auto_save_target_name = ""
     auto_save_target_kind = ""  # "pc", "npc", or ""
     auto_save_prompted = False
