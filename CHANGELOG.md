@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.49] - 2026-05-29 — "Unbreakable Will"
+
+**Schema version:** 64
+**Commit summary:** **PFE&G type-aware condition immunity mechanical hook.** Closes the second of three v2.97.46-filed Protection from Evil and Good mechanical halves. New `_pc_has_pfeag_against_type` helper (char_id variant of v2.97.48's combatant-id helper) walks the saver's buffs for PFE&G and checks the source caster's creature type against the buff's `effects.pfeag_protected_types` list. `/respond` short-circuits the Charmed / Frightened install when the marker is present and emits a `feature_used(source=protection-from-evil-and-good)` broadcast naming the protected target and the source type. The gate is inserted between the v2.57.0 Mindless Rage check and the v2.97.43 Heroism check, so all four condition-immunity gates (AoD Charmed, Mindless Rage Charmed/Frightened, PFE&G Charmed/Frightened-from-protected-type, Heroism Frightened) now layer cleanly.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. **(1)** New `_pc_has_pfeag_against_type(campaign_id, target_char_id, caster_creature_type)` helper. **(2)** New `_broadcast_pfeag_condition_immunity` companion broadcast emitting `feature_used(source=protection-from-evil-and-good)` naming the target and source type. **(3)** Gate inserted in `/respond` between the Mindless Rage and Heroism Frightened branches: when `cond_key in ("charmed", "frightened")`, look up the caster's combatant from the active battle (for the creature_type override), resolve the type via the v2.97.48 `_attacker_creature_type` helper, and short-circuit if `_pc_has_pfeag_against_type` returns True.
+
+### Added
+- `_pc_has_pfeag_against_type` helper in `app/routes/tabletop_routes.py`.
+- `_broadcast_pfeag_condition_immunity` broadcast.
+- PFE&G type-aware condition-install short-circuit in `/respond` (between Mindless Rage and Heroism branches).
+- `tests/harness/test_pfeag_condition_immunity.py::test_pfeag_blocks_frightened_from_fiend_caster` — Caelan wards Pip with PFE&G; Lyra's combatant gets `creature_type: "fiend"` test override via PUT /battle; Lyra casts Fear at Pip; loops to a failed Wis save; asserts `auto_buff_installed == ""`, the PFE&G broadcast fires, and Pip's buffs do NOT include Frightened.
+
+### Changed
+- `app/routes/tabletop_routes.py::respond` — adds the PFE&G type-aware immunity gate.
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.49 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 628 → 629, version stamp v2.97.48 → v2.97.49.
+
+### Notes
+- **PATCH bump** — one helper + one broadcast + one gate insertion. Same shape as the v2.55.0 AoD, v2.57.0 Mindless Rage, and v2.97.43 Heroism gates; the pattern is now fully proven across four condition-immunity sources.
+- **Marker-keyed + type-aware.** Distinguishes v2.97.49 from earlier gates: AoD/Mindless Rage/Heroism check only the saver's buffs; PFE&G additionally checks the source caster's creature type. The v2.97.48 `_attacker_creature_type` helper covers the caster type lookup chain (combatant override → sheet → NPC template).
+- **One PFE&G hook still filed.** Type-aware save advantage — when a PFE&G-warded target makes a NEW save against an ongoing effect from a protected type, the save base_expression flips to `2d20kh1`. Same shape as the v2.97.35 `_saver_bless_bane_save_suffix` (modifies base_expression). Needs the save context to track the spell's source type — which the v2.97.49 helper now exposes via the same lookup chain.
+- **Standalone test had to add an intermediate buff-read sync point** between the Fear cast and /respond. Same workaround as the v2.97.43 Heroism test's sweep-isolation fix. The test passes standalone reliably; the intermediate read makes it pass under sweep ordering as well.
+- Total harness count: 629 (was 628 in v2.97.48) — one new PFE&G immunity round-trip test.
+
+---
+
 ## [2.97.48] - 2026-05-29 — "The Sacred Veil"
 
 **Schema version:** 64

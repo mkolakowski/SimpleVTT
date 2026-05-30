@@ -10911,6 +10911,49 @@ async def respond_roll_request(
                             "breakdown": rec.breakdown,
                             "auto_buff_installed": auto_buff_installed,
                         }
+                # v2.97.49 — PFE&G type-aware condition immunity.
+                # Closes the second of three v2.97.46-filed PFE&G
+                # hooks. If the saver carries PFE&G AND the cast's
+                # source caster's creature type is in the buff's
+                # pfeag_protected_types list AND the install would
+                # land Charmed or Frightened, short-circuit. The
+                # caster's creature type is resolved via the
+                # v2.97.48 ``_attacker_creature_type`` helper using
+                # the caster's combatant from the active battle
+                # (which carries the test/GM override) plus sheet
+                # fallback.
+                if _cond_key in ("charmed", "frightened"):
+                    _pfeag_caster_id = ctx.get("caster_char_id")
+                    if _pfeag_caster_id:
+                        _pfeag_caster_cb = None
+                        _pfeag_state = hub.get_battle(campaign_id)
+                        if _pfeag_state:
+                            for _pc in (_pfeag_state.get("combatants") or []):
+                                if _pc.get("char_id") == int(_pfeag_caster_id):
+                                    _pfeag_caster_cb = _pc
+                                    break
+                        _pfeag_caster_type = _attacker_creature_type(
+                            db, int(_pfeag_caster_id), _pfeag_caster_cb,
+                        )
+                        if _pfeag_caster_type and _pc_has_pfeag_against_type(
+                            campaign_id, int(tgt_char_id), _pfeag_caster_type,
+                        ):
+                            _pfeag_target = db.query(Character).filter(
+                                Character.id == int(tgt_char_id),
+                            ).first()
+                            await _broadcast_pfeag_condition_immunity(
+                                campaign_id, _pfeag_target,
+                                cond.get("name") or _cond_key,
+                                _pfeag_caster_type,
+                            )
+                            auto_buff_installed = ""
+                            _save_request_context.pop(roll_req.id, None)
+                            return {
+                                "ok": True,
+                                "total": rec.total,
+                                "breakdown": rec.breakdown,
+                                "auto_buff_installed": auto_buff_installed,
+                            }
                 # v2.97.43 — Heroism (Bard L1) immunity to Frightened.
                 # Same pre-install short-circuit shape as Mindless
                 # Rage and AoD but reads a marker effect off the
@@ -17787,6 +17830,72 @@ def _pc_has_heroism_frightened_immunity(
         if effects.get("condition_immunity_frightened") is True:
             return True
     return False
+
+
+def _pc_has_pfeag_against_type(
+    campaign_id: int,
+    target_char_id: int,
+    caster_creature_type: str,
+) -> bool:
+    """v2.97.49 — closes the second of three v2.97.46-filed PFE&G
+    mechanical hooks. char_id variant of
+    ``_target_pfeag_blocks_attacker_type`` (which takes combatant_id)
+    for use in /respond's condition-install gate. Reads the target
+    PC's buff list via ``_get_buffs`` and checks the source caster's
+    creature type against the PFE&G ``pfeag_protected_types`` list.
+    Used to short-circuit Charmed / Frightened installs when the
+    spell's source is a protected creature type.
+    """
+    if not target_char_id or not caster_creature_type:
+        return False
+    for b in _get_buffs(campaign_id, int(target_char_id)) or []:
+        if not isinstance(b, dict):
+            continue
+        if b.get("key") != "protection-from-evil-and-good":
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        protected = effects.get("pfeag_protected_types") or []
+        if not isinstance(protected, list):
+            continue
+        if caster_creature_type in [str(t).lower() for t in protected]:
+            return True
+    return False
+
+
+async def _broadcast_pfeag_condition_immunity(
+    campaign_id: int, target: "Character",
+    cond_name: str, caster_creature_type: str,
+) -> None:
+    """Companion broadcast for ``_pc_has_pfeag_against_type``. Models
+    on ``_broadcast_heroism_frightened_immunity`` — emits a
+    ``feature_used(source=protection-from-evil-and-good)`` event
+    naming the protected target and the source creature type so the
+    chat card surfaces why the failed save didn't install the
+    condition.
+    """
+    if not target:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": target.id,
+            "character_name": target.name,
+            "user_color": target.color,
+            "feature_name": (
+                f"🛐 Protection from Evil and Good → immune to "
+                f"{cond_name.lower()} from {caster_creature_type}s"
+            ),
+            "feature_desc": (
+                f"{target.name} is warded against {caster_creature_type}s "
+                f"by Protection from Evil and Good and can't be "
+                f"{cond_name.lower()} by them. The failed save doesn't "
+                f"install the condition."
+            ),
+            "source": "protection-from-evil-and-good",
+        },
+    })
 
 
 async def _broadcast_heroism_frightened_immunity(
