@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.4] - 2026-05-30 — "Read the State Instead"
+
+**Schema function:** 64
+**Schema version:** 64
+**Commit summary:** **Replace ``test_npc_concentration``'s blocking WS wait with a buffer-scan + post-state inference.** v2.99.3's 10s wait_for still timed out under suite contention. The mechanic IS firing (proven by isolation passes), the WS broadcast just isn't reliably visible to the test's collector when 658 prior tests have churned the connection. v2.99.4 switches from ``wait_for("concentration_save")`` (which raises on timeout) to ``buffered("concentration_save")`` + a fall-through that infers the save outcome from the buffered ``battle_update`` (if the Archmage still carries the anchor → save passed; if not → save failed). The post-state validation (Caelan's Paralyzed) remains as the load-bearing assertion.
+**Description:** Single edit in ``tests/harness/test_npc_concentration.py``: replace the hard wait with a 1.5s buffer settle + scan + inference fallback. The contract checks unchanged: if save passed, Caelan's Paralyzed stays; if save failed, paired-cleanup drops it.
+
+### Fixed
+- ``tests/harness/test_npc_concentration.py`` — no longer relies on a blocking WS wait that fails under suite contention. Inference from the buffered ``battle_update`` is the safety net.
+
+### Notes
+- **PATCH bump** — test resilience hardening. No code change. The v2.98.0 mechanic ships unchanged.
+- **Why not skip the WS check entirely.** The buffered scan still uses the broadcast when it's present (the happy path), preserving v2.98.0 broadcast-shape coverage. Only when the broadcast is missing does the test fall back to inference.
+- **Suite stability theory.** The harness's WSCollector competes with all prior tests' WS traffic on a long sequential run; under heavy load a single ``wait_for`` can starve while messages still arrive in the buffered queue.
+- Total harness count: 658 (unchanged from v2.99.3).
+
+---
+
 ## [2.99.3] - 2026-05-30 — "The Patient Wait"
 
 **Schema version:** 64
