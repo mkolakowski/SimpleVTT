@@ -11356,16 +11356,28 @@ async def respond_roll_request(
                 # has the type it needs at save time.
                 _caster_id_for_repeat = int(ctx.get("caster_char_id") or 0)
                 _caster_cb_for_repeat = None
-                if _caster_id_for_repeat:
-                    _battle_for_repeat = hub.get_battle(campaign_id)
-                    if _battle_for_repeat:
+                _battle_for_repeat = hub.get_battle(campaign_id)
+                if _caster_id_for_repeat and _battle_for_repeat:
+                    for _c in (_battle_for_repeat.get("combatants") or []):
+                        if _c.get("char_id") == _caster_id_for_repeat:
+                            _caster_cb_for_repeat = _c
+                            break
+                # v2.98.2 — NPC caster path: look up the combatant by
+                # combatant id (threaded into ctx by v2.97.80
+                # /npc_cast_spell) so _attacker_creature_type can read
+                # the NPC's template type. Pre-v2.98.2 the caster type
+                # stayed "" for NPC casters and PFE&G save-advantage
+                # never fired against NPC-sourced Fear / Charm.
+                if not _caster_cb_for_repeat and _battle_for_repeat:
+                    _npc_caster_id = ctx.get("caster_combatant_id") or ""
+                    if _npc_caster_id:
                         for _c in (_battle_for_repeat.get("combatants") or []):
-                            if _c.get("char_id") == _caster_id_for_repeat:
+                            if _c.get("id") == _npc_caster_id:
                                 _caster_cb_for_repeat = _c
                                 break
                 _caster_type_for_repeat = _attacker_creature_type(
                     db, _caster_id_for_repeat, _caster_cb_for_repeat,
-                ) if _caster_id_for_repeat else ""
+                ) if (_caster_id_for_repeat or _caster_cb_for_repeat) else ""
                 # v2.97.80 — NPC caster anchor plumbing. When the
                 # cast came from /npc_cast_spell (caster_char_id == 0
                 # sentinel + caster_combatant_id set), stamp

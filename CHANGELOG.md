@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.98.2] - 2026-05-30 — "Read the Tower's Type"
+
+**Schema version:** 64
+**Commit summary:** **Capture the NPC caster's creature type when installing save-or-suck conditions, so PFE&G save-advantage fires against NPC-sourced fear/charm.** Pre-v2.98.2, ``/respond``'s install path computed ``source_caster_creature_type`` only when ``caster_char_id`` was non-zero (PC casters). NPC casters via /npc_cast_spell (``caster_char_id == 0`` sentinel) left the field empty, so the v2.97.50 ``_saver_pfeag_save_advantage`` couldn't match the NPC's creature type against the PC's PFE&G ``pfeag_protected_types`` list — straight d20 even when PFE&G covered the type. v2.98.2 closes the gap by looking up the NPC caster's combatant via the v2.97.80 ``caster_combatant_id`` field and threading it through the existing v2.97.48 ``_attacker_creature_type`` helper.
+**Description:** Extends the `/respond` install path's caster-type capture block: when no PC caster combatant matches, fall back to looking up the NPC caster combatant by ``ctx["caster_combatant_id"]`` from the active battle state, then call ``_attacker_creature_type(db, _caster_id_for_repeat, _caster_cb_for_repeat)`` with the NPC combatant. The helper already supports the NPC path via ``token_template.sheet["type"]``. With this in place a PC's repeated save against an NPC-installed Charmed / Frightened condition reads the NPC's creature type and PFE&G advantage fires.
+
+### Added
+- ``tests/harness/test_pfeag_npc_caster.py::test_pfeag_advantage_against_npc_caster`` — NPC caster with ``creature_type: "fiend"`` runtime override casts Fear at Pip; Caelan wards Pip with PFE&G; verify Pip's Frightened carries ``source_caster_creature_type: "fiend"`` and /use_repeated_save returns ``pfeag_advantage_applied: True``.
+
+### Changed
+- ``app/routes/tabletop_routes.py::respond`` — extended the caster-type capture to look up the NPC caster combatant via ``ctx["caster_combatant_id"]`` when no PC caster matches.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.98.2 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — one logic edit + one test. No new endpoint, no new field on any catalog.
+- **Why this matters.** PFE&G is one of the few RAW save-advantage hooks in 5e and the existing v2.97.50 wiring works against PC casters (Lyra-as-fiend via the test override). NPC casters were the missing half of the symmetry — the system tracked the install but couldn't reason about the caster's type at save time.
+- **Reuses the v2.97.80 plumbing.** The NPC caster's combatant id was already threaded into ``_save_request_context`` for the v2.98.0 concentration anchor install. v2.98.2 reads the same field to also drive the creature-type lookup. No new context field needed.
+- Total harness count: 656 (was 655 in v2.98.1).
+
+---
+
 ## [2.98.1] - 2026-05-30 — "Two Tower Spells"
 
 **Schema version:** 64
