@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.63] - 2026-05-30 — "Shake the Sleeper"
+
+**Schema version:** 64
+**Commit summary:** **Wake-a-sleeper endpoint** — companion to v2.49.61's wake-on-damage hook. RAW Sleep (PHB p.276): "the affected creature continues to sleep until the spell ends, the sleeper takes damage, or someone uses an action to shake or slap the sleeper awake." v2.49.61 covered the damage path; v2.97.63 ships the third path: an ally uses an action to wake a sleeping target. New ``POST /api/campaign/{cid}/wake_sleeper`` validates the waker's action availability + the target's Sleep-sourced Unconscious / asleep buff, drops the buff (PC path via ``_remove_buff``, NPC path via combatant-keyed buff_update), flips the waker's action chip via ``_mark_battle_economy``, and broadcasts ``feature_used(source=sleep-woken-by-action)``.
+**Description:** One new endpoint in ``app/routes/tabletop_routes.py`` between ``/use_bardic_inspiration_die`` and ``/use_repeated_save`` (around line 14760). Body: ``{character_id, target_combatant_id, target_character_id?}``. Looks up the target in the active battle, walks its buff list for any ``unconscious`` / ``asleep`` buff sourced by ``source_spell == "Sleep"`` (matching the v2.49.61 gate exactly), drops via ``_remove_buff`` for PCs or in-state mutation + broadcast for NPCs, marks the waker's action used, broadcasts a single feature_used event naming both the waker and the sleeper. Same Phase 4 over-budget gate semantics as Lay on Hands / Cure Wounds.
+
+### Added
+- ``POST /api/campaign/{cid}/wake_sleeper`` endpoint in ``app/routes/tabletop_routes.py``.
+- ``tests/harness/test_wake_sleeper.py`` — three tests: (a) happy path: Garrik wakes a sleep-flagged Pip; asserts buff removed + feature_used broadcast fires + Garrik's action flips used; (b) 409 ``no_sleep_buff`` when the target isn't asleep; (c) 409 ``over_budget`` when Garrik's action already used and override not set.
+
+### Changed
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.63 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 640 → 643, version stamp v2.97.62 → v2.97.63.
+
+### Notes
+- **PATCH bump** — one new endpoint + three harness tests.
+- **Closes the Sleep RAW trio.** v2.97.63 + v2.49.61 (wake-on-damage) + Sleep's own spell-end clock (concentration / duration) cover all three RAW wake conditions: damage, action, time. Sleep is now fully RAW-active.
+- **Scope: Sleep specifically.** The endpoint matches on ``source_spell == "Sleep"`` exactly, same gate as v2.49.61. A future Power Word Knockout / Phantasmal Killer / etc. unconscious source that should also be wakeable by shaking would need its own gate (or a generalized ``effects.wakeable_by_action`` marker). Filing this as a follow-up — RAW behavior of those other sources is different enough that they shouldn't share the helper without thought.
+- **Action cost is non-negotiable RAW.** The waker uses their action. The Phase 4 over-budget gate applies; override semantics match the rest of the action-economy endpoints.
+- **NPC waker support.** The endpoint validates ``char_id`` so the waker is a PC. RAW: a goblin could wake another goblin, but the demo doesn't model NPC action-economy this way. NPC-on-NPC wake is filed.
+- **NPC target support is full.** The target can be either a PC or an NPC (the buff list lives on the combatant either way). The PC path routes through ``_remove_buff`` (broadcast + paired-cleanup); the NPC path mutates the combatant directly and broadcasts ``buff_update`` keyed on ``combatant_id``.
+- **Companion to v2.97.62.** Both commits close out the "ongoing-effect ends" surface: v2.97.62 ends repeated-save effects at end of turn, v2.97.63 ends Sleep via an action. Future content (Charm Person damage retrigger, Confusion end-of-turn) can layer on the same install-time marker pattern.
+- Total harness count: 643 (was 640 in v2.97.62) — three new wake-sleeper tests.
+
+---
+
 ## [2.97.62] - 2026-05-30 — "The Bell Rings Itself"
 
 **Schema version:** 64

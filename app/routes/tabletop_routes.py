@@ -14972,6 +14972,168 @@ async def use_repeated_save(
     }
 
 
+# ----------- API: wake a sleeper (v2.97.63) -----------
+
+
+@router.post("/api/campaign/{campaign_id}/wake_sleeper")
+async def wake_sleeper(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.97.63 — companion to v2.49.61's wake-on-damage hook. RAW
+    (Sleep, PHB p.276): "the affected creature continues to sleep
+    until the spell ends, the sleeper takes damage, or someone uses
+    an action to shake or slap the sleeper awake." This endpoint
+    covers the third path: a waker uses their action to wake a
+    sleeper.
+
+    Body: ``{character_id, target_combatant_id, target_character_id?}``.
+    The waker (``character_id``) must own an action; the target must
+    carry an Unconscious / asleep buff whose ``source_spell`` is
+    ``"Sleep"`` (matches the wake-on-damage gate). Drops the buff
+    via ``_remove_buff`` (PC path) or combatant-keyed removal (NPC
+    path), broadcasts ``feature_used(source=sleep-woken-by-action)``,
+    and flips the waker's action chip via ``_mark_battle_economy``.
+
+    Errors:
+    - 400 character_id / target missing
+    - 403 not your character / not a campaign member
+    - 404 waker or target not found
+    - 409 ``no_sleep_buff`` — target doesn't carry a Sleep-sourced
+      unconscious buff (already awake, never slept, or asleep from
+      a different source like Power Word Knockout)
+    - 409 ``over_budget`` — waker has no action slot available and
+      override not set
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+    target_character_id_in = body.get("target_character_id")
+    if target_character_id_in is not None:
+        try:
+            target_character_id_in = int(target_character_id_in)
+        except (TypeError, ValueError):
+            target_character_id_in = None
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id and not target_character_id_in:
+        raise HTTPException(400, "target_combatant_id or target_character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Waker character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    # Phase 4 over-budget gate on the action slot. Same shape as
+    # the Lay on Hands / Cure Wounds / Use Feature pattern.
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    override = bool(body.get("override")) and not strict
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    if was_used and not user_is_gm and not override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "wake-sleeper",
+            "label": "Wake sleeper",
+            "strict": strict,
+        })
+
+    # Look up the target in the active battle.
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    target = None
+    for c in state.get("combatants") or []:
+        if target_combatant_id and c.get("id") == target_combatant_id:
+            target = c
+            break
+        if (
+            target_character_id_in
+            and c.get("char_id") == target_character_id_in
+            and not target_combatant_id
+        ):
+            target = c
+            break
+    if target is None:
+        raise HTTPException(404, "Target combatant not found")
+
+    # Validate the target carries a Sleep-sourced unconscious / asleep buff.
+    buffs = list(target.get("buffs") or [])
+    sleep_keys = [
+        b.get("key") for b in buffs
+        if (b or {}).get("key") in ("unconscious", "asleep")
+        and (b or {}).get("source_spell") == "Sleep"
+    ]
+    if not sleep_keys:
+        return JSONResponse(status_code=409, content={
+            "error": "no_sleep_buff",
+            "label": "Target isn't asleep from a Sleep spell",
+        })
+
+    target_char_id = target.get("char_id")
+    target_name = target.get("name") or ""
+    if target_char_id:
+        for key in sleep_keys:
+            await _remove_buff(campaign_id, int(target_char_id), key)
+        _mirror_buffs_to_sheet(
+            db, int(target_char_id),
+            _get_buffs(campaign_id, int(target_char_id)),
+        )
+    else:
+        # NPC path: remove from the combatant's buff list directly.
+        target["buffs"] = [
+            b for b in buffs
+            if not (
+                (b or {}).get("key") in ("unconscious", "asleep")
+                and (b or {}).get("source_spell") == "Sleep"
+            )
+        ]
+        hub.set_battle(campaign_id, state)
+        await hub.broadcast(campaign_id, {
+            "type": "buff_update",
+            "data": {
+                "combatant_id": target.get("id"),
+                "buffs": target["buffs"],
+            },
+        })
+
+    # Flip the waker's action chip.
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "source": "sleep-woken-by-action",
+            "char_name": char.name,
+            "target_name": target_name,
+            "target_combatant_id": target.get("id"),
+            "label": f"🌅 {char.name} woke {target_name}",
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "waker_char_name": char.name,
+        "target_name": target_name,
+        "target_combatant_id": target.get("id"),
+        "buffs_removed": sleep_keys,
+        "over_budget": was_used,
+    }
+
+
 # ----------- API: Cutting Words (Lore Bard Lv 3) -----------
 
 # v2.67.0 Phase 1 — Reactions automation foundation.
