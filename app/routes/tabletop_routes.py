@@ -27731,6 +27731,14 @@ async def use_npc_cast_spell(
     auto_save_damage_breakdown = ""
     auto_save_prompted = False
     auto_save_prompt_id = 0
+    # v2.98.5 — NPC-target condition-install plumbing. The v2.98.5
+    # NPC caster → NPC target save-or-suck branch (below) sets these
+    # on a successful install so the spell_cast payload + the chat
+    # card render the condition chip on the cast card.
+    auto_save_buff_key = ""
+    auto_save_buff_name = ""
+    auto_save_buff_icon = ""
+    auto_save_buff_duration = 0
     if (
         is_save
         and target_combatant
@@ -27858,6 +27866,81 @@ async def use_npc_cast_spell(
                         "dc": save_dc,
                     },
                 })
+
+        # v2.98.5 — NPC caster → NPC target save-or-suck install path.
+        # Mirror of the PC-caster → NPC-target block in /cast_spell at
+        # line ~12895. When the spell has a ``_SPELL_CONDITION_MAP``
+        # entry + the target failed the save, install the matching
+        # condition buff on the target NPC via ``_install_buff_on_combatant_id``;
+        # if the catalog entry carries ``concentration: True``, also
+        # install a caster-side ``concentration-<spell>`` anchor on
+        # the NPC caster combatant (matches the v2.97.80 NPC anchor
+        # plumbing that /respond's PC-target path uses). The v2.97.60
+        # repeated-save stamps + the v2.97.65 ``save_on_damage`` marker
+        # are stamped on the target buff so the v2.97.69 end-of-turn
+        # auto-fire + v2.97.66 damage-trigger save both work for this
+        # path too.
+        if (
+            spell_slug
+            and not damage_expr_raw
+            and auto_save_target_kind == "npc"
+            and auto_save_passed is False
+            and target_combatant
+        ):
+            cond = _SPELL_CONDITION_MAP.get(spell_slug)
+            if cond:
+                # Capture the NPC caster's creature type for PFE&G
+                # plumbing — same pattern as v2.98.2 /respond install.
+                _caster_cb_for_npc = caster
+                _caster_type_for_npc = _attacker_creature_type(
+                    db, None, _caster_cb_for_npc,
+                )
+                target_buff = {
+                    "key": cond["key"],
+                    "name": cond["name"],
+                    "icon": cond.get("icon", "💫"),
+                    # NPC caster — no source_char_id; use combatant id.
+                    "source_combatant_id": combatant_id,
+                    "source_char_name": caster_name,
+                    "source_spell": spell_name,
+                    "duration_rounds": int(cond.get("duration_rounds", 10)),
+                    "duration_max": int(cond.get("duration_rounds", 10)),
+                    # v2.97.67 — target-side condition buff carries
+                    # concentration: False; the caster's anchor below
+                    # handles the concentration semantics.
+                    "concentration": False,
+                    "effects": list(cond.get("effects", [])),
+                    "repeated_save_ability": save_ability,
+                    "repeated_save_dc": int(save_dc),
+                    "source_caster_creature_type": _caster_type_for_npc or "",
+                    "save_on_damage": bool(cond.get("save_on_damage")),
+                }
+                installed = await _install_buff_on_combatant_id(
+                    campaign_id, target_combatant.get("id"), target_buff,
+                )
+                if installed:
+                    auto_save_buff_key = cond["key"]
+                    auto_save_buff_name = cond["name"]
+                    auto_save_buff_icon = cond.get("icon", "💫")
+                    auto_save_buff_duration = int(cond.get("duration_rounds", 10))
+                    # NPC caster concentration anchor (mirror of the
+                    # /respond PC-target NPC-caster path at v2.97.80).
+                    if bool(cond.get("concentration")):
+                        npc_caster_buff = {
+                            "key": f"concentration-{spell_slug}",
+                            "name": f"Concentrating: {spell_name}",
+                            "icon": "🌀",
+                            "source_combatant_id": combatant_id,
+                            "source_char_name": caster_name,
+                            "source_spell": spell_name,
+                            "duration_rounds": int(cond.get("duration_rounds", 10)),
+                            "duration_max": int(cond.get("duration_rounds", 10)),
+                            "concentration": True,
+                            "effects": [f"Concentrating on {spell_name}"],
+                        }
+                        await _install_buff_on_combatant_id(
+                            campaign_id, combatant_id, npc_caster_buff,
+                        )
 
         # Save-for-half damage application on NPC targets when auto_apply
         # is on. Sacred Flame is "no effect on save" not "half" — that's
@@ -28036,6 +28119,13 @@ async def use_npc_cast_spell(
         "auto_save_damage_breakdown": auto_save_damage_breakdown,
         "auto_save_prompted": auto_save_prompted,
         "auto_save_prompt_id": auto_save_prompt_id,
+        # v2.98.5 — NPC-target condition install (Hold Person at
+        # bandit, Fear at NPC, etc.). Empty when no condition
+        # installed.
+        "auto_save_buff_key": auto_save_buff_key,
+        "auto_save_buff_name": auto_save_buff_name,
+        "auto_save_buff_icon": auto_save_buff_icon,
+        "auto_save_buff_duration": auto_save_buff_duration,
         # v2.49.219: save-result correlation label. The PC-target path
         # creates a RollRequest with this label; the player's response
         # produces a roll with note prefixed `→ {label}` which

@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.98.5] - 2026-05-30 — "The Hostile Spell on a Hostile Mind"
+
+**Schema version:** 64
+**Commit summary:** **``/npc_cast_spell`` now installs save-or-suck conditions on NPC targets.** Pre-v2.98.5, the endpoint already installed conditions on PC targets via the v2.97.75 ``_save_request_context`` stash + the /respond hook, but completely skipped NPC targets: an Archmage casting Hold Person at a bandit rolled the save server-side, reported pass/fail on the chat card, and… did nothing. v2.98.5 ports the v2.38.0 PC-caster → NPC-target inline-install block from /cast_spell over to /npc_cast_spell so the same catalog lookup + condition install + v2.97.80 NPC concentration anchor fire for NPC casters targeting NPCs. Closes the last v2.97.75-filed gap.
+**Description:** Two edits in ``app/routes/tabletop_routes.py``. **(1)** Initialize the four ``auto_save_buff_*`` payload variables at the top of /npc_cast_spell so the new block can populate them. **(2)** Add a new install block after the NPC-target save resolution: when ``spell_slug`` is set, no damage is rolled, the target is an NPC, and the save failed, look up the catalog entry, install the target buff with the v2.97.71 catalog shape + v2.97.60 repeated-save stamps + v2.97.97 (sic — v2.97.67) ``concentration: False`` + v2.97.80 ``source_combatant_id`` pointing at the NPC caster. When the catalog entry has ``concentration: True``, install a ``concentration-<spell>`` anchor on the NPC caster combatant via ``_install_buff_on_combatant_id``. Surface the four ``auto_save_buff_*`` fields on the chat card payload so the cast card renders the condition chip.
+
+### Added
+- NPC caster → NPC target inline condition install in ``/npc_cast_spell``.
+- ``auto_save_buff_key`` / ``auto_save_buff_name`` / ``auto_save_buff_icon`` / ``auto_save_buff_duration`` fields on /npc_cast_spell's chat card payload.
+- ``tests/harness/test_npc_cast_npc_target_install.py::test_npc_cast_npc_target_installs_paralyzed`` — Archmage casts Hold Person at a bandit; loop until WIS save fails; assert Paralyzed lands on the bandit with v2.97.71/60/80 stamps and the Archmage carries the v2.97.80 anchor.
+
+### Changed
+- ``app/routes/tabletop_routes.py::use_npc_cast_spell`` — adds the v2.98.5 install block + payload field surfacing.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.98.5 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — new install path on an existing endpoint, no schema change. Per CLAUDE.md "MINOR — new backward-compatible feature" is a judgment call; this is closer to "finishing the v2.97.75 wiring" so PATCH fits the spirit better.
+- **Save-or-suck only.** The block gates on ``not damage_expr_raw`` so damage-rolling save spells (Fireball, Cone of Cold, etc.) don't accidentally install conditions on NPCs that the catalog might have. Pure save-or-suck (Hold Person, Fear, Confusion, Banishment, Suggestion, Bane) are the conditions in the catalog today.
+- **Reuses the v2.97.80 NPC concentration plumbing.** The anchor install uses the same ``source_combatant_id`` keying, so the v2.98.0 damage-triggered concentration save + ``_drop_paired_concentration_buffs_npc`` paired cleanup both work end-to-end for NPC → NPC casts. An Archmage holds a bandit; the bandit's ally hits the Archmage; the Archmage rolls CON; on a fail, the bandit's Paralyzed drops via the v2.98.0 cleanup helper.
+- **PFE&G NPC creature_type capture (v2.98.2) carries through.** The target buff's ``source_caster_creature_type`` field is populated via the v2.97.48 ``_attacker_creature_type`` helper reading the NPC caster's template — so an NPC fiend installing Frightened on another NPC stamps the type correctly. A PC casting PFE&G on the target NPC could… well, target an NPC, which the existing helpers don't currently support, but that's a future-content question, not a wiring question.
+- Total harness count: 657 (was 656 in v2.98.4).
+
+---
+
 ## [2.98.4] - 2026-05-30 — "The Vigil Stops Shielding"
 
 **Schema version:** 64
