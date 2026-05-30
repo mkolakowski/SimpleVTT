@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.71] - 2026-05-30 — "Two More to the Bell"
+
+**Schema version:** 64
+**Commit summary:** **Add Confusion + Banishment catalog entries to `_SPELL_CONDITION_MAP`.** Confusion (Wis save, L4, Bard/Druid/Sorcerer/Wizard) installs the new "confused" condition with RAW end-of-turn Wis save — and automatically picks up the v2.97.62/69 PUT /battle end-of-turn auto-fire via the v2.97.60 install stamps + v2.97.70 shared helper. No code change required for the mechanic. Banishment (Cha save, L4, Cleric/Paladin/Sorcerer/Warlock/Wizard) installs the new "banished" condition; RAW does NOT grant an end-of-turn save (concentration / duration is the only spell-end path), so this entry is plain catalog content that won't pick up the auto-fire. Demonstrates the v2.97.70 helper composing cleanly with new content — adding a save-or-suck spell with end-of-turn behavior is now a one-catalog-entry change.
+**Description:** Two catalog edits in ``app/routes/tabletop_routes.py::_SPELL_CONDITION_MAP``: ``"confusion"`` → ``"confused"`` (concentration, 10 rounds, end-of-turn save auto via v2.97.62/69+70 plumbing) and ``"banishment"`` → ``"banished"`` (concentration, 10 rounds, no repeated save). Both entries documented with RAW quotes + integration notes.
+
+### Added
+- ``"confusion"`` entry in ``_SPELL_CONDITION_MAP`` — Wis save, installs Confused condition with end-of-turn auto-fire.
+- ``"banishment"`` entry in ``_SPELL_CONDITION_MAP`` — Cha save, installs Banished condition (no end-of-turn save, concentration handles spell-end).
+- ``tests/harness/test_spell_condition_catalog_confusion_banishment.py::test_confusion_installs_confused_with_repeated_save_stamps`` — simulates an install via PUT /battle with the v2.97.60 stamps; advances the turn; asserts the 🔁 End-of-turn save broadcast fires for Confused.
+- ``tests/harness/test_spell_condition_catalog_confusion_banishment.py::test_banishment_catalog_has_no_repeated_save_stamps`` — verifies the Banished install via PUT /battle stays put through a turn advance (no end-of-turn save broadcast).
+
+### Changed
+- ``app/routes/tabletop_routes.py::_SPELL_CONDITION_MAP`` — adds two new entries (confusion, banishment) with documented RAW notes.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.71 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 646 → 648, version stamp v2.97.69 → v2.97.71.
+
+### Notes
+- **PATCH bump** — two catalog rows + two harness tests. No new helpers, no new endpoints.
+- **The v2.97.70 helper's first test.** Adding Confusion immediately picks up the end-of-turn auto-fire infrastructure via the shared helper — proves the design.
+- **Banishment's no-end-of-turn case** is intentional. The catalog entry doesn't carry the v2.97.60 ``repeated_save_ability`` / ``repeated_save_dc`` stamps (because no /respond install path runs without the cast context). Future ``/cast_spell`` would install Banished without those fields by default; the v2.97.62/69 auto-fire skips buffs without the stamps. So Banishment doesn't break the auto-fire pattern — it just doesn't participate in it.
+- **No demo character has Confusion or Banishment.** Neither test relies on a real cast; both directly seed the condition buff via PUT /battle with appropriate stamps (or without, for Banishment). This is the same pattern as the v2.97.63 wake-sleeper test which bypassed /cast_sleep's HP gate.
+- **Spell list extension still filed.** Future work: add Confusion to Thalindra's wizard spell list (Lv 7 wizard has L4 slots, so it would be castable) so a player can actually trigger the condition through a /cast_spell call. Banishment same — add to Caelan (Paladin)'s spell list.
+- Total harness count: 648 (was 646 in v2.97.69) — two new catalog tests.
+
+---
+
 ## [2.97.70] - 2026-05-30 — "One Bell to Ring Them All"
 
 **Schema version:** 64

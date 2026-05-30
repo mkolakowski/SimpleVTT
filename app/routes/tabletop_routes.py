@@ -811,6 +811,52 @@ _SPELL_CONDITION_MAP = {
         # save-or-end resolution.
         "save_on_damage": True,
     },
+    # v2.97.71 — Confusion (Bard / Druid / Sorcerer / Wizard L4).
+    # AoE 10-foot-radius sphere, 90 ft range, WIS save vs spell DC,
+    # concentration up to 1 minute. RAW (PHB p.224): "An affected
+    # target can't take reactions and must roll a d10 at the start
+    # of each of its turns to determine its behavior for that turn.
+    # At the end of each of its turns, an affected target can make
+    # a Wisdom saving throw. If it succeeds, this effect ends for
+    # that target." The end-of-turn save rides the v2.97.62 /
+    # v2.97.69 PUT /battle auto-fire (PC + NPC) via the v2.97.60
+    # install stamps; the v2.97.70 shared helper handles the
+    # resolution. No save_on_damage marker — damage doesn't
+    # retrigger Confusion saves RAW.
+    "confusion": {
+        "key": "confused",
+        "name": "Confused",
+        "icon": "🌀",
+        "duration_rounds": 10,
+        "concentration": True,
+        "effects": [
+            "can't take reactions",
+            "d10 at start of turn for random behavior",
+            "save again at end of each turn (auto-fires)",
+        ],
+    },
+    # v2.97.71 — Banishment (Cleric / Paladin / Sorcerer / Warlock
+    # / Wizard L4). Single target, 60 ft range, CHA save vs spell
+    # DC, concentration up to 1 minute. RAW (PHB p.217): the target
+    # is "incapacitated" on the harmless demiplane (if same plane)
+    # or returns home (different plane). RAW does NOT grant an
+    # end-of-turn save — once banished, the target stays banished
+    # until the spell ends or concentration breaks. We model the
+    # condition install without the v2.97.60 repeated_save fields
+    # so the v2.97.62 / v2.97.69 PUT /battle auto-fire skips it.
+    # Concentration cleanup still handles the spell-end correctly.
+    "banishment": {
+        "key": "banished",
+        "name": "Banished",
+        "icon": "👻",
+        "duration_rounds": 10,
+        "concentration": True,
+        "effects": [
+            "incapacitated on a harmless demiplane",
+            "returns when spell ends or concentration breaks",
+            "no end-of-turn save RAW",
+        ],
+    },
     # v2.49.55: Monk Stunning Strike (class feature). Used by the
     # /use_stunning_strike endpoint via the same save-or-suck pipeline
     # as Hold Person etc. The Stunned condition is NOT a concentration
