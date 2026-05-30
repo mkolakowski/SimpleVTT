@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.50] - 2026-05-29 — "Tools for the Vigil"
+
+**Schema version:** 64
+**Commit summary:** **PFE&G save-advantage helper landed (wiring filed).** Adds the `_saver_pfeag_save_advantage` helper that returns True when a saver carries PFE&G AND the source caster's creature type is in the protected list AND the cond_key is charmed or frightened. Future ongoing-effect save flows (when that path is modeled — RAW PFE&G's advantage applies to "any new saving throw against the relevant effect" once a target is already affected by a charm/fright/possess from a protected type) will be able to consume this helper at their save-roll construction site without touching condition resolution. Today's install-time save advantage WIRING is filed: it would compose strangely with the v2.97.49 immunity gate (gate fires after the save fails, so install-time save advantage on the protected install path has no observable difference), and our codebase doesn't have a distinct ongoing-save flow yet for the RAW-correct trigger.
+**Description:** One edit in `app/routes/tabletop_routes.py`: new `_saver_pfeag_save_advantage(campaign_id, saver_char_id, source_caster_creature_type, cond_key)` helper near `_pc_has_pfeag_against_type`. Delegates to the existing v2.97.49 `_pc_has_pfeag_against_type` for the actual PFE&G + protected-type check; just adds the cond_key gate (charmed/frightened only) for narrower scoping. A comment in `/cast_spell`'s PC save-prompt site documents WHY the install-time wiring isn't applied: with the v2.97.49 immunity gate in place, install-time save advantage is a no-op for the only RAW-relevant install conditions (charmed/frightened from protected types). Filing the wiring rather than landing it dead-on-arrival keeps the code path clean and the helper available.
+
+### Added
+- `_saver_pfeag_save_advantage` helper in `app/routes/tabletop_routes.py`.
+- Inline comment in `/cast_spell`'s PC save-prompt site documenting the WIRING-FILED status and the future ongoing-save flow that would consume the helper.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.50 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — helper-only addition. No new code paths fire today.
+- **Why the wiring is filed, not landed.** Investigation found that wiring `_saver_pfeag_save_advantage` at /cast_spell's PC save-prompt construction site (alongside the v2.97.35 Bless/Bane suffix + v2.97.43 countercharm flip) interacted poorly with the v2.97.49 immunity gate in /respond. Save advantage flips to 2d20kh1 → save passes more often → fewer install attempts → fewer gate fires → harder to confirm the gate's behavior in sweep order. RAW PFE&G's save advantage is specifically for NEW saves AFTER the target is already affected ("any new saving throw against the relevant effect") — which would be a future repeated-save flow (e.g. Hold Person end-of-turn save against ongoing Paralyzed). Our codebase doesn't have that flow yet; landing the helper without wiring keeps the API ready for it.
+- **Filed for follow-up:** wire `_saver_pfeag_save_advantage` into the ongoing-effect save flow when that gets modeled (likely paired with end-of-turn / start-of-turn save infrastructure that also enables the v2.97.44-filed Heroism per-turn temp HP recurrence).
+- **Concludes the PFE&G mechanical-hook trio.** v2.97.48 shipped attacker-disadvantage (concrete wiring + test), v2.97.49 shipped type-aware condition immunity (concrete wiring + test), v2.97.50 ships the save-advantage helper (filed wiring). 2/3 mechanically active, 1/3 ready for a future flow.
+- Total harness count: 629 (unchanged from v2.97.49) — no new tests.
+
+---
+
 ## [2.97.49] - 2026-05-29 — "Unbreakable Will"
 
 **Schema version:** 64

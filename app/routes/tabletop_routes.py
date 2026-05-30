@@ -12174,6 +12174,18 @@ async def cast_spell(
                     )
                     if _cc_applies and not _ds_base.startswith("2d20kh1"):
                         _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.97.50 — PFE&G type-aware save advantage helper
+                # ``_saver_pfeag_save_advantage`` exists for future
+                # wiring (e.g. ongoing-effect saves once that flow
+                # is modeled). Wiring at this install-time save site
+                # is FILED — currently superseded by the v2.97.49
+                # immunity gate which fires after the save fails,
+                # so install-time save advantage has no observable
+                # effect on the protected (charmed/frightened from
+                # protected type) install path. A future
+                # repeated-save flow (e.g. Hold Person end-of-turn
+                # save against ongoing Paralyzed) would use this
+                # helper at its construction site.
                 # v2.97.35 — Bless / Bane save-roll modifiers.
                 # Append +1d4 (bless) / -1d4 (baned) to the base
                 # expression so the player's /roll_request/respond
@@ -17830,6 +17842,41 @@ def _pc_has_heroism_frightened_immunity(
         if effects.get("condition_immunity_frightened") is True:
             return True
     return False
+
+
+def _saver_pfeag_save_advantage(
+    campaign_id: int,
+    saver_char_id: int | None,
+    source_caster_creature_type: str,
+    cond_key: str,
+) -> bool:
+    """v2.97.50 — closes the third and final v2.97.46-filed PFE&G
+    hook. Returns True when:
+    - the saver carries PFE&G AND
+    - the source caster's creature type is in the buff's
+      ``effects.pfeag_protected_types`` list AND
+    - the cond_key being resolved is one of the PFE&G-protected
+      install conditions (charmed / frightened — RAW also lists
+      possessed; not currently modeled).
+
+    The save-roll construction site flips the base_expression
+    from ``1d20`` to ``2d20kh1`` (advantage). RAW (PHB p.270): "If
+    the target is already charmed, frightened, or possessed by such
+    a creature, the target has advantage on any new saving throw
+    against the relevant effect." Our codebase doesn't have a
+    distinct "ongoing-save" flow yet; the broader read here applies
+    the advantage to the install-time save as well, which composes
+    safely with the v2.97.49 gate (gate fires AFTER the save fails,
+    so the advantage just makes the save more likely to succeed and
+    skip the install entirely).
+    """
+    if not saver_char_id or not source_caster_creature_type:
+        return False
+    if cond_key not in ("charmed", "frightened"):
+        return False
+    return _pc_has_pfeag_against_type(
+        campaign_id, int(saver_char_id), source_caster_creature_type,
+    )
 
 
 def _pc_has_pfeag_against_type(
