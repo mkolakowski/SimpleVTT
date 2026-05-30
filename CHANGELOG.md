@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.59] - 2026-05-29 — "Verse in the Right Slot"
+
+**Schema version:** 64
+**Commit summary:** **Fix v2.97.58 Heroism harness test — Lyra's Heroism is at spell_index 7, not 3.** The v2.97.58 test guessed Lyra's Heroism index as 3 based on a mistaken reading of the bard sheet. Actual order: Vicious Mockery=0, Mage Hand=1, Minor Illusion=2, Prestidigitation=3, Healing Word=4, Cure Wounds=5, Faerie Fire=6, Heroism=7. Test failed under sweep with "Heroism not installed; got []" because spell_index=3 was Prestidigitation (cantrip, no buff installed). Pure index correction — no production code change.
+**Description:** One edit in ``tests/harness/test_heroism_per_turn_temp_hp.py``: ``HEROISM_INDEX = 7`` (was 3). The v2.97.58 install-time stamp + turn-start recurrence hook are unchanged.
+
+### Changed
+- ``tests/harness/test_heroism_per_turn_temp_hp.py::test_heroism_recurs_on_turn_advance`` — spell_index corrected from 3 → 7.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.59 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — pure test fix. No production code change.
+- **Lesson noted, same as v2.97.54.** Future tests touching demo character spell lists should grep ``app/demo_seed.py`` for the actual spell name to find the index. The v2.97.54 fix was for a similar mistaken-Tavik issue with Sanctuary; v2.97.59 is the same shape for Lyra and Heroism.
+- Total harness count: 636 (unchanged from v2.97.58) — same test, now correctly wired.
+
+---
+
 ## [2.97.58] - 2026-05-29 — "The Daybreak Tally"
 
 **Schema version:** 64

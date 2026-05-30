@@ -102,7 +102,7 @@ async def test_heroism_recurs_on_turn_advance(gm_client, gm_ws, roster):
     # (per Lyra's bard sheet: Vicious Mockery=0, Mage Hand=1, etc.).
     # Use a more robust lookup by name via /cast_spell error path? No
     # — just hardcode the index, demo seed is the contract.
-    HEROISM_INDEX = 3
+    HEROISM_INDEX = 7
     cast = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
         json={
