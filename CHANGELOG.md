@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.78] - 2026-05-30 — "Take it All the Way Back"
+
+**Schema version:** 64
+**Commit summary:** **Fix v2.97.77 by adding ``"buff_drop_from_save"`` to the ``/undo_attack_damage`` no-op guard list.** v2.97.77 added the kind tag, the snapshot, the log entry, the surfacing, and the reverse branch — but missed that the early-exit no-op guard at the top of ``/undo_attack_damage`` only treats entries as "real work" if their kind is in a hardcoded allowlist (``buff_install`` / ``spell_slot_spend`` / ``resource_spend`` / etc.). The new ``buff_drop_from_save`` kind wasn't in the list, so when the only log entry under a cast_id was a v2.97.77 buff-drop snapshot, the endpoint returned ``{ok: True, no_op: True}`` and the reverse loop never ran. The harness ``test_passing_repeated_save_can_be_undone`` caught it on the first run against the live container.
+**Description:** One-line fix in ``app/routes/tabletop_routes.py`` adding ``e.get("kind") == "buff_drop_from_save"`` to the ``any()`` predicate. With this in place the v2.97.77 reverse branch actually fires and the Frightened buff snaps back onto the target.
+
+### Fixed
+- ``/undo_attack_damage`` no_op guard now recognizes ``buff_drop_from_save`` entries (v2.97.77 leftover).
+
+### Changed
+- ``app/routes/tabletop_routes.py::undo_attack_damage`` — guard list expanded by one entry.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.78 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — one-line fix that closes the v2.97.77 regression. No new logic.
+- **Test now passes.** ``tests/harness/test_undo_buff_drop_from_save.py::test_passing_repeated_save_can_be_undone`` round-trips Pip's Frightened buff drop + restore end-to-end.
+- Total harness count: 653 (unchanged from v2.97.77) — same test, now actually green.
+
+---
+
 ## [2.97.77] - 2026-05-30 — "Take it Back"
 
 **Schema version:** 64

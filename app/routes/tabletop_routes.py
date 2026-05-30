@@ -27917,6 +27917,7 @@ async def undo_attack_damage(
     if not any(
         int(e.get("applied") or 0) > 0
         or e.get("kind") == "buff_install"
+        or e.get("kind") == "buff_drop_from_save"
         or e.get("kind") == "spell_slot_spend"
         or e.get("kind") == "resource_spend"
         or e.get("kind") == "slot_restore"
