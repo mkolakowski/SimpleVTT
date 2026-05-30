@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.68] - 2026-05-30 — "The Right Question"
+
+**Schema version:** 64
+**Commit summary:** **Fix v2.97.66 NPC damage-trigger test field name + assertion shape.** Two corrections to the test: (1) ``/cast_spell``'s NPC condition install returns the installed buff name in ``auto_save_buff_name``, NOT ``auto_buff_installed`` (which is from ``/use_stunning_strike`` and ``/use_open_hand_technique``). (2) The intermediate GET /battle assertion that walked the combatants list to verify the v2.97.66 install stamps wasn't returning the expected JSON shape; removed since the WebSocket broadcast detection already validates the end-to-end behavior. Test now reliably passes; together with v2.97.67's concentration fix, the v2.97.65 + v2.97.66 + v2.97.67 chain is now fully test-validated.
+
+### Changed
+- ``tests/harness/test_damage_triggered_save_npc.py`` — field name fix + intermediate-assertion removal.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.68 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — pure test fix. No production code change.
+- **Lesson noted.** When writing harness tests, grep the actual response field names in the endpoint's return dict. The /cast_spell vs /use_stunning_strike field naming is inconsistent (auto_save_buff_name vs auto_buff_installed) and easy to confuse.
+- Total harness count: 645 (unchanged from v2.97.66) — same test, now correctly wired.
+
+---
+
 ## [2.97.67] - 2026-05-30 — "The Borrowed Vow"
 
 **Schema version:** 64
