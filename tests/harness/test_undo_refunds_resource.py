@@ -2051,6 +2051,142 @@ async def test_undo_cast_heroism_grants_temp_hp_and_reverses(
     )
 
 
+async def test_multi_target_aid_heals_and_buffs_all(gm_client, gm_ws, roster):
+    """v2.97.47 — multi-target coverage for Aid. Caelan casts Aid with
+    an AoE target_combatant_ids list of 3 PCs (Pip, Lyra, Krieger).
+    The v2.97.31 walker installs the buff on each, the v2.97.41 heal
+    +5 fires on each, and the v2.97.42 effective-max-HP extension
+    applies to each. Undo refunds the slot AND drops every buff +
+    every heal in one POST.
+
+    Closes the multi-target gap noted in v2.97.40's notes.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    pip = roster["Pip Quickfingers"]
+    lyra = roster["Lyra Sunstrider"]
+    krieger = roster["Krieger Stonefist"]
+    for c in (caelan, pip, lyra, krieger):
+        await _long_rest(gm_client, c["id"])
+
+    # Pre-wound each target so the +5 heal lands instead of capping
+    # at base max. Use a value comfortably below base max.
+    await _set_hp(gm_client, pip["id"], 20)
+    await _set_hp(gm_client, lyra["id"], 15)
+    await _set_hp(gm_client, krieger["id"], 25)
+
+    pip_tok = f"tok_aid3_pip_{pip['id']}"
+    lyra_tok = f"tok_aid3_lyra_{lyra['id']}"
+    krieger_tok = f"tok_aid3_krieger_{krieger['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_aid3_caelan_{caelan['id']}",
+                    "char_id": caelan["id"],
+                    "name": caelan["name"],
+                    "initiative": 14,
+                    "hp_current": 60, "hp_max": 60,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": pip_tok, "char_id": pip["id"], "name": pip["name"],
+                    "initiative": 12, "hp_current": 20, "hp_max": 47,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": lyra_tok, "char_id": lyra["id"], "name": lyra["name"],
+                    "initiative": 10, "hp_current": 15, "hp_max": 35,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": krieger_tok, "char_id": krieger["id"], "name": krieger["name"],
+                    "initiative": 8, "hp_current": 25, "hp_max": 55,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    gm_ws.mark()
+    AID_INDEX = 5
+    # AoE multi-target via target_combatant_ids list. The walker
+    # promotes the first id into target_combatant_id; the remaining
+    # ids ride through the AoE path.
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": AID_INDEX,
+            "slot_level": 2,
+            "class_slug": "paladin",
+            "target_combatant_ids": [pip_tok, lyra_tok, krieger_tok],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json()["id"]
+
+    # All three targets should now carry the Aid buff.
+    for tgt in (pip, lyra, krieger):
+        tgt_buffs = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tgt['id']}/buffs"
+        )).json().get("buffs", [])
+        assert any(
+            (b or {}).get("key") == "aid" for b in tgt_buffs
+        ), f"aid missing on {tgt['name']}; got {tgt_buffs}"
+
+    # The v2.97.41 install heal fires a character_hp_update per
+    # target. Collect them and verify a +5 delta for each.
+    import asyncio as _asy
+    await _asy.sleep(0.3)
+    hp_msgs = gm_ws.buffered("character_hp_update")
+    healed_char_ids = {
+        m["data"]["character_id"]
+        for m in hp_msgs
+        if m["data"].get("source") == "heal" and m["data"].get("delta") == 5
+    }
+    assert pip["id"] in healed_char_ids, (
+        f"Pip didn't receive Aid heal; healed={healed_char_ids}"
+    )
+    assert lyra["id"] in healed_char_ids
+    assert krieger["id"] in healed_char_ids
+
+    # Undo — should reverse 3x buff_install + 3x heal in one POST.
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+    # Three buff_install legs (one per target).
+    buff_install_count = sum(
+        1 for e in per_target if e.get("kind") == "buff_install"
+    )
+    assert buff_install_count == 3, (
+        f"expected 3 buff_install legs; got {buff_install_count}"
+    )
+
+    # And no aid buff on any target post-undo.
+    for tgt in (pip, lyra, krieger):
+        tgt_buffs = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tgt['id']}/buffs"
+        )).json().get("buffs", [])
+        assert not any(
+            (b or {}).get("key") == "aid" for b in tgt_buffs
+        ), f"aid still installed on {tgt['name']} post-undo: {tgt_buffs}"
+
+
 async def test_aid_extends_effective_max_hp(gm_client, gm_ws, roster):
     """v2.97.42 — Aid now extends the effective max-HP clamp via
     ``_buff_hp_max_bonus``. Closes the other half of the v2.97.40

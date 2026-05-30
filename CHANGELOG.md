@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.47] - 2026-05-29 — "Three Stout Hearts"
+
+**Schema version:** 64
+**Commit summary:** **Multi-target Aid harness coverage.** Closes the multi-target gap noted in the v2.97.40 "Stout Hearts" notes. Caelan casts Aid in one POST with `target_combatant_ids` set to three PC tokens (Pip, Lyra, Krieger pre-wounded to half HP). The v2.97.31 walker resolves each combatant_id → char_id, installs the `aid` buff on each, the v2.97.41 install heal +5 fires on each, and the v2.97.42 effective-max-HP extension applies per target. Undo refunds the L2 slot AND reverses every buff_install + every heal in one POST (3 buff_install legs in per_target, plus the heal-reverted legs). Pure test addition — no production code change.
+**Description:** One new test in `tests/harness/test_undo_refunds_resource.py`: `test_multi_target_aid_heals_and_buffs_all`. Sets up a 4-combatant battle (Caelan + 3 pre-wounded targets), casts Aid with the AoE list, asserts each target gets the buff + a `character_hp_update(source=heal, delta=5)` broadcast, undoes, asserts the per_target carries 3 buff_install legs and a spell_slot_refunded leg, and verifies no aid buffs remain on any target.
+
+### Added
+- `tests/harness/test_undo_refunds_resource.py::test_multi_target_aid_heals_and_buffs_all` — Caelan casts Aid on Pip + Lyra + Krieger in one POST; asserts all 3 get the buff + heal; undo reverses everything.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — added v2.97.47 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 626 → 627, version stamp v2.97.46 → v2.97.47.
+
+### Notes
+- **PATCH bump** — pure test addition. No code changes outside of doc + version files.
+- **Confirms v2.97.31 AoE walker, v2.97.41 install heal, and v2.97.42 effective-max-HP all play correctly with multi-target casts.** The walker promotes the first AoE id into target_combatant_id and loops the rest through the same install/log/heal block. Each target's buff snapshot is independent (separate buffs_before lists in the per-target buff_install entries); undo correctly walks them in reverse.
+- Total harness count: 627 (was 626 in v2.97.46) — one new multi-target round-trip test.
+
+---
+
 ## [2.97.46] - 2026-05-29 — "The Six Wards"
 
 **Schema version:** 64
