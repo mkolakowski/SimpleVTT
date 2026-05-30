@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.52] - 2026-05-29 — "The Inviolate Ward"
+
+**Schema version:** 64
+**Commit summary:** **Sanctuary attacker-Wis-save gate mechanical hook.** Closes the first of the two v2.97.45-filed Sanctuary mechanical halves. When an attacker uses ``/attack`` against a Sanctuary-warded target, the server rolls a Wis save for the attacker against the caster's original spell save DC (captured on the buff at install time as ``effects.dc``). On a failed save, the endpoint short-circuits before any d20 attack-roll construction: the action chip still flips RAW ("the creature loses the attack"), a roll-log entry surfaces the save, a ``feature_used(source=sanctuary)`` broadcast names the block, and the response returns ``sanctuary_blocked: True`` with ``hit: False`` + the save details. AoE bypass + the "ends on offense" trigger remain filed.
+**Description:** Three edits in ``app/routes/tabletop_routes.py``. **(1)** New ``_target_sanctuary_dc(campaign_id, target_combatant_id)`` helper walks the target combatant's buffs for the ``sanctuary`` key and returns the install-time ``effects.dc`` (0 when absent). **(2)** Install-time DC capture in the v2.97.31 walker — when the catalog key is ``sanctuary``, deep-copy ``effects`` and inject ``effects["dc"] = 8 + prof + spellcasting_mod`` (using ``_caster_spellcasting_mod``). **(3)** Pre-attack gate in ``/use_attack``: after the v2.97.48 PFE&G computation, call the helper; on non-zero DC, roll ``1d20 + attacker_wis_save_mod`` (via ``_resolve_stat_modifier``) and broadcast the result with a ``🕊️ Sanctuary · <attacker> Wis save vs DC <N>`` note. On fail, flip the action chip via ``_mark_battle_economy``, broadcast ``feature_used(source=sanctuary)``, and early-return.
+
+### Added
+- ``_target_sanctuary_dc`` helper in ``app/routes/tabletop_routes.py``.
+- Install-time DC injection on the Sanctuary buff in the v2.97.31 ``/cast_spell`` walker.
+- Sanctuary attacker-Wis-save gate in ``/use_attack`` (pre-atk_expr).
+- ``tests/harness/test_buff_attack_hooks.py::test_sanctuary_blocks_attack_on_failed_wis_save`` — Caelan casts Sanctuary on Pip; Krieger attacks Pip; loop to a failed Wis save; asserts ``sanctuary_blocked == True``, ``hit == False``, ``save_passed == False``, and ``save_dc > 0`` in the response.
+
+### Changed
+- ``app/routes/tabletop_routes.py::use_attack`` — adds the early-return Sanctuary gate.
+- ``app/routes/tabletop_routes.py::cast_spell`` (v2.97.31 walker) — adds the install-time DC capture branch.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.52 to the cross-reference list.
+- ``docs/test-harness-coverage.md`` — total count 630 → 631, version stamp v2.97.51 → v2.97.52.
+
+### Notes
+- **PATCH bump** — one helper + one install-time injection + one early-return gate.
+- **Closes one of two filed Sanctuary halves.** The second filed half — ``sanctuary_ends_on_offense`` (warded creature attacks or casts a harmful spell → buff drops) — is still pending. Same install-time marker (``effects.sanctuary_ends_on_offense``) drives it; a future commit walks the attacker's own buffs in ``/use_attack``/``/cast_spell`` for the marker and ends the buff via ``_install_buff_on_combatant_id`` with ``duration_rounds: 0`` (or via ``end_buff`` directly).
+- **RAW partial coverage.** v2.97.52 covers the "lose this attack" case. RAW also says "AS WELL AS any further attacks or harmful spells it directs at the target until the start of its next turn" — modeling that needs per-attacker per-target attack-suppression state, which is filed as a future enhancement. For now the v2.97.52 gate re-fires on every subsequent attack against the warded target, which is a strictly-more-favorable-to-the-defender approximation.
+- **AoE bypass** is implicit: ``/use_attack`` is single-target only. AoE attacks (``/cast_spell`` save-or-suck) don't carry a ``target_combatant_id`` in the same way, so the gate doesn't fire on them, matching RAW.
+- **Self-attack guard.** The gate skips when the attacker's combatant id equals the target's — a player attacking themselves (e.g. for unusual triggers) doesn't trip Sanctuary on their own buff.
+- **DC capture pattern generalizes.** Future buffs that need to remember their caster's DC at install time can lift the same shape: ``effects = dict(template.effects); effects["dc"] = 8 + prof + mod`` in the walker. The catalog stays declarative; the per-cast state lives on the installed buff.
+- Total harness count: 631 (was 630 in v2.97.51) — one new Sanctuary attacker-save round-trip test.
+
+---
+
 ## [2.97.51] - 2026-05-29 — "Open Hands, Open Books"
 
 **Schema version:** 64

@@ -12908,6 +12908,20 @@ async def cast_spell(
             )
             _bless_buff = dict(spell_buff_template)
             _bless_buff["source_char_id"] = char.id
+            # v2.97.52 — Sanctuary install-time spell save DC capture.
+            # The catalog effects dict gets a per-cast ``dc`` field so
+            # the v2.97.52 attacker Wis-save gate in /use_attack can
+            # resolve a fresh save against the original caster's DC
+            # without re-resolving the caster's stats at attack time.
+            # Deep-copy effects so the catalog dict isn't mutated across
+            # casts.
+            if spell_buff_template.get("key") == "sanctuary":
+                _sanc_prof = int((char.sheet or {}).get("proficiency_bonus") or 2)
+                _sanc_mod = _caster_spellcasting_mod(char.sheet or {})
+                _bless_buff["effects"] = dict(
+                    spell_buff_template.get("effects") or {}
+                )
+                _bless_buff["effects"]["dc"] = 8 + _sanc_prof + _sanc_mod
             _bless_buff_ok = await _install_buff(
                 campaign_id, _bless_tid, _bless_buff,
             )
@@ -17093,6 +17107,47 @@ def _target_pfeag_blocks_attacker_type(
                 return True
         return False
     return False
+
+
+def _target_sanctuary_dc(
+    campaign_id: int,
+    target_combatant_id: str | None,
+) -> int:
+    """v2.97.52 — closes the first of two v2.97.45-filed Sanctuary
+    mechanical halves. Returns the install-time spell save DC stamped
+    on the target's ``sanctuary`` buff via ``effects.dc``, or 0 when
+    the target has no Sanctuary buff (or the buff lacks a DC).
+
+    The DC is captured at install-time in /cast_spell's v2.97.31
+    walker (the catalog's effects dict gets a per-cast ``dc`` field
+    added before the buff is installed). At attack time /use_attack
+    calls this helper; non-zero return means the attacker must roll
+    a Wis save vs that DC before the attack lands. RAW (PHB p.272):
+    "any creature who targets the warded creature with an attack or
+    a harmful spell must first make a Wisdom saving throw."
+    """
+    if not target_combatant_id:
+        return 0
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return 0
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if b.get("key") != "sanctuary":
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            try:
+                return int(effects.get("dc") or 0)
+            except (TypeError, ValueError):
+                return 0
+        return 0
+    return 0
 
 
 def _attacker_has_bane(campaign_id: int, attacker_char_id: int) -> bool:
@@ -24971,6 +25026,77 @@ async def use_attack(
     target_pfeag_blocks_type = _target_pfeag_blocks_attacker_type(
         campaign_id, target_combatant_id, _attacker_type,
     )
+
+    # v2.97.52 — Sanctuary attacker-Wis-save gate. Closes the first of
+    # the v2.97.45-filed Sanctuary mechanical hooks. If the target
+    # carries Sanctuary, the attacker must make a Wis save vs the
+    # caster's spell DC (stamped on the buff at install time). On
+    # fail, the attack is lost: the action chip still flips RAW
+    # ("the creature loses the attack"), the roll is logged for
+    # transparency, a feature_used(source=sanctuary) broadcast names
+    # the block, and the endpoint returns early with
+    # ``sanctuary_blocked=True``. AoE bypasses (not modeled — single-
+    # target /use_attack only). Skipped on self-targeted attacks
+    # (rare; attacking yourself shouldn't fire the gate since RAW it's
+    # specifically "any creature who targets the warded creature").
+    _sanc_dc = _target_sanctuary_dc(campaign_id, target_combatant_id)
+    if (
+        _sanc_dc > 0
+        and target_combatant_id
+        and (_attacker_cb is None or _attacker_cb.get("id") != target_combatant_id)
+    ):
+        _wis_mod, _ = _resolve_stat_modifier(sheet, "dnd5e", "wis_save")
+        _wis_expr = f"1d20{_wis_mod:+d}"
+        try:
+            _wis_r = dice_mod.roll(_wis_expr)
+            _wis_rolled = int(_wis_r.total)
+            _wis_breakdown = _wis_r.breakdown
+        except dice_mod.DiceParseError:
+            _wis_rolled = 0
+            _wis_breakdown = ""
+        _wis_passed = _wis_rolled >= _sanc_dc
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": _wis_expr,
+                "total": _wis_rolled,
+                "breakdown": _wis_breakdown,
+                "note": (
+                    f"🕊️ Sanctuary · {char.name} Wis save "
+                    f"vs DC {_sanc_dc}"
+                ),
+                "user_name": char.name,
+                "char_name": char.name,
+                "visibility": Visibility.PUBLIC.value,
+                "dc": _sanc_dc,
+            },
+        })
+        if not _wis_passed:
+            # RAW: attack still costs the action. Flip the chip before
+            # the early return so the economy state matches a normal
+            # attack (UI shows action chip used, prevents the player
+            # from spamming retries against the warded target).
+            await _mark_battle_economy(campaign_id, char.id, "action")
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "source": "sanctuary",
+                    "char_name": char.name,
+                    "target_combatant_id": target_combatant_id,
+                    "save_dc": _sanc_dc,
+                    "save_rolled": _wis_rolled,
+                    "label": f"Sanctuary blocked {char.name}'s attack",
+                },
+            })
+            return {
+                "ok": True,
+                "hit": False,
+                "sanctuary_blocked": True,
+                "save_dc": _sanc_dc,
+                "save_rolled": _wis_rolled,
+                "save_passed": False,
+                "save_breakdown": _wis_breakdown,
+            }
 
     # v2.97.34 — buff-driven attack-roll modifiers. Sacred Weapon
     # (v2.97.29) adds +CHA mod, Bless (v2.97.31) adds +1d4, Bane

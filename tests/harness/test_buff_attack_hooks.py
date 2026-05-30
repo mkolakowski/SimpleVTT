@@ -825,3 +825,106 @@ async def test_oht_npc_save_picks_up_bless_suffix(
     assert "1d4[" in breakdown, (
         f"expected '1d4[' in OHT NPC save breakdown; got {breakdown!r}"
     )
+
+
+async def test_sanctuary_blocks_attack_on_failed_wis_save(
+    gm_client, roster,
+):
+    """v2.97.52 — Sanctuary attacker-Wis-save gate. Caelan casts
+    Sanctuary on Pip; Krieger attacks Pip; the v2.97.52 gate fires
+    a Wis save for Krieger against Caelan's spell DC (14: 8 + prof 3
+    + CHA mod 3). On a failed save, /attack returns early with
+    ``sanctuary_blocked: True`` and ``hit: False``. Krieger's Wis
+    save mod is 0 (Barbarian Wis 10), so save-fail probability per
+    iteration is ~65% — 20 iterations cumulative miss-rate << 0.1%.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    krieger = roster["Krieger Stonefist"]
+    pip = roster["Pip Quickfingers"]
+
+    await _long_rest(gm_client, caelan["id"])
+    await _long_rest(gm_client, krieger["id"])
+    await _long_rest(gm_client, pip["id"])
+
+    caelan_tok = f"tok_sanc_caelan_{caelan['id']}"
+    krieger_tok = f"tok_sanc_krieger_{krieger['id']}"
+    pip_tok = f"tok_sanc_pip_{pip['id']}"
+
+    blocked = False
+    for _ in range(20):
+        await _long_rest(gm_client, caelan["id"])
+        await _long_rest(gm_client, krieger["id"])
+        await _long_rest(gm_client, pip["id"])
+        # Aggressive cleanup so stale Sanctuary from prior iterations
+        # doesn't survive across rests.
+        for _stale_key in (
+            "sanctuary", "bless", "shield-of-faith", "aid", "heroism",
+            "protection-from-evil-and-good", "faerie-fired",
+        ):
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+                json={"character_id": pip["id"], "key": _stale_key},
+            )
+        await _seed_battle_with(gm_client, [
+            {"id": caelan["id"], "name": caelan["name"], "tok_id": caelan_tok, "hp_max": 60, "initiative": 14},
+            {"id": krieger["id"], "name": krieger["name"], "tok_id": krieger_tok, "hp_max": 55, "initiative": 12},
+            {"id": pip["id"], "name": pip["name"], "tok_id": pip_tok, "hp_max": 40, "initiative": 8},
+        ])
+        # Caelan casts Sanctuary on Pip (spell_index 4, L1).
+        sanc_cast = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": caelan["id"],
+                "spell_index": 4,
+                "slot_level": 1,
+                "class_slug": "paladin",
+                "target_character_id": pip["id"],
+                "target_combatant_id": pip_tok,
+                "target_name": pip["name"],
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert sanc_cast.status_code == 200, sanc_cast.text
+        # Sanity: Pip carries Sanctuary with effects.dc set.
+        pip_buffs = (await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+        )).json().get("buffs", [])
+        sanc_buff = next(
+            (b for b in pip_buffs if (b or {}).get("key") == "sanctuary"),
+            None,
+        )
+        assert sanc_buff is not None, (
+            f"Sanctuary not installed on Pip; got {pip_buffs}"
+        )
+        _eff = (sanc_buff or {}).get("effects") or {}
+        assert int(_eff.get("dc") or 0) > 0, (
+            f"Sanctuary buff missing effects.dc; got {sanc_buff}"
+        )
+
+        # Krieger attacks Pip. The Sanctuary gate fires.
+        atk = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": pip_tok,
+                "target_character_id": pip["id"],
+                "target_name": pip["name"],
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert atk.status_code == 200, atk.text
+        data = atk.json()
+        if data.get("sanctuary_blocked") is True:
+            assert data.get("hit") is False
+            assert int(data.get("save_dc") or 0) > 0
+            assert data.get("save_passed") is False
+            blocked = True
+            break
+
+    assert blocked, (
+        "no failed Wis save in 20 tries; couldn't confirm Sanctuary "
+        "attacker-save gate fired"
+    )
