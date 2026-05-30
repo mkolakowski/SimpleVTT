@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.79] - 2026-05-30 — "The Undo Pill Returns"
+
+**Schema version:** 64
+**Commit summary:** **Surface the v2.97.77/78 undo handle as a ↶ Undo pill on save-pass roll log cards.** v2.97.77 added the server-side cast_id + log entry + reverse branch; v2.97.78 closed the no-op guard gap so the round-trip actually worked. v2.97.79 wires the client: the three save-pass ``feature_used`` sources (``repeated-save-passed`` / ``repeated-save-passed-auto`` / ``damage-triggered-save-passed``) now join the existing ``_REFUNDABLE_FEATURE_SOURCES`` allowlist in ``tabletop.js``. When a save-pass card carries a non-empty ``cast_id``, the existing v2.96.0 ↶ Undo pill renderer + click handler fire — no new JS plumbing required, since the broadcast payload already matches the shape the existing click handler expects.
+**Description:** Three-string addition to the JavaScript allowlist set at ``app/static/tabletop.js:5445``. Same comment block extended in place so a future contributor sees the v2.97.77 motivation next to the v2.96.0 pattern. No HTML / CSS changes — the pill class (``chip-undo feature-cast-undo``) and the click-handler attachment (``.feature-cast-undo`` delegated handler) both already exist.
+
+### Added
+- Three new entries in ``_REFUNDABLE_FEATURE_SOURCES``:
+  - ``repeated-save-passed`` — manual /use_repeated_save success.
+  - ``repeated-save-passed-auto`` — end-of-turn auto-fire success (v2.97.62/69).
+  - ``damage-triggered-save-passed`` — damage-trigger save success (v2.97.65/66).
+
+### Changed
+- ``app/static/tabletop.js`` — allowlist set extended with v2.97.79 comment.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.97.79 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — three strings + a comment. No new mechanics, no new endpoints, no new tests.
+- **Why it's safe.** The broadcast payload (``{source, char_name, buff_key, label, cast_id}``) was already shipping from v2.97.77; the v2.97.77 click handler already lives on ``.feature-cast-undo`` and POSTs ``/undo_attack_damage`` with ``attack_id: data-cast-id``. Adding the source strings to the allowlist is the entire wiring delta.
+- **No new test.** The v2.97.77 harness test (``test_undo_buff_drop_from_save.py``) already exercises the full server round-trip; the JS allowlist edit is a UI-only addition that the existing tests don't cover, and per CLAUDE.md harness-discipline rule UI-only commits aren't required to land a server-contract test.
+- Total harness count: 653 (unchanged from v2.97.78).
+
+---
+
 ## [2.97.78] - 2026-05-30 — "Take it All the Way Back"
 
 **Schema version:** 64

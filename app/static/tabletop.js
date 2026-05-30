@@ -5467,6 +5467,15 @@
             'stunning-strike',
             'hunters-mark',
             'hex',
+            // v2.97.79 — save-pass condition-drop sources. The server
+            // stamps a buff_drop_from_save log entry under a fresh
+            // cast_id and ships it on these feature_used broadcasts so
+            // the GM can undo a save-pass that shouldn't have been
+            // allowed (wrong DC, wrong target, etc.). Hits the
+            // v2.97.77 reverse branch in /undo_attack_damage.
+            'repeated-save-passed',
+            'repeated-save-passed-auto',
+            'damage-triggered-save-passed',
         ]);
         if (d.cast_id && _REFUNDABLE_FEATURE_SOURCES.has(d.source)) {
             featurePills.push(
