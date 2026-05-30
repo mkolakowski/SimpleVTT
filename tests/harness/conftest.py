@@ -125,3 +125,66 @@ async def bob_ws(bob_client: httpx.AsyncClient) -> AsyncIterator[WSCollector]:
             yield collector
     finally:
         await ws.close()
+
+
+# v2.99.5 — session-level PC state reset fixture.
+#
+# Tests that depend on a PC starting from a known-clean state can
+# request ``clean_pcs`` to long-rest every demo PC + clear a known
+# set of persistent buff keys from each one. Use this when a prior
+# test's state leak (Frightened from Fear tests, Stunned from
+# Stunning Strike tests, etc.) would silently degrade the PC's
+# capability — most commonly to-hit penalties from Frightened /
+# Prone / Blinded, or auto-fail STR/DEX saves from Paralyzed.
+#
+# This is NOT ``autouse=True`` because it adds ~1s per test it runs
+# on (12 long_rest calls + 12×N end_buff no-ops). Tests that don't
+# need cross-suite state isolation skip it for speed; tests that DO
+# need it pay the cost.
+#
+# Filed as a follow-up: when the per-test cost is acceptable, flip
+# this to ``autouse=True`` and remove the per-test cleanup blocks
+# in test_use_repeated_save, test_pfeag_condition_immunity,
+# test_npc_concentration, test_aura_of_devotion, etc.
+
+# Persistent buff keys that commonly leak between tests + affect
+# attack rolls / saves / to-hit. Future content adds keys here when
+# it lands.
+_LEAKABLE_BUFF_KEYS = (
+    "frightened", "paralyzed", "stunned", "prone", "blinded",
+    "incapacitated", "unconscious", "asleep", "charmed",
+    "baned", "faerie-fired", "confused", "banished",
+    "heroism", "bless", "shield-of-faith", "sacred-weapon",
+    "bardic-inspiration-die", "protection-from-evil-and-good",
+    "rage", "metamagic-empowered-pending",
+    "concentration-hex", "concentration-hunters-mark",
+    "concentration-hold-person", "concentration-fear",
+    "concentration-bless", "concentration-bane",
+    "concentration-faerie-fire", "concentration-banishment",
+    "concentration-confusion", "concentration-suggestion",
+    "concentration-hideous-laughter",
+)
+
+
+@pytest_asyncio.fixture
+async def clean_pcs(
+    gm_client: httpx.AsyncClient, roster: dict[str, dict],
+) -> dict[str, dict]:
+    """v2.99.5 — long-rest every PC + clear all known persistent
+    buff keys. Used by suite-contention-sensitive tests as a per-
+    test reset gate. Returns the roster dict so callers can chain
+    ``roster = clean_pcs`` in their signature without an extra
+    fixture request.
+    """
+    for char in roster.values():
+        char_id = char["id"]
+        for key in _LEAKABLE_BUFF_KEYS:
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+                json={"character_id": char_id, "key": key},
+            )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/rest",
+            json={"type": "long"},
+        )
+    return roster

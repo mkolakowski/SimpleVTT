@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.5] - 2026-05-30 — "Wash the Roster"
+
+**Schema version:** 64
+**Commit summary:** **Add the ``clean_pcs`` opt-in fixture that long-rests every demo PC + clears a known-leakable buff key list, and wire it into the two suite-contention flakes (``test_npc_concentration`` + ``test_aura_of_devotion``).** Pre-v2.99.5, both tests passed in isolation but failed under full-suite runs because cumulative buff state leaked across tests — Pip ending up Frightened from a prior Fear test, or Krieger carrying a Rage anchor that influenced Lyra's Suggestion install. v2.99.5 adds a per-test reset fixture that walks every PC, ends each of 30+ commonly-leaky buff keys, and long-rests. Tests opt in by depending on ``clean_pcs`` in their signature (returning the same roster dict so callers can substitute it for the existing ``roster`` fixture without restructuring).
+**Description:** New fixture in ``tests/harness/conftest.py``. New module-level constant ``_LEAKABLE_BUFF_KEYS`` lists 30+ keys covering conditions (Frightened/Paralyzed/Stunned/Prone/Blinded/Charmed/Banished/Confused/etc.), positive buffs that affect rolls (Heroism / Bless / Sacred Weapon / Bardic Inspiration / Rage), and concentration anchors (concentration-hex / concentration-hold-person / …). Two test files updated to depend on ``clean_pcs`` instead of ``roster``.
+
+### Added
+- ``clean_pcs`` pytest fixture in ``tests/harness/conftest.py``.
+- ``_LEAKABLE_BUFF_KEYS`` constant in ``tests/harness/conftest.py``.
+
+### Changed
+- ``tests/harness/test_npc_concentration.py`` — depends on ``clean_pcs`` instead of ``roster``.
+- ``tests/harness/test_aura_of_devotion.py`` — depends on ``clean_pcs`` instead of ``roster``.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.99.5 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — test infrastructure addition. No code change.
+- **Why opt-in instead of autouse.** Running 12 long_rests + 30 end_buffs per PC adds ~1s per test. At 658 tests × 1s that's ~11 minutes per suite run. Tests that don't need cross-test state isolation skip the cost; tests that do need it pay it explicitly. Filed: when CI time is no longer the bottleneck, flip to ``autouse=True`` + audit/remove the per-test cleanup blocks that other tests carry today.
+- **Coverage growth path.** Future suite-contention failures opt in by adding ``clean_pcs`` to their signature. The fixture name + the comment block in conftest.py make the convention discoverable.
+- Total harness count: 658 (unchanged from v2.99.4).
+
+---
+
 ## [2.99.4] - 2026-05-30 — "Read the State Instead"
 
 **Schema function:** 64

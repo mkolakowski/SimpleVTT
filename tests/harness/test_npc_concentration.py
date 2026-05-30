@@ -46,8 +46,13 @@ def _find_combatant(battle_msg, combatant_id):
 
 
 async def test_npc_concentration_anchor_installs_and_breaks_on_damage(
-    gm_client, gm_ws, roster,
+    gm_client, gm_ws, clean_pcs,
 ):
+    # v2.99.5 — uses clean_pcs to long-rest every PC + clear all
+    # known leakable buff keys before the test. This is the
+    # session-level reset that supersedes the per-test cleanup at
+    # v2.99.2.
+    roster = clean_pcs
     caelan = roster["Sir Caelan Lightbringer"]
     pip = roster["Pip Quickfingers"]
 

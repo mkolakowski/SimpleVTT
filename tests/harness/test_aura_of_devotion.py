@@ -152,8 +152,12 @@ async def _cast_and_respond_for_save_outcome(
 
 
 async def test_aura_of_devotion_blocks_charmed_install(
-    gm_client, gm_ws, roster, lyra_rested,
+    gm_client, gm_ws, clean_pcs, lyra_rested,
 ):
+    # v2.99.5 — uses clean_pcs to long-rest every PC + clear
+    # leakable buff keys before the test. Closes suite-contention
+    # flake.
+    roster = clean_pcs
     """Caelan (Paladin Lv 7 Oath of Devotion) is in init. Lyra casts
     Suggestion at Krieger; loop until Krieger fails his Wis save →
     the Charmed buff is NOT installed AND a
