@@ -12724,6 +12724,22 @@ async def cast_spell(
                     )
                     if _cc_applies and not _ds_base.startswith("2d20kh1"):
                         _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.99.11 — (D) Phase 2 race-keyed save advantage.
+                # Fey Ancestry (Elf/Half-Elf) on saves vs charm
+                # install + Gnome Cunning (Rock/Forest Gnome) on
+                # INT/WIS/CHA saves from any spell. Same kh1 swap
+                # idiom; composes safely with Danger Sense / AoP /
+                # Countercharm / Indomitable above.
+                _race_applies, _race_slug, _race_trait_name = (
+                    _race_grants_save_advantage(
+                        tgt_char.sheet,
+                        save_ability=save_ability,
+                        spell_slug=spell_slug,
+                        is_spell_save=True,
+                    )
+                )
+                if _race_applies and not _ds_base.startswith("2d20kh1"):
+                    _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
                 # v2.97.50 — PFE&G type-aware save advantage helper
                 # ``_saver_pfeag_save_advantage`` exists for future
                 # wiring (e.g. ongoing-effect saves once that flow
@@ -12802,6 +12818,14 @@ async def cast_spell(
                         await _broadcast_countercharm(
                             campaign_id, _cc_bard, tgt_char,
                         )
+                # v2.99.11: race-keyed save advantage broadcast.
+                # Fires once per save when the saver's race trait
+                # (Fey Ancestry / Gnome Cunning) grants advantage.
+                if _race_applies:
+                    await _broadcast_race_save_advantage(
+                        campaign_id, tgt_char,
+                        _race_slug, _race_trait_name, save_ability,
+                    )
                 # v2.37.0 Phase T.3d: stash the cast context so the
                 # roll-response handler can install the matching
                 # condition buff if the PC fails. Slug + char_id +
@@ -13027,6 +13051,18 @@ async def cast_spell(
                     )
                     if _aoe_cc_applies and not _aoe_ds_base.startswith("2d20kh1"):
                         _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.99.11 — race-keyed save advantage on AoE saves.
+                # Same gate as the single-target site above.
+                _aoe_race_applies, _aoe_race_slug, _aoe_race_name = (
+                    _race_grants_save_advantage(
+                        extra_pc.sheet,
+                        save_ability=save_ability,
+                        spell_slug=spell_slug,
+                        is_spell_save=True,
+                    )
+                )
+                if _aoe_race_applies and not _aoe_ds_base.startswith("2d20kh1"):
+                    _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
                 _aoe_req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
@@ -13098,6 +13134,13 @@ async def cast_spell(
                         await _broadcast_countercharm(
                             campaign_id, _aoe_cc_bard, extra_pc,
                         )
+                # v2.99.11: race-keyed save advantage broadcast on
+                # AoE saves. Mirror of the single-target site above.
+                if _aoe_race_applies:
+                    await _broadcast_race_save_advantage(
+                        campaign_id, extra_pc,
+                        _aoe_race_slug, _aoe_race_name, save_ability,
+                    )
                 auto_save_targets.append({
                     "combatant_id": extra.get("id"),
                     "target_name": extra_name,
@@ -13854,6 +13897,11 @@ async def place_aoe(
     damage_expr = ctx.get("damage_expr") or ""
     damage_type = ctx.get("damage_type") or ""
     auto_apply_damage = bool(ctx.get("auto_apply_damage"))
+    # v2.99.11 — pull the spell slug from the pending cast context
+    # so the race-keyed save advantage gate's spell-condition lookup
+    # has the source spell to inspect. Empty string falls through
+    # to the gate's no-spell-slug branch (returns no-trait).
+    spell_slug = str(ctx.get("spell_slug") or "")
 
     auto_save_targets: list[dict] = []
     # v2.48.5 — track whether we auto-added any NPCs to the battle
@@ -13954,9 +14002,28 @@ async def place_aoe(
             _ds_pc_applies = _pc_has_danger_sense_on_dex_save(
                 extra_pc, save_ability,
             )
-            if _ds_pc_applies:
+            # v2.99.11 — (D) Phase 2 race-keyed save advantage at
+            # the /place_aoe PC server-rolled save site. Fey
+            # Ancestry (charm install) + Gnome Cunning (INT/WIS/CHA
+            # vs spell). Composes with Danger Sense via OR — if
+            # either applies, the d20 expression becomes 2d20kh1.
+            _aoe_pl_race_applies, _aoe_pl_race_slug, _aoe_pl_race_name = (
+                _race_grants_save_advantage(
+                    extra_pc.sheet,
+                    save_ability=save_ability,
+                    spell_slug=spell_slug,
+                    is_spell_save=True,
+                )
+            )
+            if _ds_pc_applies or _aoe_pl_race_applies:
                 expr = f"2d20kh1{pc_mod:+d}"
-                await _broadcast_danger_sense(campaign_id, extra_pc)
+                if _ds_pc_applies:
+                    await _broadcast_danger_sense(campaign_id, extra_pc)
+                if _aoe_pl_race_applies:
+                    await _broadcast_race_save_advantage(
+                        campaign_id, extra_pc,
+                        _aoe_pl_race_slug, _aoe_pl_race_name, save_ability,
+                    )
             else:
                 expr = f"1d20{pc_mod:+d}"
             # v2.53.0 — Aura of Protection (Paladin Lv 6+). Adds the
@@ -18764,6 +18831,205 @@ async def _broadcast_danger_sense(campaign_id: int, char: "Character") -> None:
                 "(traps, spells)."
             ),
             "source": "danger-sense",
+        },
+    })
+
+
+# v2.99.11 — (D) Phase 2 race-keyed save advantage table. First
+# entries cover Fey Ancestry (Elf, Half-Elf, Wood Elf, High Elf,
+# Dark Elf — advantage on saves vs being charmed) and Gnome Cunning
+# (Rock Gnome, Forest Gnome — advantage on INT/WIS/CHA saves vs
+# magic). Each table key is a normalized race slug; the values are
+# rule dicts read by `_race_grants_save_advantage`.
+#
+# Rule dict shape:
+#   trait_slug:       string, used by the broadcast for the source
+#                     attribution + the chat-card label.
+#   trait_name:       display name for the chat card ("Fey Ancestry").
+#   save_abilities:   list of save abilities the rule fires on
+#                     ("STR" / "DEX" / "CON" / "INT" / "WIS" / "CHA").
+#                     Empty list = any ability.
+#   condition_keys:   list of `_SPELL_CONDITION_MAP` condition keys
+#                     the rule gates on. None = no condition gate.
+#                     ["charmed"] = only saves vs charm install.
+#   is_spell_save:    True = only triggers on saves from spells
+#                     (used by Gnome Cunning's "vs magic" rule).
+#                     None / False = no spell-source gate.
+#
+# Future Phase 2 additions:
+#   - Dwarven Resilience (Hill/Mountain Dwarf — advantage on saves
+#     vs poison): needs spell-damage-type tagging (filed v2.99.12).
+#   - Halfling Lucky (race trait — reroll natural 1): pre-d20
+#     reroll, not advantage; folds into the Reactions framework
+#     `attack_targeted` path (filed v2.99.13).
+_RACE_SAVE_ADVANTAGES: "dict[str, list[dict]]" = {
+    "elf": [
+        {
+            "trait_slug": "fey-ancestry",
+            "trait_name": "Fey Ancestry",
+            "save_abilities": [],
+            "condition_keys": ["charmed"],
+            "is_spell_save": None,
+        },
+    ],
+    "half-elf": [
+        {
+            "trait_slug": "fey-ancestry",
+            "trait_name": "Fey Ancestry",
+            "save_abilities": [],
+            "condition_keys": ["charmed"],
+            "is_spell_save": None,
+        },
+    ],
+    "gnome": [
+        {
+            "trait_slug": "gnome-cunning",
+            "trait_name": "Gnome Cunning",
+            "save_abilities": ["INT", "WIS", "CHA"],
+            "condition_keys": None,
+            "is_spell_save": True,
+        },
+    ],
+}
+
+
+def _race_slug_from_sheet(sheet: dict) -> str:
+    """Normalize the display race name on the sheet to a lookup
+    slug used by `_RACE_SAVE_ADVANTAGES`. Folds the subrace
+    variants into their parent slug:
+
+      "Elf" / "High Elf" / "Wood Elf" / "Dark Elf" → "elf"
+      "Half-Elf" → "half-elf"
+      "Rock Gnome" / "Forest Gnome" / "Gnome" → "gnome"
+      "Hill Dwarf" / "Mountain Dwarf" / "Dwarf" → "dwarf"
+      "Lightfoot Halfling" / "Stout Halfling" / "Halfling" → "halfling"
+      "Variant Human" / "Human" → "human"
+
+    Returns empty string when the sheet has no race set.
+    """
+    if not sheet:
+        return ""
+    raw = (sheet.get("race") or "").strip().lower()
+    if not raw:
+        return ""
+    if "half-elf" in raw or "half elf" in raw:
+        return "half-elf"
+    if "half-orc" in raw or "half orc" in raw:
+        return "half-orc"
+    if "elf" in raw:
+        return "elf"
+    if "gnome" in raw:
+        return "gnome"
+    if "dwarf" in raw:
+        return "dwarf"
+    if "halfling" in raw:
+        return "halfling"
+    if "tiefling" in raw:
+        return "tiefling"
+    if "dragonborn" in raw:
+        return "dragonborn"
+    if "human" in raw:
+        return "human"
+    return raw
+
+
+def _race_grants_save_advantage(
+    saving_char_sheet: "dict | None",
+    *,
+    save_ability: str,
+    spell_slug: str | None = None,
+    is_spell_save: bool = True,
+) -> "tuple[bool, str, str]":
+    """v2.99.11 — (D) Phase 2 race-keyed save advantage gate. Returns
+    (applies, trait_slug, trait_name). True when the saving PC's
+    race has a `_RACE_SAVE_ADVANTAGES` rule that matches the save
+    context.
+
+    Construction-time hook: caller swaps the d20 expression
+    `1d20 → 2d20kh1` when this returns True (same kh1 idiom as
+    Danger Sense / Indomitable). Composes safely with other
+    advantage sources — kh1-of-kh1 is still kh1.
+
+    Args:
+      saving_char_sheet: the PC's sheet dict (read for race + level).
+      save_ability: "STR" / "DEX" / "CON" / "INT" / "WIS" / "CHA".
+      spell_slug: the slug of the spell forcing the save (used by
+                  rules with `condition_keys` to check the spell's
+                  `_SPELL_CONDITION_MAP` entry).
+      is_spell_save: True when the save source is a spell. False for
+                     non-spell save triggers (rare today — all
+                     wired sites pass True).
+
+    v1 simplifications:
+    - "vs magic" (Gnome Cunning) collapses to "from a spell" since
+      every spell-source save we model is magical. NPC monster
+      breath weapons / non-spell saves aren't currently audited
+      against the magic gate.
+    """
+    sheet = saving_char_sheet or {}
+    if not sheet:
+        return False, "", ""
+    race_slug = _race_slug_from_sheet(sheet)
+    if not race_slug:
+        return False, "", ""
+    rules = _RACE_SAVE_ADVANTAGES.get(race_slug) or []
+    if not rules:
+        return False, "", ""
+    ability = (save_ability or "").strip().upper()
+    for rule in rules:
+        abilities = rule.get("save_abilities") or []
+        if abilities and ability not in abilities:
+            continue
+        if rule.get("is_spell_save") and not is_spell_save:
+            continue
+        cond_keys = rule.get("condition_keys")
+        if cond_keys:
+            if not spell_slug:
+                continue
+            entry = _SPELL_CONDITION_MAP.get(spell_slug)
+            if not entry:
+                continue
+            entry_key = (entry.get("key") or "").strip().lower()
+            if entry_key not in cond_keys:
+                continue
+        return True, rule.get("trait_slug") or "", rule.get("trait_name") or ""
+    return False, "", ""
+
+
+async def _broadcast_race_save_advantage(
+    campaign_id: int,
+    char: "Character | None",
+    trait_slug: str,
+    trait_name: str,
+    save_ability: str,
+) -> None:
+    """Companion broadcast for `_race_grants_save_advantage`. Emits a
+    `feature_used` event with `source: <trait_slug>` so the chat
+    card surfaces the trigger ("Lyra used 🧝 Fey Ancestry —
+    advantage on Wis save vs charm.").
+    """
+    if not char or not trait_slug:
+        return
+    ability_label = (save_ability or "").strip().upper() or "?"
+    icon = {
+        "fey-ancestry": "🧝",
+        "gnome-cunning": "🧞",
+        "dwarven-resilience": "⛏",
+    }.get(trait_slug, "🪄")
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                f"{icon} {trait_name} — advantage on {ability_label} save"
+            ),
+            "feature_desc": (
+                f"{trait_name} grants {char.name} advantage on this "
+                f"saving throw."
+            ),
+            "source": trait_slug,
         },
     })
 

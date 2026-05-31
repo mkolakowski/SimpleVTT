@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.11] - 2026-05-31 — "The Fey Verdict"
+
+**Schema version:** 64
+**Commit summary:** **(D) Phase 2 race-keyed save advantage — first ship: Fey Ancestry (Elf / Half-Elf) advantage on saves vs charm install + Gnome Cunning (Rock / Forest Gnome) advantage on INT/WIS/CHA saves from any spell.** The v2.60.1 doc filed (D) Phase 2 as "the most leveraged remaining commit — unblocks 4+ race features in one shot by reusing the v2.52.0+ save-roll construction hook." v2.99.11 lands that framework: a curated `_RACE_SAVE_ADVANTAGES` table keyed on normalized race slug, a `_race_grants_save_advantage(sheet, save_ability, spell_slug)` gate function, a `_broadcast_race_save_advantage` companion, and a `_race_slug_from_sheet` normalizer that folds subrace variants (High/Wood/Dark Elf → elf, Rock/Forest Gnome → gnome, etc.) into their parent slug. Wired into all 3 save-roll construction sites: `/cast_spell` single-target PC save + AoE PC save (both roll_request-based) and `/place_aoe` PC server-rolled save (direct expression).
+**Description:** New helper + curated table in `app/routes/tabletop_routes.py`. Three wire-up sites mirror the v2.52.0 Danger Sense / v2.54.0 Countercharm pattern — when the helper returns True, the d20 expression swaps `1d20 → 2d20kh1` and a `feature_used` broadcast fires with `source: <trait_slug>` so the chat card surfaces the trigger. Harness coverage via `tests/harness/test_race_save_advantage.py` (3 tests: happy Fey Ancestry on Suggestion, control non-charm install Hold Person, control non-Fey race Hill Dwarf).
+
+### Added
+- `_RACE_SAVE_ADVANTAGES` curated table — first entries for `elf`, `half-elf`, `gnome`. Each value is a list of rule dicts with `trait_slug`, `trait_name`, `save_abilities`, `condition_keys`, `is_spell_save` fields. Scales to additional races (Dwarven Resilience, Halfling Lucky-on-1, etc.) without code changes — just append a rule dict.
+- `_race_slug_from_sheet(sheet)` — normalizes display race name → lookup slug. Folds Hill Dwarf / Mountain Dwarf → dwarf, Rock Gnome / Forest Gnome → gnome, High Elf / Wood Elf / Dark Elf → elf, etc.
+- `_race_grants_save_advantage(saving_char_sheet, save_ability, spell_slug, is_spell_save)` — gate function returning `(applies, trait_slug, trait_name)`. Walks the race's rule list, checks each rule's `save_abilities` filter (empty = any), `is_spell_save` flag (Gnome Cunning needs True), and `condition_keys` against `_SPELL_CONDITION_MAP[spell_slug]` (Fey Ancestry only on charm install).
+- `_broadcast_race_save_advantage(campaign_id, char, trait_slug, trait_name, save_ability)` — companion broadcast emitting `feature_used` with `source = trait_slug` so the chat card surfaces "🧝 Fey Ancestry — advantage on WIS save."
+- `tests/harness/test_race_save_advantage.py` — 3 tests covering happy + 2 control paths via Lyra (Half-Elf Bard) casting Suggestion / Hold Person at Thalindra (Elf) / Tavik (Hill Dwarf).
+
+### Changed
+- `/cast_spell` single-target PC save site — `_race_grants_save_advantage` call alongside Countercharm + Danger Sense + AoP; broadcast fires when the trait applies.
+- `/cast_spell` AoE PC save site (`extra_pc` loop) — same wiring as the single-target site.
+- `/place_aoe` PC server-rolled save site — composes OR-style with Danger Sense for the 2d20kh1 expression swap; pulls `spell_slug` from `ctx` to feed the gate.
+- `docs/plans/class-content-status.md` — Half-Elf row "Fey Ancestry = charm immunity, Darkvision descriptive" updated to flag Fey Ancestry charm-save advantage ✅; High Elf row's Fey Ancestry note ✅; Rock Gnome row's Gnome Cunning ✅; cross-cutting (D) section status updated to reflect Phase 2 first-ship.
+- `docs/test-harness-coverage.md` — added the new test file row + bumped the total-test-count.
+
+### Notes
+- **PATCH bump** — (D) Phase 2 first-ship is mechanically wired but ships only 2 traits (Fey Ancestry + Gnome Cunning). PATCH because the SemVer surface is "additive curated table" rather than a feature-shaped flag. Doc-only follow-up commits will bump for Dwarven Resilience (saves vs poison damage — needs spell-damage-type tagging), Halfling Lucky-on-natural-1 (folds into the Reactions framework's `attack_targeted` trigger).
+- **v1 simplifications.** "Vs magic" (Gnome Cunning) collapses to "from a spell" since every spell-source save we model is magical. NPC monster breath weapons / non-spell saves aren't audited against the magic gate. The Suggestion-Charmed install test exercises the happy path — Hold Person's Paralyzed install proves the spell-condition gate works (Fey Ancestry doesn't fire on non-charm installs).
+- **Demo fixtures.** Lyra is Half-Elf, Thalindra is Elf, Mira is Wood Elf, Kael is Wood Elf — 4 PCs benefit from Fey Ancestry in the demo. No Rock Gnome in the demo today; Gnome Cunning is wired but untested against a live PC. Filed for a follow-up Gnome demo character.
+- **Wiki surfacing.** `class-content-status.md` is already in `_DOC_ALLOWLIST` (verified v2.99.10) — no allowlist / wiki landing-page edits needed for this commit.
+- Total harness count: 664 (was 661 in v2.99.10).
+
+---
+
 ## [2.99.10] - 2026-05-31 — "The Cartographer's Sweep"
 
 **Schema version:** 64

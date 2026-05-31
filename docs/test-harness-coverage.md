@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 661 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.9, 2026-05-30).
+**Total tests:** 664 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.11, 2026-05-31).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -865,6 +865,15 @@ v2.52.0 — Barbarian Lv 2+ Danger Sense. First save-roll advantage intercept; `
 | `test_danger_sense_advantage_on_dex_save` | Thalindra casts Fireball at Krieger (Barbarian 5) → the roll_request broadcast carries `base_expression="2d20kh1"` AND a `feature_used(source=danger-sense)` broadcast fires for Krieger. |
 | `test_danger_sense_skips_non_barbarian` | Control: Thalindra casts Fireball at Pip (Rogue 7) → `base_expression="1d20"` (no kh1); no Danger Sense broadcast. |
 | `test_danger_sense_skips_non_dex_save` | Tavik casts Hold Person (WIS save) at Krieger → `base_expression="1d20"`; Danger Sense is Dex-only. |
+
+### `test_race_save_advantage.py`
+v2.99.11 — (D) Phase 2 race-keyed save advantage. `_race_grants_save_advantage(sheet, save_ability, spell_slug, is_spell_save)` returns `(applies, trait_slug, trait_name)` based on the curated `_RACE_SAVE_ADVANTAGES` table. First entries: Fey Ancestry (Elf / Half-Elf) advantage on saves vs charm install; Gnome Cunning (Rock / Forest Gnome) advantage on INT/WIS/CHA saves from spells. Wired into all 3 save-roll construction sites (single-target PC save, AoE PC save, `/place_aoe` server-rolled save). Broadcasts `feature_used` with `source: <trait_slug>`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_fey_ancestry_advantage_on_charm_save` | Lyra (Half-Elf Bard) casts Suggestion at Thalindra (Elf Wizard) → Wis save, Suggestion installs Charmed → `base_expression="2d20kh1"` AND `feature_used(source=fey-ancestry)` broadcast fires for Thalindra. |
+| `test_fey_ancestry_skips_non_charm_save` | Control: Lyra casts Hold Person at Thalindra → Wis save, Paralyzed install (not Charmed) → `base_expression="1d20"`; no Fey Ancestry broadcast. |
+| `test_fey_ancestry_skips_non_fey_race` | Control: Lyra casts Suggestion at Tavik (Hill Dwarf Cleric) → Wis save vs Charmed but Tavik isn't Elf/Half-Elf → `base_expression="1d20"`; no Fey Ancestry broadcast. |
 
 ### `test_use_save_evasion.py`
 v2.51.5 — Monk Lv 7+ (and Rogue Lv 7+) Evasion. Server-side intercept of save-for-half Dex-save damage via `_apply_evasion_to_dex_save_damage` (wired into all 7 save-damage call sites). With Evasion: save → 0, fail → half. Without: standard save → half, fail → full. Broadcasts `feature_used` with `source: "evasion"` on every fire (both branches).

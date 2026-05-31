@@ -541,13 +541,13 @@ trait as a row with description.
 | Race | Traits | Status | Notes |
 |---|---|---|---|
 | Dragonborn | Draconic Ancestry, Breath Weapon, Damage Resistance | 🟡 | Breath weapon needs a "click to fire" + save-DC challenge — same pattern as Channel Divinity options |
-| Half-Elf | ASI, Darkvision, Fey Ancestry, Skill Versatility, Extra Language | 🟡 | ASI ✅ via sheet; passives (Fey Ancestry = charm immunity, Darkvision) descriptive only |
+| Half-Elf | ASI, Darkvision, Fey Ancestry, Skill Versatility, Extra Language | 🟢 | ASI ✅ via sheet; **Fey Ancestry charm-save advantage ✅** v2.99.11 via `_race_grants_save_advantage` — Half-Elf saves vs spells that install Charmed swap d20 → 2d20kh1. Lyra (Half-Elf Bard) is the demo fixture. Charm immunity (RAW "can't be put to sleep magically") still descriptive — folds into the next (D) Phase 3 condition-install immunity gate. Darkvision is descriptive (no light-aware engine). |
 | Half-Orc | Darkvision, Menacing, Relentless Endurance, Savage Attacks | 🟡 | Relentless Endurance has "once per long rest" semantics — could be a 1/1 resource counter |
-| High Elf | Darkvision, Keen Senses, Fey Ancestry, Trance, Elf Weapon Training, Cantrip, Extra Language | 🟢 | Cantrip choice + Elf Weapon Training proficiency wire through existing systems; the rest descriptive |
+| High Elf | Darkvision, Keen Senses, Fey Ancestry, Trance, Elf Weapon Training, Cantrip, Extra Language | 🟢 | Cantrip choice + Elf Weapon Training proficiency wire through existing systems. **Fey Ancestry charm-save advantage ✅** v2.99.11 — Thalindra (Elf Wizard), Mira (Wood Elf Druid), Kael (Wood Elf Monk) all benefit; saves vs charm install swap d20 → 2d20kh1. Trance ("magically put to sleep" immunity) folds into the (D) Phase 3 condition-install immunity gate (currently descriptive). |
 | Hill Dwarf | Darkvision, Dwarven Resilience (poison adv/resistance), Dwarven Combat Training, Tool Proficiency, Stonecunning, Speed Not Reduced by Heavy Armor, Dwarven Toughness | 🟢 | Demo Tavik benefits from Dwarven Toughness (+5 HP at Lv 5) — already in the cleric sheet's `hp.max=43` |
 | Human | ASI ×6, Extra Language | ✅ | The all-+1-stats flow is supported via standard ASI; Variant Human's free feat would need the feat-picker UI work |
 | Lightfoot Halfling | Lucky, Brave, Halfling Nimbleness, Naturally Stealthy | 🟡 | Lucky (reroll 1 on attack/check/save) would need a roll-time intercept — same shape as the Lucky feat in some homebrew sources |
-| Rock Gnome | Darkvision, Gnome Cunning (adv vs INT/WIS/CHA magic saves), Artificer's Lore (+2 ×PB on history of magic items), Tinker | 🟡 | |
+| Rock Gnome | Darkvision, Gnome Cunning (adv vs INT/WIS/CHA magic saves), Artificer's Lore (+2 ×PB on history of magic items), Tinker | 🟢 | **Gnome Cunning ✅** v2.99.11 — `_race_grants_save_advantage` wires Rock/Forest Gnome saves vs spells (`save_abilities: ["INT", "WIS", "CHA"]`, `is_spell_save: True`). RAW gates on "vs magic"; v1 simplification collapses to "from a spell" since every spell-source save we model is magical. No Rock Gnome PC in the demo today — Gnome Cunning is wired but untested against a live PC; filed for a follow-up Gnome demo character. Artificer's Lore is a skill-context intercept (filed for the (B) skill-check engine hook). Tinker is descriptive (1-hour clockwork creation). |
 | Tiefling | Darkvision, Hellish Resistance (fire resist), Infernal Legacy (Thaumaturgy + Hellish Rebuke 1/day + Darkness 1/day) | 🟢 | Infernal Legacy spells could attach to a per-day resource counter; spell-cast hook exists for cantrips |
 
 ---
@@ -777,10 +777,9 @@ First 8 entries:
   Enhance Ability, Greater Invisibility, Mirror Image, etc. all
   pending entries).
 
-### D. Passive trait engine — ⚪ STILL UNIMPLEMENTED
+### D. Passive trait engine — 🟢 PARTIAL (Phase 2 first-ship v2.99.11)
 
-**Status:** No code. Every racial / class passive trait is purely
-descriptive — the player applies it manually at roll time.
+**Status:** Phase 1 (static stat mods) ✅ baked into demo sheets. **Phase 2 first-ship v2.99.11 ✅** — `_RACE_SAVE_ADVANTAGES` curated table + `_race_grants_save_advantage` helper + `_race_slug_from_sheet` normalizer + `_broadcast_race_save_advantage` companion. First entries: Fey Ancestry (Elf / Half-Elf) charm-save advantage; Gnome Cunning (Rock / Forest Gnome) INT/WIS/CHA spell-save advantage. Wired into all 3 save-roll construction sites (single-target PC save, AoE PC save, /place_aoe server-rolled save). Phase 2 follow-ups still ⚪: Dwarven Resilience (saves vs poison damage — needs spell-damage-type tagging), Halfling Lucky-on-natural-1 (folds into the Reactions framework's `attack_targeted` trigger). Phases 3–5 still ⚪.
 
 **Affects:** Every race's Darkvision / damage resistance /
 saving-throw advantage; Sneak Attack reqs; Dwarven Toughness (HP);
