@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.10] - 2026-05-31 — "The Cartographer's Sweep"
+
+**Schema version:** 64
+**Commit summary:** **Doc-only re-audit of `docs/plans/class-content-status.md` against v2.60.2 → v2.99.9 (186 commits).** The class/subclass/feat/race feature catalog had not been swept since the v2.60.1 audit. This commit lands the v2.99.9 audit-summary block plus row flips for the work shipped in the window: F9 Reactions automation framework (NEW — Phases 1–6 ✅ v2.66.7–v2.78.0), F10 NPC concentration tracking (NEW — ✅ v2.98.0–v2.98.5), six SRD feats flipped 🟡 → 🟢/✅ (Lucky / Defensive Duelist / War Caster / Mage Slayer / Sentinel / Polearm Master), eight spell-buff catalog entries flipped 🟡 → 🟢 (Bless / Bane / Heroism / Aid / Shield of Faith / PFE&G / Sanctuary / Faerie Fire), Bardic Inspiration recipient side ✅ (v2.97.56–57), F8 Phase D extended ✅ via v2.97.16–v2.97.79 reversal coverage. The "Order of priority" list is rewritten to reflect the new ⚪ frontier — (D) Phase 2 race-keyed save advantage table is now the most leveraged remaining commit.
+**Description:** Single-file edit to `docs/plans/class-content-status.md`. No code, no schema, no test surface change. The audit block sits between the v2.60.1 audit block and the per-class tables for chronological scanning.
+
+### Changed
+- `docs/plans/class-content-status.md` — added v2.99.9 audit summary block; flipped Feats table (6 feats wired); updated Bard Bardic Inspiration row (recipient consume endpoint); rewrote cross-cutting (B) attack-roll-intercept section to credit Reactions framework; rewrote cross-cutting (C) buff-slot section to credit `_SPELL_BUFF_MAP`; updated F8 status to reflect v2.97.16–v2.97.79 reversal coverage; added F9 Reactions framework + F10 NPC concentration to missing-frameworks section; rewrote framework prioritization and Order of priority lists.
+
+### Notes
+- **PATCH bump** — doc-only audit refresh. Per CLAUDE.md's per-commit version rule.
+- **Why now.** The doc was last audited at v2.60.1 (2026-05-25). 186 commits had landed in the window without a status sweep, leaving 14+ rows stale. The Feats table's standing claim "Mechanical feat effects are uniformly ⚪" was the most visible drift — six feats had shipped automated intercepts via the v2.66.7–v2.78.0 Reactions framework.
+- **What this commit does NOT do.** No new feature wiring. No new test surface. No changelog rule changes. The downstream multi-choice question to the user picks the next concrete feature commit.
+- **Wiki surfacing.** No allowlist / wiki landing-page / docs/wiki/README.md edits needed — `plan-class-content-status` is already in `_DOC_ALLOWLIST` (verified) and the wiki landing-page + index already link to it.
+- Total harness count: 661 (unchanged — doc-only commit).
+
+---
+
 ## [2.99.9] - 2026-05-30 — "The Spotter on the Shore"
 
 **Schema version:** 64

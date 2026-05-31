@@ -161,6 +161,103 @@ every ⚪ row in the status tables has a corresponding plan entry,
 even when the plan is just "blocked on framework X; defer until
 X ships."
 
+> **Re-audit (v2.99.9, 2026-05-31):** walked v2.60.2 → v2.99.9 (186
+> commits). The window was dominated by **two new infrastructure
+> frameworks** plus a wave of **spell-buff mechanical wiring** that
+> flipped 14+ ⚪/🟡 rows. Highlights:
+>
+> - **Reactions automation framework (NEW — Phases 1–6 ✅).** v2.66.7
+>   filed the plan; v2.67.0–v2.67.2 shipped the server foundation +
+>   client popup UI + Uncanny Dodge ack; v2.68.0 added the GM
+>   Reactions Panel for every combatant; v2.69.0–v2.78.0 wired
+>   per-feature triggers: **Shield** (v2.69.0), **Counterspell**
+>   (v2.70.0), **Hellish Rebuke + Absorb Elements** (v2.71.0),
+>   **Silvery Barbs** (v2.72.0), **NPC monster reactions** (v2.73.0),
+>   **Defensive Duelist** (v2.74.0), **Mage Slayer** (v2.75.0),
+>   **War Caster** (v2.76.0), **Lucky** (v2.77.0), **Cloak of
+>   Displacement** (v2.78.0). Plus v2.66.0–v2.66.6 OA + Sentinel +
+>   Polearm Master ground work. **This unblocks every reaction-based
+>   class/race/feat feature** (Shield + Counterspell are PC/NPC
+>   parity; reaction slot consumption v2.67.3 fires on every
+>   reaction). Wiki page at v2.82.0.
+> - **NPC concentration tracking (NEW — ✅ v2.98.0).** NPC casters now
+>   hold concentration buffs and lose them on damage like PCs (Hold
+>   Person, Hex, Hunter's Mark, etc.). v2.97.75 + v2.98.5 also wire
+>   `/npc_cast_spell` save install (NPCs can cast save-or-suck spells
+>   on PCs and install condition buffs server-side).
+> - **Six SRD feats flipped 🟡 → 🟢/✅** (mechanically wired via the
+>   Reactions framework): **Lucky** ✅ (v2.77.0 — 3-charge resource,
+>   pre-d20 reroll via `attack_targeted` reaction trigger),
+>   **Defensive Duelist** ✅ (v2.74.0 — +PB to AC vs one melee attack),
+>   **War Caster** ✅ (v2.76.0 + v2.83.0 — spell OA + advantage on
+>   concentration saves), **Mage Slayer** ✅ (v2.75.0 — reaction
+>   attack on nearby spell cast), **Sentinel** 🟢 (v2.66.5–v2.66.6,
+>   effect 3 wired; effects 1+2 still filed pending auto-fire +
+>   Disengage modeling), **Polearm Master** 🟢 (v2.66.4 — enter-reach
+>   OA; weapon-wielding gate still filed). **The L416 doc note
+>   "Mechanical feat effects are uniformly ⚪" is now stale** — six of
+>   the seven feats listed have automated intercepts.
+> - **Spell buff mechanical wiring — 8 spells flipped 🟡 → 🟢** via the
+>   v2.97.30+ `_SPELL_BUFF_MAP` catalog: **Bless** (+d4 attack/save),
+>   **Bane** (-d4 attack/save), **Heroism** (temp HP per turn +
+>   Frightened immunity), **Aid** (+5 max HP + install heal),
+>   **Shield of Faith** (+2 AC mechanical hook), **Protection from
+>   Evil & Good** (3-part: attacker disadvantage + condition immunity
+>   + save advantage), **Sanctuary** (attacker Wis save gate +
+>   ends-on-offense), **Faerie Fire** (attackers gain advantage).
+>   Plus **Hex/Hunter's Mark** got buff-teardown plumbing (v2.97.32).
+>   This is the largest single buff-engine expansion since v2.49.x.
+> - **Bardic Inspiration recipient side ✅** (v2.97.56–v2.97.57) —
+>   `/apply_bardic_inspiration_die` endpoint + banner UI. The "🟡
+>   recipient die consume pending Phase B roll-time intercept" note
+>   in cross-cutting C is now stale. Recipient picks "Use die" from
+>   their banner after a roll — post-action apply rather than pre-d20
+>   modal, but RAW-allowed (player decides after seeing the result).
+> - **F8 Condition undo — Phase A+B → A+B+partial D** (v2.97.16–v2.97.79).
+>   v2.65.0 shipped A+B; v2.97.16–v2.97.27 extended undo to 4 heal
+>   endpoints + heal-claim + Blessed Healer; v2.97.20–v2.97.21 added
+>   Rage + Indomitable buff drops on undo; v2.97.22–v2.97.31 added
+>   buff teardown for Monk ki spends + Metamagic Empowered + Shield +
+>   Absorb Elements + Stunning Strike + Channel Divinity + Bardic
+>   Inspiration target + Bless + Hex + Hunter's Mark + Bane + Faerie
+>   Fire; v2.97.77–v2.97.79 wired save-pass condition-drop reversal.
+>   **Phase C (Indomitable RAW reroll) still ⚪** — advantage-on-save
+>   variant from v2.56.0 is the current ship.
+> - **Repeated-save auto-fire ✅** (v2.97.62–v2.97.70). End-of-turn
+>   tolling of buff repeat-saves (Hold Person break-out attempts,
+>   Hideous Laughter wake-up, etc.) plus damage-triggered re-saves
+>   for Fear/Hideous Laughter. v2.99.0 generalized Sleep's `/shake_awake`
+>   into a `wakeable_by_action` marker reusable by other unconscious
+>   buffs. Auto-fire also extends to NPC savers (v2.97.69).
+> - **Sleep / charm / fright / save-or-suck full pipeline ✅** — Sleep
+>   v2.49.58+ already covered; Hold Person + Confusion + Banishment
+>   wired through `/npc_cast_spell` v2.97.74 + v2.97.75 + v2.97.79.
+>   Thalindra's spell list now includes Confusion + Banishment
+>   (v2.97.72). Banishment also on Caelan's list v2.97.73.
+> - **Other one-row flips:** **Wholeness of Body**, **Stillness of
+>   Mind**, **Stunning Strike**, **Reckless Attack**, **Improved
+>   Critical**, **Remarkable Athlete** (already noted in v2.60.1 but
+>   shipped through v2.49.231–v2.49.243 window — confirmed); **Magic
+>   Missile** dart auto-damage (v2.49.155–v2.49.156); **AoE NPC casts**
+>   (v2.49.217); **NPC weapon attack `/npc_attack`** endpoint
+>   (v2.49.164); **per-target NPC reach parsing** (v2.66.2).
+>
+> **Harness growth**: 485 tests (v2.60.1) → **858 tests** (v2.99.9).
+> ~370 new test files. CI workflow runs the full suite on every
+> push to `main`.
+
+**Re-audit conclusion (v2.99.9, 2026-05-31).** The doc requires
+substantial flips. The Feats table needs all six mechanically-wired
+feats updated. Cross-cutting (B) attack-roll intercept gap is now
+partially closed via the Reactions framework (Lucky is a pre-d20
+modal that fires from `attack_targeted`; Defensive Duelist, Shield,
+Counterspell all share the trigger plumbing). **The remaining big
+⚪ areas after this audit:** (D) passive trait engine Phase 2 (race
+save advantages), Sorcerer Metamagic + Font-of-Magic picker (still
+⚪/🟢 — counter exists, picker doesn't), Warlock Pact Boon + Eldritch
+Invocations, Wizard Spell Mastery + Signature Spells, Cleric Divine
+Intervention. See updated "## Order of priority" below.
+
 ## Status legend
 
 | Symbol | Meaning |
@@ -206,7 +303,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | Spells panel renders + casts via `/api/.../roll` |
-| 1 | Bardic Inspiration | ✅ | v2.11.0 — target picker (`showTargetPicker`) excludes self per RAW; `/use_bardic_inspiration` endpoint decrements counter + marks bonus slot + scales die by Bard level (d6/d8/d10/d12). Harness coverage v2.14.1. |
+| 1 | Bardic Inspiration | ✅ | v2.11.0 — target picker (`showTargetPicker`) excludes self per RAW; `/use_bardic_inspiration` endpoint decrements counter + marks bonus slot + scales die by Bard level (d6/d8/d10/d12). Harness coverage v2.14.1. **Recipient consume side ✅** v2.97.56–v2.97.57 — `/apply_bardic_inspiration_die` endpoint validates the die buff on the recipient, decrements the die, and broadcasts `die_consumed`; recipient sees a banner UI ("Tap the verse") with a one-click apply button. RAW pre-d20 declaration is not enforced — recipient picks "Use die" after seeing the roll result, which is RAW-allowed per the spell description. Per-cast undo via the v2.97.30 buff-teardown framework. |
 | 2 | Jack of All Trades | ✅ | v2.15.2 — `_hasJackOfAllTrades(form)` JS helper + Jinja `_bard_lv_ns` mirror in the skill card render. Adds `floor(PB/2)` to non-proficient ability checks (raw ability rolls + non-proficient skill rolls; saves intentionally untouched per RAW). Roll note carries `(Jack +N)` for attribution. |
 | 2 | Song of Rest | ✅ | v2.15.3 — `_song_of_rest_for_campaign` helper picks highest-level Bard in campaign; `/rest` short-rest folds `+1dN` (d6/d8/d10/d12 by Bard level) into the recovery dice expression. UI Short Rest button routed through `/rest` in v2.15.4; Long Rest in v2.15.5. Harness coverage in `tests/harness/test_rest.py`. |
 | 3 | Bard College | ✅ | Subclass system shipped — see Subclasses table. College of Lore has features JSON + Cutting Words + Additional Magical Secrets wired (v2.15.7-v2.15.10). |
@@ -408,20 +505,31 @@ have features JSON.
 
 ## Feats
 
-Only one SRD feat shipped (Grappler is the only one in the OGL SRD 5.1).
-Homebrew feats live alongside the SRD via the campaign-scoped homebrew
-tier (e.g. the demo's `lucky-strike` feat in
-`app/data/homebrew/campaign-X/feats/`).
+Originally only one SRD feat (Grappler) was shipped under the OGL SRD
+5.1. The v2.66.x–v2.83.0 Reactions automation framework expanded the
+roster with six mechanically-wired Tasha's/PHB feats consumed by the
+reactions trigger system. Homebrew feats live alongside the SRD via
+the campaign-scoped homebrew tier (e.g. the demo's `lucky-strike`
+feat in `app/data/homebrew/campaign-X/feats/`).
 
 | Feat | Source | Status | Notes |
 |---|---|---|---|
 | Grappler | SRD 5.1 (`app/data/local/dnd5e/feats/grappler.json`) | 🟡 | Description renders on sheet; no mechanical wiring (Grappler's "advantage on grapple checks" would need a per-skill-roll context) |
-| Lucky Strike (demo homebrew) | `seed_homebrew_files` → `feats/lucky-strike.json` | 🟡 | Description renders; no automatic reroll-on-miss intercept |
+| Lucky | PHB feat | ✅ | v2.77.0 — `_pc_has_lucky_available(char)` checks 3-charge resource on the sheet's `feats`; reaction option added to `_eligible_reactions[attack_targeted]` so the Reactions framework offers a "Spend Luck point?" prompt on incoming attacks (and on the player's own d20 paths via the GM Reactions Panel). On accept, decrements the charge + broadcasts a reroll. RAW pre-d20 declaration is the framework's default for `attack_targeted`. |
+| Defensive Duelist | PHB feat | ✅ | v2.74.0 — `_pc_has_defensive_duelist_available(char)` returns `(eligible, ac_bonus=PB)`. Reaction option added to `_eligible_reactions[attack_targeted]` with an AC override payload; on accept the attack is re-adjudicated against the bumped AC. Wielding-a-finesse-weapon gate is filed (currently any equipped finesse weapon on the sheet counts). |
+| War Caster | PHB feat | ✅ | v2.83.0 ("Iron Concentration") — `_pc_has_war_caster_feat(char)` grants advantage on concentration saves by appending `2d20kh1` to the save expression at construction time (same hook as Danger Sense). v2.76.0 ("Spell in Hand") — `_pc_has_war_caster_available(char)` registers an OA reaction trigger that lets the warcaster cast a 1-action spell as the OA (`/cast_spell` invoked from the reaction handler). RAW somatic-component-in-occupied-hand allowance is filed for follow-up. |
+| Mage Slayer | PHB feat | ✅ | v2.75.0 ("Mage Slayer") — `_pc_has_mage_slayer_available(char)` registers a reaction trigger on the `spell_cast_near` event (broadcast by `/cast_spell` and `/npc_cast_spell` when an enemy caster within 5 ft begins a spell). Reaction payload is a melee weapon attack; concentration-save disadvantage on the target post-hit is filed pending the per-cast concentration-save advantage/disadvantage stack. |
+| Sentinel | PHB feat | 🟢 | v2.66.5–v2.66.6 ("The Sentinel's Watch") — `_combatant_has_sentinel(db, combatant)` reads the sheet's `feats` for slug "sentinel". **Effect 3 ✅** (ally-attacked-near-you advisory) wired into `/attack` (v2.66.5) + `/npc_attack` (v2.66.6) — when a Sentinel-feated combatant is within 5 ft of the target of a melee attack, the response emits an OA reaction prompt for the Sentinel. **Effect 1** (OA-hit reduces target speed to 0) + **Effect 2** (Disengage bypass denial) still filed pending the OA auto-fire stack + Disengage modeling. |
+| Polearm Master | PHB feat | 🟢 | v2.66.4 ("The Quarterstaff") — `_combatant_has_polearm_master(db, combatant)` checks `feats` for slug "polearm_master". An inverse-transition (from > reach, to ≤ reach) OA trigger so a creature ENTERING a Polearm Master's reach provokes an OA. **Wielding-a-polearm enforcement** is filed (currently the feat counts on any combatant with the slug). The 1d4 bonus-action butt-end attack is filed as a future class-features-shaped action button. |
+| Cloak of Displacement (item, not feat — listed for adjacency) | wonderous item | ✅ | v2.78.0 ("The Displaced Bard") — Phase 5 generic item-reaction framework allows magic items to register reactions the same way feats do. First consumer: Cloak of Displacement applies disadvantage on incoming attack rolls until hit. Demo: Lyra wears it. |
+| Lucky Strike (demo homebrew) | `seed_homebrew_files` → `feats/lucky-strike.json` | 🟡 | Description renders; no automatic reroll-on-miss intercept. v2.77.0 Lucky framework could be reused — the homebrew feat needs to register its own reaction trigger entry in `_eligible_reactions`. Filed for a follow-up once a second SRD-feat-shape homebrew use case appears. |
 
 Adding new feats means dropping a JSON file in the matching tier; the
 homebrew editor (campaign settings → Homebrew → Feats) can author them
-via UI. **Mechanical feat effects are uniformly ⚪** — none have automated
-intercepts; they're all reference-text-on-the-sheet for now.
+via UI. **Mechanical wiring path** for new feats: register the feat's
+slug in `_eligible_reactions[trigger]` with a `_pc_has_<slug>_available`
+gate function + a reaction payload; the Reactions framework
+(v2.67.0–v2.78.0) handles the prompt + slot consumption + broadcast.
 
 ---
 
@@ -487,16 +595,25 @@ Master), Lay on Hands (Paladin), Cleansing Touch, Stroke of Luck.
 - Bardic Inspiration recipient-side picker (currently the bard's
   picker is wired but the recipient's "spend a die" timing isn't).
 
-### B. Roll-time intercepts — 🟢 PARTIAL (save-roll hooks ✅; attack-roll pre-d20 modals ⚪)
+### B. Roll-time intercepts — 🟢 PARTIAL (save-roll hooks ✅; attack-roll path partly closed via Reactions framework v2.67.0+)
 
 **Status:** Save-roll construction-time hooks shipped (v2.52.0 onward).
-Attack-roll pre-d20 intercepts (Lucky reroll, Portent swap, Bardic
-Inspiration recipient die) still filed.
+Attack-roll pre-d20 intercepts shipped indirectly via the Reactions
+automation framework (v2.66.7 design plan → v2.67.0 server foundation
+→ v2.67.2 client popup UI → v2.69.0–v2.78.0 per-feature wiring).
+Reactions framework approach: server emits `attack_targeted` /
+`spell_cast_near` / `damage_taken` / `save_resolved` events; eligible
+PCs/NPCs get a modal-style prompt with the reaction choice; on accept,
+the trigger consequence (reroll, AC bump, damage halving, etc.)
+applies post-roll-pre-effect. **Lucky feat (race Lucky is separate)
+is now ✅** via the framework's `attack_targeted` trigger.
 
-**Affects:** Lucky (Halfling + feat), Reliable Talent (Rogue),
-Indomitable (Fighter ✅), Stroke of Luck (Rogue), Portent (Divination),
-Bardic Inspiration (recipient side), Sneak Attack (uplift), Divine
-Smite (uplift), Improved Critical (Champion ✅).
+**Affects:** Lucky (Halfling + feat ✅ via reactions v2.77.0),
+Reliable Talent (Rogue — still ⚪), Indomitable (Fighter ✅ v2.56.0),
+Stroke of Luck (Rogue — still 🟢), Portent (Divination — still ⚪),
+Bardic Inspiration (recipient side ✅ v2.97.56–v2.97.57 — note:
+post-roll apply, not pre-d20 modal), Sneak Attack (uplift ✅),
+Divine Smite (uplift ✅), Improved Critical (Champion ✅).
 
 **What shipped — save-roll path:**
 - v2.52.0 — **Danger Sense** (Barbarian Lv 2+ Dex save adv) via
@@ -522,32 +639,46 @@ Smite (uplift), Improved Critical (Champion ✅).
   `_pc_has_rage_active_buff`. Charm/fright install short-circuit
   keyed off the saver's own rage buff (not an ally aura).
 
+**What shipped via the Reactions framework (v2.66.7 → v2.78.0):**
+- v2.67.0–v2.67.2 — server emits eligible-reactions list with each
+  d20 trigger; client renders the floating popup ("Permission
+  Granted"); Uncanny Dodge ack ships as the first per-feature wire.
+- v2.69.0 — **Shield** spell as a reaction on `attack_targeted`.
+- v2.70.0 — **Counterspell** on `spell_cast_near`.
+- v2.71.0 — **Hellish Rebuke + Absorb Elements** on `damage_taken`.
+- v2.72.0 — **Silvery Barbs** on `save_resolved`.
+- v2.73.0 — NPC monster reactions via `attack_targeted` (parity).
+- v2.74.0 — **Defensive Duelist** feat (PB AC bump).
+- v2.75.0 — **Mage Slayer** feat (reaction attack on nearby cast).
+- v2.76.0 — **War Caster** feat (spell-as-OA).
+- v2.77.0 — **Lucky** feat (3-charge resource + reroll on accept).
+- v2.78.0 — Phase 5 generic item-reaction framework + **Cloak of
+  Displacement** as the seed item.
+- v2.83.0 — **War Caster** passive concentration-save advantage (the
+  non-reaction half of the feat).
+
 **What's left (attack-roll pre-d20 intercepts):**
-- **Lucky** (Halfling + feat). Reroll a d20 (attack/save/check) before
-  the result is announced. Needs a pre-result modal that pauses the
-  roll between dice land + result applied. Today's roll endpoint
-  (`/roll`) is fire-and-forget; the modal would need to (a) defer the
-  result-application broadcast, (b) present the player with "Use a
-  Luck point?", (c) re-roll if accepted, (d) apply the new result.
-  Big architectural change — touches every roll path.
+- **Halfling Lucky (race trait — NOT the feat).** Same shape as the
+  feat but tied to the race + only triggers on natural 1s. Lower
+  priority than the (D) passive trait engine Phase 2 plan that would
+  pick this up alongside Fey Ancestry / Dwarven Resilience.
 - **Portent** (Divination Wizard Lv 2). Roll 2d20 at start of day
   (LR / SR per-feature), bank the values; later spend one to swap
   in for ANY d20 anyone rolls (attack / save / check by self or
-  another creature). Needs (a) a banked-values panel on Thalindra's
-  sheet, (b) a roll-time modal offering "swap with portent N?" at
-  every d20 trigger across the campaign — easily 5+ surfaces (PC
-  saves, NPC attacks, ally death saves, etc.).
+  another creature). The Reactions framework provides the modal
+  surface; the missing piece is the banked-values panel on
+  Thalindra's sheet + a `swap_d20_result` reaction kind. Easier now
+  that v2.67.0 ships the modal infrastructure.
 - **Reliable Talent** (Rogue Lv 11). Floor-of-10 on proficient skill
   checks. Needs the skill-check engine to compose `max(rolled, 10)`
   via the same construction-time hook the save-rolls use. Smaller
-  scope than Lucky — purely additive on top of the roll math.
+  scope than Lucky — purely additive on top of the roll math. Pip
+  would need a Lv 7 → 11 bump (currently Lv 7 post-v2.51.6).
 - **Stroke of Luck** (Rogue Lv 20). Convert a miss → hit OR a failed
-  check → 20. Per-short-rest counter exists; the conversion needs the
-  pre-result modal. Same shape as Lucky but with a binary "convert"
-  vs "reroll" choice.
-- **Bardic Inspiration (recipient)**. The bard's grant-side is wired;
-  the recipient's "spend a die" timing isn't. Needs a roll-time
-  modal on the recipient's d20 ("Add bardic inspiration die?").
+  check → 20. Per-short-rest counter exists; conversion shipped via
+  the v2.67.0 framework's reaction-on-`save_resolved` surface would
+  do it (similar to Silvery Barbs but caster-on-self). No demo Lv 20
+  fixture today.
 
 **Why the save-roll path was easier than attack-roll**: save rolls go
 through `/roll_request` which has a `base_expression` field assembled
@@ -560,16 +691,27 @@ attack-roll dice to the server (like save rolls), or (b) extending
 `/roll` with a two-phase commit (post dice → server prompts → client
 confirms/rerolls).
 
-### C. Combat condition / buff slot — ✅ SHIPPED (v2.19.x → v2.49.x → v2.58.0+)
+### C. Combat condition / buff slot — ✅ SHIPPED (v2.19.x → v2.49.x → v2.58.0+ → v2.97.x spell-buff catalog)
 
 **Status:** Buff infrastructure shipped end-to-end. Concentration
 cascade + buff cleanup + condition-install immunity gates all
-operational.
+operational. **NPC concentration ✅** (v2.98.0) — NPC casters now
+hold and lose concentration buffs like PCs (Hold Person, Hex,
+Hunter's Mark, etc.). v2.97.x landed a `_SPELL_BUFF_MAP` catalog
+that flipped 8 previously-descriptive spell buffs to mechanically
+wired.
 
 **Affects:** Rage (resistance + adv on STR ✅), Reckless Attack
-(adv + disadv incoming ✅), Bless (+1d4 on attack/save 🟡 still
-descriptive), Bardic Inspiration (recipient 🟡 still descriptive),
-almost every concentration spell (✅ concentration cleanup wired).
+(adv + disadv incoming ✅), **Bless** (+d4 attack/save ✅ v2.97.31+),
+**Bane** (-d4 attack/save ✅ v2.97.33+), **Heroism** (temp HP +
+Frightened immunity ✅ v2.97.37+), **Aid** (+5 HP + max-HP bonus ✅
+v2.97.40+), **Shield of Faith** (+2 AC ✅ v2.97.38–39), **PFE&G**
+(attacker disadv + cond immunity + save adv ✅ v2.97.46–v2.97.50),
+**Sanctuary** (attacker Wis save + ends-on-offense ✅ v2.97.45–v2.97.55),
+**Faerie Fire** (attackers gain advantage ✅ v2.97.33–34),
+**Bardic Inspiration recipient die** (✅ v2.97.56–57),
+almost every concentration spell (✅ concentration cleanup wired,
+NPC parity v2.98.0).
 
 **What shipped:**
 - v2.19.x — combatant `buffs` list as part of battle state;
@@ -592,22 +734,48 @@ almost every concentration spell (✅ concentration cleanup wired).
 - v2.60.0 — once-per-turn-flag pattern on `combatant.economy` for
   Colossus Slayer + Divine Strike + on-hit-only resets.
 
+**What shipped via v2.97.x (`_SPELL_BUFF_MAP`):**
+The v2.97.30+ work extracted spell-buff effects into a curated
+catalog `_SPELL_BUFF_MAP` keyed on spell slug. Each entry declares
+the buff key + duration + effect dict; the cast handler installs
+the buff, downstream attack/save/damage hooks read effects by key.
+First 8 entries:
+- v2.97.31–v2.97.36 — **Bless** install + attack-roll +d4 + save-roll
+  +d4 + teardown. Also lands the `/place_aoe` AoE save-site wire.
+- v2.97.33–v2.97.34 — **Bane** mirror (-d4) + **Faerie Fire**
+  attacker-advantage hook.
+- v2.97.37–v2.97.44 — **Heroism** install temp HP grant + per-turn
+  recurrence + Frightened immunity.
+- v2.97.40–v2.97.41 — **Aid** install +5 current HP + max-HP
+  extension.
+- v2.97.38–v2.97.39 — **Shield of Faith** AC mechanical hook.
+- v2.97.45–v2.97.55 — **Sanctuary** install + attacker Wis save gate
+  + ends-on-offense via `/cast_spell` + `/use_attack` exit hooks.
+- v2.97.46–v2.97.50 — **Protection from Evil & Good** 3-part:
+  attacker-disadvantage + condition immunity (charmed/frightened/
+  possessed) + advantage on saves vs source type.
+- v2.97.30 — **Bardic Inspiration target buff teardown** (recipient
+  buff drops via the undo framework).
+- v2.97.32 — **Hex + Hunter's Mark buff teardown** plumbing
+  (existing on-hit damage uplift; this commit wires the undo path).
+
 **What's left (filed):**
-- **Bless** (+1d4 on attack rolls + saves). The cleric's Bless cast
-  installs a buff; the wired attack/save paths would read
-  `effects.attack_roll_bonus_dice` + `effects.save_bonus_dice`.
-  Today Bless is data-only (the spell casts but the bonus dice
-  aren't auto-applied to recipients' rolls).
-- **Bardic Inspiration recipient side**. The bard's `/use_bardic_inspiration`
-  installs a buff on the recipient with `effects.inspiration_die`;
-  the d20 paths would consume the die on next roll. Pre-d20 modal
-  needed (cross-references Phase B above).
 - **Suspended condition state** for Mindless Rage's RAW second
   sentence ("if you ARE charmed when you enter rage, the effect is
   suspended"). Today Mindless Rage only blocks NEW installs.
-- **Buff-reversal undo** for condition-install. `/undo_attack_damage`
-  reverts HP changes but doesn't un-install conditions; same gap on
-  AoE heals (only first target reverts).
+- **Buff-reversal undo for some legacy paths** — most reverts now
+  covered via v2.97.16–v2.97.79 (heal endpoints + heal-claim +
+  Rage + Indomitable + Monk ki spends + Metamagic Empowered +
+  Shield + Absorb Elements + Stunning Strike + Channel Divinity +
+  Bardic + Bless + Hex + Hunter's Mark + Bane + Faerie Fire +
+  save-pass condition drops). **Phase C death-save concentration
+  drop undo** still ⚪ (cascaded concentration drops on death-save
+  override aren't reversed).
+- **More spells in `_SPELL_BUFF_MAP`** — Bless/Bane/Heroism/Aid/SoF/
+  PFE&G/Sanctuary/Faerie Fire are seeded; the catalog scales to any
+  spell with similar attack/save/damage hooks (Crusader's Mantle,
+  Enhance Ability, Greater Invisibility, Mirror Image, etc. all
+  pending entries).
 
 ### D. Passive trait engine — ⚪ STILL UNIMPLEMENTED
 
@@ -1400,9 +1568,9 @@ school/class. Skip silence-zone validation for v1 (too positional).
 
 **Effort estimate:** 1 commit. Mostly schema + a single gate.
 
-### F8. Condition-buff undo / reversal — 🟢 PARTIAL (v2.65.0 Phase A+B shipped)
+### F8. Condition-buff undo / reversal — 🟢 PARTIAL (Phase A+B+D-partial shipped v2.65.0 + v2.97.16–v2.97.79; Phase C still ⚪)
 
-**Status:** Phase A (snapshot pipeline + multi-target undo) + Phase B (condition install undo on save-fail) shipped v2.65.0. Phase C (RAW Indomitable reroll endpoint) + Phase D (death-save override concentration drop undo) filed as v2.65.x follow-ups — both are additive consumers of the v2.65.0 snapshot helpers.
+**Status:** Phase A (snapshot pipeline + multi-target undo) + Phase B (condition install undo on save-fail) shipped v2.65.0. **Phase D extended substantially v2.97.16–v2.97.79** — 4 heal endpoints (v2.97.16), heal-claim (v2.97.17), Blessed Healer self-heal (v2.97.18), Rage buff drop (v2.97.20), Indomitable arm buff drop (v2.97.21), 3 Monk ki spends (v2.97.22), Metamagic Empowered (v2.97.23), Shield + Absorb Elements (v2.97.24), Stunning Strike (v2.97.25–v2.97.26), Channel Divinity buff teardown (v2.97.29), Bardic Inspiration target (v2.97.30), Bless (v2.97.31), Hex + Hunter's Mark (v2.97.32), Bane + Faerie Fire (v2.97.33), save-pass condition drop (v2.97.77–v2.97.79). Plus the `↶ Undo pill` UI extension v2.97.79 routes save-pass cards into the existing undo allowlist. **Phase C (RAW Indomitable reroll endpoint) still ⚪** — v2.56.0 advantage-on-save variant remains the v1 simplification.
 
 **What it is:** A reverse-install pipeline for buffs that hold state.
 Today `/undo_attack_damage` reverts HP changes but doesn't un-install
@@ -1432,33 +1600,94 @@ than per-op replay — robust against state drift.
 `_apply_*` site needs to write its snapshot). High-value once shipped
 — closes 4+ filed v1 simplifications.
 
+### F9. Reactions automation framework — ✅ SHIPPED (v2.66.7 → v2.78.0, Phases 1–6)
+
+**Status:** Plan filed v2.66.7. Phase 1a (server foundation) ✅ v2.67.0. Phase 1b (client popup UI + per-user settings) ✅ v2.67.1. Phase 2a (Uncanny Dodge prompt ack) ✅ v2.67.2. NPC reaction slot consumption ✅ v2.67.3. **GM Reactions Panel** for every combatant ✅ v2.68.0 + v2.68.1–v2.68.11 catalog expansion. Phase 3a–3d (Shield / Counterspell / Hellish Rebuke / Absorb Elements / Silvery Barbs) ✅ v2.69.0–v2.72.0. Phase 6 NPC monster reactions via `attack_targeted` ✅ v2.73.0. Phase 4a–4d (Defensive Duelist / Lucky / War Caster OA / Mage Slayer) ✅ v2.74.0–v2.77.0. Phase 5 generic item-reaction framework + Cloak of Displacement ✅ v2.78.0. Wiki page v2.82.0.
+
+**What it is:** A trigger-event broadcast bus emitted by the action endpoints (`/attack`, `/npc_attack`, `/cast_spell`, `/npc_cast_spell`, `/apply_damage`, `/respond` save), keyed on event types (`attack_targeted`, `spell_cast_near`, `damage_taken`, `save_resolved`, `attack_missed`, `enter_reach`, etc.). For each event, the server walks every battle combatant, asks `_eligible_reactions[event_type](combatant, context)` for the menu of options (filtered by feature ownership + reaction slot availability + per-feature gates), and pushes the eligible-reactions list to the player (PC) or GM (NPC). On accept, the framework consumes the reaction slot and dispatches the per-feature consequence.
+
+**Consumers (10 features + 1 item, all wired):**
+- **Shield** spell (Wizard / Sorcerer / Wizard variants) — `attack_targeted` → +5 AC retroactive.
+- **Counterspell** — `spell_cast_near` (60 ft) → ability check vs spell level.
+- **Hellish Rebuke** (Tiefling Infernal Legacy + Warlock) — `damage_taken` → 2d10 fire save-or-suck.
+- **Absorb Elements** — `damage_taken` (elemental) → resistance + +1d6 next attack.
+- **Silvery Barbs** — `save_resolved` (ally success / enemy success) → reroll the d20.
+- **Defensive Duelist** feat — `attack_targeted` (melee, finesse weapon) → +PB AC.
+- **Lucky** feat — `attack_targeted` (any) → reroll d20.
+- **War Caster** feat — `enter_reach` OA window → cast 1-action spell as OA.
+- **Mage Slayer** feat — `spell_cast_near` (5 ft) → melee attack.
+- **Sentinel** feat (effect 3) — `attack_targeted` on ally within 5 ft → OA on attacker.
+- **Uncanny Dodge** (Rogue Lv 5) — `damage_taken` (attack) → halve damage. (v2.49.243 auto-fires; v2.67.2 added the explicit prompt ack so the GM can suppress.)
+- **Cloak of Displacement** (magic item) — `attack_targeted` → disadvantage on attack rolls until hit.
+
+**Reaction slot consumption:** Every accept flips the combatant's `economy.reaction` to True. Slot resets at the start of the same combatant's next turn (existing v2.4.31 economy plumbing).
+
+**Phase 4 still filed:**
+- **Per-player reaction-prompt settings** (mute prompt categories, auto-decline thresholds) — partial via v2.68.1 reaction-prompt coverage extension.
+- **Bardic Inspiration's "spend die on a reaction roll"** — the Lucky pattern (pre-d20 modal on `attack_targeted`) generalizes, but the recipient die consume currently fires post-roll (v2.97.56–v2.97.57). RAW grants pre-roll declaration; could be reworked into a `attack_targeted` reaction.
+- **Portent swap** — would consume `attack_targeted` / `save_resolved` events with a "swap d20 result with portent N" payload. Reactions framework can carry it; just needs the Portent banked-values panel.
+
+**Reads well alongside:** Wiki page at v2.82.0 (`docs/wiki/reactions-automation.html` per the wiki rule); per-class flips in this doc map to the reactions consumers list above. **F9 is the largest infrastructure win since the v2.4.31 action-economy framework** — it formalizes every "wait, can my character react to this?" prompt that previously required GM intervention.
+
+### F10. NPC concentration tracking — ✅ SHIPPED (v2.98.0, v2.98.5)
+
+**Status:** PC concentration cleanup shipped v2.38.x; NPC parity shipped v2.98.0 ("The Caster Loses Focus") + v2.98.1 ("Two Tower Spells") + v2.98.2 ("Read the Tower's Type") + v2.98.5 ("The Hostile Spell on a Hostile Mind") — `/npc_cast_spell` now installs condition buffs on PC + NPC targets, and NPC casters maintain concentration on installed spells. Damage on the NPC triggers a concentration save like a PC; failure cascade-drops the paired condition buffs from PCs (e.g. a Mage's Hold Person drops when the Mage takes damage).
+
+**What it is:** Symmetry of the PC concentration pipeline for NPC casters. New helpers `_drop_paired_concentration_buffs_npc()`, `_npc_concentration_buff_for()`, `_maybe_npc_concentration_save()`. Keyed on `source_combatant_id` (the NPC's `combatants[i].id`) rather than `source_char_id`. NPC casters store concentration buffs in their own `combatant.buffs` list; PC targets store the paired condition buff with `source_combatant_id` back-reference.
+
+**Blocks:**
+- **NPC Cleric Hold Person / Hold Monster** — now ✅; before this, an NPC cleric casting Hold Person never dropped concentration so the target was paralyzed forever.
+- **NPC Wizard concentration spells** (Sleep, Hypnotic Pattern, Slow, Banishment, Confusion) — all now drop on caster damage.
+- **NPC Warlock Hex** — drops correctly on caster damage.
+- **NPC Ranger Hunter's Mark** — drops correctly on caster damage.
+- **Archmage TokenTemplate** (v2.97.74) — first SRD NPC with Banishment + Confusion in the demo.
+
+**v1 simplifications:**
+- NPC concentration save uses the monster's stat block CON mod + proficiency — no "Constitution save proficiency" hand-edit on the monster JSON yet.
+- NPC concentration drop doesn't broadcast a special chat card today — just the buff teardown event.
+
 ### Framework prioritization
 
 If the question is "what should we build next to unlock the MOST
-unimplemented features?", the ranking is:
+unimplemented features?", the ranking (updated v2.99.9):
 
-1. **F1 Token adjacency** — unblocks 6+ features (Sneak Attack
-   validation, AoP/AoD radius, Bardic recipient range, Mass Cure
-   range, Opportunity Attack). Smallest LOC investment. **Build
-   first.**
-2. **F8 Condition undo** — closes 4+ filed simplifications + enables
-   RAW Indomitable. **Build second** since it removes simplifications
-   already shipped.
-3. **F6 Magical-source resistance** — unblocks Ki-Empowered Strikes +
-   3 class-feature dependencies. **Build third** — small + targeted.
-4. **F2 Fog-of-war** — unblocks 4+ Lv 10+ Ranger / Rogue features.
-   Skip if no demo PC is at those levels.
-5. **F3-F4 Terrain + fall** — pair. Low ROI until a Druid /
+1. ~~**F1 Token adjacency**~~ ✅ shipped v2.61.0 + v2.66.0–v2.66.6.
+2. ~~**F8 Condition undo**~~ 🟢 partial — Phase A+B+D-mostly shipped
+   via v2.65.0 + v2.97.16–v2.97.79. **Phase C (RAW Indomitable
+   reroll)** is the only ⚪ remainder; would replace the v2.56.0
+   advantage-on-save simplification with the correct reroll-on-fail.
+3. ~~**F6 Magical-source resistance**~~ ✅ shipped v2.63.0. Follow-up
+   consumers (Magic Weapon, Pact of the Blade, Druid Primal Strike,
+   Improved Divine Smite) still need single-line additions to
+   `_attack_is_magical`.
+4. ~~**F2 Fog-of-war**~~ ✅ shipped v2.64.0 (data model + endpoints +
+   auto-reveal). Consumer features (Blindsense, Hide in Plain
+   Sight, Vanish, Feral Senses) plumbing-ready — each is a small
+   per-class commit. Defer until a Lv 10+ Ranger demo PC ships.
+5. ~~**F9 Reactions automation framework**~~ ✅ shipped Phases 1–6
+   (v2.66.7–v2.78.0). Phase 4 follow-ups: Portent banked-values
+   panel, Bardic Inspiration pre-roll reaction variant, per-player
+   prompt mute settings.
+6. ~~**F10 NPC concentration**~~ ✅ shipped v2.98.0–v2.98.5. Follow-up:
+   special-case chat card on NPC concentration drop.
+7. **F3–F4 Terrain + fall** ⚪ — pair. Low ROI until a Druid /
    tactical-combat campaign needs them.
-6. **F5 Disease** — niche; defer until a disease-themed campaign
+8. **F5 Disease** ⚪ — niche; defer until a disease-themed campaign
    surfaces.
-7. **F7 Components** — Archdruid + Subtle Spell only; defer.
+9. **F7 Components** ⚪ — Archdruid + Subtle Spell only; defer.
+
+**Top remaining infrastructure gap:** (D) Passive trait engine
+Phase 2 (race-keyed save advantage table). NOT counted as an F-row
+because it's already filed under cross-cutting (D) — but it's the
+single most leveraged remaining ⚪ piece, unlocking Dwarven
+Resilience + Gnome Cunning + High Elf Trance + Fey Ancestry +
+Halfling Lucky-on-natural-1 in one commit.
 
 ---
 
 ## Order of priority (rough)
 
-Updated for v2.60.1. ~~Strikethrough~~ items are shipped.
+Updated for v2.99.9 (re-audit 2026-05-31). ~~Strikethrough~~ items are shipped.
 
 1. ~~**(E) Action-economy tracker — Phase 1+2** — manual chip strip + auto-advance from existing strike / cast buttons.~~ ✅ shipped v2.4.31 (Phase 1) + v2.5.3 (Phase 2) + v2.5.5 (Phase 2b full-sheet sync).
 2. ~~**Channel Divinity option-picker.**~~ ✅ shipped v2.9.0 with the reusable `showResourceOptionPicker` helper. Life Domain end-to-end v2.14.0; all 12 canon Cleric domains + Paladin Oath of Devotion options curated by v2.56.2.
@@ -1468,19 +1697,23 @@ Updated for v2.60.1. ~~Strikethrough~~ items are shipped.
 6. ~~**(E) Action-economy — Phase 3+4** — class-feature table + gating with GM override.~~ ✅ shipped v2.6.0 (Phase 3 curated table) + v2.6.1 (Phase 4 gating) + v2.7.2 (Phase 4a dimming) + v2.8.0 (strict mode).
 7. **Cross-cutting (A) generalized.** Refactor LoH / Wild Shape / Bardic Inspiration / Ki / Sorcery Points onto a single `resource → option → target → effect` framework. Now post-shipping #3-5 since the abstraction emerges from the concrete cases. Ki picker and Channel Divinity picker now share the v2.9.0 primitive; Sorcery Points + Superiority Dice + Lay on Hands disease-cure option still need their pickers wired.
 8. ~~**Sneak Attack / Divine Smite per-attack uplift toggle.**~~ ✅ shipped v2.16.0 (per-attack uplift modal on Strike click; both work as confirmation-after-d20-result not RAW-correct pre-roll declaration; filed for the eventual Phase B mid-roll intercept).
-9. **(B) Roll-time intercepts — save-roll path** ✅ shipped (Danger Sense v2.52.0, Aura of Protection v2.53.0, Countercharm v2.54.0, Aura of Devotion v2.55.0, Indomitable v2.56.0, Mindless Rage v2.57.0). **Attack-roll path** still ⚪ — unblocks Lucky (Halfling + feat), Portent (Divination), Reliable Talent (Rogue), Stroke of Luck (Rogue), Bardic Inspiration recipient-side die. Largest remaining intercept gap.
-10. ~~**(C) Buff slot.**~~ ✅ shipped (v2.19.x → v2.49.x → v2.58.0+). Buff dict shape stable; install/remove helpers operational; mechanical-effect intercepts at attack-roll / save-roll / heal-resolution; concentration cleanup via `_drop_caster_concentration`. Remaining: Bless attack/save bonus (filed); Bardic Inspiration recipient die (cross-ref Phase B); suspended-buff state for Mindless Rage RAW second sentence (filed).
-11. **(D) Passive trait engine** ⚪ — see the rewritten section above. Phased plan (Phase 1 stat-mod confirmation, Phase 2 race-keyed save-advantage table, Phase 3 race condition-install immunity, Phase 4 Half-Orc Relentless Endurance, Phase 5 Tiefling Infernal Legacy). Phase 2 is the most leveraged — would unblock Dwarven Resilience + Gnome Cunning + High Elf Trance + Fey Ancestry in one commit by reusing the v2.52.0+ save-roll construction hook.
+9. ~~**(B) Roll-time intercepts — save-roll path**~~ ✅ shipped (Danger Sense v2.52.0, Aura of Protection v2.53.0, Countercharm v2.54.0, Aura of Devotion v2.55.0, Indomitable v2.56.0, Mindless Rage v2.57.0). **Attack-roll path** ✅ partly shipped via the F9 Reactions framework (Lucky feat v2.77.0, Defensive Duelist v2.74.0, Shield v2.69.0). **Remaining attack-roll ⚪ items:** Portent (Divination Wizard Lv 2 — needs banked-values panel + `swap_d20_result` reaction kind), Reliable Talent (Rogue Lv 11 — needs skill-check construction hook), Stroke of Luck (Rogue Lv 20 — same framework as Silvery Barbs), Halfling Lucky (race — folds into (D) Phase 2).
+10. ~~**(C) Buff slot.**~~ ✅ shipped (v2.19.x → v2.49.x → v2.58.0+ → v2.97.x catalog). Buff dict shape stable; install/remove helpers operational; mechanical-effect intercepts at attack-roll / save-roll / heal-resolution; concentration cleanup via `_drop_caster_concentration` + NPC parity v2.98.0. **`_SPELL_BUFF_MAP` catalog** v2.97.30+ adds Bless/Bane/Heroism/Aid/Shield of Faith/PFE&G/Sanctuary/Faerie Fire. Bardic Inspiration recipient die ✅ v2.97.56–57. Remaining: more spells in `_SPELL_BUFF_MAP` (Crusader's Mantle, Enhance Ability, Greater Invisibility, etc.); suspended-buff state for Mindless Rage RAW second sentence (filed).
+11. **(D) Passive trait engine** ⚪ — see the rewritten section above. Phased plan (Phase 1 stat-mod confirmation, Phase 2 race-keyed save-advantage table, Phase 3 race condition-install immunity, Phase 4 Half-Orc Relentless Endurance, Phase 5 Tiefling Infernal Legacy). **Phase 2 is the most leveraged next commit** — would unblock Dwarven Resilience + Gnome Cunning + High Elf Trance + Fey Ancestry + Halfling Lucky-on-natural-1 in one commit by reusing the v2.52.0+ save-roll construction hook.
 12. ~~**(E) Action-economy — Phase 5** — movement tracker.~~ ✅ shipped v2.6.2 (chip) + v2.8.1-2 (breadcrumb) + v2.8.3 (Dash modal).
-13. **F1 Token positional adjacency** (NEW priority — see "Missing system frameworks" section above) — small commit unblocks 6+ filed simplifications (Sneak Attack ally-adjacency, AoP/AoD/Countercharm 10/30 ft radius, Bardic 60 ft range, Mass Cure target range, Opportunity Attack trigger). **Highest-ROI next infrastructure piece.**
-14. **F8 Condition undo / reversal** (NEW priority) — closes 4 filed v1 simplifications including RAW Indomitable. Per-cast snapshot pipeline ~3-5 commits.
-15. **F6 Magical-source resistance gating** (NEW priority) — unblocks Ki-Empowered Strikes + Improved Divine Smite + Magic Weapon + Pact of the Blade + Brutal Critical. Small + targeted ~1-2 commits.
+13. ~~**F1 Token positional adjacency**~~ ✅ shipped v2.61.0 + v2.66.0–v2.66.6.
+14. **F8 Condition undo / reversal** 🟢 partial — Phase A+B+D-mostly shipped. **Phase C (RAW Indomitable reroll endpoint)** is the only ⚪ remainder; would replace the v2.56.0 advantage-on-save simplification with RAW reroll-on-fail.
+15. ~~**F6 Magical-source resistance gating**~~ ✅ shipped v2.63.0. Follow-up consumers (Magic Weapon spell, Pact of the Blade, Druid Primal Strike, Improved Divine Smite) are single-line additions to `_attack_is_magical`.
+16. ~~**F9 Reactions automation framework**~~ ✅ Phases 1–6 shipped v2.66.7–v2.78.0.
+17. ~~**F10 NPC concentration**~~ ✅ shipped v2.98.0–v2.98.5.
+18. **Sorcerer Metamagic + Font-of-Magic spend picker** ⚪ — Sorcery Points counter exists but the spend picker doesn't; Metamagic is unfiled. Reuses the v2.9.0 picker primitive. **High-leverage user-visible win** — closes one of the largest still-unwired core classes.
+19. **Warlock Pact Boon (Tome → Blade → Chain order)** + **Eldritch Invocations picker** ⚪ — Pact Magic short-rest slot refresh is a one-line patch (already 🟡); Pact of the Tome is the easiest Pact Boon (just an extra-spells flag); Eldritch Invocations is a content-driven picker.
 
-Items 4 + 11 are the next-up user-visible wins for the remaining
-class features. Items 13-15 are the highest-leverage infrastructure
-investments — each unlocks multiple Lv 10+ features in one commit
-window. Items 9 (attack-roll intercept) + (D) Phase 2 (race-keyed
-save-advantage table) are the largest remaining ⚪ areas.
+**Top user-visible wins after this audit:**
+- Item 11 (D Phase 2 — race save advantage) — single commit, ~150 LOC, ships 5 race features.
+- Item 18 (Sorcerer Font-of-Magic picker + first Metamagic) — closes a core class with a small picker + new endpoint.
+- Item 14 (F8 Phase C — RAW Indomitable reroll) — replaces v1 simplification with RAW; same per-cast snapshot stack as Phase B.
+- Item 4 (Wild Shape token-swap via the Token.disguise primitive filed v2.15.9) — pure UI win; design doc already complete.
 
 ---
 
