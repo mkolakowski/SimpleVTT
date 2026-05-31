@@ -4583,7 +4583,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             const parsed = JSON.parse(raw);
             attacks = parsed.map(a => ({
                 name:         a.name || '',
-                attack_bonus: (a.attack_bonus ?? a.bonus ?? '').toString(),
+                attack_bonus: (a.attack_bonus ?? a.bonus ?? a.atk_bonus ?? '').toString(),
                 damage:       a.damage || '',
                 damage_type:  a.damage_type || '',
                 range:        a.range || '',
@@ -4862,6 +4862,71 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 if (typeof CAMPAIGN_ID === 'undefined') return;
                 const idx = parseInt(btn.dataset.idx, 10);
                 btn.disabled = true;
+
+                // v2.99.7 — monster-sheet Strike routes to /npc_attack.
+                // The PC pipeline below assumes a Character row exists
+                // for MY_CHAR_ID; on a monster sheet MY_CHAR_ID is a
+                // TokenTemplate id and /attack would 404. Skip the
+                // uplift modal (those are PC class-feature based) and
+                // route directly to the NPC attack endpoint after
+                // resolving a target via the same multi-target picker
+                // the mini-sheet .mini-strike-btn handler uses.
+                if (window.IS_MONSTER_SHEET) {
+                    const combId = window.MONSTER_COMBATANT_ID || '';
+                    if (!combId) {
+                        (window.showToast || alert)(
+                            'Open this monster from the initiative tracker to strike — the sheet needs a combatant context.',
+                            'warning',
+                        );
+                        btn.disabled = false;
+                        return;
+                    }
+                    const a = attacks[idx] || {};
+                    let _tgt = null;
+                    if (typeof window.vttOpenMultiTargetPicker === 'function') {
+                        const _picked = await window.vttOpenMultiTargetPicker({
+                            required: 1,
+                            spellName: a.name || 'Attack',
+                            casterCharId: null,
+                            rangeStr: a.range || '',
+                        });
+                        if (_picked === null) {
+                            btn.disabled = false;
+                            return;
+                        }
+                        _tgt = _picked[0] || '';
+                    }
+                    try {
+                        const resp = await fetch(
+                            `/api/campaign/${CAMPAIGN_ID}/npc_attack`,
+                            {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    combatant_id: combId,
+                                    action_id: a._slug || a.name || '',
+                                    action_name: a.name || 'Attack',
+                                    attack_bonus: a.attack_bonus || '',
+                                    damage: a.damage || '',
+                                    damage_type: a.damage_type || '',
+                                    range: a.range || '',
+                                    ...(_tgt ? { target_combatant_id: _tgt } : {}),
+                                }),
+                            },
+                        );
+                        if (!resp.ok) {
+                            let body; try { body = await resp.json(); } catch { body = null; }
+                            (window.showToast || alert)(
+                                'Strike failed: '
+                                + (body ? JSON.stringify(body) : await resp.text()),
+                                'error',
+                            );
+                        }
+                    } finally {
+                        btn.disabled = false;
+                    }
+                    return;
+                }
 
                 // v2.16.0: pop the uplift modal when any class-feature
                 // damage uplift is available. Cancel kills the swing

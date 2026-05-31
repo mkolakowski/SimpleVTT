@@ -46,6 +46,21 @@
         const CAMPAIGN_ID = {{ campaign.id }};
         const CHAR_ID     = {{ char.id }};
         const ME = { id: {{ user.id }} };
+        // v2.99.7 — flag the sheet form as monster-mode so the shared
+        // sheet_dnd5e.html click handlers can route ability/skill/save
+        // rolls to /roll with ``skip_roll_state + actor_name`` (instead
+        // of using the GM-user's PC fallback) and route attack Strikes
+        // to /npc_attack (instead of /attack which would 404 on the
+        // template id). The combatant_id query string is set by the
+        // init-tracker's "📋 Sheet" link so the attacker is unambiguous;
+        // when the sheet is opened standalone (no combatant_id) the
+        // Strike handler surfaces a toast pointing the GM at the init
+        // tracker.
+        window.IS_MONSTER_SHEET = true;
+        window.MONSTER_NAME = {{ (char.name or "Monster") | tojson }};
+        window.MONSTER_COMBATANT_ID = (
+            new URLSearchParams(window.location.search).get('combatant_id') || ''
+        );
         // Monster sheets are GM-only and don't persist edits — the close
         // hook either dismisses the drawer (when this sheet is iframed
         // inside the 2.3.15 drawer on the tabletop) or navigates back

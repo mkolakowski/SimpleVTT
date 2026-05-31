@@ -543,7 +543,19 @@
                     ? parseInt(form.dataset.charId, 10)
                     : (typeof CHAR_ID !== 'undefined' ? CHAR_ID : null);
                 const body = { expression: expr, visibility, note };
-                if (charId) body.character_id = charId;
+                // v2.99.7 — monster sheets are not backed by a Character
+                // row; sending the template id as character_id would
+                // make the server's roll_state fallback land on an
+                // unrelated PC owned by the GM. Pass actor_name +
+                // skip_roll_state to opt into the v2.49.211/212
+                // "no character attribution" path so the roll log
+                // attributes to the monster name instead.
+                if (window.IS_MONSTER_SHEET) {
+                    body.skip_roll_state = true;
+                    if (window.MONSTER_NAME) body.actor_name = window.MONSTER_NAME;
+                } else if (charId) {
+                    body.character_id = charId;
+                }
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

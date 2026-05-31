@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.7] - 2026-05-30 — "The Monster Picks Up the Sword"
+
+**Schema version:** 64
+**Commit summary:** **Unify the monster init-tracker sheet with the PC sheet shell so the GM can click ability/save/skill checks and Strike attacks the same way a player clicks them on a PC sheet.** The drawer iframe + `monster_template_sheet_page` route + `sheet_dnd5e.html` shell were already shipped (v2.3.10 / v2.3.15); v2.99.7 closes the three remaining gaps that prevented click-to-roll from actually working on monsters: (1) the `atk_bonus` projection field wasn't in the template's parse fallback chain so the bonus chips rendered empty, (2) the Strike button POSTed to `/attack` which 404s on a TokenTemplate id, (3) the ability/save/skill `/roll` calls passed the template id as `character_id` so the server's PC-fallback hijacked attribution to whatever PC the GM happens to own first. Phase 1 of the TODO "Unified Monster Sheet in Initiative Tracker" item.
+
+### Added
+- ``window.IS_MONSTER_SHEET`` / ``window.MONSTER_NAME`` / ``window.MONSTER_COMBATANT_ID`` globals on the monster sheet page (``monster_page.html``) so shared sheet handlers can detect monster mode.
+- Monster-mode branch in the ``.atk-strike`` handler (``sheet_dnd5e.html``) that routes Strikes to ``/npc_attack`` with the structured attack fields + multi-target picker target.
+- Monster-mode branch in ``wireDnd5eRollButtons`` (``sheet.js``) that sends ``skip_roll_state: true`` + ``actor_name: <monster name>`` instead of ``character_id``.
+
+### Fixed
+- Attack bonus chips on the monster sheet now render the +N to-hit — added ``a.atk_bonus`` to the renderAttacks parse fallback chain (``a.attack_bonus ?? a.bonus ?? a.atk_bonus``).
+- Ability / save / skill rolls on a monster sheet now attribute to the monster's name in the roll log instead of silently falling through to whatever PC the GM owns first.
+- Strike clicks on a monster sheet now actually fire a /npc_attack instead of 404ing on /attack with the template id.
+
+### Changed
+- ``app/templates/monster_page.html`` — set the three ``window.IS_MONSTER_SHEET`` / ``window.MONSTER_NAME`` / ``window.MONSTER_COMBATANT_ID`` globals.
+- ``app/templates/sheet_dnd5e.html`` — monster-mode branch in the .atk-strike handler + atk_bonus fallback.
+- ``app/static/sheet.js`` — monster-mode branch in wireDnd5eRollButtons.
+- ``docs/wiki/consume-without-refund-audit.md`` — added v2.99.7 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — wires existing infrastructure (the `monster_template_sheet_page` route, the drawer iframe, /npc_attack, /roll's `actor_name`/`skip_roll_state` pipeline) into the shared sheet handlers. No new endpoints, no schema change.
+- **Test deferred to Phase 1.5** per the planning question — manual GM click-through against the live container is the v1 verification path. A harness test (`test_monster_sheet_init.py`) is filed for follow-up.
+- **Strike requires the combatant context.** When the monster sheet is opened standalone (no `?combatant_id=` query string), the Strike button surfaces a toast pointing the GM at the init tracker. This is intentional: /npc_attack needs a combatant_id to attribute the swing to a specific NPC instance.
+- **Uplift modal hidden for monsters.** The class-feature uplifts (Divine Smite, Sneak Attack, Colossus Slayer, etc.) are PC-only. The monster-mode branch skips the uplift modal entirely.
+- **Multi-target picker still applies.** Strike click pops the canvas crosshair / modal picker the same way PC strikes do. The picker's ``casterCharId`` is passed as null for monsters (the picker handles null gracefully — only used for self-exclusion which is moot for an NPC attacker).
+- **roll_state for monsters is filed.** Today no adv/disadv plumbing on monster rolls — `skip_roll_state: true` opts out entirely. Future work could add per-combatant `roll_state` keyed on the hub combatant dict.
+- **Spells / legendary / lair actions deferred to Phase 2.** The Spells fieldset is still gated out by ``is_monster_sheet`` in ``sheet_dnd5e.html:1043``; un-gating + wiring to /npc_cast_spell is the next chunk. Legendary / lair actions need a new projection field in ``_monster_template_to_sheet``.
+- Total harness count: 658 (unchanged — no new tests).
+
+---
+
 ## [2.99.6] - 2026-05-30 — "Roster Reset For Everyone"
 
 **Schema version:** 64
