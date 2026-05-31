@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.8] - 2026-05-30 — "The Pre-Flight Card"
+
+**Schema version:** 64
+**Commit summary:** **Add `docs/wiki/testing-checklist.md` as a living per-version verification log.** A standing checklist at the top covers what every commit needs to verify (version bump, container restart, /version poll, per-commit harness, doc surfacing, end-of-session suite sweep); a per-version section under it carries entries for each release with manual click-through steps, automated coverage notes, regression watches, and filed follow-ups. The v2.99.7 monster-sheet entry is the first populated entry; a template at the bottom guides future entries.
+**Description:** New file `docs/wiki/testing-checklist.md` (~135 lines), plus the two wiki-surfacing edits — landing-page table row in `app/templates/wiki.html` and `docs/wiki/README.md` row — per the CLAUDE.md wiki-surfacing rule. No allowlist entry needed (the doc lives at `docs/wiki/<slug>.md` so the wiki route serves it directly).
+
+### Added
+- `docs/wiki/testing-checklist.md` — standing checklist + per-version verification log + template for future entries.
+- Wiki landing-page row in `app/templates/wiki.html` linking to the new guide.
+- Index row in `docs/wiki/README.md`.
+
+### Notes
+- **PATCH bump** — pure doc addition. No code, no schema, no test surface change.
+- **Why this is its own commit.** Bundling the doc with the v2.99.7 monster sheet commit would have mixed test-discipline tooling with feature wiring. Keeping them split makes the testing-checklist file easier to discover via `git log` and lets future contributors land their own per-version verification entries against a clearly-versioned scaffold.
+- **Future commits should append.** Each new commit lands a section above the current latest in the per-version log. The template at the bottom of the file is the format to copy.
+- Total harness count: 658 (unchanged).
+
+---
+
 ## [2.99.7] - 2026-05-30 — "The Monster Picks Up the Sword"
 
 **Schema version:** 64

@@ -56,6 +56,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-reactions-automation" in resp.text
     # v2.82.0: reactions-automation GM how-to listed in the available-guides table.
     assert "/wiki/reactions" in resp.text
+    # v2.99.8: testing-checklist per-version verification log listed.
+    assert "/wiki/testing-checklist" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
