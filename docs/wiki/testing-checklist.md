@@ -28,6 +28,54 @@ The CLAUDE.md per-commit rule covers most of this, but here's the consolidated l
 
 The most recent version is at the top. **Append new entries above older ones.** Each entry should follow the [template at the bottom](#template-for-future-entries).
 
+### v2.99.9 — "The Spotter on the Shore"
+
+**Scope:** Land the Phase 1.5 follow-up filed by v2.99.7 — three harness tests at `tests/harness/test_monster_sheet_init.py` codifying the monster-sheet contract so a future regression breaks CI before it breaks manual click-through.
+
+**Automated coverage:**
+
+- `test_monster_sheet_page_exposes_globals` — GETs the monster sheet page, asserts `window.IS_MONSTER_SHEET = true;`, `MONSTER_NAME` populated, `MONSTER_COMBATANT_ID` present.
+- `test_monster_roll_attributes_to_actor_name` — POSTs `/roll` with `skip_roll_state: true` + `actor_name`, asserts the broadcast carries `no_char_attribution: true` + `actor_name` + `char_name: null`.
+- `test_monster_sheet_strike_routes_to_npc_attack` — POSTs `/npc_attack` with the v2.99.7 Strike body shape, asserts 200 + `weapon_attack` broadcast with `is_npc_attack: true` + `caster_combatant_id` set.
+
+**Manual verification:** None required — pure test addition. The v2.99.7 click-through steps stay the v1 verification path (they exercise things harness can't reach, like the multi-target picker UI and the uplift modal suppression).
+
+**Regression watch:**
+
+- If a future commit edits `monster_page.html`, test 1 fires fast — the three globals are the contract.
+- If a future commit refactors `/roll`'s attribution path, test 2 fires before any monster-sheet user sees mis-attribution.
+- If a future commit changes `/npc_attack`'s body shape or broadcast shape, test 3 fires.
+
+**Filed for follow-up:**
+
+- Playwright UI test in `tests/harness_ui/` that exercises the actual click (button → fetch → broadcast). Out of scope for the harness layer; needs the visual-regression-harness scaffold.
+- Phase 2 monster sheet (Spells fieldset un-gate, legendary/lair actions as first-class buttons) still pending — when it ships, append tests for the new mechanic to this file.
+
+---
+
+### v2.99.8 — "The Pre-Flight Card"
+
+**Scope:** Add `docs/wiki/testing-checklist.md` (this file) as a per-version verification log.
+
+**Automated coverage:**
+
+- `tests/harness/test_wiki.py::test_wiki_home_renders` extended with one assertion (`/wiki/testing-checklist` is in the landing page response) so a future regression that removes the table row gets caught.
+
+**Manual verification:**
+
+1. Browse to `http://localhost:8013/wiki` → "Available guides" table includes a "Testing checklist" row linking to `/wiki/testing-checklist`.
+2. Click the link → page renders with the standing checklist, per-version log, and template.
+
+**Regression watch:**
+
+- `docs/wiki/README.md`'s table row stays in sync — if a future contributor removes the doc, both indexes need updating.
+
+**Filed for follow-up:**
+
+- None.
+
+---
+
 ### v2.99.7 — "The Monster Picks Up the Sword"
 
 **Scope:** Monster init-tracker sheet now supports click-to-roll for ability/save/skill checks and Strike attacks. Routes Strikes to `/npc_attack` and rolls to `/roll` with `actor_name + skip_roll_state` so attribution lands on the monster.

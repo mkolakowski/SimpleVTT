@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.9] - 2026-05-30 — "The Spotter on the Shore"
+
+**Schema version:** 64
+**Commit summary:** **Land the v2.99.7 Phase 1.5 follow-up: three harness tests codifying the monster-sheet contract.** v2.99.7 shipped manual-verified per the planning question; v2.99.9 closes the loop with `tests/harness/test_monster_sheet_init.py`. The three tests catch the most likely regression paths: (1) the JS globals going missing from `monster_page.html` (Strike + roll click handlers silently fall through to the PC pipeline), (2) the `/roll` endpoint's `actor_name` + `skip_roll_state` branch breaking (monster ability rolls mis-attribute to the GM's first owned PC), (3) the `/npc_attack` body shape the new Strike branch sends drifting from what the endpoint accepts.
+
+### Added
+- `tests/harness/test_monster_sheet_init.py` — 3 tests:
+  - `test_monster_sheet_page_exposes_globals` — GET on the monster sheet page returns 200 + body contains `window.IS_MONSTER_SHEET = true;`, `MONSTER_NAME` populated from the template, and `MONSTER_COMBATANT_ID`.
+  - `test_monster_roll_attributes_to_actor_name` — POST `/roll` with `skip_roll_state: true` + `actor_name` → broadcast carries `no_char_attribution: true` + `actor_name` + `char_name: null`.
+  - `test_monster_sheet_strike_routes_to_npc_attack` — POST `/npc_attack` with the v2.99.7 Strike body shape → 200 + `weapon_attack` broadcast with `is_npc_attack: true`, `caster_combatant_id` set, `caster_char_id: null`.
+
+### Changed
+- `docs/test-harness-coverage.md` — total bumped 658 → 661, version stamp v2.99.1 → v2.99.9.
+- `docs/wiki/consume-without-refund-audit.md` — added v2.99.9 to the cross-reference list.
+
+### Notes
+- **PATCH bump** — test-only addition. The v2.99.7 mechanic ships unchanged.
+- **What these tests catch.** Each test pins a specific layer of the v2.99.7 wiring. A future commit that drops `window.IS_MONSTER_SHEET` from `monster_page.html` (test 1) or breaks the `no_char_attribution` flag in `/roll` (test 2) or changes the `/npc_attack` response shape (test 3) fails before the manual click-through would catch it.
+- **What they don't catch.** The actual click-through (button → fetch → broadcast) lives in JS and would need Playwright. That's tests/harness_ui/ territory and is deferred.
+- Total harness count: 661 (was 658 in v2.99.8).
+
+---
+
 ## [2.99.8] - 2026-05-30 — "The Pre-Flight Card"
 
 **Schema version:** 64
