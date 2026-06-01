@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.33] - 2026-06-01 — "The Twinned Hand"
+
+**Schema version:** 64
+**Commit summary:** **Twinned Spell metamagic — second mechanically-wired metamagic option after v2.49.124 Empowered.** RAW (PHB p.102): "When you Cast a Spell that targets only one creature and doesn't have a range of self, you can spend a number of sorcery points equal to the spell's level to target a second creature in range with the same spell (1 sorcery point if the spell is a cantrip)." v1 announce-only ship — matches the v2.6.0 Quickened Spell precedent. Server decrements SP by `max(1, spell_level)` + broadcasts the trigger. The actual second-target cast is performed manually by the player via a second `/cast_spell` call. Auto-routing to the second target with the same damage roll / save DC is filed for a future commit (would need a pending-buff pattern + `/cast_spell` consumer that loops the cast).
+**Description:** New endpoint `/use_metamagic_twinned_spell` taking `character_id` + `spell_level` (0-5; 0 = cantrip). Validates Sorcerer Lv 3+, SP available >= `max(1, spell_level)`. Atomically decrements SP + broadcasts `resource_update` + `feature_used(source=metamagic-twinned-spell)` + logs `resource_spend` undo entry. Zara's `_metamagic_options` list extended from `["quickened-spell", "empowered-spell"]` to include `"twinned-spell"` (3 picks total via demo expansion — RAW Lv 3 = 2 known but the demo shows all three for fixture coverage).
+
+### Added
+- `/api/campaign/{campaign_id}/use_metamagic_twinned_spell` endpoint — body `{character_id, spell_level (0-5)}`. Returns `{ok, sp_cost, sp_remaining, sp_max, spell_level, cast_id}` on success; 409 on insufficient SP / wrong class / level too low; 400 on bad spell_level.
+- `twinned-spell` entry in Zara's `class_features` list (rendered as a Class abilities button).
+- `tests/harness/test_use_metamagic_twinned.py` — 6 tests:
+  - `test_twinned_l1_costs_1_sp` — L1 spell costs 1 SP; SP decrements; broadcast fires.
+  - `test_twinned_l3_costs_3_sp` — L3 spell costs 3 SP.
+  - `test_twinned_cantrip_costs_1_sp` — Cantrip (spell_level=0) costs 1 SP RAW.
+  - `test_twinned_not_enough_points` — Drain Zara's SP via Empowered loop; Twinned at L1 returns 409 `not_enough_points`.
+  - `test_twinned_wrong_class` — Tavik (Cleric) → 409 `wrong_class`.
+  - `test_twinned_spell_level_out_of_range` — `spell_level=6` → 400.
+
+### Changed
+- Zara's `_metamagic_options` list extended to include `"twinned-spell"`. Demo expansion houserule — RAW Lv 3 = 2 known, the demo shows all three for fixture coverage. Comment in the seed explains.
+- `docs/plans/class-content-status.md` — Sorcerer Metamagic row updated to credit v2.99.33 Twinned Spell ✅ alongside Empowered ✅ v2.49.124 + Quickened 🟡 v2.6.0.
+- `docs/test-harness-coverage.md` — total bumped + new test file row.
+
+### Notes
+- **PATCH bump** — additive endpoint + demo seed line + 6 tests.
+- **Why announce-only.** RAW Twinned Spell requires a second target in range with the SAME spell. Auto-routing the second cast would need: (a) target picker that respects the original spell's range from the first target's position; (b) same damage roll re-applied (RAW is unclear — "the same spell" could mean fresh roll OR same numbers); (c) cast_id chain that links the two casts for undo. The v1 announce-only ship lets the GM apply the second cast manually. Filed.
+- **Three metamagic options on Zara.** RAW Lv 3 Sorcerer knows 2 metamagics; bumps to 3 at Lv 10 and 4 at Lv 17. Zara is Lv 5 so should only know 2. The demo seed gives her 3 (Quickened / Empowered / Twinned) as a houserule expansion so the test fixture exercises all three. Players can RAW-correct via the sheet edit panel by removing one entry.
+- **Demo coverage.** Zara Emberfire is the only Sorcerer. She now has 3 of 8 metamagics wired (Quickened announce-only, Empowered fully-mechanical, Twinned announce-only). Remaining ⚪: Subtle (needs F7 components), Distant, Heightened, Careful, Subtle (3 more for the Lv 17 capstone). Twinned was the natural next-ship per the v2.99.29 audit summary.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 712 (was 706 in v2.99.32).
+
+---
+
 ## [2.99.32] - 2026-06-01 — "The Last Echo"
 
 **Schema version:** 64

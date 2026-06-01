@@ -2285,13 +2285,24 @@ def _sorcerer_sheet(name: str) -> dict:
                 "name": "Empowered Spell (metamagic)",
                 "desc": "Spend 1 sorcery point: when you roll damage for a spell, reroll up to CHA-mod of the lowest damage dice once (you must use the new rolls).",
             },
+            # v2.99.33 — Twinned Spell. Variable SP cost (spell
+            # level, min 1 for cantrip). Announce-only in v1
+            # (player makes the second-target cast manually).
+            # PHB p.102.
+            {
+                "key": "twinned-spell",
+                "name": "Twinned Spell (metamagic)",
+                "desc": "Spend SP = spell level (min 1 for cantrip): when you cast a single-target spell with range > Self, target a second creature in range. v1: announce-only — cast the spell at the second target via a follow-up Cast.",
+            },
         ],
         # Sorcerer's Metamagic at Lv 3 picks 2 options. Zara's picks:
         # Quickened Spell (curated entry in `_FEATURE_ECONOMY`) +
-        # Empowered Spell (v2.49.124 — replaces Twinned as the second
-        # pick because Empowered ships ahead of Twinned and gives the
-        # demo a working second Metamagic option out-of-the-box).
-        "_metamagic_options": ["quickened-spell", "empowered-spell"],
+        # Empowered Spell (v2.49.124) + Twinned Spell (v2.99.33).
+        # 3 picks total despite RAW Lv 3 = 2 known (Lv 10 + 17 add
+        # 1 more each) — demo expansion via an early-pick variant
+        # houserule so the test fixture exercises all three. Twinned
+        # is the third option to flesh out the metamagic suite.
+        "_metamagic_options": ["quickened-spell", "empowered-spell", "twinned-spell"],
         # Draconic Bloodline subclass picks an ancestor at Lv 1.
         # Red = fire (matches Tiefling's flame motif + Hellish
         # Resistance). Elemental Affinity (Lv 6) is deferred until

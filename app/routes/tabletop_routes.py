@@ -21647,6 +21647,159 @@ async def use_metamagic_empowered_spell(
     }
 
 
+# ----------- API: Metamagic Twinned Spell (Sorcerer Lv 3+) ----------
+# v2.99.33 — second mechanically-wired metamagic option after the
+# v2.49.124 Empowered Spell ship. RAW (PHB p.102): "When you Cast
+# a Spell that targets only one creature and doesn't have a range
+# of self, you can spend a number of sorcery points equal to the
+# spell's level to target a second creature in range with the same
+# spell (1 sorcery point if the spell is a cantrip)."
+#
+# v1 announce-only ship — matches the Quickened Spell precedent
+# from v2.6.0. The endpoint validates eligibility + decrements SP,
+# but the actual second-target cast is performed manually by the
+# player via a second /cast_spell call. Auto-routing to the second
+# target with the same damage roll / save DC is filed for a future
+# commit (would need: pending-buff pattern + /cast_spell consumer
+# that loops the cast over the second target's char_id /
+# combatant_id with the same damage roll).
+#
+# Validation:
+#   - Sorcerer Lv 3+ (Metamagic unlock)
+#   - SP available equal to spell_level (1 for cantrip)
+#   - spell_level in 0-5 (cantrip = 0; L5 = max Sorcerer slot)
+
+
+@router.post("/api/campaign/{campaign_id}/use_metamagic_twinned_spell")
+async def use_metamagic_twinned_spell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend SP equal to spell level (min 1) to declare Twinned Spell
+    on the caster's next spell cast. v1: announce-only — server
+    decrements SP + broadcasts feature_used; player makes the
+    second-target cast manually via a follow-up /cast_spell.
+
+    Body: ``{character_id, spell_level: int (0-5), override?}``.
+
+    Validates Sorcerer Lv 3+ and SP available >= max(1, spell_level).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    try:
+        spell_level = int(body.get("spell_level") or 0)
+    except (TypeError, ValueError):
+        spell_level = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if spell_level < 0 or spell_level > 5:
+        raise HTTPException(400, "spell_level must be in 0-5 (cantrip = 0)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": level,
+        })
+
+    # RAW: cost = spell level, minimum 1 (cantrip).
+    sp_cost = max(1, spell_level)
+
+    # Sorcery-points resource lookup.
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < sp_cost:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_points",
+            "required": sp_cost, "have": sp_cur,
+            "spell_level": spell_level,
+        })
+
+    new_sp = sp_cur - sp_cost
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # v2.99.33 — Twinned undo plumbing. Single resource_spend leg.
+    tw_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(tw_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "sorcery-points",
+        "amount": sp_cost,
+        "source_label": "Metamagic — Twinned Spell",
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+    spell_label = f"L{spell_level}" if spell_level > 0 else "cantrip"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": (
+                f"✨ Metamagic — Twinned Spell ({sp_cost} SP, {spell_label})"
+            ),
+            "feature_desc": (
+                f"Twinned Spell declared for {spell_label}. Cast the spell "
+                f"at a single target as usual, then cast it again at a "
+                f"second creature in range (announce-only — no auto-route "
+                f"in v1)."
+            ),
+            "source": "metamagic-twinned-spell",
+            "cast_id": tw_cast_id,
+            "remaining": new_sp, "max": sp_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "sp_cost": sp_cost,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "spell_level": spell_level,
+        "cast_id": tw_cast_id,
+    }
+
+
 # ----------- API: Second Wind (Fighter Lv 1) -----------
 
 @router.post("/api/campaign/{campaign_id}/use_second_wind")
