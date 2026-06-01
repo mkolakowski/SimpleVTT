@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.15] - 2026-05-31 — "Magic Can't Put You To Sleep"
+
+**Schema version:** 64
+**Commit summary:** **(D) Phase 3 first-ship: Fey Ancestry magical sleep immunity.** The RAW second sentence of Fey Ancestry — "magic can't put you to sleep" — has been descriptive only since the demo's first Elf. v2.99.15 wires it as a true install-time immunity by extending the existing v2.49.64 `_is_sleep_immune` helper to read the race slug via the v2.99.11 `_race_slug_from_sheet` normalizer. Elf / Half-Elf / Wood Elf / High Elf / Dark Elf targets now silently filter into the Sleep cast's `unaffected` list with `reason: "fey-ancestry"`.
+**Description:** Three-line extension to `_is_sleep_immune._check_sheet`: after the existing undead + charm-immune checks, a new branch returns `(True, "fey-ancestry")` when the saver's normalized race slug is "elf" or "half-elf". The Sleep target walker (`/cast_sleep`) already surfaces immune targets in the `unaffected[].reason` field, so the existing chat-card UI now displays "Thalindra was immune (Fey Ancestry)" alongside the existing undead / charm-immune cases. Harness coverage via `tests/harness/test_cast_sleep_fey_ancestry.py` (4 tests covering Elf, Half-Elf, Wood Elf, and a non-Fey-Ancestry Halfling control).
+
+### Added
+- `tests/harness/test_cast_sleep_fey_ancestry.py` — 4 tests:
+  - `test_elf_target_immune_via_fey_ancestry` — Lyra casts Sleep at Thalindra (Elf); even at 5 HP under a 7d8 pool, Thalindra lands in `unaffected` with `reason="fey-ancestry"`.
+  - `test_half_elf_target_immune_via_fey_ancestry` — Lyra (Half-Elf, Bard caster) targets herself; same gate, same reason.
+  - `test_wood_elf_target_immune_via_fey_ancestry` — Mira (Wood Elf Druid) — confirms slug normalizer folds Wood Elf → elf.
+  - `test_halfling_target_NOT_immune` — Pip (Halfling Rogue) at 5 HP → affected. Regression guard against over-broad immunity filtering.
+
+### Changed
+- `_is_sleep_immune._check_sheet` — after the existing undead + charm-immune branches, returns `(True, "fey-ancestry")` when `_race_slug_from_sheet(sheet) in ("elf", "half-elf")`. Docstring updated to reflect the new reason value.
+- `docs/plans/class-content-status.md` — Fey Ancestry sleep-immunity note ✅ across the Half-Elf and High Elf rows; (D) section status updated to reflect Phase 3 first-ship.
+- `docs/test-harness-coverage.md` — total bumped + new test file row added.
+
+### Notes
+- **PATCH bump** — additive immunity branch + 4 tests.
+- **Why this is install-time immunity (Phase 3), not save advantage (Phase 2).** Sleep RAW has NO saving throw — it's HP-pool-based affecting in ascending order. Fey Ancestry's sleep-immunity clause therefore needs an install-time gate, not the v2.99.11 construction-time save-advantage helper. The same architectural distinction will apply to future Phase 3 entries (Half-Orc Relentless Endurance HP-pinned-to-1, future charm-immunity races, etc.) — they're install-time short-circuits, not d20 advantage.
+- **Compatibility with existing immunity flows.** The new branch is appended AFTER the undead + charm-immune checks, so a Drow (Elf subrace) with charm-immune'd template (if a future homebrew adds the trait) would report `reason: "charm_immune"` rather than `"fey-ancestry"` — the more specific cause wins. Same logic as undead trumping charm-immune in v2.49.64.
+- **Demo coverage.** Thalindra (Elf Wizard), Mira (Wood Elf Druid), Kael (Wood Elf Monk), Lyra (Half-Elf Bard) all benefit. That's 4 of 6 demo PCs in the Tavern Brawl combatant list — Sleep is now substantially harder to cast effectively on the party, matching RAW.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 677 (was 673 in v2.99.14).
+
+---
+
 ## [2.99.14] - 2026-05-31 — "The Brave and the Trance"
 
 **Schema version:** 64

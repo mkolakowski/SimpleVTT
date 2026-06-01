@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 673 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.14, 2026-05-31).
+**Total tests:** 677 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.15, 2026-05-31).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -339,6 +339,16 @@ v2.49.64 — closes the v2.49.58 "undead / charm-immune exclusion" filed item. R
 | `test_undead_excluded` | Skeleton + bandit targeted at L3. Skeleton lands in `unaffected` with `reason="undead"`; bandit still affected. |
 | `test_charm_immune_excluded` | Doppelganger (non-undead but charm-immune) lands in `unaffected` with `reason="charm_immune"`. Regression guard that the two branches are distinct. |
 | `test_regular_humanoid_still_affected` | Plain bandit (humanoid, no charm immunity) → affected, NOT in unaffected with an immunity reason. Regression guard against over-broad immunity filtering. |
+
+### `test_cast_sleep_fey_ancestry.py`
+v2.99.15 — (D) Phase 3 first-ship: Fey Ancestry magical sleep immunity. Extends `_is_sleep_immune._check_sheet` to read the race slug via `_race_slug_from_sheet` and return `(True, "fey-ancestry")` for `elf` / `half-elf` normalized slugs. Elf / Half-Elf / Wood Elf / High Elf / Dark Elf targets silently filter into `unaffected[]` with `reason: "fey-ancestry"` — RAW (PHB p.23): "magic can't put you to sleep."
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_elf_target_immune_via_fey_ancestry` | Lyra casts Sleep at Thalindra (Elf Wizard) at 5 HP under a 7d8 pool → Thalindra lands in `unaffected` with `reason="fey-ancestry"` (never counts against HP pool). |
+| `test_half_elf_target_immune_via_fey_ancestry` | Lyra (Half-Elf Bard) targets herself with Sleep → same immunity gate. |
+| `test_wood_elf_target_immune_via_fey_ancestry` | Mira (Wood Elf Druid) → confirms slug normalizer folds Wood Elf → elf. |
+| `test_halfling_target_NOT_immune` | Control: Pip (Halfling) → affected, regression guard against over-broad immunity. |
 
 ### `test_cast_sleep_multi_class.py`
 v2.49.63 — closes the "add Sleep to Bard / Sorcerer / Warlock lists" filed item. Seed-list backfill verified via one happy-path cast per class. Sleep is RAW on bard / sorcerer / warlock / wizard lists; pre-v2.49.63 only Thalindra (wizard) had it.

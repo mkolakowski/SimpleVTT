@@ -24443,8 +24443,19 @@ async def cast_hex(
 # through their monster template (slug → SRD JSON via local_content);
 # PCs route through their character sheet. Returns ``(is_immune,
 # reason)`` where reason is one of ``"undead"`` / ``"charm_immune"``
-# / ``""``. Undead trumps charm-immune in reporting (most undead are
-# also charm-immune; "undead" is the more specific cause).
+# / ``"fey-ancestry"`` / ``""``. Undead trumps the others in
+# reporting (most undead are also charm-immune; "undead" is the
+# more specific cause).
+#
+# v2.99.15 — (D) Phase 3 first-ship: extends the immunity gate with
+# Fey Ancestry (Elf / Half-Elf). RAW Fey Ancestry second sentence
+# (PHB p.23): "magic can't put you to sleep." This is a true
+# install-time IMMUNITY (not a save advantage like the v2.99.11
+# charm-save half of Fey Ancestry), so the Sleep target walker
+# silently filters Fey-Ancestry'd creatures into the unaffected
+# list — same as undead / charm-immune monsters. Surfaces in the
+# `unaffected[].reason` field with `"fey-ancestry"` so the cast
+# card can display "Thalindra was immune (Fey Ancestry)".
 def _is_sleep_immune(
     combatant: dict, db: Session, campaign_id: int,
 ) -> tuple[bool, str]:
@@ -24458,6 +24469,12 @@ def _is_sleep_immune(
         cond_imm_l = [str(c).lower() for c in cond_imm]
         if any("charm" in c for c in cond_imm_l):
             return True, "charm_immune"
+        # v2.99.15 — Fey Ancestry sleep immunity (Elf / Half-Elf).
+        # Uses the same slug normalizer as the v2.99.11 save
+        # advantage table so subrace variants (Wood / High / Dark
+        # Elf) fold to the same gate.
+        if _race_slug_from_sheet(sheet) in ("elf", "half-elf"):
+            return True, "fey-ancestry"
         return False, ""
 
     # NPC: resolve via monster template's SRD-overlaid sheet.
