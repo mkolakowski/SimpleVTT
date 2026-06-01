@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.25] - 2026-06-01 — "The Pact Renews"
+
+**Schema version:** 64
+**Commit summary:** **Warlock Pact Magic short-rest slot refresh + Font of Magic doc cleanup.** Two half-implemented features knocked out in one commit. (1) RAW Warlock Pact Magic (PHB p.107): spell slots refresh on a short rest — the unique Warlock mechanic that distinguishes Pact Magic from every other caster's long-rest pool. Pre-v2.99.25 the `/rest` short-rest branch never touched spell slots at all; the doc reflected this as 🟡 "data-only." v2.99.25 ships the slot-level `reset: "short"` field + a short-rest walker that resets `used = 0` on any matching slot row. (2) Font of Magic was actually fully shipped (endpoints v2.49.120, picker UI v2.49.121, 13 harness tests in `test_use_font_of_magic.py`); the doc 🟢 status was stale. v2.99.25 flips the row to ✅.
+**Description:** Two-part commit: (1) Warlock Pact Magic mechanical wiring — `reset: "short"` field on Magnus's L3 Pact slot row + a slot-walker in the `/rest` short-rest branch that resets matching slots + broadcasts `spell_slot_update` per refreshed slot. The slot-level marker (rather than a blanket warlock-class gate) generalizes to multiclass Warlocks and future homebrew short-rest casters. (2) Doc cleanup — Font of Magic row flipped to ✅ with full v2.49.120–v2.97.6 implementation history.
+
+### Added
+- `reset: "short"` field on Magnus Hexbinder's `_warlock_sheet` L3 Pact Magic slot row.
+- Slot-walker block in the `/rest` short-rest branch — walks `sheet.spell_slots[cslug][lvl]`, resets `used = 0` on any slot row carrying `reset: "short"`, queues a broadcast for each.
+- Broadcast loop after the existing short-rest resource broadcasts — fires `spell_slot_update` per refreshed slot so any open sheet / mini-sheet repaints the slot pips.
+- `tests/harness/test_warlock_pact_magic_rest.py` — 3 tests:
+  - `test_warlock_pact_magic_refreshes_on_short_rest` — happy path. Magnus deplete → short rest → `spell_slot_update(warlock, L3, used=0)` broadcast fires.
+  - `test_warlock_pact_magic_refreshes_on_long_rest` — sanity. Long rest also refreshes Pact slots via the existing long-rest path. Regression guard against the short-rest change over-touching the long-rest path.
+  - `test_short_rest_does_not_touch_non_warlock_slots` — regression guard. Thalindra (Wizard L1 slots, no `reset: "short"` marker) takes a short rest; no `spell_slot_update` broadcast for her slots.
+
+### Changed
+- `_warlock_sheet` in `app/demo_seed.py` — Pact slot row gains `"reset": "short"`.
+- `/rest` short-rest branch in `app/routes/tabletop_routes.py` — slot-walker + per-slot broadcast loop.
+- `docs/plans/class-content-status.md` — Font of Magic row flipped 🟢 → ✅ (was stale, mechanism shipped v2.49.120); Warlock Pact Magic note updated to ✅ short-rest refresh.
+
+### Notes
+- **PATCH bump** — single new mechanical wire + 3 tests + doc cleanup.
+- **Why the slot-level marker, not a class-slug gate.** A blanket "if cslug == 'warlock' then refresh on short rest" works for the demo but breaks under three foreseeable scenarios: (a) multiclass Warlocks where the Pact slots live in a different bucket post-merge, (b) homebrew classes that grant a short-rest slot pool (Mystic, etc.), (c) future SRD content that grants short-rest slots to specific levels of a class (e.g. a Sorcerer subclass capstone). The slot-level field is data-driven and forward-compatible.
+- **Font of Magic doc cleanup.** The audit found Font of Magic was actually shipped v2.49.120 (endpoints) + v2.49.121 (client picker via native `prompt()`) + v2.97.6 (undo plumbing). 13 harness tests in `test_use_font_of_magic.py` cover slot↔SP both directions, ephemeral slot creation, multiclass routing, error paths. The doc was stale at 🟢; flipped to ✅. Future polish: replace the native `prompt()` calls with the v2.9.0 `showResourceOptionPicker` modal for styling consistency.
+- **Other potentially-stale rows.** The audit also surfaced Rage's `str_check` / `str_save` advantage as descriptive-only (the buff carries the markers but no intercept consumes them). Filed for a follow-up — RAW Rage advantage on STR saves only fires vs spells with STR saves (none in the demo today), so the test fixture would need a STR-save AoE spell first.
+- **Demo coverage.** Magnus Hexbinder (Warlock The Fiend Lv 5) now has a fully RAW-functional short rest. Casting a spell, taking a short rest, then casting again works end-to-end.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 692 (was 689 in v2.99.24).
+
+---
+
 ## [2.99.24] - 2026-06-01 — "The Paladin's Watch"
 
 **Schema version:** 64

@@ -1421,9 +1421,17 @@ def _warlock_sheet(name: str) -> dict:
         # every other caster's long-rest slots). The slot key
         # "warlock" is intentional — v2.16.0+'s spell-slot tracker
         # keys off class_slug for routing.
+        # v2.99.25 — `reset: "short"` field on each Pact Magic slot.
+        # The /rest short-rest branch reads this field per-slot to
+        # decide whether to refresh on a short rest (parallel to the
+        # existing resource-level `reset` field for short-rest
+        # resources like Ki / Channel Divinity). Without this field
+        # the short-rest handler doesn't touch spell slots at all,
+        # so Pact Magic slots would only refresh on long rest —
+        # breaking the Warlock's defining short-rest mechanic.
         "spell_slots": {
             "warlock": {
-                "3": {"total": 2, "used": 0},
+                "3": {"total": 2, "used": 0, "reset": "short"},
             },
         },
         "inventory": [

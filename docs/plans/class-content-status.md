@@ -434,7 +434,7 @@ The `### Header` names below come from the `features` field of each JSON.
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | |
 | 1 | Sorcerous Origin | ✅ | Subclass system shipped — see Subclasses table. Draconic Bloodline has features JSON; Wild Magic has Tides of Chaos counter. |
-| 2 | Font of Magic | 🟢 | Sorcery Points counter (`key: 'sorcery-points'`); curated `_FEATURE_ECONOMY` entry shipped v2.16.2 (slot:'free'). Full SP↔slot conversion picker waits on a Sorcerer fixture (Phase A.4+). Slot-conversion endpoint would follow the Arcane Recovery (`/use_arcane_recovery`) pattern — atomic mutation of spell_slots + the Sorcery Points counter. |
+| 2 | Font of Magic | ✅ | v2.49.120 — `/use_font_of_magic_to_points` (sacrifice a slot for N SP) + `/use_font_of_magic_to_slot` (spend SP to recover a slot at the L1=2/L2=3/L3=5/L4=6/L5=7 cost table). Both atomic; both bonus actions; both auto-mark the bonus chip + emit `spell_slot_update` + `resource_update` + `feature_used` broadcasts. Zara Emberfire (Lv 5 Sorcerer) is the demo fixture; she has the `sorcery-points` resource (5/5 long-rest). v2.49.121 wired the client-side picker (resource pill → direction prompt → slot-level prompt). v2.97.6 added the Phase D.3 undo plumbing. 13 harness tests in `test_use_font_of_magic.py` cover all paths (slot→SP, SP→slot, no-slot-to-sacrifice, slot-too-high, not-enough-points, ephemeral-slot creation when full, long-rest strips ephemeral, wrong class, multiclass class_slug routing). Future polish: replace the v2.49.121 native `prompt()` calls with the v2.9.0 `showResourceOptionPicker` modal for styling consistency with Channel Divinity. |
 | 3 | Metamagic | ⚪ | Per-cast modifier; needs spell-cast intercept |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 20 | Sorcerous Restoration | ⚪ | Auto-refill 4 sorcery points on short rest — could just be a special-case in the rest endpoint |
@@ -444,7 +444,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
 | 1 | Otherworldly Patron | ✅ | Subclass system shipped — see Subclasses table. The Fiend has features JSON (Dark One's Blessing / Own Luck / Fiendish Resilience still descriptive). |
-| 1 | Pact Magic | 🟡 | Uses spell-slot UI but slots refresh on short rest; partial — slot reset path needs the patch |
+| 1 | Pact Magic | ✅ | v2.99.25 — Warlock spell slots refresh on a **short** rest (RAW PHB p.107). Slot-level `reset: "short"` field on the sheet's `spell_slots[cslug][lvl]` row; `/rest` short-rest branch walks the field and resets `used = 0` on any matching row + broadcasts `spell_slot_update` per refreshed slot. Magnus Hexbinder (Warlock The Fiend Lv 5) is the demo fixture (2 L3 Pact slots). Harness: `test_warlock_pact_magic_rest.py` (3 tests covering short rest happy path, long-rest sanity, and a Wizard-slot-unaffected regression guard). The slot-level marker rather than a class-slug gate generalizes to multiclass + future homebrew short-rest casters. |
 | 2 | Eldritch Invocations | 🟡 | Picker UI not wired; invocations are stat boosts / new options |
 | 3 | Pact Boon | ⚪ | |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |

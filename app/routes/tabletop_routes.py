@@ -26256,6 +26256,43 @@ async def rest_character(
     new_hp = min(hp_max, hp_cur + recovered) if hp_max > 0 else (hp_cur + recovered)
     hd["current"] = hd_cur - 1
     hd["max"] = hd_max
+    # v2.99.25 — Warlock Pact Magic short-rest slot refresh. RAW
+    # (PHB p.107): Warlock spell slots refresh on a short rest,
+    # unlike every other caster. Walks `sheet.spell_slots[cslug]`
+    # and resets `used = 0` on any slot row carrying
+    # `reset: "short"`. The slot-level marker (rather than a
+    # blanket warlock-class gate) generalizes to future homebrew
+    # casters with short-rest slots and to multiclass Warlocks
+    # whose pact slots live alongside other classes' long-rest
+    # slots. Other classes' slots (no `reset` field or
+    # `reset != "short"`) are left untouched on short rest.
+    short_rest_slot_broadcasts: list[tuple[str, int, int]] = []
+    short_slots = dict(sheet.get("spell_slots") or {})
+    new_short_slots: dict = {}
+    for cslug, by_lvl in short_slots.items():
+        if isinstance(by_lvl, dict):
+            cleaned: dict = {}
+            for lvl_key, slot_obj in by_lvl.items():
+                if (isinstance(slot_obj, dict)
+                        and (slot_obj.get("reset") or "").strip().lower() == "short"):
+                    try:
+                        cur_total = int(slot_obj.get("total") or 0)
+                    except (TypeError, ValueError):
+                        cur_total = 0
+                    cleaned[lvl_key] = {**slot_obj, "used": 0}
+                    if cur_total > 0:
+                        try:
+                            short_rest_slot_broadcasts.append(
+                                (cslug, int(lvl_key), cur_total)
+                            )
+                        except (TypeError, ValueError):
+                            pass
+                else:
+                    cleaned[lvl_key] = slot_obj
+            new_short_slots[cslug] = cleaned
+        else:
+            new_short_slots[cslug] = by_lvl
+    sheet["spell_slots"] = new_short_slots
     sheet["hp"] = hp
     sheet["hit_dice"] = hd
     char.sheet = sheet
@@ -26288,6 +26325,24 @@ async def rest_character(
                     "key": r.get("key"),
                     "current": int(r.get("current") or 0),
                     "max": int(r.get("max") or 0),
+                },
+            })
+        except Exception:
+            pass
+
+    # v2.99.25 — broadcast Pact Magic slot refills so any open
+    # sheet / mini-sheet repaints the slot pips. Mirrors the
+    # long-rest broadcast loop at the top of this handler.
+    for cslug, lvl, total in short_rest_slot_broadcasts:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "spell_slot_update",
+                "data": {
+                    "character_id": char.id,
+                    "class_slug": cslug,
+                    "level": lvl,
+                    "total": total,
+                    "used": 0,
                 },
             })
         except Exception:
