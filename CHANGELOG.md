@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.26] - 2026-06-01 — "The Berserker's Steady Breath"
+
+**Schema version:** 64
+**Commit summary:** **Rage advantage on STR saves — close the third RAW Rage benefit.** RAW (PHB p.48): "you have advantage on Strength checks and Strength saving throws" while raging. The rage buff has carried `effects.advantage_on = ["str_check", "str_save", "str_attack"]` since v2.20.0. The `str_attack` half is consumed by v2.49.238's `_attacker_has_str_attack_advantage`. v2.99.26 wires the `str_save` half via a new sibling helper `_pc_has_rage_str_save_advantage` consuming the same buff marker. The construction-time hook fires in all 3 save-roll sites: `/cast_spell` single-target PC save, AoE PC save, `/place_aoe` PC server-rolled save. The `str_check` half is still descriptive-only (the `/roll` endpoint doesn't carry an ability tag — filed for follow-up).
+**Description:** New `_pc_has_rage_str_save_advantage(campaign_id, char_id, save_ability)` helper reads the saving PC's combatant buffs for `key == "rage"` AND `effects.advantage_on` containing `"str_save"`. Returns True only when `save_ability == "STR"`. Companion broadcast `_broadcast_rage_str_save_advantage` emits `feature_used(source=rage-str-save)`. Wired into all 3 save-roll construction sites alongside the existing race-trait + Danger Sense + Aura of Protection hooks. Demo seed adds Gust of Wind (Wizard L2, STR save, no damage) to Thalindra's spell list as the test fixture — appended at the END so existing spell_index assertions stay valid.
+
+### Added
+- `_pc_has_rage_str_save_advantage(campaign_id, saving_char_id, save_ability)` — sibling to `_pc_has_rage_active_buff` (v2.57.0 Mindless Rage) and `_attacker_has_str_attack_advantage` (v2.49.238). Reads the same rage buff but gates on the `str_save` advantage marker.
+- `_broadcast_rage_str_save_advantage(campaign_id, char)` — companion broadcast with rage-flavor copy ("Krieger raging — advantage on STR save").
+- Gust of Wind (`save_ability: "STR"`) on Thalindra's `_wizard_sheet` spell list — Wizard L2 STR-save spell, the test trigger.
+- `tests/harness/test_rage_str_save.py` — 3 tests:
+  - `test_rage_grants_advantage_on_str_save` — Krieger rages; Thalindra casts Gust of Wind at him → `base_expression="2d20kh1"` AND `feature_used(source=rage-str-save)` broadcast for Krieger.
+  - `test_rage_skips_str_save_when_not_raging` — Control: no rage → STR save rolls 1d20.
+  - `test_rage_skips_non_str_save_when_raging` — Control: rage + Banishment (CHA save) → no advantage; rage gates on STR only. DEX save would conflict with Danger Sense, so CHA save is the clean comparison.
+
+### Changed
+- 3 save-roll construction sites (`/cast_spell` single-target PC, `/cast_spell` AoE PC, `/place_aoe` PC server-rolled) — added the Rage STR-save advantage call alongside the existing race-trait hooks. Composes via kh1-of-kh1 with prior advantage sources.
+- `docs/plans/class-content-status.md` — Rage row updated to credit the v2.99.26 str_save wire; `advantage_on=["str_check"]` half noted as still filed (no /roll ability-tag plumbing yet).
+- `docs/test-harness-coverage.md` — total bumped + new test file row added.
+
+### Notes
+- **PATCH bump** — additive helper + 3 wire-up sites + 3 tests + 1 demo-seed line.
+- **Why STR-only.** The hook short-circuits when `save_ability != "STR"` before doing any work, so non-STR save rolls (DEX/CON/INT/WIS/CHA) cost nothing extra. Rage's advantage on STR checks is a different code path (the `/roll` endpoint, which currently has no ability-tag in its body) — that work is filed.
+- **Why CHA save for the control case.** DEX save would trigger Krieger's Danger Sense advantage and confound the test. CON / WIS / INT / CHA all work for the control; CHA was the simplest available via Thalindra's existing spell list (Banishment at L4).
+- **Demo coverage.** Krieger Stonefist (Half-Orc Berserker Lv 7). Now has STR-save advantage (v2.99.26) on top of Reckless Attack (v2.49.238), Danger Sense Dex-save advantage (v2.52.0), Mindless Rage charm/fright install gate (v2.57.0), Relentless Endurance (v2.99.17), and Savage Attacks (v2.99.23). His race+class trait coverage is now complete.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 695 (was 692 in v2.99.25).
+
+---
+
 ## [2.99.25] - 2026-06-01 — "The Pact Renews"
 
 **Schema version:** 64

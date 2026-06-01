@@ -12840,6 +12840,16 @@ async def cast_spell(
                 )
                 if _race_applies and not _ds_base.startswith("2d20kh1"):
                     _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.99.26 — Rage advantage on STR saves. Closes the
+                # third RAW Rage benefit (the buff has carried the
+                # `str_save` marker since v2.20.0 but no consumer
+                # read it). Composes via kh1-of-kh1 with the prior
+                # advantage sources.
+                _rage_str_save = _pc_has_rage_str_save_advantage(
+                    campaign_id, int(tgt_char.id), save_ability,
+                )
+                if _rage_str_save and not _ds_base.startswith("2d20kh1"):
+                    _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
                 # v2.97.50 — PFE&G type-aware save advantage helper
                 # ``_saver_pfeag_save_advantage`` exists for future
                 # wiring (e.g. ongoing-effect saves once that flow
@@ -12925,6 +12935,11 @@ async def cast_spell(
                     await _broadcast_race_save_advantage(
                         campaign_id, tgt_char,
                         _race_slug, _race_trait_name, save_ability,
+                    )
+                # v2.99.26 — Rage STR-save advantage broadcast.
+                if _rage_str_save:
+                    await _broadcast_rage_str_save_advantage(
+                        campaign_id, tgt_char,
                     )
                 # v2.37.0 Phase T.3d: stash the cast context so the
                 # roll-response handler can install the matching
@@ -13165,6 +13180,12 @@ async def cast_spell(
                 )
                 if _aoe_race_applies and not _aoe_ds_base.startswith("2d20kh1"):
                     _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.99.26 — Rage STR-save advantage on AoE saves.
+                _aoe_rage_str_save = _pc_has_rage_str_save_advantage(
+                    campaign_id, int(extra_pc.id), save_ability,
+                )
+                if _aoe_rage_str_save and not _aoe_ds_base.startswith("2d20kh1"):
+                    _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
                 _aoe_req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
@@ -13242,6 +13263,11 @@ async def cast_spell(
                     await _broadcast_race_save_advantage(
                         campaign_id, extra_pc,
                         _aoe_race_slug, _aoe_race_name, save_ability,
+                    )
+                # v2.99.26 — Rage STR-save advantage broadcast on AoE.
+                if _aoe_rage_str_save:
+                    await _broadcast_rage_str_save_advantage(
+                        campaign_id, extra_pc,
                     )
                 auto_save_targets.append({
                     "combatant_id": extra.get("id"),
@@ -14120,7 +14146,12 @@ async def place_aoe(
                     is_spell_save=True,
                 )
             )
-            if _ds_pc_applies or _aoe_pl_race_applies:
+            # v2.99.26 — Rage STR-save advantage at /place_aoe PC
+            # server-rolled save site.
+            _aoe_pl_rage_str_save = _pc_has_rage_str_save_advantage(
+                campaign_id, int(extra_pc.id), save_ability,
+            )
+            if _ds_pc_applies or _aoe_pl_race_applies or _aoe_pl_rage_str_save:
                 expr = f"2d20kh1{pc_mod:+d}"
                 if _ds_pc_applies:
                     await _broadcast_danger_sense(campaign_id, extra_pc)
@@ -14128,6 +14159,10 @@ async def place_aoe(
                     await _broadcast_race_save_advantage(
                         campaign_id, extra_pc,
                         _aoe_pl_race_slug, _aoe_pl_race_name, save_ability,
+                    )
+                if _aoe_pl_rage_str_save:
+                    await _broadcast_rage_str_save_advantage(
+                        campaign_id, extra_pc,
                     )
             else:
                 expr = f"1d20{pc_mod:+d}"
@@ -19945,6 +19980,80 @@ def _pc_has_rage_active_buff(
                 return True
         return False
     return False
+
+
+def _pc_has_rage_str_save_advantage(
+    campaign_id: int, saving_char_id: "int | None", save_ability: str,
+) -> bool:
+    """v2.99.26 — Rage advantage on STR saves. RAW (PHB p.48): "you
+    have advantage on Strength checks and Strength saving throws"
+    while raging.
+
+    Returns True only when (a) save_ability == "STR" and (b) the
+    saving PC's combatant carries an active ``rage`` buff with
+    ``str_save`` in its ``effects.advantage_on`` list.
+
+    Wired into the 3 save-roll construction sites (`/cast_spell`
+    single-target PC save, AoE PC save, `/place_aoe` PC server-rolled
+    save). Caller swaps `1d20 → 2d20kh1` when this returns True;
+    composes safely with other advantage sources via kh1-of-kh1.
+
+    Distinct from `_pc_has_rage_active_buff` (v2.57.0 Mindless Rage —
+    blocks charm/fright install when raging at Lv 6+) and
+    `_attacker_has_str_attack_advantage` (v2.49.238 — STR attack
+    advantage while raging). Closes the third RAW Rage benefit
+    that was descriptive-only until now (the buff carries the
+    ``str_save`` marker since v2.20.0 but no consumer ever read it).
+    """
+    if (save_ability or "").strip().upper() != "STR":
+        return False
+    if not saving_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != saving_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() != "rage":
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            adv = effects.get("advantage_on") or []
+            if isinstance(adv, list) and "str_save" in adv:
+                return True
+        return False
+    return False
+
+
+async def _broadcast_rage_str_save_advantage(
+    campaign_id: int, char: "Character | None",
+) -> None:
+    """Companion broadcast for `_pc_has_rage_str_save_advantage`.
+    Emits a `feature_used` event with `source: "rage-str-save"` so
+    the chat card surfaces the trigger ("Krieger raging — advantage
+    on STR save.").
+    """
+    if not char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": "🦬 Rage — advantage on STR save",
+            "feature_desc": (
+                f"{char.name} is raging: advantage on the Strength "
+                f"saving throw."
+            ),
+            "source": "rage-str-save",
+        },
+    })
 
 
 def _pc_has_heroism_frightened_immunity(

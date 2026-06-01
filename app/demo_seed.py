@@ -513,6 +513,17 @@ def _wizard_sheet(name: str) -> dict:
              "casting_time": "1 action", "save_ability": "CON",
              "damage": "1d12", "damage_type": "poison",
              "desc": "10 ft, CON save DC 14 or take 1d12 poison damage. Scales: 2d12 at L5+, 3d12 at L11+, 4d12 at L17+."},
+            # v2.99.26 — Gust of Wind. Wizard Lv 2 spell, STR save
+            # vs being pushed 15 ft. Demo fixture for Rage's STR-save
+            # advantage hook: Krieger raging while caught in
+            # Thalindra's Gust of Wind exercises the v2.99.26 wire.
+            # No damage — this is a pure STR-save spell so the test
+            # focuses on the d20 swap rather than damage halving.
+            # Appended at END so existing spell_index assertions
+            # stay valid.
+            {"name": "Gust of Wind", "level": 2, "prepared": True, "_slug": "gust-of-wind",
+             "casting_time": "1 action", "save_ability": "STR",
+             "desc": "60 ft × 10 ft line from caster, STR save DC 14 or be pushed 15 ft. Disperses gas / extinguishes candles. Concentration up to 1 min."},
         ],
         "spell_slots": {
             "wizard": {
