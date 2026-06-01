@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.28] - 2026-06-01 — "The Mighty Heave"
+
+**Schema version:** 64
+**Commit summary:** **Rage advantage on STR ability/skill checks — close the last descriptive-only Rage benefit.** v2.99.26 closed the `str_save` half via the save-roll construction hook. v2.99.28 closes the `str_check` half by extending the `/roll` endpoint with an optional `stat_key` field + a Rage check that swaps `1d20 → 2d20kh1` when the body carries `stat_key: "str_check"` AND the rolling PC is raging. After v2.99.28, **all three Rage advantage markers (`str_check`, `str_save`, `str_attack`) are mechanically wired** — the buff carries them all and consumers exist for all three.
+**Description:** New `_pc_has_rage_str_check_advantage(campaign_id, char_id)` helper — sibling to v2.99.26's `_pc_has_rage_str_save_advantage`. Reads the same rage buff but gates on `str_check` in `effects.advantage_on`. New `_broadcast_rage_str_check_advantage` companion with check-flavor copy. `/roll` endpoint extended with an optional `stat_key` field (defaulted to empty); when `stat_key == "str_check"` AND the rage check fires, the d20 expression swaps pre-roll. Same kh1-of-kh1 composition as the v2.2.0 roll_state advantage path. The `stat_key` field is forward-compatible — future hooks (Reliable Talent on proficient skill checks, Bardic Inspiration die on checks/saves) can read the same plumbing.
+
+### Added
+- `_pc_has_rage_str_check_advantage(campaign_id, char_id)` — sibling helper to v2.99.26's STR save version.
+- `_broadcast_rage_str_check_advantage(campaign_id, char)` — companion broadcast with check-flavor copy.
+- `stat_key` body field on `/roll` — optional, length-capped (60 chars), lowercased. Today only consumed by the Rage STR-check hook; future hooks read the same field.
+- `tests/harness/test_rage_str_check.py` — 3 tests:
+  - `test_rage_grants_advantage_on_str_check` — happy path. Krieger rages; POST /roll with `stat_key="str_check"` → broadcast expression carries `2d20kh1` + `feature_used(source=rage-str-check)` fires.
+  - `test_rage_skips_str_check_when_not_raging` — control. No rage → 1d20 unchanged.
+  - `test_rage_skips_non_str_check_when_raging` — control. Rage + `stat_key="dex_check"` → no swap.
+
+### Changed
+- `/roll` (`roll_dice`) — reads optional `stat_key` body field; applies Rage STR-check advantage pre-roll when both gates fire; emits broadcast post-roll.
+- `docs/plans/class-content-status.md` — Rage row updated to credit the v2.99.28 str_check wire. All three Rage advantage markers now ✅.
+- `docs/test-harness-coverage.md` — total bumped + new test file row added.
+
+### Notes
+- **PATCH bump** — additive helper + broadcast + 1 body field + pre-roll hook + 3 tests.
+- **Client-side wiring still pending.** The `/roll` endpoint now consumes `stat_key`; existing PC sheet skill / ability buttons need to send the field when posting STR-keyed rolls (e.g. Athletics check button → `stat_key="str_check"`). Until that ships, the Rage advantage triggers only when the test fixture (or a GM tool) explicitly sends the field. Filed for a small client-side commit that walks the skill/ability button templates.
+- **All three Rage advantages now wired.** `str_attack` via v2.49.238's `_attacker_has_str_attack_advantage`. `str_save` via v2.99.26's construction-time save-roll hook. `str_check` via v2.99.28's `/roll` pre-roll hook. Plus the existing damage bonus (v2.20.0) + B/P/S resistance (v2.20.0) + Mindless Rage charm/fright install gate (v2.57.0).
+- **stat_key generalizes.** Future hooks can read the same field without endpoint changes: Reliable Talent (Rogue Lv 11 — floor of 10 on `*_check` with proficient skill), Bardic Inspiration recipient die (consumes the die on any d20), Halfling Lucky already fires via the `/roll` Halfling-detector regardless of stat_key.
+- **Demo coverage.** Krieger Stonefist now has the full Rage benefit triangle wired. Casting Athletics check while raging → 2d20kh1 + broadcast.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 700 (was 697 in v2.99.27).
+
+---
+
 ## [2.99.27] - 2026-06-01 — "Mind The Reach"
 
 **Schema version:** 64

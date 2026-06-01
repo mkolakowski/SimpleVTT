@@ -10723,6 +10723,13 @@ async def roll_dice(
     visibility_str = str(body.get("visibility", "public")).lower()
     note = str(body.get("note", ""))[:200]
     skip_roll_state = bool(body.get("skip_roll_state"))
+    # v2.99.28 — Optional stat_key (e.g. "str_check", "wis_save",
+    # "Perception") for ability/skill/save-roll provenance. Today
+    # only consumed by the Rage STR-check advantage hook below; the
+    # field is a no-op when absent. Future hooks (Reliable Talent
+    # for proficient skill checks, Bardic Inspiration on attacks /
+    # checks / saves) can read it from the same plumbing.
+    stat_key_raw = str(body.get("stat_key") or "").strip().lower()[:60]
     # v2.49.212: monster rolls pass `actor_name` (the TokenTemplate name
     # like "Cult Acolyte") so the roll-log entry surfaces the monster
     # identity in the rolled-by slot instead of the GM's user_name. Only
@@ -10780,6 +10787,22 @@ async def roll_dice(
     note_suffix = _roll_state_note_suffix(roll_state_applied)
     if note_suffix:
         note = (note + note_suffix)[:200]
+
+    # v2.99.28 — Rage STR-check advantage. Fires only when the body
+    # carries `stat_key: "str_check"` AND the rolling PC has an active
+    # rage buff with `str_check` in its `effects.advantage_on`. Swap
+    # is applied BEFORE the roll (RAW: advantage on the check, not
+    # post-roll reroll). Composes safely with the v2.2.0 roll_state
+    # advantage above — kh1-of-kh1 stays kh1.
+    _rage_str_check_fired = False
+    if (
+        stat_key_raw == "str_check"
+        and _char is not None
+        and _pc_has_rage_str_check_advantage(campaign_id, _char.id)
+    ):
+        if "1d20" in expr and "2d20kh1" not in expr and "2d20kl1" not in expr:
+            expr = expr.replace("1d20", "2d20kh1", 1)
+            _rage_str_check_fired = True
 
     try:
         result = dice_mod.roll(expr)
@@ -10894,6 +10917,11 @@ async def roll_dice(
         await _broadcast_halfling_lucky_check(
             campaign_id, _char, _hl_old_d20, _hl_new_d20,
         )
+    # v2.99.28 — Rage STR-check advantage broadcast. Fires after the
+    # roll lands so the chat card can show the trigger alongside the
+    # roll result. The d20 swap happened pre-roll above.
+    if _rage_str_check_fired and _char is not None:
+        await _broadcast_rage_str_check_advantage(campaign_id, _char)
     return {"ok": True, "total": rec.total, "breakdown": rec.breakdown,
             "roll_state_applied": roll_state_applied or None}
 
@@ -20098,6 +20126,72 @@ async def _broadcast_rage_str_save_advantage(
                 f"saving throw."
             ),
             "source": "rage-str-save",
+        },
+    })
+
+
+def _pc_has_rage_str_check_advantage(
+    campaign_id: int, char_id: "int | None",
+) -> bool:
+    """v2.99.28 — Rage advantage on STR ability/skill checks. RAW
+    (PHB p.48): "you have advantage on Strength checks and Strength
+    saving throws" while raging.
+
+    Returns True when the PC's combatant carries an active ``rage``
+    buff with ``str_check`` in its ``effects.advantage_on`` list.
+    Caller (the `/roll` endpoint) gates this on the body's
+    ``stat_key == "str_check"`` BEFORE calling — this helper assumes
+    the call site has already established that the roll is a STR
+    check. Mirrors `_pc_has_rage_str_save_advantage` (v2.99.26) but
+    on `str_check` instead of `str_save`.
+
+    Closes the third descriptive-only half of Rage's `advantage_on`
+    marker. After v2.99.28, all three (str_check / str_save /
+    str_attack) are mechanically wired.
+    """
+    if not char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() != "rage":
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            adv = effects.get("advantage_on") or []
+            if isinstance(adv, list) and "str_check" in adv:
+                return True
+        return False
+    return False
+
+
+async def _broadcast_rage_str_check_advantage(
+    campaign_id: int, char: "Character | None",
+) -> None:
+    """Companion broadcast for `_pc_has_rage_str_check_advantage`.
+    Same flavor copy as the save variant, swapped "save" → "check".
+    """
+    if not char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": "🦬 Rage — advantage on STR check",
+            "feature_desc": (
+                f"{char.name} is raging: advantage on the Strength "
+                f"ability / skill check."
+            ),
+            "source": "rage-str-check",
         },
     })
 
