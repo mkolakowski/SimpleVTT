@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.17] - 2026-05-31 — "The Half-Orc Stands Up"
+
+**Schema version:** 64
+**Commit summary:** **(D) Phase 3 second-ship: Half-Orc Relentless Endurance — auto-clamp to 1 HP instead of 0 once per long rest.** RAW (PHB p.41): "When you are reduced to 0 hit points but not killed outright, you can drop to 1 hit point instead. You can't use this feature again until you finish a long rest." v2.99.17 wires this as a hook in `_apply_hp_change` — the SINGLE source of truth for HP transitions since v2.1.0. When damage would drop a PC from alive → 0 HP AND the massive-damage rule didn't fire (not killed outright) AND the `relentless-endurance` resource is available, the function clamps `new_current = 1`, decrements the resource, and stays at `status="alive"` (skipping the death-save state machine entirely).
+**Description:** New `_pc_has_relentless_endurance_available(sheet)` detector + `_decrement_relentless_endurance(sheet)` in-place mutator + `_broadcast_relentless_endurance(campaign_id, char, damage_amount)` companion. Wire is a 5-line conditional in `_apply_hp_change`'s "alive → 0 HP" branch between the massive-damage check and the dying-status branch. Result dict gains `relentless_endurance_fired` + `relentless_endurance_damage` flags so the main damage caller (`_apply_damage_to_combatant`) can fire the broadcast + `resource_update` event (so the per-PC resource UI flips 1/1 → 0/1 without a manual refresh). Krieger's demo seed gains a 1/long-rest `relentless-endurance` resource entry — the resource IS the trait (sheet-presence is the gate).
+
+### Added
+- `_pc_has_relentless_endurance_available(sheet)` — detector. Returns True when the sheet has the `relentless-endurance` resource with `current > 0`.
+- `_decrement_relentless_endurance(sheet)` — in-place mutator that decrements the resource's `current` by 1 (called from inside `_apply_hp_change`).
+- `_broadcast_relentless_endurance(campaign_id, char, damage_amount)` — companion broadcast emitting `feature_used` with `source: "relentless-endurance"` so the chat card surfaces "💪 Krieger used Relentless Endurance — dropped to 1 HP instead of 0 from N damage."
+- `relentless-endurance` resource entry on Krieger's `_barbarian_sheet` in `app/demo_seed.py` (current=1, max=1, reset="long", source="Half-Orc").
+- `tests/harness/test_relentless_endurance.py` — 2 tests:
+  - `test_relentless_endurance_clamps_zero_to_one` — Krieger at 3 HP; Pip attacks; assert HP-update broadcast carries current=1 AND resource_update fires AND feature_used(source=relentless-endurance) fires.
+  - `test_relentless_endurance_skips_non_half_orc` — Lyra at 3 HP; same setup; assert HP=0 (no clamp) AND no Relentless Endurance broadcast.
+
+### Changed
+- `_apply_hp_change` — added the Relentless Endurance branch between the massive-damage check and the dying-status branch in the alive→0 HP transition. Return dict carries the trigger flags.
+- `_apply_damage_to_combatant` — after the existing `character_hp_update` broadcast, reads the trigger flags and fires the `feature_used(source=relentless-endurance)` + `resource_update` broadcasts when set.
+- `docs/plans/class-content-status.md` — Half-Orc row's Relentless Endurance note ✅; (D) Phase 3 status updated.
+- `docs/test-harness-coverage.md` — total bumped + new test file row added.
+
+### Notes
+- **PATCH bump** — additive helpers + 5-line wire + 2 tests.
+- **Massive-damage interaction.** RAW: Relentless Endurance fires when reduced to 0 HP **but not killed outright**. "Killed outright" = the massive-damage rule (damage past 0 ≥ max HP) → instant death. The wire is intentionally placed AFTER the massive-damage check so a single-shot kill (e.g. Krieger at 5 HP takes 65 damage with max 55) skips Relentless Endurance and goes straight to dead. The unit-style test could exercise this; filed for a follow-up since the test fixture would need a high-damage attack source.
+- **Resource is the trait.** The `relentless-endurance` resource on Krieger's sheet IS the race trait — there's no separate race-slug gate. This matches the v2.77.0 Lucky-feat pattern (sheet's `feats` list is the trait check). A future Stout Halfling Resilience could ship the same way (its own resource on the sheet).
+- **Long-rest refresh.** The resource's `reset: "long"` field is read by the existing `/rest` endpoint's `refilled_resources` walker (v2.15.4+), so Krieger's Relentless Endurance auto-refills on long rest without any new wiring. Tested via the existing harness rest fixtures.
+- **Demo coverage.** Krieger Stonefist (Half-Orc Berserker Lv 7) is the only Half-Orc PC. No other demo race triggers this hook.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 680 (was 678 in v2.99.16).
+
+---
+
 ## [2.99.16] - 2026-05-31 — "Swap the Frightened Volunteer"
 
 **Schema version:** 64

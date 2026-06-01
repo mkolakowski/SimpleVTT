@@ -5171,6 +5171,26 @@ async def _apply_damage_to_combatant(
                 "source": "attack",
             },
         })
+        # v2.99.17 — Half-Orc Relentless Endurance broadcast.
+        # `_apply_hp_change` fired the clamp + resource decrement;
+        # surface the trigger to the chat card so the GM + table can
+        # see the Half-Orc just saved themselves. Also emit a
+        # `resource_update` so the per-PC resource UI flips
+        # (1/1 → 0/1) without a manual refresh.
+        if result.get("relentless_endurance_fired"):
+            await _broadcast_relentless_endurance(
+                campaign_id, char,
+                int(result.get("relentless_endurance_damage") or 0),
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": char.id,
+                    "key": "relentless-endurance",
+                    "current": 0,
+                    "max": 1,
+                },
+            })
         # v2.49.61: RAW Sleep — taking damage wakes the sleeper.
         await _wake_sleeping_on_damage(campaign_id, char.id, None, applied, db=db)
         # v2.97.65 — damage-triggered repeated saves (Fear, Hideous
@@ -19251,6 +19271,99 @@ def _extract_kept_d20_from_breakdown(breakdown: str) -> "int | None":
         return None
 
 
+# v2.99.17 — (D) Phase 3 second-ship: Half-Orc Relentless Endurance.
+# RAW (PHB p.41): "When you are reduced to 0 hit points but not
+# killed outright, you can drop to 1 hit point instead. You can't
+# use this feature again until you finish a long rest."
+#
+# Implementation:
+#   - Per-long-rest resource on the sheet (key="relentless-endurance",
+#     current=1, max=1, reset="long"). Krieger gets one in the demo
+#     seed; any future Half-Orc PC should as well.
+#   - `_pc_has_relentless_endurance_available(sheet)` returns True
+#     when the sheet has the resource AND current > 0. Doesn't
+#     gate on race slug because the resource is the trait — if it's
+#     on the sheet, the PC has it (the race normalization can be
+#     re-added as a defense if it turns out homebrew abuses the
+#     pattern).
+#   - `_apply_hp_change` hook (v2.99.17): when damage drops the PC
+#     from alive → 0 HP AND the massive-damage rule didn't fire
+#     (not killed outright) AND the resource is available, clamp
+#     new_current=1 + decrement the resource + stay alive. Returns
+#     a `relentless_endurance_fired: True` flag in the result dict
+#     so callers can broadcast the trigger.
+
+def _pc_has_relentless_endurance_available(sheet: "dict | None") -> bool:
+    """Detect Half-Orc Relentless Endurance availability on a PC
+    sheet. Returns True when the sheet has the `relentless-endurance`
+    resource with current > 0. The resource is the trait — the demo
+    seed adds it for Krieger; future Half-Orc PCs should as well.
+    """
+    if not sheet:
+        return False
+    for r in (sheet.get("resources") or []):
+        if not isinstance(r, dict):
+            continue
+        key = (r.get("key") or "").strip().lower()
+        if key != "relentless-endurance":
+            continue
+        try:
+            cur = int(r.get("current") or 0)
+        except (TypeError, ValueError):
+            cur = 0
+        return cur > 0
+    return False
+
+
+def _decrement_relentless_endurance(sheet: dict) -> None:
+    """In-place decrement of the relentless-endurance resource on
+    a sheet. Called by `_apply_hp_change` after the HP clamp.
+    """
+    resources = list(sheet.get("resources") or [])
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "relentless-endurance":
+            updated = dict(r)
+            try:
+                cur = int(updated.get("current") or 0)
+            except (TypeError, ValueError):
+                cur = 0
+            updated["current"] = max(0, cur - 1)
+            resources[i] = updated
+            sheet["resources"] = resources
+            return
+
+
+async def _broadcast_relentless_endurance(
+    campaign_id: int,
+    char: "Character | None",
+    damage_amount: int,
+) -> None:
+    """Companion broadcast for the Relentless Endurance auto-fire.
+    Emits a `feature_used` event with `source: "relentless-endurance"`
+    so the chat card surfaces the trigger ("Krieger used 💪 Relentless
+    Endurance — dropped to 1 HP instead of 0 from 30 damage.").
+    """
+    if not char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": "💪 Relentless Endurance — dropped to 1 HP",
+            "feature_desc": (
+                f"{char.name} took {damage_amount} damage but Relentless "
+                f"Endurance (Half-Orc race trait) kept him alive at 1 HP. "
+                f"1/long rest."
+            ),
+            "source": "relentless-endurance",
+        },
+    })
+
+
 async def _broadcast_halfling_lucky(
     campaign_id: int,
     char: "Character | None",
@@ -25141,6 +25254,8 @@ def _apply_hp_change(
     new_status = old_status
     became_dying = False
     became_dead = False
+    relentless_endurance_fired = False
+    relentless_endurance_damage = 0
 
     new_current = max(0, int(new_current))
 
@@ -25169,6 +25284,19 @@ def _apply_hp_change(
                     became_dead = True
                     successes = 0
                     failures = 0
+                # v2.99.17 — Half-Orc Relentless Endurance auto-fire.
+                # RAW: "reduced to 0 HP but not killed outright" → drop
+                # to 1 HP instead. The massive-damage check above
+                # gates "not killed outright" (if remaining ≥ max_hp,
+                # instant death takes priority). Available 1/long
+                # rest via the `relentless-endurance` resource.
+                elif _pc_has_relentless_endurance_available(sheet):
+                    new_current = 1
+                    _decrement_relentless_endurance(sheet)
+                    relentless_endurance_fired = True
+                    relentless_endurance_damage = damage_amount
+                    # Stay alive; don't tick death-save state.
+                    new_status = "alive"
                 else:
                     new_status = "dying"
                     became_dying = True
@@ -25230,6 +25358,10 @@ def _apply_hp_change(
         "status_changed": new_status != old_status,
         "became_dying": became_dying,
         "became_dead": became_dead,
+        # v2.99.17 — Relentless Endurance trigger flags. Callers
+        # broadcast the feature_used event when fired.
+        "relentless_endurance_fired": relentless_endurance_fired,
+        "relentless_endurance_damage": relentless_endurance_damage,
     }
 
 

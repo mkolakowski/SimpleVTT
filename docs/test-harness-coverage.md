@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 678 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.16, 2026-05-31).
+**Total tests:** 680 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.17, 2026-05-31).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -349,6 +349,14 @@ v2.99.15 — (D) Phase 3 first-ship: Fey Ancestry magical sleep immunity. Extend
 | `test_half_elf_target_immune_via_fey_ancestry` | Lyra (Half-Elf Bard) targets herself with Sleep → same immunity gate. |
 | `test_wood_elf_target_immune_via_fey_ancestry` | Mira (Wood Elf Druid) → confirms slug normalizer folds Wood Elf → elf. |
 | `test_halfling_target_NOT_immune` | Control: Pip (Halfling) → affected, regression guard against over-broad immunity. |
+
+### `test_relentless_endurance.py`
+v2.99.17 — (D) Phase 3 second-ship: Half-Orc Relentless Endurance auto-clamp. `_apply_hp_change` reads the `relentless-endurance` resource (1/long-rest counter on Krieger's sheet); when damage drops the PC from alive → 0 HP AND the massive-damage rule didn't fire AND the resource is available, the function clamps `new_current = 1`, decrements the resource, and stays at `status="alive"`. Result dict carries `relentless_endurance_fired` / `relentless_endurance_damage` flags so `_apply_damage_to_combatant` can emit the `feature_used(source=relentless-endurance)` + `resource_update` broadcasts.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_relentless_endurance_clamps_zero_to_one` | Krieger at 3 HP; Pip attacks; after a hit dealing ≥3 damage, the `character_hp_update` broadcast carries `current=1`, `resource_update` for `relentless-endurance` carries `current=0`, AND `feature_used(source=relentless-endurance)` broadcast fires for Krieger. |
+| `test_relentless_endurance_skips_non_half_orc` | Control: Lyra at 3 HP; same attack setup; HP-update broadcast carries `current=0` (no clamp); no Relentless Endurance broadcast. Regression guard. |
 
 ### `test_cast_sleep_multi_class.py`
 v2.49.63 — closes the "add Sleep to Bard / Sorcerer / Warlock lists" filed item. Seed-list backfill verified via one happy-path cast per class. Sleep is RAW on bard / sorcerer / warlock / wizard lists; pre-v2.49.63 only Thalindra (wizard) had it.

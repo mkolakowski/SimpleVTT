@@ -1766,6 +1766,23 @@ def _barbarian_sheet(name: str) -> dict:
                 "desc": "Bonus action — enter rage: +2 damage on STR melee attacks (Lv 1-8), advantage on STR checks / saves, resistance to bludgeoning / piercing / slashing. Lasts 1 min or until turn ends without attacking / taking damage. 4 uses at Lv 6-11; refreshes on long rest.",
                 "manual": False,
             },
+            # v2.99.17 — Half-Orc Relentless Endurance. RAW (PHB
+            # p.41): "When you are reduced to 0 hit points but not
+            # killed outright, you can drop to 1 hit point instead.
+            # You can't use this feature again until you finish a
+            # long rest." Auto-fires when damage would set Krieger
+            # to 0 HP (not killed outright by massive damage); the
+            # server-side _apply_hp_change hook reads this resource
+            # via `_pc_has_relentless_endurance_available(sheet)`
+            # and clamps HP to 1.
+            {
+                "key": "relentless-endurance",
+                "name": "Relentless Endurance",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "Half-Orc",
+                "desc": "When reduced to 0 HP but not killed outright, drop to 1 HP instead. 1/long rest.",
+                "manual": False,
+            },
         ],
         # v2.18.2: clickable Class abilities buttons. Rage's curated
         # entry is slot:'bonus' (since v2.6.0); clicking announces +
