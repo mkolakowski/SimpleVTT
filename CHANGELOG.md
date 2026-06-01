@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.34] - 2026-06-01 — "The Far Reach"
+
+**Schema version:** 64
+**Commit summary:** **Distant Spell metamagic — third announce-only ship after Twinned (v2.99.33).** RAW (PHB p.102): 1 SP flat. Doubles a spell's range (5 ft → 10 ft, 60 ft → 120 ft, etc.) OR extends a Touch spell to 30 ft. Same announce-only shape as Twinned + Quickened. Server decrements 1 SP + broadcasts the trigger. The actual range extension is applied by the GM manually at the next cast. Auto-route would need a pending-buff pattern + a `/cast_spell` consumer that mutates the spell's range string at resolution time; filed.
+**Description:** New endpoint `/use_metamagic_distant_spell` taking just `character_id` (no spell_level — flat 1 SP cost). Validates Sorcerer Lv 3+ + SP >= 1. Atomically decrements SP + broadcasts `resource_update` + `feature_used(source=metamagic-distant-spell)` + logs `resource_spend` undo entry. Zara's `_metamagic_options` extended to 4 picks.
+
+### Added
+- `/api/campaign/{campaign_id}/use_metamagic_distant_spell` endpoint — body `{character_id}`. Returns `{ok, sp_cost: 1, sp_remaining, sp_max, cast_id}`.
+- `distant-spell` entry in Zara's `class_features` list (rendered as a Class abilities button).
+- `tests/harness/test_use_metamagic_distant.py` — 3 tests:
+  - `test_distant_costs_1_sp_and_broadcasts` — happy path.
+  - `test_distant_not_enough_points` — 409 when SP exhausted.
+  - `test_distant_wrong_class` — 409 for Tavik (Cleric).
+
+### Changed
+- Zara's `_metamagic_options` list extended from 3 → 4 picks (Quickened / Empowered / Twinned / Distant). RAW Lv 3 = 2 known, but demo expansion exercises all four for fixture coverage.
+- `docs/plans/class-content-status.md` — Sorcerer Metamagic row updated to credit Distant ✅ alongside Empowered + Twinned + Quickened.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — additive endpoint + demo seed line + 3 tests.
+- **Why announce-only.** Like Twinned, the actual mechanical effect (extended range) would need the spell-cast resolution to mutate the spell's range string. The `/cast_spell` flow currently reads range from the spell JSON / sheet entry; intercepting + doubling at cast time is filed as a follow-up. The v1 announce-only ship is sufficient for play tables that adjudicate metamagics manually (the GM applies the extended range when the cast lands).
+- **Touch-spell extension.** RAW Distant Spell ALSO extends Touch spells to 30 ft. The v1 endpoint doesn't distinguish — it just announces "doubled range / 30 ft Touch." GM applies whichever clause is relevant.
+- **Demo coverage.** Zara now has 4 of 8 metamagics declared (3 mechanical / announce-only via endpoints + 1 announce-only via the v2.6.0 curated `_FEATURE_ECONOMY` entry for Quickened). Remaining ⚪: Subtle (blocked on F7), Heightened, Careful, Extended.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 715 (was 712 in v2.99.33).
+
+---
+
 ## [2.99.33] - 2026-06-01 — "The Twinned Hand"
 
 **Schema version:** 64

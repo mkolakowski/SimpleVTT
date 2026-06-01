@@ -2294,15 +2294,24 @@ def _sorcerer_sheet(name: str) -> dict:
                 "name": "Twinned Spell (metamagic)",
                 "desc": "Spend SP = spell level (min 1 for cantrip): when you cast a single-target spell with range > Self, target a second creature in range. v1: announce-only — cast the spell at the second target via a follow-up Cast.",
             },
+            # v2.99.34 — Distant Spell. 1 SP flat. Announce-only.
+            # PHB p.102.
+            {
+                "key": "distant-spell",
+                "name": "Distant Spell (metamagic)",
+                "desc": "Spend 1 sorcery point: double the range of a spell with range ≥ 5 ft, OR extend a Touch spell to 30 ft. v1: announce-only — GM applies the extended range at cast time.",
+            },
         ],
         # Sorcerer's Metamagic at Lv 3 picks 2 options. Zara's picks:
-        # Quickened Spell (curated entry in `_FEATURE_ECONOMY`) +
-        # Empowered Spell (v2.49.124) + Twinned Spell (v2.99.33).
-        # 3 picks total despite RAW Lv 3 = 2 known (Lv 10 + 17 add
-        # 1 more each) — demo expansion via an early-pick variant
-        # houserule so the test fixture exercises all three. Twinned
-        # is the third option to flesh out the metamagic suite.
-        "_metamagic_options": ["quickened-spell", "empowered-spell", "twinned-spell"],
+        # Quickened Spell (v2.6.0) + Empowered Spell (v2.49.124) +
+        # Twinned Spell (v2.99.33) + Distant Spell (v2.99.34). 4
+        # picks total despite RAW Lv 3 = 2 known (Lv 10 + 17 add 1
+        # more each) — demo expansion houserule so the test fixture
+        # exercises the full metamagic stack as it ships.
+        "_metamagic_options": [
+            "quickened-spell", "empowered-spell",
+            "twinned-spell", "distant-spell",
+        ],
         # Draconic Bloodline subclass picks an ancestor at Lv 1.
         # Red = fire (matches Tiefling's flame motif + Hellish
         # Resistance). Elemental Affinity (Lv 6) is deferred until
