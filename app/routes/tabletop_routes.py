@@ -10739,6 +10739,21 @@ async def roll_dice(
         result = dice_mod.roll(expr)
     except dice_mod.DiceParseError as e:
         raise HTTPException(400, str(e))
+
+    # v2.99.22 — Halfling Lucky check-roll surface. Closes the last
+    # v2.99.13 / v2.99.21 simplification — RAW Halfling Lucky covers
+    # attack rolls (v2.99.21), saving throws (v2.99.13), AND ability
+    # checks. The /roll endpoint is the generic surface for ability /
+    # skill / initiative / death-save / generic d20 rolls; the
+    # intercept fires whenever the kept d20 is 1 AND the rolling PC
+    # is a Halfling. Reroll uses a fresh full-expression roll.
+    _hl_old_d20: "int | None" = None
+    _hl_new_d20: "int | None" = None
+    if _char and _pc_has_halfling_lucky(_char.sheet):
+        result, _hl_old_d20, _hl_new_d20 = _maybe_halfling_lucky_attack_reroll(
+            _char, expr, result,
+        )
+
     rec = DiceRoll(
         campaign_id=campaign_id,
         user_id=user.id,
@@ -10746,7 +10761,11 @@ async def roll_dice(
         breakdown=result.breakdown,
         total=result.total,
         visibility=visibility,
-        note=note,
+        note=(
+            note + f" | 🍀 Lucky reroll d20 1 → {_hl_new_d20}"
+            if _hl_old_d20 == 1 and _hl_new_d20 is not None
+            else note
+        )[:200],
     )
     db.add(rec)
     db.commit()
@@ -10823,6 +10842,12 @@ async def roll_dice(
         },
         recipient_filter=_filter,
     )
+    # v2.99.22 — Halfling Lucky companion broadcast on the /roll
+    # surface. Fires only when the intercept rerolled the d20.
+    if _hl_old_d20 == 1 and _hl_new_d20 is not None and _char is not None:
+        await _broadcast_halfling_lucky_check(
+            campaign_id, _char, _hl_old_d20, _hl_new_d20,
+        )
     return {"ok": True, "total": rec.total, "breakdown": rec.breakdown,
             "roll_state_applied": roll_state_applied or None}
 
@@ -19395,6 +19420,40 @@ def _maybe_halfling_lucky_attack_reroll(
         return result, None, None
     new_kept = _extract_kept_d20_from_breakdown(new_result.breakdown or "")
     return new_result, 1, new_kept
+
+
+async def _broadcast_halfling_lucky_check(
+    campaign_id: int,
+    char: "Character | None",
+    old_d20: int,
+    new_d20: int,
+) -> None:
+    """v2.99.22 check-flavor companion to `_broadcast_halfling_lucky`.
+    Fires from the `/roll` endpoint when Halfling Lucky rerolls a
+    natural 1 on a generic d20 roll (ability check / skill check /
+    initiative / anything that isn't a save or attack).
+
+    Same `feature_used(source=halfling-lucky)` shape; the chat-card
+    rendering treats all three flavors interchangeably.
+    """
+    if not char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                f"🍀 Halfling Lucky — d20 {old_d20} → {new_d20}"
+            ),
+            "feature_desc": (
+                f"{char.name} rolled a natural 1. Halfling Lucky "
+                f"rerolls the d20 (new value: {new_d20})."
+            ),
+            "source": "halfling-lucky",
+        },
+    })
 
 
 async def _broadcast_halfling_lucky_attack(

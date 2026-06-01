@@ -405,3 +405,77 @@ async def test_halfling_lucky_skips_non_natural_one(
     assert not lucky_msgs, (
         f"Halfling Lucky broadcast should NOT fire on non-natural-1: {lucky_msgs}"
     )
+
+
+# v2.99.22 — check-roll surface for Halfling Lucky. The intercept
+# lives in /roll post-d20 roll; same shape as the save (v2.99.13)
+# and attack (v2.99.21) surfaces.
+
+
+async def test_halfling_lucky_rerolls_on_check_natural_one(
+    gm_client, gm_ws, roster,
+):
+    """Pip rolls a generic d20 (ability/skill check shape) with
+    character_id=Pip; seeded dice forces d20=1; server rerolls;
+    feature_used(source=halfling-lucky) broadcast fires; the
+    roll-log note carries the 🍀 Lucky reroll annotation.
+    """
+    pip = roster["Pip Quickfingers"]
+    # Seed d20=1 — use a small expression so the seed-find loop is fast.
+    await _seed_until_d20_is_one(gm_client, gm_ws, "1d20")
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20+4",  # Pip's Stealth-shaped expression
+            "visibility": "public",
+            "character_id": pip["id"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    import asyncio as _asy
+    await _asy.sleep(0.3)
+    # Lucky broadcast.
+    lucky_msgs = _lucky_broadcasts(gm_ws, pip["id"])
+    assert lucky_msgs, (
+        f"expected feature_used(source=halfling-lucky) on check reroll; "
+        f"buffered: {[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+    # Roll broadcast carries the Lucky annotation in the note.
+    roll_msg = _last_roll(gm_ws)
+    assert roll_msg is not None
+    note = (roll_msg.get("data") or {}).get("note") or ""
+    assert "Lucky reroll d20 1 →" in note, (
+        f"expected 'Lucky reroll' in note; got {note!r}"
+    )
+
+
+async def test_halfling_lucky_check_skips_non_halfling(
+    gm_client, gm_ws, roster,
+):
+    """Control: Garrik rolls 1d20+4 with seeded d20=1 → no reroll,
+    no Halfling Lucky broadcast.
+    """
+    garrik = roster["Garrik Ironside"]
+    await _seed_until_d20_is_one(gm_client, gm_ws, "1d20")
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20+4",
+            "visibility": "public",
+            "character_id": garrik["id"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    import asyncio as _asy
+    await _asy.sleep(0.3)
+    lucky_msgs = _lucky_broadcasts(gm_ws, garrik["id"])
+    assert not lucky_msgs, (
+        f"Halfling Lucky should NOT fire for non-Halfling: {lucky_msgs}"
+    )
+    roll_msg = _last_roll(gm_ws)
+    note = (roll_msg.get("data") or {}).get("note") or ""
+    assert "Lucky reroll" not in note, (
+        f"non-Halfling should NOT see Lucky reroll note; got {note!r}"
+    )

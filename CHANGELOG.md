@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.22] - 2026-06-01 — "Lucky Everywhere"
+
+**Schema version:** 64
+**Commit summary:** **Halfling Lucky ability-check surface — full RAW coverage.** v2.99.13 shipped saves, v2.99.21 shipped attacks; v2.99.22 closes the loop with the `/roll` endpoint (generic d20 → ability/skill/initiative/death-save). RAW Halfling Lucky now fires on all three of "attack roll, ability check, or saving throw" surfaces. The intercept reuses the v2.99.21 `_maybe_halfling_lucky_attack_reroll` helper (renamed-in-mind but kept under its original name for backward compatibility) — same parser, same reroll logic. New companion broadcast `_broadcast_halfling_lucky_check` with check-flavor copy.
+**Description:** Three-line intercept addition to `roll_dice` (the `/roll` endpoint handler): after the `dice_mod.roll(expr)` call but before the `DiceRoll` record is created, the intercept rerolls when the kept d20 is 1 AND the rolling PC is a Halfling. The DiceRoll's `note` carries "🍀 Lucky reroll d20 1 → N" appended to whatever the caller's note was; the broadcast fires after the standard `roll` event lands. Harness coverage extends `tests/harness/test_halfling_lucky.py` from 5 → 7 tests.
+
+### Added
+- `_broadcast_halfling_lucky_check(campaign_id, char, old_d20, new_d20)` — check-flavor companion broadcast. Same `feature_used(source=halfling-lucky)` shape as the save and attack flavors.
+- Two new tests in `tests/harness/test_halfling_lucky.py`:
+  - `test_halfling_lucky_rerolls_on_check_natural_one` — Pip rolls `1d20+4` (Stealth-shaped) with seeded d20=1; assert reroll fires + broadcast + Lucky note.
+  - `test_halfling_lucky_check_skips_non_halfling` — Control: Garrik with seeded d20=1; no reroll, no broadcast, no Lucky note.
+
+### Changed
+- `roll_dice` (`/api/campaign/{cid}/roll`) — post-roll intercept block. Reuses `_maybe_halfling_lucky_attack_reroll` (its name is misleading post-v2.99.22 since it now serves attack + check + would serve any d20-context, but renaming would churn the v2.99.21 wire). The DiceRoll's `note` is augmented with the Lucky annotation when the reroll fires.
+- `docs/plans/class-content-status.md` — Halfling row's Lucky note updated to ✅ for the check-roll surface; (D) Phase 2 status updated.
+- `docs/test-harness-coverage.md` — total bumped + new test rows added.
+
+### Notes
+- **PATCH bump** — additive helper + 1 wire site + 2 tests. No new endpoint surface — leverages the existing `/roll`.
+- **Full RAW coverage.** Halfling Lucky now fires on all three surfaces RAW mandates: attack rolls (v2.99.21 `/attack`), saving throws (v2.99.13 `/roll_request/respond`), ability checks (v2.99.22 `/roll`). Initiative + death-save rolls also route through `/roll` so they're covered too.
+- **Helper name caveat.** `_maybe_halfling_lucky_attack_reroll` is the canonical intercept; the "attack" in its name is historical. Refactoring to `_maybe_halfling_lucky_reroll` would touch every consumer and the v2.99.21 commit window — keeping the name pinned for v2.99.22 since the function is context-agnostic.
+- **Broadcast flavor.** All three companion broadcasts emit identical `source: "halfling-lucky"`. The chat-card render treats them interchangeably; the flavor copy ("attack roll" vs "save" vs "natural 1") is just for the description text.
+- **Demo coverage.** Pip Quickfingers is the only Halfling. He now has Lucky firing on every roll type RAW covers.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 686 (was 684 in v2.99.21).
+
+---
+
 ## [2.99.21] - 2026-06-01 — "Lucky On The Sword Side"
 
 **Schema version:** 64

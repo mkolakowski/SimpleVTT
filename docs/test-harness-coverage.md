@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 684 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.21, 2026-06-01).
+**Total tests:** 686 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.22, 2026-06-01).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -917,6 +917,8 @@ v2.99.13 — Halfling Lucky race-trait reroll-on-natural-1 (save-roll surface). 
 | `test_halfling_lucky_skips_non_natural_one` | Control: Pip with d20 ≥ 10 → no reroll, no broadcast (trait only fires on natural 1). |
 | `test_halfling_lucky_rerolls_on_attack_natural_one` | v2.99.21 attack-roll surface. Pip attacks a Bandit with seeded d20=1 → server rerolls + `feature_used(source=halfling-lucky)` broadcast fires for Pip. |
 | `test_halfling_lucky_attack_skips_non_halfling` | Control: Garrik (Variant Human) attacks with seeded d20=1 → no reroll, no broadcast. |
+| `test_halfling_lucky_rerolls_on_check_natural_one` | v2.99.22 check-roll surface. Pip rolls `1d20+4` (Stealth-shaped) with seeded d20=1 → server rerolls; `feature_used(source=halfling-lucky)` broadcast + Lucky note in the roll log. |
+| `test_halfling_lucky_check_skips_non_halfling` | Control: Garrik rolls `1d20+4` with seeded d20=1 → no reroll, no broadcast. |
 
 ### `test_use_save_evasion.py`
 v2.51.5 — Monk Lv 7+ (and Rogue Lv 7+) Evasion. Server-side intercept of save-for-half Dex-save damage via `_apply_evasion_to_dex_save_damage` (wired into all 7 save-damage call sites). With Evasion: save → 0, fail → half. Without: standard save → half, fail → full. Broadcasts `feature_used` with `source: "evasion"` on every fire (both branches).
