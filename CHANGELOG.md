@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.20] - 2026-06-01 — "The Bronze Ward"
+
+**Schema version:** 64
+**Commit summary:** **Bronze Dragonborn Damage Resistance (lightning) — one-line follow-up to v2.99.18 / v2.99.19.** Rowan is Bronze Dragonborn per his demo seed comment line ("Bronze Dragonborn for the lightning breath weapon"). RAW (PHB p.34, Draconic Ancestry table): Bronze ancestor → lightning damage resistance. v2.99.20 declares `damage_resistances: ["lightning"]` on Rowan's sheet; the v2.99.18 `_resistance_halve` extension halves incoming lightning damage on the way in.
+**Description:** Single-line addition to `_warlock_sheet` in `app/demo_seed.py`. No code change. No new harness test — the mechanism is identical to v2.99.18 Hellish Resistance (fire) and v2.99.19 Dwarven Resilience (poison), both of which exercise the same `_resistance_halve` wire. A happy-path lightning test would need a lightning-damage attack in the demo (SRD lightning damage is dragons / lightning bolt spell / call lightning); filed for whoever adds one.
+
+### Changed
+- `_warlock_sheet` in `app/demo_seed.py` — Rowan now carries `damage_resistances: ["lightning"]` for his Bronze Dragonborn ancestor.
+- `docs/plans/class-content-status.md` — Dragonborn row's Damage Resistance note ✅; cross-cutting (D) status updated.
+
+### Notes
+- **PATCH bump** — single-line demo seed change.
+- **Why no harness test.** Same rationale as v2.99.19: leverages the already-tested v2.99.18 wire. A parallel lightning-specific test would duplicate the proof. A happy-path test needs a lightning-damage attack source — Thalindra has Lightning Bolt (8d6 lightning, L3 wizard) but it's a save-for-half AoE spell that requires the `/place_aoe` flow to apply damage, which is more involved test setup than the demo-seed change warrants. Filed for the next commit that wires the AoE PC save damage path through a focused test, OR adds a Storm Sorcerer / Tempest Cleric ability that deals direct lightning damage to a single PC target.
+- **Other Dragonborn ancestries — same shape.** Future Dragonborn PCs of other ancestries (Black → acid, Blue → lightning, Brass → fire, Bronze → lightning, Copper → acid, Gold → fire, Green → poison, Red → fire, Silver → cold, White → cold) ship the same way: one line of demo-seed data.
+- **Demo coverage.** Rowan Ashstride (Warlock The Fiend Lv 5, Bronze Dragonborn) is the only Dragonborn PC. **9 of 12 demo PCs now have at least one wired race trait.** Remaining 3 PCs: Caelan (Variant Human, no racial trait gates the framework), Garrik (Variant Human, same), Krieger's Half-Orc Savage Attacks (extra crit die — needs (B) crit-intercept work, not the (D) race framework).
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 682 (unchanged).
+
+---
+
 ## [2.99.19] - 2026-06-01 — "The Stone Constitution"
 
 **Schema version:** 64

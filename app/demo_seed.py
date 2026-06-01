@@ -1319,6 +1319,13 @@ def _warlock_sheet(name: str) -> dict:
         "speed": 30,
         # Lv 1 max d8 (8) + 4× avg d8 (5) + CON +2 × 5 = 8 + 20 + 10 = 38.
         "hp": {"current": 38, "max": 38, "temp": 0},
+        # v2.99.20 — Bronze Dragonborn Damage Resistance: resistance
+        # to lightning damage. RAW (PHB p.34, Draconic Ancestry
+        # table): Bronze ancestor → lightning damage resistance.
+        # Same shape as v2.99.18 Tiefling Hellish Resistance and
+        # v2.99.19 Hill Dwarf Dwarven Resilience poison — sheet-level
+        # damage_resistances list read by _resistance_halve.
+        "damage_resistances": ["lightning"],
         "initiative_bonus": 2,  # DEX 14 mod
         "proficiency_bonus": 3,
         "hit_dice": {"current": 5, "max": 5},
