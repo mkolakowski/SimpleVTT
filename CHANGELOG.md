@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.18] - 2026-05-31 — "The Infernal Veneer"
+
+**Schema version:** 64
+**Commit summary:** **(D) Phase 3 third-ship: Tiefling Hellish Resistance (fire damage resistance) via sheet-level `damage_resistances` field extension.** RAW (PHB p.43): "You have resistance to fire damage." v2.99.18 extends `_resistance_halve` to read a sheet-level `damage_resistances` list — the same field shape NPC monster templates already use — so PCs with race traits granting permanent resistance populate the list at character creation. The same code path NPCs use now serves PCs too. Zara Emberfire's demo sheet gains `damage_resistances: ["fire"]`.
+**Description:** Three-line extension to `_resistance_halve`: before the existing buff-walk, check the sheet root's `damage_resistances` list (handling both list and comma-separated string shapes for parity with NPC template input forms). Match against the incoming `damage_type` and halve the damage on match. Demo-seed addition is one line on Zara's `_sorcerer_sheet`. Harness coverage via `tests/harness/test_hellish_resistance.py` (2 tests using TEST_MODE dice seeding to deterministically observe halved-vs-not-halved damage).
+
+### Added
+- `damage_resistances` field reading in `_resistance_halve` — handles both list shape (Python list of strings) and string shape (comma-separated, matching the NPC template form input).
+- Zara Emberfire's demo sheet now carries `damage_resistances: ["fire"]` for Hellish Resistance.
+- `tests/harness/test_hellish_resistance.py` — 2 tests:
+  - `test_tiefling_halves_fire_damage` — Thalindra casts Fire Bolt at Zara; rolled total halved (floor) in `damage_applied`.
+  - `test_no_resistance_for_non_tiefling` — Control: Fire Bolt at Pip (Halfling) → no halving; regression guard against over-broad resistance match.
+
+### Changed
+- `_resistance_halve` — reads `target_sheet["damage_resistances"]` before walking buffs. Returns `(damage // 2, True)` when the damage type matches a sheet-level entry.
+- `docs/plans/class-content-status.md` — Tiefling row's Hellish Resistance note ✅; (D) Phase 3 status updated.
+- `docs/test-harness-coverage.md` — total bumped + new test file row added.
+
+### Notes
+- **PATCH bump** — additive helper extension + 1-line demo seed + 2 tests.
+- **Architectural symmetry with NPCs.** Monster templates have carried `damage_resistances` (text input on `/admin/templates/edit`) since v2.18.x — `_resistance_halve_npc` reads it for monster combatants. v2.99.18 makes PCs symmetric: PCs with race-trait resistance store it the same way. Future race-trait additions (Dragonborn Damage Resistance by ancestry, Stout Halfling poison resistance, Dwarven Resilience poison resistance) ship the same way: one line of demo-seed data per fixture.
+- **Hellish Rebuke + Darkness 1/day counters** already shipped on Zara's sheet as `hellish-rebuke` / `darkness-racial` resources (v2.18.1). The mechanical wiring for the actual casts goes through the v2.71.0 Reactions framework (Hellish Rebuke trigger on `damage_taken`) and an existing `/cast_spell` path for Darkness — both work; the resources just decrement on cast.
+- **Dwarven Resilience poison-resistance follow-up.** v2.99.12 filed the resistance half. Now that `_resistance_halve` reads sheet-level `damage_resistances`, the fix is: add `damage_resistances: ["poison"]` to Tavik's Hill Dwarf sheet. Filed for a follow-up bump.
+- **Dragonborn Damage Resistance follow-up.** Rowan is Dragonborn — needs a sheet-level `damage_resistances: ["fire"]` (Red Dragon ancestor) when that ancestry is wired. Filed.
+- **Demo coverage.** Zara Emberfire (Tiefling Sorcerer Lv 5) is the only Tiefling PC. The full party now has 7 of 12 PCs with at least one wired race trait: Pip / Tavik / Thalindra / Lyra / Mira / Kael / Krieger / Zara.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 682 (was 680 in v2.99.17).
+
+---
+
 ## [2.99.17] - 2026-05-31 — "The Half-Orc Stands Up"
 
 **Schema version:** 64

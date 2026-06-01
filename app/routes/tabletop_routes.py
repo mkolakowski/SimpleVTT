@@ -20150,10 +20150,28 @@ def _resistance_halve(
     """If the target's ``_buffs_active`` has resistance to
     ``damage_type``, return (halved, True). Otherwise (damage_amount,
     False). RAW: resistance halves damage (floor).
+
+    v2.99.18 — also checks the sheet-level ``damage_resistances``
+    list for permanent racial resistances (Tiefling Hellish
+    Resistance to fire, Dwarven Resilience to poison, Dragonborn
+    Damage Resistance by ancestry, etc.). The field shape matches
+    NPC monster templates: a list of damage-type strings stored at
+    sheet root. PCs with a race trait granting permanent resistance
+    populate this list at character creation; the same list is read
+    by NPC paths via ``_resistance_halve_npc``.
     """
     if damage_amount <= 0 or not damage_type:
         return damage_amount, False
     damage_type_l = damage_type.strip().lower()
+    # v2.99.18 — permanent race-trait resistance (Hellish Resistance,
+    # Dwarven Resilience poison, Dragonborn ancestry, etc.).
+    sheet_resists = (target_sheet or {}).get("damage_resistances") or []
+    if isinstance(sheet_resists, str):
+        sheet_resists = [p.strip() for p in sheet_resists.split(",") if p.strip()]
+    if isinstance(sheet_resists, list):
+        for r in sheet_resists:
+            if (str(r) or "").strip().lower() == damage_type_l:
+                return damage_amount // 2, True
     for b in (target_sheet or {}).get("_buffs_active") or []:
         if not isinstance(b, dict):
             continue

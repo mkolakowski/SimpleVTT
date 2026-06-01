@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 680 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.17, 2026-05-31).
+**Total tests:** 682 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.18, 2026-05-31).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -357,6 +357,14 @@ v2.99.17 — (D) Phase 3 second-ship: Half-Orc Relentless Endurance auto-clamp. 
 |------|-----------------|
 | `test_relentless_endurance_clamps_zero_to_one` | Krieger at 3 HP; Pip attacks; after a hit dealing ≥3 damage, the `character_hp_update` broadcast carries `current=1`, `resource_update` for `relentless-endurance` carries `current=0`, AND `feature_used(source=relentless-endurance)` broadcast fires for Krieger. |
 | `test_relentless_endurance_skips_non_half_orc` | Control: Lyra at 3 HP; same attack setup; HP-update broadcast carries `current=0` (no clamp); no Relentless Endurance broadcast. Regression guard. |
+
+### `test_hellish_resistance.py`
+v2.99.18 — (D) Phase 3 third-ship: Tiefling Hellish Resistance (sheet-level `damage_resistances` field on PCs). `_resistance_halve` extended to read the sheet root's `damage_resistances` list before walking buffs. Same field shape NPC templates already use. Zara Emberfire's demo sheet ships `damage_resistances: ["fire"]`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_tiefling_halves_fire_damage` | Thalindra casts Fire Bolt at Zara (Tiefling); deterministic seed lands a hit; `damage_applied == damage_total // 2` (resistance halving). |
+| `test_no_resistance_for_non_tiefling` | Control: Fire Bolt at Pip (Halfling) → `damage_applied == damage_total` (no halving). Regression guard against over-broad resistance match. |
 
 ### `test_cast_sleep_multi_class.py`
 v2.49.63 — closes the "add Sleep to Bard / Sorcerer / Warlock lists" filed item. Seed-list backfill verified via one happy-path cast per class. Sleep is RAW on bard / sorcerer / warlock / wizard lists; pre-v2.49.63 only Thalindra (wizard) had it.

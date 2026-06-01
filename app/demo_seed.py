@@ -2086,6 +2086,13 @@ def _sorcerer_sheet(name: str) -> dict:
         # Lv 1 max d6 (6) + 4× avg d6 (4) + CON +2 × 5 = 6 + 16 + 10 = 32,
         # plus Draconic Resilience +1 HP / sorcerer level = +5. Total 37.
         "hp": {"current": 37, "max": 37, "temp": 0},
+        # v2.99.18 — Tiefling Hellish Resistance: resistance to fire
+        # damage. RAW (PHB p.43). The v2.99.18 _resistance_halve
+        # extension reads this list at the sheet root and halves
+        # incoming damage of any matching type before applying it.
+        # Same shape as NPC monster templates' damage_resistances
+        # field.
+        "damage_resistances": ["fire"],
         "initiative_bonus": 2,  # DEX 14 mod
         "proficiency_bonus": 3,
         "hit_dice": {"current": 5, "max": 5},
