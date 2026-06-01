@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.16] - 2026-05-31 — "Swap the Frightened Volunteer"
+
+**Schema version:** 64
+**Commit summary:** **Full-suite sweep fix: switch `test_heroism_blocks_frightened_install` target from Pip (Halfling) to Garrik (Variant Human Fighter) so v2.99.14 Halfling Brave doesn't intercept the failed-save loop.** The full 678-test harness sweep after the v2.99.10–v2.99.15 session surfaced 2 failures: this one (caused by my own v2.99.14 work) and `test_npc_concentration` (a known suite-contention flake hardened in v2.99.2–v2.99.5; not caused by this session). v2.99.16 fixes the Heroism test at its source and documents the NPC concentration flake as a pre-existing follow-up.
+**Description:** The Heroism Frightened-immunity test relies on the target failing a Wis save vs Lyra's Fear so the Heroism install-gate has something to short-circuit. With Pip as the target, v2.99.14's Halfling Brave save advantage made the failed-save loop too sparse — 30 tries at the post-advantage ~12% fail rate is ~2% likely to never fail. Swapping to Garrik (Variant Human Fighter, Wis +1, no race save trait) restores the ~65% fail rate the test was designed around. Also dropped Caelan from the test battle so his Aura of Protection bonus doesn't add +CHA to the save.
+
+### Changed
+- `tests/harness/test_heroism_frightened_immunity.py` — swap Pip → Garrik throughout; drop Caelan from the battle (Aura of Protection was padding the save). All variable names + docstring updated.
+
+### Notes
+- **PATCH bump** — test-only fix. No code, no schema, no production behavior change.
+- **Full-suite sweep result.** 676 of 678 tests passed in 1877 seconds (~31 min). Two failures:
+  1. **test_heroism_blocks_frightened_install** — caused by v2.99.14 (this session). Fixed here.
+  2. **test_npc_concentration::test_npc_concentration_anchor_installs_and_breaks_on_damage** — pre-existing suite-contention flake. Hardened multiple times in v2.99.2–v2.99.5 already. Passes in isolation; fails ~once in 30 minutes of suite runtime when WS broadcast races or dice-RNG state pollution gets unlucky. Documented but not fixed in this commit — would need a separate hardening pass + may be addressed via the v2.97.x reaction-prompt-suppress framework.
+- **No other regressions.** All v2.99.x session features (Fey Ancestry / Gnome Cunning / Dwarven Resilience / Halfling Lucky / Halfling Brave / Fey Ancestry sleep immunity) plus their adjacent buff-engine work continued to pass. 16 new tests from this session all green.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 678 (was 677 in v2.99.15 — corrected count after sweep).
+
+---
+
 ## [2.99.15] - 2026-05-31 — "Magic Can't Put You To Sleep"
 
 **Schema version:** 64
