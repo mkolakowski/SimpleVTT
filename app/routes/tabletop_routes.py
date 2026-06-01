@@ -19364,6 +19364,71 @@ async def _broadcast_relentless_endurance(
     })
 
 
+def _maybe_halfling_lucky_attack_reroll(
+    char: "Character | None",
+    atk_expr: str,
+    result: "object",
+) -> "tuple[object, int | None, int | None]":
+    """v2.99.21 — attack-roll surface for Halfling Lucky.
+
+    Inspects a freshly-rolled attack expression; if the kept d20 is
+    1 AND the attacker is a Halfling, re-rolls the full expression
+    once and returns the new RollResult. Returns
+    `(new_result, old_d20, new_d20)` — old_d20 / new_d20 are None
+    when no reroll fired so callers can short-circuit broadcasts.
+
+    Mirrors the v2.99.13 save-roll surface (`/roll_request/respond`
+    intercept) but lives in the synchronous /attack roll loop.
+    `dice_mod.roll` raises `DiceParseError` on bad expressions; this
+    helper guards that (callers shouldn't lose the original result
+    just because the reroll itself fails).
+    """
+    if not char or not _pc_has_halfling_lucky(char.sheet):
+        return result, None, None
+    breakdown = getattr(result, "breakdown", "") or ""
+    kept = _extract_kept_d20_from_breakdown(breakdown)
+    if kept != 1:
+        return result, None, None
+    try:
+        new_result = dice_mod.roll(atk_expr)
+    except dice_mod.DiceParseError:
+        return result, None, None
+    new_kept = _extract_kept_d20_from_breakdown(new_result.breakdown or "")
+    return new_result, 1, new_kept
+
+
+async def _broadcast_halfling_lucky_attack(
+    campaign_id: int,
+    char: "Character | None",
+    old_d20: int,
+    new_d20: int,
+) -> None:
+    """v2.99.21 attack-roll companion to `_broadcast_halfling_lucky`.
+    Same `feature_used(source=halfling-lucky)` shape; the chat-card
+    rendering treats "attack roll" / "save" interchangeably (both
+    just surface the d20 reroll).
+    """
+    if not char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                f"🍀 Halfling Lucky — d20 {old_d20} → {new_d20}"
+            ),
+            "feature_desc": (
+                f"{char.name} rolled a natural 1 on the attack roll. "
+                f"Halfling Lucky rerolls the d20 (new value: "
+                f"{new_d20})."
+            ),
+            "source": "halfling-lucky",
+        },
+    })
+
+
 async def _broadcast_halfling_lucky(
     campaign_id: int,
     char: "Character | None",
@@ -27083,6 +27148,12 @@ async def use_attack(
     attack_total = None
     attack_breakdown = ""
     attack_roll_state_applied = ""
+    # v2.99.21 — Halfling Lucky attack-roll intercept tracker.
+    # Set by _maybe_halfling_lucky_attack_reroll when the kept d20
+    # was 1 and the attacker is a Halfling. The broadcast fires
+    # after the standard attack-result broadcast lands.
+    _hl_old_d20: "int | None" = None
+    _hl_new_d20: "int | None" = None
     if not is_save and attack_bonus_raw:
         bonus_expr = attack_bonus_raw if attack_bonus_raw.startswith(("+", "-"))\
             or any(c.isalpha() for c in attack_bonus_raw)\
@@ -27128,11 +27199,20 @@ async def use_attack(
             attack_roll_state_applied = f"disadvantage_{dis_label}"
         try:
             r = dice_mod.roll(atk_expr)
+            # v2.99.21 — Halfling Lucky attack-roll intercept. Reroll
+            # the full expression once when the kept d20 == 1. Track
+            # the old/new values so the broadcast can surface the
+            # trigger after the response broadcast lands.
+            r, _hl_old_d20, _hl_new_d20 = _maybe_halfling_lucky_attack_reroll(
+                char, atk_expr, r,
+            )
             attack_total = r.total
             attack_breakdown = r.breakdown
         except dice_mod.DiceParseError:
             attack_total = None
             attack_breakdown = ""
+            _hl_old_d20 = None
+            _hl_new_d20 = None
     elif not is_save:
         # No bonus given — flat d20
         atk_expr, attack_roll_state_applied = _apply_roll_state(
@@ -27166,6 +27246,11 @@ async def use_attack(
             attack_roll_state_applied = f"disadvantage_{dis_label}"
         try:
             r = dice_mod.roll(atk_expr)
+            # v2.99.21 — Halfling Lucky attack-roll intercept on the
+            # bonusless branch. Same shape as the bonused branch above.
+            r, _hl_old_d20, _hl_new_d20 = _maybe_halfling_lucky_attack_reroll(
+                char, atk_expr, r,
+            )
             attack_total = r.total
             attack_breakdown = r.breakdown
         except dice_mod.DiceParseError:
@@ -27638,6 +27723,12 @@ async def use_attack(
         "auto_attack_targets": auto_attack_targets,
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
+    # v2.99.21 — Halfling Lucky attack-roll companion broadcast. Fires
+    # when the primary attack's d20 was 1 and the reroll consumed it.
+    if _hl_old_d20 == 1 and _hl_new_d20 is not None:
+        await _broadcast_halfling_lucky_attack(
+            campaign_id, char, _hl_old_d20, _hl_new_d20,
+        )
     # v2.5.5: full-sheet → init chip sync. Weapon attacks always burn the
     # action slot; bonus-action attacks (e.g. off-hand light weapon) come
     # through a separate row whose action.economy override is followed

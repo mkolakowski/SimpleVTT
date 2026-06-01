@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.21] - 2026-06-01 — "Lucky On The Sword Side"
+
+**Schema version:** 64
+**Commit summary:** **Halfling Lucky attack-roll surface — close the v2.99.13 save-only simplification.** v2.99.13 shipped Halfling Lucky's reroll-on-natural-1 trigger on `/roll_request/respond` (save rolls) only — RAW Halfling Lucky covers attack rolls AND saves AND ability checks. v2.99.21 wires the attack-roll surface: a post-d20 intercept in `/attack` re-rolls the full attack expression when the kept d20 is 1 AND the attacker is a Halfling. Same `feature_used(source=halfling-lucky)` broadcast shape; same `_extract_kept_d20_from_breakdown` parser; new helper `_maybe_halfling_lucky_attack_reroll(char, atk_expr, result)` factors the intercept so the two attack-roll sites (with-bonus + bonusless) share one wire.
+**Description:** Three new functions in `app/routes/tabletop_routes.py`: `_maybe_halfling_lucky_attack_reroll` (synchronous helper returning `(new_result, old_d20, new_d20)`), `_broadcast_halfling_lucky_attack` (companion broadcast with attack-flavor copy distinct from the save-flavor companion). Wire is two `r, _hl_old_d20, _hl_new_d20 = _maybe_halfling_lucky_attack_reroll(char, atk_expr, r)` calls inside each `try: r = dice_mod.roll(atk_expr)` block, plus an `if _hl_old_d20 == 1` broadcast right after the existing `weapon_attack` event. Harness coverage extends `tests/harness/test_halfling_lucky.py` with 2 new tests using the `_seed_until_d20_is_one` helper from the save-roll tests + a Bandit NPC as the attack target.
+
+### Added
+- `_maybe_halfling_lucky_attack_reroll(char, atk_expr, result) -> (new_result, old_d20, new_d20)` — synchronous attack-roll intercept helper. Mirrors the v2.99.13 save-roll surface but lives in the `/attack` roll loop. Returns the original result + (None, None) when the attacker isn't a Halfling OR the kept d20 isn't 1.
+- `_broadcast_halfling_lucky_attack(campaign_id, char, old_d20, new_d20)` — attack-flavor companion broadcast (the existing `_broadcast_halfling_lucky` is save-flavor). Same `feature_used(source=halfling-lucky)` shape; the chat-card render treats them interchangeably.
+- 2 new tests in `tests/harness/test_halfling_lucky.py`:
+  - `test_halfling_lucky_rerolls_on_attack_natural_one` — Pip attacks a Bandit with seeded d20=1 → server rerolls + broadcast fires.
+  - `test_halfling_lucky_attack_skips_non_halfling` — Control: Garrik (Variant Human) attacks with seeded d20=1 → no reroll, no broadcast.
+
+### Changed
+- Two `try: r = dice_mod.roll(atk_expr)` sites in `/attack` (the bonused branch + the bonusless branch) — added the Halfling Lucky intercept line.
+- `_hl_old_d20` / `_hl_new_d20` initialized at the top of the function body so both branches share scope.
+- Post-`weapon_attack` broadcast — fires `_broadcast_halfling_lucky_attack` when the primary attack's d20 was 1.
+- `docs/plans/class-content-status.md` — Halfling row's Lucky note updated to ✅ for the attack-roll surface; (D) Phase 2 status updated.
+- `docs/test-harness-coverage.md` — total bumped + new test rows added.
+
+### Notes
+- **PATCH bump** — additive helpers + 2 wire sites + 2 tests.
+- **Ability-check surface still ⚪.** Halfling Lucky also covers ability checks RAW. The harness wire would be inside `/roll` or `/roll_request/respond` for non-DC roll requests (skill checks), but those paths are stable and the test fixtures are straightforward — filed as a small follow-up.
+- **Extra-target attack rolls (multi-target).** The primary attack's d20 is the one wired; the extra-target loop in `/attack` (`target_combatant_ids[1:]`) keeps the original v2.99.13 + earlier behavior (no reroll). Halfling Lucky RAW only triggers on a single d20 per "roll," so a multi-target attack arguably should let the Halfling pick which die to reroll — defaulting to the primary is the simplest v1 choice. Filed if the multi-target attack flow becomes common for Pip.
+- **Determinism.** Tests use the existing `/api/test/dice/seed` + `_seed_until_d20_is_one` helper from the v2.99.13 save-surface tests. CI workflow runs with TEST_MODE on; tests skip cleanly on a non-TEST_MODE deploy via the seed assert.
+- **Demo coverage.** Pip Quickfingers (Halfling Rogue Lv 7) is the only Halfling. Lucky now fires on saves AND attacks.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 684 (was 682 in v2.99.20).
+
+---
+
 ## [2.99.20] - 2026-06-01 — "The Bronze Ward"
 
 **Schema version:** 64
