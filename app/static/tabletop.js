@@ -3862,6 +3862,22 @@
             } else if (msg.type === 'roll') {
                 appendRoll(msg.data);
                 _focusRollLogIfLocal(msg.data && msg.data.user_id);
+                // v2.99.32 — track most-recent-roll per character so
+                // the BI die banner (v2.97.57) can pick up the
+                // roll's stat_key / stat_ability for chat-card text.
+                // Indexed by character_id; timestamps let consumers
+                // ignore stale entries.
+                try {
+                    const d = msg.data || {};
+                    if (d.character_id && (d.stat_key || d.stat_ability)) {
+                        window._lastRollByChar = window._lastRollByChar || {};
+                        window._lastRollByChar[d.character_id] = {
+                            stat_key: d.stat_key || '',
+                            stat_ability: d.stat_ability || '',
+                            ts: Date.now(),
+                        };
+                    }
+                } catch (e) { /* tracker is best-effort */ }
             } else if (msg.type === 'member_color_update') {
                 const { user_id, color } = msg.data;
                 if (color) USER_COLORS[user_id] = color;

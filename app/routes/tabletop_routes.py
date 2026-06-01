@@ -10725,11 +10725,17 @@ async def roll_dice(
     skip_roll_state = bool(body.get("skip_roll_state"))
     # v2.99.28 — Optional stat_key (e.g. "str_check", "wis_save",
     # "Perception") for ability/skill/save-roll provenance. Today
-    # only consumed by the Rage STR-check advantage hook below; the
-    # field is a no-op when absent. Future hooks (Reliable Talent
-    # for proficient skill checks, Bardic Inspiration on attacks /
-    # checks / saves) can read it from the same plumbing.
-    stat_key_raw = str(body.get("stat_key") or "").strip().lower()[:60]
+    # consumed by the Rage STR-check advantage hook (v2.99.28) and
+    # the v2.99.32 broadcast-echo for client-side trackers (BI die
+    # banner). Future hooks (Reliable Talent for proficient skill
+    # checks, Bardic Inspiration on attacks / checks / saves) can
+    # read it from the same plumbing.
+    # v2.99.32 — preserve original case for the broadcast echo
+    # (skill names like "Athletics" need their canonical case for
+    # chat-card text); fold-case separately for the Rage hook
+    # comparison below.
+    stat_key_raw = str(body.get("stat_key") or "").strip()[:60]
+    stat_key_lc = stat_key_raw.lower()
     # v2.99.30 — Optional stat_ability — the underlying ability slug
     # for skill rolls ("STR" for Athletics, "WIS" for Perception).
     # Used by hooks that fire on ability-based skill checks (Rage
@@ -10805,8 +10811,8 @@ async def roll_dice(
     # kh1.
     _rage_str_check_fired = False
     _is_str_check_roll = (
-        stat_key_raw == "str_check"
-        or (stat_ability_raw == "STR" and stat_key_raw != "str_save")
+        stat_key_lc == "str_check"
+        or (stat_ability_raw == "STR" and stat_key_lc != "str_save")
     )
     if (
         _is_str_check_roll
@@ -10920,6 +10926,14 @@ async def roll_dice(
                 "roll_state_applied": roll_state_applied or None,
                 "no_char_attribution": _no_char_attribution,
                 "actor_name": _actor_name,
+                # v2.99.32 — stat provenance echo on the broadcast so
+                # client-side trackers (e.g. the v2.99.31+ BI die
+                # banner) can pick up the most-recent-roll's
+                # stat_key / stat_ability for chat-card text without
+                # a separate API call.
+                "stat_key": stat_key_raw or None,
+                "stat_ability": stat_ability_raw or None,
+                "character_id": _char.id if _char else None,
             },
         },
         recipient_filter=_filter,

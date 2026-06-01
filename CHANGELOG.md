@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.32] - 2026-06-01 — "The Last Echo"
+
+**Schema version:** 64
+**Commit summary:** **Wire the BI die banner to send stat_key + stat_ability — close the v2.99.31 client-side gap.** Three-part end-to-end commit: (1) `/roll` broadcast now echoes `stat_key`, `stat_ability`, `character_id` alongside the existing fields; (2) `tabletop.js` indexes the most-recent-roll-per-character into `window._lastRollByChar`; (3) the v2.97.57 BI die banner reads the tracker on click and includes the most-recent roll's stat_key + stat_ability in the consume body (only when the tracked roll is recent, < 30 seconds). End-to-end: Krieger rolls Athletics → server broadcasts `stat_key: "Athletics"` + `stat_ability: "STR"` → tabletop tracker indexes by Krieger's char_id → if Krieger then has a BI die buff and clicks the banner, the consume call includes the Athletics provenance → chat card says "Bardic Inspiration d8 on Athletics check" instead of generic "ability check."
+**Description:** Server: extends the `/roll` broadcast `data` shape with `stat_key`, `stat_ability`, `character_id` fields (defaults to None / null when not provided). Splits the input parsing so `stat_key_raw` preserves original case for the broadcast echo and `stat_key_lc` is folded-case for the Rage hook comparison. Client: `tabletop.js` adds the tracker block; `tabletop.html` BI banner reads from it with a 30-second recency gate. Harness adds `test_roll_broadcast_stat_provenance.py` (2 tests covering with-stat-fields + without-stat-fields paths).
+
+### Added
+- `stat_key`, `stat_ability`, `character_id` fields on the `/roll` broadcast `data` payload.
+- `window._lastRollByChar` tracker in `app/static/tabletop.js` — indexed by `character_id`; each entry carries `{stat_key, stat_ability, ts}`.
+- 30-second recency gate in `app/templates/tabletop.html` BI die banner — reads the tracker; only sends the stat fields if the most-recent roll is fresh.
+- `tests/harness/test_roll_broadcast_stat_provenance.py` — 2 tests:
+  - `test_roll_broadcast_includes_stat_key_and_ability` — body sends "Athletics" + "STR" → broadcast carries the same.
+  - `test_roll_broadcast_omits_stat_fields_when_absent` — body sends nothing → broadcast carries null for both. Backward-compat.
+
+### Changed
+- `roll_dice` (`/roll`) — preserves original case for `stat_key_raw` (for broadcast echo) + adds `stat_key_lc` for the Rage hook's case-insensitive comparison.
+- `roll_dice` broadcast — `data` shape extended with the three new fields.
+- `app/static/tabletop.js` — `msg.type === 'roll'` handler now updates `window._lastRollByChar`.
+- `app/templates/tabletop.html` — BI banner reads the tracker on click; includes stat fields in the consume body when the tracked roll is recent.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — broadcast schema extension + client tracker + banner enhancement + 2 tests.
+- **Case preservation matters.** Skill names like "Athletics" / "Persuasion" / "Sleight of Hand" need their canonical case for chat-card text. v2.99.28's original parse used `.lower()` which broke this; v2.99.32 splits the case-preserved + case-folded variants so the Rage hook (case-insensitive comparison) and the broadcast echo (canonical case) both work.
+- **30-second recency gate.** The BI die banner shouldn't pull stale roll provenance — if the player rolled Athletics 5 minutes ago, then opened the BI banner just now, the most-recent roll is unrelated. 30 seconds is the upper bound on "consume the die for the roll you just made" per RAW "before the DM resolves the outcome." Adjustable.
+- **End-to-end flow.** Krieger rolls Athletics check on his sheet (v2.99.30 wire) → server broadcasts `stat_key: "Athletics"` + `stat_ability: "STR"` + `character_id: ...` (v2.99.32) → tabletop.js tracker updates → if Krieger has a BI die buff, banner shows; on click → consume body includes the Athletics provenance (v2.99.32) → BI die endpoint produces chat-card text "✨ Krieger consumes Bardic Inspiration d8 on Athletics check" (v2.99.31).
+- **Backward compatibility.** Old clients that don't read the new broadcast fields see no behavior change. Old callers that don't send the new body fields get the legacy generic chat-card text.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 706 (was 704 in v2.99.31).
+
+---
+
 ## [2.99.31] - 2026-06-01 — "Tag The Verse"
 
 **Schema version:** 64

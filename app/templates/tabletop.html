@@ -8118,16 +8118,29 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const ctx = btn.getAttribute('data-context') || '';
                 btn.disabled = true;
                 btn.style.opacity = '0.6';
+                // v2.99.32 — pull the most-recent-roll's stat_key /
+                // stat_ability from the v2.99.32 tracker. Only
+                // include in the body when the tracked roll is
+                // recent (within 30s) so a stale Athletics roll
+                // from 5 minutes ago doesn't mislabel the chat card.
+                const body = {
+                    character_id: charId,
+                    context: ctx,
+                };
+                try {
+                    const tracked = (window._lastRollByChar || {})[charId];
+                    if (tracked && (Date.now() - (tracked.ts || 0)) < 30000) {
+                        if (tracked.stat_key) body.stat_key = tracked.stat_key;
+                        if (tracked.stat_ability) body.stat_ability = tracked.stat_ability;
+                    }
+                } catch (e) { /* tracker read is best-effort */ }
                 try {
                     const r = await fetch(
                         '/api/campaign/' + CAMPAIGN_ID + '/use_bardic_inspiration_die',
                         {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                character_id: charId,
-                                context: ctx,
-                            }),
+                            body: JSON.stringify(body),
                         }
                     );
                     if (!r.ok) {
