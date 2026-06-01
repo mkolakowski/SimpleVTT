@@ -12730,11 +12730,15 @@ async def cast_spell(
                 # INT/WIS/CHA saves from any spell. Same kh1 swap
                 # idiom; composes safely with Danger Sense / AoP /
                 # Countercharm / Indomitable above.
+                # v2.99.12 — also handles Dwarven Resilience (saves
+                # vs poison damage OR poisoned-install). Passes the
+                # spell's damage type via `_save_damage_type_from_spell`.
                 _race_applies, _race_slug, _race_trait_name = (
                     _race_grants_save_advantage(
                         tgt_char.sheet,
                         save_ability=save_ability,
                         spell_slug=spell_slug,
+                        damage_type=_save_damage_type_from_spell(spell),
                         is_spell_save=True,
                     )
                 )
@@ -13053,11 +13057,13 @@ async def cast_spell(
                         _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
                 # v2.99.11 — race-keyed save advantage on AoE saves.
                 # Same gate as the single-target site above.
+                # v2.99.12 — pass damage_type for Dwarven Resilience.
                 _aoe_race_applies, _aoe_race_slug, _aoe_race_name = (
                     _race_grants_save_advantage(
                         extra_pc.sheet,
                         save_ability=save_ability,
                         spell_slug=spell_slug,
+                        damage_type=_save_damage_type_from_spell(spell),
                         is_spell_save=True,
                     )
                 )
@@ -14007,11 +14013,14 @@ async def place_aoe(
             # Ancestry (charm install) + Gnome Cunning (INT/WIS/CHA
             # vs spell). Composes with Danger Sense via OR — if
             # either applies, the d20 expression becomes 2d20kh1.
+            # v2.99.12 — pass damage_type for Dwarven Resilience.
+            # (`damage_type` is already in scope from ctx above.)
             _aoe_pl_race_applies, _aoe_pl_race_slug, _aoe_pl_race_name = (
                 _race_grants_save_advantage(
                     extra_pc.sheet,
                     save_ability=save_ability,
                     spell_slug=spell_slug,
+                    damage_type=damage_type,
                     is_spell_save=True,
                 )
             )
@@ -18839,8 +18848,14 @@ async def _broadcast_danger_sense(campaign_id: int, char: "Character") -> None:
 # entries cover Fey Ancestry (Elf, Half-Elf, Wood Elf, High Elf,
 # Dark Elf — advantage on saves vs being charmed) and Gnome Cunning
 # (Rock Gnome, Forest Gnome — advantage on INT/WIS/CHA saves vs
-# magic). Each table key is a normalized race slug; the values are
-# rule dicts read by `_race_grants_save_advantage`.
+# magic).
+# v2.99.12 — added Dwarven Resilience (Hill/Mountain Dwarf —
+# advantage on saves vs poison damage OR poisoned-condition
+# install). Adds `damage_types` to the rule schema for damage-type
+# gating, and updates the helper signature to accept `damage_type`.
+#
+# Each table key is a normalized race slug; the values are rule
+# dicts read by `_race_grants_save_advantage`.
 #
 # Rule dict shape:
 #   trait_slug:       string, used by the broadcast for the source
@@ -18850,15 +18865,24 @@ async def _broadcast_danger_sense(campaign_id: int, char: "Character") -> None:
 #                     ("STR" / "DEX" / "CON" / "INT" / "WIS" / "CHA").
 #                     Empty list = any ability.
 #   condition_keys:   list of `_SPELL_CONDITION_MAP` condition keys
-#                     the rule gates on. None = no condition gate.
-#                     ["charmed"] = only saves vs charm install.
+#                     the rule gates on. None / [] = no condition
+#                     gate. ["charmed"] = matches saves vs charm
+#                     install.
+#   damage_types:     list of damage-type slugs the rule gates on
+#                     ("poison" / "fire" / etc.). None / [] = no
+#                     damage gate. ["poison"] = matches poison-damage
+#                     spells (Poison Spray, Cloudkill, etc.).
 #   is_spell_save:    True = only triggers on saves from spells
 #                     (used by Gnome Cunning's "vs magic" rule).
 #                     None / False = no spell-source gate.
 #
+# Match semantics: if BOTH `condition_keys` and `damage_types` are
+# set, the rule fires if EITHER matches (OR). If only one is set,
+# the rule fires when that filter matches. If neither is set, the
+# rule fires when `save_abilities` + `is_spell_save` match alone
+# (e.g. Gnome Cunning).
+#
 # Future Phase 2 additions:
-#   - Dwarven Resilience (Hill/Mountain Dwarf — advantage on saves
-#     vs poison): needs spell-damage-type tagging (filed v2.99.12).
 #   - Halfling Lucky (race trait — reroll natural 1): pre-d20
 #     reroll, not advantage; folds into the Reactions framework
 #     `attack_targeted` path (filed v2.99.13).
@@ -18869,6 +18893,7 @@ _RACE_SAVE_ADVANTAGES: "dict[str, list[dict]]" = {
             "trait_name": "Fey Ancestry",
             "save_abilities": [],
             "condition_keys": ["charmed"],
+            "damage_types": None,
             "is_spell_save": None,
         },
     ],
@@ -18878,6 +18903,7 @@ _RACE_SAVE_ADVANTAGES: "dict[str, list[dict]]" = {
             "trait_name": "Fey Ancestry",
             "save_abilities": [],
             "condition_keys": ["charmed"],
+            "damage_types": None,
             "is_spell_save": None,
         },
     ],
@@ -18887,10 +18913,44 @@ _RACE_SAVE_ADVANTAGES: "dict[str, list[dict]]" = {
             "trait_name": "Gnome Cunning",
             "save_abilities": ["INT", "WIS", "CHA"],
             "condition_keys": None,
+            "damage_types": None,
             "is_spell_save": True,
         },
     ],
+    "dwarf": [
+        {
+            "trait_slug": "dwarven-resilience",
+            "trait_name": "Dwarven Resilience",
+            "save_abilities": [],
+            "condition_keys": ["poisoned"],
+            "damage_types": ["poison"],
+            "is_spell_save": None,
+        },
+    ],
 }
+
+
+def _save_damage_type_from_spell(spell: dict) -> str:
+    """v2.99.12 — extract the damage type a save-based spell deals.
+    Reads the spell-root `damage_type` first; falls back to the
+    first action with both `save_ability` and `damage_type` set
+    (matches the SRD JSON structure where save-spell damage typing
+    typically lives on the action, e.g. Poison Spray, Cloudkill).
+    Returns the lower-cased damage type slug ("poison" / "fire" /
+    "thunder" / etc.) or empty string when the spell has no damage
+    type (pure save-or-suck like Suggestion / Hold Person).
+    """
+    if not isinstance(spell, dict):
+        return ""
+    dt = (spell.get("damage_type") or "").strip().lower()
+    if dt:
+        return dt
+    for a in (spell.get("actions") or []):
+        if not isinstance(a, dict):
+            continue
+        if a.get("save_ability") and a.get("damage_type"):
+            return (a.get("damage_type") or "").strip().lower()
+    return ""
 
 
 def _race_slug_from_sheet(sheet: dict) -> str:
@@ -18938,12 +18998,18 @@ def _race_grants_save_advantage(
     *,
     save_ability: str,
     spell_slug: str | None = None,
+    damage_type: str | None = None,
     is_spell_save: bool = True,
 ) -> "tuple[bool, str, str]":
     """v2.99.11 — (D) Phase 2 race-keyed save advantage gate. Returns
     (applies, trait_slug, trait_name). True when the saving PC's
     race has a `_RACE_SAVE_ADVANTAGES` rule that matches the save
     context.
+
+    v2.99.12 — added `damage_type` arg + OR semantics between
+    `condition_keys` and `damage_types`. Dwarven Resilience fires
+    on EITHER poisoned-condition install (Hold Person-shape) OR
+    poison-damage spell (Poison Spray / Cloudkill).
 
     Construction-time hook: caller swaps the d20 expression
     `1d20 → 2d20kh1` when this returns True (same kh1 idiom as
@@ -18956,6 +19022,8 @@ def _race_grants_save_advantage(
       spell_slug: the slug of the spell forcing the save (used by
                   rules with `condition_keys` to check the spell's
                   `_SPELL_CONDITION_MAP` entry).
+      damage_type: the damage type the spell deals ("poison" / "fire"
+                  / etc.). Used by rules with `damage_types`.
       is_spell_save: True when the save source is a spell. False for
                      non-spell save triggers (rare today — all
                      wired sites pass True).
@@ -18965,6 +19033,9 @@ def _race_grants_save_advantage(
       every spell-source save we model is magical. NPC monster
       breath weapons / non-spell saves aren't currently audited
       against the magic gate.
+    - "Vs poison" (Dwarven Resilience) collapses to "spell deals
+      poison damage OR installs poisoned". Non-spell poison sources
+      (NPC bite-and-poison-save attack pattern) aren't audited yet.
     """
     sheet = saving_char_sheet or {}
     if not sheet:
@@ -18976,23 +19047,32 @@ def _race_grants_save_advantage(
     if not rules:
         return False, "", ""
     ability = (save_ability or "").strip().upper()
+    dt = (damage_type or "").strip().lower()
     for rule in rules:
         abilities = rule.get("save_abilities") or []
         if abilities and ability not in abilities:
             continue
         if rule.get("is_spell_save") and not is_spell_save:
             continue
-        cond_keys = rule.get("condition_keys")
-        if cond_keys:
-            if not spell_slug:
-                continue
+        cond_keys = rule.get("condition_keys") or []
+        dmg_types = rule.get("damage_types") or []
+        if not cond_keys and not dmg_types:
+            # No filters → rule fires based on save_abilities +
+            # is_spell_save alone (Gnome Cunning shape).
+            return True, rule.get("trait_slug") or "", rule.get("trait_name") or ""
+        # Either filter populated → rule fires when EITHER matches.
+        matched = False
+        if cond_keys and spell_slug:
             entry = _SPELL_CONDITION_MAP.get(spell_slug)
-            if not entry:
-                continue
-            entry_key = (entry.get("key") or "").strip().lower()
-            if entry_key not in cond_keys:
-                continue
-        return True, rule.get("trait_slug") or "", rule.get("trait_name") or ""
+            if entry:
+                entry_key = (entry.get("key") or "").strip().lower()
+                if entry_key in cond_keys:
+                    matched = True
+        if not matched and dmg_types and dt:
+            if dt in dmg_types:
+                matched = True
+        if matched:
+            return True, rule.get("trait_slug") or "", rule.get("trait_name") or ""
     return False, "", ""
 
 

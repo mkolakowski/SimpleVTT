@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.12] - 2026-05-31 — "The Stout Constitution"
+
+**Schema version:** 64
+**Commit summary:** **(D) Phase 2 second-ship: Dwarven Resilience (Hill / Mountain Dwarf advantage on saves vs poison-damage spells OR poisoned-condition install).** v2.99.11 shipped the framework + Fey Ancestry + Gnome Cunning. v2.99.12 adds Dwarven Resilience as the third entry, plus a `damage_types` field on the rule schema and a `_save_damage_type_from_spell` helper that extracts the damage tag from spell-root or action-level `damage_type`. The `_race_grants_save_advantage` gate now accepts a `damage_type` kwarg and uses OR semantics between `condition_keys` and `damage_types` so Dwarven Resilience fires on EITHER trigger.
+**Description:** Three-line wire update at each of the 3 save-roll construction sites (pass `damage_type` alongside `spell_slug`). New rule entry `dwarf` with both `condition_keys=["poisoned"]` and `damage_types=["poison"]`. Demo seed addition: Poison Spray (Wizard cantrip, CON save, 1d12 poison) appended at the end of Thalindra's spell list so existing spell_index assertions stay valid. Harness coverage extends `tests/harness/test_race_save_advantage.py` with 3 more tests (happy path + 2 controls) — Thalindra (Elf Wizard) casts Poison Spray at Tavik (Hill Dwarf Cleric) → advantage triggers; Fireball at Tavik → no Dwarven Resilience (fire ≠ poison); Poison Spray at Thalindra herself → no Dwarven Resilience (Elf ≠ Dwarf).
+
+### Added
+- `_save_damage_type_from_spell(spell)` helper — reads spell-root `damage_type` first, falls back to first action with both `save_ability` and `damage_type` set. Returns lower-cased slug or empty string.
+- `damage_types` field on the `_RACE_SAVE_ADVANTAGES` rule schema — list of damage-type slugs the rule fires on.
+- `dwarf` entry in `_RACE_SAVE_ADVANTAGES` with `condition_keys=["poisoned"]` + `damage_types=["poison"]`.
+- Demo seed: Poison Spray on Thalindra's spell list (cantrip, CON save, 1d12 poison) as the test fixture for Dwarven Resilience.
+- `tests/harness/test_race_save_advantage.py` — 3 new tests covering happy path + 2 controls for Dwarven Resilience.
+
+### Changed
+- `_race_grants_save_advantage` signature gains a `damage_type` keyword arg.
+- Gate logic updated: when EITHER `condition_keys` or `damage_types` is populated, the rule fires when EITHER filter matches (OR semantics). When BOTH are absent, the rule fires based on `save_abilities` + `is_spell_save` alone.
+- All 3 save-roll construction sites (`/cast_spell` single-target PC save, AoE PC save, `/place_aoe` PC server-rolled save) now pass `damage_type` to the helper. The first two extract it via `_save_damage_type_from_spell(spell)`; `/place_aoe` reuses the existing in-scope `damage_type` variable pulled from `ctx`.
+- `docs/plans/class-content-status.md` — Hill Dwarf row's Dwarven Resilience note ✅; (D) section status updated to reflect Phase 2 second-ship.
+- `docs/test-harness-coverage.md` — total bumped + new test rows added.
+
+### Notes
+- **PATCH bump** — additive rule + 3 wire updates + 3 tests.
+- **v1 simplifications.** Dwarven Resilience "vs poison" still gates only on spell sources (`is_spell_save=True` not enforced here because Dwarven Resilience RAW also covers non-spell poison). Non-spell poison sources (NPC bite-and-poison-save attack patterns) aren't audited; could fold in once `/npc_attack` save-on-hit support lands. The "resistance to poison damage" half of Dwarven Resilience is filed separately — needs the v2.63.0 resistance pipeline to read a per-PC race trait list.
+- **Demo fixture.** Tavik (Hill Dwarf Cleric Lv 8) is the only demo Dwarf. Mountain Dwarf isn't represented but the slug normalizer (`_race_slug_from_sheet`) folds both into `dwarf`.
+- **Spell index.** Poison Spray appended at the END of Thalindra's spell list so existing tests' `FIREBALL_INDEX=7` / `HOLD_PERSON=8` / `CONFUSION=12` / `BANISHMENT=13` assumptions stay valid. Poison Spray = index 14.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed — `class-content-status` is already in `_DOC_ALLOWLIST`.
+- Total harness count: 667 (was 664 in v2.99.11).
+
+---
+
 ## [2.99.11] - 2026-05-31 — "The Fey Verdict"
 
 **Schema version:** 64

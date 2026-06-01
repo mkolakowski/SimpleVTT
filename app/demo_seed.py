@@ -501,6 +501,18 @@ def _wizard_sheet(name: str) -> dict:
             {"name": "Banishment", "level": 4, "prepared": True, "_slug": "banishment",
              "casting_time": "1 action", "save_ability": "CHA",
              "desc": "60 ft single target. CHA save DC 14 or be Banished (incapacitated on harmless demiplane). Concentration up to 1 min. NO end-of-turn save RAW."},
+            # v2.99.12 — Poison Spray. Wizard cantrip, CON save vs
+            # 1d12 poison damage (2d12 at Lv 5+, 3d12 at Lv 11+, 4d12
+            # at Lv 17+). Demo fixture for Dwarven Resilience: Tavik
+            # (Hill Dwarf) saving against Thalindra's Poison Spray
+            # exercises the v2.99.12 race save advantage gate. Damage
+            # type "poison" matches the Dwarven Resilience rule's
+            # damage_types list. Appended at END so existing
+            # spell_index assertions stay valid.
+            {"name": "Poison Spray", "level": 0, "prepared": True, "_slug": "poison-spray",
+             "casting_time": "1 action", "save_ability": "CON",
+             "damage": "1d12", "damage_type": "poison",
+             "desc": "10 ft, CON save DC 14 or take 1d12 poison damage. Scales: 2d12 at L5+, 3d12 at L11+, 4d12 at L17+."},
         ],
         "spell_slots": {
             "wizard": {

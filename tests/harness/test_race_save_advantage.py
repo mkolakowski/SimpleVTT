@@ -205,3 +205,153 @@ async def test_fey_ancestry_skips_non_fey_race(
     assert not msgs, (
         f"Fey Ancestry broadcast should NOT fire for Hill Dwarf: {msgs}"
     )
+
+
+# v2.99.12 — Dwarven Resilience tests. Thalindra (Elf Wizard, Lv 7)
+# casts Poison Spray (cantrip, CON save, poison damage) at Tavik
+# (Hill Dwarf Cleric, Lv 8). The v2.99.12 rule entry matches on
+# damage_type="poison" OR condition_keys=["poisoned"], so Tavik's
+# CON save base_expression swaps `1d20 → 2d20kh1` + a
+# `feature_used(source=dwarven-resilience)` broadcast fires.
+#
+# Poison Spray's slot/level conventions: cantrip, level=0, no
+# slot_level required (server ignores). spell_index = last appended
+# in v2.99.12 = index 14 on Thalindra's spell list (post-v2.97.72
+# Confusion + Banishment).
+
+POISON_SPRAY_THAL_INDEX = 14  # appended last in v2.99.12
+
+
+@pytest_asyncio.fixture
+async def thalindra_rested(gm_client, roster):
+    thal = roster["Thalindra Moonwhisper"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thal['id']}/rest",
+        json={"type": "long"},
+    )
+    return thal
+
+
+async def test_dwarven_resilience_advantage_on_poison_save(
+    gm_client, gm_ws, roster, thalindra_rested,
+):
+    """Thalindra (Elf Wizard) casts Poison Spray (CON save, 1d12
+    poison) at Tavik (Hill Dwarf Cleric) → Dwarven Resilience fires
+    because the spell deals poison damage. roll_request
+    base_expression = 2d20kh1 + feature_used(source=dwarven-resilience)
+    broadcast for Tavik.
+    """
+    thal = thalindra_rested
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [_tok(thal), _tok(tavik)])
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": thal["id"],
+            "spell_index": POISON_SPRAY_THAL_INDEX,
+            "slot_level": 0,
+            "class_slug": "wizard",
+            "target_combatant_id": f"tok_race_{tavik['id']}",
+            "target_character_id": tavik["id"],
+            "target_name": tavik["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["auto_save_ability"] == "CON"
+    assert data["auto_save_target_kind"] == "pc"
+    assert data["auto_save_prompted"] is True
+
+    rr = _roll_request_broadcast(gm_ws)
+    assert rr is not None, "expected a roll_request broadcast for Tavik's Con save"
+    assert rr["data"]["base_expression"] == "2d20kh1", (
+        f"Dwarven Resilience should set base_expression to 2d20kh1; "
+        f"got {rr['data']['base_expression']!r}"
+    )
+    msgs = _race_save_broadcasts(gm_ws, tavik["id"], "dwarven-resilience")
+    assert msgs, (
+        f"expected feature_used(source=dwarven-resilience) for Tavik; "
+        f"buffered: {[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+
+
+async def test_dwarven_resilience_skips_non_poison_save(
+    gm_client, gm_ws, roster, thalindra_rested,
+):
+    """Control: Fireball (Dex save, fire damage) at Tavik → Dwarven
+    Resilience doesn't fire (the rule gates on poison only).
+    Confirmed by base_expression staying 1d20 and no
+    dwarven-resilience broadcast.
+    """
+    thal = thalindra_rested
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [_tok(thal), _tok(tavik)])
+    gm_ws.mark()
+    # Fireball is index 7 in Thalindra's spell list (see Danger
+    # Sense harness for the same assertion).
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": thal["id"],
+            "spell_index": 7,
+            "slot_level": 3,
+            "class_slug": "wizard",
+            "target_combatant_id": f"tok_race_{tavik['id']}",
+            "target_character_id": tavik["id"],
+            "target_name": tavik["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    rr = _roll_request_broadcast(gm_ws)
+    assert rr is not None
+    assert rr["data"]["base_expression"] == "1d20", (
+        f"Fireball (fire damage) should NOT trigger Dwarven Resilience; "
+        f"got base_expression={rr['data']['base_expression']!r}"
+    )
+    msgs = _race_save_broadcasts(gm_ws, tavik["id"], "dwarven-resilience")
+    assert not msgs, (
+        f"Dwarven Resilience broadcast should NOT fire on Fireball: {msgs}"
+    )
+
+
+async def test_dwarven_resilience_skips_non_dwarf_race(
+    gm_client, gm_ws, roster, thalindra_rested,
+):
+    """Control: Poison Spray at Thalindra herself (Elf) → Dwarven
+    Resilience doesn't fire because Thalindra isn't a Dwarf.
+    base_expression stays 1d20; no dwarven-resilience broadcast.
+    (Fey Ancestry also doesn't fire because Poison Spray installs
+    no condition — the spell-condition map is empty for poison-spray.)
+    """
+    thal = thalindra_rested
+    await _seed_battle(gm_client, [_tok(thal)])
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": thal["id"],
+            "spell_index": POISON_SPRAY_THAL_INDEX,
+            "slot_level": 0,
+            "class_slug": "wizard",
+            "target_combatant_id": f"tok_race_{thal['id']}",
+            "target_character_id": thal["id"],
+            "target_name": thal["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    rr = _roll_request_broadcast(gm_ws)
+    assert rr is not None
+    assert rr["data"]["base_expression"] == "1d20", (
+        f"Elf has no Dwarven Resilience; "
+        f"got base_expression={rr['data']['base_expression']!r}"
+    )
+    msgs = _race_save_broadcasts(gm_ws, thal["id"], "dwarven-resilience")
+    assert not msgs, (
+        f"Dwarven Resilience broadcast should NOT fire for Elf: {msgs}"
+    )
