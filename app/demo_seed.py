@@ -2362,6 +2362,14 @@ def _fighter_sheet(name: str) -> dict:
             {"name": "Handaxe (thrown)", "attack_bonus": "+8", "damage": "1d6+4",
              "damage_type": "slashing", "range": "20/60 ft",
              "desc": "Light, thrown. Can also be wielded melee. Garrik carries two so an Action Surge thrown-attack combo is possible."},
+            # v2.99.27 — Glaive (martial polearm, 1d10 slashing, reach
+            # 10 ft). Demo fixture for Polearm Master enter-reach OA
+            # trigger (v2.66.4 helper now gates on equipped polearm
+            # per RAW). Garrik can swap to the Glaive when the encounter
+            # calls for reach control.
+            {"name": "Glaive", "attack_bonus": "+8", "damage": "1d10+4",
+             "damage_type": "slashing", "range": "10 ft",
+             "desc": "Two-handed, heavy, reach 10 ft. Polearm Master: enter-reach OA + bonus-action butt-end strike (1d4)."},
         ],
         # Fighter is non-casting RAW (Champion subclass doesn't grant
         # spells either). No spells / spell_slots fields needed.
@@ -2375,6 +2383,17 @@ def _fighter_sheet(name: str) -> dict:
              "damage": "1d6", "damage_type": "slashing",
              "range": "20/60 ft", "properties": "light, thrown",
              "_slug": "handaxe"},
+            # v2.99.27 — Glaive (martial polearm). Default equipped=False
+            # so Garrik defaults to Greatsword. Tests + GM can flip
+            # equipped=True via sheet-fields PATCH to trigger the
+            # Polearm Master enter-reach OA. The v2.99.27 wire reads
+            # this `equipped` field in `_pc_wields_polearm` and only
+            # fires Polearm Master when an equipped polearm is found.
+            {"name": "Glaive", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": False, "hands": 2,
+             "damage": "1d10", "damage_type": "slashing",
+             "range": "10 ft", "properties": "heavy, two-handed, reach",
+             "_slug": "glaive"},
             {"name": "Chain mail", "type": "armor", "qty": 1,
              "equippable": True, "equipped": True,
              "armor_type": "heavy", "ac_value": 16,
@@ -2399,6 +2418,17 @@ def _fighter_sheet(name: str) -> dict:
         "feats": [
             {"slug": "lucky", "name": "Lucky",
              "desc": "3 luck points per long rest. Spend 1 to roll an extra d20 on your attack, check, or save (pick which to use). Also spend 1 when an attack roll is made against you: roll a d20, choose whether the attack uses the attacker's roll or yours."},
+            # v2.99.27 — Polearm Master added via Garrik's Lv 4 ASI
+            # (replaced the +2 STR/CON ASI with the feat). Lv 9
+            # Champion has had 3 ASIs (Lv 4, 6, 8); using one for a
+            # feat is RAW-legal. Polearm Master enables the v2.66.4
+            # enter-reach OA trigger when Garrik equips his Glaive,
+            # AND the bonus-action butt-end strike (filed: needs a
+            # dedicated action button + 1d4 attack). Garrik is the
+            # demo's two-feat Fighter fixture (Variant Human free
+            # Lv 1 feat = Lucky; Lv 4 ASI-feat = Polearm Master).
+            {"slug": "polearm-master", "name": "Polearm Master",
+             "desc": "When you take the Attack action and attack with only a glaive / halberd / pike / quarterstaff / spear, you can make a bonus-action melee attack with the opposite end (1d4 + STR mod). Other creatures provoke an OA from you when they enter your reach (5 ft for quarterstaff/spear; 10 ft for glaive/halberd/pike)."},
         ],
         # v2.17.0: Fighter Lv 5 resources. Both refresh on short rest.
         # v2.56.0: Indomitable counter added (Lv 9 unlock): 1/long rest;

@@ -2402,31 +2402,77 @@ def _check_sentinel_attack_triggers(
 # feat set: either an explicit ``polearm_master: True`` on the
 # combatant dict (GM flag for NPCs) or a PC sheet with a
 # ``feats`` entry whose slug normalizes to "polearm-master".
+# v2.99.27 — RAW polearm weapon names. Polearm Master applies to
+# glaive / halberd / quarterstaff (PHB p.168) + spear (PHB errata /
+# Tasha's). Pike is sometimes included by extended interpretation;
+# included here for the v1 polearm gate. Matched case-insensitively
+# against an equipped weapon's name or `_slug` field on the sheet.
+_POLEARM_WEAPON_NAMES = {
+    "glaive", "halberd", "quarterstaff", "spear", "pike",
+}
+
+
+def _pc_wields_polearm(sheet: "dict | None") -> bool:
+    """v2.99.27 — return True when the sheet has an equipped weapon
+    whose name or `_slug` matches one of `_POLEARM_WEAPON_NAMES`.
+    Reads `sheet["inventory"]` for `equipped: True` weapon items.
+    """
+    if not sheet:
+        return False
+    for item in (sheet.get("inventory") or []):
+        if not isinstance(item, dict):
+            continue
+        if not item.get("equipped"):
+            continue
+        name = (item.get("name") or "").strip().lower()
+        slug = (item.get("_slug") or "").strip().lower()
+        for polearm in _POLEARM_WEAPON_NAMES:
+            if polearm in name or polearm in slug:
+                return True
+    return False
+
+
 def _combatant_has_polearm_master(
     db: Session, combatant: dict,
 ) -> bool:
+    """v2.66.4 — Polearm Master feat detection.
+
+    v2.99.27 — sheet-driven path now also gates on the PC actually
+    wielding a polearm (RAW PHB p.168: the feat's enter-reach OA
+    requires "you are wielding a glaive, halberd, pike, quarterstaff,
+    or spear"). The explicit combatant-level `polearm_master`
+    override (used by test fixtures + GM overrides) still wins —
+    it bypasses both feat and weapon checks. This preserves the
+    v2.66.4 test fixtures while tightening the production gate to
+    match RAW.
+    """
     explicit = combatant.get("polearm_master")
     if explicit is not None:
         return bool(explicit)
     char_id = combatant.get("char_id")
-    if char_id:
-        try:
-            char = db.query(Character).filter(
-                Character.id == int(char_id),
-            ).first()
-        except Exception:
-            char = None
-        if char and char.sheet:
-            for f in (char.sheet.get("feats") or []):
-                if not isinstance(f, dict):
-                    continue
-                slug = (f.get("slug") or "").strip().lower()
-                if slug == "polearm-master":
-                    return True
-                name = (f.get("name") or "").strip().lower().replace(" ", "-")
-                if name == "polearm-master":
-                    return True
-    return False
+    if not char_id:
+        return False
+    try:
+        char = db.query(Character).filter(
+            Character.id == int(char_id),
+        ).first()
+    except Exception:
+        char = None
+    if not char or not char.sheet:
+        return False
+    has_feat = False
+    for f in (char.sheet.get("feats") or []):
+        if not isinstance(f, dict):
+            continue
+        slug = (f.get("slug") or "").strip().lower()
+        name = (f.get("name") or "").strip().lower().replace(" ", "-")
+        if slug == "polearm-master" or name == "polearm-master":
+            has_feat = True
+            break
+    if not has_feat:
+        return False
+    # v2.99.27 — RAW polearm-wielding gate on the sheet-driven path.
+    return _pc_wields_polearm(char.sheet)
 
 
 # v2.66.2 — Regex for NPC monster action desc strings. The SRD
@@ -32316,6 +32362,14 @@ _SHEET_PATCH_KEYS = {
     # Feats list — auto-saved on add/remove so the player's selection
     # persists across refreshes without an explicit Save.
     "feats",
+    # v2.99.27 — Inventory list. Primarily for the harness to flip
+    # the `equipped` field on weapon items so polearm / armor / shield
+    # gates can be exercised without a full sheet-save form post.
+    # Production sheet-edit flow uses the same field, just via a
+    # different code path. Players already control their inventory
+    # via the sheet edit panel; allowing it here doesn't broaden the
+    # attack surface.
+    "inventory",
     # v2.68.11 — high-level identity fields (subclass / fighting style /
     # level). Primarily for the harness to mutate during tests so the
     # GM Reactions catalog gates (subclass + level) can be exercised

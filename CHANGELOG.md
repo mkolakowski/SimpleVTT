@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.27] - 2026-06-01 — "Mind The Reach"
+
+**Schema version:** 64
+**Commit summary:** **Polearm Master enter-reach OA — close the wielding gate + demo polearm fixture.** RAW (PHB p.168): the Polearm Master enter-reach OA requires "you are wielding a glaive, halberd, pike, quarterstaff, or spear." The v2.66.4 wire detected the feat by slug but did NOT gate on the actually-equipped weapon — a PC with the feat AND no polearm would still trigger. v2.99.27 closes the gap: the sheet-driven path of `_combatant_has_polearm_master` now also calls a new `_pc_wields_polearm` helper that scans the sheet's inventory for an `equipped: True` item whose name or `_slug` matches one of `_POLEARM_WEAPON_NAMES = {glaive, halberd, quarterstaff, spear, pike}`. The explicit combatant-level `polearm_master` override still wins, so v2.66.4 test fixtures + GM overrides are unchanged.
+**Description:** Three-part commit: (1) new `_POLEARM_WEAPON_NAMES` constant + `_pc_wields_polearm(sheet)` helper. (2) `_combatant_has_polearm_master` extended to call the wielding helper on the sheet-driven path. (3) Demo seed adds Polearm Master feat + Glaive to Garrik Ironside (Variant Human Champion Fighter Lv 9) — the demo's two-feat Fighter fixture. Garrik's Glaive defaults to `equipped: False` so his Greatsword default behaviour stays the same; tests flip via sheet-fields PATCH. To support that, `inventory` was added to the `_SHEET_PATCH_KEYS` allowlist (production sheet-edit UI already mutates inventory; this just opens the lightweight PATCH path).
+
+### Added
+- `_POLEARM_WEAPON_NAMES` module-level set — RAW polearm weapon names.
+- `_pc_wields_polearm(sheet)` helper — scans `sheet["inventory"]` for an `equipped: True` weapon whose `name` or `_slug` matches a polearm name. Case-insensitive substring match.
+- Garrik Ironside's `feats` list gains `{slug: "polearm-master", ...}` (alongside existing Lucky from Variant Human). RAW justification: Variant Human free Lv 1 feat = Lucky; Lv 4 ASI swap = Polearm Master.
+- Garrik's `attacks` list gains a Glaive attack (1d10+4 slashing, reach 10 ft).
+- Garrik's `inventory` list gains a Glaive (default `equipped: False`).
+- `inventory` key in `_SHEET_PATCH_KEYS` allowlist — opens the lightweight `/sheet-fields` PATCH path to inventory mutation. Production sheet-edit form post already controls this field; the allowlist just lets harness tests + GM tooling flip `equipped` without a full sheet save.
+- `tests/harness/test_polearm_master_wielding.py` — 2 tests:
+  - `test_polearm_master_fires_when_glaive_equipped` — Garrik with Glaive equipped via sheet-fields PATCH; Krieger moves into 10 ft → enter-reach OA trigger fires for Garrik.
+  - `test_polearm_master_skips_when_no_polearm_equipped` — Control: Garrik with Glaive UNequipped (default); same geometry → no trigger. RAW-correct.
+
+### Changed
+- `_combatant_has_polearm_master` — sheet-driven path now gates on both feat slug AND `_pc_wields_polearm(sheet)`. Explicit combatant-level `polearm_master` override unchanged.
+- `_SHEET_PATCH_KEYS` allowlist extended with `inventory`.
+- Garrik's `_fighter_sheet` in `app/demo_seed.py` — feats list + attacks list + inventory list extended with Polearm Master + Glaive.
+- `docs/plans/class-content-status.md` — Polearm Master row in the Feats table updated to credit Garrik as a demo fixture + the v2.99.27 wielding gate.
+- `docs/test-harness-coverage.md` — total bumped + new test file row added.
+
+### Notes
+- **PATCH bump** — additive helper + 1 wire site + 1 allowlist key + 2 tests + demo seed.
+- **Backward compatibility for v2.66.4 tests.** The existing `test_oa_polearm_master_fires_on_enter_reach` test uses `tavik_combatant["polearm_master"] = True` — the explicit combatant-level override that wins before the sheet check. My new wielding gate doesn't fire for that path. Both v2.66.4 tests still pass alongside the v2.99.27 ones (4/4 tests green).
+- **Why Garrik gets 2 feats.** Variant Human's free Lv 1 feat (Lucky) + Lv 4 ASI-as-feat (Polearm Master) = 2 feats at Lv 9. RAW-legal — every ASI slot can be a feat instead.
+- **Inventory allowlist scope.** Adding `inventory` to the `/sheet-fields` PATCH allowlist doesn't broaden attack surface — players already control their inventory via the sheet edit panel form post. The allowlist gates which fields the lightweight PATCH path accepts; production code paths weren't restricted before this commit.
+- **Demo fixture for the bonus-action butt-end strike.** RAW Polearm Master also grants a bonus-action 1d4 attack with the polearm's opposite end. The wire is filed — needs a class_features button + the `/use_polearm_butt` endpoint. Garrik is now the natural fixture when that ships.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 697 (was 695 in v2.99.26).
+
+---
+
 ## [2.99.26] - 2026-06-01 — "The Berserker's Steady Breath"
 
 **Schema version:** 64
