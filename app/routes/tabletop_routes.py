@@ -11137,11 +11137,41 @@ async def respond_roll_request(
     except dice_mod.DiceParseError as e:
         raise HTTPException(400, f"Bad expression '{final_expr}': {e}")
 
+    # v2.99.13 — Halfling Lucky race trait. RAW: when you roll a 1
+    # on the d20 (for a save, in this surface), reroll and use the
+    # new die. Auto-fires (no resource cost). Detects natural 1 by
+    # parsing the kept d20 value from the breakdown — covers
+    # 1d20 / 2d20kh1 (advantage) / 2d20kl1 (disadvantage) shapes.
+    # If the reroll lands on 1 again, RAW: keep the new roll (no
+    # double reroll — Lucky only triggers once per d20 cast).
+    _halfling_lucky_old_d20 = None
+    _halfling_lucky_new_d20 = None
+    if char and _pc_has_halfling_lucky(char.sheet):
+        _kept = _extract_kept_d20_from_breakdown(result.breakdown)
+        if _kept == 1:
+            _halfling_lucky_old_d20 = 1
+            # Reroll the full expression — dice_mod re-rolls every
+            # die including modifiers (so an attached Bless +1d4
+            # also rerolls; v1 simplification). Acceptable for the
+            # save-roll surface since saves don't typically carry
+            # multiple-d20 stacked modifiers beyond Bless.
+            try:
+                result = dice_mod.roll(final_expr)
+            except dice_mod.DiceParseError:
+                pass  # fall through with original result
+            _halfling_lucky_new_d20 = _extract_kept_d20_from_breakdown(
+                result.breakdown,
+            )
+
     # Build a descriptive note
     char_name = char.name if char else None
     note_parts = [f"→ {roll_req.label}"]
     if stat_label:
         note_parts.append(stat_label)
+    if _halfling_lucky_old_d20 == 1 and _halfling_lucky_new_d20 is not None:
+        note_parts.append(
+            f"🍀 Lucky reroll d20 1 → {_halfling_lucky_new_d20}"
+        )
     if roll_req.dc is not None:
         outcome = "✓ Pass" if result.total >= roll_req.dc else "✗ Fail"
         note_parts.append(f"DC {roll_req.dc} — {outcome}")
@@ -11193,6 +11223,27 @@ async def respond_roll_request(
             },
         },
     )
+
+    # v2.99.13 — Halfling Lucky feature_used broadcast. Fires only
+    # when the reroll actually happened (natural 1 detected upstream).
+    # Mirrors the v2.99.11 race-save-advantage broadcast shape so
+    # the chat card can render "Pip used 🍀 Lucky — d20 1 → 18".
+    if (
+        _halfling_lucky_old_d20 == 1
+        and _halfling_lucky_new_d20 is not None
+        and char is not None
+    ):
+        # Pull the save_ability from the roll_req.stat_key when set
+        # (e.g. "dex_save" → "DEX"); empty string when this was a
+        # check / non-save roll-request.
+        _stat_key = (roll_req.stat_key or "").strip().lower()
+        _save_ab = (
+            _stat_key.split("_")[0].upper() if "_save" in _stat_key else ""
+        )
+        await _broadcast_halfling_lucky(
+            campaign_id, char,
+            _halfling_lucky_old_d20, _halfling_lucky_new_d20, _save_ab,
+        )
 
     # v2.72.0 Phase 3d — Silvery Barbs prompt. When a save resolves
     # WITH PASS (creature succeeded), emit a save_resolved event to
@@ -19095,6 +19146,7 @@ async def _broadcast_race_save_advantage(
         "fey-ancestry": "🧝",
         "gnome-cunning": "🧞",
         "dwarven-resilience": "⛏",
+        "halfling-lucky": "🍀",
     }.get(trait_slug, "🪄")
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
@@ -19110,6 +19162,102 @@ async def _broadcast_race_save_advantage(
                 f"saving throw."
             ),
             "source": trait_slug,
+        },
+    })
+
+
+# v2.99.13 — (D) Phase 2 third-ship: Halfling Lucky race trait.
+# RAW (PHB p.28): "When you roll a 1 on the d20 for an attack roll,
+# ability check, or saving throw, you can reroll the die and must
+# use the new roll." Auto-fire (no resource cost, unlimited per
+# RAW). Distinct shape from Fey Ancestry / Dwarven Resilience /
+# Gnome Cunning (which gate advantage at construction time): Lucky
+# is a post-result intercept — fires AFTER the d20 lands on 1, not
+# before.
+#
+# v1 scope: ship the save-roll surface only (intercept in
+# /roll_request/respond). Attack-roll and ability-check surfaces
+# need separate intercepts and are filed for follow-ups. The
+# v2.77.0 Lucky feat is the user-facing analog for attack rolls
+# (reaction-modal-style); the race trait could fold into that
+# trigger or stay as a separate auto-fire mechanism. Keeping the
+# race trait separate is RAW-correct: Halfling Lucky has no charge,
+# can't run out, and triggers automatically.
+
+def _pc_has_halfling_lucky(sheet: "dict | None") -> bool:
+    """Detect Halfling race trait Lucky on a PC sheet. Reads
+    `sheet["race"]` slug via `_race_slug_from_sheet` and returns
+    True when the normalized slug is "halfling" (covers Lightfoot
+    Halfling, Stout Halfling, and the bare race string).
+
+    Distinct from `_pc_has_lucky_available` (v2.77.0 Lucky feat),
+    which gates on a 3-charge resource. Halfling Lucky is unlimited
+    and triggers only on natural 1.
+    """
+    return _race_slug_from_sheet(sheet or {}) == "halfling"
+
+
+import re as _re_lucky
+
+# Matches "1d20[14]=14" / "2d20kh1[16,9]kh11=16" / "2d20kl1[8,3]kl11=3"
+# — the kept value is the integer after the trailing `=`. Same shape
+# as the v2.49.231 Improved Critical _D20_RE in
+# tests/harness/test_use_attack_improved_critical.py.
+_HALFLING_KEPT_D20_RE = _re_lucky.compile(
+    r"\d*d20[^d=+ ]*=(\d+)", _re_lucky.IGNORECASE,
+)
+
+
+def _extract_kept_d20_from_breakdown(breakdown: str) -> "int | None":
+    """Extract the kept d20 value from a dice breakdown string.
+    Handles `1d20` (no adv/disadv), `2d20kh1` (advantage), and
+    `2d20kl1` (disadvantage). Returns None when the breakdown
+    doesn't contain a recognizable d20 component.
+
+    Used by `_halfling_lucky_should_reroll` to decide whether
+    Halfling Lucky's "rolled a 1" trigger fires.
+    """
+    if not breakdown:
+        return None
+    m = _HALFLING_KEPT_D20_RE.search(breakdown)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
+async def _broadcast_halfling_lucky(
+    campaign_id: int,
+    char: "Character | None",
+    old_d20: int,
+    new_d20: int,
+    save_ability: str,
+) -> None:
+    """Companion broadcast for the Halfling Lucky reroll. Emits a
+    `feature_used` event with `source: "halfling-lucky"` naming the
+    old + new d20 values so the chat card can read "Pip used 🍀
+    Lucky — d20 1 → 18 on his Wis save."
+    """
+    if not char:
+        return
+    ability_label = (save_ability or "").strip().upper() or "?"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                f"🍀 Halfling Lucky — d20 {old_d20} → {new_d20}"
+            ),
+            "feature_desc": (
+                f"{char.name} rolled a natural 1 on the {ability_label} "
+                f"save. Halfling Lucky rerolls the d20 (new value: "
+                f"{new_d20})."
+            ),
+            "source": "halfling-lucky",
         },
     })
 

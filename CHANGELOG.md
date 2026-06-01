@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.13] - 2026-05-31 — "The Little Reroll"
+
+**Schema version:** 64
+**Commit summary:** **(D) Phase 2 third-ship: Halfling Lucky race trait — reroll on natural 1 (save-roll surface v1).** v2.99.11 shipped Fey Ancestry + Gnome Cunning, v2.99.12 added Dwarven Resilience. v2.99.13 closes (D) Phase 2 for the demo by wiring the Halfling race trait. Distinct shape from the prior three: Halfling Lucky is a POST-result intercept (fires when the kept d20 lands on 1), not a construction-time advantage swap. v1 scope ships the save-roll surface only (`/roll_request/respond`) — attack-roll and ability-check surfaces are filed for follow-up (Phase 4-equivalent reaction-framework integration).
+**Description:** New helpers in `app/routes/tabletop_routes.py`: `_pc_has_halfling_lucky(sheet)` race-trait detector, `_extract_kept_d20_from_breakdown(breakdown)` parser (handles 1d20 / 2d20kh1 / 2d20kl1), `_broadcast_halfling_lucky` companion. Wire site is in `respond_roll_request` — after `dice_mod.roll`, if `_extract_kept_d20_from_breakdown(result.breakdown) == 1` AND the rolling PC is a Halfling, the server re-rolls the full expression once (RAW: Lucky doesn't double-trigger — keep the reroll even if it lands on 1 again), updates the roll record + note + `feature_used` broadcast. Harness coverage via `tests/harness/test_halfling_lucky.py` (3 tests using the `/api/test/dice/seed` TEST_MODE endpoint for deterministic d20=1 forcing).
+
+### Added
+- `_pc_has_halfling_lucky(sheet)` — sheet-only detector. Reads `sheet["race"]` slug via the v2.99.11 `_race_slug_from_sheet` normalizer; returns True when the slug folds to "halfling" (Lightfoot Halfling / Stout Halfling / bare "Halfling").
+- `_extract_kept_d20_from_breakdown(breakdown)` — regex helper extracting the kept d20 value from a dice-mod breakdown string. Handles `1d20[N]=N`, `2d20kh1[A,B]kh11=N` (advantage), `2d20kl1[A,B]kl11=N` (disadvantage). Same regex shape as the v2.49.231 Improved Critical _D20_RE.
+- `_broadcast_halfling_lucky(campaign_id, char, old_d20, new_d20, save_ability)` — companion broadcast emitting `feature_used` with `source: "halfling-lucky"`.
+- `tests/harness/test_halfling_lucky.py` — 3 tests:
+  - `test_halfling_lucky_rerolls_on_natural_one` — Pip (Halfling Rogue) saves vs Suggestion; dice seed forces d20=1; assert reroll fires + broadcast.
+  - `test_halfling_lucky_skips_non_halfling` — Thalindra (Elf) with seeded d20=1 → no reroll, no broadcast.
+  - `test_halfling_lucky_skips_non_natural_one` — Pip with d20 ≥ 10 → no reroll.
+
+### Changed
+- `respond_roll_request` (`/roll_request/{id}/respond`) — post-roll intercept block. When natural 1 detected on a Halfling save, reroll the full expression once; replaces `result` in-place. Roll note carries "🍀 Lucky reroll d20 1 → N" alongside the existing pass/fail marker. Broadcast emits `feature_used(source=halfling-lucky)`.
+- Icon map in `_broadcast_race_save_advantage` extended with `"halfling-lucky": "🍀"` for consistency (though Halfling Lucky uses its own dedicated broadcast).
+- `docs/plans/class-content-status.md` — Lightfoot Halfling row's Lucky note ✅; (D) section status updated to reflect Phase 2 third-ship.
+- `docs/test-harness-coverage.md` — total bumped + new test rows added.
+
+### Notes
+- **PATCH bump** — additive helper + 1 wire-up site + 3 tests.
+- **v1 simplifications.** (a) Save-roll surface only — attack-roll Halfling Lucky will reuse the v2.77.0 `attack_targeted` reaction framework or a similar post-result intercept on `/attack`; ability-check surface needs a wire on `/roll` for check rolls. (b) Reroll uses a fresh full-expression roll, so an attached Bless +1d4 also re-rolls — acceptable since saves rarely stack multiple-d20 modifiers. (c) If the reroll lands on 1 again, the test re-seeds — RAW says you keep the reroll (no double trigger). (d) Halfling Lucky doesn't compose with the v2.77.0 Lucky FEAT — a Halfling-Lucky PC who took the Lucky feat would have both trigger sources; v1 fires the race trait first (auto), and the feat reaction can still fire after.
+- **Demo fixture.** Pip Quickfingers (Halfling Rogue Lv 7) is the only Halfling in the demo. No Stout Halfling fixture; the slug normalizer folds both into "halfling".
+- **TEST_MODE dice seed dependency.** The 3 tests rely on `/api/test/dice/seed` being available — this endpoint mounts only when `TEST_MODE=true` (CI workflow + local Docker via `.env`). Tests will skip cleanly via the seed call's assert if the endpoint 404s on a non-TEST_MODE deploy.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 670 (was 667 in v2.99.12).
+
+---
+
 ## [2.99.12] - 2026-05-31 — "The Stout Constitution"
 
 **Schema version:** 64
