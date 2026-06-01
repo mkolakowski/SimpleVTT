@@ -888,7 +888,18 @@ def _paladin_sheet(name: str) -> dict:
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
         ],
-        "feats": [],
+        # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
+        # Sentinel fits his Paladin Devotion frontline-protector role:
+        # ally-attacked-near-you OA advisory (v2.66.5 effect 3 wired
+        # through /attack + /npc_attack). Effects 1 (OA-hit speed-0)
+        # and 2 (Disengage bypass denial) are filed pending the OA
+        # auto-fire stack + Disengage modeling. Distinct from
+        # Tavik's War Caster, Lyra's Defensive Duelist, Krieger's
+        # Mage Slayer, and Garrik's Lucky.
+        "feats": [
+            {"slug": "sentinel", "name": "Sentinel",
+             "desc": "When you hit a creature with an OA, its speed becomes 0 for the rest of the turn. Creatures within 5 ft provoke OAs even after taking Disengage. When a creature within 5 ft of you attacks an ally (not you), you can use your reaction to make a melee weapon attack against it."},
+        ],
         # v2.14.0: Lay on Hands pool (5 × Lv = 25 HP), Divine Sense
         # (1 + CHA mod = 4 / long rest), Channel Divinity (1 / short
         # rest), Cleansing Touch (CHA mod / long rest — locked at Lv 14

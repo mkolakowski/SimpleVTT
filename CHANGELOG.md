@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.24] - 2026-06-01 — "The Paladin's Watch"
+
+**Schema version:** 64
+**Commit summary:** **Caelan Variant Human gets the Sentinel feat — full Variant Human bonus-feat coverage in the demo.** RAW Variant Human (PHB p.31) grants a free Lv 1 feat. Garrik already had Lucky (v2.77.0); Caelan's `feats` list was empty. v2.99.24 declares `{slug: "sentinel"}` on Caelan's Paladin Devotion sheet so the v2.66.5 `_combatant_has_sentinel` sheet-path actually finds a feat to read. Effect 3 (ally-attacked-near-you OA advisory) is the mechanically-wired half and now surfaces for Caelan via the demo seed alone — no manual combatant override needed.
+**Description:** Single-line feat addition to `_paladin_sheet` in `app/demo_seed.py` + a focused harness test that places Caelan within 5 ft of Krieger (the attacker), has Krieger attack Pip, and asserts the v2.66.5 sentinel-attack-trigger fires for Caelan via the sheet-driven detection path. Distinct from the existing v2.66.5 harness test that uses Tavik with a combatant-level `sentinel: True` override flag.
+
+### Added
+- Caelan's `_paladin_sheet` `feats` list now contains `{slug: "sentinel", name: "Sentinel", desc: "..."}`.
+- `tests/harness/test_caelan_sentinel.py` — 1 test:
+  - `test_caelan_sentinel_from_sheet_triggers_on_ally_attack` — Krieger attacks Pip; Caelan stands within 5 ft of Krieger; `_attack` response's `sentinel_triggers` list names Caelan AND a `feature_used(source=sentinel-attack-trigger)` broadcast fires for him.
+
+### Changed
+- `docs/plans/class-content-status.md` — Sentinel row in the Feats table updated to credit Caelan as a demo fixture; (D) Phase 3 status updated.
+- `docs/test-harness-coverage.md` — total bumped + new test row added.
+
+### Notes
+- **PATCH bump** — single-line demo seed + 1 test.
+- **Feat distribution across the demo's Variant Humans.** Garrik (Variant Human Fighter) has Lucky (v2.77.0); Caelan (Variant Human Paladin) now has Sentinel (v2.99.24). Distinct from the other PCs' feats — Tavik's War Caster (v2.83.0), Lyra's Defensive Duelist (v2.74.0), Krieger's Mage Slayer (v2.75.0), and Rowan's Eldritch Invocations (Warlock subclass-feature, not RAW-feat). The demo party covers 6 distinct RAW-feat mechanics across 5 PCs (Garrik + Tavik + Lyra + Krieger + Caelan).
+- **Sentinel effect 3 only.** RAW Sentinel has three effects; the v2.66.5 wire ships effect 3 (ally-attacked-near-you advisory). Effects 1 (OA-hit speed-0) and 2 (Disengage bypass denial) are filed pending the OA auto-fire stack + Disengage modeling. The advisory is what fires for Caelan today.
+- **All 12 demo PCs now have at least one wired race or feat trait.** Caelan's Sentinel fills the last hole: Pip (Lucky + Brave Halfling), Tavik (Hill Dwarf Resilience + War Caster), Thalindra (Elf Fey Ancestry), Lyra (Half-Elf Fey Ancestry + Defensive Duelist), Mira / Kael (Wood Elf Fey Ancestry), Garrik (Variant Human + Lucky feat), Krieger (Half-Orc Relentless Endurance + Savage Attacks + Mage Slayer feat), Caelan (Variant Human + Sentinel feat), Zara (Tiefling Hellish Resistance + Infernal Legacy resources), Rowan (Bronze Dragonborn Lightning Resistance + Warlock invocations). **12 / 12 demo PCs wired.**
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 689 (was 688 in v2.99.23).
+
+---
+
 ## [2.99.23] - 2026-06-01 — "The Savage Crit"
 
 **Schema version:** 64
