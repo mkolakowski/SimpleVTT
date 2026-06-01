@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 670 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.13, 2026-05-31).
+**Total tests:** 673 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.14, 2026-05-31).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -877,6 +877,9 @@ v2.99.11–v2.99.12 — (D) Phase 2 race-keyed save advantage. `_race_grants_sav
 | `test_dwarven_resilience_advantage_on_poison_save` | Thalindra (Elf Wizard) casts Poison Spray (CON save, poison damage) at Tavik (Hill Dwarf Cleric) → Dwarven Resilience fires → `base_expression="2d20kh1"` AND `feature_used(source=dwarven-resilience)` broadcast fires for Tavik. |
 | `test_dwarven_resilience_skips_non_poison_save` | Control: Fireball (Dex save, fire damage) at Tavik → Dwarven Resilience doesn't fire (poison-only) → `base_expression="1d20"`; no broadcast. |
 | `test_dwarven_resilience_skips_non_dwarf_race` | Control: Poison Spray at Thalindra herself (Elf) → Dwarven Resilience doesn't fire (Elf, not Dwarf) → `base_expression="1d20"`; no broadcast. |
+| `test_halfling_brave_advantage_on_fright_save` | Lyra casts Fear at Pip (Halfling Rogue) → Wis save vs Frightened install → Halfling Brave fires → `base_expression="2d20kh1"` AND `feature_used(source=halfling-brave)` broadcast for Pip. |
+| `test_halfling_brave_skips_non_fright_save` | Control: Lyra casts Suggestion (Charmed install) at Pip → Halfling Brave doesn't fire (gates on Frightened only); `base_expression="1d20"`. |
+| `test_halfling_brave_skips_non_halfling` | Control: Lyra casts Fear at Thalindra (Elf) → no Halfling Brave broadcast (race gate). |
 
 ### `test_halfling_lucky.py`
 v2.99.13 — Halfling Lucky race-trait reroll-on-natural-1 (save-roll surface). Distinct from the v2.77.0 Lucky FEAT — Halfling Lucky is unlimited, auto-fire, only triggers on natural 1. Post-result intercept in `respond_roll_request`: after `dice_mod.roll`, if `_extract_kept_d20_from_breakdown(result.breakdown) == 1` AND the rolling PC is a Halfling, reroll the full expression once. Broadcasts `feature_used` with `source: "halfling-lucky"`. Roll note carries "🍀 Lucky reroll d20 1 → N". Uses `/api/test/dice/seed` TEST_MODE endpoint for deterministic d20=1 forcing.

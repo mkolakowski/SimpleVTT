@@ -18978,6 +18978,28 @@ _RACE_SAVE_ADVANTAGES: "dict[str, list[dict]]" = {
             "is_spell_save": None,
         },
     ],
+    # v2.99.14 — Halfling Brave. RAW (PHB p.28): "You have advantage
+    # on saving throws against being frightened." Same shape as Fey
+    # Ancestry but on the "frightened" condition. Lightfoot and Stout
+    # Halfling both have Brave; the slug normalizer folds both into
+    # "halfling". Pip (Halfling Rogue) is the demo fixture.
+    #
+    # Future Halfling rule additions:
+    #   - Stout Halfling — Stout Resilience (advantage on poison
+    #     saves + resistance). Same shape as Dwarven Resilience but
+    #     SUBRACE-only. Folding into the "halfling" slug would over-
+    #     apply to Lightfoot. Filed for a future subrace-aware
+    #     normalizer extension (read sheet.subrace if present).
+    "halfling": [
+        {
+            "trait_slug": "halfling-brave",
+            "trait_name": "Halfling Brave",
+            "save_abilities": [],
+            "condition_keys": ["frightened"],
+            "damage_types": None,
+            "is_spell_save": None,
+        },
+    ],
 }
 
 
@@ -19147,6 +19169,7 @@ async def _broadcast_race_save_advantage(
         "gnome-cunning": "🧞",
         "dwarven-resilience": "⛏",
         "halfling-lucky": "🍀",
+        "halfling-brave": "🌟",
     }.get(trait_slug, "🪄")
     await hub.broadcast(campaign_id, {
         "type": "feature_used",

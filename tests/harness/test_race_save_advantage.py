@@ -355,3 +355,135 @@ async def test_dwarven_resilience_skips_non_dwarf_race(
     assert not msgs, (
         f"Dwarven Resilience broadcast should NOT fire for Elf: {msgs}"
     )
+
+
+# v2.99.14 — Halfling Brave tests. Lyra (Half-Elf Bard) casts Fear
+# at Pip (Halfling Rogue). RAW Fear installs Frightened on a failed
+# Wis save; Halfling Brave grants advantage on saves vs frightened
+# install. Same shape as Fey Ancestry (charmed) — construction-time
+# d20 → 2d20kh1 swap.
+#
+# Fear is Lyra's spell at index 19 (appended end of v2.97.43
+# spell list, per docs/test-harness-coverage). Wis save → Frightened.
+
+FEAR_LYRA_INDEX = 19
+
+
+async def test_halfling_brave_advantage_on_fright_save(
+    gm_client, gm_ws, roster, lyra_rested,
+):
+    """Lyra (Half-Elf Bard) casts Fear at Pip (Halfling Rogue).
+    Fear installs Frightened; Halfling Brave grants advantage →
+    base_expression="2d20kh1" + feature_used(source=halfling-brave)
+    broadcast fires for Pip.
+    """
+    lyra = lyra_rested
+    pip = roster["Pip Quickfingers"]
+    await _seed_battle(gm_client, [_tok(lyra), _tok(pip)])
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": lyra["id"],
+            "spell_index": FEAR_LYRA_INDEX,
+            "slot_level": 3,
+            "class_slug": "bard",
+            "target_combatant_id": f"tok_race_{pip['id']}",
+            "target_character_id": pip["id"],
+            "target_name": pip["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["auto_save_ability"] == "WIS"
+    assert data["auto_save_target_kind"] == "pc"
+
+    rr = _roll_request_broadcast(gm_ws)
+    assert rr is not None, "expected a roll_request broadcast for Pip's Wis save"
+    assert rr["data"]["base_expression"] == "2d20kh1", (
+        f"Halfling Brave should set base_expression to 2d20kh1; "
+        f"got {rr['data']['base_expression']!r}"
+    )
+    msgs = _race_save_broadcasts(gm_ws, pip["id"], "halfling-brave")
+    assert msgs, (
+        f"expected feature_used(source=halfling-brave) for Pip; "
+        f"buffered: {[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+
+
+async def test_halfling_brave_skips_non_fright_save(
+    gm_client, gm_ws, roster, lyra_rested,
+):
+    """Control: Lyra casts Suggestion (Charmed install) at Pip.
+    Halfling Brave gates on Frightened only → doesn't fire.
+    base_expression stays 1d20; no Halfling Brave broadcast.
+    """
+    lyra = lyra_rested
+    pip = roster["Pip Quickfingers"]
+    await _seed_battle(gm_client, [_tok(lyra), _tok(pip)])
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": lyra["id"],
+            "spell_index": SUGGESTION_LYRA_INDEX,
+            "slot_level": 2,
+            "class_slug": "bard",
+            "target_combatant_id": f"tok_race_{pip['id']}",
+            "target_character_id": pip["id"],
+            "target_name": pip["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    rr = _roll_request_broadcast(gm_ws)
+    assert rr is not None
+    assert rr["data"]["base_expression"] == "1d20", (
+        f"Suggestion (Charmed) should NOT trigger Halfling Brave; "
+        f"got base_expression={rr['data']['base_expression']!r}"
+    )
+    msgs = _race_save_broadcasts(gm_ws, pip["id"], "halfling-brave")
+    assert not msgs, (
+        f"Halfling Brave broadcast should NOT fire on Charmed install: {msgs}"
+    )
+
+
+async def test_halfling_brave_skips_non_halfling(
+    gm_client, gm_ws, roster, lyra_rested,
+):
+    """Control: Lyra casts Fear at Thalindra (Elf Wizard). Halfling
+    Brave gates on Halfling race → doesn't fire on Elf. (Note: Elf
+    also doesn't have a frightened-save rule today, so the
+    base_expression stays 1d20.)
+    """
+    lyra = lyra_rested
+    thal = roster["Thalindra Moonwhisper"]
+    await _seed_battle(gm_client, [_tok(lyra), _tok(thal)])
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": lyra["id"],
+            "spell_index": FEAR_LYRA_INDEX,
+            "slot_level": 3,
+            "class_slug": "bard",
+            "target_combatant_id": f"tok_race_{thal['id']}",
+            "target_character_id": thal["id"],
+            "target_name": thal["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    rr = _roll_request_broadcast(gm_ws)
+    assert rr is not None
+    assert rr["data"]["base_expression"] == "1d20", (
+        f"Non-Halfling should NOT trigger Halfling Brave; "
+        f"got base_expression={rr['data']['base_expression']!r}"
+    )
+    msgs = _race_save_broadcasts(gm_ws, thal["id"], "halfling-brave")
+    assert not msgs, (
+        f"Halfling Brave broadcast should NOT fire for Elf: {msgs}"
+    )

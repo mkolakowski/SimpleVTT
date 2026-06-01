@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.14] - 2026-05-31 — "The Brave and the Trance"
+
+**Schema version:** 64
+**Commit summary:** **(D) Phase 2 fourth-ship: Halfling Brave advantage on saves vs Frightened install + doc clarification on High Elf Trance.** v2.99.13 shipped Halfling Lucky reroll-on-1; v2.99.14 adds Brave to the same race slug. Same construction-time pattern as Fey Ancestry but on the "frightened" condition key. Lyra's existing Fear spell (v2.97.43 demo seed addition) is the test fixture. The companion doc clarification removes the v2.60.1 plan's mistaken "High Elf Trance advantage on charm saves" attribution — Trance is "elves meditate instead of sleep," not a save-advantage trait; the sleep-immunity clause that was conflated with Trance is actually part of Fey Ancestry's RAW second sentence ("can't be put to sleep magically") and belongs in the (D) Phase 3 condition-install immunity gate.
+**Description:** Single rule entry in `_RACE_SAVE_ADVANTAGES["halfling"]` (the slug normalizer collapses Lightfoot + Stout into "halfling"); icon-map addition for the broadcast; doc edit clarifying the Trance attribution. Harness test extends `tests/harness/test_race_save_advantage.py` with 3 more tests via Pip (Halfling Rogue) saving vs Lyra's Fear spell.
+
+### Added
+- `_RACE_SAVE_ADVANTAGES["halfling"]` rule entry for Halfling Brave (`condition_keys=["frightened"]`). Same shape as Fey Ancestry, different condition key. Both Lightfoot and Stout Halflings benefit (the slug normalizer folds them).
+- `_broadcast_race_save_advantage` icon map: `"halfling-brave": "🌟"`.
+- 3 new tests in `tests/harness/test_race_save_advantage.py`:
+  - `test_halfling_brave_advantage_on_fright_save` — Lyra Fear → Pip → Halfling Brave fires (advantage + broadcast).
+  - `test_halfling_brave_skips_non_fright_save` — Lyra Suggestion (Charmed) → Pip → Halfling Brave doesn't fire (it gates on frightened only; Charmed → Fey Ancestry side, but Pip isn't Elf so neither fires).
+  - `test_halfling_brave_skips_non_halfling` — Lyra Fear → Thalindra (Elf) → no Halfling Brave broadcast (race gate).
+
+### Changed
+- `docs/plans/class-content-status.md` — Halfling row's Brave note ✅; High Elf Trance attribution corrected (it's not a save-advantage trait); Phase 2 status updated to reflect four shipped races.
+
+### Notes
+- **PATCH bump** — additive rule entry + 3 tests + doc clarification.
+- **High Elf Trance clarification.** The v2.60.1 (D) Phase 2 plan listed "High Elf Trance advantage on charm saves" as a Phase 2 entry. This was a conflation. RAW: (1) **Trance** (PHB p.23) = "Elves don't need to sleep. Instead, they meditate deeply, remaining semiconscious, for 4 hours a day." No combat / save effect. (2) **Fey Ancestry** (PHB p.23) = "You have advantage on saving throws against being charmed, AND magic can't put you to sleep." The charm-save advantage half is ✅ in v2.99.11; the sleep-immunity half is a condition-install IMMUNITY (Phase 3 gate, mirror of v2.55.0 Aura of Devotion shape) — filed there, not here.
+- **Stout Halfling differentiation.** Stout Halfling has Stout Resilience (advantage on poison saves + poison damage resistance) — same shape as Dwarven Resilience. The current slug normalizer folds Stout + Lightfoot into "halfling" so I can't add a subrace-specific rule without over-applying. Filed for a future subrace-aware normalizer extension.
+- **Demo coverage.** Pip Quickfingers (Halfling Rogue Lv 7) is the only Halfling in the demo. Both Brave and Lucky apply.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 673 (was 670 in v2.99.13).
+
+---
+
 ## [2.99.13] - 2026-05-31 — "The Little Reroll"
 
 **Schema version:** 64
