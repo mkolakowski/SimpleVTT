@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 686 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.22, 2026-06-01).
+**Total tests:** 688 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.23, 2026-06-01).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -357,6 +357,14 @@ v2.99.17 — (D) Phase 3 second-ship: Half-Orc Relentless Endurance auto-clamp. 
 |------|-----------------|
 | `test_relentless_endurance_clamps_zero_to_one` | Krieger at 3 HP; Pip attacks; after a hit dealing ≥3 damage, the `character_hp_update` broadcast carries `current=1`, `resource_update` for `relentless-endurance` carries `current=0`, AND `feature_used(source=relentless-endurance)` broadcast fires for Krieger. |
 | `test_relentless_endurance_skips_non_half_orc` | Control: Lyra at 3 HP; same attack setup; HP-update broadcast carries `current=0` (no clamp); no Relentless Endurance broadcast. Regression guard. |
+
+### `test_savage_attacks.py`
+v2.99.23 — Half-Orc Savage Attacks. `_compute_attack_auto_uplifts` extended with `is_crit` + `weapon_damage_expr` kwargs. When the attacker is Half-Orc + the hit is a crit + the damage type is physical (melee proxy via `_PHYSICAL_DAMAGE_TYPES`), the helper adds one extra die roll to the uplift list with `source="savage-attacks"`. Krieger's Greataxe (1d12) is the demo fixture.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_savage_attacks_fires_on_half_orc_crit` | Krieger crits a Bandit (seeded d20=20) → `auto_uplifts` includes `{source="savage-attacks", expression="1d12"}` (the weapon's first die). |
+| `test_savage_attacks_skips_non_half_orc` | Control: Garrik (Variant Human Champion Fighter) crits (d20 ∈ {19, 20}) → no Savage Attacks uplift. Regression guard. |
 
 ### `test_hellish_resistance.py`
 v2.99.18 — (D) Phase 3 third-ship: Tiefling Hellish Resistance (sheet-level `damage_resistances` field on PCs). `_resistance_halve` extended to read the sheet root's `damage_resistances` list before walking buffs. Same field shape NPC templates already use. Zara Emberfire's demo sheet ships `damage_resistances: ["fire"]`.

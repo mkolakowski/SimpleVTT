@@ -17841,6 +17841,8 @@ def _compute_attack_auto_uplifts(
     attacker_sheet: dict,
     target_combatant_id: str | None,
     attack_damage_type: str,
+    is_crit: bool = False,
+    weapon_damage_expr: str = "",
 ) -> list[dict]:
     """Compute auto-applied uplifts from attacker's buffs + class
     features at /attack time.
@@ -17992,7 +17994,63 @@ def _compute_attack_auto_uplifts(
                 except dice_mod.DiceParseError:
                     pass
 
+    # 5. v2.99.23 — Half-Orc Savage Attacks. RAW (PHB p.41): "When
+    #    you score a critical hit with a melee weapon attack, you
+    #    can roll one of the weapon's damage dice one additional
+    #    time and add it to the extra damage of the critical hit."
+    #    No resource cost; auto-fires on every melee crit. The
+    #    helper gates on:
+    #      - is_crit=True (caller passes the crit flag)
+    #      - weapon_damage_expr non-empty (extract the first die)
+    #      - attacker race slug = "half-orc"
+    #    RAW limits this to MELEE weapon attacks; we infer melee from
+    #    the damage type belonging to the physical-melee set
+    #    (bludgeoning / piercing / slashing). Ranged-only weapon
+    #    attacks shouldn't fire Savage Attacks even if the attacker
+    #    is Half-Orc; the damage_type gate handles that for the
+    #    common case (longbow uses piercing too, but the demo's
+    #    Krieger throws javelins which ALSO use piercing — accepted
+    #    v1 simplification, RAW correctness can ship when an
+    #    is_melee flag plumbs through `_compute_attack_auto_uplifts`).
+    if is_crit and weapon_damage_expr and is_physical:
+        if _race_slug_from_sheet(attacker_sheet) == "half-orc":
+            first_die = _extract_first_die(weapon_damage_expr)
+            if first_die:
+                try:
+                    r = dice_mod.roll(first_die)
+                    uplifts.append({
+                        "label": "Savage Attacks",
+                        "expression": first_die,
+                        "total": r.total,
+                        "breakdown": r.breakdown,
+                        "damage_type": attack_damage_type or "slashing",
+                        "source": "savage-attacks",
+                    })
+                except dice_mod.DiceParseError:
+                    pass
+
     return uplifts
+
+
+import re as _re_savage
+
+_FIRST_DIE_RE = _re_savage.compile(r"(\d+d\d+)", _re_savage.IGNORECASE)
+
+
+def _extract_first_die(expr: str) -> str:
+    """v2.99.23 — extract the first die-expression (e.g. "1d12") from
+    a weapon damage expression like "1d12+4" or "2d6+3". Returns
+    empty string when no `<n>d<m>` pattern is found.
+
+    Used by Half-Orc Savage Attacks to identify the "weapon's damage
+    die" to re-roll on a melee crit.
+    """
+    if not expr:
+        return ""
+    m = _FIRST_DIE_RE.search(str(expr))
+    if not m:
+        return ""
+    return m.group(1)
 
 
 async def _mark_divine_strike_used(
@@ -27366,6 +27424,8 @@ async def use_attack(
         attacker_sheet=sheet,
         target_combatant_id=target_combatant_id,
         attack_damage_type=damage_type,
+        is_crit=is_crit,
+        weapon_damage_expr=damage_expr_raw,
     )
     # v2.60.0 — defer the mark-as-used calls for on-hit-only uplifts
     # (Colossus Slayer + Divine Strike) until after hit determination

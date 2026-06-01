@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.23] - 2026-06-01 — "The Savage Crit"
+
+**Schema version:** 64
+**Commit summary:** **Half-Orc Savage Attacks — extra weapon damage die on melee crit.** RAW (PHB p.41): "When you score a critical hit with a melee weapon attack, you can roll one of the weapon's damage dice one additional time and add it to the extra damage of the critical hit." v2.99.23 extends `_compute_attack_auto_uplifts` with `is_crit` + `weapon_damage_expr` kwargs and adds a Savage Attacks branch that fires when the attacker is Half-Orc + the hit is a crit + the damage type is physical (melee proxy). The extra die is appended to the `auto_uplifts` list with `source="savage-attacks"`, label "Savage Attacks", and the weapon's first die expression (`1d12` for Krieger's Greataxe). Krieger Lv 7 Berserker is the demo fixture.
+**Description:** Two new helpers: `_extract_first_die(expr)` regex parser for "Xd Y" extraction (e.g. "1d12" from "1d12+4"); `_compute_attack_auto_uplifts` signature extension to take `is_crit: bool = False` and `weapon_damage_expr: str = ""`. The branch inside the function gates on `is_crit AND weapon_damage_expr AND is_physical AND _race_slug_from_sheet(attacker_sheet) == "half-orc"`. Caller in `/attack` passes both new kwargs. Harness coverage via `tests/harness/test_savage_attacks.py` (2 tests using TEST_MODE dice seeding to deterministically force crits).
+
+### Added
+- `_extract_first_die(expr)` regex helper — returns the first `<n>d<m>` substring from a damage expression. Used by Savage Attacks to identify "the weapon's damage die."
+- `_FIRST_DIE_RE` module-level regex.
+- Savage Attacks branch in `_compute_attack_auto_uplifts`. Inactive when `is_crit=False` or when the attacker isn't Half-Orc — backward-compatible with all existing callers (defaults to False).
+- `tests/harness/test_savage_attacks.py` — 2 tests:
+  - `test_savage_attacks_fires_on_half_orc_crit` — Krieger crits a Bandit; `auto_uplifts` includes `{source="savage-attacks", expression="1d12"}`.
+  - `test_savage_attacks_skips_non_half_orc` — Control: Garrik (Variant Human Champion Fighter) crits; no Savage Attacks uplift.
+
+### Changed
+- `_compute_attack_auto_uplifts` signature gains `is_crit` and `weapon_damage_expr` kwargs (defaulted to `False` and `""` for backward compatibility with non-attack callers — there are none today, but the default avoids future regressions).
+- `/attack` (`use_attack`) call site passes `is_crit=is_crit, weapon_damage_expr=damage_expr_raw`.
+- `docs/plans/class-content-status.md` — Half-Orc row's Savage Attacks note ✅; (D) Phase 3 status updated to credit a fourth ship.
+- `docs/test-harness-coverage.md` — total bumped + new test rows added.
+
+### Notes
+- **PATCH bump** — additive helper + 1 caller site + 2 tests.
+- **Melee-only gate via physical-damage proxy.** RAW Savage Attacks is melee-only (a longbow hit doesn't count). The current gate uses `is_physical` (the existing `_PHYSICAL_DAMAGE_TYPES` set: bludgeoning / piercing / slashing). Krieger's Greataxe is slashing (melee, correct) and his Javelin is piercing (works melee OR thrown ranged). A thrown-Javelin crit would trigger Savage Attacks today — RAW it should only on the melee swing. Filed for an `is_melee` kwarg on `_compute_attack_auto_uplifts` when the attack flow plumbs the weapon's melee/ranged tag through.
+- **Reuses the v2.49.231 Improved Critical pattern.** The Champion Fighter's lowered crit threshold (19+) doesn't extend to Krieger (he's a Barbarian, not Champion). His crit-rate is standard 20-only; Savage Attacks fires the same way regardless of the threshold helper.
+- **Demo coverage.** Krieger Stonefist (Half-Orc Berserker Lv 7) is the only Half-Orc PC. He now has Relentless Endurance (v2.99.17 — clamp 0 HP → 1 HP) AND Savage Attacks (v2.99.23 — extra crit die) both wired.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 688 (was 686 in v2.99.22).
+
+---
+
 ## [2.99.22] - 2026-06-01 — "Lucky Everywhere"
 
 **Schema version:** 64
