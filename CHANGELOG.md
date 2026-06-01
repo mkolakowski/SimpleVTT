@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.29] - 2026-06-01 — "The Empowered Audit"
+
+**Schema version:** 64
+**Commit summary:** **Doc-only re-audit pass — Sorcerer Metamagic row flipped ⚪ → 🟢.** Following the Font of Magic stale-marker discovery in v2.99.25, ran a focused audit of 12 candidate rows in `class-content-status.md`. 11 of 12 were accurately documented. The 1 stale row: Sorcerer Metamagic was marked ⚪ "no plan" but Empowered Spell is actually fully shipped via `/use_metamagic_empowered_spell` (v2.49.124) — buff-arming + `_roll_with_empowered_reroll` consumes the buff on the next damage roll + 9 harness tests passing in `test_use_metamagic_empowered.py`. Quickened Spell is announce-only via the v2.6.0 `_FEATURE_ECONOMY` curated entry. Other metamagics (Twinned, Subtle, Distant, Heightened, Careful) are still genuinely ⚪.
+**Description:** Single doc edit to the Sorcerer Metamagic row (line ~438). Replaced the one-line ⚪ note with a detailed 🟢 description crediting Empowered Spell ✅ (full implementation history), Quickened 🟡 (announce-only), and the remaining ⚪ metamagics. No code change.
+
+### Changed
+- `docs/plans/class-content-status.md` — Sorcerer Metamagic row flipped ⚪ → 🟢 with v2.49.124 Empowered Spell credit + Quickened Spell v2.6.0 credit + remaining ⚪ items called out.
+
+### Notes
+- **PATCH bump** — doc-only audit refresh.
+- **Why the row was stale.** v2.49.124 shipped Empowered Spell as part of the Sorcery Phase 1 work; the test file `test_use_metamagic_empowered.py` (9 tests) has been green since then. But the status doc row didn't get updated in the v2.49.111 / v2.60.1 / v2.99.10 audit passes — likely because it was originally filed under "needs spell-cast intercept" and the auditors didn't dig deep enough to spot the existing implementation.
+- **Other audit findings (all accurate).** The agent re-verified 11 other suspected-stale rows: Bardic Inspiration recipient die ✅, Bard Cutting Words ✅, Fighter Indomitable ✅ (v1 advantage variant correctly noted), Monk Stunning Strike + Stillness of Mind + Wholeness of Body all ✅, Paladin Aura of Protection + Aura of Devotion ✅, Druid Wild Shape ✅, Rogue Uncanny Dodge ✅, Wizard Arcane Recovery ✅, Cleric Life Domain Disciple of Life + Blessed Healer + Divine Strike ✅, Warlock Agonizing Blast 🟡 (correctly marked — the demo seed bakes CHA mod into the attack entry's static "+3" damage but the spell-cast path has no automatic Agonizing Blast hook). All accurate; no action needed.
+- **Cleric Channel Divinity domain options.** Agent confirmed all 12 canon domains have curated Lv 2 options in `_FEATURE_ECONOMY` (per v2.56.1–v2.56.2). The MAIN Channel Divinity row at the Lv 2 entry is already ✅. The individual domain SUBCLASS rows (Knowledge / Tempest / Trickery / etc.) appropriately show 🟡 / 🟢 reflecting the OVERALL subclass mechanical wiring (subclass passives + higher-level features), not just the Lv 2 CD options being curated. No change needed there.
+- **Sorcerer Metamagic next steps.** The remaining metamagics (Twinned / Subtle / Distant / Heightened / Careful) each need a per-cast intercept on `/cast_spell`. Twinned is the easiest single ship (extends single-target to two-target). Subtle waits on F7 component tracking. Filed as separate per-metamagic plans.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 700 (unchanged — no test surface change).
+
+---
+
 ## [2.99.28] - 2026-06-01 — "The Mighty Heave"
 
 **Schema version:** 64
