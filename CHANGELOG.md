@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.19] - 2026-06-01 — "The Stone Constitution"
+
+**Schema version:** 64
+**Commit summary:** **Dwarven Resilience poison resistance — one-line follow-up to v2.99.18.** v2.99.12 shipped the save-advantage half of Dwarven Resilience (advantage on saves vs poison damage / poisoned-condition install). v2.99.18 extended `_resistance_halve` to read sheet-level `damage_resistances`. v2.99.19 closes the loop: Tavik's Hill Dwarf sheet gains `damage_resistances: ["poison"]`, so poison damage that lands on him is halved before HP application — identical mechanism to Zara's v2.99.18 Hellish Resistance fire-halving.
+**Description:** Single-line addition to `_cleric_sheet` in `app/demo_seed.py`. No code change — the v2.99.18 wire (`_resistance_halve` reading `target_sheet["damage_resistances"]`) is the only consumer needed. No new harness test — the mechanism is identical to v2.99.18's `test_hellish_resistance.py` happy-path (substituting Tavik / Hill Dwarf / poison for Zara / Tiefling / fire). The single-target Poison Spray cast path doesn't currently auto-apply damage on PC save fail (only AoE damage spells do), so a happy-path harness test would require either an NPC poison attack or an AoE poison spell at a higher level — filed for a follow-up if either ships.
+
+### Changed
+- `_cleric_sheet` in `app/demo_seed.py` — Tavik now carries `damage_resistances: ["poison"]`.
+- `docs/plans/class-content-status.md` — Hill Dwarf row's Dwarven Resilience poison-resistance note ✅; cross-cutting (D) status updated.
+
+### Notes
+- **PATCH bump** — single-line demo seed change. No code, no schema, no test surface change.
+- **Why no new harness test.** This commit leverages the existing v2.99.18 `_resistance_halve` wire which is already covered by `test_hellish_resistance.py` (proves the sheet-level `damage_resistances` field halves damage on a matching damage type, and skips for non-matching). Adding a parallel test for poison would just duplicate that proof — the field shape + damage flow are identical. Per CLAUDE.md harness-discipline: "Every new endpoint commit lands a harness test" — this isn't a new endpoint; it's a demo-seed change leveraging an already-tested wire. **However**, a happy-path test for poison damage application would require a poison-damage attack source: SRD monsters with poison damage (Giant Spider, Erinyes) aren't in the demo template roster today, and the single-target Poison Spray cast path doesn't auto-apply damage on PC save fail (only the AoE damage flow does). Filed for the next commit that adds a poison-damage SRD monster to the demo or completes the single-target PC save damage auto-apply.
+- **What's filed.** v2.99.18 noted Dragonborn ancestry damage resistance as a parallel follow-up (same shape: `damage_resistances: [<ancestry>]` on Rowan's sheet). Filed for whoever picks up the ancestry choice for Rowan (Red Dragon → fire, Black → acid, etc.).
+- **Demo coverage.** Tavik Stonebrow (Hill Dwarf Cleric Lv 8) is the only Dwarf PC. 8 of 12 demo PCs now have at least one wired race trait.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 682 (unchanged).
+
+---
+
 ## [2.99.18] - 2026-05-31 — "The Infernal Veneer"
 
 **Schema version:** 64

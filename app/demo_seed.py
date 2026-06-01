@@ -597,6 +597,14 @@ def _cleric_sheet(name: str) -> dict:
         # 8 (Lv 1 d8) + 7× avg d8 (5) + CON +2 × 8 + Dwarven Toughness +1 × 8
         # = 8 + 35 + 16 + 8 = 67. (v2.60.0: was 51 at Lv 6 — added 8 per level for Lv 7/8.)
         "hp": {"current": 67, "max": 67, "temp": 0},
+        # v2.99.19 — Hill Dwarf Dwarven Resilience: resistance to
+        # poison damage. RAW (PHB p.20). v2.99.12 shipped the
+        # save-advantage half (Dwarven Resilience grants advantage
+        # on saves vs poison); v2.99.18 extended _resistance_halve
+        # to read sheet-level damage_resistances; v2.99.19 closes
+        # the loop by declaring the resistance on Tavik's sheet.
+        # Fire / acid / cold / etc. unaffected.
+        "damage_resistances": ["poison"],
         "initiative_bonus": 0,
         "proficiency_bonus": 3,  # +3 through Lv 5-8.
         "hit_dice": {"current": 8, "max": 8},
