@@ -15533,6 +15533,14 @@ async def use_bardic_inspiration_die(
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     context = (body.get("context") or "").strip().lower()
+    # v2.99.31 — Optional stat_key / stat_ability for richer chat-card
+    # text (mirrors the v2.99.28+ /roll plumbing). When the player
+    # consumes their BI die on a specific roll (Athletics check,
+    # Persuasion check, Wis save, etc.), the chat-card note can
+    # carry the specific skill / ability instead of the generic
+    # "ability check" label.
+    stat_key_raw = str(body.get("stat_key") or "").strip()[:60]
+    stat_ability_raw = str(body.get("stat_ability") or "").strip().upper()[:3]
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     if context not in ("attack", "save", "check", ""):
@@ -15588,12 +15596,23 @@ async def use_bardic_inspiration_die(
         db, int(char.id), _get_buffs(campaign_id, int(char.id)),
     )
 
-    context_label = {
-        "attack": "attack roll",
-        "save": "saving throw",
-        "check": "ability check",
-        "": "roll",
-    }.get(context, "roll")
+    # v2.99.31 — Build the context label, preferring a specific
+    # stat_key (e.g. "Athletics check") over the generic context.
+    if stat_key_raw and stat_key_raw.lower().endswith("_check") and stat_ability_raw:
+        # Raw ability check shape ("str_check" → "STR check").
+        context_label = f"{stat_ability_raw} check"
+    elif stat_key_raw and stat_key_raw.lower().endswith("_save") and stat_ability_raw:
+        context_label = f"{stat_ability_raw} save"
+    elif stat_key_raw and "_" not in stat_key_raw:
+        # Skill name like "Athletics" — use as-is, append "check".
+        context_label = f"{stat_key_raw} check"
+    else:
+        context_label = {
+            "attack": "attack roll",
+            "save": "saving throw",
+            "check": "ability check",
+            "": "roll",
+        }.get(context, "roll")
     bonus_label = bi_buff.get("source_char_name") or ""
     source_hint = f" (from {bonus_label})" if bonus_label else ""
     await hub.broadcast(campaign_id, {
@@ -15618,6 +15637,11 @@ async def use_bardic_inspiration_die(
         "rolled": rolled,
         "breakdown": breakdown,
         "context": context,
+        # v2.99.31 — echo the stat_key / stat_ability for client-side
+        # audit / chat-card rendering.
+        "stat_key": stat_key_raw,
+        "stat_ability": stat_ability_raw,
+        "context_label": context_label,
     }
 
 

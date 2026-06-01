@@ -152,3 +152,118 @@ async def test_consume_bi_die_without_buff_returns_409(gm_client, roster):
     assert resp.status_code == 409, resp.text
     body = resp.json()
     assert body.get("error") == "no_bi_die"
+
+
+# v2.99.31 — stat_key + stat_ability for richer chat-card text.
+# When the player consumes the die on a SPECIFIC roll (Athletics
+# check, Persuasion check, STR save, etc.), the chat-card note can
+# carry the specific skill / ability instead of the generic
+# "ability check" label.
+
+
+async def test_consume_bi_die_with_skill_stat_key_uses_skill_label(
+    gm_client, gm_ws, roster,
+):
+    """Lyra inspires Pip; Pip consumes the die with
+    stat_key="Athletics" + stat_ability="STR". Roll note carries
+    "Athletics check" instead of the generic "ability check".
+    """
+    lyra = roster["Lyra Sunstrider"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, lyra["id"])
+    await _long_rest(gm_client, pip["id"])
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+        json={"character_id": pip["id"], "key": "bardic-inspiration-die"},
+    )
+    lyra_tok = f"tok_bidie2_lyra_{lyra['id']}"
+    pip_tok = f"tok_bidie2_pip_{pip['id']}"
+    await _seed_battle_with(gm_client, [
+        {"id": lyra["id"], "name": lyra["name"], "tok_id": lyra_tok, "hp_max": 35, "initiative": 14},
+        {"id": pip["id"], "name": pip["name"], "tok_id": pip_tok, "hp_max": 40, "initiative": 8},
+    ])
+    bi_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration",
+        json={
+            "character_id": lyra["id"],
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+        },
+    )
+    assert bi_resp.status_code == 200
+
+    gm_ws.mark()
+    consume = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration_die",
+        json={
+            "character_id": pip["id"],
+            "context": "check",
+            "stat_key": "Athletics",
+            "stat_ability": "STR",
+        },
+    )
+    assert consume.status_code == 200, consume.text
+    data = consume.json()
+    assert data["stat_key"] == "Athletics"
+    assert data["stat_ability"] == "STR"
+    assert data["context_label"] == "Athletics check"
+
+    import asyncio as _asy
+    await _asy.sleep(0.2)
+    roll_msgs = gm_ws.buffered("roll")
+    consume_msg = next(
+        (m for m in roll_msgs
+         if "Bardic Inspiration" in (m.get("data") or {}).get("note", "")
+         and "Athletics check" in (m.get("data") or {}).get("note", "")),
+        None,
+    )
+    assert consume_msg is not None, (
+        f"expected note containing 'Athletics check'; got notes="
+        f"{[(m.get('data') or {}).get('note') for m in roll_msgs]}"
+    )
+
+
+async def test_consume_bi_die_with_ability_check_stat_key_uses_ability_label(
+    gm_client, gm_ws, roster,
+):
+    """Raw ability check shape: stat_key="str_check" + stat_ability="STR"
+    → context_label is "STR check".
+    """
+    lyra = roster["Lyra Sunstrider"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, lyra["id"])
+    await _long_rest(gm_client, pip["id"])
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+        json={"character_id": pip["id"], "key": "bardic-inspiration-die"},
+    )
+    lyra_tok = f"tok_bidie3_lyra_{lyra['id']}"
+    pip_tok = f"tok_bidie3_pip_{pip['id']}"
+    await _seed_battle_with(gm_client, [
+        {"id": lyra["id"], "name": lyra["name"], "tok_id": lyra_tok, "hp_max": 35, "initiative": 14},
+        {"id": pip["id"], "name": pip["name"], "tok_id": pip_tok, "hp_max": 40, "initiative": 8},
+    ])
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration",
+        json={
+            "character_id": lyra["id"],
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+        },
+    )
+    consume = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration_die",
+        json={
+            "character_id": pip["id"],
+            "context": "check",
+            "stat_key": "str_check",
+            "stat_ability": "STR",
+        },
+    )
+    assert consume.status_code == 200, consume.text
+    data = consume.json()
+    assert data["context_label"] == "STR check"

@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.31] - 2026-06-01 — "Tag The Verse"
+
+**Schema version:** 64
+**Commit summary:** **Bardic Inspiration die consume — richer chat-card text via v2.99.30 plumbing.** `/use_bardic_inspiration_die` (v2.97.56) accepted a generic `context` field ("attack" / "save" / "check"). With v2.99.30's `stat_key` + `stat_ability` plumbing now wired into the client's skill / ability / save buttons, the BI die endpoint can show specific labels ("Athletics check" / "STR check" / "Persuasion check") in the chat-card note rather than the generic "ability check." Additive enhancement — the legacy `context` field still works and old callers see no change.
+**Description:** Two body fields added to `/use_bardic_inspiration_die`: `stat_key` (60-char string — e.g. "Athletics" / "str_check" / "wis_save") and `stat_ability` (3-char ability slug). When provided, the server builds a more specific `context_label` ("STR check" for `str_check` + STR, "Athletics check" for skill name "Athletics", "WIS save" for `wis_save` + WIS, etc.) instead of the legacy generic label. The label is included in the roll-broadcast `note` text and echoed back in the response for client-side audit. 2 new harness tests cover the skill-name path (`Athletics check`) and the raw ability path (`STR check`).
+
+### Added
+- `stat_key` and `stat_ability` body fields on `/use_bardic_inspiration_die` — optional, length-capped (60 / 3 chars). Mirror the v2.99.30 `/roll` plumbing.
+- `context_label` and `stat_key` and `stat_ability` echoed in the response body.
+- 2 new tests in `tests/harness/test_use_bardic_inspiration_die.py`:
+  - `test_consume_bi_die_with_skill_stat_key_uses_skill_label` — Athletics skill → "Athletics check" in note.
+  - `test_consume_bi_die_with_ability_check_stat_key_uses_ability_label` — `str_check` + STR → "STR check" in note.
+
+### Changed
+- `use_bardic_inspiration_die` — parses optional fields; builds `context_label` from `stat_key` + `stat_ability` when present, falling back to the legacy generic label when absent.
+- Response body shape extended with `stat_key`, `stat_ability`, `context_label` echo.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — additive fields + label improvement + 2 tests. Backward-compatible: old callers see no behavior change.
+- **Client wiring deferred.** The PC sheet skill buttons already send `stat_key` + `stat_ability` to `/roll` (v2.99.30). The BI die banner UI (in `tabletop.html`) currently only sends `context` ("attack"/"save"/"check"). A follow-up commit can extend the banner to also carry the most-recent-roll's stat_key for full chat-card consistency. Filed.
+- **Why the label split.** The legacy `context` ("attack"/"save"/"check") is intentionally kept because: (a) the BI die can be applied without a specific stat_key (player rolls a raw d20 with no provenance); (b) the legacy field continues to drive the existing chat card. The v2.99.31 enhancement is a strict refinement when stat_key is provided.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 704 (was 702 in v2.99.30).
+
+---
+
 ## [2.99.30] - 2026-06-01 — "The Stat Tag"
 
 **Schema version:** 64
