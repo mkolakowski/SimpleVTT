@@ -484,6 +484,18 @@
                 const _isRmkAthAbility = (ab) => remarkable > 0
                     && ['STR', 'DEX', 'CON'].includes((ab || '').toUpperCase());
 
+                // v2.99.30 — stat_key field for /roll provenance.
+                // Hooks like the v2.99.28 Rage STR-check advantage
+                // read this field server-side to identify the roll
+                // type. Schema: "<ability>_check" for raw ability,
+                // "<ability>_save" for saves, "<SkillName>" for
+                // skills (matches the /roll_request convention).
+                // `statAbility` is the underlying ability slug (e.g.
+                // "STR" for Athletics) — used by hooks that fire on
+                // ability-based skill checks (Rage covers all STR
+                // checks including STR-based skills).
+                let statKey = '';
+                let statAbility = '';
                 if (btn.dataset.rollAbility) {
                     const ab = btn.dataset.rollAbility;
                     const mod = abilityModifier(readField(form, `abilities.${ab}`));
@@ -496,6 +508,8 @@
                     if (jack > 0) tags.push('Jack +' + jack);
                     if (rmk > 0)  tags.push('Rmk Ath +' + rmk);
                     note = `${ab} check${tags.length ? ' (' + tags.join(', ') + ')' : ''}`;
+                    statKey = `${ab.toLowerCase()}_check`;
+                    statAbility = (ab || '').toUpperCase();
                 } else if (btn.dataset.rollSave) {
                     const ab = btn.dataset.rollSave;
                     const mod = abilityModifier(readField(form, `abilities.${ab}`));
@@ -503,6 +517,8 @@
                     const total = mod + (isProf ? prof : 0);
                     expr = `1d20${formatBonus(total)}`;
                     note = `${ab} save${isProf ? ' (prof)' : ''}`;
+                    statKey = `${ab.toLowerCase()}_save`;
+                    statAbility = (ab || '').toUpperCase();
                 } else if (btn.dataset.rollSkill) {
                     const skill = btn.dataset.rollSkill;
                     const ab = btn.dataset.skillAbility;
@@ -528,6 +544,8 @@
                     else if (rmkApplied > 0) skillTags.push('Rmk Ath +' + rmkApplied);
                     else if (jackApplied > 0) skillTags.push('Jack +' + jackApplied);
                     note = `${skill}${skillTags.length ? ' (' + skillTags.join(', ') + ')' : ''}`;
+                    statKey = skill;
+                    statAbility = (ab || '').toUpperCase();
                 }
 
                 if (!expr) return;
@@ -543,6 +561,10 @@
                     ? parseInt(form.dataset.charId, 10)
                     : (typeof CHAR_ID !== 'undefined' ? CHAR_ID : null);
                 const body = { expression: expr, visibility, note };
+                // v2.99.30 — stat_key for /roll provenance. Drives
+                // server-side hooks like Rage STR-check advantage.
+                if (statKey) body.stat_key = statKey;
+                if (statAbility) body.stat_ability = statAbility;
                 // v2.99.7 — monster sheets are not backed by a Character
                 // row; sending the template id as character_id would
                 // make the server's roll_state fallback land on an

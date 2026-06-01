@@ -10730,6 +10730,12 @@ async def roll_dice(
     # for proficient skill checks, Bardic Inspiration on attacks /
     # checks / saves) can read it from the same plumbing.
     stat_key_raw = str(body.get("stat_key") or "").strip().lower()[:60]
+    # v2.99.30 — Optional stat_ability — the underlying ability slug
+    # for skill rolls ("STR" for Athletics, "WIS" for Perception).
+    # Used by hooks that fire on ability-based skill checks (Rage
+    # covers all STR checks INCLUDING STR-based skills like
+    # Athletics). Schema upper-case 3-letter abbr; defaults to "".
+    stat_ability_raw = str(body.get("stat_ability") or "").strip().upper()[:3]
     # v2.49.212: monster rolls pass `actor_name` (the TokenTemplate name
     # like "Cult Acolyte") so the roll-log entry surfaces the monster
     # identity in the rolled-by slot instead of the GM's user_name. Only
@@ -10788,15 +10794,22 @@ async def roll_dice(
     if note_suffix:
         note = (note + note_suffix)[:200]
 
-    # v2.99.28 — Rage STR-check advantage. Fires only when the body
-    # carries `stat_key: "str_check"` AND the rolling PC has an active
-    # rage buff with `str_check` in its `effects.advantage_on`. Swap
-    # is applied BEFORE the roll (RAW: advantage on the check, not
-    # post-roll reroll). Composes safely with the v2.2.0 roll_state
-    # advantage above — kh1-of-kh1 stays kh1.
+    # v2.99.28 — Rage STR-check advantage. Fires when the body
+    # carries `stat_key: "str_check"` OR (v2.99.30) the body carries
+    # `stat_ability: "STR"` (skill roll on a STR-based skill — RAW
+    # Rage covers all STR checks including Athletics) AND the
+    # rolling PC has an active rage buff with `str_check` in its
+    # `effects.advantage_on`. Swap is applied BEFORE the roll (RAW:
+    # advantage on the check, not post-roll reroll). Composes safely
+    # with the v2.2.0 roll_state advantage above — kh1-of-kh1 stays
+    # kh1.
     _rage_str_check_fired = False
-    if (
+    _is_str_check_roll = (
         stat_key_raw == "str_check"
+        or (stat_ability_raw == "STR" and stat_key_raw != "str_save")
+    )
+    if (
+        _is_str_check_roll
         and _char is not None
         and _pc_has_rage_str_check_advantage(campaign_id, _char.id)
     ):

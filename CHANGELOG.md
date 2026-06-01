@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.30] - 2026-06-01 — "The Stat Tag"
+
+**Schema version:** 64
+**Commit summary:** **Wire client-side PC sheet skill / ability / save buttons to send `stat_key` + `stat_ability` — close the v2.99.28 client-side gap + extend Rage check coverage to STR-based skills.** v2.99.28 added the `stat_key` body field to `/roll` and wired the Rage STR-check advantage gate. But the client-side skill / ability / save buttons in `sheet.js` didn't send the field — the trigger only fired when a test fixture or GM tool explicitly added `stat_key` to the body. v2.99.30 closes that loop: the three branches in `wireDnd5eRollButtons` (ability / save / skill) now compute the appropriate `stat_key` value and a new `stat_ability` slug, and append both to the POST body. Server-side, the Rage check hook reads `stat_ability == "STR"` as an alternative trigger so STR-based skill rolls (Athletics) also get rage advantage — RAW Rage covers all STR checks including skills.
+**Description:** Three-part edit: (1) `sheet.js` ability branch sets `statKey = "<ab>_check"` + `statAbility = ab`. Save branch sets `statKey = "<ab>_save"` + `statAbility = ab`. Skill branch sets `statKey = skill_name` + `statAbility = skill_ability` (e.g. "STR" for Athletics). Both fields appended to the POST body when non-empty. (2) `roll_dice` parses `stat_ability` (uppercase 3-letter ability slug). (3) Rage STR-check hook updated: fires on EITHER `stat_key == "str_check"` OR (`stat_ability == "STR"` AND not a save), so STR-based skill rolls land in the trigger window. Harness extended with 2 new tests (STR skill happy + WIS skill control).
+
+### Added
+- `stat_ability` body field on `/roll` — uppercase 3-letter ability slug ("STR" / "DEX" / "CON" / "INT" / "WIS" / "CHA"), capped at 3 chars. Optional; defaults to "". Future hooks read the same field.
+- 2 new tests in `tests/harness/test_rage_str_check.py`:
+  - `test_rage_grants_advantage_on_str_skill` — Krieger rages; `stat_key="Athletics"` + `stat_ability="STR"` → 2d20kh1 + broadcast.
+  - `test_rage_skips_non_str_skill_when_raging` — Control: same setup with `stat_key="Perception"` + `stat_ability="WIS"` → no swap.
+
+### Changed
+- `app/static/sheet.js` `wireDnd5eRollButtons` — three branches (ability / save / skill) compute `statKey` + `statAbility` + append to POST body when non-empty.
+- `roll_dice` (`/roll`) — parses `stat_ability` body field; Rage STR-check hook now fires on EITHER `stat_key == "str_check"` OR (`stat_ability == "STR"` AND `stat_key != "str_save"`). The `!= "str_save"` guard is defensive — saves use the separate v2.99.26 save-roll construction hook, not this `/roll` hook.
+- `docs/plans/class-content-status.md` — Rage row updated to credit the v2.99.30 client wiring + STR-skill coverage. All Rage check / save / skill / attack surfaces now end-to-end wired.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — client wiring + server field + 2 tests + doc cleanup. No new endpoint surface.
+- **End-to-end Rage STR-check.** Krieger raging → clicks the STR check button on his PC sheet → client POSTs `stat_key="str_check"` + `stat_ability="STR"` → server detects rage buff + STR marker → swaps `1d20 → 2d20kh1` → rolls + broadcasts `feature_used(source=rage-str-check)` + the regular roll event. Same flow for an Athletics skill button (uses skill→ability mapping).
+- **Forward-compatible plumbing.** The new fields will serve future hooks without further endpoint changes: Reliable Talent (Rogue Lv 11 — floor of 10 on `*_check` rolls with proficient skill), Bardic Inspiration recipient die on checks/saves (already triggers via the post-result framework; could move pre-d20 via this field), Halfling Lucky already fires regardless of stat field, Portent swap (Divination Lv 2 — bank a d20 + spend on any check / save / attack).
+- **Save buttons send `stat_key="<ab>_save"` too**, even though the v2.99.26 Rage STR-save hook lives in `/cast_spell` / `/roll_request` construction paths (not in `/roll`). The save button on the PC sheet posts to `/roll`, not `/cast_spell` — so STR save advantage during a GM-prompted ad-hoc STR save would also fire if v2.99.30 extended the `/roll` hook to saves. Filed for a follow-up; today STR saves via `/roll` skip the Rage hook (the helper short-circuits when stat_key looks like a save).
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 702 (was 700 in v2.99.29).
+
+---
+
 ## [2.99.29] - 2026-06-01 — "The Empowered Audit"
 
 **Schema version:** 64

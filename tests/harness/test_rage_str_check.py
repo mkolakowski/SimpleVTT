@@ -152,6 +152,90 @@ async def test_rage_skips_str_check_when_not_raging(
     assert not msgs
 
 
+# v2.99.30 — stat_ability field covers STR-based skill rolls.
+# Athletics is a STR-based skill; RAW Rage advantage covers all
+# STR checks INCLUDING STR-based skill checks. The client sends
+# stat_key=<SkillName> + stat_ability="STR" for skill rolls.
+
+
+async def test_rage_grants_advantage_on_str_skill(
+    gm_client, gm_ws, krieger_rested,
+):
+    """Krieger rages; POST /roll with stat_key="Athletics" +
+    stat_ability="STR" → expression swapped to 2d20kh1 + broadcast.
+    RAW: Rage covers all STR checks including Athletics (STR-based
+    skill). v2.99.30 stat_ability field carries the underlying
+    ability for the Rage check hook to detect this case.
+    """
+    krieger = krieger_rested
+    await _seed_battle(gm_client, [_tok(krieger)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rage",
+        json={"character_id": krieger["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20+7",
+            "stat_key": "Athletics",
+            "stat_ability": "STR",
+            "visibility": "public",
+            "character_id": krieger["id"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    import asyncio as _asy
+    await _asy.sleep(0.2)
+
+    roll_msg = _roll(gm_ws)
+    assert roll_msg is not None
+    expr = (roll_msg.get("data") or {}).get("expression") or ""
+    assert "2d20kh1" in expr, (
+        f"Rage should swap on STR-based skill (Athletics); got "
+        f"expression={expr!r}"
+    )
+    msgs = _rage_check_broadcasts(gm_ws, krieger["id"])
+    assert msgs, "expected rage-str-check broadcast on STR skill roll"
+
+
+async def test_rage_skips_non_str_skill_when_raging(
+    gm_client, gm_ws, krieger_rested,
+):
+    """Control: Krieger rages; stat_key="Perception" + stat_ability=
+    "WIS" → no rage swap. Perception is WIS-based; Rage's STR
+    advantage doesn't apply.
+    """
+    krieger = krieger_rested
+    await _seed_battle(gm_client, [_tok(krieger)])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rage",
+        json={"character_id": krieger["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20+4",
+            "stat_key": "Perception",
+            "stat_ability": "WIS",
+            "visibility": "public",
+            "character_id": krieger["id"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    import asyncio as _asy
+    await _asy.sleep(0.2)
+
+    roll_msg = _roll(gm_ws)
+    expr = (roll_msg.get("data") or {}).get("expression") or ""
+    assert "2d20kh1" not in expr, (
+        f"Rage should NOT swap on WIS-based skill; got expression={expr!r}"
+    )
+
+
 async def test_rage_skips_non_str_check_when_raging(
     gm_client, gm_ws, krieger_rested,
 ):
