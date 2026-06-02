@@ -1085,6 +1085,73 @@ async def test_oa_fires_when_one_side_is_neutral(
         await _set_team(gm_client, kr_tok["id"], "neutral")
 
 
+# ── v2.99.57 — plan-movement-oa-flow Phase 6: per-owner sub-queue ──
+
+
+async def test_oa_parallel_prompts_when_watchers_have_different_owners(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.57: Krieger (GM-owned) walks past Pip (alice) AND
+    Thalindra (bob). Both are PC watchers with different owners.
+    Phase 6 partitions triggers by owner, so TWO reaction_prompts
+    fire concurrently — one for each owner's queue.
+    """
+    krieger = roster["Krieger Stonefist"]
+    pip = roster["Pip Quickfingers"]            # owned by alice
+    thalindra = roster["Thalindra Moonwhisper"] # owned by bob
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(pip["name"], pip["id"], init=8),
+        _make_combatant(thalindra["name"], thalindra["id"], init=6),
+    ])
+    # Pip 5 ft east, Thalindra 5 ft south of Krieger; moving Krieger
+    # far away exits BOTH reaches.
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, pip["id"], 420.0, 350.0)
+    await _place_token(gm_client, thalindra["id"], 350.0, 420.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 800.0, "y": 800.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    await asyncio.sleep(0.2)
+
+    prompts = _prompt_broadcasts(gm_ws)
+    oa_prompts = [
+        m for m in prompts
+        if (m.get("data") or {}).get("trigger_event") in (
+            "creature_exits_reach", "creature_enters_reach",
+        )
+    ]
+    watcher_chars = sorted(
+        (m.get("data") or {}).get("watcher_char_id") for m in oa_prompts
+    )
+    assert len(oa_prompts) == 2, (
+        f"different-owner watchers should get parallel prompts; "
+        f"got {len(oa_prompts)} with watcher_char_ids={watcher_chars}"
+    )
+    # Both PCs' char_ids surface.
+    assert pip["id"] in watcher_chars, (
+        f"expected Pip's prompt; got watcher_char_ids={watcher_chars}"
+    )
+    assert thalindra["id"] in watcher_chars, (
+        f"expected Thalindra's prompt; got watcher_char_ids={watcher_chars}"
+    )
+    # Each prompt's next_triggers is EMPTY — each owner has only one
+    # watcher in their group, so there's nothing to chain.
+    for p in oa_prompts:
+        # next_triggers lives in the prompt entry's context (server
+        # side); on the broadcast it isn't directly exposed but the
+        # absence of a 2nd prompt for the same owner after resolve
+        # would prove parallelism. v1: just assert the broadcast had
+        # the right shape.
+        assert isinstance(p.get("data", {}).get("options"), list)
+
+
 # ── v2.99.56 — plan-movement-oa-flow Phase 5: serial queue + picker + skip ──
 
 

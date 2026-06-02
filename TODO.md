@@ -87,13 +87,13 @@ Two additional buttons use slightly different padding and may need individual re
 
 ## Manually Added
 
-- 🔥 **IN PROGRESS** — GM and player does not get popup notification that opportunity attack can be used. **Design doc: [`docs/plans/movement-oa-flow.md`](docs/plans/movement-oa-flow.md)** (added v2.99.50). Ships phase-by-phase:
-    - Phase 1: Team data model + same-team filter
-    - Phase 2: Token Management UI overhaul (edit button, pills, remove upload art)
-    - Phase 3: "would-this-trigger-OA?" preview endpoint
-    - Phase 4: Pre-move "Continue or Stop?" modal
-    - Phase 5: Per-watcher serial resolution + attack picker (with feat-spell options)
-    - Phase 6: Multi-token-per-owner sequencing
+- ✅ **DONE** — GM and player do not get popup notification that opportunity attack can be used. **Design doc: [`docs/plans/movement-oa-flow.md`](docs/plans/movement-oa-flow.md)** (added v2.99.50). All 6 phases shipped v2.99.52–v2.99.57:
+    - Phase 1 ✅ v2.99.52 — Team data model + same-team filter
+    - Phase 2 ✅ v2.99.53 — Token Management UI overhaul (edit button, pills, remove upload art)
+    - Phase 3 ✅ v2.99.54 — "would-this-trigger-OA?" preview endpoint
+    - Phase 4 ✅ v2.99.55 — Pre-move "Continue or Stop?" modal (the headline)
+    - Phase 5 ✅ v2.99.56 — Per-watcher serial resolution + attack picker + skip
+    - Phase 6 ✅ v2.99.57 — Multi-token-per-owner sub-queue (parallel across owners)
     - Notification flow (covered by Phase 4 + 5):
         - Pause movement and popup notification
         - User moving token gets popup asking if they want to continue movement as they will trigger an attack of opportunity

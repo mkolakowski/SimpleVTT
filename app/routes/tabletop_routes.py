@@ -9350,48 +9350,82 @@ async def move_token(
             },
         })
 
-    # v2.99.56 — emit a SINGLE reaction_prompt for the head trigger
-    # only. The tail (oa_triggers[1:]) goes into the head's
-    # context.next_triggers; /use_reaction's resolve handler pops
-    # the next head off and emits a fresh prompt for the next
-    # watcher when the current one resolves.
+    # v2.99.57 — plan-movement-oa-flow Phase 6 per-owner sub-queue.
+    # v2.99.56 emitted a SINGLE reaction_prompt for the head of the
+    # entire trigger list, globally serializing every watcher.
+    # v2.99.57 partitions triggers by their watcher's primary owner
+    # (PC's owner_user_id; GM for NPCs) and emits ONE prompt per
+    # owner in parallel. Each owner's tail rides in that prompt's
+    # context.next_triggers; /use_reaction's resolve chain pops the
+    # next head off the SAME owner's queue when resolved. Net
+    # effect: two different players each get their popup
+    # immediately; one player owning two watchers sees them one at
+    # a time.
     if oa_triggers:
-        _head = oa_triggers[0]
-        _head_trig_type = _head.get("trigger_type") or "exit"
-        _head_reach_ft = _head.get("watcher_reach_ft") or 5.0
-        _head_reach_disp = (
-            int(_head_reach_ft) if float(_head_reach_ft).is_integer()
-            else _head_reach_ft
-        )
-        if _head_trig_type == "enter":
-            _head_summary = (
-                f"{mover_name} entered {_head.get('watcher_name')}'s "
-                f"{_head_reach_disp} ft polearm reach. Polearm Master "
-                f"lets you use your reaction to make a melee attack "
-                f"on entry."
+        # Partition triggers by owner_user_id, preserving original
+        # iteration order across owners + within each owner.
+        _gm_uid = int(campaign.gm_user_id) if campaign.gm_user_id else 0
+        _owner_groups: dict[int, list[dict]] = {}
+        _owner_order: list[int] = []
+        for _trig in oa_triggers:
+            _wcid = _trig.get("watcher_char_id")
+            _owner_uid: int | None = None
+            if _wcid:
+                try:
+                    _wchar = db.query(Character).filter(
+                        Character.id == int(_wcid),
+                    ).first()
+                except Exception:
+                    _wchar = None
+                if _wchar and _wchar.owner_user_id:
+                    _owner_uid = int(_wchar.owner_user_id)
+            if _owner_uid is None:
+                _owner_uid = _gm_uid
+            if _owner_uid not in _owner_groups:
+                _owner_groups[_owner_uid] = []
+                _owner_order.append(_owner_uid)
+            _owner_groups[_owner_uid].append(_trig)
+
+        for _owner_uid in _owner_order:
+            _group = _owner_groups[_owner_uid]
+            if not _group:
+                continue
+            _head = _group[0]
+            _head_trig_type = _head.get("trigger_type") or "exit"
+            _head_reach_ft = _head.get("watcher_reach_ft") or 5.0
+            _head_reach_disp = (
+                int(_head_reach_ft) if float(_head_reach_ft).is_integer()
+                else _head_reach_ft
             )
-            _head_evt = "creature_enters_reach"
-        else:
-            _head_summary = (
-                f"{mover_name} moved out of {_head.get('watcher_name')}'s "
-                f"{_head_reach_disp} ft reach. Use your reaction to "
-                f"make a melee attack?"
-            )
-            _head_evt = "creature_exits_reach"
-        _head_watcher_combatant = None
-        for _c in (hub.get_battle(campaign_id) or {}).get(
-            "combatants", []
-        ) or []:
-            if _c.get("id") == _head.get("watcher_combatant_id"):
-                _head_watcher_combatant = _c
-                break
-        if _head_watcher_combatant is not None:
+            if _head_trig_type == "enter":
+                _head_summary = (
+                    f"{mover_name} entered {_head.get('watcher_name')}'s "
+                    f"{_head_reach_disp} ft polearm reach. Polearm "
+                    f"Master lets you use your reaction to make a melee "
+                    f"attack on entry."
+                )
+                _head_evt = "creature_enters_reach"
+            else:
+                _head_summary = (
+                    f"{mover_name} moved out of "
+                    f"{_head.get('watcher_name')}'s "
+                    f"{_head_reach_disp} ft reach. Use your reaction to "
+                    f"make a melee attack?"
+                )
+                _head_evt = "creature_exits_reach"
+            _head_watcher_combatant = None
+            for _c in (hub.get_battle(campaign_id) or {}).get(
+                "combatants", []
+            ) or []:
+                if _c.get("id") == _head.get("watcher_combatant_id"):
+                    _head_watcher_combatant = _c
+                    break
+            if _head_watcher_combatant is None:
+                continue
             try:
-                # Tail entries are passed verbatim so the resolve
-                # handler can re-look-up the watcher in init by
-                # combatant_id when it's time to emit the next
-                # prompt. Each entry is a dict of the trigger fields
-                # already in `oa_triggers`.
+                # Tail entries are scoped to THIS owner only. Each
+                # owner's chain is independent — resolving an alice
+                # prompt won't pop a bob prompt off.
                 _tail = [
                     {
                         "watcher_combatant_id": t.get("watcher_combatant_id"),
@@ -9401,7 +9435,7 @@ async def move_token(
                         "watcher_reach_ft": t.get("watcher_reach_ft"),
                         "trigger_type": t.get("trigger_type") or "exit",
                     }
-                    for t in oa_triggers[1:]
+                    for t in _group[1:]
                 ]
                 await _emit_reaction_prompt(
                     db, campaign, _head_watcher_combatant,
@@ -9416,15 +9450,10 @@ async def move_token(
                     },
                 )
             except Exception as _oa_emit_err:
-                # v2.99.49 — log the exception instead of swallowing
-                # it silently so OA popup failures surface in
-                # docker compose logs app. The legacy feature_used
-                # advisory above + the move response's
-                # opportunity_attack_triggers list are unaffected.
                 logging.exception(
                     "OA reaction_prompt emit failed for "
-                    "watcher_combatant_id=%s trigger=%s: %s",
-                    _head.get("watcher_combatant_id"),
+                    "owner_uid=%s watcher_combatant_id=%s trigger=%s: %s",
+                    _owner_uid, _head.get("watcher_combatant_id"),
                     _head_trig_type, _oa_emit_err,
                 )
 

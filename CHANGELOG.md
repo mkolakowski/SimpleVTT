@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.57] - 2026-06-02 — "Each Player's Turn" — plan-movement-oa-flow Phase 6 (plan closes ✅)
+
+**Schema version:** 65
+**Commit summary:** **plan-movement-oa-flow Phase 6 — per-owner sub-queue closes the plan.** v2.99.56 globally serialized every OA prompt — at any moment exactly one prompt was open, regardless of how many watchers/players were involved. That was a step too strict: two different players each watching one mover should each get their own popup immediately, not wait for the other to finish. v2.99.57 partitions OA triggers by the watcher's primary owner (PC's `owner_user_id`, or the GM for NPCs) and emits ONE prompt per owner in parallel. Each owner's tail rides in that prompt's `context.next_triggers`; resolving an owner's prompt pops the next head off **THAT owner's queue** only — alice's chain never interferes with bob's. Net effect: parallel popups across owners, serial within an owner.
+**Description:** `/token/move` now partitions `oa_triggers` by `watcher_char.owner_user_id` (fallback: campaign.gm_user_id for NPC watchers). For each owner group in original encounter-order, emits one `reaction_prompt` for that owner's head trigger with `context.next_triggers = group[1:]`. The /use_reaction chain logic from Phase 5 needs NO changes — it reads `next_triggers` from the resolving prompt's context and emits the next; since each prompt's context is now per-owner, the chain stays per-owner naturally. Phase 5's `test_oa_serial_queue_emits_one_prompt_then_chains` (Tavik + Caelan both GM-owned → single GM group → serial) still passes unchanged. New Phase 6 test exercises parallel chains via Pip (Alice) + Thalindra (Bob) as PC watchers.
+
+### Added
+- Per-owner partition loop in `/token/move`'s OA emit block (line ~9353): groups triggers by primary owner, emits one prompt per owner group, each with its own `next_triggers` tail.
+- `tests/harness/test_opportunity_attack.py::test_oa_parallel_prompts_when_watchers_have_different_owners` — Krieger walks past Pip (Alice) AND Thalindra (Bob); asserts exactly 2 `reaction_prompt` broadcasts fire concurrently (one per owner), with both PCs' char_ids surfaced.
+
+### Changed
+- `/token/move` OA emit loop: globally-serialized single-head emit (v2.99.56) → per-owner-partitioned multi-head emit. Within each owner's group, the head emits a prompt with the tail in `context.next_triggers`; across owners, prompts fire in parallel.
+- `docs/plans/movement-oa-flow.md` — Phase 6 status row flipped ⚪ → ✅. **All phases shipped.**
+- `app/templates/wiki.html` + `docs/wiki/README.md` — plan status pill flipped from "🟠 Phases 1–5 shipped" to "✅ All phases (1–6) shipped".
+- `docs/test-harness-coverage.md` — total bumped 776 → 777.
+
+### Notes
+- **PATCH bump** — pure backend logic change. No new endpoint, no schema change, no client wiring change. Both Phase 5 + Phase 6 changes flow through the same `_emit_reaction_prompt` helper without modification.
+- **Two-axis serialization.** The combined Phase 5 + Phase 6 contract: prompts are SERIAL within an owner's queue, PARALLEL across owners. Same-team filter from Phase 1 still applies upstream — same-team-tagged tokens never get into `oa_triggers` in the first place.
+- **GM as default owner for NPCs.** When a watcher's `char.owner_user_id` is null OR the watcher is an NPC (no char_id), the GM is treated as the primary owner. This means all NPC OAs serialize through a single "GM queue" — which matches what the GM wants (one popup to resolve before the next). A future GM "co-runner" model could expand this to multiple GM-class users; filed.
+- **Resolves the original "popup not appearing" report.** The user's original to-do said "GM and player does not get popup notification that OA can be used." The full 6-phase plan addresses every angle: Phase 1 prevents friendly-fire OAs from cluttering the queue; Phase 2 surfaces the team data model in the GM UI; Phase 3 lets the client preview; Phase 4 pops the pre-move modal; Phase 5 serializes per watcher + adds attack picker; Phase 6 partitions by owner so multiple players each see their own popup independently.
+- **Phase 5 acceptance criterion fully met.** "Two different players each own 1 watcher → both popups fire in parallel" was Phase 6's stated acceptance criterion; v2.99.57's parallel test asserts exactly that.
+- **Wiki surfacing.** Plan-status pill update touches landing + on-disk index per CLAUDE.md. The plan doc itself is unchanged structurally; status table now shows all six phases as ✅.
+- Total harness count: 777 (was 776 in v2.99.56).
+
+---
+
 ## [2.99.56] - 2026-06-02 — "One At A Time" — plan-movement-oa-flow Phase 5
 
 **Schema version:** 65

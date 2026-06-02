@@ -13,7 +13,7 @@ This plan does NOT supersede `plan-reactions-automation`. That doc owns the gene
 | 3 | "Would-this-trigger-OA?" preview endpoint | ✅ shipped | v2.99.54 |
 | 4 | Pre-move "Continue or Stop?" modal | ✅ shipped | v2.99.55 |
 | 5 | Per-watcher serial OA resolution + attack picker | ✅ shipped | v2.99.56 |
-| 6 | Multi-token-per-owner sequencing | ⚪ proposed | v2.99.5x |
+| 6 | Multi-token-per-owner sequencing | ✅ shipped | v2.99.57 |
 
 The current ship contract (v2.99.49) — reactive popup with amber pulse + diagnostics — stays unchanged through Phase 1-3. Phase 4 onwards shifts the popup contract; v2.99.49's UX work flows through.
 
