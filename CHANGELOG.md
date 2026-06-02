@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.66] - 2026-06-02 — "Right URL" — fix the v2.99.65 regression test URL
+
+**Schema version:** 65
+**Commit summary:** **Fix the speed-heal regression test's economy URL.** v2.99.65 shipped `test_load_encounter_heals_missing_speed_walk` with a guessed URL (`/economy/{char_id}`) that returned 404 against the live container. The actual endpoint is `/character/{char_id}/economy`. PATCH bump to land the fix; the test now passes and the heal contract holds (Krieger combatant without `speed_walk` → Load heals from sheet → /economy returns 40).
+**Description:** One-line URL correction inside the test added in v2.99.65.
+
+### Fixed
+- `tests/harness/test_encounters.py::test_load_encounter_heals_missing_speed_walk` — use the correct economy endpoint URL (`/character/{char_id}/economy`, not `/economy/{char_id}`). Test now passes against the live container.
+
+### Notes
+- **PATCH bump** — test-only fix. No server change, no API change.
+- The v2.99.65 server-side fix is unchanged and verified passing by this corrected test.
+- Total harness count: 785 (unchanged from v2.99.65).
+
+---
+
 ## [2.99.65] - 2026-06-02 — "Krieger Walks Faster" — heal combatant speed_walk from sheet on encounter Load
 
 **Schema version:** 65

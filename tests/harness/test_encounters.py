@@ -245,7 +245,7 @@ async def test_load_encounter_heals_missing_speed_walk(gm_client, roster):
         # /economy returns the combatant's speed_walk projected by
         # the heal (40 from Krieger's seeded sheet).
         eco = await gm_client.get(
-            f"/api/campaign/{CAMPAIGN_ID}/economy/{krieger['id']}",
+            f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/economy",
         )
         assert eco.status_code == 200, eco.text
         body = eco.json()
