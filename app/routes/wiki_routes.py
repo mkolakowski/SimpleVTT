@@ -66,6 +66,7 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "plan-death-saves": Path("docs") / "plans" / "death-saves.md",
     "plan-demo-mode": Path("docs") / "plans" / "demo-mode.md",
     "plan-encounter-sim-test-suite": Path("docs") / "plans" / "encounter-sim-test-suite.md",
+    "plan-movement-oa-flow": Path("docs") / "plans" / "movement-oa-flow.md",
     "plan-player-simulacrum": Path("docs") / "plans" / "player-simulacrum.md",
     "plan-reactions-automation": Path("docs") / "plans" / "reactions-automation.md",
     "plan-ruler-and-range": Path("docs") / "plans" / "ruler-and-range.md",

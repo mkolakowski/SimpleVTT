@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.50] - 2026-06-01 — "The Marching Orders"
+
+**Schema version:** 64
+**Commit summary:** **Movement-OA flow design plan — docs/plans/movement-oa-flow.md.** User to-do (pre-move OA confirmation modal + per-watcher serial resolution + attack picker + same-team filter + token-management UI overhaul) is a 5-6 commit undertaking that wants up-front design. v2.99.49 only addressed the existing reactive popup's visibility; the full to-do needs a fundamentally different flow (preemptive, serialized, with a new data model). v2.99.50 ships the plan doc + wires it into the wiki per the CLAUDE.md surfacing rules so subsequent commits land against a written contract.
+**Description:** New design doc breaks the to-do into 6 phases — (1) team data model + same-team filter, (2) Token Management UI overhaul, (3) "would-this-trigger-OA?" preview endpoint, (4) pre-move "Continue or Stop?" modal, (5) per-watcher serial resolution + attack picker, (6) multi-token-per-owner sequencing. Each phase has a file-touch table + acceptance criteria. Open questions section covers movement budget accounting, teleport vs walk, death-during-OA, GM-as-mover routing, and reaction-via-`/use_attack` plumbing. Decisions section locks in the major architectural choices (server-side filter, mover-side modal, attack picker via sheet attacks, team on Token not Character).
+
+### Added
+- `docs/plans/movement-oa-flow.md` — the design plan.
+- Allowlist entry `plan-movement-oa-flow` → `docs/plans/movement-oa-flow.md` in `app/routes/wiki_routes.py`.
+- "Movement-OA flow" row in the Design Plans table on `app/templates/wiki.html`.
+- "Movement-OA flow" row in `docs/wiki/README.md`.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_movement_oa_flow_plan` — per-slug serve test.
+
+### Changed
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — assertion list extended with `/wiki/doc/plan-movement-oa-flow`.
+- `docs/test-harness-coverage.md` — total bumped (1 new wiki-serve test).
+
+### Notes
+- **PATCH bump** — docs + wiki-surfacing only. No code changes to runtime endpoints. The to-do's actual implementation lands in v2.99.5x as each phase ships.
+- **Why a plan doc first.** The to-do touches 5 subsystems (token data model, token-management UI, move endpoint, reaction-prompt machinery, attack endpoint) and reverses the OA flow from reactive to preemptive. A written plan up-front gives reviewers (and future me) a contract to land against and avoids the "what was supposed to happen here?" question 3 commits in.
+- **v2.99.49 UX work stays.** The amber pulse / accent stripe / 30s TTL / browser console diagnostics added in v2.99.49 are still the popup contract through Phase 1-3. Phase 4 shifts to a pre-move modal; the existing post-move popup contract continues to cover the war-caster / shield / counterspell / etc. reactions that DON'T involve a pre-move pause.
+- **Wiki surfacing.** All four required edits per CLAUDE.md done in the same commit: allowlist, landing-page table, on-disk index, per-slug harness test + assertion-list extension.
+- Total harness count: 764 (was 763 in v2.99.49).
+
+---
+
 ## [2.99.49] - 2026-06-01 — "The Amber Pulse"
 
 **Schema version:** 64
