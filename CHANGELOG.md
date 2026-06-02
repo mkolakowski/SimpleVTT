@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.36] - 2026-06-01 — "The Sharper Edge"
+
+**Schema version:** 64
+**Commit summary:** **Heightened Spell — close the AoE PC save + `/place_aoe` site wires.** v2.99.35 shipped the single-target `/cast_spell` PC save wire. v2.99.36 extends Heightened to the remaining 2 save-roll construction sites: the AoE PC save loop in `/cast_spell` (the `extra_pc` loop) and the `/place_aoe` PC server-rolled save. Same shape: read `_caster_has_heightened_pending`, swap d20 → 2d20kl1, drop the buff (one-use per RAW). For AoE, the FIRST PC saver in the iteration order gets the disadvantage and the buff drops so subsequent savers roll normally.
+**Description:** Two new wire blocks — one inside the `/cast_spell` AoE PC save loop, one inside the `/place_aoe` PC server-rolled save loop. The `/place_aoe` site also loads the caster Character row once (for the broadcast's name + color) and reuses it across the loop iterations. New harness test exercises AoE Heightened via Zara casting Fireball at Krieger + Pip with Heightened armed — the consume broadcast fires + the buff drops post-cast.
+
+### Added
+- AoE PC save loop wire in `/cast_spell` (line ~13391) — reads caster's pending Heightened buff via `_caster_has_heightened_pending(campaign_id, char.id)`; on True, swaps target's save d20 → 2d20kl1 + drops the buff + emits consume broadcast.
+- `/place_aoe` PC save loop wire (line ~14322) — same shape via `_caster_has_heightened_pending(campaign_id, int(ctx.get("caster_char_id") or 0))`; uses a once-loaded `_caster_char_for_broadcast` for the broadcast naming.
+- `tests/harness/test_use_metamagic_heightened.py::test_heightened_consume_on_aoe_save` — 4th test in the file. Zara casts Fireball at Krieger + Pip with Heightened armed; consume broadcast fires + buff is gone.
+
+### Changed
+- `/place_aoe` — loads `_caster_char_for_broadcast = db.query(Character).filter(...)` once near the top, before the target loop. Used by the v2.99.36 Heightened consume broadcast.
+- The AoE save d20 expression construction now includes a 3-way OR (Danger Sense / race trait / Rage advantage OR Heightened disadvantage OR plain). When the saver has BOTH advantage AND Heightened, the existing kh1 wins per the v2.99.35 simplification + RAW PHB p.173 cancellation note; the buff still drops because the cast consumed it.
+- `docs/plans/class-content-status.md` — Heightened note updated to credit AoE site wiring complete (all 3 save-roll construction sites covered).
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — 2 additional wire sites + 1 new test + a once-loaded Character helper.
+- **RAW "ONE TARGET" simplification.** For AoE save spells, the buff fires on the first PC saver in the iteration order and drops. Subsequent PC savers in the same cast roll normally. A future commit could add a caster-side target picker so the player explicitly chooses which target gets the disadvantage; today the iteration order wins. Filed.
+- **NPC saver heightened.** The 3 save-roll sites wire applies to PC savers only (the construction-time hooks live in the PC branches). NPC savers from `/cast_spell` or `/place_aoe` aren't currently affected by Heightened. Filed — would need a parallel hook in `_resolve_repeated_save_for_buff` or the NPC save resolution path.
+- **Cancellation case.** Advantage-AND-Heightened keeps the kh1 (advantage wins per the existing assertion shape) AND drops the buff. RAW says "advantage and disadvantage cancel" → roll normally. A future commit could restore the 1d20 base in the cancel case; v1 simplification keeps the kh1 to avoid breaking existing race-trait save tests.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 719 (was 718 in v2.99.35).
+
+---
+
 ## [2.99.35] - 2026-06-01 — "The Sharpened Spell"
 
 **Schema version:** 64

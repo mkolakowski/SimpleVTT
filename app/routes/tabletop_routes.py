@@ -13316,6 +13316,25 @@ async def cast_spell(
                 )
                 if _aoe_rage_str_save and not _aoe_ds_base.startswith("2d20kh1"):
                     _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.99.36 — Heightened Spell metamagic on AoE saves.
+                # Same shape as the v2.99.35 single-target wire: read
+                # the caster's pending buff, swap to 2d20kl1 (or skip
+                # the swap when advantage already applied), drop the
+                # buff. RAW "ONE TARGET" — for AoE this fires on the
+                # FIRST PC saver in the iteration order and drops the
+                # buff so subsequent PCs in the same cast roll
+                # normally. Filed: caster-side target picker for
+                # explicit selection.
+                _aoe_heightened_fired = _caster_has_heightened_pending(
+                    campaign_id, int(char.id),
+                )
+                if _aoe_heightened_fired:
+                    if not _aoe_ds_base.startswith("2d20kh1"):
+                        _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kl1", 1)
+                    await _remove_buff(
+                        campaign_id, int(char.id),
+                        "metamagic-heightened-pending",
+                    )
                 _aoe_req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
@@ -13398,6 +13417,11 @@ async def cast_spell(
                 if _aoe_rage_str_save:
                     await _broadcast_rage_str_save_advantage(
                         campaign_id, extra_pc,
+                    )
+                # v2.99.36 — Heightened Spell consume broadcast on AoE.
+                if _aoe_heightened_fired:
+                    await _broadcast_heightened_consumed(
+                        campaign_id, char, extra_pc.name,
                     )
                 auto_save_targets.append({
                     "combatant_id": extra.get("id"),
@@ -14160,6 +14184,17 @@ async def place_aoe(
     # has the source spell to inspect. Empty string falls through
     # to the gate's no-spell-slug branch (returns no-trait).
     spell_slug = str(ctx.get("spell_slug") or "")
+    # v2.99.36 — load the caster Character row once for the
+    # Heightened Spell consume broadcast in the PC save loop. The
+    # save-roll d20 swap reads `_caster_has_heightened_pending` by
+    # char_id alone, but the broadcast wants the name + color.
+    _caster_char_for_broadcast = None
+    try:
+        _caster_char_for_broadcast = db.query(Character).filter(
+            Character.id == int(ctx.get("caster_char_id") or 0),
+        ).first()
+    except Exception:
+        pass
 
     auto_save_targets: list[dict] = []
     # v2.48.5 — track whether we auto-added any NPCs to the battle
@@ -14281,6 +14316,14 @@ async def place_aoe(
             _aoe_pl_rage_str_save = _pc_has_rage_str_save_advantage(
                 campaign_id, int(extra_pc.id), save_ability,
             )
+            # v2.99.36 — Heightened Spell metamagic disadvantage at
+            # /place_aoe PC server-rolled save site. Same one-use
+            # semantics: drop the buff after the swap regardless of
+            # whether the swap visibly fired (advantage cancellation
+            # case).
+            _aoe_pl_heightened = _caster_has_heightened_pending(
+                campaign_id, int(ctx.get("caster_char_id") or 0),
+            )
             if _ds_pc_applies or _aoe_pl_race_applies or _aoe_pl_rage_str_save:
                 expr = f"2d20kh1{pc_mod:+d}"
                 if _ds_pc_applies:
@@ -14294,8 +14337,18 @@ async def place_aoe(
                     await _broadcast_rage_str_save_advantage(
                         campaign_id, extra_pc,
                     )
+            elif _aoe_pl_heightened:
+                expr = f"2d20kl1{pc_mod:+d}"
             else:
                 expr = f"1d20{pc_mod:+d}"
+            if _aoe_pl_heightened:
+                await _remove_buff(
+                    campaign_id, int(ctx.get("caster_char_id") or 0),
+                    "metamagic-heightened-pending",
+                )
+                await _broadcast_heightened_consumed(
+                    campaign_id, _caster_char_for_broadcast, extra_pc.name,
+                )
             # v2.53.0 — Aura of Protection (Paladin Lv 6+). Adds the
             # paladin's CHA mod to ALL saves (not just Dex), so this
             # path appends the bonus regardless of save_ability. The

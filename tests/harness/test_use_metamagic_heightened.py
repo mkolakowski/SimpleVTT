@@ -189,3 +189,77 @@ async def test_heightened_consume_on_save_swaps_to_disadvantage(
         (b or {}).get("key") == "metamagic-heightened-pending"
         for b in zara_buffs_post
     ), f"Heightened buff should be dropped post-consume; got {zara_buffs_post}"
+
+
+# v2.99.36 — AoE save site wire. RAW "ONE TARGET" for AoE: v1
+# fires on the FIRST PC saver and drops the buff. The second PC
+# saver (and any beyond) rolls normally.
+
+
+async def test_heightened_consume_on_aoe_save(
+    gm_client, gm_ws, zara_rested, roster,
+):
+    """Zara arms Heightened, then casts Fireball at Krieger + Pip.
+    The first PC saver (Krieger or Pip) gets disadvantage; the second
+    rolls normally because the buff dropped. Asserts the consume
+    broadcast fires for ONE of the targets + the buff is gone.
+    """
+    zara = zara_rested
+    krieger = roster["Krieger Stonefist"]
+    pip = roster["Pip Quickfingers"]
+    await _seed_battle(gm_client, [_tok(zara), _tok(krieger), _tok(pip)])
+    # Arm Heightened (3 SP).
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_heightened_spell",
+        json={"character_id": zara["id"]},
+    )
+    assert r.status_code == 200, r.text
+
+    gm_ws.mark()
+    # Cast Fireball at primary target Krieger, AoE picks up Pip via
+    # target_combatant_ids. Fireball index for Zara is 11 (Fire
+    # Bolt=0, Mage Hand=1, Minor Illusion=2, Prest=3, Shocking
+    # Grasp=4, Thaumaturgy=5, Shield=6, Magic Missile=7, Burning
+    # Hands=8, Mirror Image=9, Scorching Ray=10, Fireball=11).
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": 11,
+            "slot_level": 3,
+            "class_slug": "sorcerer",
+            "target_combatant_id": f"tok_ht_{krieger['id']}",
+            "target_character_id": krieger["id"],
+            "target_name": krieger["name"],
+            "target_combatant_ids": [
+                f"tok_ht_{krieger['id']}",
+                f"tok_ht_{pip['id']}",
+            ],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    import asyncio as _asy
+    await _asy.sleep(0.2)
+
+    # Heightened consume broadcast fires at least once.
+    fu_msgs = gm_ws.buffered("feature_used")
+    consumed = [
+        m for m in fu_msgs
+        if (m.get("data") or {}).get("source") == "metamagic-heightened-spell"
+        and (m.get("data") or {}).get("character_id") == zara["id"]
+    ]
+    assert consumed, (
+        f"expected at least one Heightened consume broadcast; "
+        f"buffered: {[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+
+    # Buff dropped post-consume.
+    zara_buffs_post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "metamagic-heightened-pending"
+        for b in zara_buffs_post
+    ), f"Heightened buff should be dropped post-AoE-consume; got {zara_buffs_post}"
