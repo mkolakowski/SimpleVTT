@@ -2190,6 +2190,12 @@ def _sorcerer_sheet(name: str) -> dict:
             # v2.49.63 — Sleep. RAW on the Sorcerer spell list. Routed
             # via /cast_sleep with class_slug="sorcerer".
             {"name": "Sleep", "level": 1, "prepared": True, "_slug": "sleep", "casting_time": "1 action"},
+            # v2.99.35 — Hold Person. RAW Sorcerer L2 spell, WIS save
+            # → Paralyzed condition. Demo fixture for Heightened
+            # Spell metamagic — Zara casts Hold Person with
+            # Heightened armed at a target, the target's first save
+            # rolls at disadvantage (2d20kl1).
+            {"name": "Hold Person", "level": 2, "prepared": True, "_slug": "hold-person", "casting_time": "1 action"},
         ],
         # Lv 5 Sorcerer slots per the Sorcerer table.
         "spell_slots": {
@@ -2301,16 +2307,26 @@ def _sorcerer_sheet(name: str) -> dict:
                 "name": "Distant Spell (metamagic)",
                 "desc": "Spend 1 sorcery point: double the range of a spell with range ≥ 5 ft, OR extend a Touch spell to 30 ft. v1: announce-only — GM applies the extended range at cast time.",
             },
+            # v2.99.35 — Heightened Spell. 3 SP flat. Mechanical:
+            # arms a `metamagic-heightened-pending` buff on the
+            # caster; the next save-roll construction site reads the
+            # buff + swaps the target's d20 → 2d20kl1 (disadvantage)
+            # AND drops the buff (one-use). PHB p.102.
+            {
+                "key": "heightened-spell",
+                "name": "Heightened Spell (metamagic)",
+                "desc": "Spend 3 sorcery points: when you cast a save-spell, ONE target rolls its first save with disadvantage. Auto-consumed on the next save-roll resolution.",
+            },
         ],
         # Sorcerer's Metamagic at Lv 3 picks 2 options. Zara's picks:
-        # Quickened Spell (v2.6.0) + Empowered Spell (v2.49.124) +
-        # Twinned Spell (v2.99.33) + Distant Spell (v2.99.34). 4
-        # picks total despite RAW Lv 3 = 2 known (Lv 10 + 17 add 1
-        # more each) — demo expansion houserule so the test fixture
-        # exercises the full metamagic stack as it ships.
+        # Quickened (v2.6.0) + Empowered (v2.49.124) + Twinned
+        # (v2.99.33) + Distant (v2.99.34) + Heightened (v2.99.35).
+        # 5 picks despite RAW Lv 3 = 2 known — demo expansion
+        # houserule so the test fixture exercises the full
+        # metamagic stack as it ships.
         "_metamagic_options": [
             "quickened-spell", "empowered-spell",
-            "twinned-spell", "distant-spell",
+            "twinned-spell", "distant-spell", "heightened-spell",
         ],
         # Draconic Bloodline subclass picks an ancestor at Lv 1.
         # Red = fire (matches Tiefling's flame motif + Hellish

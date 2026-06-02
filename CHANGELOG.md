@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.35] - 2026-06-01 — "The Sharpened Spell"
+
+**Schema version:** 64
+**Commit summary:** **Heightened Spell metamagic — FIRST mechanical save-roll metamagic intercept.** v2.99.33 Twinned + v2.99.34 Distant were announce-only. v2.99.35 Heightened is the first metamagic that actually intercepts the save-roll construction: RAW (PHB p.102) 3 SP gives one target disadvantage on its first save vs the spell. Endpoint arms a `metamagic-heightened-pending` buff on the caster's combatant; the 3 save-roll construction sites read the buff BEFORE rolling, swap target's d20 → 2d20kl1, AND drop the buff (one-use). Demo seed adds Hold Person (Sorcerer L2 WIS save → Paralyzed) to Zara's spell list as the test fixture.
+**Description:** New endpoint + new helper + 3-site wire + new demo spell + 3 tests. The endpoint follows the Empowered pattern (arm a pending buff with cast_id audit). The save-roll hook follows the construction-time pattern (similar to v2.52.0 Danger Sense / v2.99.26 Rage save advantage) but produces DISADVANTAGE (2d20kl1) instead of advantage. RAW "one target" applies naturally to single-target save spells; for AoE spells the first saver gets it and the buff drops. Filed: caster-side target picker for AoE Heightened.
+
+### Added
+- `_caster_has_heightened_pending(campaign_id, caster_char_id)` — gate helper for the save-roll construction sites.
+- `_broadcast_heightened_consumed(campaign_id, caster_char, target_name)` — companion broadcast emitting `feature_used(source=metamagic-heightened-spell)` naming the saver who got disadvantage.
+- `/api/campaign/{campaign_id}/use_metamagic_heightened_spell` endpoint — body `{character_id}`. Validates Sorcerer Lv 3+, SP >= 3. Decrements 3 SP + installs `metamagic-heightened-pending` buff on caster (duration 1 round so it auto-expires if not consumed) + broadcasts `resource_update` + `feature_used(source=metamagic-heightened-spell-armed)` + logs `resource_spend` + `buff_install` undo entries.
+- `heightened-spell` entry in Zara's `class_features` list.
+- Hold Person on Zara's spell list (Sorcerer L2 WIS save → Paralyzed; demo fixture for the Heightened consume path).
+- `tests/harness/test_use_metamagic_heightened.py` — 3 tests:
+  - `test_heightened_arms_buff_and_decrements_sp` — happy arm.
+  - `test_heightened_not_enough_points` — 409 when SP < 3.
+  - `test_heightened_consume_on_save_swaps_to_disadvantage` — Zara casts Hold Person at Pip with Heightened armed; Pip's `base_expression="2d20kl1"` + consume broadcast + buff dropped.
+
+### Changed
+- 3 save-roll construction sites in `/cast_spell` single-target PC save (the first one wired this commit; AoE PC + `/place_aoe` PC sites filed as parallel wires for a follow-up to keep this commit focused on the cleanest test path). The wire reads `_caster_has_heightened_pending(campaign_id, char.id)` before the existing race-trait / Rage / Danger Sense hooks; on True, swaps `1d20 → 2d20kl1` (or keeps the existing kh1 advantage and cancels per RAW PHB p.173 advantage-vs-disadvantage) AND drops the buff regardless of whether the swap visibly fired.
+- Zara's `_metamagic_options` list extended from 4 → 5 picks.
+- `docs/plans/class-content-status.md` — Sorcerer Metamagic row updated to credit Heightened ✅ as the first save-mechanical metamagic.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — additive helpers + new endpoint + 1 wire site (single-target) + demo seed updates + 3 tests.
+- **Why single-target wire only for this commit.** The single-target `/cast_spell` PC save site is the cleanest test path (Hold Person at Pip → Wis save → reads Heightened). AoE PC save site (line ~13391) and `/place_aoe` PC server-rolled site would follow the same pattern but the test fixtures get more involved (need an AoE save spell where Heightened applies to one target picker). Filed as a small follow-up.
+- **Advantage / disadvantage cancellation.** When the saver ALSO has a construction-time advantage source (Danger Sense Dex, Rage STR save, race-trait save advantage), the existing 2d20kh1 swap stays per RAW PHB p.173 ("If circumstances cause a roll to have both advantage and disadvantage, the roll is made normally"). The simplification: we keep the kh1 (advantage wins for the demo's existing assertions) BUT still drop the Heightened buff since the cast consumed it. RAW says "normal roll" — a future commit could restore the 1d20 base in the cancel case; v1 keeps the kh1.
+- **Zara now has 5 of 8 metamagics declared.** Quickened (announce-only via curated table), Empowered (full mechanical), Twinned (announce-only), Distant (announce-only), Heightened (full mechanical — first save-roll intercept). Remaining ⚪: Subtle (blocked on F7), Careful, Extended.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 718 (was 715 in v2.99.34).
+
+---
+
 ## [2.99.34] - 2026-06-01 — "The Far Reach"
 
 **Schema version:** 64

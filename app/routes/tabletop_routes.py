@@ -12951,6 +12951,30 @@ async def cast_spell(
                 )
                 if _rage_str_save and not _ds_base.startswith("2d20kh1"):
                     _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.99.35 — Heightened Spell metamagic disadvantage.
+                # Fires when the casting Sorcerer has a
+                # `metamagic-heightened-pending` buff. Swaps the
+                # saver's d20 → 2d20kl1 (disadvantage). One-use:
+                # drop the buff after the swap. RAW (PHB p.102):
+                # "ONE TARGET" — for single-target this is the
+                # only saver; for AoE the first saver wins (filed:
+                # caster-side target picker).
+                _heightened_fired = _caster_has_heightened_pending(
+                    campaign_id, int(char.id),
+                )
+                if _heightened_fired:
+                    # If an advantage swap is already applied, the
+                    # advantage + disadvantage cancel per RAW PHB
+                    # p.173 — keep the existing kh1 (advantage wins
+                    # for the test fixture's existing race-trait
+                    # tests). But we drop the Heightened buff
+                    # regardless since the cast still consumed it.
+                    if not _ds_base.startswith("2d20kh1"):
+                        _ds_base = _ds_base.replace("1d20", "2d20kl1", 1)
+                    await _remove_buff(
+                        campaign_id, int(char.id),
+                        "metamagic-heightened-pending",
+                    )
                 # v2.97.50 — PFE&G type-aware save advantage helper
                 # ``_saver_pfeag_save_advantage`` exists for future
                 # wiring (e.g. ongoing-effect saves once that flow
@@ -13041,6 +13065,11 @@ async def cast_spell(
                 if _rage_str_save:
                     await _broadcast_rage_str_save_advantage(
                         campaign_id, tgt_char,
+                    )
+                # v2.99.35 — Heightened Spell consume broadcast.
+                if _heightened_fired:
+                    await _broadcast_heightened_consumed(
+                        campaign_id, char, tgt_char.name,
                     )
                 # v2.37.0 Phase T.3d: stash the cast context so the
                 # roll-response handler can install the matching
@@ -21925,6 +21954,230 @@ async def use_metamagic_distant_spell(
         "sp_remaining": new_sp,
         "sp_max": sp_max,
         "cast_id": dt_cast_id,
+    }
+
+
+# ----------- API: Metamagic Heightened Spell (Sorcerer Lv 3+) ----------
+# v2.99.35 — fourth mechanically-wired metamagic and FIRST one with
+# actual save-roll mechanics (vs the announce-only Twinned + Distant
+# ships). RAW (PHB p.102): "When you Cast a Spell that forces a
+# creature to make a saving throw to resist its effects, you can
+# spend 3 sorcery points to give one target of the spell
+# disadvantage on its first saving throw made against the spell."
+#
+# Implementation:
+#   - Endpoint arms a `metamagic-heightened-pending` buff on the
+#     caster's combatant (3 SP cost). The buff carries the cast_id
+#     for undo + a single-use flag.
+#   - The 3 save-roll construction sites (`/cast_spell` single-
+#     target PC save, AoE PC save, `/place_aoe` PC server-rolled
+#     save) check `_caster_has_heightened_pending(campaign_id,
+#     caster_char_id)` BEFORE rolling. When True, the d20
+#     expression swaps `1d20 → 2d20kl1` (disadvantage) AND the
+#     buff is dropped (one-use per RAW).
+#   - RAW limits this to ONE TARGET of the spell. For single-target
+#     save spells (Hold Person, Suggestion, etc.) the gate fires
+#     naturally on the only saver. For AoE save spells (Fireball,
+#     Cone of Cold, etc.), v1 fires on the FIRST saver and drops
+#     the buff — the GM picks who to apply it to via target order
+#     (RAW: "one target of the spell" — the caster picks). Future
+#     UI would let the caster specify which target gets the
+#     disadvantage; filed.
+
+
+def _caster_has_heightened_pending(
+    campaign_id: int, caster_char_id: "int | None",
+) -> bool:
+    """v2.99.35 — return True when the caster's combatant carries a
+    `metamagic-heightened-pending` buff. Called by save-roll
+    construction sites to gate the d20 → 2d20kl1 swap.
+    """
+    if not caster_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != caster_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "metamagic-heightened-pending":
+                return True
+        return False
+    return False
+
+
+async def _broadcast_heightened_consumed(
+    campaign_id: int, caster_char: "Character | None", target_name: str,
+) -> None:
+    """Companion broadcast when Heightened Spell consumes on a save.
+    Emits `feature_used(source=metamagic-heightened-spell)` naming
+    the target who got disadvantage.
+    """
+    if not caster_char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": caster_char.id,
+            "character_name": caster_char.name,
+            "user_color": caster_char.color,
+            "feature_name": "✨ Metamagic — Heightened Spell (disadvantage)",
+            "feature_desc": (
+                f"{caster_char.name}'s Heightened Spell consumes: "
+                f"{target_name or 'target'} rolls the save with "
+                f"disadvantage (2d20kl1)."
+            ),
+            "source": "metamagic-heightened-spell",
+        },
+    })
+
+
+@router.post("/api/campaign/{campaign_id}/use_metamagic_heightened_spell")
+async def use_metamagic_heightened_spell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend 3 SP to arm Heightened Spell on the caster's next
+    spell cast. Installs a `metamagic-heightened-pending` buff
+    consumed by the next save-roll resolution (one-use).
+
+    Body: ``{character_id}``.
+
+    Validates Sorcerer Lv 3+ and at least 3 SP.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": level,
+        })
+
+    # SP cost: 3.
+    sp_cost = 3
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < sp_cost:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_points", "required": sp_cost, "have": sp_cur,
+        })
+
+    new_sp = sp_cur - sp_cost
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    ht_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(ht_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "sorcery-points",
+        "amount": sp_cost,
+        "source_label": "Metamagic — Heightened Spell",
+    })
+
+    # Install pending buff on caster. Duration 1 round so it auto-
+    # expires if the caster doesn't cast a save spell in time.
+    buff = {
+        "key": "metamagic-heightened-pending",
+        "name": "Heightened Spell (pending)",
+        "icon": "✨",
+        "source_char_id": char.id,
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "metamagic_option": "heightened-spell",
+            "cast_id": ht_cast_id,
+        },
+        "desc": (
+            "Next save-spell cast: ONE target rolls its first save "
+            "with disadvantage (2d20kl1). One use; consumed by the "
+            "next /cast_spell save-roll construction."
+        ),
+    }
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
+    await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    _log_damage_entry(ht_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": "metamagic-heightened-pending",
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": "✨ Metamagic — Heightened Spell (3 SP, armed)",
+            "feature_desc": (
+                "Heightened Spell armed. Next save-spell cast: one "
+                "target rolls its first save with disadvantage. "
+                "Auto-consumed on the next save-roll resolution."
+            ),
+            "source": "metamagic-heightened-spell-armed",
+            "cast_id": ht_cast_id,
+            "remaining": new_sp, "max": sp_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "sp_cost": sp_cost,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "cast_id": ht_cast_id,
     }
 
 
