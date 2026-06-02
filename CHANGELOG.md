@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.51] - 2026-06-01 — "The Ranked Backlog"
+
+**Schema version:** 64
+**Commit summary:** **Docs pass — CLAUDE.md "what's next" rule update + TODO.md priority legend.** User-requested update to the `Offer "what's next" as multiple-choice questions` rule: remove the "Single-option follow-ups — just state in prose" exclusion and add a positive inclusion that surfaces top-priority to-do items as the recommended option even when there's only one obvious next step. Adds a four-tier priority legend (🔥 IN PROGRESS / 🔴 P1 / 🟡 P2 / 🟢 P3) to `TODO.md`'s "Manually Added" backlog so the assistant has a concrete signal for "what's top priority?" when wrapping a commit.
+**Description:** Two-file docs commit. `CLAUDE.md` line ~159: moves the single-option-follow-ups bullet from "When NOT to use it" to "When to use it" with the new spec — surface the top-priority `TODO.md` item as the `(Recommended)` option, alongside 1–3 alternatives (lower-priority items, scope tweaks, or "plan it first"). `TODO.md`: new "Priority legend" section at the top + per-item tags on every entry in the "Manually Added" section. The plan-movement-oa-flow ship is marked `🔥 IN PROGRESS` and tied to its design doc; the OA-related to-do bullets are restructured under it as phase callouts.
+
+### Added
+- `TODO.md` priority legend section + per-item P-tags on the Manually Added backlog.
+- Phase callouts on the OA to-do bullets that map each requirement to the plan-movement-oa-flow.md phase it lands in.
+
+### Changed
+- `CLAUDE.md` "Offer 'what's next' as multiple-choice questions" rule: moved single-option follow-ups from the "When NOT to use" list to the "When to use" list with a new requirement — frame them as multi-choice with the top-priority `TODO.md` item as `(Recommended)`.
+
+### Notes
+- **PATCH bump** — docs only. No runtime code changes. No new tests.
+- **Why move the rule.** The user observed that a strict "no single-option multi-choice" gate produced prose-style "next up: X" follow-ups that forced them to retype to redirect. Multi-choice with one recommended + 1-3 redirects costs one extra click for a confirm, but saves a retype every time they want to pivot. Same UX rationale as the original rule.
+- **Priority tags scope.** Tags landed on the "Manually Added" section only — the rest of `TODO.md` (Touch Target Remediation, Character Sheet, GM Tools, etc.) is already organized by section header + insertion order which conveys natural priority for those domains. The legend note at the top calls this scope explicitly.
+- **No total-test bump.** Total stays 764.
+
+---
+
 ## [2.99.50] - 2026-06-01 — "The Marching Orders"
 
 **Schema version:** 64

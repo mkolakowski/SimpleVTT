@@ -162,10 +162,10 @@ When wrapping a commit, presenting candidates for the next piece of work, or sur
 - When the user has said "what's next?" or similar, and there's more than one reasonable next step.
 - When you're about to pick between multiple implementation approaches and want explicit guidance (e.g. "Phase A only" vs. "Full F8" vs. "Phase A + B").
 - Whenever you'd otherwise write a closing paragraph like "What's next? Candidates queued: ..." or "Say the word for any of these: ...".
+- Single-option follow-ups that surface the top-priority item from [`TODO.md`](TODO.md) — even when there's only one obvious next step, frame it as a multi-choice with the to-do's top-priority item as the recommended option (suffix `(Recommended)`) and 1–3 alternatives (lower-priority to-do items, a "different scope" tweak, or "plan it first"). The picker gives the user a 1-click confirm AND a redirect path, where prose would force them to retype.
 
 **When NOT to use it:**
 
-- Single-option follow-ups (no choice to make — just state the next step in prose).
 - Confirmations that don't have alternatives ("Should I commit?" — just commit per the per-commit rule).
 - Clarifying questions where the option space isn't enumerable (those stay as free-form text).
 - When the user has already chosen what's next and you're mid-implementation.

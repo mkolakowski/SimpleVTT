@@ -1,6 +1,17 @@
 # SimpleVTT — Planned Features
 
-Backlog of features to implement. Not prioritized — order is arbitrary.
+Backlog of features to implement.
+
+**Priority legend (Manually Added section only; other sections are time-ordered by header):**
+
+| Tag | Meaning |
+|-----|---------|
+| `🔥 IN PROGRESS` | Actively being shipped (a plan doc + ongoing commits exist). |
+| `🔴 P1` | High priority — bugs, regressions, top-of-the-list features the user has explicitly asked for. |
+| `🟡 P2` | Medium priority — substantial features that are planned but not blocking anyone. |
+| `🟢 P3` | Low priority — polish / cosmetic / nice-to-have UX tweaks. |
+
+When the assistant offers a single-option "what's next?" via `AskUserQuestion` after a commit, the **top-priority** item (highest P-level, or the IN PROGRESS phase) should be the **(Recommended)** option per the rule in [`CLAUDE.md`](CLAUDE.md#offer-whats-next-as-multiple-choice-questions).
 
 ---
 
@@ -75,60 +86,67 @@ Two additional buttons use slightly different padding and may need individual re
 ---
 
 ## Manually Added
-- Bug: Un-do button does not refund spell slot
+
+- 🔥 **IN PROGRESS** — GM and player does not get popup notification that opportunity attack can be used. **Design doc: [`docs/plans/movement-oa-flow.md`](docs/plans/movement-oa-flow.md)** (added v2.99.50). Ships phase-by-phase:
+    - Phase 1: Team data model + same-team filter
+    - Phase 2: Token Management UI overhaul (edit button, pills, remove upload art)
+    - Phase 3: "would-this-trigger-OA?" preview endpoint
+    - Phase 4: Pre-move "Continue or Stop?" modal
+    - Phase 5: Per-watcher serial resolution + attack picker (with feat-spell options)
+    - Phase 6: Multi-token-per-owner sequencing
+    - Notification flow (covered by Phase 4 + 5):
+        - Pause movement and popup notification
+        - User moving token gets popup asking if they want to continue movement as they will trigger an attack of opportunity
+            - player chooses to stop → token stops + doesn't move out of the spot that leaving would trigger the OA + end flow
+            - player chooses to move → owner of the token(s) receives a notification per token, if they have a reaction, to either roll the attack or skip
+                - Attacking choice lists eligible attacks (some feats will let spells be used) and if the player chooses an attack, executes it as the OA
+                    - if player survives → allow movement until next OA contest, as range allows
+                - If skip chosen → allow movement until next OA contest, as range allows
+    - if multiple tokens would get OAs they will need to all be resolved before the player can continue movement (Phase 5)
+    - if one owner has multiple tokens that would need to make OAs, finish one flow before showing the next (Phase 6)
+    - Do not prompt for OAs for tokens on the same "team" (Phase 1)
+        - GM to specify using a toggle inside token management to assign "hero" or "villain" team groups vs the existing players and GM/NPC (Phase 1 + 2)
+        - add edit button next to refresh and expose dropdown to change ownership and team per line item (Phase 2)
+            - when not editing, show these new fields as pills before the buttons (Phase 2)
+            - when not editing do not show player assignment dropdown (Phase 2)
+        - remove upload art from token management (Phase 2)
+- 🔴 **P1** — Bug: Un-do button does not refund spell slot
     - should also audit and remediate any instances where a feature/item/other is consumed and not refunded
-- Bug investigation: NPCs unable to use action buttons, IE strike button on Dagger for vex
+- 🔴 **P1** — Bug investigation: NPCs unable to use action buttons, IE strike button on Dagger for vex
     - Players seem to work as expected
-- Feature: plan three ways that we can allow users to up-cast spells
-    - IE, Magic missle at level 3
+- 🟡 **P2** — Feature: plan three ways that we can allow users to up-cast spells
+    - IE, Magic missile at level 3
     - Note: will need an audit of spells to see how up-casting them will affect how the spell is handled
-- Feature: Framework that will allow then to use features like luck by clicking a button inside the roll log card they want to re-roll
-    - button to only be visable to GM and PC owner
+- 🟡 **P2** — Feature: Framework that will allow then to use features like luck by clicking a button inside the roll log card they want to re-roll
+    - button to only be visible to GM and PC owner
     - Add confirmation to confirm usage
-    - Should "grey out" if the PC/NPC does not have use of the feature and should not be visable if no features avaliabe
-- Feature: More pills in the roll log for spells
-    - Move spell type, range, action type and details to pills
-        - details should be an expanding pill
-         pills should be differnt color than damage pills
-- Move the Title of the campain, to the center of the window and please place it in a "pill" that has the "glass effects"
-- Remove badge system tt-topbar-badge and "muted tt-topbar-gm from the tt-topbar
-- Allow the map and roll log (when on the left) to move over the tt-topbar but not over the title of the campain or the ruler, roll log, battle, charaters, tools buttons
-- change the the logout button under tools > quick links to reverse how its animated (better for backgrounds)
-- Update the Dice roller to have the same glass effects
-- when roll log is on left, do not make dissapear when gm requests roll and gm rolls for player
-    - example: GM uses gm roller to push a INT Sace with the DC of 20 for both demo charaters, GM rolls as Pip, roll log collapses after the roll animation completes
-- update all of roll log to look like spells
-- GM does not get momvement popup when moving tokens past range
-- Aoe updates
-    - Aoe spells that are concentration or have a duration, place a visual indacator of the spell
-        - notable complications, 
-            - Spirit guaridan: aoe will need to be bound to player token and tokens on the same team should not be targeted
-            - Moonbeam: after placement, is concentration, as long as there is duratioon and the caster has not lost concentration, display the moon beam and allow the player to move it per the range in the spell, once per turn
-    - aoe spells that are a single turn, like fire ball, leave a pulse to indacate the aoe to the playters, should happen for a few seconds
-- add feature to lock player and npc movement
+    - Should "grey out" if the PC/NPC does not have use of the feature and should not be visible if no features available
+- 🟡 **P2** — when roll log is on left, do not make disappear when gm requests roll and gm rolls for player
+    - example: GM uses gm roller to push a INT Save with the DC of 20 for both demo characters, GM rolls as Pip, roll log collapses after the roll animation completes
+- 🟡 **P2** — GM does not get movement popup when moving tokens past range
+- 🟡 **P2** — AoE updates
+    - AoE spells that are concentration or have a duration, place a visual indicator of the spell
+        - notable complications,
+            - Spirit Guardians: aoe will need to be bound to player token and tokens on the same team should not be targeted
+            - Moonbeam: after placement, is concentration, as long as there is duration and the caster has not lost concentration, display the moonbeam and allow the player to move it per the range in the spell, once per turn
+    - AoE spells that are a single turn, like Fireball, leave a pulse to indicate the AoE to the players, should happen for a few seconds
+- 🟡 **P2** — Add feature to lock player and NPC movement
     - add toggle in encounter
-    - add option in campain settings to make the toggle default on or off in the encounter interface
+    - add option in campaign settings to make the toggle default on or off in the encounter interface
     - player and GM to get popup notifying that movement is locked
-        - Player can reguest from GM to allow movement
+        - Player can request from GM to allow movement
             - GM can approve or deny
         - GM popup will ask to confirm movement
-- GM and player does not get popup notification that opportuniry attack can be used
-    - Notification flow:
-        - Pause movement and popup notification
-        - User moveing token to get popup asking if they want to continue movement as they will trigger an attack of opprotunity
-            - player chooses to stop movinge, the players token will stop and not move out of the spot that leaving would trigger the attack of opprotunity and end flow
-            - player chooses to move, the owner of the token(s) will recieve a notification per token, if they have a reaction, to either roll the attack or skip
-                - Attacking choice will list the eligible attacks (some feats will let spells be used) and if the player choosed an attack execute it as the attack of opprotunity
-                    - if player survives, allow movement until next attack of opprotunity contest, as range allows
-                - If skip chosen, allow movement until next attack of opprotunity contest, as range allows
-    - if multiple tokens would get attacks of opprotinity they will need to all be resolved before the player can continue movement
-    - if one owner has multiple tokens that would need to make attacks of opprotunity, finish one flow before showing the next
-    - Do not prompt for attaks of opprotunity for tokens on the same "team"
-        - GM to specify using a toggle inside token managment to assign "hero" or "villian" team groups vs the existing players and GM/NPC
-        - add edit button next to refresh and expose dropdown to change ownership and team per line item
-            - when not editing, show these new fields as pills before the buttons
-            - when not editing do not show player assignment dropdown
-        - remove upload art from token management
+- 🟢 **P3** — Feature: More pills in the roll log for spells
+    - Move spell type, range, action type and details to pills
+        - details should be an expanding pill
+        - pills should be different color than damage pills
+- 🟢 **P3** — Move the Title of the campaign, to the center of the window and please place it in a "pill" that has the "glass effects"
+- 🟢 **P3** — Remove badge system tt-topbar-badge and "muted tt-topbar-gm" from the tt-topbar
+- 🟢 **P3** — Allow the map and roll log (when on the left) to move over the tt-topbar but not over the title of the campaign or the ruler, roll log, battle, characters, tools buttons
+- 🟢 **P3** — Change the logout button under tools > quick links to reverse how its animated (better for backgrounds)
+- 🟢 **P3** — Update the Dice roller to have the same glass effects
+- 🟢 **P3** — Update all of roll log to look like spells
 
 
 
