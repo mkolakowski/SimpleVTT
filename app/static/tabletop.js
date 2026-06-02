@@ -3378,6 +3378,124 @@
         _commitTokenMove(tok, origX, origY, sx, sy);
     });
 
+    /* v2.99.69 — pre-move Dash modal. Shown BEFORE the v2.99.55 OA
+     * modal when the planned move would provoke an OA. The Dash
+     * decision is independent of the OA: Dash extends movement but
+     * doesn't prevent the OA (RAW: Disengage prevents OA — not
+     * surfaced yet; filed for follow-up). Buttons: Take Dash /
+     * Skip Dash / Cancel. After the decision the OA modal chains
+     * automatically. Cancel snaps the token back without showing
+     * either downstream prompt.
+     */
+    function _showPreMoveDashModal({
+        tokenLabel, triggers, distanceFt, onChoice, onCancel,
+    }) {
+        const backdrop = document.createElement('div');
+        backdrop.setAttribute('style', [
+            'position:fixed', 'inset:0',
+            'background:rgba(0,0,0,0.45)',
+            'z-index:2147483600',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'padding:16px',
+            'animation:reactionPopIn 180ms ease-out',
+        ].join(';'));
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-label', 'Dash before opportunity attack');
+
+        const card = document.createElement('div');
+        card.setAttribute('style', [
+            'background:#1f2433',
+            'background:color-mix(in srgb, var(--bg, #1f2433) 88%, transparent)',
+            'backdrop-filter:blur(8px)',
+            '-webkit-backdrop-filter:blur(8px)',
+            'border:1px solid var(--border, rgba(255,255,255,0.18))',
+            'border-left:4px solid #66bb6a',
+            'border-radius:10px',
+            'padding:18px 20px',
+            'color:var(--fg, #fff)',
+            'font-size:13px',
+            'max-width:440px', 'width:100%',
+            'box-shadow:0 10px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(102,187,106,0.18)',
+        ].join(';'));
+
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:14px; font-weight:600; margin-bottom:6px;';
+        header.textContent = '🏃 Take the Dash action?';
+        card.appendChild(header);
+
+        const summary = document.createElement('p');
+        summary.style.cssText = 'margin:0 0 10px 0; font-size:12px; opacity:0.85; line-height:1.4;';
+        const distTxt = distanceFt > 0 ? ' (~' + distanceFt + ' ft)' : '';
+        const provokers = (triggers || [])
+            .map(t => t.watcher_name || 'a hostile')
+            .filter((v, i, a) => a.indexOf(v) === i)
+            .join(', ');
+        summary.innerHTML = (
+            'This move' + distTxt + ' will provoke an Opportunity Attack '
+            + 'from <strong>' + (provokers || 'a hostile') + '</strong>. '
+            + 'Dash extends your turn movement so you can finish the escape; '
+            + 'the OA will still fire either way.'
+        );
+        card.appendChild(summary);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:8px; justify-content:flex-end; margin-top:6px; flex-wrap:wrap;';
+
+        function _btn(label, style, onClick) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.setAttribute('style', [
+                'min-height:44px', 'padding:6px 14px',
+                'border-radius:6px', 'cursor:pointer', 'font-size:13px',
+                'border:1px solid var(--border, rgba(255,255,255,0.22))',
+            ].join(';') + ';' + style);
+            b.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                document.removeEventListener('keydown', _onKey);
+                backdrop.remove();
+                onClick();
+            });
+            return b;
+        }
+        btnRow.appendChild(_btn(
+            '✋ Cancel move',
+            'background:rgba(255,255,255,0.04); color:var(--fg);',
+            onCancel,
+        ));
+        btnRow.appendChild(_btn(
+            'Skip Dash',
+            'background:rgba(255,255,255,0.06); color:var(--fg);',
+            () => onChoice(false),
+        ));
+        btnRow.appendChild(_btn(
+            '🏃 Take Dash',
+            'background:#66bb6a; color:#1f2433; font-weight:600; border-color:#43a047;',
+            () => onChoice(true),
+        ));
+        card.appendChild(btnRow);
+
+        backdrop.addEventListener('click', (ev) => {
+            if (ev.target === backdrop) {
+                document.removeEventListener('keydown', _onKey);
+                backdrop.remove();
+                onCancel();
+            }
+        });
+        function _onKey(ev) {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                document.removeEventListener('keydown', _onKey);
+                backdrop.remove();
+                onCancel();
+            }
+        }
+        document.addEventListener('keydown', _onKey);
+
+        backdrop.appendChild(card);
+        document.body.appendChild(backdrop);
+    }
+
     /* v2.99.55 — plan-movement-oa-flow Phase 4 pre-move modal. Built
      * inline rather than via the showMovementOverrunModal helper
      * because the trigger semantics are different (movement-overrun
@@ -3586,12 +3704,35 @@
             // is the safety net.
         }
         if (_oaTriggers.length > 0) {
-            _showPreMoveOaModal({
+            // v2.99.69 — sequential Dash → OA modals. When the move
+            // would provoke OA, first ask the dragger if they want
+            // to take the Dash action (extends movement; doesn't
+            // prevent OA per RAW — Disengage does, filed for a
+            // follow-up). After the Dash decision, chain to the
+            // existing OA Continue/Stop modal.
+            _showPreMoveDashModal({
                 tokenLabel: token.label || 'Token',
                 triggers: _oaTriggers,
                 distanceFt: _previewDistanceFt,
-                onContinue: () => postMove(true),
-                onStop: snapBack,
+                onChoice: (tookDash) => {
+                    if (tookDash && typeof window._getActiveCombatant === 'function'
+                            && typeof window._dashCombatant === 'function') {
+                        const active = window._getActiveCombatant();
+                        if (active) {
+                            try { window._dashCombatant(active); } catch (e) {
+                                console.warn('[oa-dash] _dashCombatant failed', e);
+                            }
+                        }
+                    }
+                    _showPreMoveOaModal({
+                        tokenLabel: token.label || 'Token',
+                        triggers: _oaTriggers,
+                        distanceFt: _previewDistanceFt,
+                        onContinue: () => postMove(true),
+                        onStop: snapBack,
+                    });
+                },
+                onCancel: snapBack,
             });
             return;
         }

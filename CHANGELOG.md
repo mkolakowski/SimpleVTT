@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.69] - 2026-06-02 — "Dash, Then Duck" — sequential Dash → OA pre-move modals
+
+**Schema version:** 65
+**Commit summary:** **Insert a Dash decision modal BEFORE the existing OA Continue/Stop pre-move modal.** User report: "when moving away from a hostile, the first prompt should be triggered from the dash action popup, and if they choose to use dash then popup the OA popup". v2.99.69 wires sequential modals: when the planned move would provoke an OA, the dragger first sees a green-accented Dash modal asking "🏃 Take the Dash action?" with three buttons (Take Dash / Skip Dash / Cancel). After the Dash decision (whether they take it or skip it), the existing amber-accented OA modal chains automatically asking "Continue / Stop" for the OA provoke. Cancel on the Dash modal snaps the token back without ever showing the OA modal. Per the user's chosen interpretation: "OA fires regardless of Dash choice — Dash extends movement, Disengage prevents OA (filed for a follow-up)".
+**Description:** Single-file change in `app/static/tabletop.js`. New `_showPreMoveDashModal({tokenLabel, triggers, distanceFt, onChoice, onCancel})` helper rendered with a green-accented glass card (border-left:#66bb6a) to visually distinguish it from the amber OA modal. The `_commitTokenMove` OA branch now opens the Dash modal first and chains the OA modal in the onChoice callback. When the user picks "Take Dash" the existing `window._dashCombatant(active)` helper is invoked (marks action chip + adds `speed_walk` to `dash_bonus_ft`) so the breadcrumb's effective movement cap reflects the Dash on the next render.
+
+### Added
+- `_showPreMoveDashModal` in `app/static/tabletop.js` — green-accented glass-card modal asking "Take the Dash action?" with three buttons: ✋ Cancel move / Skip Dash / 🏃 Take Dash. Esc + backdrop click cancel the move.
+- Sequential chain in `_commitTokenMove`: when `_oaTriggers.length > 0`, open Dash modal first. Both Take/Skip → chain into the existing v2.99.55 OA modal. Take Dash also marks `economy.action = true` + extends `dash_bonus_ft` via `window._dashCombatant`. Cancel from the Dash modal short-circuits the chain (no OA modal, snap-back).
+
+### Notes
+- **PATCH bump** — UI-only additive flow. No server change, no API change, no schema change. Skipping Dash takes the same code path as the pre-v2.99.69 direct-to-OA flow.
+- **Disengage NOT yet offered.** RAW prevents OA via Disengage (a separate action). The user's chosen interpretation says "Dash extends movement, Disengage prevents OA". Adding Disengage as a fourth button on the Dash modal (or as its own modal) is filed for a follow-up — the v2.99.69 modal is scoped to the user's exact ask (Dash → OA sequential).
+- **Why not collapse to one modal?** The user explicitly picked "Sequential modals (Dash → OA)" over the "One combined modal" alternative. Two modals also keep each decision focused; combining would either hide the OA-provoker list behind Dash-decision copy or vice versa.
+- **The Dash modal doesn't fire on non-OA moves.** It's gated on `_oaTriggers.length > 0` — i.e., the move actually provokes. Regular moves still go through the existing speed-cap overrun modal at `window.showMovementOverrunModal` unchanged.
+- **No new harness tests this commit.** Client-side modal UX is covered by the deferred `harness_ui` Playwright suite. Server-side OA contracts unchanged.
+- Total harness count: 785 (unchanged from v2.99.68).
+
+---
+
 ## [2.99.68] - 2026-06-02 — "Click and Swing" — Take OA auto-rolls the chosen attack + NPC picker
 
 **Schema version:** 65
