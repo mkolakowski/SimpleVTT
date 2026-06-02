@@ -158,10 +158,15 @@ async def _set_token_pos(gm_client, token_id: int, x: float, y: float):
     """Setup move: drop a token to a known position WITHOUT triggering
     an OA broadcast in the buffered WS messages we care about. We
     clear the WS buffer after via gm_ws.mark() in the calling test.
+
+    v2.99.55 — always passes ``oa_confirmed: True`` so the v2.99.55
+    Phase 4 gate doesn't 409 on a setup move that happens to cross
+    a watcher's reach. Setup moves are GM-authored and aren't
+    subject to the pre-move modal.
     """
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{token_id}/move",
-        json={"x": float(x), "y": float(y)},
+        json={"x": float(x), "y": float(y), "oa_confirmed": True},
     )
     assert r.status_code == 200, r.text
 
@@ -228,7 +233,7 @@ async def test_oa_fires_when_mover_leaves_watcher_reach(
     # Move Krieger 5 cells right → 25 ft from Tavik.
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 700.0, "y": 350.0},
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -283,7 +288,7 @@ async def test_oa_skips_when_watcher_reaction_used(
 
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 700.0, "y": 350.0},
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -322,7 +327,7 @@ async def test_oa_skips_when_move_starts_out_of_reach(
     # Move Krieger further away — still no transition through reach.
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 280.0, "y": 350.0},
+        json={"x": 280.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -371,7 +376,7 @@ async def test_oa_honors_explicit_melee_reach_ft_override(
     # = 15 ft from Tavik. Past the 10 ft threshold → OA.
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 560.0, "y": 350.0},
+        json={"x": 560.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -429,7 +434,7 @@ async def test_oa_5ft_reach_still_skips_at_10ft_start(
 
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 560.0, "y": 350.0},
+        json={"x": 560.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -518,7 +523,7 @@ async def test_oa_npc_reach_parses_from_monster_action_desc(
     # "reach 10 ft." from the giant's Greatclub action desc.
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 560.0, "y": 350.0},
+        json={"x": 560.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -576,7 +581,7 @@ async def test_oa_polearm_master_fires_on_enter_reach(
     # transition triggers Polearm Master OA.
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 490.0, "y": 350.0},
+        json={"x": 490.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -639,7 +644,7 @@ async def test_oa_enter_reach_skips_without_polearm_master(
 
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 490.0, "y": 350.0},
+        json={"x": 490.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -978,7 +983,7 @@ async def test_oa_skips_when_mover_and_watcher_share_team(
         gm_ws.mark()
         resp = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-            json={"x": 700.0, "y": 350.0},
+            json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()
@@ -1021,7 +1026,7 @@ async def test_oa_fires_when_mover_and_watcher_opposite_teams(
         gm_ws.mark()
         resp = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-            json={"x": 700.0, "y": 350.0},
+            json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()
@@ -1064,7 +1069,7 @@ async def test_oa_fires_when_one_side_is_neutral(
         gm_ws.mark()
         resp = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-            json={"x": 700.0, "y": 350.0},
+            json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()
@@ -1078,6 +1083,120 @@ async def test_oa_fires_when_one_side_is_neutral(
         )
     finally:
         await _set_team(gm_client, kr_tok["id"], "neutral")
+
+
+# ── v2.99.55 — plan-movement-oa-flow Phase 4: oa_confirmed 409 gate ──
+
+
+async def test_token_move_409_when_oa_triggers_without_confirmation(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.55: /token/move without ``oa_confirmed: true`` AND with
+    triggers fires → 409 ``oa_confirmation_required`` + token
+    position unchanged + no token_move broadcast. Defense-in-depth
+    in case a malicious client races past the preview check.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Move to (750, 350) — exits Tavik's reach. Distinct coords
+    # from the rest of the file so the replace_all `oa_confirmed`
+    # sweep doesn't touch this call.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 750.0, "y": 350.0},
+    )
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["error"] == "oa_confirmation_required"
+    assert body["would_trigger_oa"] is True
+    triggers = [
+        t for t in body.get("triggers", [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert triggers, (
+        f"409 body should surface the Tavik trigger; got {body}"
+    )
+
+    # Token position must be unchanged.
+    kr_tok_after = await _get_token_for_char(gm_client, krieger["id"])
+    assert abs(kr_tok_after["x"] - 350.0) < 0.01, (
+        f"409 must not move token; expected x=350.0, got {kr_tok_after['x']}"
+    )
+
+    # No token_move broadcast either — defense-in-depth means the
+    # other clients shouldn't observe a phantom move.
+    await asyncio.sleep(0.15)
+    tm_msgs = [
+        m for m in gm_ws.buffered("token_move")
+        if (m.get("data") or {}).get("id") == kr_tok["id"]
+    ]
+    assert not tm_msgs, (
+        f"409 path must not emit token_move; got {tm_msgs}"
+    )
+
+
+async def test_token_move_succeeds_with_oa_confirmed_true(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.55: POST /token/move with ``oa_confirmed: true`` AND
+    triggers fires → 200 + token moves + triggers emit as today.
+    Confirms the new flag opt-out from the 409 gate works.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 750.0, "y": 350.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    triggers = [
+        t for t in data.get("opportunity_attack_triggers") or []
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert triggers, (
+        f"oa_confirmed=true should still surface the Tavik trigger; "
+        f"got {data.get('opportunity_attack_triggers')}"
+    )
+
+    # Token moved.
+    kr_tok_after = await _get_token_for_char(gm_client, krieger["id"])
+    assert abs(kr_tok_after["x"] - 750.0) < 0.01, (
+        f"oa_confirmed=true should commit the move; got x={kr_tok_after['x']}"
+    )
+
+    # Legacy feature_used advisory still fires.
+    await asyncio.sleep(0.15)
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "opportunity-attack-trigger"
+        and (m.get("data") or {}).get("character_id") == tavik["id"]
+    ]
+    assert fu, (
+        f"oa_confirmed=true should still emit OA advisory broadcasts; "
+        f"buffered: {[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
 
 
 # ── v2.99.54 — plan-movement-oa-flow Phase 3: preview_move endpoint ──
@@ -1105,7 +1224,7 @@ async def test_preview_move_returns_triggers_without_moving_token(
     # Preview a move that would exit Tavik's 5 ft reach.
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/preview_move",
-        json={"x": 700.0, "y": 350.0},
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -1154,7 +1273,7 @@ async def test_preview_move_honors_same_team_filter(
     try:
         resp = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/preview_move",
-            json={"x": 700.0, "y": 350.0},
+            json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()

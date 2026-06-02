@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.55] - 2026-06-01 — "The Held Step" — plan-movement-oa-flow Phase 4 (the headline ask)
+
+**Schema version:** 65
+**Commit summary:** **plan-movement-oa-flow Phase 4 — pre-move "Continue or Stop?" modal + server-side `oa_confirmed` 409 gate.** This is the headline ask from the original to-do: the user wanted movement to PAUSE on OA provocation, ask the mover whether to continue, and only commit the move after confirmation. v2.99.55 wires the client to call v2.99.54's preview endpoint before every token drag-commit, opens a glass-card modal listing the watchers + reach when `would_trigger_oa: true`, and lets the player choose Continue (POST with `oa_confirmed: true`) or Stop (snap-back). The server enforces the new `oa_confirmed` flag as defense-in-depth: if a request arrives with triggers AND no `oa_confirmed: true`, /token/move returns 409 `oa_confirmation_required` BEFORE committing the move and BEFORE broadcasting `token_move`, so a malicious or racing client can't bypass the modal.
+**Description:** Three-file commit (server + client + tests). Server: `/token/move` accepts `oa_confirmed: bool` in body. The OA-trigger computation runs BEFORE the position commit; if any triggers fire AND `oa_confirmed` isn't True, return 409 with the trigger list (same shape as `/preview_move`). Client: `_commitTokenMove` is now `async`. The first thing it does is POST `/token/{id}/preview_move`. If `would_trigger_oa: true`, it opens `_showPreMoveOaModal` (new helper inline in tabletop.js) — a glass-card modal listing each watcher with their reach + a Continue / Stop button pair. Continue calls `postMove(true)` (with `oa_confirmed: true`); Stop calls `snapBack()`. Click-outside + Escape both default to Stop (safer default). OA-clear moves fall through to the existing movement-overrun gate unchanged.
+
+### Added
+- `/api/campaign/{cid}/token/{id}/move` accepts new `oa_confirmed: bool` body field. When True, the legacy behavior is preserved (commit move + broadcast `token_move` + emit OA `feature_used` + `reaction_prompt` for every triggered watcher). When False (or missing) AND triggers would fire, returns 409 `oa_confirmation_required` with `{would_trigger_oa: true, distance_ft, triggers: [...]}` — same shape as `/preview_move`. NO commit, NO broadcast on the 409 path.
+- `_showPreMoveOaModal({tokenLabel, triggers, distanceFt, onContinue, onStop})` helper in `app/static/tabletop.js`. Glass-card modal with amber accent stripe matching v2.99.49's reaction popup. Lists each watcher with their reach + trigger type ("exits 5 ft reach" / "enters 10 ft polearm reach"). Click outside, Escape, and the Stop button all dismiss + snap-back; Continue button POSTs the move with `oa_confirmed: true`.
+- `_commitTokenMove` is now `async` and calls `/token/{id}/preview_move` before every drag-commit. If the preview reports triggers, the modal opens; otherwise the existing gate logic runs.
+- 2 new tests in `tests/harness/test_opportunity_attack.py`:
+  - `test_token_move_409_when_oa_triggers_without_confirmation` — /move without `oa_confirmed` AND with triggers → 409 + token position unchanged + no `token_move` broadcast.
+  - `test_token_move_succeeds_with_oa_confirmed_true` — /move with `oa_confirmed: true` AND triggers → 200 + token moves + advisory `feature_used` still emits.
+
+### Changed
+- Existing /move callers in `tests/harness/test_opportunity_attack.py` + `tests/harness/test_reaction_prompt.py` now pass `oa_confirmed: True` on calls that intentionally cross a watcher's reach. The setup helper `_set_token_pos` always passes `oa_confirmed: True` so it never 409s on a test-setup move that happens to provoke. Total ~14 call-site updates.
+- `docs/plans/movement-oa-flow.md` — Phase 4 status row flipped ⚪ → ✅.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — plan status pill flipped to "🟠 Phases 1–4 shipped".
+- `docs/test-harness-coverage.md` — total bumped 770 → 772.
+
+### Notes
+- **PATCH bump** but **backwards-incompatible for direct `/token/move` callers.** Any non-browser client that POSTs `/token/move` and expects OA-triggering moves to commit silently is now 409'd on the first such call. The fix is to pass `oa_confirmed: true` — same one-line opt-out the harness helpers got in this commit. Documented in the CHANGELOG so external callers can spot the change.
+- **Why the "snap-back" UX choice.** The current canvas drag updates the token's local x/y immediately during drag for snappy feedback; `_commitTokenMove` is the post-drop callback. On Stop, the local x/y is reset to (origX, origY) via the existing `snapBack` helper + a `render()` call. No server round-trip needed for the snap-back — the server never saw the move attempt.
+- **Click-outside / Escape default to Stop.** The safer behavior for a "you'd take damage if you continue" prompt is to do nothing. Players reach for the modal's Continue button when they explicitly want to walk into the swing.
+- **Glass-card visual matches v2.99.49 reaction popup.** Same amber accent stripe + frosted backdrop so the table sees a consistent "you provoked something, look here" visual language across pre-move modals and post-event reaction prompts.
+- **Phase 5 unblocked.** The serial OA queue + attack picker land next. The Continue button currently triggers the existing v2.66.0 advisory + v2.67.0 reaction-prompt broadcasts (one per watcher in parallel); Phase 5 will serialize them.
+- **Distance hint on the modal.** The summary line shows the preview's `distance_ft` (e.g. "Continuing this move (~25 ft)") so the player can gauge "how far into my movement budget does this commit me?" — useful when several feet of movement remain.
+- **Wiki surfacing.** Plan-status pill update touches landing + on-disk index per CLAUDE.md.
+- Total harness count: 772 (was 770 in v2.99.54).
+
+---
+
 ## [2.99.54] - 2026-06-01 — "The Scout's Glance" — plan-movement-oa-flow Phase 3
 
 **Schema version:** 65

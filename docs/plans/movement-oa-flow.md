@@ -11,7 +11,7 @@ This plan does NOT supersede `plan-reactions-automation`. That doc owns the gene
 | 1 | Team data model + same-team filter | ✅ shipped | v2.99.52 |
 | 2 | Token Management UI overhaul | ✅ shipped | v2.99.53 |
 | 3 | "Would-this-trigger-OA?" preview endpoint | ✅ shipped | v2.99.54 |
-| 4 | Pre-move "Continue or Stop?" modal | ⚪ proposed | v2.99.5x |
+| 4 | Pre-move "Continue or Stop?" modal | ✅ shipped | v2.99.55 |
 | 5 | Per-watcher serial OA resolution + attack picker | ⚪ proposed | v2.99.5x |
 | 6 | Multi-token-per-owner sequencing | ⚪ proposed | v2.99.5x |
 

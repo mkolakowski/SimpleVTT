@@ -103,7 +103,7 @@ async def test_oa_exit_reach_emits_reaction_prompt(
 
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 700.0, "y": 350.0},
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
 
@@ -165,7 +165,7 @@ async def test_use_reaction_marks_economy_and_resolves_prompt(
 
     await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 700.0, "y": 350.0},
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
     )
     await asyncio.sleep(0.2)
 
@@ -233,7 +233,7 @@ async def test_use_reaction_replay_guard(
 
     await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 700.0, "y": 350.0},
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
     )
     await asyncio.sleep(0.2)
 
@@ -1703,7 +1703,7 @@ async def test_war_caster_prompt_offers_cast_alongside_oa(
 
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 700.0, "y": 350.0},
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     await asyncio.sleep(0.2)
@@ -1746,7 +1746,7 @@ async def test_use_war_caster_cast_marks_reaction(
 
     await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 700.0, "y": 350.0},
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
     )
     await asyncio.sleep(0.2)
 
@@ -2681,7 +2681,7 @@ async def test_use_reaction_marks_npc_economy_via_combatant_id(
     # Move Krieger out of the bandit's 5 ft reach.
     move = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 700.0, "y": 350.0},
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
     )
     assert move.status_code == 200, move.text
     await asyncio.sleep(0.2)

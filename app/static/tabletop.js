@@ -3378,6 +3378,135 @@
         _commitTokenMove(tok, origX, origY, sx, sy);
     });
 
+    /* v2.99.55 — plan-movement-oa-flow Phase 4 pre-move modal. Built
+     * inline rather than via the showMovementOverrunModal helper
+     * because the trigger semantics are different (movement-overrun
+     * is per-active-combatant + speed-cap-aware; OA is geometry-only
+     * + per-watcher). Glass-card styling matches v2.99.49's
+     * reaction-prompt popup so the table sees a consistent visual
+     * language for "your action provoked something." z-index above
+     * the canvas + the GM panels (2147483600 matches reaction
+     * popup).
+     */
+    function _showPreMoveOaModal({
+        tokenLabel, triggers, distanceFt, onContinue, onStop,
+    }) {
+        // Backdrop blocks canvas interaction while the modal is open.
+        const backdrop = document.createElement('div');
+        backdrop.setAttribute('style', [
+            'position:fixed', 'inset:0',
+            'background:rgba(0,0,0,0.45)',
+            'z-index:2147483600',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'padding:16px',
+            'animation:reactionPopIn 180ms ease-out',
+        ].join(';'));
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-label', 'Opportunity attack provoked');
+
+        const card = document.createElement('div');
+        card.setAttribute('style', [
+            'background:#1f2433',
+            'background:color-mix(in srgb, var(--bg, #1f2433) 88%, transparent)',
+            'backdrop-filter:blur(8px)',
+            '-webkit-backdrop-filter:blur(8px)',
+            'border:1px solid var(--border, rgba(255,255,255,0.18))',
+            'border-left:4px solid #ffb74d',
+            'border-radius:10px',
+            'padding:18px 20px',
+            'color:var(--fg, #fff)',
+            'font-size:13px',
+            'max-width:420px', 'width:100%',
+            'box-shadow:0 10px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,183,77,0.18)',
+        ].join(';'));
+
+        // Header.
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:14px; font-weight:600; margin-bottom:6px;';
+        header.textContent = '⚠ Opportunity Attack provoked';
+        card.appendChild(header);
+
+        // Summary line.
+        const summary = document.createElement('p');
+        summary.style.cssText = 'margin:0 0 10px 0; font-size:12px; opacity:0.85; line-height:1.4;';
+        const distTxt = distanceFt > 0 ? ' (~' + distanceFt + ' ft)' : '';
+        summary.textContent = (
+            'Continuing this move' + distTxt + ' will provoke an '
+            + 'Opportunity Attack from:'
+        );
+        card.appendChild(summary);
+
+        // Trigger list.
+        const list = document.createElement('ul');
+        list.style.cssText = 'margin:0 0 14px 0; padding-left:18px; font-size:12px;';
+        (triggers || []).forEach(t => {
+            const li = document.createElement('li');
+            const reach = Number(t.watcher_reach_ft) || 5;
+            const reachTxt = (reach % 1 === 0) ? reach.toFixed(0) : reach.toFixed(1);
+            const kind = (t.trigger_type === 'enter')
+                ? 'enters ' + reachTxt + ' ft polearm reach'
+                : 'exits ' + reachTxt + ' ft reach';
+            li.textContent = (t.watcher_name || 'Watcher') + ' — ' + kind;
+            li.style.marginBottom = '3px';
+            list.appendChild(li);
+        });
+        card.appendChild(list);
+
+        // Buttons. Stop = primary (red-tinted) since the safer
+        // default is to NOT walk into a swing. Continue = secondary.
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:8px; justify-content:flex-end; margin-top:6px;';
+
+        function _btn(label, style, onClick) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.setAttribute('style', [
+                'min-height:44px', 'padding:6px 14px',
+                'border-radius:6px', 'cursor:pointer', 'font-size:13px',
+                'border:1px solid var(--border, rgba(255,255,255,0.22))',
+            ].join(';') + ';' + style);
+            b.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                backdrop.remove();
+                onClick();
+            });
+            return b;
+        }
+        btnRow.appendChild(_btn(
+            '✋ Stop — don\'t provoke',
+            'background:rgba(255,255,255,0.04); color:var(--fg);',
+            onStop,
+        ));
+        btnRow.appendChild(_btn(
+            '⚔ Continue anyway',
+            'background:#ffb74d; color:#1f2433; font-weight:600; border-color:#e09a2a;',
+            onContinue,
+        ));
+        card.appendChild(btnRow);
+
+        // Click outside the card → treat as Stop (safer default).
+        backdrop.addEventListener('click', (ev) => {
+            if (ev.target === backdrop) {
+                backdrop.remove();
+                onStop();
+            }
+        });
+        // Escape key → Stop too.
+        function _onKey(ev) {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                document.removeEventListener('keydown', _onKey);
+                backdrop.remove();
+                onStop();
+            }
+        }
+        document.addEventListener('keydown', _onKey);
+
+        backdrop.appendChild(card);
+        document.body.appendChild(backdrop);
+    }
+
     /* v2.8.3: pre-commit gate for token drags. Computes the distance the
      * proposed move would add, looks up whether the dragger owns the
      * active combatant, and — if the move would push them past their
@@ -3393,14 +3522,26 @@
      * Non-active / off-turn drags: also skip the modal. The breadcrumb
      * only tracks active-combatant moves; gating off-turn drags would
      * be confusing.
+     *
+     * v2.99.55: a Phase 4 pre-move OA gate runs BEFORE the
+     * movement-overrun gate. If the move would provoke any OAs the
+     * dragger sees a Continue/Stop modal first; OA-clear moves fall
+     * through to the existing gate logic.
      */
-    function _commitTokenMove(token, origX, origY, sx, sy) {
+    async function _commitTokenMove(token, origX, origY, sx, sy) {
         const tokenId = token.id;
-        const postMove = () => {
-            fetch(`/api/campaign/${CAMPAIGN_ID}/token/${tokenId}/move`, {
+        // v2.99.55 — plan-movement-oa-flow Phase 4. postMove now
+        // accepts an opt-in oa_confirmed flag; the pre-flight preview
+        // gate below sets it to true after the user clicks Continue.
+        // No flag = first try; if the server returns 409 the snapback
+        // fires + the legacy advisory still surfaces on the chat-log.
+        const postMove = (oaConfirmed = false) => {
+            const body = { x: sx, y: sy };
+            if (oaConfirmed) body.oa_confirmed = true;
+            return fetch(`/api/campaign/${CAMPAIGN_ID}/token/${tokenId}/move`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ x: sx, y: sy }),
+                body: JSON.stringify(body),
             });
         };
         const snapBack = () => {
@@ -3408,6 +3549,52 @@
             token.y = origY;
             render();
         };
+
+        // v2.99.55 — plan-movement-oa-flow Phase 4 pre-move OA gate.
+        // Before anything else, ask the server "would this move
+        // trigger an OA?" via the v2.99.54 preview endpoint. If it
+        // would, open the Continue/Stop modal; if not, fall through
+        // to the existing movement-overrun gate / direct post.
+        //
+        // The preview is best-effort: if the network call fails or
+        // the server is unreachable, we fall through to the existing
+        // flow. The server's 409 oa_confirmation_required is the
+        // defense-in-depth backstop — if the client somehow skipped
+        // the preview AND the move triggers OAs, the actual
+        // /token/move POST will 409 below.
+        let _oaTriggers = [];
+        let _previewDistanceFt = 0;
+        try {
+            const previewResp = await fetch(
+                `/api/campaign/${CAMPAIGN_ID}/token/${tokenId}/preview_move`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x: sx, y: sy }),
+                },
+            );
+            if (previewResp.ok) {
+                const data = await previewResp.json();
+                if (data && data.would_trigger_oa) {
+                    _oaTriggers = Array.isArray(data.triggers)
+                        ? data.triggers : [];
+                    _previewDistanceFt = Number(data.distance_ft) || 0;
+                }
+            }
+        } catch (_) {
+            // Preview failed — fall through. The 409 gate on /move
+            // is the safety net.
+        }
+        if (_oaTriggers.length > 0) {
+            _showPreMoveOaModal({
+                tokenLabel: token.label || 'Token',
+                triggers: _oaTriggers,
+                distanceFt: _previewDistanceFt,
+                onContinue: () => postMove(true),
+                onStop: snapBack,
+            });
+            return;
+        }
 
         // No gate when the dragger is GM, when window helpers aren't
         // loaded, when the modal helper isn't available, or when init

@@ -9130,6 +9130,43 @@ async def move_token(
         grid_size_px, grid_type, from_x, from_y, x, y,
     )
 
+    # v2.99.55 — plan-movement-oa-flow Phase 4 defense-in-depth gate.
+    # Compute OA triggers BEFORE committing the move. If any fire
+    # AND the client didn't pass ``oa_confirmed: true``, return 409
+    # `oa_confirmation_required` so the malicious-client case can't
+    # bypass the pre-move modal. The client (v2.99.55 Phase 4 wire)
+    # calls /token/{id}/preview_move first, opens the modal, and
+    # only POSTs /token/move with `oa_confirmed: true` once the GM
+    # / player has clicked Continue. Token position stays put on the
+    # 409 path so the client doesn't need to snap-back from a
+    # half-committed move.
+    oa_triggers: list[dict] = []
+    if distance_ft > 0:
+        try:
+            oa_triggers = _check_opportunity_attack_triggers(
+                db, campaign_id, int(token.id),
+                from_x, from_y, x, y,
+            )
+        except Exception:
+            oa_triggers = []
+    if oa_triggers and not bool(body.get("oa_confirmed")):
+        return JSONResponse(status_code=409, content={
+            "error": "oa_confirmation_required",
+            "would_trigger_oa": True,
+            "distance_ft": distance_ft,
+            "triggers": [
+                {
+                    "watcher_combatant_id": t.get("watcher_combatant_id"),
+                    "watcher_name": t.get("watcher_name"),
+                    "watcher_char_id": t.get("watcher_char_id"),
+                    "watcher_token_id": t.get("watcher_token_id"),
+                    "watcher_reach_ft": t.get("watcher_reach_ft"),
+                    "trigger_type": t.get("trigger_type") or "exit",
+                }
+                for t in oa_triggers
+            ],
+        })
+
     token.x = x
     token.y = y
     db.commit()
@@ -9150,15 +9187,7 @@ async def move_token(
     # a feature_used advisory so the watcher's controller can decide
     # whether to spend their reaction on an OA. Pure advisory — does
     # NOT auto-fire the attack or consume the reaction.
-    oa_triggers: list[dict] = []
-    if distance_ft > 0:
-        try:
-            oa_triggers = _check_opportunity_attack_triggers(
-                db, campaign_id, int(token.id),
-                from_x, from_y, x, y,
-            )
-        except Exception:
-            oa_triggers = []
+    # v2.99.55 — oa_triggers was computed above for the 409 gate; reuse.
     mover_name = token.label or "Token"
     for trig in oa_triggers:
         reach_ft = trig.get("watcher_reach_ft") or 5.0
