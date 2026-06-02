@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.63] - 2026-06-02 — "The Card Acts" — inline OA action buttons in the chat-log card
+
+**Schema version:** 65
+**Commit summary:** **Add Take OA / per-attack / Skip buttons inline in the chat-log card for `opportunity-attack-trigger`.** User report after v2.99.62: pre-move modal works, the chat-log card shows "Opportunity Attack triggered", but no popup follows AND no clickable button is in the message. The top-right popup IS the canonical actionable surface — but if it fails to render (browser quirk, CSS issue, popup script error), the GM was stuck. v2.99.63 adds a parallel actionable surface: when the `reaction_prompt` broadcast arrives, the chat-log card for the corresponding watcher gets injected with the same buttons (Take OA / per-attack picker / War Caster / Skip). Click → POST `/use_reaction` (same endpoint the popup uses). Pairs with the popup — if both render, both work; if either fails, the other still does.
+**Description:** Three-file commit. (1) `tabletop.js::_appendFeatureUsed` — when `data.source === 'opportunity-attack-trigger'`, set data attributes on the LI (`data-source`, `data-watcher-combatant-id`, `data-trigger-type`, `data-prompt-injected="false"`) AND inject an empty `<div class="oa-action-row">` placeholder inside the card body. (2) New helper `_injectOaButtonsToChatCard(data)` walks the roll log in reverse for the most recent matching OA card that hasn't been injected yet, populates its action row with buttons built from the prompt's `options` list, and wires click handlers. (3) WS dispatch in `tabletop.js` listens for `reaction_prompt` messages (in addition to the existing `reaction_prompt.js` popup handler) and calls the new injector. Diagnostic visibility: `reaction_prompt.js` bumps `console.debug` → `console.log` so the `[reaction_prompt]` log shows at the default DevTools level (Verbose-off).
+
+### Added
+- `_injectOaButtonsToChatCard(data)` helper in `tabletop.js` — finds the most recent matching OA chat-card by `watcher_combatant_id` and populates its action row with buttons from the reaction prompt's options.
+- WS dispatch in `tabletop.js` for `reaction_prompt` messages — calls the new injector for OA-related triggers (`creature_exits_reach` / `creature_enters_reach`).
+- Data attributes on OA chat-log cards: `data-source`, `data-watcher-combatant-id`, `data-trigger-type`, `data-prompt-injected` — used by the injector to match the right card.
+- `<div class="oa-action-row">` placeholder inside the card body for the dynamic buttons.
+- Diagnostic console.log on inject path (`[oa-inline] injecting buttons watcher=X prompt=Y options=N`) so the user can verify in DevTools that the reaction prompt arrived and matched a card.
+
+### Changed
+- `reaction_prompt.js`: `console.debug('[reaction_prompt]', …)` → `console.log('[reaction_prompt]', …)` so the diagnostic line shows at the default DevTools console level (Verbose-off). Pre-v2.99.63 users had to enable Verbose to see it.
+
+### Notes
+- **PATCH bump** — additive UI surface, no server change, no endpoint behavior change. The popup still works independently; the chat-card buttons are a parallel path.
+- **Why both surfaces.** The popup is the primary UX (top-right, animated, focused). The chat-card buttons are the persistent audit surface (visible until you scroll up, clickable from the roll log). Some users prefer the popup (one-click, prominent); some prefer the chat card (in-context). Both work; both pipeline through `/use_reaction`.
+- **Cross-tab race handling.** If you click a chat-card button while the popup is open (or vice-versa), the loser gets `409 prompt_already_resolved` and the chat row collapses to "✓ Already resolved." Same race handling as the popup-only flow.
+- **No new tests.** Server contract unchanged; UI tests live in the (deferred) harness_ui suite. The popup-side tests in `test_reaction_prompt.py` + `test_opportunity_attack.py` exercise the broadcast contract that the new injector reads from — and those all still pass (60 tests).
+- **Why didn't the popup fire before?** Still unclear — could be a browser cache (the user's tab might have stale `reaction_prompt.js`), a DevTools console-filter issue (debug entries hidden), or a subtle render path bug. v2.99.63's chat-card surface sidesteps all three: the broadcasts are received, parsed, and rendered into the chat log without any popup-script dependency. The bumped `console.log` in `reaction_prompt.js` will give the user (and me) a visible signal next session whether the popup pipeline is reaching their browser.
+- Total harness count: 782 (unchanged from v2.99.62).
+
+---
+
 ## [2.99.62] - 2026-06-02 — "Find the Goon" — fix the demo OA-doesn't-fire bug
 
 **Schema version:** 65

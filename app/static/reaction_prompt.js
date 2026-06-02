@@ -287,13 +287,14 @@
             const targets = Array.isArray(data.target_user_ids)
                 ? data.target_user_ids.map(Number) : [];
             const mode = (window.ME && window.ME.reactionPromptMode) || 'popup';
-            // v2.99.49 — diagnostic console.log so users reporting
-            // "popup doesn't appear" can open devtools and see what
-            // filter (if any) suppressed the render. Logs the
-            // prompt_id + trigger_event + this user's filter
-            // outcome. Non-noisy: only fires per prompt arrival.
+            // v2.99.49 — diagnostic log so users reporting "popup
+            // doesn't appear" can open devtools and see what filter
+            // (if any) suppressed the render. v2.99.63: bumped from
+            // console.debug → console.log so the line shows at the
+            // default DevTools Verbose-off level (debug entries are
+            // hidden unless the user explicitly enables Verbose).
             try {
-                console.debug(
+                console.log(
                     '[reaction_prompt]',
                     'prompt_id=' + (data.prompt_id || '?'),
                     'trigger=' + (data.trigger_event || '?'),

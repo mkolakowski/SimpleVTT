@@ -4123,6 +4123,16 @@
             } else if (msg.type === 'feature_used') {
                 _appendFeatureUsed(msg.data);
                 _focusRollLogIfLocal(msg.data && msg.data.user_id);
+            } else if (msg.type === 'reaction_prompt') {
+                // v2.99.63 — inject Take OA / Skip / per-attack buttons
+                // into the matching OA chat-log card. Pairs with the
+                // top-right popup (reaction_prompt.js) so the user has
+                // two parallel actionable surfaces; if the popup is
+                // hidden, dismissed, or fails to render, the chat-card
+                // buttons still work.
+                try { _injectOaButtonsToChatCard(msg.data); } catch (e) {
+                    console.warn('[oa-inline] inject failed', e);
+                }
             } else if (msg.type === 'presence_update') {
                 _renderPresence(msg.data);
             } else if (msg.type === 'character_hp_update') {
@@ -5691,7 +5701,35 @@
             ? `<div class="result-pills">${featurePills.join('')}</div>`
             : '';
         const targetTagHtml = _targetTagHtml(d);
+        // v2.99.63 — when this is an OA trigger card, tag the LI with
+        // data attributes so the reaction_prompt arrival can find the
+        // right card to inject action buttons into. The empty
+        // .oa-action-row div is populated on reaction_prompt arrival
+        // (per the v2.99.63 inline-buttons fallback for the popup).
+        const isOaTrigger = d.source === 'opportunity-attack-trigger';
+        const oaDataAttrs = isOaTrigger
+            ? ` data-source="opportunity-attack-trigger"`
+            + ` data-watcher-combatant-id="${escapeHTML(d.watcher_combatant_id || '')}"`
+            + ` data-trigger-type="${escapeHTML(d.trigger_type || 'exit')}"`
+            + ` data-prompt-injected="false"`
+            : '';
+        const oaActionRow = isOaTrigger
+            ? `<div class="oa-action-row" style="display:none;margin-top:8px;flex-wrap:wrap;gap:6px;"></div>`
+            : '';
         const li = document.createElement('li');
+        if (oaDataAttrs) {
+            // setAttribute path so the data-* land on the LI itself,
+            // not the inner card div. Querying .closest('li') from a
+            // descendant button finds the right card to mark resolved.
+            li.setAttribute('data-source', 'opportunity-attack-trigger');
+            if (d.watcher_combatant_id) li.setAttribute(
+                'data-watcher-combatant-id', String(d.watcher_combatant_id),
+            );
+            if (d.trigger_type) li.setAttribute(
+                'data-trigger-type', String(d.trigger_type),
+            );
+            li.setAttribute('data-prompt-injected', 'false');
+        }
         li.innerHTML = `
             <div class="roll-card feature-used-card">
                 <div class="roll-card-header">
@@ -5709,6 +5747,7 @@
                     </div>
                     ${healPill}
                     ${_overBudgetBadge(d)}
+                    ${oaActionRow}
                 </div>
             </div>`;
         ul.appendChild(li);
@@ -5749,6 +5788,128 @@
                 }
             });
         }
+    }
+
+    // v2.99.63 — inline OA action buttons in the chat-log card.
+    // The reaction_prompt broadcast (popup pipeline) carries
+    // prompt_id + options + watcher_combatant_id. Find the most
+    // recent OA card matching watcher_combatant_id that hasn't
+    // been injected yet, and populate its .oa-action-row with
+    // clickable buttons (Take OA / per-attack / War Caster / Skip).
+    // Click → POST /use_reaction; on success, replace the row with
+    // a resolved state indicator.
+    function _injectOaButtonsToChatCard(data) {
+        if (!data || typeof data !== 'object') return;
+        const trig = data.trigger_event || '';
+        if (trig !== 'creature_exits_reach' && trig !== 'creature_enters_reach') {
+            return;
+        }
+        const wcid = data.watcher_combatant_id;
+        if (!wcid) return;
+        // Diagnostic log so the user can see (in DevTools Console)
+        // that the OA prompt arrived AND was matched to a card.
+        console.log(
+            '[oa-inline] injecting buttons',
+            'watcher=' + wcid,
+            'prompt=' + data.prompt_id,
+            'options=' + (data.options || []).length,
+        );
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+        // Walk LIs in reverse to find the most recent matching OA
+        // card that hasn't had buttons injected yet.
+        const lis = ul.querySelectorAll(
+            'li[data-source="opportunity-attack-trigger"]'
+            + '[data-prompt-injected="false"]',
+        );
+        let targetLi = null;
+        for (let i = lis.length - 1; i >= 0; i--) {
+            if (String(lis[i].dataset.watcherCombatantId) === String(wcid)) {
+                targetLi = lis[i];
+                break;
+            }
+        }
+        if (!targetLi) {
+            console.warn(
+                '[oa-inline] no matching card found for watcher='
+                + wcid + '; popup-only fallback',
+            );
+            return;
+        }
+        const row = targetLi.querySelector('.oa-action-row');
+        if (!row) return;
+        row.innerHTML = '';
+        const opts = Array.isArray(data.options) ? data.options : [];
+        const promptId = data.prompt_id;
+        opts.forEach(opt => {
+            if (!opt || !opt.key) return;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'oa-action-btn';
+            btn.textContent = opt.label || opt.key;
+            btn.setAttribute('style', [
+                'padding:6px 12px',
+                'border-radius:6px',
+                'border:1px solid var(--border, rgba(255,255,255,0.22))',
+                'background:rgba(255,255,255,0.04)',
+                'color:var(--fg, #fff)',
+                'font-size:12px',
+                'cursor:pointer',
+                'min-height:36px',
+            ].join(';'));
+            if (opt.available === false) {
+                btn.disabled = true;
+                btn.title = opt.unavailable_reason || '';
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+            btn.addEventListener('click', async () => {
+                row.querySelectorAll('button').forEach(b => { b.disabled = true; });
+                try {
+                    const resp = await fetch(
+                        `/api/campaign/${CAMPAIGN_ID}/use_reaction`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({
+                                prompt_id: promptId,
+                                reaction_key: opt.key,
+                                watcher_char_id: data.watcher_char_id,
+                            }),
+                        },
+                    );
+                    if (resp.ok) {
+                        row.innerHTML = (
+                            '<span style="font-size:12px;opacity:0.8;">'
+                            + '✓ Resolved: ' + (opt.label || opt.key)
+                            + '</span>'
+                        );
+                    } else {
+                        // 409 prompt_already_resolved (cross-tab race)
+                        // OR 400 (bad input). Either way, the chat row
+                        // shows that the prompt is no longer actionable.
+                        row.innerHTML = (
+                            '<span style="font-size:12px;opacity:0.8;">'
+                            + '✓ Already resolved'
+                            + '</span>'
+                        );
+                        if (resp.status !== 409) {
+                            console.warn(
+                                '[oa-inline] /use_reaction failed',
+                                resp.status, await resp.text(),
+                            );
+                        }
+                    }
+                } catch (e) {
+                    console.error('[oa-inline] /use_reaction errored', e);
+                    row.querySelectorAll('button').forEach(b => { b.disabled = false; });
+                }
+            });
+            row.appendChild(btn);
+        });
+        row.style.display = 'flex';
+        targetLi.setAttribute('data-prompt-injected', 'true');
     }
 
     // ---------- Weapon-attack card ----------
