@@ -1085,6 +1085,295 @@ async def test_oa_fires_when_one_side_is_neutral(
         await _set_team(gm_client, kr_tok["id"], "neutral")
 
 
+# ── v2.99.56 — plan-movement-oa-flow Phase 5: serial queue + picker + skip ──
+
+
+def _prompt_broadcasts(gm_ws):
+    return list(gm_ws.buffered("reaction_prompt"))
+
+
+async def test_oa_serial_queue_emits_one_prompt_then_chains(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.56: when a move triggers TWO OAs (Krieger walks past
+    both Tavik and Caelan), only ONE reaction_prompt fires on the
+    /token/move call. After /use_reaction resolves the first, a
+    SECOND reaction_prompt fires for the second watcher (the
+    serial-queue chain).
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    caelan = roster["Sir Caelan Lightbringer"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+        _make_combatant(caelan["name"], caelan["id"], init=6),
+    ])
+    # Geometry: Krieger at (350, 350). Tavik 5 ft east. Caelan 5 ft
+    # south. Moving Krieger to (700, 350) (5 cells east) exits the
+    # reach of BOTH.
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    await _place_token(gm_client, caelan["id"], 350.0, 420.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Trigger the move (oa_confirmed=true to bypass the v2.99.55 409).
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 800.0, "y": 800.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # The move response carries BOTH triggers (the advisory list).
+    triggers = data.get("opportunity_attack_triggers") or []
+    assert len(triggers) >= 2, (
+        f"expected 2 triggers (Tavik + Caelan); got {triggers}"
+    )
+
+    await asyncio.sleep(0.2)
+    # Exactly ONE reaction_prompt fired so far — for the head.
+    prompts = _prompt_broadcasts(gm_ws)
+    oa_prompts = [
+        m for m in prompts
+        if (m.get("data") or {}).get("trigger_event") in (
+            "creature_exits_reach", "creature_enters_reach",
+        )
+    ]
+    assert len(oa_prompts) == 1, (
+        f"expected exactly 1 OA reaction_prompt after the move "
+        f"(serial queue); got {len(oa_prompts)}: "
+        f"{[(m.get('data') or {}).get('watcher_name') for m in oa_prompts]}"
+    )
+    head_data = oa_prompts[0]["data"]
+    # Resolving the head should fire a SECOND prompt for the other
+    # watcher.
+    prompt_id = head_data["prompt_id"]
+    gm_ws.mark()
+    resp2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "skip-oa",
+            "watcher_char_id": head_data.get("watcher_char_id"),
+        },
+    )
+    assert resp2.status_code == 200, resp2.text
+
+    await asyncio.sleep(0.2)
+    next_prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("trigger_event") in (
+            "creature_exits_reach", "creature_enters_reach",
+        )
+    ]
+    assert len(next_prompts) == 1, (
+        f"resolving head should chain ONE next prompt for the tail; "
+        f"got {len(next_prompts)}"
+    )
+    next_data = next_prompts[0]["data"]
+    # The chained prompt's watcher must be DIFFERENT from the head's.
+    assert next_data.get("watcher_combatant_id") != head_data.get(
+        "watcher_combatant_id"
+    ), (
+        f"chained prompt should target the OTHER watcher; head was "
+        f"{head_data.get('watcher_combatant_id')}, next was "
+        f"{next_data.get('watcher_combatant_id')}"
+    )
+
+
+async def test_oa_prompt_includes_per_attack_picker_options(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.56: the OA prompt's options list includes one entry per
+    melee attack on the watcher's sheet — keys of the form
+    ``take-the-oa:{idx}`` with params carrying the attack metadata.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == tavik["id"]
+    ]
+    assert prompts, "expected reaction_prompt for Tavik"
+    options = prompts[0]["data"].get("options") or []
+    keys = [o.get("key") for o in options]
+    # Generic take-the-oa stays for back-compat.
+    assert "take-the-oa" in keys, (
+        f"generic take-the-oa option must remain; got {keys}"
+    )
+    # At least one picker option for Tavik's mace / weapon attacks.
+    picker_keys = [k for k in keys if k and k.startswith("take-the-oa:")]
+    assert picker_keys, (
+        f"expected at least one per-attack picker option; got {keys}"
+    )
+    # Skip option present.
+    assert "skip-oa" in keys, (
+        f"skip-oa option must be present; got {keys}"
+    )
+    # Picker entry params carry the attack name.
+    picker_entry = next(
+        (o for o in options if o.get("key") == picker_keys[0]), None,
+    )
+    assert picker_entry
+    params = picker_entry.get("params") or {}
+    assert isinstance(params.get("attack_index"), int)
+    assert (params.get("attack_name") or "").strip(), (
+        f"picker params should carry the attack name; got {params}"
+    )
+
+
+async def test_oa_use_reaction_skip_does_not_mark_reaction(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.56: POST /use_reaction with ``reaction_key=skip-oa``
+    resolves the prompt + emits the audit broadcast BUT does NOT
+    mark the watcher's reaction slot. The watcher can still react
+    to a later trigger this round.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
+    )
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == tavik["id"]
+    ]
+    assert prompts, "expected reaction_prompt for Tavik"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "skip-oa",
+            "watcher_char_id": tavik["id"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    # Audit broadcast fires.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "oa-skipped"
+        and (m.get("data") or {}).get("character_id") == tavik["id"]
+    ]
+    assert fu, "expected feature_used(source=oa-skipped) audit broadcast"
+    # Reaction slot NOT marked — no economy_update for Tavik's reaction.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == tavik["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+        and (m.get("data") or {}).get("used") is True
+    ]
+    assert not econ, (
+        f"skip-oa must NOT mark the reaction slot; got {econ}"
+    )
+
+
+async def test_oa_use_reaction_attack_picker_marks_reaction_and_audits(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.56: POST /use_reaction with ``reaction_key=take-the-oa:0``
+    marks the reaction slot AND emits a feature_used naming the
+    chosen attack (source=oa-attack-chosen).
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
+    )
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == tavik["id"]
+    ]
+    assert prompts, "expected reaction_prompt for Tavik"
+    prompt = prompts[0]["data"]
+    prompt_id = prompt["prompt_id"]
+    # Pick the first per-attack picker key.
+    picker_keys = [
+        o.get("key") for o in (prompt.get("options") or [])
+        if (o.get("key") or "").startswith("take-the-oa:")
+    ]
+    assert picker_keys, "expected at least one picker option"
+    chosen_key = picker_keys[0]
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": chosen_key,
+            "watcher_char_id": tavik["id"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    # Reaction slot marked.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == tavik["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+        and (m.get("data") or {}).get("used") is True
+    ]
+    assert econ, "expected economy_update marking Tavik's reaction used"
+    # oa-attack-chosen audit broadcast.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "oa-attack-chosen"
+        and (m.get("data") or {}).get("character_id") == tavik["id"]
+    ]
+    assert fu, "expected feature_used(source=oa-attack-chosen) broadcast"
+    # The broadcast carries the attack name + index.
+    assert (fu[-1]["data"].get("attack_name") or "").strip(), (
+        f"oa-attack-chosen should carry attack_name; got {fu[-1]['data']}"
+    )
+
+
 # ── v2.99.55 — plan-movement-oa-flow Phase 4: oa_confirmed 409 gate ──
 
 

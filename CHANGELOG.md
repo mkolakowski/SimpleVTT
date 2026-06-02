@@ -10,6 +10,45 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.56] - 2026-06-02 — "One At A Time" — plan-movement-oa-flow Phase 5
+
+**Schema version:** 65
+**Commit summary:** **plan-movement-oa-flow Phase 5 — serial OA queue + per-attack picker + skip option.** Closes the parallel-popup-swarm problem and the "click your sheet's Attack button after the prompt" UX gap. When a single move triggers OAs from multiple watchers, `/token/move` now emits **one** `reaction_prompt` for the head trigger; the tail rides along in the prompt's `context.next_triggers`. `/use_reaction`'s resolve handler pops the next head off and emits a fresh prompt — chained until the queue drains. The prompt's option list extends from a single generic "Take the OA" entry to one entry per melee attack on the watcher's sheet (`take-the-oa:{idx}` keys with attack metadata in params). A new `skip-oa` option resolves the prompt without consuming the reaction so the watcher can react to a later trigger this round.
+**Description:** Three-part server-side commit. (1) `_eligible_reactions[creature_exits_reach]` + `[creature_enters_reach]` now walk the watcher's PC sheet via a new `_pc_melee_attacks(char)` helper that filters `sheet.attacks` for entries with a leading "N ft" range ≤ 15 ft and no `/` (slashes mark thrown/ranged). Each match becomes a `take-the-oa:{idx}` option with the attack name as the label and `{attack_index, attack_name, attack_bonus, damage, damage_type}` in params. (2) `/use_reaction` dispatch handles `take-the-oa:{idx}` keys identically to the generic `take-the-oa` (mark reaction slot) but ALSO broadcasts `feature_used(source=oa-attack-chosen)` naming the chosen attack so the chat log carries an audit trail. New `skip-oa` handler resolves the prompt + emits `feature_used(source=oa-skipped)` WITHOUT marking the reaction slot. (3) `/token/move` no longer emits a `reaction_prompt` per trigger; instead, it loops triggers for the `feature_used` audit advisory, then emits a single `reaction_prompt` for the head with `context.next_triggers = oa_triggers[1:]`. After `reaction_prompt_resolved` fires in `/use_reaction`, the handler checks `entry.context.next_triggers`; if non-empty, pops the head + emits the next prompt with the remaining tail.
+
+### Added
+- `_pc_melee_attacks(char)` helper — returns `[(attack_index, attack_dict), …]` for melee attacks on a PC's sheet. Range detection: leading "N ft" prefix ≤ 15 ft, no slash (thrown/ranged like "20/60 ft" are excluded).
+- Per-attack picker options in `_eligible_reactions[creature_exits_reach]` + `[creature_enters_reach]`. PC watchers get one `take-the-oa:{idx}` entry per melee attack with `{attack_index, attack_name, attack_bonus, damage, damage_type}` in `params`. NPC watchers stay on the generic `take-the-oa` (GM still rolls manually for v1).
+- `skip-oa` option appended to both exit-reach + enter-reach option lists. Resolves the prompt without consuming the reaction.
+- `/use_reaction` dispatch for `take-the-oa:{idx}` — same reaction-slot mark as the generic `take-the-oa` + a `feature_used(source=oa-attack-chosen)` broadcast naming the chosen attack.
+- `/use_reaction` dispatch for `skip-oa` — resolves the prompt + emits `feature_used(source=oa-skipped)` audit broadcast WITHOUT marking the reaction slot.
+- Serial-queue chain in `/use_reaction` post-resolve path: when `entry.context.next_triggers` is non-empty AND `entry.trigger_event` is an OA event, pops the head + re-emits `reaction_prompt` for the next watcher with the remaining tail in its `next_triggers` context.
+- 4 new tests in `tests/harness/test_opportunity_attack.py`:
+  - `test_oa_serial_queue_emits_one_prompt_then_chains` — Krieger walks past Tavik AND Caelan (2 triggers). Exactly 1 reaction_prompt fires; resolving it via `skip-oa` chains to a 2nd prompt for the other watcher.
+  - `test_oa_prompt_includes_per_attack_picker_options` — prompt options list includes `take-the-oa` generic, one `take-the-oa:{idx}` per melee attack, War Caster (if applicable), and `skip-oa`.
+  - `test_oa_use_reaction_skip_does_not_mark_reaction` — `skip-oa` resolves the prompt + audit fires, but no `economy_update` for the reaction slot.
+  - `test_oa_use_reaction_attack_picker_marks_reaction_and_audits` — `take-the-oa:0` marks the reaction + `feature_used(source=oa-attack-chosen)` carries the attack name.
+
+### Changed
+- `/token/move` OA emit loop: legacy `feature_used` advisory still fires per trigger (chat-log audit unchanged), but `reaction_prompt` now fires for the HEAD only with the tail in `context.next_triggers`. v2.66.0 + v2.67.0 trigger-by-trigger feature_used unchanged for backward compat.
+- `_eligible_reactions[creature_exits_reach]` + `[creature_enters_reach]` — restructured so the watcher's Character is loaded once at the top and reused for the new picker walk + the existing War Caster check.
+- `docs/plans/movement-oa-flow.md` — Phase 5 status row flipped ⚪ → ✅.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — plan status pill flipped to "🟠 Phases 1–5 shipped".
+- `docs/test-harness-coverage.md` — total bumped 772 → 776.
+
+### Notes
+- **PATCH bump** — additive options + a dispatch handler + a re-emit chain. No schema change, no API surface removal. Existing `take-the-oa` generic option still resolves identically; the new picker options are a strict superset.
+- **Attack auto-execution still filed for v3.** RAW Phase 5 said "execute the attack via existing `/use_attack` infrastructure." v2.99.56 ships the picker + reaction slot mark + audit broadcast — but the actual d20 swing still requires the player to click their sheet's Attack button. Reason: `/use_attack` is a 600-line FastAPI handler tightly coupled to the request lifecycle; calling it from inside `/use_reaction` needs a helper extraction that's a substantial separate commit. The audit broadcast names the chosen attack so the GM / table can mentally bind the swing to the OA without losing context.
+- **Why a serial chain via `context.next_triggers` instead of a server-side queue dict.** The chain piggybacks on the existing `_active_reaction_prompts` entry — no new lifecycle state to manage, no separate TTL purge, no separate cross-tab race. Each prompt carries its own queue continuation; resolving it pops one off the tail. Self-terminating when the tail is empty.
+- **Multi-token-per-owner sequencing still needs Phase 6.** Today's chain serializes BY-WATCHER but doesn't group by owner. If a single player owns multiple watchers (one player runs two PCs), they'll see the next prompt as soon as they resolve the current one, but they don't get any grouping. Phase 6 adds per-owner sub-queueing.
+- **PC vs NPC asymmetry.** PC watchers get the per-attack picker. NPC watchers stay on the generic `take-the-oa` because their attacks live on the monster template's actions list (different schema, GM rolls manually anyway). A future ship could mine the NPC actions for melee attacks and add per-action picker options too; filed.
+- **War Caster spell-cast option unchanged.** v2.76.0 Phase 4c's `take-war-caster-cast` still fires for PC watchers with the War Caster feat + a 1-action spell. Sits alongside the new picker options.
+- **Skip resolves but doesn't mark.** The `skip-oa` handler explicitly DOES NOT call `_mark_battle_economy`. The watcher's reaction slot stays free for a later trigger this round. Audit broadcast surfaces the explicit "passed" decision.
+- **Wiki surfacing.** Plan-status pill update touches landing + on-disk index per CLAUDE.md.
+- Total harness count: 776 (was 772 in v2.99.55).
+
+---
+
 ## [2.99.55] - 2026-06-01 — "The Held Step" — plan-movement-oa-flow Phase 4 (the headline ask)
 
 **Schema version:** 65

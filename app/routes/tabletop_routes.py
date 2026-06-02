@@ -3095,6 +3095,42 @@ def _pc_has_war_caster_feat(char) -> bool:
     return False
 
 
+def _pc_melee_attacks(char) -> list[tuple[int, dict]]:
+    """v2.99.56 — plan-movement-oa-flow Phase 5 helper.
+
+    Return ``[(attack_index, attack_dict), …]`` of the PC's melee
+    attacks suitable for opportunity-attack picker options.
+
+    Range detection: the sheet attack's ``range`` field is matched
+    against a leading "<N> ft" prefix (no slash). Slashes ("20/60
+    ft") mark thrown / ranged attacks even when they're nominally
+    usable in melee — RAW treats them as ranged for the OA
+    provoking-vs-being-provoked question. Anything with reach <= 15
+    ft and no slash qualifies. Missing range → skipped (an attack
+    without a declared range can't be safely classified as melee).
+    """
+    if not char or not char.sheet:
+        return []
+    out: list[tuple[int, dict]] = []
+    for idx, a in enumerate(char.sheet.get("attacks") or []):
+        if not isinstance(a, dict):
+            continue
+        rng = (a.get("range") or "").strip().lower()
+        if not rng or "/" in rng:
+            continue
+        import re as _re
+        m = _re.match(r"^(\d+(?:\.\d+)?)\s*ft", rng)
+        if not m:
+            continue
+        try:
+            reach = float(m.group(1))
+        except (TypeError, ValueError):
+            continue
+        if reach <= 15.0:
+            out.append((idx, a))
+    return out
+
+
 def _pc_has_war_caster_available(char) -> bool:
     """Detect War Caster feat + at-least-one-1-action-spell on a PC."""
     if not char or not char.sheet:
@@ -3414,11 +3450,13 @@ def _eligible_reactions(
             "available": True,
             "unavailable_reason": None,
         }]
-        # v2.76.0 Phase 4c — War Caster cast-instead-of-OA option.
-        # RAW: PC may cast a 1-action single-target spell at the
-        # creature provoking the OA instead of making the weapon
-        # swing. Helper gates on feat + at-least-one-1-action-spell;
-        # the GM/player picks which spell at cast time.
+        # v2.99.56 — plan-movement-oa-flow Phase 5 attack picker.
+        # PC watchers get one option per melee attack from their
+        # sheet so the player picks which weapon to swing. Key
+        # shape: ``take-the-oa:{idx}`` where idx is the attack
+        # index in ``sheet.attacks``. NPC watchers stay on the
+        # generic key (GM rolls manually for v1).
+        wchar = None
         if watcher_char_id:
             try:
                 wchar = db.query(Character).filter(
@@ -3426,30 +3464,66 @@ def _eligible_reactions(
                 ).first()
             except Exception:
                 wchar = None
-            if wchar and _pc_has_war_caster_available(wchar):
+        if wchar:
+            for idx, atk in _pc_melee_attacks(wchar):
                 opts.append({
-                    "key": "take-war-caster-cast",
-                    "label": (
-                        "✨ War Caster — cast a 1-action spell instead "
-                        "of the OA"
-                    ),
-                    "kind": "feat",
-                    "resource_cost": "Reaction + spell slot (when cast)",
+                    "key": f"take-the-oa:{idx}",
+                    "label": "⚔ " + (atk.get("name") or "Attack"),
+                    "kind": "attack",
+                    "resource_cost": "Reaction",
                     "params": {
-                        "provoker_combatant_id": context.get("provoker_combatant_id"),
-                        "provoker_char_id": context.get("provoker_char_id"),
-                        # v2.66.0 OA emit uses ``mover_name`` /
-                        # ``mover_token_id`` as the provoker identity;
-                        # accept either spelling so this branch works
-                        # without changing the OA emit context.
-                        "provoker_name": (
-                            context.get("provoker_name")
-                            or context.get("mover_name")
-                        ),
+                        "attack_index": idx,
+                        "attack_name": atk.get("name") or "",
+                        "attack_bonus": atk.get("attack_bonus") or "",
+                        "damage": atk.get("damage") or "",
+                        "damage_type": atk.get("damage_type") or "",
                     },
                     "available": True,
                     "unavailable_reason": None,
                 })
+        # v2.76.0 Phase 4c — War Caster cast-instead-of-OA option.
+        # RAW: PC may cast a 1-action single-target spell at the
+        # creature provoking the OA instead of making the weapon
+        # swing. Helper gates on feat + at-least-one-1-action-spell;
+        # the GM/player picks which spell at cast time.
+        if wchar and _pc_has_war_caster_available(wchar):
+            opts.append({
+                "key": "take-war-caster-cast",
+                "label": (
+                    "✨ War Caster — cast a 1-action spell instead "
+                    "of the OA"
+                ),
+                "kind": "feat",
+                "resource_cost": "Reaction + spell slot (when cast)",
+                "params": {
+                    "provoker_combatant_id": context.get("provoker_combatant_id"),
+                    "provoker_char_id": context.get("provoker_char_id"),
+                    # v2.66.0 OA emit uses ``mover_name`` /
+                    # ``mover_token_id`` as the provoker identity;
+                    # accept either spelling so this branch works
+                    # without changing the OA emit context.
+                    "provoker_name": (
+                        context.get("provoker_name")
+                        or context.get("mover_name")
+                    ),
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+        # v2.99.56 — Phase 5 skip option. Resolves the prompt
+        # without consuming the watcher's reaction so the next
+        # queued OA (Phase 5B chain) can fire promptly. Also
+        # surfaces an audit broadcast so the GM can see who passed
+        # on a swing.
+        opts.append({
+            "key": "skip-oa",
+            "label": "✋ Skip — don't take the OA",
+            "kind": "skip",
+            "resource_cost": "",
+            "params": {},
+            "available": True,
+            "unavailable_reason": None,
+        })
         return opts
     # v2.68.1 — Polearm Master enter-reach. Same option key as the
     # exit-reach trigger (same mechanic, same dispatch handler) but
@@ -3465,10 +3539,9 @@ def _eligible_reactions(
             "available": True,
             "unavailable_reason": None,
         }]
-        # v2.76.0 Phase 4c — War Caster also applies for enter-reach
-        # OA (Polearm Master + War Caster combo: when an enemy enters
-        # the polearm wielder's reach, they OA — War Caster lets that
-        # OA be a spell instead).
+        # v2.99.56 — Phase 5 attack picker for Polearm Master OA.
+        # Same shape as the exit-reach picker above.
+        wchar = None
         if watcher_char_id:
             try:
                 wchar = db.query(Character).filter(
@@ -3476,30 +3549,61 @@ def _eligible_reactions(
                 ).first()
             except Exception:
                 wchar = None
-            if wchar and _pc_has_war_caster_available(wchar):
+        if wchar:
+            for idx, atk in _pc_melee_attacks(wchar):
                 opts.append({
-                    "key": "take-war-caster-cast",
-                    "label": (
-                        "✨ War Caster — cast a 1-action spell instead "
-                        "of the Polearm-Master OA"
-                    ),
-                    "kind": "feat",
-                    "resource_cost": "Reaction + spell slot (when cast)",
+                    "key": f"take-the-oa:{idx}",
+                    "label": "⚔ " + (atk.get("name") or "Attack"),
+                    "kind": "attack",
+                    "resource_cost": "Reaction",
                     "params": {
-                        "provoker_combatant_id": context.get("provoker_combatant_id"),
-                        "provoker_char_id": context.get("provoker_char_id"),
-                        # v2.66.0 OA emit uses ``mover_name`` /
-                        # ``mover_token_id`` as the provoker identity;
-                        # accept either spelling so this branch works
-                        # without changing the OA emit context.
-                        "provoker_name": (
-                            context.get("provoker_name")
-                            or context.get("mover_name")
-                        ),
+                        "attack_index": idx,
+                        "attack_name": atk.get("name") or "",
+                        "attack_bonus": atk.get("attack_bonus") or "",
+                        "damage": atk.get("damage") or "",
+                        "damage_type": atk.get("damage_type") or "",
                     },
                     "available": True,
                     "unavailable_reason": None,
                 })
+        # v2.76.0 Phase 4c — War Caster also applies for enter-reach
+        # OA (Polearm Master + War Caster combo: when an enemy enters
+        # the polearm wielder's reach, they OA — War Caster lets that
+        # OA be a spell instead).
+        if wchar and _pc_has_war_caster_available(wchar):
+            opts.append({
+                "key": "take-war-caster-cast",
+                "label": (
+                    "✨ War Caster — cast a 1-action spell instead "
+                    "of the Polearm-Master OA"
+                ),
+                "kind": "feat",
+                "resource_cost": "Reaction + spell slot (when cast)",
+                "params": {
+                    "provoker_combatant_id": context.get("provoker_combatant_id"),
+                    "provoker_char_id": context.get("provoker_char_id"),
+                    # v2.66.0 OA emit uses ``mover_name`` /
+                    # ``mover_token_id`` as the provoker identity;
+                    # accept either spelling so this branch works
+                    # without changing the OA emit context.
+                    "provoker_name": (
+                        context.get("provoker_name")
+                        or context.get("mover_name")
+                    ),
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+        # v2.99.56 — Phase 5 skip option (Polearm Master enter-reach).
+        opts.append({
+            "key": "skip-oa",
+            "label": "✋ Skip — don't take the OA",
+            "kind": "skip",
+            "resource_cost": "",
+            "params": {},
+            "available": True,
+            "unavailable_reason": None,
+        })
         return opts
     # v2.68.1 — Sentinel ally-attacked-near-you. Different option key
     # (`take-sentinel-strike`) so the dispatch can distinguish it
@@ -9189,6 +9293,18 @@ async def move_token(
     # NOT auto-fire the attack or consume the reaction.
     # v2.99.55 — oa_triggers was computed above for the 409 gate; reuse.
     mover_name = token.label or "Token"
+    # v2.99.56 — plan-movement-oa-flow Phase 5 serial queue.
+    # Pre-v2.99.56 every trigger emitted both a legacy feature_used
+    # advisory AND a reaction_prompt in parallel — multiple
+    # watchers' owners all got popups at once. v2.99.56 keeps the
+    # per-trigger feature_used (audit trail stays complete) but
+    # only emits a single reaction_prompt for the HEAD of the
+    # trigger list. The tail rides along in the head's
+    # ``context.next_triggers``; /use_reaction's resolve handler
+    # pops the head off and emits the next prompt when the current
+    # one resolves. This serializes the watcher prompts so the
+    # mover sees them flow one-at-a-time instead of an
+    # everyone-at-once swarm.
     for trig in oa_triggers:
         reach_ft = trig.get("watcher_reach_ft") or 5.0
         # Render the reach in whole feet when it's an integer value
@@ -9233,58 +9349,83 @@ async def move_token(
                 "mover_name": mover_name,
             },
         })
-        # v2.67.0 Phase 1 — also emit a reaction_prompt for the
-        # OA exit-reach trigger. Keeps the legacy feature_used
-        # advisory for backward compat (existing harness tests +
-        # chat-card render path); the new broadcast adds the
-        # popup + roll-log "Take the OA" button path.
-        # v2.68.1 — emit the reaction prompt for BOTH exit (OA) and
-        # enter (Polearm Master) transitions so the GM + the watcher's
-        # owning user get a popup either way. The prompt's trigger
-        # event name + context distinguishes the two so the player UI
-        # can adapt copy if needed; v1's `_eligible_reactions` returns
-        # the same "take-the-oa" option for either transition since
-        # the reaction mechanic (one melee attack) is identical.
-        watcher_combatant = None
-        for c in (hub.get_battle(campaign_id) or {}).get(
+
+    # v2.99.56 — emit a SINGLE reaction_prompt for the head trigger
+    # only. The tail (oa_triggers[1:]) goes into the head's
+    # context.next_triggers; /use_reaction's resolve handler pops
+    # the next head off and emits a fresh prompt for the next
+    # watcher when the current one resolves.
+    if oa_triggers:
+        _head = oa_triggers[0]
+        _head_trig_type = _head.get("trigger_type") or "exit"
+        _head_reach_ft = _head.get("watcher_reach_ft") or 5.0
+        _head_reach_disp = (
+            int(_head_reach_ft) if float(_head_reach_ft).is_integer()
+            else _head_reach_ft
+        )
+        if _head_trig_type == "enter":
+            _head_summary = (
+                f"{mover_name} entered {_head.get('watcher_name')}'s "
+                f"{_head_reach_disp} ft polearm reach. Polearm Master "
+                f"lets you use your reaction to make a melee attack "
+                f"on entry."
+            )
+            _head_evt = "creature_enters_reach"
+        else:
+            _head_summary = (
+                f"{mover_name} moved out of {_head.get('watcher_name')}'s "
+                f"{_head_reach_disp} ft reach. Use your reaction to "
+                f"make a melee attack?"
+            )
+            _head_evt = "creature_exits_reach"
+        _head_watcher_combatant = None
+        for _c in (hub.get_battle(campaign_id) or {}).get(
             "combatants", []
         ) or []:
-            if c.get("id") == trig.get("watcher_combatant_id"):
-                watcher_combatant = c
+            if _c.get("id") == _head.get("watcher_combatant_id"):
+                _head_watcher_combatant = _c
                 break
-        if watcher_combatant is not None:
+        if _head_watcher_combatant is not None:
             try:
-                if trigger_type == "exit":
-                    _evt = "creature_exits_reach"
-                else:  # "enter" — Polearm Master
-                    _evt = "creature_enters_reach"
+                # Tail entries are passed verbatim so the resolve
+                # handler can re-look-up the watcher in init by
+                # combatant_id when it's time to emit the next
+                # prompt. Each entry is a dict of the trigger fields
+                # already in `oa_triggers`.
+                _tail = [
+                    {
+                        "watcher_combatant_id": t.get("watcher_combatant_id"),
+                        "watcher_name": t.get("watcher_name"),
+                        "watcher_char_id": t.get("watcher_char_id"),
+                        "watcher_token_id": t.get("watcher_token_id"),
+                        "watcher_reach_ft": t.get("watcher_reach_ft"),
+                        "trigger_type": t.get("trigger_type") or "exit",
+                    }
+                    for t in oa_triggers[1:]
+                ]
                 await _emit_reaction_prompt(
-                    db, campaign, watcher_combatant,
-                    trigger_event=_evt,
-                    summary=feature_desc,
+                    db, campaign, _head_watcher_combatant,
+                    trigger_event=_head_evt,
+                    summary=_head_summary,
                     context={
                         "mover_token_id": int(token.id),
                         "mover_name": mover_name,
-                        "watcher_reach_ft": reach_ft,
-                        "trigger_type": trigger_type,
+                        "watcher_reach_ft": _head_reach_ft,
+                        "trigger_type": _head_trig_type,
+                        "next_triggers": _tail,
                     },
                 )
             except Exception as _oa_emit_err:
-                # v2.99.49 — log the exception instead of swallowing it
-                # silently. Pre-v2.99.49 the bare `pass` meant a bug in
-                # `_emit_reaction_prompt` (broken `_eligible_reactions`,
-                # missing campaign field, etc.) would silently suppress
-                # the OA popup with no diagnostic trail. The legacy
-                # feature_used advisory + the OA trigger advisory on
-                # the move response are unaffected — only the popup
-                # path is suppressed. Logging here surfaces the root
-                # cause in `docker compose logs app` without breaking
-                # the move flow.
+                # v2.99.49 — log the exception instead of swallowing
+                # it silently so OA popup failures surface in
+                # docker compose logs app. The legacy feature_used
+                # advisory above + the move response's
+                # opportunity_attack_triggers list are unaffected.
                 logging.exception(
                     "OA reaction_prompt emit failed for "
                     "watcher_combatant_id=%s trigger=%s: %s",
-                    trig.get("watcher_combatant_id"),
-                    trigger_type, _oa_emit_err,
+                    _head.get("watcher_combatant_id"),
+                    _head_trig_type, _oa_emit_err,
                 )
 
     # v2.8.0: strict-mode movement audit. When the campaign has
@@ -16561,10 +16702,20 @@ async def use_reaction(
     # extend this table. v2.67.3 extends the slot-flip to NPC
     # watchers — PCs use the character_id-keyed helper, NPCs use
     # the combatant_id-keyed helper.
-    if reaction_key in ("take-the-oa", "take-sentinel-strike"):
-        # Both reactions consume the watcher's reaction slot the
-        # same way; the option-key distinction is for telemetry +
-        # future per-reaction handlers.
+    if (
+        reaction_key in ("take-the-oa", "take-sentinel-strike")
+        or reaction_key.startswith("take-the-oa:")
+    ):
+        # v2.99.56 — plan-movement-oa-flow Phase 5 attack picker.
+        # Keys of the form ``take-the-oa:{idx}`` resolve like the
+        # generic ``take-the-oa`` (mark the reaction slot) but ALSO
+        # broadcast a feature_used naming the chosen attack so the
+        # chat log shows which weapon the watcher swung with. v1
+        # still requires the player to click the actual Attack
+        # button on their sheet to roll the swing; auto-execution
+        # of the OA via /use_attack is filed for v3 (needs a
+        # /use_attack refactor to extract a callable helper that
+        # doesn't depend on the FastAPI request lifecycle).
         if watcher_char_id:
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
@@ -16575,6 +16726,76 @@ async def use_reaction(
                 await _mark_battle_economy_by_combatant_id(
                     campaign_id, str(watcher_combatant_id), "reaction",
                 )
+        # If this is a picker key (with :{idx}), surface the chosen
+        # attack name via a feature_used broadcast so the chat-log
+        # shows the audit trail.
+        if reaction_key.startswith("take-the-oa:"):
+            try:
+                _picked = next(
+                    (o for o in (entry.get("options") or [])
+                     if o.get("key") == reaction_key),
+                    None,
+                )
+            except Exception:
+                _picked = None
+            if _picked:
+                _params = (_picked.get("params") or {})
+                _name = _params.get("attack_name") or "OA Attack"
+                _watcher_name = _picked.get("watcher_name") or ""
+                # Pull the watcher name from the prompt entry's
+                # watcher_combatant_id → state lookup (more reliable
+                # than picker meta).
+                try:
+                    _state = hub.get_battle(campaign_id) or {}
+                    for _c in (_state.get("combatants") or []):
+                        if _c.get("id") == entry.get("watcher_combatant_id"):
+                            _watcher_name = _c.get("name") or _watcher_name
+                            break
+                except Exception:
+                    pass
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": watcher_char_id,
+                        "character_name": _watcher_name,
+                        "feature_name": f"⚔ Opportunity Attack — {_name}",
+                        "feature_desc": (
+                            f"{_watcher_name or 'Watcher'} swings {_name} "
+                            f"as their Opportunity Attack. (Click the "
+                            f"weapon's Attack button to roll the swing.)"
+                        ),
+                        "source": "oa-attack-chosen",
+                        "attack_name": _name,
+                        "attack_index": _params.get("attack_index"),
+                    },
+                })
+    elif reaction_key == "skip-oa":
+        # v2.99.56 — plan-movement-oa-flow Phase 5 skip. Resolves
+        # the prompt WITHOUT marking the watcher's reaction so the
+        # slot stays available for another trigger this round.
+        # Audit broadcast names who passed.
+        _watcher_name = ""
+        try:
+            _state = hub.get_battle(campaign_id) or {}
+            for _c in (_state.get("combatants") or []):
+                if _c.get("id") == entry.get("watcher_combatant_id"):
+                    _watcher_name = _c.get("name") or ""
+                    break
+        except Exception:
+            pass
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": watcher_char_id,
+                "character_name": _watcher_name,
+                "feature_name": "✋ OA skipped",
+                "feature_desc": (
+                    f"{_watcher_name or 'Watcher'} chose NOT to take the "
+                    f"Opportunity Attack. Reaction is still available."
+                ),
+                "source": "oa-skipped",
+            },
+        })
     elif reaction_key == "uncanny-dodge-ack":
         # v2.67.2 Phase 2a — informational ack. Uncanny Dodge already
         # auto-fired in ``_apply_damage_to_combatant``; this resolves
@@ -17553,6 +17774,63 @@ async def use_reaction(
             "resolved_by_user_id": int(user.id),
         },
     })
+
+    # v2.99.56 — plan-movement-oa-flow Phase 5 serial queue. If this
+    # resolved prompt carries pending OA triggers (next_triggers)
+    # in its context, emit a NEW reaction_prompt for the next
+    # watcher. Mover details (mover_token_id / mover_name /
+    # trigger_type / etc.) ride along in the context so each
+    # subsequent prompt has the same provoker info as the first.
+    # End-of-queue (empty next_triggers) is the natural terminator.
+    _ctx = entry.get("context") or {}
+    _next = list(_ctx.get("next_triggers") or [])
+    if _next and entry.get("trigger_event") in (
+        "creature_exits_reach", "creature_enters_reach",
+    ):
+        _head = _next[0]
+        _remaining = _next[1:]
+        try:
+            _next_event = (
+                "creature_enters_reach"
+                if (_head.get("trigger_type") or "exit") == "enter"
+                else "creature_exits_reach"
+            )
+            _next_watcher_combatant = None
+            for _c in (hub.get_battle(campaign_id) or {}).get(
+                "combatants", []
+            ) or []:
+                if _c.get("id") == _head.get("watcher_combatant_id"):
+                    _next_watcher_combatant = _c
+                    break
+            if _next_watcher_combatant is not None:
+                _next_reach = _head.get("watcher_reach_ft") or 5.0
+                _reach_disp = (
+                    int(_next_reach)
+                    if float(_next_reach).is_integer() else _next_reach
+                )
+                _next_summary = (
+                    f"{_ctx.get('mover_name') or 'A creature'} "
+                    f"{'entered' if _next_event == 'creature_enters_reach' else 'left'} "
+                    f"{_head.get('watcher_name') or 'your'}'s "
+                    f"{_reach_disp} ft reach. Use your reaction?"
+                )
+                await _emit_reaction_prompt(
+                    db, campaign, _next_watcher_combatant,
+                    trigger_event=_next_event,
+                    summary=_next_summary,
+                    context={
+                        "mover_token_id": _ctx.get("mover_token_id"),
+                        "mover_name": _ctx.get("mover_name"),
+                        "watcher_reach_ft": _next_reach,
+                        "trigger_type": _head.get("trigger_type") or "exit",
+                        "next_triggers": _remaining,
+                    },
+                )
+        except Exception as _queue_err:
+            logging.exception(
+                "OA queue chain emit failed at next-head=%s: %s",
+                _head.get("watcher_combatant_id"), _queue_err,
+            )
 
     return {
         "ok": True,
