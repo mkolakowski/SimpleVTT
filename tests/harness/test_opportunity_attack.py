@@ -1085,6 +1085,105 @@ async def test_oa_fires_when_one_side_is_neutral(
         await _set_team(gm_client, kr_tok["id"], "neutral")
 
 
+# ── v2.99.59 — presence-aware popup routing ──
+
+
+async def _move_krieger_past_pip(gm_client, krieger, pip):
+    """Helper: place Krieger + Pip with Pip in melee reach, then move
+    Krieger out of reach. Returns the move response JSON.
+    """
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(pip["name"], pip["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, pip["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    return kr_tok
+
+
+async def test_oa_prompt_routes_to_player_when_present(
+    gm_client, gm_ws, alice_ws, roster,
+):
+    """v2.99.59: alice has an open WS connection (she's at the table).
+    Krieger walks past her PC (Pip). The prompt's target_user_ids
+    routes to alice ONLY — the GM is excluded so they don't get a
+    duplicate popup the player is already handling.
+    """
+    krieger = roster["Krieger Stonefist"]
+    pip = roster["Pip Quickfingers"]  # owned by alice
+    kr_tok = await _move_krieger_past_pip(gm_client, krieger, pip)
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("watcher_char_id") == pip["id"]
+    ]
+    assert prompts, "expected reaction_prompt for Pip"
+    targets = prompts[0]["data"].get("target_user_ids") or []
+    pip_owner = pip.get("owner_user_id")
+    assert pip_owner is not None, (
+        "Pip's owner_user_id should be populated in the roster"
+    )
+    assert pip_owner in targets, (
+        f"alice (Pip's owner) is connected → target should include her "
+        f"id; got {targets}"
+    )
+    # GM excluded — player handles their own popup.
+    # Look up GM id via the campaign roster — Tavik is GM-owned.
+    tavik = roster["Brother Tavik Stonebrow"]
+    gm_uid = tavik.get("owner_user_id")
+    assert gm_uid is not None
+    assert gm_uid not in targets, (
+        f"alice is present → GM should NOT receive Pip's popup; "
+        f"got targets={targets} (gm_uid={gm_uid})"
+    )
+
+
+async def test_oa_prompt_routes_to_gm_when_player_absent(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.59: alice does NOT have an open WS connection (note the
+    fixture signature: no alice_ws requested). Krieger walks past
+    Pip. Since alice is offline, the popup falls back to the GM so
+    it doesn't vanish unhandled.
+    """
+    krieger = roster["Krieger Stonefist"]
+    pip = roster["Pip Quickfingers"]
+    kr_tok = await _move_krieger_past_pip(gm_client, krieger, pip)
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("watcher_char_id") == pip["id"]
+    ]
+    assert prompts, "expected reaction_prompt for Pip"
+    targets = prompts[0]["data"].get("target_user_ids") or []
+    tavik = roster["Brother Tavik Stonebrow"]
+    gm_uid = tavik.get("owner_user_id")
+    pip_owner = pip.get("owner_user_id")
+    assert gm_uid in targets, (
+        f"alice is absent → GM should receive Pip's popup as fallback; "
+        f"got {targets}"
+    )
+    # Alice excluded — she's offline.
+    assert pip_owner not in targets, (
+        f"alice is offline → her id should NOT be in targets; "
+        f"got {targets}"
+    )
+
+
 # ── v2.99.57 — plan-movement-oa-flow Phase 6: per-owner sub-queue ──
 
 

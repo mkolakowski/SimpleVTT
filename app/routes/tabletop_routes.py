@@ -4091,13 +4091,29 @@ def _resolve_watcher_user_ids(
     db: Session, campaign: "Campaign", watcher_combatant: dict,
 ) -> list[int]:
     """Return the list of user_ids whose clients should render the
-    reaction popup. For a PC watcher, that's the character's
-    ``owner_user_id``. For an NPC watcher (no char_id), the GM
-    receives the popup. The list also always includes the GM so they
-    see every prompt in the roll-log audit even when a PC owns it.
+    reaction popup.
+
+    v2.99.59 — presence-aware routing. Pre-v2.99.59 returned BOTH
+    the PC owner + the GM unconditionally, so the GM got every
+    player's popup as an "audit" copy. The user reported this as
+    noisy: when Alice is at the table running Pip, the GM doesn't
+    need a duplicate popup. v2.99.59 routes by presence:
+
+      - PC watcher whose owner is CONNECTED → target = [owner].
+        Player handles their own popup; GM stays quiet.
+      - PC watcher whose owner is NOT CONNECTED → target = [GM].
+        The GM plays for the absent player; popup never vanishes.
+      - NPC watcher (no char_id) → target = [GM] (unchanged).
+      - GM-owned PC → target = [GM] (the owner IS the GM, so no
+        change vs. the legacy behavior).
+
+    The audit trail is preserved by the legacy ``feature_used``
+    broadcasts on the chat-card render path — those still fire for
+    every trigger and every user sees them in the roll log.
     """
     out: list[int] = []
     char_id = watcher_combatant.get("char_id")
+    owner_uid: int | None = None
     if char_id:
         try:
             char = db.query(Character).filter(
@@ -4106,10 +4122,29 @@ def _resolve_watcher_user_ids(
         except Exception:
             char = None
         if char and char.owner_user_id:
-            out.append(int(char.owner_user_id))
-    # GM always gets the prompt for audit visibility.
-    if campaign and campaign.gm_user_id and int(campaign.gm_user_id) not in out:
-        out.append(int(campaign.gm_user_id))
+            owner_uid = int(char.owner_user_id)
+    gm_uid = (
+        int(campaign.gm_user_id)
+        if campaign and campaign.gm_user_id else None
+    )
+    if owner_uid is not None and owner_uid != gm_uid:
+        # PC watcher with a non-GM owner. Route by presence.
+        try:
+            owner_present = hub.is_user_present(int(campaign.id), owner_uid)
+        except Exception:
+            owner_present = False
+        if owner_present:
+            out.append(owner_uid)
+        else:
+            # Player offline → GM plays on their behalf so the
+            # popup doesn't vanish unhandled.
+            if gm_uid is not None:
+                out.append(gm_uid)
+    else:
+        # NPC watcher OR PC owned by the GM. Either way, the GM
+        # handles the popup.
+        if gm_uid is not None:
+            out.append(gm_uid)
     return out
 
 

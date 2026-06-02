@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.59] - 2026-06-02 — "Step Up If Empty"
+
+**Schema version:** 65
+**Commit summary:** **Presence-aware reaction-popup routing.** User report: the GM was getting a duplicate popup for every player's reaction prompt, even when the player was at the table handling it themselves. v2.99.59 routes popups by WS presence: when a PC's owner is connected via WebSocket, ONLY the owner gets the popup; the GM is silenced for that one. When the owner is offline (away from the table, disconnected), the GM gets the popup as a fallback so it doesn't vanish unhandled. NPC watcher popups go to the GM as before. The legacy `feature_used` chat-log advisory still fires for every trigger and every connected client, so the GM retains a full audit trail in the roll log.
+**Description:** Two-file commit. (1) `app/realtime.py::CampaignHub.is_user_present(campaign_id, user_id)` — new probe that returns True when at least one open WebSocket in this campaign's channel is identified as the given user_id. Multi-tab honors any open tab (a player on their character sheet still counts as present). (2) `app/routes/tabletop_routes.py::_resolve_watcher_user_ids` — pre-v2.99.59 returned `[owner_uid, gm_uid]` unconditionally for PC watchers. v2.99.59 forks on `hub.is_user_present(owner_uid)`: present → `[owner_uid]` only; absent → `[gm_uid]` only. NPC watchers and GM-owned PCs continue to route to `[gm_uid]` (their owner IS the GM, so no behavior change). Net effect: each popup goes to exactly ONE user — the player when they're at the table, the GM when they're not.
+
+### Added
+- `CampaignHub.is_user_present(campaign_id, user_id) -> bool` — single-user presence probe. Multi-tab honored.
+- 2 new tests in `tests/harness/test_opportunity_attack.py`:
+  - `test_oa_prompt_routes_to_player_when_present` — alice's WS open + Krieger walks past Pip → prompt's `target_user_ids = [alice_id]`, GM excluded.
+  - `test_oa_prompt_routes_to_gm_when_player_absent` — alice's WS NOT open → prompt's `target_user_ids = [gm_id]` (fallback), alice excluded.
+
+### Changed
+- `_resolve_watcher_user_ids` now returns at most ONE user_id per call — the player if present, the GM if not. The previous behavior of always-including-the-GM-for-audit-visibility was the user-reported friction.
+
+### Notes
+- **PATCH bump** — routing logic change only. No schema bump, no new endpoint, no client wiring change. The reaction_prompt.js popup script already filters by `target_user_ids`; the new tighter list just means fewer false positives.
+- **Why the GM-audit comment was dropped.** Pre-v2.99.59 the function comment said "GM always gets the prompt for audit visibility." The user explicitly asked for the opposite: only when the player is absent. The audit trail isn't lost — the legacy `feature_used(source=opportunity-attack-trigger)` broadcast (and equivalent for Shield / Counterspell / etc.) still fires for every trigger, hitting every connected client. The GM sees it in their chat log; the popup is just suppressed.
+- **Multi-tab semantics.** Any open WebSocket tab for a user counts as "present." Player on the character sheet in tab A + tabletop in tab B → both tabs register, player is present, GM stays quiet. Player closes all their tabs → server sees no presence → popup routes to GM.
+- **GM-owned PCs.** When the GM owns a PC (e.g., Tavik in the demo), `owner_uid == gm_uid`. The routing collapses to `[gm_uid]` — same as before. No GM-vs-GM duplication.
+- **Phase 6 cross-owner partition still works.** The Phase 6 per-owner partition emits one prompt per owner_group. With v2.99.59 routing, each owner's prompt targets ONLY that owner (or the GM if absent). Two players at the table each get their own popup; one player absent + one present → the absent player's popup goes to the GM, the present player's popup goes to them.
+- **Wiki surfacing.** docs/wiki/reactions.md's troubleshooting section already mentions the `target_user_ids` filter; no update needed beyond the implicit "GM no longer sees player popups by default" note in the CHANGELOG.
+- Total harness count: 779 (was 777 in v2.99.57; v2.99.58 was a docs/data-only commit).
+
+---
+
 ## [2.99.58] - 2026-06-02 — "Pre-Tagged for the Brawl"
 
 **Schema version:** 65

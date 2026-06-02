@@ -64,6 +64,33 @@ class CampaignHub:
             }
         return list(seen.values())
 
+    def is_user_present(self, campaign_id: int, user_id: int) -> bool:
+        """v2.99.59 — single-user presence probe.
+
+        Returns True when at least one open WebSocket in this
+        campaign's channel is identified as ``user_id``. Used by the
+        reaction-prompt router so popups for an offline player's PC
+        fall back to the GM instead of vanishing into the void.
+
+        Multi-tab is honored — any open tab for the user makes them
+        "present" — so an OA prompt fires even if the player is on
+        their character sheet in a second tab and not on the
+        tabletop tab.
+        """
+        if user_id is None:
+            return False
+        try:
+            uid = int(user_id)
+        except (TypeError, ValueError):
+            return False
+        for ws in self._channels.get(campaign_id, ()):
+            ident = self._identities.get(ws)
+            if not ident:
+                continue
+            if ident.get("user_id") == uid:
+                return True
+        return False
+
     async def connect(
         self,
         campaign_id: int,
