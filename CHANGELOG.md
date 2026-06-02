@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.45] - 2026-06-01 — "The Patron's Gift"
+
+**Schema version:** 64
+**Commit summary:** **Mystic Arcanum (Warlock Lv 11+) — daily free-cast charge spender.** RAW (PHB p.108): at Lv 11/13/15/17 a Warlock gains a chosen L6/L7/L8/L9 spell castable 1/long-rest without expending a Pact Magic slot. v1 ship covers the **L6 tier** only (Magnus Hexbinder at Lv 11 in tests via the v2.99.39 capstone-test pattern). New endpoint `/use_mystic_arcanum` takes `{character_id, slot_level: 6|7|8|9}`, validates Warlock + class level >= gate (Lv 11/13/15/17) + the matching `mystic-arcanum-l{N}` resource has uses remaining. Atomically decrements + broadcasts `resource_update` + `feature_used(source=mystic-arcanum)`. The endpoint is "announce-only" charge spending — it consumes the daily counter; the actual spell cast still goes through `/cast_spell` (free-cast routing in `/cast_spell` is filed for v2).
+**Description:** Endpoint follows the metamagic-endpoint shape (validate class + level + resource, atomic mutate, dual broadcast, undo log entry). The `_MYSTIC_ARCANUM_LEVEL_GATE` lookup table (L6→11, L7→13, L8→15, L9→17) keeps the level gate per-tier so a future commit just adds the L7/L8/L9 resource rows without endpoint changes. Resource `mystic-arcanum-l6` (1/1 long-rest) added to Magnus's sheet — shown descriptively at Lv 5 (endpoint rejects with `level_too_low`), fires at Lv 11+ via the level PATCH.
+
+### Added
+- `/api/campaign/{campaign_id}/use_mystic_arcanum` endpoint. Body `{character_id, slot_level: 6|7|8|9}`. Validates Warlock + level gate + resource. Atomic decrement + `resource_update` + `feature_used` broadcasts + `resource_spend` undo log.
+- `_MYSTIC_ARCANUM_LEVEL_GATE` constant mapping spell level → required class level (PHB-correct per p.108).
+- `mystic-arcanum-l6` resource on Magnus Hexbinder's sheet (1/1, reset=long, class_slug=warlock). Long rest already refills it via the existing `reset: "long"` flag.
+- `mystic-arcanum` class_features entry on Magnus's sheet (descriptive at Lv 5, fires at Lv 11+).
+- `tests/harness/test_use_mystic_arcanum.py` — 7 tests:
+  - `test_mystic_arcanum_l6_decrements_at_lv_11` — happy path: 200 + resource decremented + dual broadcasts.
+  - `test_mystic_arcanum_no_uses_left` — second call same day → 409 no_uses_left.
+  - `test_mystic_arcanum_level_too_low` — Lv 5 → 409 level_too_low (required 11).
+  - `test_mystic_arcanum_wrong_class` — Tavik (Cleric) → 409 wrong_class.
+  - `test_mystic_arcanum_invalid_slot_level` — slot_level=3 → 400.
+  - `test_mystic_arcanum_l7_level_too_low_at_lv_11` — Lv 11 Magnus on L7 → 409 (L7 requires 13). Level gate fires before resource gate.
+  - `test_mystic_arcanum_long_rest_refills` — spend → long rest → second spend succeeds. Confirms the `reset: "long"` plumbing covers Mystic Arcanum.
+
+### Changed
+- `docs/plans/class-content-status.md` — Warlock Mystic Arcanum row updated to ✅ (L6 tier; L7/L8/L9 filed).
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — 1 new endpoint + 1 demo-seed resource + 1 demo-seed class_feature + 7 tests. No schema change.
+- **L7/L8/L9 tiers filed.** The endpoint already accepts `slot_level: 7|8|9` and gates on Lv 13/15/17, but Magnus's sheet doesn't carry the `mystic-arcanum-l7/l8/l9` resources yet — those follow when a higher-level Warlock fixture lands. The endpoint returns `no_arcanum_resource` 404 if the resource is missing (covered by the level-gate-fires-first ordering — L7 at Lv 11 hits `level_too_low` before resource lookup).
+- **Free-cast routing.** The endpoint announces the charge spend; the actual spell cast still uses `/cast_spell` which consumes a Pact Magic slot. A future commit would either (a) add a `mystic_arcanum_cast_id` field to `/cast_spell` body that the spell-slot consumer reads to skip slot deduction, or (b) install a one-cast `mystic-arcanum-pending` buff on Magnus that `/cast_spell`'s slot path reads + drops. Filed for the day Warlock UX gets the per-tier picker.
+- **Capstone test pattern reused.** Tests use the v2.99.39 class-scoped `level` PATCH (bump Lv 5 → Lv 11, restore at finally) without rebuilding Magnus's sheet. Same pattern as `test_sorcerous_restoration.py` + `test_superior_inspiration.py` + `test_elemental_affinity.py`.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 751 (was 744 in v2.99.44).
+
+---
+
 ## [2.99.44] - 2026-06-01 — "The Encore"
 
 **Schema version:** 64

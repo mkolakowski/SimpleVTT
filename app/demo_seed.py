@@ -1511,6 +1511,22 @@ def _warlock_sheet(name: str) -> dict:
                 "desc": "Action — 5×30-ft line of lightning, 2d6 damage, DEX save DC 13 (8 + PB + CON mod) for half. Bronze Dragonborn ancestry. Refreshes on short rest.",
                 "manual": False,
             },
+            # v2.99.45 — Mystic Arcanum L6 (Warlock Lv 11+ capstone-ish
+            # feature). RAW PHB p.108: choose one 6th-level Warlock
+            # spell as your arcanum, castable 1/long-rest without
+            # consuming a Pact Magic slot. The resource is shown at
+            # 1/1 even at Lv 5 (descriptive); /use_mystic_arcanum
+            # enforces the Lv 11+ gate before allowing the spend.
+            # L7/L8/L9 arcana (Lv 13/15/17) filed for tier follow-ups.
+            {
+                "key": "mystic-arcanum-l6",
+                "name": "Mystic Arcanum (L6)",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "warlock Lv 11 / Mystic Arcanum",
+                "class_slug": "warlock",
+                "desc": "1/long rest (Lv 11+): cast a chosen 6th-level Warlock spell without expending a Pact Magic slot. Use /use_mystic_arcanum to spend the charge.",
+                "manual": False,
+            },
         ],
         # v2.18.4: clickable Class abilities buttons. The Fiend's Dark
         # One's Blessing is a passive trigger (no button) — the (B)
@@ -1534,6 +1550,16 @@ def _warlock_sheet(name: str) -> dict:
                 "key": "agonizing-blast",
                 "name": "Agonizing Blast",
                 "desc": "Passive — when you cast Eldritch Blast, add CHA mod (+3) to each beam's damage. Already baked into the Eldritch Blast attack entry's +3 modifier — informational only.",
+            },
+            # v2.99.45 — Mystic Arcanum (Warlock Lv 11+). PHB p.108.
+            # Daily 1/long-rest free cast of a chosen 6/7/8/9-th level
+            # Warlock spell (Lv 11/13/15/17 respectively). v1 ship
+            # covers the L6 tier only; L7/L8/L9 filed. Descriptive
+            # entry until Magnus hits Lv 11 in a future fixture bump.
+            {
+                "key": "mystic-arcanum",
+                "name": "Mystic Arcanum (Lv 11)",
+                "desc": "Beginning at 11th level: choose one 6th-level Warlock spell as your arcanum; cast it 1/long rest without expending a Pact Magic slot. Lv 13/15/17 unlock L7/L8/L9 picks. Use /use_mystic_arcanum to spend the daily charge.",
             },
         ],
         # Pact Boon (Lv 3): Pact of the Tome / Pact of the Blade / Pact

@@ -448,7 +448,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 2 | Eldritch Invocations | 🟡 | Picker UI not wired; invocations are stat boosts / new options |
 | 3 | Pact Boon | ⚪ | |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
-| 11 / 13 / 15 / 17 | Mystic Arcanum | ⚪ | One-per-day single-slot spells, fresh tracking needed |
+| 11 / 13 / 15 / 17 | Mystic Arcanum | 🟢 | v2.99.45 — **L6 tier ✅.** `/use_mystic_arcanum` endpoint takes `{character_id, slot_level: 6\|7\|8\|9}`; validates Warlock + class level >= gate (Lv 11/13/15/17 for L6/L7/L8/L9) + the matching `mystic-arcanum-l{N}` resource has uses remaining. Atomic decrement + `resource_update` + `feature_used(source=mystic-arcanum)` broadcasts. Magnus Hexbinder is the demo fixture (carries `mystic-arcanum-l6` resource 1/1 long; tests bump Magnus Lv 5 → Lv 11 via the v2.99.39 capstone-test pattern). 7 tests cover happy + 6 gate cases (no_uses_left, level_too_low at L6/L7, wrong_class, invalid slot_level, long_rest_refills). L7 / L8 / L9 tier resources filed — endpoint already accepts those slot_levels but Magnus's sheet doesn't carry them yet. Free-cast routing (cast the chosen arcanum spell without consuming a Pact Magic slot) is filed for v2; v1 is announce-only charge spending. |
 | 20 | Eldritch Master | ⚪ | |
 
 ### Wizard

@@ -23116,6 +23116,175 @@ async def use_elemental_affinity(
     }
 
 
+# ----------- API: Mystic Arcanum (Warlock Lv 11+) ----------
+# v2.99.45. RAW (PHB p.108): "At 11th level, your patron bestows
+# upon you a magical secret called an arcanum. Choose one 6th-level
+# spell from the warlock spell list as this arcanum. You can cast
+# your arcanum spell once without expending a spell slot. You must
+# finish a long rest before you can do so again. At higher levels,
+# you gain more warlock spells of your choice: one 7th-level spell
+# at 13th level, one 8th-level spell at 15th level, and one
+# 9th-level spell at 17th level."
+#
+# v1 covers the L6 tier only (Magnus Hexbinder at Lv 11+ in tests
+# via the v2.99.39 capstone-test pattern). L7/L8/L9 tier endpoints
+# would follow the same shape — gate at Lv 13/15/17, decrement
+# `mystic-arcanum-l{N}` resource. Filed.
+#
+# The endpoint is an "announce-only" charge spender (matches the
+# Twinned / Distant / Extended announce-only metamagics). It
+# decrements the daily counter + broadcasts; the actual spell cast
+# still goes through /cast_spell (without slot consumption is filed
+# — for v1 the GM applies a manual override on the cast UI).
+
+_MYSTIC_ARCANUM_LEVEL_GATE = {
+    6: 11,   # L6 arcanum unlocks at Warlock Lv 11
+    7: 13,
+    8: 15,
+    9: 17,
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_mystic_arcanum")
+async def use_mystic_arcanum(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.45 — Spend a Mystic Arcanum daily charge. Body:
+    `{character_id, slot_level: int}` where slot_level ∈ {6,7,8,9}.
+
+    Validates Warlock + class level >= gate (Lv 11/13/15/17 for
+    L6/L7/L8/L9) + the matching `mystic-arcanum-l{N}` resource
+    has uses remaining. Atomically decrements the daily counter +
+    broadcasts `resource_update` + `feature_used`.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    try:
+        slot_level = int(body.get("slot_level") or 0)
+    except (TypeError, ValueError):
+        slot_level = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level not in _MYSTIC_ARCANUM_LEVEL_GATE:
+        raise HTTPException(
+            400, "slot_level must be one of 6, 7, 8, 9",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls != "warlock":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "warlock", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    required = _MYSTIC_ARCANUM_LEVEL_GATE[slot_level]
+    if level < required:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low",
+            "required": required, "got": level,
+            "slot_level": slot_level,
+        })
+
+    resource_key = f"mystic-arcanum-l{slot_level}"
+    resources = list(sheet.get("resources") or [])
+    ma_row = None
+    ma_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == resource_key:
+            ma_row = dict(r); ma_idx = i; break
+    if ma_row is None:
+        return JSONResponse(status_code=404, content={
+            "error": "no_arcanum_resource",
+            "resource_key": resource_key,
+            "hint": (
+                f"Magnus's sheet doesn't carry a {resource_key} resource. "
+                f"Add one with current=1/max=1/reset=long."
+            ),
+        })
+    cur = int(ma_row.get("current") or 0)
+    mx = int(ma_row.get("max") or 0)
+    if cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "resource_key": resource_key,
+            "current": cur, "max": mx,
+        })
+
+    new_cur = cur - 1
+    ma_row["current"] = new_cur
+    resources[ma_idx] = ma_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    ma_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(ma_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": resource_key,
+        "amount": 1,
+        "source_label": f"Mystic Arcanum (L{slot_level})",
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": resource_key,
+            "current": new_cur, "max": mx,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                f"🌑 Mystic Arcanum (L{slot_level})"
+            ),
+            "feature_desc": (
+                f"{char.name} channels their patron's gift: casts the "
+                f"L{slot_level} arcanum spell without expending a "
+                f"Pact Magic slot. (1/long rest)"
+            ),
+            "source": "mystic-arcanum",
+            "slot_level": slot_level,
+            "cast_id": ma_cast_id,
+            "remaining": new_cur, "max": mx,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "resource_key": resource_key,
+        "remaining": new_cur,
+        "max": mx,
+        "cast_id": ma_cast_id,
+    }
+
+
 # ----------- API: Second Wind (Fighter Lv 1) -----------
 
 @router.post("/api/campaign/{campaign_id}/use_second_wind")
