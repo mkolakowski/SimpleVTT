@@ -341,3 +341,108 @@ async def test_heightened_cancels_with_advantage_to_plain_1d20(
         (b or {}).get("key") == "metamagic-heightened-pending"
         for b in zara_buffs_post
     ), f"Heightened buff should be dropped on cancel too; got {zara_buffs_post}"
+
+
+# v2.99.42 — NPC saver Heightened. Closes the v2.99.36 filed "PC paths
+# only" note. Casts Hold Person at an NPC; the server-rolled NPC
+# save expression carries "2d20kl1" (disadvantage) and the chat
+# `roll` broadcast surfaces it. Heightened buff drops + consume
+# broadcast fires for the NPC name.
+
+
+async def test_heightened_disadvantage_on_npc_save(
+    gm_client, gm_ws, zara_rested,
+):
+    """Zara arms Heightened, casts Hold Person at an NPC bandit
+    (single-target Wis save). The server-rolled save's `expression`
+    in the chat `roll` broadcast carries "2d20kl1" (disadvantage) +
+    Heightened consume broadcast fires for the NPC + buff dropped.
+    """
+    zara = zara_rested
+    # Fetch a bandit template.
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    # Seed Zara + bandit in battle.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                _tok(zara),
+                {"id": "tok_ht_bandit", "char_id": None,
+                 "token_template_id": bandit_tmpl["id"],
+                 "name": bandit_tmpl["name"], "initiative": 7,
+                 "hp_current": 100, "hp_max": 100, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+    # Arm Heightened (3 SP).
+    arm = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_heightened_spell",
+        json={"character_id": zara["id"]},
+    )
+    assert arm.status_code == 200, arm.text
+
+    gm_ws.mark()
+    # Cast Hold Person at the bandit (single-target Wis save).
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": HOLD_PERSON_ZARA_INDEX,
+            "slot_level": 2,
+            "class_slug": "sorcerer",
+            "target_combatant_id": "tok_ht_bandit",
+            "target_name": bandit_tmpl["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data.get("auto_save_target_kind") == "npc"
+
+    # Save's roll broadcast carries "2d20kl1" in the expression.
+    import asyncio as _asy
+    await _asy.sleep(0.2)
+    roll_msgs = gm_ws.buffered("roll")
+    save_rolls = [
+        m for m in roll_msgs
+        if (m.get("data") or {}).get("char_name") == bandit_tmpl["name"]
+    ]
+    assert save_rolls, (
+        f"expected a roll broadcast for the bandit's save; "
+        f"buffered: {[(m.get('type'), (m.get('data') or {}).get('char_name')) for m in gm_ws.buffered()]}"
+    )
+    expr = save_rolls[-1]["data"]["expression"]
+    assert "2d20kl1" in expr, (
+        f"NPC save expression should carry the Heightened disadvantage "
+        f"'2d20kl1' marker; got {expr!r}"
+    )
+
+    # Consume broadcast fires for the NPC.
+    fu_msgs = gm_ws.buffered("feature_used")
+    consumed = [
+        m for m in fu_msgs
+        if (m.get("data") or {}).get("source") == "metamagic-heightened-spell"
+        and (m.get("data") or {}).get("character_id") == zara["id"]
+    ]
+    assert consumed, (
+        f"expected feature_used(source=metamagic-heightened-spell) for NPC "
+        f"saver; buffered: "
+        f"{[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+
+    # Buff dropped.
+    zara_buffs_post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "metamagic-heightened-pending"
+        for b in zara_buffs_post
+    ), f"Heightened buff should be dropped post-NPC-consume; got {zara_buffs_post}"

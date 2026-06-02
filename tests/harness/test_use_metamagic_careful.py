@@ -243,3 +243,115 @@ async def test_careful_auto_pass_on_save_swaps_to_force_pass(
         (b or {}).get("key") == "metamagic-careful-pending"
         for b in zara_buffs_post
     ), f"Careful buff should be dropped post-cast; got {zara_buffs_post}"
+
+
+# v2.99.42 — NPC saver Careful. Closes the v2.99.38 filed "PC paths
+# only" note. Casts Fireball at a protected NPC; the server-rolled
+# NPC save expression carries "1d20+99" (auto-pass) and the chat
+# `roll` broadcast surfaces it.
+
+
+async def test_careful_auto_pass_on_npc_save(
+    gm_client, gm_ws, zara_rested,
+):
+    """Zara arms Careful protecting an NPC bandit, casts Fireball at
+    the bandit (single-target). The server-rolled save's `expression`
+    in the chat `roll` broadcast carries "1d20+99" (auto-pass) +
+    protected broadcast fires + auto_save_passed=True + buff dropped.
+    """
+    zara = zara_rested
+    # Fetch a bandit template.
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    # Seed Zara + bandit in battle.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                _tok(zara),
+                {"id": "tok_cf_bandit", "char_id": None,
+                 "token_template_id": bandit_tmpl["id"],
+                 "name": bandit_tmpl["name"], "initiative": 7,
+                 "hp_current": 100, "hp_max": 100, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+    # Arm Careful protecting the bandit.
+    arm = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_careful_spell",
+        json={
+            "character_id": zara["id"],
+            "protected_combatant_ids": ["tok_cf_bandit"],
+        },
+    )
+    assert arm.status_code == 200, arm.text
+
+    gm_ws.mark()
+    # Cast Fireball at the bandit (single-target). Dex save.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": 11,  # Fireball
+            "slot_level": 3,
+            "class_slug": "sorcerer",
+            "target_combatant_id": "tok_cf_bandit",
+            "target_name": bandit_tmpl["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["auto_save_target_kind"] == "npc"
+    # The auto-pass expression always succeeds against any sane DC.
+    assert data.get("auto_save_passed") is True, (
+        f"Careful auto-pass should make NPC save succeed; got "
+        f"auto_save_passed={data.get('auto_save_passed')}"
+    )
+
+    # Save's roll broadcast carries "1d20+99" in the expression.
+    import asyncio as _asy
+    await _asy.sleep(0.2)
+    roll_msgs = gm_ws.buffered("roll")
+    save_rolls = [
+        m for m in roll_msgs
+        if (m.get("data") or {}).get("char_name") == bandit_tmpl["name"]
+    ]
+    assert save_rolls, (
+        f"expected a roll broadcast for the bandit's save; "
+        f"buffered: {[(m.get('type'), (m.get('data') or {}).get('char_name')) for m in gm_ws.buffered()]}"
+    )
+    expr = save_rolls[-1]["data"]["expression"]
+    assert "1d20+99" in expr, (
+        f"NPC save expression should carry the Careful auto-pass "
+        f"'1d20+99' marker; got {expr!r}"
+    )
+
+    # Protected broadcast fires.
+    fu_msgs = gm_ws.buffered("feature_used")
+    protected = [
+        m for m in fu_msgs
+        if (m.get("data") or {}).get("source") == "metamagic-careful-spell"
+        and (m.get("data") or {}).get("character_id") == zara["id"]
+    ]
+    assert protected, (
+        f"expected feature_used(source=metamagic-careful-spell) for NPC "
+        f"protected target; buffered: "
+        f"{[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+
+    # Buff dropped at end of cast.
+    zara_buffs_post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "metamagic-careful-pending"
+        for b in zara_buffs_post
+    ), f"Careful buff should be dropped post-cast; got {zara_buffs_post}"

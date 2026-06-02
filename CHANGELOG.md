@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.42] - 2026-06-01 — "The Even-Handed Spell"
+
+**Schema version:** 64
+**Commit summary:** **NPC saver Careful + Heightened — closes the v1 "PC paths only" notes.** v2.99.38 Careful + v2.99.35-36 Heightened wired only the 3 PC save-roll construction sites. RAW says "creatures" — NPC familiars, allied wolves, even hostile foes the Sorcerer wants to spare all qualify. v2.99.42 wires both metamagics into the 3 NPC save sites: `/cast_spell` single-target NPC save, `/cast_spell` AoE NPC save loop, `/place_aoe` NPC server-rolled save. Same string-replace shape as the PC wires (`1d20 → 1d20+99` for Careful auto-pass, `1d20 → 2d20kl1` for Heightened disadvantage). Heightened's one-use semantic now spans BOTH PC and NPC iteration in the AoE loop — first eligible saver in iteration order gets the swap, buff drops.
+**Description:** 3 wire blocks added to the existing NPC save sites. Heightened consume + Careful protected broadcasts both reuse the `_broadcast_heightened_consumed` / `_broadcast_careful_protected` helpers — the helpers don't care whether the saver is a PC or NPC, they just emit a `feature_used` with the target name. Careful's end-of-cast buff drop in `/cast_spell` + `/place_aoe` (v2.99.38) already fires for NPC-only casts because it doesn't gate on PC iteration. NPCs don't have construction-time advantage sources today (no Danger Sense / race-trait/ Rage on monster sheets), so the v2.99.41 cancel-case fork is a no-op at the NPC sites — pure disadvantage applies.
+
+### Added
+- 3 NPC save-roll site wires in `app/routes/tabletop_routes.py`:
+  - `/cast_spell` single-target NPC save (line ~13158) — Careful auto-pass + Heightened disadvantage wires before the `dice_mod.roll(expr)` call.
+  - `/cast_spell` AoE NPC save loop (line ~13556) — same shape; iteration-order one-use semantic for Heightened (first NPC saver in the loop gets it; PC iteration before this can already have consumed the buff).
+  - `/place_aoe` NPC server-rolled save (line ~14620) — same shape via `ctx.get("caster_char_id")`; uses the already-loaded `_caster_char_for_broadcast` from v2.99.36.
+- `tests/harness/test_use_metamagic_careful.py::test_careful_auto_pass_on_npc_save` — Zara arms Careful protecting a bandit, casts Fireball at the bandit single-target. Asserts (a) `auto_save_passed: True` (the +99 forces the pass), (b) the chat `roll` broadcast's `expression` carries `1d20+99`, (c) protected broadcast fires for the NPC, (d) buff dropped post-cast.
+- `tests/harness/test_use_metamagic_heightened.py::test_heightened_disadvantage_on_npc_save` — Zara arms Heightened, casts Hold Person at a bandit single-target. Asserts (a) chat `roll` broadcast's `expression` carries `2d20kl1`, (b) consume broadcast fires for the NPC, (c) buff dropped post-cast.
+
+### Changed
+- `docs/plans/class-content-status.md` — Sorcerer Metamagic row note updated to credit NPC saver wires shipped for both Careful + Heightened.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — 3 additive wires at existing NPC save sites + 2 new tests. No new endpoint, no schema change, no API surface change.
+- **NPC iteration-order semantic for Heightened AoE.** When Zara casts Fireball with Heightened armed at a mix of PC + NPC targets, the FIRST eligible saver in iteration order gets the disadvantage and the buff drops. Iteration order in `/cast_spell` is `target_combatant_ids` (caller-controlled); in `/place_aoe` it's the picker's intersection list. Filed: caster-side target picker for explicit selection.
+- **Cancel case at NPC sites.** v2.99.41 added the advantage + disadvantage → 1d20 cancel rule at the 3 PC sites. NPC sites don't currently have construction-time advantage sources, so pure disadvantage applies. A future commit that adds NPC-side advantage (e.g. monster traits like a Beholder's Antimagic Cone giving advantage on saves vs spells) would need the same cancel-case fork in the NPC sites.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 734 (was 732 in v2.99.41).
+
+---
+
 ## [2.99.41] - 2026-06-01 — "The Even Hand"
 
 **Schema version:** 64

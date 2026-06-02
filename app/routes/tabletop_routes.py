@@ -13148,6 +13148,45 @@ async def cast_spell(
                     )
                     if _bb_suffix_npc:
                         expr = f"{expr}{_bb_suffix_npc}"
+                    # v2.99.42 — Careful Spell auto-pass at the
+                    # single-target NPC save site. Same shape as the
+                    # v2.99.38 PC wire: if the caster's pending buff
+                    # protects this NPC's combatant_id, swap d20 →
+                    # "1d20+99" (mathematically guarantees PASS). RAW
+                    # ("creatures" — NPC qualifies). Buff drops at
+                    # end of cast.
+                    _npc_careful_buff = _caster_has_careful_pending_buff(
+                        campaign_id, int(char.id),
+                    )
+                    _npc_careful_target_id = (
+                        target_combatant_id
+                        or (target_combatant.get("id") if target_combatant else "")
+                    )
+                    if _combatant_is_careful_protected(
+                        _npc_careful_buff, _npc_careful_target_id,
+                    ):
+                        expr = expr.replace("1d20", "1d20+99", 1)
+                        await _broadcast_careful_protected(
+                            campaign_id, char, target_combatant.get("name") or "",
+                        )
+                    # v2.99.42 — Heightened Spell disadvantage at the
+                    # single-target NPC save site. Same shape as the
+                    # v2.99.35 PC wire: swap d20 → "2d20kl1" + drop
+                    # the buff. NPCs don't have construction-time
+                    # advantage sources today, so the v2.99.41
+                    # cancel-case fork is a no-op here.
+                    _npc_heightened_fired = _caster_has_heightened_pending(
+                        campaign_id, int(char.id),
+                    )
+                    if _npc_heightened_fired:
+                        expr = expr.replace("1d20", "2d20kl1", 1)
+                        await _remove_buff(
+                            campaign_id, int(char.id),
+                            "metamagic-heightened-pending",
+                        )
+                        await _broadcast_heightened_consumed(
+                            campaign_id, char, target_combatant.get("name") or "",
+                        )
                     try:
                         _r = dice_mod.roll(expr)
                         auto_save_rolled = int(_r.total)
@@ -13514,6 +13553,36 @@ async def cast_spell(
             )
             if _bb_suffix_aoe:
                 _expr = f"{_expr}{_bb_suffix_aoe}"
+            # v2.99.42 — Careful Spell auto-pass at AoE NPC save site.
+            # Read pending buff once per loop iteration so a multi-NPC
+            # AoE with only some protected works correctly.
+            _aoe_npc_careful_buff = _caster_has_careful_pending_buff(
+                campaign_id, int(char.id),
+            )
+            if _combatant_is_careful_protected(
+                _aoe_npc_careful_buff, extra.get("id"),
+            ):
+                _expr = _expr.replace("1d20", "1d20+99", 1)
+                await _broadcast_careful_protected(
+                    campaign_id, char, extra_name,
+                )
+            # v2.99.42 — Heightened disadvantage at AoE NPC save site.
+            # Same one-use semantic as the PC paths: first eligible
+            # saver (PC OR NPC in iteration order) gets disadvantage +
+            # buff drops. If the buff already dropped via a prior PC
+            # iteration above, this is a no-op.
+            _aoe_npc_heightened = _caster_has_heightened_pending(
+                campaign_id, int(char.id),
+            )
+            if _aoe_npc_heightened:
+                _expr = _expr.replace("1d20", "2d20kl1", 1)
+                await _remove_buff(
+                    campaign_id, int(char.id),
+                    "metamagic-heightened-pending",
+                )
+                await _broadcast_heightened_consumed(
+                    campaign_id, char, extra_name,
+                )
             try:
                 _r = dice_mod.roll(_expr)
                 _rolled = int(_r.total)
@@ -14544,6 +14613,36 @@ async def place_aoe(
         )
         if _bb_suffix_npc_aoe:
             expr = f"{expr}{_bb_suffix_npc_aoe}"
+        # v2.99.42 — Careful Spell auto-pass at /place_aoe NPC save
+        # site. Read pending buff each iteration so multi-NPC AoE
+        # with only some protected works correctly.
+        _place_npc_careful_buff = _caster_has_careful_pending_buff(
+            campaign_id, int(ctx.get("caster_char_id") or 0),
+        )
+        if _combatant_is_careful_protected(
+            _place_npc_careful_buff, extra.get("id"),
+        ):
+            expr = expr.replace("1d20", "1d20+99", 1)
+            await _broadcast_careful_protected(
+                campaign_id, _caster_char_for_broadcast, extra_name,
+            )
+        # v2.99.42 — Heightened disadvantage at /place_aoe NPC save
+        # site. Same one-use semantic as PC sites: first eligible
+        # saver gets the swap + buff drops. NPCs have no
+        # construction-time advantage sources today, so the v2.99.41
+        # cancel-case fork is a no-op here.
+        _place_npc_heightened = _caster_has_heightened_pending(
+            campaign_id, int(ctx.get("caster_char_id") or 0),
+        )
+        if _place_npc_heightened:
+            expr = expr.replace("1d20", "2d20kl1", 1)
+            await _remove_buff(
+                campaign_id, int(ctx.get("caster_char_id") or 0),
+                "metamagic-heightened-pending",
+            )
+            await _broadcast_heightened_consumed(
+                campaign_id, _caster_char_for_broadcast, extra_name,
+            )
         try:
             r = dice_mod.roll(expr)
             rolled = int(r.total)
