@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.60] - 2026-06-02 — "Crossed Threads"
+
+**Schema version:** 65
+**Commit summary:** **Path-aware OA detection — fires when a mover walks THROUGH a watcher's reach in a single drag.** Pre-v2.99.60 `_check_opportunity_attack_triggers` only inspected the endpoint positions of a move: was the mover within reach at the from-pos, and is the mover outside reach at the to-pos? A move that started OUT, transited the reach circle mid-drag, and ended OUT was silently allowed to pass without provoking an OA — even though RAW (PHB p.195) explicitly says "an opportunity attack interrupts the provoking creature's movement, occurring right before the creature leaves your reach." User report: dragging a hero across the map past a villain didn't fire the popup. v2.99.60 adds a segment-vs-circle geometric check: if both endpoints are outside reach AND the segment's minimum distance to the watcher is ≤ reach_ft, the OA fires at the (computed) exit point.
+**Description:** New helper `_segment_to_point_min_ft(grid_size_px, ax, ay, bx, by, px, py)` returns the minimum distance in feet from line segment (a→b) to point (p). Uses Euclidean throughout (the Chebyshev approximation `_distance_ft_between_points` uses for endpoint-to-endpoint is the wrong metric for "did the threat circle touch your path?"). Inside `_check_opportunity_attack_triggers`, between the existing exit-reach and Polearm-Master-enter-reach branches, a new `elif` block fires when `dist_from > reach_ft AND dist_to > reach_ft AND seg_min_ft <= reach_ft`. The trigger dict carries a new `path_crossed_ft` field so future telemetry / chat-card copy can explain why the OA fired despite both endpoints being outside reach.
+
+### Added
+- `_segment_to_point_min_ft` helper — segment-vs-point geometry in feet.
+- Path-cross OA branch in `_check_opportunity_attack_triggers` (line ~2777).
+- `path_crossed_ft` field on path-cross trigger dicts (carried through `/token/move`'s `opportunity_attack_triggers` response).
+- 2 new tests in `tests/harness/test_opportunity_attack.py`:
+  - `test_oa_fires_on_path_cross_when_both_endpoints_outside_reach` — Tavik at (700, 350), Krieger drags from (350, 350) to (1050, 350). Both endpoints 25 ft from Tavik (out of reach); the path crosses Tavik's 5 ft reach. Asserts the OA fires + the trigger carries `path_crossed_ft ≤ 5.0`.
+  - `test_oa_skips_path_cross_when_path_misses_reach` — Tavik at (700, 700), Krieger's path stays north and misses entirely. Asserts no OA fires.
+
+### Changed
+- `_check_opportunity_attack_triggers`: was 2 branches (exit + enter), now 3 (exit + path-cross + enter). Path-cross uses Euclidean min-distance vs. the Chebyshev endpoint metric; the stricter geometry avoids over-detection on square grids.
+- `docs/test-harness-coverage.md` — total bumped 779 → 781.
+
+### Notes
+- **PATCH bump** — additive geometry check, no schema change, no API surface removal. `opportunity_attack_triggers` response now optionally carries `path_crossed_ft` on path-cross triggers; existing endpoint-OA triggers omit it (key absence ≠ presence-of-falsy, so legacy clients ignoring unknown fields keep working).
+- **Why Euclidean for path-cross + Chebyshev for endpoints.** Endpoint distance uses Chebyshev on square grids per RAW's 5-5-5 diagonals rule — it's the right metric for "how far did this token move." Path-cross is a different question: "did the watcher's threat circle touch this token's straight-line path?" That's a pure 2-D geometric query for which Euclidean is natural. Mixing Chebyshev into segment-to-point would over-detect (the watcher's "reach" would expand to a square instead of a circle on square grids). Euclidean is both more precise AND more conservative — it under-detects rather than over-detects when in doubt.
+- **Polearm Master enter-reach NOT path-cross-aware yet.** A move that enters-and-leaves a polearm-wielder's reach should technically provoke Polearm Master OA at the entry point. Today's path-cross branch only fires the exit OA. Polearm Master path-cross is filed for v2.99.61 (~30 lines + a test).
+- **No double-fire risk.** The exit-reach branch (`dist_from <= reach AND dist_to > reach`) handles the start-inside-end-outside case unchanged. The new path-cross branch fires ONLY when BOTH endpoints are outside — it's an `elif` on a strictly disjoint condition. A move that starts inside reach is never reached by the new branch.
+- **Wiki surfacing.** docs/plans/movement-oa-flow.md gets a new "Backlog → Phase 7 (path-aware) ✅ shipped v2.99.60" footnote. The plan doc otherwise stays unchanged structurally.
+- Total harness count: 781 (was 779 in v2.99.59).
+
+---
+
 ## [2.99.59] - 2026-06-02 — "Step Up If Empty"
 
 **Schema version:** 65

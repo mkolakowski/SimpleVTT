@@ -2056,6 +2056,48 @@ def _distance_ft_between_points(
     return round(cells * 5, 1)
 
 
+def _segment_to_point_min_ft(
+    grid_size_px: int,
+    ax: float, ay: float, bx: float, by: float,
+    px: float, py: float,
+) -> float:
+    """v2.99.60 — minimum distance in feet from the line segment
+    (a→b) to the point (p). Used by the path-aware OA detection
+    in `_check_opportunity_attack_triggers`: if a watcher's reach
+    circle intersects a mover's path (even though the start and
+    end positions are BOTH outside the reach), the mover passed
+    through the reach mid-move and provokes an OA on exit.
+
+    Uses Euclidean distance (px → ft via grid_size_px) regardless
+    of grid type. The Chebyshev/Euclidean distinction in
+    `_distance_ft_between_points` matters for end-to-end distance
+    rendering ("how many feet did you move"); the path-cross check
+    is a pure geometric "did the threat circle touch your path?"
+    question for which Euclidean is the natural metric. Square
+    grids' Chebyshev approximation would over-detect, so Euclidean
+    is the stricter (and more conservative) RAW reading.
+    """
+    if grid_size_px <= 0:
+        return 0.0
+    dx = bx - ax
+    dy = by - ay
+    seg_len_sq = dx * dx + dy * dy
+    if seg_len_sq == 0.0:
+        # Zero-length segment — distance is just point-to-point.
+        return ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5 / grid_size_px * 5
+    # Project P onto the segment, clamping the parameter to [0, 1]
+    # so we stay within the segment endpoints.
+    t = ((px - ax) * dx + (py - ay) * dy) / seg_len_sq
+    if t < 0.0:
+        t = 0.0
+    elif t > 1.0:
+        t = 1.0
+    qx = ax + t * dx
+    qy = ay + t * dy
+    px_dist = ((px - qx) ** 2 + (py - qy) ** 2) ** 0.5
+    return round(px_dist / grid_size_px * 5, 1)
+
+
 # v2.62.1 — F1 consumer #2: Sneak Attack ally-adjacency detection.
 # RAW Sneak Attack (Rogue Lv 1): "advantage on the attack roll" OR
 # "another enemy of the target is within 5 ft of it, not
@@ -2732,6 +2774,39 @@ def _check_opportunity_attack_triggers(
                 "trigger_type": "exit",
             })
             continue
+        # v2.99.60 — path-aware OA. RAW (PHB p.195): "An opportunity
+        # attack interrupts the provoking creature's movement,
+        # occurring right before the creature leaves your reach."
+        # Pre-v2.99.60 the helper only checked endpoints (was_in,
+        # is_in) — a mover that started OUT of reach, walked
+        # THROUGH the threat circle, and ended OUT was invisible to
+        # the OA path even though RAW says it provokes on the exit
+        # step. v2.99.60 closes the gap: if both endpoints are
+        # outside reach AND the move segment passes within
+        # reach_ft of the watcher, fire OA at the (computed) exit
+        # point.
+        if dist_from > reach_ft and dist_to > reach_ft:
+            seg_min_ft = _segment_to_point_min_ft(
+                grid_size_px, from_x, from_y, to_x, to_y, wx, wy,
+            )
+            if seg_min_ft <= reach_ft:
+                triggers.append({
+                    "watcher_combatant_id": c.get("id"),
+                    "watcher_name": c.get("name") or "Combatant",
+                    "watcher_char_id": c.get("char_id"),
+                    "watcher_color": c.get("color"),
+                    "watcher_token_id": int(watcher_token.id),
+                    "watcher_reach_ft": reach_ft,
+                    "dist_from_ft": dist_from,
+                    "dist_to_ft": dist_to,
+                    # Distinguish path-cross OAs in the trigger
+                    # data so future telemetry / chat-card copy can
+                    # explain why the OA fired despite both
+                    # endpoints being outside reach.
+                    "trigger_type": "exit",
+                    "path_crossed_ft": seg_min_ft,
+                })
+                continue
         # v2.66.4 — Polearm Master enter-reach OA. Fires when a
         # creature ENTERS the watcher's reach (the inverse of the
         # exit transition). Only watchers with the Polearm Master

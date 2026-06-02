@@ -1085,6 +1085,98 @@ async def test_oa_fires_when_one_side_is_neutral(
         await _set_team(gm_client, kr_tok["id"], "neutral")
 
 
+# ── v2.99.60 — path-aware OA detection ──
+
+
+async def test_oa_fires_on_path_cross_when_both_endpoints_outside_reach(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.60 — RAW: an OA fires "right before the creature leaves
+    your reach." A mover that walks THROUGH a watcher's reach in
+    one drag (starts OUT, passes within reach mid-segment, ends OUT)
+    should still provoke an OA at the exit point. Pre-v2.99.60 the
+    endpoint-only check missed this.
+
+    Geometry: Tavik at (700, 350). Krieger starts at (350, 350) —
+    5 cells (25 ft) west of Tavik, out of reach. Drag Krieger to
+    (1050, 350) — 5 cells (25 ft) east of Tavik, also out of
+    reach. The straight-line path passes RIGHT THROUGH Tavik's
+    5 ft reach. Path-cross OA should fire.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 700.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 1050.0, "y": 350.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    triggers = [
+        t for t in (data.get("opportunity_attack_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert triggers, (
+        f"path-cross OA should fire for Tavik; got triggers="
+        f"{data.get('opportunity_attack_triggers')}"
+    )
+    # The trigger should carry the new path_crossed_ft field.
+    assert triggers[0].get("path_crossed_ft") is not None, (
+        f"path-cross trigger should carry path_crossed_ft; got "
+        f"{triggers[0]}"
+    )
+    # The path_crossed_ft (min distance from segment to watcher)
+    # should be <= the watcher's 5 ft reach.
+    assert triggers[0]["path_crossed_ft"] <= 5.0, (
+        f"path_crossed_ft should be within reach; got "
+        f"{triggers[0]['path_crossed_ft']}"
+    )
+
+
+async def test_oa_skips_path_cross_when_path_misses_reach(
+    gm_client, roster,
+):
+    """v2.99.60 — control test for the path-cross logic. If the
+    move path's minimum distance to the watcher is greater than
+    their reach, no OA fires.
+
+    Geometry: Tavik at (700, 700). Krieger at (350, 350); drag him
+    to (1050, 350) — the path is far north of Tavik (well outside
+    his 5 ft / 1-cell reach). No path-cross OA.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 700.0, 700.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 1050.0, "y": 350.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    triggers = [
+        t for t in (data.get("opportunity_attack_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert not triggers, (
+        f"path that misses reach should NOT fire OA; got {triggers}"
+    )
+
+
 # ── v2.99.59 — presence-aware popup routing ──
 
 
