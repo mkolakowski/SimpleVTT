@@ -27653,9 +27653,52 @@ async def rest_character(
         else:
             new_short_slots[cslug] = by_lvl
     sheet["spell_slots"] = new_short_slots
+
+    # v2.99.39 — Sorcerous Restoration (Sorcerer Lv 20 capstone). RAW
+    # (PHB p.101): "Beginning at 20th level, you regain 4 expended
+    # sorcery points whenever you finish a short rest." Sorcery
+    # points use `reset: "long"` so the resource-refill loop above
+    # doesn't touch them on a short rest — Lv 20 is the only path to
+    # get SP back from a short rest. Gated on class==sorcerer AND
+    # level>=20. Multiclass Sorcerers: the gate reads the sheet's
+    # base `class`/`level` (the primary class). Future Sorcerer/X
+    # multiclass would need a class-roster scan; filed.
+    sr_restored_sp = 0
+    sr_sp_new = None
+    sr_sp_max = None
+    if (
+        (sheet.get("class") or "").strip().lower() == "sorcerer"
+        and int(sheet.get("level") or 0) >= 20
+    ):
+        sr_resources = list(sheet.get("resources") or [])
+        for i, r in enumerate(sr_resources):
+            if not isinstance(r, dict):
+                continue
+            if (r.get("key") or "").strip().lower() != "sorcery-points":
+                continue
+            sp_cur = int(r.get("current") or 0)
+            sp_max = int(r.get("max") or 0)
+            if sp_max <= 0:
+                break
+            sr_restored_sp = min(4, sp_max - sp_cur)
+            if sr_restored_sp <= 0:
+                # Already at max — no broadcast, RAW restore amount is 0.
+                sr_sp_new = sp_cur
+                sr_sp_max = sp_max
+                break
+            new_sp = sp_cur + sr_restored_sp
+            updated = {**r, "current": new_sp}
+            sr_resources[i] = updated
+            sr_sp_new = new_sp
+            sr_sp_max = sp_max
+            break
+        sheet["resources"] = sr_resources
+
     sheet["hp"] = hp
     sheet["hit_dice"] = hd
     char.sheet = sheet
+    from sqlalchemy.orm.attributes import flag_modified as _flag_mod_sr
+    _flag_mod_sr(char, "sheet")
     # Short rest healing goes through the state machine so a dying
     # character who somehow ends up able to take a short rest (e.g. via
     # the GM rolling them stable then back up) cleanly wakes them.
@@ -27690,6 +27733,47 @@ async def rest_character(
         except Exception:
             pass
 
+    # v2.99.39 — Sorcerous Restoration broadcasts. Mirrors the
+    # `resource_update` shape every other SP touch uses + emits a
+    # `feature_used(source=sorcerous-restoration)` so the chat log
+    # surfaces "Zara regains 4 sorcery points (Sorcerous Restoration)".
+    if sr_restored_sp > 0 and sr_sp_new is not None and sr_sp_max is not None:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": char.id,
+                    "key": "sorcery-points",
+                    "current": int(sr_sp_new),
+                    "max": int(sr_sp_max),
+                },
+            })
+        except Exception:
+            pass
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": char.id,
+                    "character_name": char.name,
+                    "user_color": char.color,
+                    "feature_name": (
+                        f"✨ Sorcerous Restoration "
+                        f"(+{sr_restored_sp} SP)"
+                    ),
+                    "feature_desc": (
+                        f"{char.name} finishes a short rest and "
+                        f"regains {sr_restored_sp} sorcery point"
+                        f"{'s' if sr_restored_sp != 1 else ''}."
+                    ),
+                    "source": "sorcerous-restoration",
+                    "remaining": int(sr_sp_new),
+                    "max": int(sr_sp_max),
+                },
+            })
+        except Exception:
+            pass
+
     # v2.99.25 — broadcast Pact Magic slot refills so any open
     # sheet / mini-sheet repaints the slot pips. Mirrors the
     # long-rest broadcast loop at the top of this handler.
@@ -27717,6 +27801,10 @@ async def rest_character(
         "recovered": recovered,
         "breakdown": breakdown,
         "resources": refilled_resources,
+        # v2.99.39 — Sorcerous Restoration: how many SP the Lv 20
+        # capstone refunded this short rest. 0 for every non-Lv-20
+        # Sorcerer + every non-Sorcerer.
+        "sorcerous_restoration_sp": int(sr_restored_sp),
         # v2.15.3: ``song_of_rest`` is non-null when any Bard ≥ Lv 2 is
         # in the campaign. ``die`` is the d{N} that was rolled, ``bard``
         # is the highest-level Bard's name (display attribution),
@@ -33531,6 +33619,11 @@ async def update_sheet(
 _SHEET_PATCH_KEYS = {
     # HP object {current, max, temp}
     "hp",
+    # Character level (1-20). Already mutable via the full-sheet POST
+    # at /character/{id}; added to the PATCH allowlist in v2.99.39 so
+    # capstone-level harness tests (Sorcerous Restoration, etc.) can
+    # bump a fixture PC to Lv 20 without rebuilding the entire sheet.
+    "level",
     # Subclass features (new per-feature format + legacy blob)
     "subclass_features_data",   # legacy blob (kept for backwards compat)
     "subclass_name",

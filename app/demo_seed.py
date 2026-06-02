@@ -2335,6 +2335,16 @@ def _sorcerer_sheet(name: str) -> dict:
                 "name": "Careful Spell (metamagic)",
                 "desc": "Spend 1 sorcery point: when you cast a save-spell, choose up to CHA-mod creatures (min 1). Those creatures auto-succeed on their first saving throw vs the spell. Auto-consumed on the next save-roll resolution.",
             },
+            # v2.99.39 — Sorcerous Restoration (Lv 20 capstone).
+            # PHB p.101. Refunds 4 SP on every short rest. Wired
+            # in /rest short-rest path; gated on class==sorcerer
+            # AND level>=20. Descriptive entry until Zara hits
+            # Lv 20 in a future fixture bump.
+            {
+                "key": "sorcerous-restoration",
+                "name": "Sorcerous Restoration (Lv 20)",
+                "desc": "Beginning at 20th level, you regain 4 expended sorcery points whenever you finish a short rest. Auto-applied by the /rest endpoint when class=Sorcerer AND level>=20.",
+            },
         ],
         # Sorcerer's Metamagic at Lv 3 picks 2 options. Zara's picks:
         # Quickened (v2.6.0) + Empowered (v2.49.124) + Twinned

@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.39] - 2026-06-01 — "The Twentieth Spark"
+
+**Schema version:** 64
+**Commit summary:** **Sorcerous Restoration — Sorcerer Lv 20 capstone closes the class to ✅.** RAW (PHB p.101): "Beginning at 20th level, you regain 4 expended sorcery points whenever you finish a short rest." Hook lands in `/character/{id}/rest` short-rest path: gated on `class==sorcerer AND level>=20`, finds the `sorcery-points` resource, adds `min(4, max-current)` SP, broadcasts `resource_update` + `feature_used(source=sorcerous-restoration)`. Sorcery points use `reset: "long"` so the resource-refill loop above doesn't touch them on a short rest — the Lv 20 capstone is the only path to SP from a short rest.
+**Description:** Hook in the short-rest branch (after the v2.99.25 Pact Magic slot refresh + before the `_apply_hp_change` call). Returns `sorcerous_restoration_sp: int` in the rest response so tests can assert the refund amount directly. `level` added to `_SHEET_PATCH_KEYS` so capstone-level harness tests can bump a fixture PC to Lv 20 via the lightweight `/sheet-fields` PATCH (already mutable via the full-sheet POST at `/character/{id}` — the PATCH allowlist just shortens the test fixture). Descriptive `sorcerous-restoration` entry added to Zara's `class_features` list so the panel renders the capstone even at Lv 5.
+
+### Added
+- Sorcerous Restoration hook in `/character/{id}/rest` short-rest path. Atomic SP top-up + `resource_update` + `feature_used(source=sorcerous-restoration)` broadcast. Skips quietly when SP already at max (no broadcast, response carries `sorcerous_restoration_sp: 0`).
+- `sorcerous_restoration_sp: int` field on the `/rest` short-rest response (alongside `recovered` / `breakdown` / etc.).
+- `level` in `_SHEET_PATCH_KEYS` allowlist — lets the test fixture bump Zara to Lv 20 via the lightweight PATCH path.
+- `sorcerous-restoration` entry in Zara's `class_features` list (descriptive at Lv 5, fires at Lv 20).
+- `tests/harness/test_sorcerous_restoration.py` — 4 tests:
+  - `test_sorcerous_restoration_refunds_4_sp_at_lv_20` — bump Zara to Lv 20, drain SP via Empowered × 5, short rest → SP back to 4 + `sorcerous_restoration_sp == 4` + `feature_used(source=sorcerous-restoration)` broadcast.
+  - `test_sorcerous_restoration_skips_at_lv_19` — Zara at Lv 19 → SP stays 0 + no broadcast.
+  - `test_sorcerous_restoration_skips_for_non_sorcerer` — Krieger (Barbarian) at Lv 20 → no SP refund (no SP resource at all).
+  - `test_sorcerous_restoration_caps_at_max` — Zara at Lv 20 with full SP → short rest leaves SP at max + `sorcerous_restoration_sp == 0`.
+
+### Changed
+- `docs/plans/class-content-status.md` — Sorcerer Lv 20 Sorcerous Restoration row updated to ✅. Sorcerer class now fully ✅ (every RAW class feature L1–L20 shipped).
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — additive hook + 1 new response field + 1 allowlist entry + 1 demo-seed line + 4 tests. No schema change.
+- **Sorcerer class fully ✅.** All RAW class features L1–L20 shipped: Spellcasting (✅), Sorcerous Origin (✅), Font of Magic (✅), Metamagic (✅ — 7 of 8: Empowered / Twinned / Distant / Heightened / Extended / Careful / Quickened; only Subtle blocked on F7), ASIs (✅), Sorcerous Restoration (✅).
+- **Multiclass note.** The gate reads the sheet's top-level `class`/`level` (the primary class). A Sorcerer 18 / Wizard 2 wouldn't qualify even though their Sorcerer level matches the capstone trigger — RAW intent is "Sorcerer Lv 20" which under multiclass rules means Lv 20 *in the Sorcerer class*. A future commit could scan the per-class `classes[]` entry instead; filed when a multiclass Sorcerer fixture lands.
+- **Test-fixture mutation pattern.** Adding `level` to the PATCH allowlist establishes a clean way for future capstone tests (Bard Lv 20 Superior Inspiration, Cleric Lv 20 Divine Intervention auto-success, Fighter Lv 20 Indomitable +3, etc.) to bump a fixture PC to Lv 20 without rebuilding the entire sheet. Test should PATCH-back to the original level at the end of the test to avoid leaking state across the suite.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 731 (was 727 in v2.99.38).
+
+---
+
 ## [2.99.38] - 2026-06-01 — "The Cautious Hand"
 
 **Schema version:** 64
