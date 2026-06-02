@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.41] - 2026-06-01 — "The Even Hand"
+
+**Schema version:** 64
+**Commit summary:** **Heightened Spell — RAW PHB p.173 cancellation fix.** v2.99.35-36 wired Heightened with a "advantage wins" simplification: when the saver had BOTH advantage (Danger Sense / race trait / Rage STR-save) AND Heightened-pending disadvantage, the d20 stayed at the advantage's 2d20kh1 shape AND the Heightened buff dropped. RAW PHB p.173 says advantage + disadvantage CANCEL — the roll is normal (1d20). v2.99.41 restores RAW: when both apply at a save site, the d20 expression becomes "1d20" (or "1d20+mod" in /place_aoe), not 2d20kh1. The Heightened buff still drops because the cast consumed it. Advantage broadcasts still fire so the chat surfaces what attempted to apply.
+**Description:** 3-site fix at the same construction sites Heightened was wired into: `/cast_spell` single-target PC save (line ~12978), `/cast_spell` AoE PC save loop (line ~13339), `/place_aoe` PC server-rolled save (line ~14342). Each site previously had the form "if d20 already 2d20kh1 → keep it, else swap to 2d20kl1". The new form is "if d20 already 2d20kh1 → collapse to 1d20 (cancel), else swap to 2d20kl1 (disadvantage)". `/place_aoe` had a slightly different shape (builds expr from scratch via if/elif chain) — the cancel case is detected when the advantage-source branch AND `_aoe_pl_heightened` are both true; expr becomes `f"1d20{pc_mod:+d}"` instead of `f"2d20kh1{pc_mod:+d}"`.
+
+### Fixed
+- 3 save-roll construction sites in `/cast_spell` + `/place_aoe`. Advantage + Heightened now produces a normal 1d20 roll per RAW PHB p.173 instead of the v2.99.35 "advantage wins" simplification.
+- Heightened buff still drops on cancel — the cast consumed the SP + the metamagic option, even if the disadvantage was cancelled.
+- Advantage broadcasts (Danger Sense / race trait / Rage STR save) still fire on cancel so the chat surfaces what attempted to apply. A future polish could append a "cancelled by Heightened" annotation; filed.
+
+### Added
+- `tests/harness/test_use_metamagic_heightened.py::test_heightened_cancels_with_advantage_to_plain_1d20` — Zara arms Heightened, casts Fireball single-target at Krieger (Half-Orc Barbarian Lv 7 — Danger Sense on Dex saves). Asserts (a) Krieger's roll_request `base_expression == "1d20"` (cancel — neither advantage nor disadvantage), (b) Heightened consume broadcast still fires, (c) Heightened buff dropped post-cast.
+
+### Notes
+- **PATCH bump** — 3 site fixes + 1 new test. No new endpoint, no schema change, no API surface change.
+- **Existing Heightened tests still pass.** `test_heightened_consume_on_save_swaps_to_disadvantage` (Pip with no advantage source for Wis save → still 2d20kl1) + `test_heightened_consume_on_aoe_save` (Krieger has Danger Sense but the test only asserts on broadcast + buff drop, not the d20 shape) are both unaffected by the cancel fix.
+- **Total harness count:** 732 (was 731 in v2.99.39, unchanged in the v2.99.40 fix-only bump).
+
+---
+
 ## [2.99.40] - 2026-06-01 — "The Roster Stamp"
 
 **Schema version:** 64

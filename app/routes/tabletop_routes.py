@@ -12963,14 +12963,22 @@ async def cast_spell(
                     campaign_id, int(char.id),
                 )
                 if _heightened_fired:
-                    # If an advantage swap is already applied, the
-                    # advantage + disadvantage cancel per RAW PHB
-                    # p.173 — keep the existing kh1 (advantage wins
-                    # for the test fixture's existing race-trait
-                    # tests). But we drop the Heightened buff
-                    # regardless since the cast still consumed it.
-                    if not _ds_base.startswith("2d20kh1"):
-                        _ds_base = _ds_base.replace("1d20", "2d20kl1", 1)
+                    # v2.99.41 — RAW PHB p.173 cancellation: when
+                    # advantage AND disadvantage both apply, the
+                    # roll is made normally (1d20). v2.99.35 kept
+                    # the kh1 (advantage wins simplification);
+                    # v2.99.41 restores RAW by collapsing back to
+                    # 1d20 when an advantage source is already on
+                    # _ds_base. Heightened-without-advantage still
+                    # swaps to 2d20kl1. Buff drops either way.
+                    if _ds_base.startswith("2d20kh1"):
+                        _ds_base = _ds_base.replace(
+                            "2d20kh1", "1d20", 1,
+                        )
+                    else:
+                        _ds_base = _ds_base.replace(
+                            "1d20", "2d20kl1", 1,
+                        )
                     await _remove_buff(
                         campaign_id, int(char.id),
                         "metamagic-heightened-pending",
@@ -13350,8 +13358,16 @@ async def cast_spell(
                     campaign_id, int(char.id),
                 )
                 if _aoe_heightened_fired:
-                    if not _aoe_ds_base.startswith("2d20kh1"):
-                        _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kl1", 1)
+                    # v2.99.41 — RAW PHB p.173 cancellation. Same
+                    # shape as the single-target wire.
+                    if _aoe_ds_base.startswith("2d20kh1"):
+                        _aoe_ds_base = _aoe_ds_base.replace(
+                            "2d20kh1", "1d20", 1,
+                        )
+                    else:
+                        _aoe_ds_base = _aoe_ds_base.replace(
+                            "1d20", "2d20kl1", 1,
+                        )
                     await _remove_buff(
                         campaign_id, int(char.id),
                         "metamagic-heightened-pending",
@@ -14403,7 +14419,15 @@ async def place_aoe(
                         campaign_id, extra_pc,
                     )
             elif _ds_pc_applies or _aoe_pl_race_applies or _aoe_pl_rage_str_save:
-                expr = f"2d20kh1{pc_mod:+d}"
+                # v2.99.41 — RAW PHB p.173 cancellation: if Heightened
+                # is also armed for this saver, advantage + disadvantage
+                # cancel and the roll is normal (1d20). Otherwise pure
+                # advantage (2d20kh1). Broadcasts still fire so the
+                # chat surfaces what tried to apply.
+                if _aoe_pl_heightened:
+                    expr = f"1d20{pc_mod:+d}"
+                else:
+                    expr = f"2d20kh1{pc_mod:+d}"
                 if _ds_pc_applies:
                     await _broadcast_danger_sense(campaign_id, extra_pc)
                 if _aoe_pl_race_applies:

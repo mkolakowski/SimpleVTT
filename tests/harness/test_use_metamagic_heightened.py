@@ -263,3 +263,81 @@ async def test_heightened_consume_on_aoe_save(
         (b or {}).get("key") == "metamagic-heightened-pending"
         for b in zara_buffs_post
     ), f"Heightened buff should be dropped post-AoE-consume; got {zara_buffs_post}"
+
+
+# v2.99.41 — RAW PHB p.173 cancellation. When the saver has BOTH an
+# advantage source (Danger Sense, race trait, Rage STR save, etc.)
+# AND Heightened disadvantage, the roll is made normally (1d20). The
+# Heightened buff still drops because the cast consumed it.
+
+
+async def test_heightened_cancels_with_advantage_to_plain_1d20(
+    gm_client, gm_ws, zara_rested, roster,
+):
+    """Zara arms Heightened, then casts Fireball single-target at
+    Krieger (Half-Orc Barbarian Lv 7 — Danger Sense gives advantage
+    on Dex saves vs visible effects). Per RAW PHB p.173 advantage +
+    disadvantage cancel: Krieger's save base_expression should be
+    "1d20" (NOT 2d20kh1 or 2d20kl1). Heightened buff still drops +
+    consume broadcast still fires.
+    """
+    zara = zara_rested
+    krieger = roster["Krieger Stonefist"]
+    await _seed_battle(gm_client, [_tok(zara), _tok(krieger)])
+    # Arm Heightened (3 SP).
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_heightened_spell",
+        json={"character_id": zara["id"]},
+    )
+    assert r.status_code == 200, r.text
+
+    gm_ws.mark()
+    # Cast Fireball at Krieger single-target (Dex save).
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": 11,  # Fireball
+            "slot_level": 3,
+            "class_slug": "sorcerer",
+            "target_combatant_id": f"tok_ht_{krieger['id']}",
+            "target_character_id": krieger["id"],
+            "target_name": krieger["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    # roll_request broadcast — base_expression should be 1d20 (cancel).
+    rr_msgs = gm_ws.buffered("roll_request")
+    rr = rr_msgs[-1] if rr_msgs else None
+    assert rr is not None, "expected a roll_request broadcast for Krieger's Dex save"
+    assert rr["data"]["base_expression"] == "1d20", (
+        f"Heightened + Danger Sense should cancel to 1d20 per RAW PHB "
+        f"p.173; got {rr['data']['base_expression']!r}"
+    )
+
+    import asyncio as _asy
+    await _asy.sleep(0.2)
+
+    # Heightened consume broadcast fires (the cast consumed the SP +
+    # the metamagic option, even if the disadvantage was cancelled).
+    fu_msgs = gm_ws.buffered("feature_used")
+    consumed = [
+        m for m in fu_msgs
+        if (m.get("data") or {}).get("source") == "metamagic-heightened-spell"
+        and (m.get("data") or {}).get("character_id") == zara["id"]
+    ]
+    assert consumed, (
+        f"expected Heightened consume broadcast even on cancel; "
+        f"buffered: {[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+
+    # Buff dropped post-consume.
+    zara_buffs_post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "metamagic-heightened-pending"
+        for b in zara_buffs_post
+    ), f"Heightened buff should be dropped on cancel too; got {zara_buffs_post}"
