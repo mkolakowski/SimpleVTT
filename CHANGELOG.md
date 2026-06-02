@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.44] - 2026-06-01 — "The Encore"
+
+**Schema version:** 64
+**Commit summary:** **Superior Inspiration — Bard Lv 20 capstone — auto-refunds one Bardic Inspiration use when initiative is rolled at zero.** RAW (PHB p.54): "At 20th level, when you roll initiative and have no uses of Bardic Inspiration left, you regain one use." Hook lives in `/battle` PUT: detects the inactive → active transition (the canonical "initiative was just rolled" moment), walks combatants for PC Bards Lv 20+ whose `bardic-inspiration` resource is at 0, refunds 1 use, broadcasts `resource_update` + `feature_used(source=superior-inspiration)`. Skips quietly when BI > 0, level < 20, non-Bard, or the battle was already active (e.g. GM tweaks turn_index mid-combat — no re-trigger).
+**Description:** Hook lands right after the `_battle_just_started` boolean (computed from `_prev_battle.get("active")` vs `state.get("active")`). Walks `state["combatants"]` per-PC, gates on class==bard + level>=20 + BI current==0, mutates the sheet's `resources` array, flag_modified, commit, broadcast. Existing turn-advance Heroism hook stays untouched. Demo subject: Lyra Sunstrider (Bard Lv 6) — bumped to Lv 20 in tests via the v2.99.39 capstone-test pattern (class-scoped `level` PATCH) then restored.
+
+### Added
+- Superior Inspiration hook in `/api/campaign/{campaign_id}/battle` PUT (line ~31951). Atomic BI refund + dual broadcast (resource_update + feature_used). Skips quietly on gate fail (no broadcast).
+- `superior-inspiration` entry in Lyra Sunstrider's `class_features` list (descriptive at Lv 6, fires at Lv 20).
+- `tests/harness/test_superior_inspiration.py` — 5 tests:
+  - `test_superior_inspiration_refunds_1_use_at_lv_20` — happy path: drain BI, transition battle inactive → active, assert BI=1 + broadcast.
+  - `test_superior_inspiration_skips_at_lv_19` — level gate. Lyra at Lv 19 → no refund.
+  - `test_superior_inspiration_skips_when_bi_above_zero` — RAW gate. Lv 20 Lyra with BI > 0 → no refund.
+  - `test_superior_inspiration_skips_for_non_bard` — class gate. Krieger (Barbarian) at Lv 20 → no refund.
+  - `test_superior_inspiration_only_fires_on_transition` — hook contract: re-PUT with active=True (e.g. GM tweaks turn_index mid-combat) does NOT re-trigger. Only the inactive → active transition counts.
+
+### Changed
+- `docs/plans/class-content-status.md` — Bard Lv 20 Superior Inspiration row updated to ✅.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — additive hook + 1 demo-seed line + 5 tests. No new endpoint, no schema change.
+- **"Roll initiative" semantic.** RAW literally says "when you roll initiative." SimpleVTT doesn't have a single endpoint that means "the GM just clicked start-combat" — initiative entries are set on individual combatants via `/roll` requests or manual entry. The cleanest proxy is the `state.active` transition False → True on `/battle` PUT, which is what the "Roll Initiative" button + the "Start Combat" UX both ultimately POST. Filed if a more granular "initiative-rolled" hook ever lands; for now the active-transition is good enough.
+- **Multiclass note.** Like Sorcerous Restoration (v2.99.39), the gate reads top-level `class`/`level` (primary class). A Bard 18 / Wizard 2 wouldn't qualify even with the Bard side at Lv 18. Per multiclass RAW that's correct (the capstone requires class level 20). Filed when a multiclass Bard fixture lands.
+- **Bard class status.** Bard now has 13 of 14 PHB L1–L20 features at ✅ or partial. Remaining gap: **Magical Inspiration** (Lv 2 Lore option that lets BI add to damage — RAW has been folded into Bardic Inspiration's free-form spend; no separate endpoint needed in 5e).
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 744 (was 739 in v2.99.43).
+
+---
+
 ## [2.99.43] - 2026-06-01 — "Red Dragon's Pact"
 
 **Schema version:** 64

@@ -31944,8 +31944,88 @@ async def update_battle(
     _prev_battle = hub.get_battle(campaign_id) or {}
     _prev_turn = _prev_battle.get("turn_index") if _prev_battle else None
     _new_turn = state.get("turn_index")
+    # v2.99.44 — Bard Lv 20 Superior Inspiration. RAW (PHB p.54): "At
+    # 20th level, when you roll initiative and have no uses of
+    # Bardic Inspiration left, you regain one use." Fires when the
+    # battle transitions inactive → active (the canonical "initiative
+    # was just rolled" moment). Walks combatants for PC Bards Lv 20+
+    # whose bardic-inspiration resource is at 0; refunds 1 use +
+    # broadcasts `resource_update` + `feature_used`. Computed
+    # BEFORE set_battle so the prev-state read is honest.
+    _battle_just_started = (
+        bool(state.get("active"))
+        and not bool(_prev_battle.get("active"))
+    )
     hub.set_battle(campaign_id, state)
     await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    if _battle_just_started:
+        for _c in (state.get("combatants") or []):
+            _bard_cid = _c.get("char_id")
+            if not _bard_cid:
+                continue
+            _bard = db.query(Character).filter(
+                Character.id == int(_bard_cid),
+                Character.campaign_id == campaign_id,
+            ).first()
+            if not _bard or not _bard.sheet:
+                continue
+            _bard_sheet = dict(_bard.sheet)
+            if (_bard_sheet.get("class") or "").strip().lower() != "bard":
+                continue
+            try:
+                _bard_level = int(_bard_sheet.get("level") or 0)
+            except (TypeError, ValueError):
+                _bard_level = 0
+            if _bard_level < 20:
+                continue
+            _bard_resources = list(_bard_sheet.get("resources") or [])
+            _bi_row = None
+            _bi_idx = -1
+            for _i, _r in enumerate(_bard_resources):
+                if not isinstance(_r, dict):
+                    continue
+                if (_r.get("key") or "").strip().lower() == "bardic-inspiration":
+                    _bi_row = dict(_r); _bi_idx = _i; break
+            if _bi_row is None:
+                continue
+            _bi_cur = int(_bi_row.get("current") or 0)
+            _bi_max = int(_bi_row.get("max") or 0)
+            if _bi_cur > 0 or _bi_max <= 0:
+                continue
+            _bi_row["current"] = 1
+            _bard_resources[_bi_idx] = _bi_row
+            _bard_sheet["resources"] = _bard_resources
+            _bard.sheet = _bard_sheet
+            from sqlalchemy.orm.attributes import flag_modified as _fm_si
+            _fm_si(_bard, "sheet")
+            db.commit()
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": _bard.id,
+                    "key": "bardic-inspiration",
+                    "current": 1, "max": _bi_max,
+                },
+            })
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": _bard.id,
+                    "character_name": _bard.name,
+                    "user_color": _bard.color,
+                    "feature_name": (
+                        "🎵 Superior Inspiration (+1 Bardic Inspiration)"
+                    ),
+                    "feature_desc": (
+                        f"{_bard.name} rolls initiative with no Bardic "
+                        f"Inspiration uses left — Superior Inspiration "
+                        f"restores one use."
+                    ),
+                    "source": "superior-inspiration",
+                    "granted": 1,
+                    "remaining": 1, "max": _bi_max,
+                },
+            })
     if (
         bool(state.get("active"))
         and _prev_turn is not None

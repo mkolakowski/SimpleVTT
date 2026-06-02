@@ -1191,6 +1191,18 @@ def _bard_sheet(name: str) -> dict:
                 "name": "Countercharm",
                 "desc": "Action — allies within 30 ft get advantage on saves vs charmed / frightened until end of next turn. Re-perform with your action to maintain.",
             },
+            # v2.99.44 — Superior Inspiration (Lv 20 capstone). PHB
+            # p.54. When you roll initiative and have no uses of
+            # Bardic Inspiration left, regain one. Auto-applied in
+            # /battle PUT when the battle transitions inactive →
+            # active, gated on class==bard AND level>=20 AND BI=0.
+            # Descriptive entry until Lyra hits Lv 20 in a future
+            # fixture bump.
+            {
+                "key": "superior-inspiration",
+                "name": "Superior Inspiration (Lv 20)",
+                "desc": "At 20th level, when you roll initiative and have no uses of Bardic Inspiration left, you regain one use. Auto-applied by the /battle PUT endpoint when class=Bard AND level>=20 AND BI current=0.",
+            },
         ],
     }
 
