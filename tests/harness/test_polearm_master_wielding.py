@@ -141,9 +141,10 @@ async def test_polearm_master_fires_when_glaive_equipped(
     gm_ws.mark()
 
     # Move Krieger 1 cell closer → 10 ft from Garrik. Enter-reach.
+    # oa_confirmed=True bypasses the v2.99.55 pre-move 409 gate.
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 490.0, "y": 350.0},
+        json={"x": 490.0, "y": 350.0, "oa_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()

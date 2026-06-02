@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 782 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.62, 2026-06-02).
+**Total tests:** 784 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.64, 2026-06-02).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -820,6 +820,9 @@ v2.66.0 — F1 follow-ups: Aura conscious-check + Opportunity Attack trigger. `_
 | `test_sentinel_skips_when_watcher_is_the_target` | Control — Krieger attacks Tavik (the sentinel) directly → no trigger (RAW: watcher must not be the target). |
 | `test_sentinel_skips_without_feat_flag` | Control — same geometry without the `sentinel` flag → no trigger. |
 | `test_sentinel_fires_on_npc_attack` | v2.66.6 — Bandit NPC (SRD slug) spawned via TokenTemplate + `/npc_attack` against Pip, Tavik (sentinel) 5 ft from the bandit → response carries `sentinel_triggers` + broadcast desc names the bandit. |
+| `test_oa_fires_for_npc_watcher_without_source_token_id` | v2.99.62 — bandit token + combatant with ONLY `token_template_id` + `name` (demo's `seed_encounter` shape — no `source_token_id`, no `char_id`) → Krieger moves out of reach → OA fires via the template+label Token-lookup fallback. Closes the demo "OA doesn't fire" regression. |
+| `test_oa_chain_multi_npc_watchers_all_get_to_attack` | v2.99.64 — two bandit NPCs (Goon-A 5 ft east, Goon-B 5 ft south of Krieger) in the demo's exact combatant shape → drag Krieger out of both reaches in one move → 2 triggers, 1 head reaction_prompt, resolve head with `skip-oa` → 1 chained next prompt for the OTHER NPC. Regression-locks the v2.99.57 per-owner sub-queue chain for multi-NPC. |
+| `test_oa_chain_multi_npc_take_the_oa_path` | v2.99.64 — parallel test with `take-the-oa` as the resolution key on the head (the GM's likely real-world flow) → chain pop fires regardless of which reaction_key resolved the head. |
 
 ### `test_reaction_prompt.py`
 v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reactions-automation.md`](plans/reactions-automation.md)). New `reaction_prompt` WS broadcast + `/api/campaign/{cid}/use_reaction` endpoint + in-memory `_active_reaction_prompts` registry with `prompt_id` replay guard. OA exit-reach (v2.66.0) retrofits to emit both the legacy `feature_used` advisory AND the new `reaction_prompt`. Schema v60 adds `users.reaction_prompt_mode`.

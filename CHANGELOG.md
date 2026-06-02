@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.64] - 2026-06-02 — "Both Goons Swing" — multi-NPC OA chain regression lock
+
+**Schema version:** 65
+**Commit summary:** **Lock in two harness tests proving the multi-NPC OA chain works end-to-end.** User report after v2.99.63: "when moving away from multiple tokens, only one gets to make the OA". Hypothesis: the server's per-owner sub-queue partition (v2.99.57) collapses all NPC watchers into a single GM-owned queue with `head + tail`; when the GM resolves the head, the `next_triggers` chain pop in `/use_reaction` is supposed to emit a fresh `reaction_prompt` for the next NPC. If the chain pop broke at any step (token lookup, target_user_ids resolve, broadcast race), only one OA would fire. v2.99.64 adds two regression tests that drive the entire flow — seed 2 NPCs in the demo's exact shape (token_template_id + name, no source_token_id, no char_id), drag the hero past both, resolve the head with skip-oa AND with take-the-oa, verify the chained second prompt fires for the OTHER NPC. Both pass — the server chain works correctly. The user's bug, if real, lives in the browser (popup race, dismissal, or DOM injection edge case) and needs in-session reproduction with the v2.99.63 console.log diagnostic to pinpoint.
+**Description:** Pure test ship — no server change, no UI change. Two tests added to `tests/harness/test_opportunity_attack.py`: (1) `test_oa_chain_multi_npc_watchers_all_get_to_attack` — skip-oa variant. (2) `test_oa_chain_multi_npc_take_the_oa_path` — take-the-oa variant. Both seed two bandit NPCs (Goon-A/B and Goon-C/D respectively) with the demo's exact combatant shape (no source_token_id, no char_id), drag Krieger out of both reaches in one /token/move, assert 2 triggers + 1 head prompt + 1 chained tail prompt for the OTHER NPC.
+
+### Added
+- `tests/harness/test_opportunity_attack.py::test_oa_chain_multi_npc_watchers_all_get_to_attack` — regression test that seeds 2 NPC watchers in the demo's exact shape, moves the hero out of both reaches, and asserts the chain emits a second prompt after the first is resolved with `skip-oa`.
+- `tests/harness/test_opportunity_attack.py::test_oa_chain_multi_npc_take_the_oa_path` — parallel test that uses `take-the-oa` as the resolution key (the GM's likely real-world flow vs. skip-oa). Confirms the chain pop fires regardless of which reaction_key resolved the head.
+
+### Fixed
+- `tests/harness/test_polearm_master_wielding.py::test_polearm_master_fires_when_glaive_equipped` — pass `oa_confirmed: True` on the `/token/move` request body so the v2.99.55 pre-move OA 409 gate doesn't reject the move. The test was missed in the v2.99.55 sweep that updated ~14 sites; surfaced when the full suite ran post-v2.99.63.
+
+### Notes
+- **PATCH bump** — additive tests, no behavior change.
+- **Server chain works.** Both tests pass — multi-NPC partition emits 1 head prompt + 1 chained next prompt, exactly as v2.99.57's per-owner sub-queue spec describes.
+- **Why the user's bug, if real, is browser-side.** The server emits both broadcasts (reaction_prompt for head, then reaction_prompt + reaction_prompt_resolved on chain). The browser's popup script (`reaction_prompt.js::_renderPopup`) stacks new popups without filtering against existing ones; the chat-card injector (v2.99.63::`_injectOaButtonsToChatCard`) walks un-injected OA cards and populates each match independently. The likeliest remaining failure modes are: (a) the GM closed the first popup before the chained prompt arrived (popup TTL 30s; resolve→emit→render is sub-second so this is unlikely), (b) a CSS or z-index issue hides the second popup, or (c) the GM didn't notice the second popup because they were rolling the first NPC's attack manually. The v2.99.63 console.log diagnostic in `reaction_prompt.js` should reveal whether the second `[reaction_prompt]` log line arrives in the GM's DevTools.
+- **What to verify in-browser.** Load the demo encounter (Tavern Brawl), drag Krieger past 2+ NPCs in one move. Click Continue on the pre-move modal. Open DevTools Console — count `[reaction_prompt]` log lines. Expectation: 1 line on the initial broadcast, 1 more line per resolved popup until the chain drains. If only 1 line ever appears, the chain pop isn't firing in production (despite the test). If 2+ lines appear but only 1 popup shows, the render path is the culprit.
+- **No new endpoints.** Harness-discipline exempt — pure regression-test ship.
+- Total harness count: 784 (was 782 in v2.99.63).
+
+---
+
 ## [2.99.63] - 2026-06-02 — "The Card Acts" — inline OA action buttons in the chat-log card
 
 **Schema version:** 65

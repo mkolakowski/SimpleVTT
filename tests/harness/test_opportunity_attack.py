@@ -1958,3 +1958,273 @@ async def test_token_patch_team_field_persists_and_broadcasts(
         )
     finally:
         await _set_team(gm_client, kr_tok["id"], "neutral")
+
+
+# ── v2.99.64 — multi-NPC-watcher chain regression ──
+
+
+async def test_oa_chain_multi_npc_watchers_all_get_to_attack(
+    gm_client, gm_ws, roster,
+):
+    """User report v2.99.63: moving a hero past TWO NPC watchers in
+    one drag only fires the OA for ONE of them — the second never
+    gets a popup. Multi-NPC partition collapses to a single GM owner
+    queue with head + tail; the head emits a prompt, and the chain
+    pop in /use_reaction is supposed to emit the tail's head when
+    the first is resolved.
+
+    Geometry: Krieger at (350, 350). Goon-A at (420, 350) (5 ft east),
+    Goon-B at (350, 420) (5 ft south). Both NPCs seeded in the demo's
+    exact shape — token_template_id + name (label) + no
+    source_token_id, no char_id. Both default-owned by the GM.
+
+    Expectations:
+      - /token/move returns 2 OA triggers
+      - exactly 1 reaction_prompt fires after the move (the GM-queue
+        head)
+      - resolving that prompt with skip-oa fires exactly 1 chained
+        prompt for the OTHER NPC
+    """
+    krieger = roster["Krieger Stonefist"]
+
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    for label, x, y in (("Goon-A", 420.0, 350.0), ("Goon-B", 350.0, 420.0)):
+        tok_resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/tokens",
+            json={
+                "token_template_id": bandit_tmpl["id"],
+                "label": label,
+                "x": x, "y": y,
+                "color": "#c84a4a",
+                "size": 1,
+            },
+        )
+        assert tok_resp.status_code == 200, tok_resp.text
+
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        {
+            "id": "tok_oa_multi_npc_a",
+            "char_id": None,
+            "token_template_id": bandit_tmpl["id"],
+            "name": "Goon-A",
+            "initiative": 8,
+            "hp_current": 11, "hp_max": 11,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        {
+            "id": "tok_oa_multi_npc_b",
+            "char_id": None,
+            "token_template_id": bandit_tmpl["id"],
+            "name": "Goon-B",
+            "initiative": 6,
+            "hp_current": 11, "hp_max": 11,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    triggers = data.get("opportunity_attack_triggers") or []
+    npc_trigs = [
+        t for t in triggers
+        if t.get("watcher_combatant_id") in (
+            "tok_oa_multi_npc_a", "tok_oa_multi_npc_b",
+        )
+    ]
+    assert len(npc_trigs) == 2, (
+        f"expected 2 NPC triggers (Goon-A + Goon-B); got "
+        f"{[t.get('watcher_combatant_id') for t in triggers]}"
+    )
+
+    await asyncio.sleep(0.2)
+
+    oa_prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("trigger_event") in (
+            "creature_exits_reach", "creature_enters_reach",
+        )
+    ]
+    assert len(oa_prompts) == 1, (
+        f"expected exactly 1 OA prompt after the move (serial "
+        f"queue, both NPCs partition to GM); got {len(oa_prompts)}: "
+        f"{[(m.get('data') or {}).get('watcher_combatant_id') for m in oa_prompts]}"
+    )
+    head_data = oa_prompts[0]["data"]
+    head_wcid = head_data.get("watcher_combatant_id")
+    assert head_wcid in ("tok_oa_multi_npc_a", "tok_oa_multi_npc_b"), (
+        f"head prompt should target an NPC watcher; got {head_wcid}"
+    )
+
+    gm_ws.mark()
+    resp2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": head_data["prompt_id"],
+            "reaction_key": "skip-oa",
+            "watcher_char_id": head_data.get("watcher_char_id"),
+        },
+    )
+    assert resp2.status_code == 200, resp2.text
+
+    await asyncio.sleep(0.2)
+    next_prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("trigger_event") in (
+            "creature_exits_reach", "creature_enters_reach",
+        )
+    ]
+    assert len(next_prompts) == 1, (
+        f"resolving the head should chain exactly 1 next prompt for "
+        f"the other NPC; got {len(next_prompts)}"
+    )
+    next_wcid = next_prompts[0]["data"].get("watcher_combatant_id")
+    assert next_wcid != head_wcid, (
+        f"chained prompt should target the OTHER NPC; head was "
+        f"{head_wcid}, next was {next_wcid}"
+    )
+    assert next_wcid in ("tok_oa_multi_npc_a", "tok_oa_multi_npc_b"), (
+        f"chained prompt should target an NPC watcher; got {next_wcid}"
+    )
+
+
+async def test_oa_chain_multi_npc_take_the_oa_path(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.64 — same as the skip-oa variant above, but uses the
+    take-the-oa reaction_key on the head. The user's "only one OA
+    fires" report most likely came from clicking Take OA on the
+    first popup (the GM's normal flow), not Skip. The chain pop
+    should fire regardless of which reaction_key resolved the head.
+    """
+    krieger = roster["Krieger Stonefist"]
+
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    for label, x, y in (("Goon-C", 420.0, 350.0), ("Goon-D", 350.0, 420.0)):
+        tok_resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/tokens",
+            json={
+                "token_template_id": bandit_tmpl["id"],
+                "label": label,
+                "x": x, "y": y,
+                "color": "#c84a4a",
+                "size": 1,
+            },
+        )
+        assert tok_resp.status_code == 200, tok_resp.text
+
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        {
+            "id": "tok_oa_multi_npc_c",
+            "char_id": None,
+            "token_template_id": bandit_tmpl["id"],
+            "name": "Goon-C",
+            "initiative": 8,
+            "hp_current": 11, "hp_max": 11,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        {
+            "id": "tok_oa_multi_npc_d",
+            "char_id": None,
+            "token_template_id": bandit_tmpl["id"],
+            "name": "Goon-D",
+            "initiative": 6,
+            "hp_current": 11, "hp_max": 11,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    oa_prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("trigger_event") in (
+            "creature_exits_reach", "creature_enters_reach",
+        )
+        and (m.get("data") or {}).get("watcher_combatant_id") in (
+            "tok_oa_multi_npc_c", "tok_oa_multi_npc_d",
+        )
+    ]
+    assert len(oa_prompts) == 1, (
+        f"expected 1 OA prompt for the head; got {len(oa_prompts)}"
+    )
+    head_data = oa_prompts[0]["data"]
+    head_wcid = head_data.get("watcher_combatant_id")
+
+    # Resolve with take-the-oa (the generic key, not the picker
+    # variant — NPCs don't get the picker by default).
+    gm_ws.mark()
+    resp2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": head_data["prompt_id"],
+            "reaction_key": "take-the-oa",
+            "watcher_char_id": head_data.get("watcher_char_id"),
+        },
+    )
+    assert resp2.status_code == 200, resp2.text
+
+    await asyncio.sleep(0.2)
+    next_prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("trigger_event") in (
+            "creature_exits_reach", "creature_enters_reach",
+        )
+        and (m.get("data") or {}).get("watcher_combatant_id") in (
+            "tok_oa_multi_npc_c", "tok_oa_multi_npc_d",
+        )
+    ]
+    assert len(next_prompts) == 1, (
+        f"resolving with take-the-oa should chain 1 next prompt; "
+        f"got {len(next_prompts)}"
+    )
+    next_wcid = next_prompts[0]["data"].get("watcher_combatant_id")
+    assert next_wcid != head_wcid, (
+        f"chained prompt should target the OTHER NPC; head was "
+        f"{head_wcid}, next was {next_wcid}"
+    )
