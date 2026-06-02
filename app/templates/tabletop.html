@@ -6175,6 +6175,42 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         }
     }
 
+    /* v2.99.67 — client-side speed_walk heal. Server-side v2.99.65
+     * heals speed_walk on encounter Load, but the GM client carries
+     * combatants in localStorage AND the battle_update broadcast is
+     * a full-state swap that preserves whatever speed_walk was on
+     * the wire. Any combatant constructed by an older client (or
+     * by manual Add-Manual which sets no sheet-link fields) keeps
+     * the stale value across renders. This heal re-projects the
+     * walking speed from the linked PC sheet or NPC template on
+     * EVERY render. Mirrors the server's _resolve_combatant_speed_walk
+     * — single source of truth is sheet.speed (int / {walk: n} dict
+     * / "30 ft." string). */
+    function _healCombatantSpeedWalk(c) {
+        if (!c) return false;
+        let sheet = null;
+        if (c.char_id) {
+            const ch = allChars.find(x => x.id === c.char_id);
+            if (ch) sheet = ch.sheet || null;
+        } else if (c.token_template_id) {
+            const tmpl = allTemplates.find(x => x.id === c.token_template_id);
+            if (tmpl) sheet = tmpl.sheet || null;
+        }
+        if (!sheet) return false;
+        const next = _speedWalkFromSheet(sheet);
+        const prev = (typeof c.speed_walk === 'number' && c.speed_walk > 0)
+            ? c.speed_walk : 0;
+        if (next > 0 && next !== prev) {
+            c.speed_walk = next;
+            return true;
+        }
+        if (prev === 0 && next > 0) {
+            c.speed_walk = next;
+            return true;
+        }
+        return false;
+    }
+
     /* v2.8.1: publish the active combatant's movement waypoints to a
      * window-scoped slot tabletop.js reads in its canvas render loop.
      * Empty path → empty slot → canvas draws nothing. Called from
@@ -6800,6 +6836,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         for (const c of battle.combatants) {
             if (!c.image_url && _resolveCombatantImage(c)) _healedAny = true;
             _ensureEconomy(c);
+            // v2.99.67 — re-project speed_walk from the linked sheet
+            // on every render so stale localStorage / older battle_update
+            // payloads don't pin the Mov cap at 30 when the sheet says 40
+            // (Krieger), 45 (Kael), 35 (Vex Wood Elf), etc.
+            if (_healCombatantSpeedWalk(c)) _healedAny = true;
         }
 
         list.innerHTML = battle.combatants.map((c, i) => {

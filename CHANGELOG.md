@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.67] - 2026-06-02 — "Pin the Speed" — client-side speed_walk heal + move Delete to bottom of sheet
+
+**Schema version:** 65
+**Commit summary:** **Add a client-side speed_walk heal so the GM init tracker re-projects the cap from the sheet on every render, and relocate the Delete Character button from the breadcrumb header to a Danger Zone footer at the bottom of the page.** User report after v2.99.65/66: Krieger's sheet shows 40 ft but the init tracker still reads 30 and the movement breadcrumb still turns red after 30 ft. Root cause: the server-side v2.99.65 heal only fires on `/load_encounter`. The GM client carries its own combatants list in localStorage; the `battle_update` WS broadcast is a full-state swap that doesn't re-read the sheet either. So any combatant constructed by a pre-v2.99.65 client (or pushed from a stale payload) keeps speed_walk=30 across every render. Fix: client-side `_healCombatantSpeedWalk(c)` re-projects `speed_walk` from the linked PC sheet or NPC template on EVERY `renderBattle()` call. Mirrors the v2.99.65 server-side `_resolve_combatant_speed_walk` so client and server agree on the source-of-truth (sheet.speed). Companion edit: Delete Character moves from the right side of the breadcrumb header (a click-magnet next to the back-link) to a Danger Zone footer block below the sheet content.
+**Description:** Two-file change. (1) `app/templates/tabletop.html` — add `_healCombatantSpeedWalk(c)` helper that walks the same int/dict/str sheet shapes as the existing `_speedWalkFromSheet`, called from the `renderBattle` heal loop right after `_ensureEconomy(c)`. Re-projects on every render so subsequent token_move's speed-cap math + the breadcrumb's red threshold both read the right value. (2) `app/templates/character_page.html` — remove the breadcrumb-flex form, restore the simple breadcrumb, and add a `.sheet-danger-zone` block after the sheet `{% include %}` containing the same form + button with a "Danger zone" label and an explanatory caption. Same confirm() flow + same permissions gate (`_can_delete`).
+
+### Added
+- `tabletop.html::_healCombatantSpeedWalk(combatant)` — re-projects walking speed from the linked PC `Character.sheet` or NPC `TokenTemplate.sheet` on every `renderBattle()`. Called from the existing v2.4.31 heal loop. Mirrors server-side `_resolve_combatant_speed_walk`.
+- `character_page.html` — bottom-of-page `.sheet-danger-zone` block holding the Delete Character form. Replaces the breadcrumb-header placement.
+
+### Fixed
+- GM init tracker's Mov chip now shows the actual sheet speed (Krieger 40, Kael 45, Vex 35) instead of being pinned at 30 by stale localStorage / a pre-v2.99.65 `battle_update` payload. Pre-v2.99.67 even after the v2.99.65 server-side heal landed, GM clients with cached combatants kept rendering the old cap because the WS broadcast didn't re-read the sheet.
+- Movement breadcrumb's red-after-30 threshold updates to match the healed cap so paths now turn red at 40 ft for Krieger, 45 ft for Kael, etc.
+
+### Changed
+- Delete Character button position. Pre-v2.99.67 it lived in the breadcrumb header at the top of `character_page.html`, right of the "Lobby › Campaign › Char Name" trail. v2.99.67 moves it to a dedicated Danger Zone block at the bottom of the page, below the sheet content, with an explanatory caption ("Permanently delete this character. This cannot be undone."). Same confirm() dialog, same permissions gate. Reduces fat-finger risk on an irreversible action.
+
+### Notes
+- **PATCH bump** — UI-only ship. No server change, no API change, no schema change.
+- **Why client-side heal even after server heal.** Server-side heal in v2.99.65 normalizes `hub.set_battle` payloads on Load. But the GM client's `renderBattle` reads from its own `battle` local variable populated from `localStorage.BATTLE_KEY` + `battle_update` broadcasts. Without a render-time projection from the linked sheet, any combatant that arrived with `speed_walk=30` (or no field at all) renders 30 forever. The client heal closes that gap and means a hard refresh isn't required after the server-side fix.
+- **No new tests.** The harness suite already covers the server-side heal (`test_load_encounter_heals_missing_speed_walk` from v2.99.65). Client-side render-time behavior is covered by the deferred `harness_ui` Playwright suite. UI changes only — pure rendering polish on existing data flow.
+- Total harness count: 785 (unchanged from v2.99.66).
+
+---
+
 ## [2.99.66] - 2026-06-02 — "Right URL" — fix the v2.99.65 regression test URL
 
 **Schema version:** 65

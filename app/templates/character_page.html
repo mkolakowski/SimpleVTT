@@ -26,23 +26,14 @@
 <div class="sheet-page-wrap">
 
     {% set _can_delete = (char.owner_user_id == user.id) or user.is_admin %}
-    <div class="sheet-breadcrumb" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <div>
-            <a href="/">Lobby</a> ›
-            {% if campaign %}
-            <a href="/campaign/{{ campaign.id }}/characters">{{ campaign.name }}</a> ›
-            {% else %}
-            <a href="/characters">My Characters</a> ›
-            {% endif %}
-            {{ char.name }}
-        </div>
-        {% if _can_delete %}
-        <form method="post" action="/characters/{{ char.id }}/delete"
-              onsubmit="return confirm('Permanently delete &quot;{{ char.name|e }}&quot;? This cannot be undone.');"
-              style="margin:0;">
-            <button type="submit" class="btn-char-delete" title="Permanently delete this character">🗑 Delete character</button>
-        </form>
+    <div class="sheet-breadcrumb">
+        <a href="/">Lobby</a> ›
+        {% if campaign %}
+        <a href="/campaign/{{ campaign.id }}/characters">{{ campaign.name }}</a> ›
+        {% else %}
+        <a href="/characters">My Characters</a> ›
         {% endif %}
+        {{ char.name }}
     </div>
 
     <div id="roll-toast-container"></div>
@@ -76,6 +67,23 @@
        returns, giving the rolling player an animated d-shape popup with
        no WS round-trip. The legacy script duplicated this popup whenever
        both fired, so it's gone. #}
+
+    {# v2.99.67 — Delete character moved from the breadcrumb header to a
+       danger-zone footer at the bottom of the sheet. The top placement
+       was a click-magnet right next to the breadcrumb back-link; moving
+       it to the very bottom of the page reduces fat-finger risk on an
+       irreversible action. Same confirm() flow + permissions gate. #}
+    {% if _can_delete %}
+    <div class="sheet-danger-zone" style="margin-top:32px;padding:16px;border:1px solid var(--border, rgba(255,255,255,0.12));border-radius:8px;background:rgba(204,51,51,0.04);">
+        <div style="font-size:12px;opacity:0.7;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Danger zone</div>
+        <form method="post" action="/characters/{{ char.id }}/delete"
+              onsubmit="return confirm('Permanently delete &quot;{{ char.name|e }}&quot;? This cannot be undone.');"
+              style="margin:0;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <span style="font-size:13px;opacity:0.85;">Permanently delete this character. This cannot be undone.</span>
+            <button type="submit" class="btn-char-delete" title="Permanently delete this character">🗑 Delete character</button>
+        </form>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}
