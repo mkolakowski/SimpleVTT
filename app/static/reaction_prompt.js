@@ -32,7 +32,11 @@
     if (window.__reactionPromptInstalled) return;
     window.__reactionPromptInstalled = true;
 
-    const POPUP_TTL_MS = 20_000;
+    // v2.99.49 — bumped from 20s to 30s. Users reported missing OA
+    // popups because they were mid-action when the popup faded;
+    // 30s gives a more forgiving window without permanently
+    // cluttering the corner.
+    const POPUP_TTL_MS = 30_000;
 
     // Map of prompt_id → DOM node so resolved/timeout handlers can
     // find the right popup to remove.
@@ -61,18 +65,30 @@
         // Match the v2.62.0 frosted-glass card aesthetic. The
         // glass-alpha CSS var is set by the body element when the
         // user has tuned it via /settings; falls back to 42%.
+        //
+        // v2.99.49 — added a solid background fallback BEHIND the
+        // color-mix() backdrop so the popup is readable on browsers
+        // that don't support color-mix yet (some older Safari /
+        // Chrome). Also added a bright 4px accent stripe on the
+        // left edge + a 1.2s attention pulse so the popup is
+        // unmistakably visible in the corner of the eye.
         return [
-            'background:color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent)',
+            // Solid fallback color first (older browsers ignore the
+            // color-mix line below and fall back to this).
+            'background:#1f2433',
+            // Modern browsers override with the translucent variant.
+            'background:color-mix(in srgb, var(--bg, #1f2433) var(--glass-alpha, 42%), transparent)',
             'backdrop-filter:blur(6px)',
             '-webkit-backdrop-filter:blur(6px)',
             'border:1px solid var(--border, rgba(255,255,255,0.18))',
+            'border-left:4px solid #ffb74d',  // bright amber accent
             'border-radius:8px',
             'padding:12px',
             'color:var(--fg, #fff)',
             'font-size:13px',
-            'box-shadow:0 6px 24px rgba(0,0,0,0.45)',
+            'box-shadow:0 6px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,183,77,0.18)',
             'pointer-events:auto',
-            'animation:reactionPopIn 180ms ease-out',
+            'animation:reactionPopIn 180ms ease-out, reactionPulse 1.2s ease-in-out 2',
         ].join(';');
     }
 
@@ -85,6 +101,14 @@
             @keyframes reactionPopIn {
                 from { transform: translateY(-8px); opacity: 0; }
                 to   { transform: translateY(0);    opacity: 1; }
+            }
+            /* v2.99.49 — short amber pulse to draw the eye. Repeats
+               twice (set in _glassCardStyle as the animation count)
+               so the popup says "look here" without nagging. */
+            @keyframes reactionPulse {
+                0%   { box-shadow: 0 6px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,183,77,0.18); }
+                50%  { box-shadow: 0 6px 24px rgba(0,0,0,0.45), 0 0 0 8px rgba(255,183,77,0.35); }
+                100% { box-shadow: 0 6px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,183,77,0.18); }
             }
             #reaction-prompt-host .rp-opt-btn {
                 display: block;
@@ -262,8 +286,27 @@
             const meId = (window.ME && window.ME.id) ? Number(window.ME.id) : null;
             const targets = Array.isArray(data.target_user_ids)
                 ? data.target_user_ids.map(Number) : [];
-            if (meId == null || !targets.includes(meId)) return;
             const mode = (window.ME && window.ME.reactionPromptMode) || 'popup';
+            // v2.99.49 — diagnostic console.log so users reporting
+            // "popup doesn't appear" can open devtools and see what
+            // filter (if any) suppressed the render. Logs the
+            // prompt_id + trigger_event + this user's filter
+            // outcome. Non-noisy: only fires per prompt arrival.
+            try {
+                console.debug(
+                    '[reaction_prompt]',
+                    'prompt_id=' + (data.prompt_id || '?'),
+                    'trigger=' + (data.trigger_event || '?'),
+                    'me=' + meId,
+                    'targets=[' + targets.join(',') + ']',
+                    'mode=' + mode,
+                    'will_render=' + (
+                        meId != null && targets.includes(meId)
+                        && mode === 'popup'
+                    ),
+                );
+            } catch (_) {}
+            if (meId == null || !targets.includes(meId)) return;
             if (mode === 'off') return;
             if (mode === 'roll_log_only') return;
             // mode === 'popup' (default) — render.

@@ -88,6 +88,19 @@ The panel is GM-only.
 - **Some NPC reactions don't fire on non-`attack_targeted` triggers.** Phase 6 catalog wires monster reactions to `attack_targeted` only; `damage_taken` / `spell_cast_near` / `ally_attacked_near` NPC walkers are filed.
 - **Passive feat effects not surfaced.** Mage Slayer's save advantage vs nearby casters + concentration disadvantage on damage dealt; War Caster's concentration-save advantage on damage. All filed.
 
+## Troubleshooting — popup doesn't appear
+
+If a reaction (most commonly an Opportunity Attack) should have fired and you didn't see a popup, check these in order:
+
+1. **Combat is active.** Reactions only fire when a battle exists in init. Out-of-combat token drags don't trigger OA — that's RAW (movement-spent semantics).
+2. **The watcher is in init.** The popup is per-watcher; a PC with reaction unspent who isn't in the init tracker won't be checked. Add them to init from the Battle drawer.
+3. **The watcher's reaction is available.** `economy.reaction = True` (already-used) is a hard skip; the chip in the init tracker shows the state.
+4. **Your popup mode is `Popup` in `/settings`.** Inadvertently flipping to `Roll log only` or `Off` is the most common cause of "I never see popups." The roll-log entry still surfaces under those modes — check the bottom-right roll log for a `⚔ Opportunity Attack triggered` card; if you see that but no popup, your setting is the cause.
+5. **Browser devtools console.** v2.99.49+ logs every incoming `reaction_prompt` with the filter outcome: `[reaction_prompt] prompt_id=… trigger=… me=… targets=[…] mode=… will_render=true/false`. If `will_render=false`, the `me` value and the `targets` list show why (you're not a listed target, or your mode is off).
+6. **The server side rejected the emit.** If `_emit_reaction_prompt` raises, v2.99.49+ logs the exception to `docker compose logs app` — search for `OA reaction_prompt emit failed`. Pre-v2.99.49 silently swallowed those errors.
+
+The popup itself uses a **frosted-glass card with an amber accent stripe + a brief amber pulse** so it should be hard to miss in the top-right corner. If you see the pulse but the card is unreadable on your browser, your browser may not support CSS `color-mix()`; v2.99.49+ ships a solid `#1f2433` background fallback.
+
 ## See also
 
 - [Reactions automation plan](/wiki/doc/plan-reactions-automation) — the per-phase design doc with status table and v3 backlog.

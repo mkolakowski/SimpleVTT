@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.49] - 2026-06-01 — "The Amber Pulse"
+
+**Schema version:** 64
+**Commit summary:** **OA reaction popup visibility + diagnostics.** User report: "GM and player do not get popup notification that opportunity attack can be used." The v2.67.0 reaction-prompt infrastructure works end-to-end (harness tests confirm both the WS broadcast and the popup render), but the popup is easy to miss visually (small top-right toast, ~12 px font, semi-transparent backdrop) and silent failures in `_emit_reaction_prompt` were swallowed without a trace. v2.99.49 makes the popup unmistakable + adds diagnostic logging so "I didn't see it" cases are debuggable from `docker compose logs app` + browser devtools console.
+**Description:** Three changes. (1) **Popup visibility** — `reaction_prompt.js`'s glass card gains a 4 px amber `border-left` accent stripe + a 1.2 s amber `reactionPulse` keyframe that fires twice on entry so the popup pulses in the corner of the eye. Solid `#1f2433` background fallback BEHIND the `color-mix()` translucent variant so older browsers without `color-mix()` support (some Safari / Chrome) still render a readable card. TTL bumped 20 s → 30 s. (2) **Server diagnostics** — replaced the bare `except Exception: pass` after `_emit_reaction_prompt` in `/token/{id}/move` with `logging.exception(...)` so OA emit failures surface in `docker compose logs app` instead of vanishing. (3) **Client diagnostics** — `console.debug('[reaction_prompt] ...')` on every incoming prompt logs the filter outcome (`me`, `targets`, `mode`, `will_render`) so devtools console immediately shows WHY a popup didn't render (most common: user inadvertently flipped `reactionPromptMode` to `off`/`roll_log_only`, or they're not in `target_user_ids`).
+
+### Added
+- `reactionPulse` keyframe in `reaction_prompt.js` — 0%→50%→100% amber-ringed `box-shadow` so the popup pulses on arrival.
+- 4 px amber `border-left` accent stripe on the popup card (`#ffb74d`).
+- Solid `#1f2433` background fallback before the `color-mix()` line so older browsers get a readable card.
+- `console.debug('[reaction_prompt] …')` diagnostic log in the message handler.
+- Troubleshooting section in `docs/wiki/reactions.md` — six-step checklist for "popup doesn't appear" (combat active, watcher in init, reaction available, mode setting, devtools log inspection, server log inspection).
+
+### Changed
+- Popup TTL: 20 s → 30 s. Users mid-action when the popup faded reported missing it; 30 s gives a more forgiving window.
+- `move_token` OA emit error handler: silent `pass` → `logging.exception(...)`. The legacy `feature_used` advisory + the move response's `opportunity_attack_triggers` are unchanged; only the popup-emit error path is now visible in logs.
+
+### Notes
+- **PATCH bump** — UX + diagnostics only, no new endpoint or schema change. Existing reaction-prompt harness tests (`test_reaction_prompt.py` + `test_opportunity_attack.py`) all still pass; the changes are visual + log-side.
+- **Why the popup felt invisible.** The pre-v2.99.49 styling was a frosted-glass card with a 1 px border + `box-shadow:0 6px 24px rgba(0,0,0,0.45)`. On a busy tabletop canvas with active map art behind it, the contrast was low. The new amber border-left + pulse + solid bg fallback puts ~10× more "look here" energy on the card without dominating the screen.
+- **Why the silent `except` was a problem.** Before v2.99.49 a bug in `_eligible_reactions` or `_resolve_watcher_user_ids` (e.g. a missing field, a DB query that returned a None Character) would raise inside the `try` block. The `pass` swallowed it. The legacy `feature_used` advisory STILL fired (it ran before the try block), so the chat-log card surfaced — but the popup pipeline silently died. The new `logging.exception` makes it visible.
+- **No new tests.** The visibility changes are CSS / animation; the diagnostics are log statements. The existing tests cover the contract (broadcast fires, popup script triggers `_renderPopup`) — they don't and shouldn't assert on style values.
+- **Wiki surfacing.** Updated `docs/wiki/reactions.md` already surfaces via the existing allowlist entry — no nav changes needed.
+- Total harness count: 763 (unchanged from v2.99.48).
+
+---
+
 ## [2.99.48] - 2026-06-01 — "One Roll, One Bonus"
 
 **Schema version:** 64

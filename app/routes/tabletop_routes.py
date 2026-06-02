@@ -9215,8 +9215,23 @@ async def move_token(
                         "trigger_type": trigger_type,
                     },
                 )
-            except Exception:
-                pass
+            except Exception as _oa_emit_err:
+                # v2.99.49 — log the exception instead of swallowing it
+                # silently. Pre-v2.99.49 the bare `pass` meant a bug in
+                # `_emit_reaction_prompt` (broken `_eligible_reactions`,
+                # missing campaign field, etc.) would silently suppress
+                # the OA popup with no diagnostic trail. The legacy
+                # feature_used advisory + the OA trigger advisory on
+                # the move response are unaffected — only the popup
+                # path is suppressed. Logging here surfaces the root
+                # cause in `docker compose logs app` without breaking
+                # the move flow.
+                logging.exception(
+                    "OA reaction_prompt emit failed for "
+                    "watcher_combatant_id=%s trigger=%s: %s",
+                    trig.get("watcher_combatant_id"),
+                    trigger_type, _oa_emit_err,
+                )
 
     # v2.8.0: strict-mode movement audit. When the campaign has
     # strict_action_economy on AND this drag pushes the combatant past
