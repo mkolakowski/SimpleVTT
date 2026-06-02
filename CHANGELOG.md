@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.48] - 2026-06-01 — "One Roll, One Bonus"
+
+**Schema version:** 64
+**Commit summary:** **Elemental Affinity AoE wires — round out the v2.99.43 single-target ship.** v2.99.43 wired the +CHA damage bonus only at the `/cast_spell` single-target NPC save-for-half damage site. RAW (PHB p.103) says the bonus applies to "one damage roll of that spell" — in an AoE the bonus should fire ONCE across the whole cast, not every target. v2.99.48 adds the AoE-loop NPC wire in `/cast_spell` + the `/place_aoe` NPC wire, both gated on a `_ea_fired` flag so the bonus applies to exactly one target per cast. Single-target NPC path (v2.99.43) handles target #0; AoE-loop NPC + `/place_aoe` NPC pick up the bonus on the first NPC in iteration order if the single-target path didn't fire (e.g. when target #0 was a PC, or when the cast skipped single-target like `/place_aoe`).
+**Description:** Two new wire blocks. `/cast_spell` AoE NPC loop reuses the same `_ea_bonus`/`_ea_fired` locals from the v2.99.43 single-target wire; the AoE loop appends `+CHA` to a local `_aoe_dmg_expr` only if `_ea_bonus > 0 AND not _ea_fired AND damage_expr`, then broadcasts the bonus and flips `_ea_fired = True`. `/place_aoe` follows the same shape with its own `_place_ea_bonus` + `_place_ea_fired` locals (computed once at the top of the endpoint from `_caster_char_for_broadcast.sheet`, same place the v2.99.36 Heightened wire loads the caster row). Both wires preserve the "PC damage paths skip EA" v2.99.43 invariant — PC damage is rolled client-side via the chat card.
+
+### Added
+- `/cast_spell` AoE NPC loop wire (line ~13591). Local `_aoe_dmg_expr` swap + broadcast + flag flip.
+- `/place_aoe` initialization of `_place_ea_bonus` + `_place_ea_fired` (line ~14370) using `_caster_char_for_broadcast.sheet`.
+- `/place_aoe` NPC save-for-half damage wire (line ~14644). Same shape as the `/cast_spell` AoE wire.
+- `tests/harness/test_elemental_affinity.py::test_elemental_affinity_aoe_fires_exactly_once` — Zara at Lv 6 casts Fireball at TWO bandits via `target_combatant_ids`; asserts EXACTLY ONE `feature_used(source=elemental-affinity-bonus)` broadcast per cast. Regression guard against the broken-up bonus that would have fired twice without the `_ea_fired` flag.
+
+### Changed
+- `docs/plans/class-content-status.md` — Draconic Bloodline note updated to credit AoE wires shipped.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — 2 site wires + 1 new test. No new endpoint, no schema change.
+- **Reused `_ea_fired` flag pattern.** The flag mirrors the v2.99.36 Heightened "ONE TARGET" semantic (`_aoe_heightened_fired`) for one-cast-one-fire. Future RAW features that share the same "fires once per cast" shape (e.g. a hypothetical Cold Sorcerer ancestry that adds slow-on-hit to one damage roll) can reuse the same flag-flip idiom.
+- **PC damage path still filed.** PC damage is rolled client-side via the chat card "Roll Damage" button — out of the server's reach. A future commit that adds a server-side PC roll path (e.g. a "GM rolls PC damage" houserule flag, or a unified roll-resolution endpoint) would let EA fire on PC damage too. Filed.
+- **/place_aoe PC wire skipped intentionally.** The `/place_aoe` NPC site rolls damage server-side; the PC site also rolls server-side per the v2.48.3 ("GM rolls everyone's saves" houserule) but PC EA was deliberately left out to mirror the v2.99.43 ship contract. A small follow-up could wire EA at the PC site too — filed.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 763 (was 762 in v2.99.47).
+
+---
+
 ## [2.99.47] - 2026-06-01 — "The Answered Prayer"
 
 **Schema version:** 64

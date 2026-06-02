@@ -233,3 +233,91 @@ async def test_elemental_affinity_wrong_class(gm_client, roster):
     assert resp.status_code == 409, resp.text
     body = resp.json()
     assert body["error"] == "wrong_class"
+
+
+# v2.99.48 — AoE wire. RAW "one damage roll of that spell" means the
+# +CHA bonus applies to ONE target's damage roll per cast, NOT every
+# target in the AoE. The single-target NPC path (v2.99.43) handles
+# target #0; the AoE NPC loop only fires the bonus if the
+# single-target path didn't (e.g. when target #0 was a PC, or when
+# there's no explicit single target).
+
+
+async def _seed_zara_vs_two_bandits(gm_client, zara):
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {"id": f"tok_ea_{zara['id']}", "char_id": zara["id"],
+                 "name": zara["name"], "initiative": 10,
+                 "hp_current": 37, "hp_max": 37, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+                {"id": "tok_ea_bandit1", "char_id": None,
+                 "token_template_id": bandit_tmpl["id"],
+                 "name": bandit_tmpl["name"], "initiative": 7,
+                 "hp_current": 200, "hp_max": 200, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+                {"id": "tok_ea_bandit2", "char_id": None,
+                 "token_template_id": bandit_tmpl["id"],
+                 "name": bandit_tmpl["name"], "initiative": 5,
+                 "hp_current": 200, "hp_max": 200, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+    return bandit_tmpl
+
+
+async def test_elemental_affinity_aoe_fires_exactly_once(
+    gm_client, gm_ws, zara_at_lv_6,
+):
+    """Lv 6 Zara casts Fireball at TWO bandits via target_combatant_ids.
+    RAW "one damage roll" — the +CHA bonus should fire EXACTLY ONCE
+    (on target #0, the single-target NPC path), not twice.
+    """
+    zara = zara_at_lv_6
+    bandit_tmpl = await _seed_zara_vs_two_bandits(gm_client, zara)
+    await _set_auto_apply(gm_client, on=True)
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": FIREBALL_ZARA_INDEX,
+            "slot_level": 3,
+            "class_slug": "sorcerer",
+            "target_combatant_id": "tok_ea_bandit1",
+            "target_name": bandit_tmpl["name"],
+            "target_combatant_ids": [
+                "tok_ea_bandit1",
+                "tok_ea_bandit2",
+            ],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    import asyncio as _asy
+    await _asy.sleep(0.2)
+    fu_msgs = gm_ws.buffered("feature_used")
+    bonus = [
+        m for m in fu_msgs
+        if (m.get("data") or {}).get("source") == "elemental-affinity-bonus"
+        and (m.get("data") or {}).get("character_id") == zara["id"]
+    ]
+    assert len(bonus) == 1, (
+        f"expected EXACTLY ONE Elemental Affinity bonus broadcast "
+        f"per cast (RAW 'one damage roll'); got {len(bonus)}: "
+        f"{[(m.get('data') or {}).get('source') for m in fu_msgs]}"
+    )

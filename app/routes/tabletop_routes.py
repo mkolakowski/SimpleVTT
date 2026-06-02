@@ -13255,10 +13255,19 @@ async def cast_spell(
         # type matches the caster's ancestor. Appends "+N" to the
         # damage expression so the bonus rolls through the existing
         # `_roll_spell_damage_with_metamagic` path (and through
-        # Empowered's reroll if also armed). RAW "one damage roll"
-        # applies to the single-target damage site (target #0); AoE
-        # loop targets get the unmodified damage_expr.
+        # Empowered's reroll if also armed).
+        #
+        # v2.99.48 — RAW "one damage roll" semantic. The bonus applies
+        # to ONE damage roll per cast. Use a `_ea_fired` flag so:
+        #   - Single-target NPC fires it (target #0 path below).
+        #   - If single-target was a PC (no server-side damage roll)
+        #     OR no target, the AoE NPC loop picks up the bonus on
+        #     the first NPC in iteration order.
+        # PC damage paths still skip EA (PC damage is rolled
+        # client-side via the chat card "Roll Damage" button — out
+        # of the server's reach in v1).
         _ea_bonus = _elemental_affinity_bonus(char.sheet, damage_type)
+        _ea_fired = False
         _ea_damage_expr = damage_expr
         if _ea_bonus > 0 and damage_expr:
             _ea_damage_expr = f"{damage_expr}+{_ea_bonus}"
@@ -13279,6 +13288,7 @@ async def cast_spell(
                     await _broadcast_elemental_affinity_bonus(
                         campaign_id, char, damage_type, _ea_bonus,
                     )
+                    _ea_fired = True
             except dice_mod.DiceParseError:
                 auto_save_damage_rolled = 0
             if auto_save_damage_rolled > 0:
@@ -13613,9 +13623,22 @@ async def cast_spell(
             # matches the per-beam pattern of Eldritch Blast (v2.40.0).
             _dmg_applied = 0
             _dmg_breakdown = ""
+            # v2.99.48 — Elemental Affinity AoE wire. If the bonus
+            # applies AND hasn't fired yet (single-target path didn't
+            # cover it — e.g. target #0 was a PC), apply it to the
+            # first NPC in iteration order. Mutates a local
+            # _aoe_dmg_expr so subsequent iterations roll the
+            # unmodified damage_expr per RAW "one damage roll".
+            _aoe_dmg_expr = damage_expr
+            if _ea_bonus > 0 and not _ea_fired and damage_expr:
+                _aoe_dmg_expr = f"{damage_expr}+{_ea_bonus}"
+                await _broadcast_elemental_affinity_bonus(
+                    campaign_id, char, damage_type, _ea_bonus,
+                )
+                _ea_fired = True
             if damage_expr and bool(campaign.auto_apply_damage):
                 try:
-                    _dr = dice_mod.roll(damage_expr)
+                    _dr = dice_mod.roll(_aoe_dmg_expr)
                     _dmg_rolled = max(0, int(_dr.total))
                     _dmg_breakdown = _dr.breakdown
                 except dice_mod.DiceParseError:
@@ -14343,6 +14366,17 @@ async def place_aoe(
         ).first()
     except Exception:
         pass
+    # v2.99.48 — Elemental Affinity bonus in /place_aoe NPC loop.
+    # Compute the +CHA bonus once from the caster's sheet, track
+    # `_place_ea_fired` so the bonus applies to ONE damage roll
+    # per cast (RAW). Applies to the first NPC saver in iteration
+    # order; PC paths skip.
+    _place_ea_bonus = 0
+    if _caster_char_for_broadcast and damage_type:
+        _place_ea_bonus = _elemental_affinity_bonus(
+            _caster_char_for_broadcast.sheet, damage_type,
+        )
+    _place_ea_fired = False
 
     auto_save_targets: list[dict] = []
     # v2.48.5 — track whether we auto-added any NPCs to the battle
@@ -14669,9 +14703,23 @@ async def place_aoe(
         passed = rolled >= dc
         dmg_applied = 0
         dmg_breakdown = ""
+        # v2.99.48 — Elemental Affinity AoE wire at /place_aoe NPC
+        # damage site. Same first-NPC-wins idiom as the /cast_spell
+        # AoE NPC loop. Applies +CHA to the FIRST NPC saver's damage
+        # roll; subsequent iterations roll the unmodified damage_expr.
+        _place_aoe_dmg_expr = damage_expr
+        if (
+            _place_ea_bonus > 0 and not _place_ea_fired and damage_expr
+        ):
+            _place_aoe_dmg_expr = f"{damage_expr}+{_place_ea_bonus}"
+            await _broadcast_elemental_affinity_bonus(
+                campaign_id, _caster_char_for_broadcast,
+                damage_type, _place_ea_bonus,
+            )
+            _place_ea_fired = True
         if damage_expr and auto_apply_damage:
             try:
-                dr = dice_mod.roll(damage_expr)
+                dr = dice_mod.roll(_place_aoe_dmg_expr)
                 dmg_rolled = max(0, int(dr.total))
                 dmg_breakdown = dr.breakdown
             except dice_mod.DiceParseError:
