@@ -3604,9 +3604,45 @@ def seed_encounter(
         (5,   3, 38, 2),   # Magnus Hexbinder
         (12,  2, 18, 2),   # Soren (Cult Acolyte) — v2.49.171
     ]
+    # v2.99.65 — index PC sheets + template sheets up front so the
+    # combatant loop can read the canonical speed without re-querying
+    # per-token. _perform_encounter_load also heals missing
+    # speed_walk on Load (Pass 3), but writing it at seed time
+    # avoids the heal pass for fresh seeds AND makes the hub.set_battle
+    # at the bottom of seed_demo_data correct without round-tripping
+    # through Load.
+    chars_by_id = {c.id: c for c in chars}
+    tmpls_by_id: dict[int, TokenTemplate] = {}
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:
         tok = tokens[token_idx]
+        _speed_walk = 30
+        if tok.character_id and tok.character_id in chars_by_id:
+            _sheet = chars_by_id[tok.character_id].sheet or {}
+            _v = _sheet.get("speed")
+            if isinstance(_v, (int, float)) and _v > 0:
+                _speed_walk = int(_v)
+            elif isinstance(_v, dict):
+                _w = _v.get("walk")
+                if isinstance(_w, (int, float)) and _w > 0:
+                    _speed_walk = int(_w)
+        elif tok.token_template_id:
+            if tok.token_template_id not in tmpls_by_id:
+                tmpls_by_id[tok.token_template_id] = (
+                    db.query(TokenTemplate)
+                    .filter(TokenTemplate.id == tok.token_template_id)
+                    .first()
+                )
+            _tmpl = tmpls_by_id.get(tok.token_template_id)
+            if _tmpl:
+                _tsheet = _tmpl.sheet or {}
+                _v = _tsheet.get("speed")
+                if isinstance(_v, (int, float)) and _v > 0:
+                    _speed_walk = int(_v)
+                elif isinstance(_v, dict):
+                    _w = _v.get("walk")
+                    if isinstance(_w, (int, float)) and _w > 0:
+                        _speed_walk = int(_w)
         combatants.append({
             "id": f"tok_{tok.id}_demo",
             "char_id": tok.character_id,
@@ -3618,6 +3654,12 @@ def seed_encounter(
             "color": tok.color,
             "dex_mod": dex_mod,
             "image_url": tok.image_url,
+            # v2.99.65 — populate speed_walk so the init tracker's
+            # Mov chip + /token/move's enforcement read the actual
+            # PC/NPC speed from the seed (Krieger 40, Kael 45, Vex
+            # 35, etc.). Pre-v2.99.65 the field was dropped and
+            # every combatant defaulted to 30.
+            "speed_walk": _speed_walk,
             # v2.19.0 Phase C.1: structured buff list (Rage, Hunter's
             # Mark, Hex, Bless, ...). Empty at seed time; /use_rage etc.
             # install entries when fired. Auto-expire ticks down at

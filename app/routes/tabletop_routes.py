@@ -2671,6 +2671,92 @@ def _combatant_melee_reach_ft(
                     return best
 
     return 5.0
+
+
+def _speed_walk_from_sheet(sheet: dict | None) -> int:
+    """Read walking speed from a sheet dict. v2.99.65 — single
+    source-of-truth helper for combatant speed_walk healing on
+    encounter Load + demo seed + NPC auto-add. Mirrors the
+    client-side ``_speedWalkFromSheet`` in tabletop.html so the
+    server agrees with what the GM client computes when adding a
+    combatant via the manual Add-to-Init flow.
+
+    Accepts the canonical ``sheet["speed"]`` field in three shapes:
+      - int (PC sheets after demo-seed normalization, monster
+        sheets after ``_monster_dict_to_sheet``)
+      - dict with a ``walk`` sub-key (open5e-shaped homebrew
+        templates pre-projection)
+      - string like "30 ft." (legacy / hand-edited sheets)
+
+    Returns the parsed int speed in feet, or 30 as the standard
+    medium-humanoid fallback when no valid value is found.
+    """
+    if not sheet or not isinstance(sheet, dict):
+        return 30
+    v = sheet.get("speed")
+    if isinstance(v, (int, float)) and v > 0:
+        return int(v)
+    if isinstance(v, dict):
+        w = v.get("walk")
+        if isinstance(w, (int, float)) and w > 0:
+            return int(w)
+        if isinstance(w, str):
+            import re as _re
+            m = _re.search(r"\d+", w)
+            if m:
+                n = int(m.group())
+                if n > 0:
+                    return n
+    if isinstance(v, str):
+        import re as _re
+        m = _re.search(r"\d+", v)
+        if m:
+            n = int(m.group())
+            if n > 0:
+                return n
+    return 30
+
+
+def _resolve_combatant_speed_walk(
+    db: Session, campaign_id: int, combatant: dict,
+) -> int:
+    """v2.99.65 — project a combatant's walking speed by looking
+    up its linked Character (PC) or TokenTemplate (NPC) sheet.
+    Used by encounter Load (heals stale combatants) and the NPC
+    auto-add path (line ~14934) to populate the missing field
+    instead of letting the consumer fall back to a hard-coded 30.
+
+    Precedence:
+      1. ``char_id`` → ``Character.sheet["speed"]``
+      2. ``token_template_id`` → ``_monster_template_to_sheet(tmpl)["speed"]``
+         (projects monster_slug overlays + homebrew speeds via the
+         same path the right-click NPC sheet uses)
+      3. Default 30.
+    """
+    char_id = combatant.get("char_id")
+    if char_id:
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(char_id),
+            ).first()
+        except Exception:
+            char = None
+        if char:
+            return _speed_walk_from_sheet(char.sheet)
+    tmpl_id = combatant.get("token_template_id")
+    if tmpl_id:
+        try:
+            tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(tmpl_id),
+            ).first()
+        except Exception:
+            tmpl = None
+        if tmpl:
+            projected = _monster_template_to_sheet(tmpl, campaign_id)
+            return _speed_walk_from_sheet(projected)
+    return 30
+
+
 def _check_opportunity_attack_triggers(
     db: Session, campaign_id: int,
     mover_token_id: int,
@@ -10766,6 +10852,22 @@ async def _perform_encounter_load(
     # ── Pass 3: restore battle hub state ──
     battle_state = payload.get("battle_state") or {}
     if battle_state:
+        # v2.99.65 — heal combatant.speed_walk on Load. The demo's
+        # seed_encounter (and most user-saved encounter payloads
+        # pre-v2.99.65) didn't write speed_walk onto combatants,
+        # so the init tracker and /token/move enforcement both
+        # fell back to a hardcoded 30 ft regardless of what the
+        # PC / NPC sheet actually said (Krieger 40, Kael 45, Vex
+        # 35, Hill Giant 40, etc.). Project the speed from the
+        # linked Character / TokenTemplate sheet so the field is
+        # populated before the hub.set_battle push.
+        for _c in (battle_state.get("combatants") or []):
+            _sw = _c.get("speed_walk")
+            if isinstance(_sw, (int, float)) and _sw > 0:
+                continue
+            _c["speed_walk"] = _resolve_combatant_speed_walk(
+                db, campaign_id, _c,
+            )
         hub.set_battle(campaign_id, battle_state)
 
     # ── Broadcasts ──
@@ -14939,6 +15041,12 @@ async def place_aoe(
                     "initiative": 0,
                     "hp_current": _hp_max,
                     "hp_max": _hp_max,
+                    # v2.99.65 — populate speed_walk from the template
+                    # sheet so /token/move enforcement + the init
+                    # tracker's Mov chip show the right cap from the
+                    # first attack. Pre-v2.99.65 this path dropped the
+                    # field and every NPC defaulted to 30.
+                    "speed_walk": _speed_walk_from_sheet(_tmpl_sheet),
                     "buffs": [],
                     "economy": {"action": False, "bonus": False,
                                 "reaction": False, "movement": 0},

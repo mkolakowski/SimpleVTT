@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.65] - 2026-06-02 — "Krieger Walks Faster" — heal combatant speed_walk from sheet on encounter Load
+
+**Schema version:** 65
+**Commit summary:** **Fix combatant.speed_walk falling back to a hardcoded 30 ft in the init tracker + /token/move enforcement, regardless of the PC/NPC sheet's actual speed.** User report: "the speed in a character/NPC sheet is not being pulled in the initiative tracker and movement logic." Root cause: the demo's `seed_encounter` (and any user-saved encounter payload pre-v2.99.65) built combatant dicts without `speed_walk`, so on Load every combatant defaulted to 30 — Krieger (sheet speed 40), Kael (45), Vex (35 Wood Elf), Hill Giant (40), etc. all read as 30 ft, breaking the action-economy Mov chip + the strict-mode movement-overrun gate. Three-pronged fix: (1) Load-time heal in `_perform_encounter_load` walks combatants and projects missing `speed_walk` from `Character.sheet["speed"]` or `_monster_template_to_sheet(TokenTemplate).sheet["speed"]`; (2) `seed_encounter` populates `speed_walk` at seed time so fresh demos don't even need the heal; (3) the server-side NPC auto-add path (when an unseeded NPC token gets attacked) now writes `speed_walk` too. Two new top-level helpers (`_speed_walk_from_sheet` + `_resolve_combatant_speed_walk`) centralize the parse logic and mirror the client-side `_speedWalkFromSheet` in tabletop.html so server and client agree.
+**Description:** Five-file change. (1) `app/routes/tabletop_routes.py` — add `_speed_walk_from_sheet(sheet)` (int/dict/str shape handling, default 30) and `_resolve_combatant_speed_walk(db, campaign_id, combatant)` (Character lookup, then TokenTemplate via `_monster_template_to_sheet`). Wire into `_perform_encounter_load` Pass 3 (heal loop before `hub.set_battle`) and the v2.66.0 NPC auto-add path (write `speed_walk` from `_tmpl_sheet`). (2) `app/demo_seed.py` — `seed_encounter` now indexes characters + templates by id once, then writes `speed_walk` per combatant by reading the sheet directly. (3) `app/version.py`, `README.md`, `CHANGELOG.md`. (4) `tests/harness/test_encounters.py` — regression test creates a fresh encounter with a Krieger combatant missing `speed_walk`, loads it, and asserts /economy returns 40 (Krieger's sheet speed), with a Tavern Brawl reload in the finally block to restore demo state for downstream tests.
+
+### Fixed
+- `_perform_encounter_load` Pass 3 now heals combatant `speed_walk` from the linked Character / TokenTemplate sheet before pushing to the realtime hub. Pre-v2.99.65 the init tracker's Mov chip + /token/move enforcement read 30 ft for every combatant regardless of sheet speed.
+- `seed_encounter` in `app/demo_seed.py` now writes `speed_walk` on every combatant by reading the PC's `Character.sheet["speed"]` (or the NPC template's `sheet["speed"]` if directly present). Fresh demo seeds no longer need the heal pass.
+- The v2.66.0 NPC auto-add path in `/use_attack` / `/cast_spell` (line ~14946 — when an unseeded NPC token gets attacked, it auto-adds to init) now writes `speed_walk` from the projected template sheet so the freshly-added combatant has the right cap from the first /token/move attempt.
+
+### Added
+- `_speed_walk_from_sheet(sheet) -> int` in `app/routes/tabletop_routes.py` — single source-of-truth speed parser handling the `sheet["speed"]` field in int / `{walk: n}` dict / "30 ft." string shapes. Mirrors the client-side `_speedWalkFromSheet` in `app/templates/tabletop.html` so server agrees with what the GM client computes via the manual Add-to-Init flow.
+- `_resolve_combatant_speed_walk(db, campaign_id, combatant) -> int` — projects a combatant's walking speed by looking up its linked PC `Character.sheet` or NPC `TokenTemplate.sheet` (via `_monster_template_to_sheet` to overlay `monster_slug` + homebrew speeds).
+- `tests/harness/test_encounters.py::test_load_encounter_heals_missing_speed_walk` — creates a fresh test encounter with a Krieger combatant deliberately missing `speed_walk`, loads it, asserts /economy/{krieger_id} returns 40 (the seeded sheet speed). Restore step in `finally` reloads Tavern Brawl so downstream tests find the standing demo state.
+
+### Notes
+- **PATCH bump** — additive helper functions + heal-on-Load behavior + new test. No schema change, no breaking API change. Combatant payloads that already carry `speed_walk` skip the heal (early continue on `isinstance(sw, (int, float)) and sw > 0`).
+- **Why three places.** The Load heal is the durable backstop for any saved encounter (demo or user-authored) that lacks the field. The seed_encounter fix avoids the heal for fresh demo seeds (the `hub.set_battle` at the end of `seed_demo_data` bypasses Load entirely). The NPC auto-add fix closes the gap for the v2.66.0 "attack an NPC token without seeding init first" path. Future work could also heal in `PUT /battle` for symmetry, but the client-side `combatantFromToken` already writes `speed_walk` correctly from `_speedWalkFromSheet`, so PUT bodies from the canonical GM client never lack the field.
+- **Coverage of the int/dict/str sheet shapes.** Demo PCs use `sheet["speed"]: int` (Krieger 40, Kael 45). SRD monsters (loaded via `monster_slug`) get the int projection from `_monster_dict_to_sheet`. Homebrew templates authored via the form-post path also write an int. Pre-projection homebrew dicts can carry `{walk: n}` — handled. Hand-edited "30 ft." strings — handled. The default-30 fallback only kicks in when the field is completely absent or unparseable.
+- **The action-economy endpoint's `speed_walk: 30` default** at `tabletop_routes.py:28477` still ships — it's the not-in-battle default, used when there's no active combatant for the requested char_id. After v2.99.65 the in-battle path at line 28493-28495 reads the (now-populated) `speed_walk` cleanly. Removing the default would surface 0 / null to the client; keeping it preserves the "no battle = treat as 30" contract the sheet relies on.
+- Total harness count: 785 (was 784 in v2.99.64).
+
+---
+
 ## [2.99.64] - 2026-06-02 — "Both Goons Swing" — multi-NPC OA chain regression lock
 
 **Schema version:** 65

@@ -1,5 +1,16 @@
 """Encounters CRUD endpoints — saved fight snapshots.
 
+v2.99.65 — also covers the speed_walk heal in _perform_encounter_load:
+when a saved encounter's battle_state combatants don't carry
+speed_walk (the demo seed's shape pre-v2.99.65 and any user-saved
+encounter from before this version), Load now projects the speed
+from the linked PC sheet or NPC template before pushing the state
+to the hub. The init tracker's Mov chip + /token/move enforcement
+read the actual speed (Krieger 40, Kael 45, Vex 35, Hill Giant 40)
+instead of falling back to a hardcoded 30.
+
+
+
 Encounters are pre-built tableau bundles (tokens + battle state +
 optional map binding + auto-play playlist) the GM can load later. The
 endpoints (``GET /encounters``, ``POST /encounters``, ``PATCH /encounters/{id}``,
@@ -147,3 +158,105 @@ async def test_update_encounter_overwrites_payload(gm_client):
 # breaks downstream tests (test_move.py, etc.) that depend on it.
 # Needs either a "save current state → load test encounter → restore"
 # pattern OR a dedicated reset-and-reseed call. Filed.
+
+
+async def test_load_encounter_heals_missing_speed_walk(gm_client, roster):
+    """v2.99.65 — regression for "speed not pulled from sheet into
+    init tracker and movement logic" bug. _perform_encounter_load
+    now walks the loaded combatants and, for each one missing
+    speed_walk, projects the value from the linked PC sheet or
+    NPC template. Without the heal, every combatant defaulted to
+    30 ft regardless of what the sheet said (Krieger 40, Kael 45,
+    Vex 35, etc.) — so the init tracker's Mov chip + /token/move
+    enforcement used a stale cap.
+
+    Setup:
+      1. Create a fresh test encounter with battle_state containing
+         a single Krieger combatant. The combatant deliberately
+         OMITS speed_walk to simulate a saved encounter from before
+         v2.99.65 (or any user-authored payload that didn't bother
+         to populate it).
+      2. Load that encounter via POST /encounters/{eid}/load.
+      3. GET /economy/{krieger_id} — assert speed_walk == 40 (the
+         value on Krieger's seeded sheet), proving the heal pulled
+         the canonical value from the Character row.
+
+    Cleanup: load the demo's Tavern Brawl encounter again to
+    restore the standing battle_state for downstream tests.
+    """
+    krieger = roster["Krieger Stonefist"]
+
+    # Snapshot the demo Tavern Brawl id for the restore step.
+    lst = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/encounters")
+    assert lst.status_code == 200, lst.text
+    tavern = next(
+        (e for e in lst.json() if e.get("name") == "Tavern Brawl"),
+        None,
+    )
+    assert tavern is not None, (
+        "expected the demo 'Tavern Brawl' encounter in the catalog"
+    )
+
+    try:
+        # Build a minimal test encounter payload: one combatant
+        # (Krieger) with NO speed_walk field. active=True so the
+        # /economy endpoint returns the per-combatant values
+        # instead of the not-in-battle defaults.
+        create = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/encounters",
+            json={
+                "name": "Speed heal regression",
+                "description": "v2.99.65 — Krieger combatant w/o speed_walk",
+                "payload": {
+                    "tokens": [],
+                    "battle_state": {
+                        "combatants": [
+                            {
+                                "id": "tok_speed_heal_krieger",
+                                "char_id": krieger["id"],
+                                "name": krieger["name"],
+                                "initiative": 10,
+                                "hp_current": 55, "hp_max": 55,
+                                "buffs": [],
+                                "economy": {
+                                    "action": False, "bonus": False,
+                                    "reaction": False, "movement": 0,
+                                },
+                                # NB: NO speed_walk — that's the bug case
+                            },
+                        ],
+                        "turn_index": 0,
+                        "round": 1,
+                        "active": True,
+                    },
+                },
+            },
+        )
+        assert create.status_code == 200, create.text
+        eid = create.json()["id"]
+
+        # Load the test encounter — heal should populate speed_walk.
+        load = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/encounters/{eid}/load",
+            json={},
+        )
+        assert load.status_code == 200, load.text
+
+        # /economy returns the combatant's speed_walk projected by
+        # the heal (40 from Krieger's seeded sheet).
+        eco = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/economy/{krieger['id']}",
+        )
+        assert eco.status_code == 200, eco.text
+        body = eco.json()
+        assert body.get("speed_walk") == 40, (
+            f"speed_walk should be healed from Krieger's sheet "
+            f"(speed=40); got {body}"
+        )
+    finally:
+        # Restore the demo's standing battle state so downstream
+        # tests find Tavern Brawl loaded.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/encounters/{tavern['id']}/load",
+            json={"start_audio": False},
+        )
