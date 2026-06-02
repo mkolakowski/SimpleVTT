@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.37] - 2026-06-01 — "The Long Burn"
+
+**Schema version:** 64
+**Commit summary:** **Extended Spell metamagic — sixth metamagic ship, announce-only.** RAW (PHB p.102): 1 SP to double a spell's duration (max 24h, requires base duration ≥ 1 minute). Same pattern as Twinned (v2.99.33) + Distant (v2.99.34) + Quickened (v2.6.0). Server decrements 1 SP + broadcasts the trigger. GM applies the duration extension at the next cast. Auto-route would need a pending-buff + `/cast_spell` consumer that mutates the spell's duration field; filed.
+**Description:** New endpoint `/use_metamagic_extended_spell` taking just `character_id` (flat 1 SP cost). Validates Sorcerer Lv 3+. Atomically decrements SP + broadcasts `resource_update` + `feature_used(source=metamagic-extended-spell)` + logs `resource_spend` undo entry. Zara's `_metamagic_options` extended from 5 → 6 picks.
+
+### Added
+- `/api/campaign/{campaign_id}/use_metamagic_extended_spell` endpoint.
+- `extended-spell` entry in Zara's `class_features` list.
+- `tests/harness/test_use_metamagic_extended.py` — 3 tests:
+  - `test_extended_costs_1_sp_and_broadcasts` — happy path.
+  - `test_extended_not_enough_points` — 409 when SP exhausted.
+  - `test_extended_wrong_class` — 409 for Tavik (Cleric).
+
+### Changed
+- Zara's `_metamagic_options` extended to 6 picks (Quickened / Empowered / Twinned / Distant / Heightened / Extended). RAW Lv 3 = 2 known but demo expansion exercises the full stack.
+- `docs/plans/class-content-status.md` — Sorcerer Metamagic row updated to credit Extended ✅.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — additive endpoint + demo seed line + 3 tests.
+- **6 of 8 metamagics shipped.** Remaining ⚪: Careful (mechanical AoE protection for N=CHA-mod allies, substantial scope), Subtle (blocked on F7 components). Other RAW metamagics (Seeking, Transmuted, etc. from Tasha's) are out-of-scope for PHB-only coverage.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 722 (was 719 in v2.99.36).
+
+---
+
 ## [2.99.36] - 2026-06-01 — "The Sharper Edge"
 
 **Schema version:** 64

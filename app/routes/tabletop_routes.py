@@ -22234,6 +22234,133 @@ async def use_metamagic_heightened_spell(
     }
 
 
+# ----------- API: Metamagic Extended Spell (Sorcerer Lv 3+) ----------
+# v2.99.37 — sixth metamagic ship. RAW (PHB p.102): "When you Cast
+# a Spell that has a duration of 1 minute or longer, you can spend
+# 1 sorcery point to double its duration, to a maximum duration of
+# 24 hours."
+#
+# v1 announce-only ship — matches Quickened (v2.6.0), Twinned
+# (v2.99.33), Distant (v2.99.34). Server decrements 1 SP +
+# broadcasts the trigger. The actual duration extension is applied
+# by the GM at the next cast. Auto-route would need a pending-buff
+# pattern + a `/cast_spell` consumer that mutates the spell's
+# duration field at resolution time; filed.
+
+
+@router.post("/api/campaign/{campaign_id}/use_metamagic_extended_spell")
+async def use_metamagic_extended_spell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend 1 SP to declare Extended Spell on the caster's next
+    spell cast. v1 announce-only — server decrements SP + broadcasts
+    feature_used; player applies the duration extension at the next
+    cast (GM adjudicates).
+
+    Body: ``{character_id}``.
+
+    Validates Sorcerer Lv 3+ and at least 1 SP.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": level,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_points", "required": 1, "have": sp_cur,
+        })
+
+    new_sp = sp_cur - 1
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    et_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(et_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "sorcery-points",
+        "amount": 1,
+        "source_label": "Metamagic — Extended Spell",
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": "✨ Metamagic — Extended Spell (1 SP, 2× duration)",
+            "feature_desc": (
+                "Extended Spell declared. Next cast: double the "
+                "spell's duration (max 24h). Announce-only — GM "
+                "applies the extended duration at cast time. RAW "
+                "requires the spell's base duration ≥ 1 minute."
+            ),
+            "source": "metamagic-extended-spell",
+            "cast_id": et_cast_id,
+            "remaining": new_sp, "max": sp_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "sp_cost": 1,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "cast_id": et_cast_id,
+    }
+
+
 # ----------- API: Second Wind (Fighter Lv 1) -----------
 
 @router.post("/api/campaign/{campaign_id}/use_second_wind")

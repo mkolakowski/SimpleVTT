@@ -2317,16 +2317,24 @@ def _sorcerer_sheet(name: str) -> dict:
                 "name": "Heightened Spell (metamagic)",
                 "desc": "Spend 3 sorcery points: when you cast a save-spell, ONE target rolls its first save with disadvantage. Auto-consumed on the next save-roll resolution.",
             },
+            # v2.99.37 — Extended Spell. 1 SP flat. Announce-only.
+            # PHB p.102.
+            {
+                "key": "extended-spell",
+                "name": "Extended Spell (metamagic)",
+                "desc": "Spend 1 sorcery point: when you cast a spell with a duration ≥ 1 minute, double its duration (max 24 hours). v1: announce-only — GM applies the extended duration at cast time.",
+            },
         ],
         # Sorcerer's Metamagic at Lv 3 picks 2 options. Zara's picks:
         # Quickened (v2.6.0) + Empowered (v2.49.124) + Twinned
-        # (v2.99.33) + Distant (v2.99.34) + Heightened (v2.99.35).
-        # 5 picks despite RAW Lv 3 = 2 known — demo expansion
-        # houserule so the test fixture exercises the full
-        # metamagic stack as it ships.
+        # (v2.99.33) + Distant (v2.99.34) + Heightened (v2.99.35) +
+        # Extended (v2.99.37). 6 picks despite RAW Lv 3 = 2 known —
+        # demo expansion houserule so the test fixture exercises the
+        # full metamagic stack as it ships.
         "_metamagic_options": [
             "quickened-spell", "empowered-spell",
-            "twinned-spell", "distant-spell", "heightened-spell",
+            "twinned-spell", "distant-spell",
+            "heightened-spell", "extended-spell",
         ],
         # Draconic Bloodline subclass picks an ancestor at Lv 1.
         # Red = fire (matches Tiefling's flame motif + Hellish
