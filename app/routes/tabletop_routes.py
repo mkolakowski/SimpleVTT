@@ -2661,6 +2661,19 @@ def _check_opportunity_attack_triggers(
         map_row.grid_type.value if map_row.grid_type else "square"
     ).lower()
     grid_size_px = int(map_row.grid_size_px)
+    # v2.99.52 — plan-movement-oa-flow Phase 1 same-team filter.
+    # Pull the mover's team once. RAW: OA fires from a "hostile
+    # creature." When BOTH mover and watcher are non-neutral AND
+    # share the same team, skip the trigger. Neutral on either
+    # side leaves the existing behavior intact (back-compat for
+    # campaigns that haven't tagged tokens yet).
+    mover_token_row = db.query(Token).filter(
+        Token.id == int(mover_token_id),
+    ).first()
+    mover_team = (
+        (mover_token_row.team or "neutral").strip().lower()
+        if mover_token_row else "neutral"
+    )
     triggers: list[dict] = []
     for c in combatants:
         # Reaction already spent? Skip — OA needs reaction.
@@ -2683,6 +2696,18 @@ def _check_opportunity_attack_triggers(
         if watcher_token is None:
             continue
         if int(watcher_token.id) == int(mover_token_id):
+            continue
+        # v2.99.52 — same-team filter. Watcher's team comes from the
+        # Token row (single source of truth); combatant dict's
+        # ``team`` field (if present) is the cached version mirrored
+        # by token_update broadcasts. Pull from the Token row to
+        # avoid stale cache. Skip when both non-neutral AND equal.
+        watcher_team = (watcher_token.team or "neutral").strip().lower()
+        if (
+            mover_team != "neutral"
+            and watcher_team != "neutral"
+            and mover_team == watcher_team
+        ):
             continue
         wx = float(watcher_token.x or 0)
         wy = float(watcher_token.y or 0)
@@ -9361,6 +9386,10 @@ def list_tokens(
             "token_template_id": t.token_template_id,
             "controller_user_id": t.controller_user_id,
             "is_hidden": bool(t.is_hidden),
+            # v2.99.52 — plan-movement-oa-flow Phase 1: surface the
+            # faction tag so the Token Management UI (Phase 2) can
+            # render the team pill / dropdown without a second fetch.
+            "team": (t.team or "neutral"),
             # v2.64.0 — F2: surface the hidden-from list to the GM so
             # the GM UI can render a per-user visibility chip
             # ("hidden from Alice / Bob"). Non-GM viewers never see
@@ -10478,6 +10507,16 @@ async def update_token(
         token.controller_user_id = int(val) if val else None
     if "color" in body:
         token.color = str(body["color"])[:20]
+    # v2.99.52 — plan-movement-oa-flow Phase 1: accept faction tag.
+    # Validated against the closed set so a malicious client can't
+    # land an arbitrary string that would skip the same-team filter
+    # via a typo. Unknown values fall back to "neutral" (back-compat
+    # default).
+    if "team" in body:
+        _t = str(body.get("team") or "neutral").strip().lower()
+        if _t not in ("hero", "villain", "neutral"):
+            _t = "neutral"
+        token.team = _t
     db.commit()
     await hub.broadcast(campaign_id, {"type": "token_update", "data": _token_dict(token)})
     return _token_dict(token)
@@ -10530,6 +10569,11 @@ def _token_dict(t: Token) -> dict:
         "image_url": t.image_url,
         "is_hidden": t.is_hidden,
         "token_template_id": t.token_template_id,
+        # v2.99.52 — plan-movement-oa-flow Phase 1 faction tag. Same
+        # field surfaced in /tokens; broadcast here so token_update
+        # listeners (Phase 2 UI) re-paint pills + dropdowns without
+        # a refetch.
+        "team": (t.team or "neutral"),
         # v2.64.0 — F2 fog-of-war: broadcast the per-user hidden list
         # alongside the token state. The client-side canvas render
         # checks `myUserId in token.hidden_from_user_ids` and skips

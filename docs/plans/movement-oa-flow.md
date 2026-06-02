@@ -8,7 +8,7 @@ This plan does NOT supersede `plan-reactions-automation`. That doc owns the gene
 
 | Phase | Subject | Status | Lands in |
 |-------|---------|--------|----------|
-| 1 | Team data model + same-team filter | ⚪ proposed | v2.99.5x |
+| 1 | Team data model + same-team filter | ✅ shipped | v2.99.52 |
 | 2 | Token Management UI overhaul | ⚪ proposed | v2.99.5x |
 | 3 | "Would-this-trigger-OA?" preview endpoint | ⚪ proposed | v2.99.5x |
 | 4 | Pre-move "Continue or Stop?" modal | ⚪ proposed | v2.99.5x |

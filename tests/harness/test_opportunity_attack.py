@@ -938,3 +938,186 @@ async def test_sentinel_fires_on_npc_attack(
     assert "Bandit" in desc, (
         f"broadcast desc should name the bandit attacker; got {desc!r}"
     )
+
+
+# ── v2.99.52 — plan-movement-oa-flow Phase 1: same-team OA filter ──
+
+
+async def _set_team(gm_client, token_id: int, team: str):
+    """Helper: PATCH a token's team field via the v2.99.52 endpoint."""
+    r = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{token_id}",
+        json={"team": team},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+async def test_oa_skips_when_mover_and_watcher_share_team(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.52: Krieger (hero) moves out of Tavik's (hero) reach →
+    NO OA trigger fires. Same-team filter swallows the trigger.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    tv_tok = await _get_token_for_char(gm_client, tavik["id"])
+    assert kr_tok and tv_tok, "tokens must exist"
+    # Tag BOTH as hero.
+    await _set_team(gm_client, kr_tok["id"], "hero")
+    await _set_team(gm_client, tv_tok["id"], "hero")
+    try:
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+            json={"x": 700.0, "y": 350.0},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        triggers = data.get("opportunity_attack_triggers") or []
+        assert not triggers, (
+            f"same-team move should NOT trigger OA; got {triggers}"
+        )
+        await asyncio.sleep(0.15)
+        oa_msgs = _oa_broadcasts(gm_ws)
+        assert not oa_msgs, (
+            f"same-team move should NOT broadcast OA advisory; got "
+            f"{[(m.get('data') or {}).get('character_name') for m in oa_msgs]}"
+        )
+    finally:
+        # Reset teams so subsequent tests start from a clean fixture.
+        await _set_team(gm_client, kr_tok["id"], "neutral")
+        await _set_team(gm_client, tv_tok["id"], "neutral")
+
+
+async def test_oa_fires_when_mover_and_watcher_opposite_teams(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.52: Krieger (villain) moves out of Tavik's (hero) reach
+    → OA trigger fires normally. Opposite teams don't filter.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    tv_tok = await _get_token_for_char(gm_client, tavik["id"])
+    await _set_team(gm_client, kr_tok["id"], "villain")
+    await _set_team(gm_client, tv_tok["id"], "hero")
+    try:
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+            json={"x": 700.0, "y": 350.0},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        triggers = [
+            t for t in (data.get("opportunity_attack_triggers") or [])
+            if t.get("watcher_char_id") == tavik["id"]
+        ]
+        assert triggers, (
+            f"opposite-team OA should fire; got triggers="
+            f"{data.get('opportunity_attack_triggers')}"
+        )
+    finally:
+        await _set_team(gm_client, kr_tok["id"], "neutral")
+        await _set_team(gm_client, tv_tok["id"], "neutral")
+
+
+async def test_oa_fires_when_one_side_is_neutral(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.52: when EITHER side is neutral the filter doesn't fire
+    — back-compat for campaigns that haven't tagged tokens yet. Mover
+    is hero, watcher is neutral → OA fires.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    tv_tok = await _get_token_for_char(gm_client, tavik["id"])
+    # Mover gets a team; watcher stays neutral.
+    await _set_team(gm_client, kr_tok["id"], "hero")
+    # tv_tok defaults to neutral; explicit set for clarity.
+    await _set_team(gm_client, tv_tok["id"], "neutral")
+    try:
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+            json={"x": 700.0, "y": 350.0},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        triggers = [
+            t for t in (data.get("opportunity_attack_triggers") or [])
+            if t.get("watcher_char_id") == tavik["id"]
+        ]
+        assert triggers, (
+            f"neutral-vs-tagged OA should still fire; got triggers="
+            f"{data.get('opportunity_attack_triggers')}"
+        )
+    finally:
+        await _set_team(gm_client, kr_tok["id"], "neutral")
+
+
+async def test_token_patch_team_field_persists_and_broadcasts(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.52: PATCH /token/{id} {team: "hero"} persists + the
+    token_update broadcast carries team='hero' + the /tokens JSON
+    projection surfaces it.
+    """
+    krieger = roster["Krieger Stonefist"]
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    gm_ws.mark()
+    try:
+        r = await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}",
+            json={"team": "hero"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json().get("team") == "hero"
+        await asyncio.sleep(0.15)
+        upd = [
+            m for m in gm_ws.buffered("token_update")
+            if (m.get("data") or {}).get("id") == kr_tok["id"]
+        ]
+        assert upd, "expected token_update broadcast after team PATCH"
+        assert upd[-1]["data"].get("team") == "hero"
+        # Echoed in /tokens GET.
+        re_tok = await _get_token_for_char(gm_client, krieger["id"])
+        assert re_tok.get("team") == "hero", (
+            f"team field should surface in /tokens; got {re_tok}"
+        )
+        # Bad input clamps to neutral.
+        r2 = await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}",
+            json={"team": "rogues"},
+        )
+        assert r2.status_code == 200, r2.text
+        assert r2.json().get("team") == "neutral", (
+            f"unknown team should clamp to neutral; got {r2.json()}"
+        )
+    finally:
+        await _set_team(gm_client, kr_tok["id"], "neutral")

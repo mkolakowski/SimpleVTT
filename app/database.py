@@ -629,6 +629,22 @@ def _apply_inline_migrations() -> None:
                 "VARCHAR(500)"
             ))
 
+    # ---- Schema v65 (2.99.52): Token.team ----
+    # plan-movement-oa-flow Phase 1 — adds a faction tag
+    # ("hero" | "villain" | "neutral") used by
+    # `_check_opportunity_attack_triggers` to skip same-team OAs.
+    # Existing rows default to "neutral" so pre-Phase-1 campaigns
+    # see no behavior change until the GM opts a token into the
+    # filter via the Token Management UI (Phase 2). The filter only
+    # fires when BOTH mover and watcher are non-neutral and match.
+    tok_cols_v65 = _column_names("tokens")
+    with engine.begin() as conn:
+        if tok_cols_v65 and "team" not in tok_cols_v65:
+            conn.execute(text(
+                "ALTER TABLE tokens ADD COLUMN team "
+                "VARCHAR(16) NOT NULL DEFAULT 'neutral'"
+            ))
+
     # ---- Schema v63 (2.86.0): encounter backgrounds ----
     # Two new columns enable the encounter-background feature: a
     # fullscreen fixed-position image/video layer BEHIND the battle

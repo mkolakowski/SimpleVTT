@@ -378,6 +378,18 @@ class Token(Base):
         ForeignKey("token_templates.id", use_alter=True, name="fk_token_template", ondelete="SET NULL"),
         nullable=True,
     )
+    # v2.99.52 — plan-movement-oa-flow Phase 1: faction tag used by
+    # `_check_opportunity_attack_triggers` to skip same-team OAs.
+    # RAW: OA only fires on a hostile creature. Values:
+    #   "hero" / "villain" — explicit factions; OA fires across,
+    #     skips within.
+    #   "neutral" (default) — back-compat for pre-Phase-1 campaigns;
+    #     OA fires regardless of the OTHER side's team. Tokens
+    #     opt into the same-team filter by getting a non-neutral
+    #     tag from the GM via the Token Management UI (Phase 2).
+    team: Mapped[str] = mapped_column(
+        String(16), default="neutral", server_default="neutral",
+    )
 
     map: Mapped[Map] = relationship(back_populates="tokens")
     character: Mapped[Optional[Character]] = relationship(back_populates="tokens")

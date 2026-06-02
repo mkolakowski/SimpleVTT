@@ -10,6 +10,43 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.52] - 2026-06-01 — "The Colors of War" — plan-movement-oa-flow Phase 1
+
+**Schema version:** 65
+**Commit summary:** **plan-movement-oa-flow Phase 1 — team data model + same-team OA filter.** First mechanical phase of the movement-OA-flow plan (docs/plans/movement-oa-flow.md). Adds a `team` field (`"hero" | "villain" | "neutral"`, default `"neutral"`) on `Token` + a schema-v65 ALTER, surfaces it in `/tokens` GET and `_token_dict` (so `token_update` broadcasts carry it), accepts it on `PATCH /token/{id}` (closed-set validated), and wires `_check_opportunity_attack_triggers` to skip a watcher when BOTH it and the mover are non-neutral AND match. Neutral-on-either-side preserves the pre-Phase-1 behavior — back-compat for campaigns that haven't tagged tokens yet.
+**Description:** Pulls the mover's team once from the `Token` row at the top of `_check_opportunity_attack_triggers`. For each candidate watcher, reads `watcher_token.team` (the Token row is the single source of truth — the combatant dict's cached `team` field would race with `token_update` broadcasts). Skips when `mover_team != "neutral" AND watcher_team != "neutral" AND mover_team == watcher_team`. Closed-set validation on the PATCH endpoint clamps unknown values to `"neutral"` so a malicious client can't lock the filter off via a typo. 4 new harness tests cover: same-team skip, opposite-team fire, neutral-vs-tagged fire (back-compat), and the PATCH persist + broadcast + clamp.
+
+### Added
+- `Token.team` SQLAlchemy column — `String(16), default="neutral", server_default="neutral"`.
+- Schema v65 migration block in `_apply_inline_migrations()` — `ALTER TABLE tokens ADD COLUMN team VARCHAR(16) NOT NULL DEFAULT 'neutral'`.
+- `team` field on the `/api/campaign/{cid}/tokens` GET projection + the `_token_dict` shared projection.
+- `team` whitelisted on `PATCH /api/campaign/{cid}/token/{id}` with closed-set validation (`"hero"` | `"villain"` | `"neutral"`; unknown values clamp to `"neutral"`).
+- Same-team filter in `_check_opportunity_attack_triggers` (line ~2670). Mover's team pulled once from the `Token` row; watcher's team read from the Token row at trigger-check time.
+- `tests/harness/test_opportunity_attack.py` — 4 new tests:
+  - `test_oa_skips_when_mover_and_watcher_share_team` — both `hero` → no triggers, no broadcast.
+  - `test_oa_fires_when_mover_and_watcher_opposite_teams` — `villain` mover, `hero` watcher → trigger fires.
+  - `test_oa_fires_when_one_side_is_neutral` — back-compat: tagged mover vs `neutral` watcher → trigger fires.
+  - `test_token_patch_team_field_persists_and_broadcasts` — PATCH persists, `token_update` broadcast carries `team`, `/tokens` echoes it, unknown values clamp to `"neutral"`.
+
+### Changed
+- `SCHEMA_VERSION` 64 → 65.
+- `docs/plans/movement-oa-flow.md` — Phase 1 status row flipped ⚪ → ✅.
+- `app/templates/wiki.html` — plan status pill flipped to "🟠 Phase 1 shipped".
+- `docs/wiki/README.md` — same status update.
+- `docs/test-harness-coverage.md` — total bumped 764 → 768.
+
+### Notes
+- **MINOR-eligible feature** but bumped as **PATCH** because the public API change is additive + the schema migration is back-compat (default `"neutral"` matches pre-Phase-1 behavior). No operator action required.
+- **No back-fill of existing tokens.** Existing tokens default to `"neutral"` after the ALTER, which preserves the pre-Phase-1 behavior. The GM opts a token into the filter by tagging it via the Token Management UI (Phase 2, next commit).
+- **Cache invalidation.** Watcher's team is read from the `Token` row at trigger-check time (not the combatant dict's cached field) so a fresh PATCH lands immediately without waiting for the next `battle_update`. Trade-off: one extra `SELECT Token.team` per watcher per move; acceptable given moves are user-paced.
+- **Closed-set validation.** PATCH accepts only `"hero"` / `"villain"` / `"neutral"` (lowercase). Anything else (typos, malicious strings, longer faction names like "rogues" or "the-cult-of-...") clamps to `"neutral"`. A future ship could expand the allowed set if multi-faction battles want it.
+- **Schema migration is idempotent.** The `if "team" not in tok_cols_v65` gate makes the ALTER a no-op on re-runs (fresh installs go through `Base.metadata.create_all` and skip the ALTER path entirely; upgrades hit the ALTER once).
+- **All existing OA tests still pass.** The default-`neutral` keeps the filter dormant for every other test in the suite. Same goes for the parallel reaction-prompt + sentinel + polearm-master tests.
+- **Wiki surfacing.** Plan-status row update touches landing-page + on-disk index per CLAUDE.md. No new wiki slugs.
+- Total harness count: 768 (was 764 in v2.99.51).
+
+---
+
 ## [2.99.51] - 2026-06-01 — "The Ranked Backlog"
 
 **Schema version:** 64
