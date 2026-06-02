@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.61] - 2026-06-02 — "Surface the Cross"
+
+**Schema version:** 65
+**Commit summary:** **Fix v2.99.60 — surface `path_crossed_ft` in the /token/move + /preview_move response projections.** v2.99.60 added the path-cross OA detection branch + the `path_crossed_ft` field on internal trigger dicts. But the 3 outward-facing response projections (`/token/move` 409 body, `/token/move` success body, `/preview_move` body) explicitly listed a closed set of fields and dropped `path_crossed_ft` on the way out. The new `test_oa_fires_on_path_cross_when_both_endpoints_outside_reach` test failed because it asserted on the response's `path_crossed_ft` but found `None`. Fix: add `path_crossed_ft: t.get("path_crossed_ft")` to each projection so the field rides through to clients + tests. The path-cross detection itself was working correctly in v2.99.60 — only the response shape needed the field.
+**Description:** Three single-line additions to the projection dicts. Each preserves the existing "closed set of fields" pattern (which is intentional — keeps the API surface explicit and avoids leaking internal trigger metadata like `dist_from_ft` / `dist_to_ft` that are only useful inside the helper). The new field uses the same `t.get(...)` pattern as the rest — endpoint-based triggers omit it (get returns None), path-cross triggers populate it with the minimum segment-to-watcher distance.
+
+### Fixed
+- `/token/move` 409 `oa_confirmation_required` response now includes `path_crossed_ft` on path-cross triggers.
+- `/token/move` 200 success response's `opportunity_attack_triggers` list now includes `path_crossed_ft`.
+- `/preview_move` response's `triggers` list now includes `path_crossed_ft`.
+- `test_oa_fires_on_path_cross_when_both_endpoints_outside_reach` now passes — the trigger surfaces the field that proves the path-cross branch fired (vs. the legacy endpoint exit-reach branch).
+
+### Notes
+- **PATCH bump** — strictly additive field on existing endpoints. No schema change, no behavior change. The path-cross detection itself shipped correctly in v2.99.60.
+- **Why projections were closed-set in the first place.** The internal `oa_triggers` dicts carry implementation details (`dist_from_ft`, `dist_to_ft`) that aren't part of the public contract. The closed-set projection prevents accidental leakage of those fields if the helper schema evolves. The trade-off bit me here when adding `path_crossed_ft` — needed to be added explicitly to each projection. Future trigger fields that callers should see need the same treatment.
+- **No new tests.** The 2 new tests from v2.99.60 (`test_oa_fires_on_path_cross_…` and `test_oa_skips_path_cross_when_path_misses_reach`) both pass now.
+- Total harness count: 781 (unchanged from v2.99.60).
+
+---
+
 ## [2.99.60] - 2026-06-02 — "Crossed Threads"
 
 **Schema version:** 65

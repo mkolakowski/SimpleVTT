@@ -9376,6 +9376,12 @@ async def move_token(
                     "watcher_token_id": t.get("watcher_token_id"),
                     "watcher_reach_ft": t.get("watcher_reach_ft"),
                     "trigger_type": t.get("trigger_type") or "exit",
+                    # v2.99.60 — path-cross OAs carry the minimum
+                    # segment-to-watcher distance the helper detected
+                    # so chat-card copy can explain why the OA fired
+                    # despite both endpoints being outside reach.
+                    # Absent on endpoint-based triggers.
+                    "path_crossed_ft": t.get("path_crossed_ft"),
                 }
                 for t in oa_triggers
             ],
@@ -9637,6 +9643,8 @@ async def move_token(
                 "watcher_token_id": t.get("watcher_token_id"),
                 "watcher_reach_ft": t.get("watcher_reach_ft"),
                 "trigger_type": t.get("trigger_type") or "exit",
+                # v2.99.60 — see /token/move 409 comment for shape.
+                "path_crossed_ft": t.get("path_crossed_ft"),
             }
             for t in oa_triggers
         ],
@@ -9720,6 +9728,8 @@ async def preview_move_token(
                 "watcher_token_id": t.get("watcher_token_id"),
                 "watcher_reach_ft": t.get("watcher_reach_ft"),
                 "trigger_type": t.get("trigger_type") or "exit",
+                # v2.99.60 — see /token/move 409 comment for shape.
+                "path_crossed_ft": t.get("path_crossed_ft"),
             }
             for t in oa_triggers
         ],
