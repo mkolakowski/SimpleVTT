@@ -23285,6 +23285,196 @@ async def use_mystic_arcanum(
     }
 
 
+# ----------- API: Eldritch Master (Warlock Lv 20) ----------
+# v2.99.46. RAW (PHB p.107): "At 20th level, you can draw on your
+# inner reserve of mystical power while entreating your patron to
+# regain expended spell slots. You can spend 1 minute entreating
+# your patron for aid to regain all your expended spell slots from
+# your Pact Magic feature. Once you regain spell slots with this
+# feature, you must finish a long rest before you can do so again."
+#
+# Mirrors the Mystic Arcanum (v2.99.45) shape: daily 1/long-rest
+# counter (`eldritch-master-uses` resource), endpoint validates
+# Warlock + Lv 20 + counter > 0, atomically refills every Pact
+# Magic slot (walks sheet.spell_slots[cslug] for any row carrying
+# `reset: "short"` — the marker Pact Magic slots already use), emits
+# `spell_slot_update` per refreshed slot + `feature_used` +
+# `resource_update`.
+
+
+@router.post("/api/campaign/{campaign_id}/use_eldritch_master")
+async def use_eldritch_master(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.46 — Spend a daily Eldritch Master use to restore all
+    Pact Magic spell slots. Body: `{character_id}`.
+
+    Validates Warlock + Lv 20 + `eldritch-master-uses` resource at
+    >= 1. Walks every spell_slots row carrying `reset: "short"` (the
+    Pact Magic marker) + sets used=0 + broadcasts a `spell_slot_update`
+    per row. Atomically decrements the daily counter + broadcasts
+    `resource_update` + `feature_used(source=eldritch-master)`.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls != "warlock":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "warlock", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 20:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 20, "got": level,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    em_row = None
+    em_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "eldritch-master-uses":
+            em_row = dict(r); em_idx = i; break
+    if em_row is None:
+        return JSONResponse(status_code=404, content={
+            "error": "no_eldritch_master_resource",
+            "hint": (
+                "Sheet doesn't carry an eldritch-master-uses resource. "
+                "Add one with current=1/max=1/reset=long."
+            ),
+        })
+    em_cur = int(em_row.get("current") or 0)
+    em_max = int(em_row.get("max") or 0)
+    if em_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "current": em_cur, "max": em_max,
+        })
+
+    # Walk Pact Magic slots (rows carrying `reset: "short"`) and reset
+    # `used` to 0. Track which slots actually had non-zero used so the
+    # response can report a refilled count.
+    spell_slots = dict(sheet.get("spell_slots") or {})
+    refilled: list[tuple[str, int, int]] = []  # (cslug, lvl, total)
+    new_spell_slots: dict = {}
+    for cslug, by_lvl in spell_slots.items():
+        if isinstance(by_lvl, dict):
+            cleaned: dict = {}
+            for lvl_key, slot_obj in by_lvl.items():
+                if (
+                    isinstance(slot_obj, dict)
+                    and (slot_obj.get("reset") or "").strip().lower() == "short"
+                ):
+                    try:
+                        cur_used = int(slot_obj.get("used") or 0)
+                        cur_total = int(slot_obj.get("total") or 0)
+                    except (TypeError, ValueError):
+                        cur_used = 0
+                        cur_total = 0
+                    cleaned[lvl_key] = {**slot_obj, "used": 0}
+                    if cur_total > 0:
+                        try:
+                            refilled.append((cslug, int(lvl_key), cur_total))
+                        except (TypeError, ValueError):
+                            pass
+                else:
+                    cleaned[lvl_key] = slot_obj
+            new_spell_slots[cslug] = cleaned
+        else:
+            new_spell_slots[cslug] = by_lvl
+    sheet["spell_slots"] = new_spell_slots
+
+    # Decrement the daily counter.
+    new_em = em_cur - 1
+    em_row["current"] = new_em
+    resources[em_idx] = em_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    em_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(em_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "eldritch-master-uses",
+        "amount": 1,
+        "source_label": "Eldritch Master",
+    })
+
+    # Broadcast resource_update + per-slot spell_slot_update + feature_used.
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "eldritch-master-uses",
+            "current": new_em, "max": em_max,
+        },
+    })
+    for cslug, lvl, total in refilled:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "spell_slot_update",
+                "data": {
+                    "character_id": char.id,
+                    "class_slug": cslug,
+                    "level": lvl,
+                    "total": total,
+                    "used": 0,
+                },
+            })
+        except Exception:
+            pass
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": "🌑 Eldritch Master (Pact Magic restored)",
+            "feature_desc": (
+                f"{char.name} entreats their patron and regains all "
+                f"Pact Magic spell slots. (1/long rest)"
+            ),
+            "source": "eldritch-master",
+            "cast_id": em_cast_id,
+            "refilled_slots": len(refilled),
+            "remaining": new_em, "max": em_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "remaining": new_em,
+        "max": em_max,
+        "refilled_slots": len(refilled),
+        "cast_id": em_cast_id,
+    }
+
+
 # ----------- API: Second Wind (Fighter Lv 1) -----------
 
 @router.post("/api/campaign/{campaign_id}/use_second_wind")
@@ -34337,6 +34527,15 @@ _SHEET_PATCH_KEYS = {
     "subclass",
     "fighting_style",
     "level",
+    # v2.99.46 — spell_slots nested {class_slug: {lvl: {total, used,
+    # reset}}}. Primarily for capstone harness tests that need to
+    # drain a fixture PC's slots to exercise restore endpoints
+    # (Eldritch Master Pact slot refill, etc.) without going through
+    # /cast_spell. Production sheet-edit flow already mutates this
+    # via the spell-slot pip click handler, just through a different
+    # route. Tests should restore the slots in a finally block or
+    # via a long rest.
+    "spell_slots",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the

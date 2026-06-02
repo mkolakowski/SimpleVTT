@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.46] - 2026-06-01 — "Patron's Return"
+
+**Schema version:** 64
+**Commit summary:** **Eldritch Master — Warlock Lv 20 capstone — refills all Pact Magic slots, 1/long rest.** RAW (PHB p.107): "At 20th level, you can draw on your inner reserve of mystical power while entreating your patron to regain expended spell slots. You can spend 1 minute entreating your patron for aid to regain all your expended spell slots from your Pact Magic feature. Once you regain spell slots with this feature, you must finish a long rest before you can do so again." New endpoint `/use_eldritch_master` validates Warlock + Lv 20 + `eldritch-master-uses` resource at >= 1, walks every spell_slots row carrying `reset: "short"` (the Pact Magic marker), sets used=0, broadcasts `spell_slot_update` per refreshed row + decrements the daily counter + broadcasts `resource_update` + `feature_used(source=eldritch-master)`.
+**Description:** Endpoint follows the Mystic Arcanum (v2.99.45) + Sorcerous Restoration (v2.99.39) shapes. The Pact Magic slot walker reuses the same `reset: "short"` marker that the v2.99.25 short-rest refresh uses, so multiclass Warlocks + future homebrew short-rest casters work transparently. `eldritch-master-uses` resource (1/1 long-rest) added to Magnus's sheet; long rest auto-refills via the existing `reset: "long"` flag. `spell_slots` added to `_SHEET_PATCH_KEYS` so the test fixture can drain Pact slots reliably without going through `/cast_spell` (the v2.99.25 test passed coincidentally because the short-rest broadcast fires unconditionally; the new Eldritch Master test needs to actually assert on the used=0 transition).
+
+### Added
+- `/api/campaign/{campaign_id}/use_eldritch_master` endpoint. Body `{character_id}`. Validates Warlock + level >= 20 + daily counter. Atomic Pact slot refill + per-slot `spell_slot_update` broadcast + `resource_update` + `feature_used(source=eldritch-master)` + `resource_spend` undo log.
+- `eldritch-master-uses` resource on Magnus Hexbinder's sheet (1/1, reset=long, class_slug=warlock).
+- `eldritch-master` class_features entry on Magnus's sheet (descriptive at Lv 5).
+- `spell_slots` in `_SHEET_PATCH_KEYS` allowlist — lets capstone harness tests (Eldritch Master + future restore-endpoint tests) drain a fixture PC's slots without going through `/cast_spell`.
+- `tests/harness/test_use_eldritch_master.py` — 5 tests:
+  - `test_eldritch_master_refills_pact_slots_at_lv_20` — happy: drain Pact L3 slots, invoke, assert (a) response carries `refilled_slots >= 1`, (b) `spell_slot_update` for warlock L3 with used=0 + total=2, (c) `resource_update` for eldritch-master-uses with current=0, (d) `feature_used(source=eldritch-master)`.
+  - `test_eldritch_master_no_uses_left` — second invocation → 409 no_uses_left.
+  - `test_eldritch_master_level_too_low` — Lv 5 → 409 level_too_low (required 20).
+  - `test_eldritch_master_wrong_class` — Tavik (Cleric) → 409 wrong_class.
+  - `test_eldritch_master_long_rest_refills` — spend → long rest → second invocation succeeds.
+
+### Changed
+- `_SHEET_PATCH_KEYS` extended with `spell_slots` — see the v2.99.46 comment in the allowlist for the rationale. Production sheet-edit flow already mutates this via the spell-slot pip click handler; the allowlist add is a test-fixture convenience that matches the existing `level` / `inventory` / `subclass` pattern.
+- `docs/plans/class-content-status.md` — Warlock Lv 20 Eldritch Master row updated to ✅. **Warlock class is now fully ✅ at L1–L11 + Lv 20.** Remaining gaps: Eldritch Invocations picker (Lv 2+; UI work) + L7/L8/L9 Mystic Arcanum tiers (filed in v2.99.45).
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — 1 new endpoint + 1 demo-seed resource + 1 demo-seed class_feature + 1 allowlist entry + 5 tests. No schema change.
+- **"1 minute" semantic.** RAW says the ritual takes 1 minute (10 rounds). v1 ship makes it instant — pressing the button refills slots immediately. A future commit could install a `eldritch-master-channeling` buff for 10 rounds that completes the refill at expiry; filed for the day a "casting time > 1 action" framework lands.
+- **Multiclass note.** Like Sorcerous Restoration / Superior Inspiration, the gate reads top-level `class`/`level` (primary class). A Warlock 18 / Wizard 2 wouldn't qualify. Per multiclass RAW that's correct (the capstone requires Warlock Lv 20). Filed when a multiclass Warlock fixture lands.
+- **Reset marker reused.** The Pact slot walker matches every row with `reset: "short"`, identical to the v2.99.25 short-rest refresh logic. So a multiclass Warlock 20 / Cleric N would correctly refill ONLY their Pact slots (Cleric slots don't carry `reset: "short"`).
+- **Capstone test pattern reused.** Tests use the v2.99.39 class-scoped `level` PATCH (bump Lv 5 → Lv 20, restore at finally) + the new v2.99.46 `spell_slots` allowlist PATCH for drain. Same pattern as the Sorcerous Restoration / Superior Inspiration / Mystic Arcanum tests.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 756 (was 751 in v2.99.45).
+
+---
+
 ## [2.99.45] - 2026-06-01 — "The Patron's Gift"
 
 **Schema version:** 64

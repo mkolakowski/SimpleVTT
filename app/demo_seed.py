@@ -1527,6 +1527,20 @@ def _warlock_sheet(name: str) -> dict:
                 "desc": "1/long rest (Lv 11+): cast a chosen 6th-level Warlock spell without expending a Pact Magic slot. Use /use_mystic_arcanum to spend the charge.",
                 "manual": False,
             },
+            # v2.99.46 — Eldritch Master (Warlock Lv 20 capstone).
+            # RAW PHB p.107: spend 1 minute entreating your patron
+            # to regain all Pact Magic spell slots. 1/long rest.
+            # Endpoint /use_eldritch_master enforces the Lv 20 gate.
+            # Descriptive at Lv 5 (endpoint rejects with level_too_low).
+            {
+                "key": "eldritch-master-uses",
+                "name": "Eldritch Master",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "warlock Lv 20 / Eldritch Master",
+                "class_slug": "warlock",
+                "desc": "1/long rest (Lv 20): spend 1 minute entreating your patron to regain all Pact Magic spell slots. Use /use_eldritch_master to invoke.",
+                "manual": False,
+            },
         ],
         # v2.18.4: clickable Class abilities buttons. The Fiend's Dark
         # One's Blessing is a passive trigger (no button) — the (B)
@@ -1560,6 +1574,16 @@ def _warlock_sheet(name: str) -> dict:
                 "key": "mystic-arcanum",
                 "name": "Mystic Arcanum (Lv 11)",
                 "desc": "Beginning at 11th level: choose one 6th-level Warlock spell as your arcanum; cast it 1/long rest without expending a Pact Magic slot. Lv 13/15/17 unlock L7/L8/L9 picks. Use /use_mystic_arcanum to spend the daily charge.",
+            },
+            # v2.99.46 — Eldritch Master (Warlock Lv 20 capstone).
+            # PHB p.107. 1-minute ritual to refill all Pact Magic
+            # slots, 1/long rest. Endpoint /use_eldritch_master
+            # validates Lv 20 gate. Descriptive until Magnus hits
+            # Lv 20 in a future fixture bump.
+            {
+                "key": "eldritch-master",
+                "name": "Eldritch Master (Lv 20)",
+                "desc": "At 20th level, spend 1 minute entreating your patron to regain all expended Pact Magic spell slots. Once used, must finish a long rest before invoking again. Use /use_eldritch_master to invoke.",
             },
         ],
         # Pact Boon (Lv 3): Pact of the Tome / Pact of the Blade / Pact
