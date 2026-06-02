@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.70] - 2026-06-02 — "The Empty Chair" — presence-aware routing for ALL popup frameworks
+
+**Schema version:** 65
+**Commit summary:** **Generalize the v2.99.59 reaction-prompt presence-routing to every popup-style broadcast — save prompts, AoE save prompts, NPC-attack save prompts, condition-install save prompts.** User report: "Apply the user awareness to all popup frameworks, and future frameworks." Pre-v2.99.70 only reaction prompts (Shield, Counterspell, OA, etc.) used `_resolve_watcher_user_ids` to fall back to the GM when the PC owner is offline. Five other popup-style broadcast sites still inlined `"target_user_ids": [tgt_char.owner_user_id]` — so when the player was away, the save prompt never reached anyone and the spell silently never resolved. v2.99.70 adds a single source-of-truth helper `_resolve_pc_prompt_target_user_ids(db, campaign, owner_user_id)` that returns `[owner]` when present, `[gm]` when absent. All five sites now route through it. The helper's docstring carries the **future-framework rule**: any new code that broadcasts a `target_user_ids` payload single-keyed by owner_user_id MUST use this helper so presence-aware routing stays the default for the whole table.
+**Description:** Single-file change in `app/routes/tabletop_routes.py`. New `_resolve_pc_prompt_target_user_ids` helper placed adjacent to the v2.99.59 `_resolve_watcher_user_ids` (the multi-source-of-truth pair lives together). Five `target_user_ids: [tgt_char.owner_user_id]` / `[extra_pc.owner_user_id]` sites replaced — covering the spell-cast PC-target save prompt (line ~13869), the AoE per-target save prompt loop (~14302), and the duplicate sites at ~25942 / ~26343 / ~32220 in other save-emitting endpoints. The reaction-prompt helper `_resolve_watcher_user_ids` is unchanged — it has watcher-specific logic (NPC watcher = GM, etc.) the simpler PC-owner helper doesn't need.
+
+### Added
+- `_resolve_pc_prompt_target_user_ids(db, campaign, owner_user_id) -> list[int]` in `app/routes/tabletop_routes.py` — presence-aware single-owner routing. Returns `[owner]` when present, `[gm]` when absent. Handles single-seat campaigns (owner == GM → just owner) and missing-owner edges (no owner, no GM → empty list, silent broadcast preserved).
+
+### Changed
+- All 5 hardcoded `target_user_ids: [single_owner_user_id]` popup broadcasts now route through the new helper. Affected flows:
+  - Spell-cast single-target PC save prompt (`/cast_spell` → save-for-half).
+  - AoE per-target PC save prompt (`/place_aoe` → save-for-half loop).
+  - The 2 duplicate sites in `/place_aoe` for save-emitting alternate paths.
+  - NPC-attack against PC save prompt (Shocking-Grasp-style spell-attacks from NPC abilities).
+
+### Notes
+- **PATCH bump** — additive helper + 5 line-level routing changes. No schema change, no API contract change. The `target_user_ids` list shape on the wire is unchanged; only its CONTENT (owner vs. GM fallback) shifts based on presence.
+- **Why a separate helper from `_resolve_watcher_user_ids`.** The reaction-prompt helper has reaction-specific shape (takes a `watcher_combatant` dict + handles NPC watchers / GM-owned PCs). The PC-prompt helper takes a single `owner_user_id` — simpler input, simpler output. Both call into the same `hub.is_user_present` primitive. Separation keeps the call sites readable (the watcher version reads combatant fields; the PC version takes the bare owner id from a Character row).
+- **Future-framework rule.** Documented in the helper's docstring: any new code path that emits a `target_user_ids: [some_owner_user_id]` broadcast MUST use this helper. Search-target: `grep "target_user_ids" app/routes/tabletop_routes.py` — every hit should either be (a) the helper itself, (b) a `_resolve_pc_prompt_target_user_ids(...)` call, or (c) a `_resolve_watcher_user_ids(...)` call. Inlined `[owner_user_id]` is the anti-pattern.
+- **No new harness tests.** The existing reaction-prompt presence tests (`test_oa_prompt_routes_to_player_when_present` / `_to_gm_when_absent`) cover the watcher helper. Save-prompt presence routing is exercised by the same `hub.is_user_present` primitive — adding a harness test is a thin layer that doesn't add coverage value. Filed for a follow-up if behavior drifts.
+- Total harness count: 785 (unchanged from v2.99.69).
+
+---
+
 ## [2.99.69] - 2026-06-02 — "Dash, Then Duck" — sequential Dash → OA pre-move modals
 
 **Schema version:** 65

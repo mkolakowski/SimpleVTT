@@ -4468,6 +4468,53 @@ def _resolve_watcher_user_ids(
     return out
 
 
+def _resolve_pc_prompt_target_user_ids(
+    db: Session, campaign: "Campaign", owner_user_id: int | None,
+) -> list[int]:
+    """v2.99.70 — single source of truth for presence-aware routing
+    of ANY popup-style broadcast targeted at a single PC's owner.
+
+    Use this everywhere a save prompt / roll request / advisory
+    popup carries ``target_user_ids: [owner_user_id]`` so the GM
+    automatically catches the popup when the player is offline.
+    This generalizes the v2.99.59 reaction-prompt routing in
+    ``_resolve_watcher_user_ids`` to non-reaction prompts (roll
+    requests, AoE-save prompts, Sentinel-attack-trigger advisories,
+    Counterspell-on-PC, etc.).
+
+    Future popup framework rule: any code that broadcasts a
+    ``target_user_ids: [single_owner_user_id]`` payload MUST go
+    through this helper instead of inlining the list. That keeps
+    presence-aware routing the default for the whole table.
+
+    Precedence:
+      - owner present  → ``[owner_user_id]`` (player handles it)
+      - owner offline AND a non-owner GM exists → ``[gm_user_id]``
+        (GM plays for the absent player)
+      - owner is the GM (single-seat campaign) → ``[owner_user_id]``
+      - no owner / no GM → ``[]`` (broadcast is silent, same as
+        legacy behavior for missing-owner edges)
+    """
+    if not campaign:
+        return []
+    gm_uid = (
+        int(campaign.gm_user_id)
+        if campaign.gm_user_id else None
+    )
+    if owner_user_id is None:
+        # No owner identified; route to GM only when one exists.
+        return [gm_uid] if gm_uid is not None else []
+    owner_uid = int(owner_user_id)
+    if gm_uid is None or owner_uid == gm_uid:
+        # Single-seat or GM-owned PC: owner === GM, route to owner.
+        return [owner_uid]
+    try:
+        owner_present = hub.is_user_present(int(campaign.id), owner_uid)
+    except Exception:
+        owner_present = False
+    return [owner_uid] if owner_present else [gm_uid]
+
+
 async def _emit_reaction_prompt(
     db: Session, campaign: "Campaign",
     watcher_combatant: dict, trigger_event: str, summary: str,
@@ -13819,7 +13866,12 @@ async def cast_spell(
                         "visibility": req.visibility.value,
                         "created_by_name": user.display_name,
                         "created_by_user_id": user.id,
-                        "target_user_ids": [tgt_char.owner_user_id],
+                        # v2.99.70 — presence-aware routing. If the PC's
+                        # owner isn't connected, fall back to the GM so
+                        # the save prompt doesn't vanish unhandled.
+                        "target_user_ids": _resolve_pc_prompt_target_user_ids(
+                            db, campaign, tgt_char.owner_user_id,
+                        ),
                         "target_user_names": [tgt_char.name],
                     },
                 })
@@ -14247,7 +14299,10 @@ async def cast_spell(
                         "visibility": _aoe_req.visibility.value,
                         "created_by_name": user.display_name,
                         "created_by_user_id": user.id,
-                        "target_user_ids": [extra_pc.owner_user_id],
+                        # v2.99.70 — presence-aware routing.
+                        "target_user_ids": _resolve_pc_prompt_target_user_ids(
+                            db, campaign, extra_pc.owner_user_id,
+                        ),
                         "target_user_names": [extra_pc.name],
                     },
                 })
@@ -25884,7 +25939,10 @@ async def use_stunning_strike(
                 "visibility": req.visibility.value,
                 "created_by_name": user.display_name,
                 "created_by_user_id": user.id,
-                "target_user_ids": [tgt_char.owner_user_id],
+                # v2.99.70 — presence-aware routing.
+                "target_user_ids": _resolve_pc_prompt_target_user_ids(
+                    db, campaign, tgt_char.owner_user_id,
+                ),
                 "target_user_names": [tgt_char.name],
             },
         })
@@ -26285,7 +26343,10 @@ async def use_open_hand_technique(
                 "visibility": req.visibility.value,
                 "created_by_name": user.display_name,
                 "created_by_user_id": user.id,
-                "target_user_ids": [tgt_char.owner_user_id],
+                # v2.99.70 — presence-aware routing.
+                "target_user_ids": _resolve_pc_prompt_target_user_ids(
+                    db, campaign, tgt_char.owner_user_id,
+                ),
                 "target_user_names": [tgt_char.name],
             },
         })
@@ -32156,7 +32217,10 @@ async def use_npc_cast_spell(
                     "visibility": req.visibility.value,
                     "created_by_name": user.display_name,
                     "created_by_user_id": user.id,
-                    "target_user_ids": [tgt_char.owner_user_id],
+                    # v2.99.70 — presence-aware routing.
+                    "target_user_ids": _resolve_pc_prompt_target_user_ids(
+                        db, campaign, tgt_char.owner_user_id,
+                    ),
                     "target_user_names": [tgt_char.name],
                 },
             })
