@@ -2345,6 +2345,17 @@ def _sorcerer_sheet(name: str) -> dict:
                 "name": "Sorcerous Restoration (Lv 20)",
                 "desc": "Beginning at 20th level, you regain 4 expended sorcery points whenever you finish a short rest. Auto-applied by the /rest endpoint when class=Sorcerer AND level>=20.",
             },
+            # v2.99.43 — Elemental Affinity (Draconic Bloodline Lv 6).
+            # PHB p.103. Auto-fire +CHA mod to one damage roll per
+            # spell-cast when the damage type matches the ancestor's
+            # type (Red → fire); optional 1 SP for 1-hour resistance
+            # via /use_elemental_affinity. Descriptive entry until
+            # Zara hits Lv 6 in a future fixture bump.
+            {
+                "key": "elemental-affinity",
+                "name": "Elemental Affinity (Lv 6)",
+                "desc": "Beginning at 6th level, when you cast a spell that deals damage of your draconic ancestor's type (Zara → fire), add CHA-mod to one damage roll. You can also spend 1 SP to gain resistance to that damage type for 1 hour (/use_elemental_affinity).",
+            },
         ],
         # Sorcerer's Metamagic at Lv 3 picks 2 options. Zara's picks:
         # Quickened (v2.6.0) + Empowered (v2.49.124) + Twinned

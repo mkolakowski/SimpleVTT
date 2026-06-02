@@ -494,7 +494,7 @@ have features JSON.
 | Paladin | Ancients / Vengeance / Conquest / Redemption / Glory / Watchers / Oathbreaker | ❌ | ✅ | 🟡 | Spell grants only |
 | Ranger | **Hunter** | ✅ | n/a | 🟡 | Hunter's Prey / Defensive Tactics / Multiattack descriptive |
 | Rogue | **Thief** | ✅ | n/a | 🟡 | Fast Hands / Use Magic Device descriptive |
-| Sorcerer | **Draconic Bloodline** | ✅ | n/a | 🟡 | Dragon Ancestor / Draconic Resilience / Dragon Wings descriptive |
+| Sorcerer | **Draconic Bloodline** | ✅ | n/a | 🟢 | **Elemental Affinity ✅** v2.99.43 — Lv 6 auto-fire +CHA mod damage bonus on spells matching ancestor's damage type (Zara=Red→fire); 1 SP `/use_elemental_affinity` arms a 1-hour resistance buff. 5 tests. Dragon Ancestor / Draconic Resilience (built into AC) descriptive; Dragon Wings (Lv 14) + Draconic Presence (Lv 18) still descriptive. |
 | Sorcerer | Wild Magic | ❌ | n/a | 🟢 | Tides of Chaos counter exists |
 | Sorcerer | Aberrant Mind / Divine Soul | ❌ | ✅ (Aberrant) | 🟡 | Spell grants only |
 | Warlock | **The Fiend** | ✅ | n/a | 🟡 | Dark One's Blessing / Dark One's Own Luck / Fiendish Resilience descriptive |

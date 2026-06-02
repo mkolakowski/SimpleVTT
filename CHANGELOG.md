@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.43] - 2026-06-01 — "Red Dragon's Pact"
+
+**Schema version:** 64
+**Commit summary:** **Elemental Affinity — Draconic Bloodline Sorcerer Lv 6 — both halves shipped.** RAW (PHB p.103): "When you cast a spell that deals damage of the type associated with your draconic ancestry, you can add your Charisma modifier to one damage roll of that spell. At the same time, you can spend 1 sorcery point to gain resistance to that damage type for 1 hour." Two halves: (1) auto-fire +CHA mod damage bonus when the spell's damage type matches the caster's ancestor; (2) opt-in /use_elemental_affinity endpoint for the 1-hour resistance buff. The bonus side hooks into `/cast_spell`'s single-target NPC save-for-half damage roll site. The resistance side installs an `elemental-affinity-resistance` buff carrying `effects.resistance_to: [drac_type]` which the existing `_resistance_halve` helper auto-reads — RAW halving fires whenever Zara takes fire damage during the buff window.
+**Description:** New helpers (`_DRACONIC_DAMAGE_TYPE_MAP` + `_draconic_damage_type` + `_elemental_affinity_bonus` + `_broadcast_elemental_affinity_bonus`) + 1 site wire + 1 new endpoint + demo seed entry + 5 tests. The bonus side is automatic — no player toggle, no SP cost. The resistance side is opt-in (player spends 1 SP via the new endpoint). The buff's resistance routes through the same `_resistance_halve` field Rage uses for physical resistance, so the halving fires through both PC damage paths (sheet-fields PATCH + `/apply_damage`) without further wires.
+
+### Added
+- `_DRACONIC_DAMAGE_TYPE_MAP` — 10-entry mapping (Black→acid, Blue→lightning, Brass→fire, Bronze→lightning, Copper→acid, Gold→fire, Green→poison, Red→fire, Silver→cold, White→cold) per PHB p.86.
+- `_draconic_damage_type(sheet)` — reads `sheet["_draconic_ancestor"]` (already set on Zara's sheet since v2.18.1) and returns the damage type (or "").
+- `_elemental_affinity_bonus(sheet, damage_type)` — gate helper. Returns the caster's CHA-mod bonus or 0. Gated on class==sorcerer + subclass contains "draconic" + level>=6 + ancestor's damage type matches the spell's damage type.
+- `_broadcast_elemental_affinity_bonus(campaign_id, caster_char, damage_type, bonus)` — companion broadcast emitting `feature_used(source=elemental-affinity-bonus)` naming the bonus amount + damage type.
+- `/api/campaign/{campaign_id}/use_elemental_affinity` endpoint — body `{character_id}`. Validates Sorcerer + Draconic Bloodline + Lv 6+ + 1 SP. Atomically decrements 1 SP + installs `elemental-affinity-resistance` buff (600 rounds = 1 hour) with `effects.resistance_to: [drac_type]` + broadcasts `resource_update` + `feature_used` + logs `resource_spend` + `buff_install` undo entries.
+- Wire in `/cast_spell` single-target NPC save-for-half damage roll site (line ~13265). Before the `_roll_spell_damage_with_metamagic` call, appends `+CHA` to the damage expression if the gate matches; the bonus rolls through Empowered's reroll path (if also armed) naturally. Companion broadcast fires post-roll.
+- `elemental-affinity` entry in Zara's `class_features` list (descriptive at Lv 5, fires at Lv 6).
+- `tests/harness/test_elemental_affinity.py` — 5 tests:
+  - `test_elemental_affinity_bonus_broadcast_on_fire_spell` — Lv 6 Zara casts Fireball at a bandit → `feature_used(source=elemental-affinity-bonus)` fires.
+  - `test_elemental_affinity_bonus_skips_at_lv_5` — Lv 5 Zara (canonical fixture level) → NO bonus broadcast. Level gate proof.
+  - `test_elemental_affinity_resistance_endpoint_arms_buff` — happy arm: 1 SP decrement + `elemental-affinity-resistance` buff with `resistance_to: ["fire"]`.
+  - `test_elemental_affinity_level_too_low` — Lv 5 → 409 level_too_low (required 6).
+  - `test_elemental_affinity_wrong_class` — Tavik (Cleric) → 409 wrong_class.
+
+### Changed
+- `docs/plans/class-content-status.md` — Sorcerer Draconic Bloodline Lv 6 row updated to ✅. **Draconic Bloodline subclass now fully shipped** at L1 + L6 (Lv 14 Dragon Wings flight + Lv 18 Draconic Presence still ⚪).
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — 4 additive helpers + 1 wire site + 1 new endpoint + 1 demo-seed line + 5 tests. No schema change.
+- **RAW "one damage roll" simplification.** The bonus fires at the single-target NPC save-for-half damage site only. For AoE casts (Fireball at multiple targets), only the FIRST target's damage roll gets the +CHA — matches RAW intent that the bonus applies to "one damage roll." AoE-loop + `/place_aoe` wires filed for v2.99.44 if a future RAW reading wants the bonus split per target.
+- **PC damage path** (`/cast_spell` at a PC target that produces a roll_request) is NOT yet wired — the damage roll for PC targets is rolled by the player client-side via the chat card's "Roll Damage" button, which lives outside the server's damage path. Filed for the day the PC roll-card adds a server-side EA hook.
+- **Resistance via existing helper.** The buff's `effects.resistance_to: ["fire"]` lands in the same field Rage uses for physical resistance. `_resistance_halve` reads buffs from `_buffs_active` and halves matching damage types — no new code needed on the consumer side. Tested indirectly via `test_elemental_affinity_resistance_endpoint_arms_buff` asserting the buff shape; the actual damage-halving is covered by `test_buff_sheet_mirror` + existing Rage / resistance tests.
+- **Capstone test pattern reused.** Tests use the v2.99.39 class-scoped `level` PATCH to bump Zara to Lv 6 (then restore to Lv 5) without rebuilding her sheet. Same pattern as `test_sorcerous_restoration.py`.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 739 (was 734 in v2.99.42).
+
+---
+
 ## [2.99.42] - 2026-06-01 — "The Even-Handed Spell"
 
 **Schema version:** 64

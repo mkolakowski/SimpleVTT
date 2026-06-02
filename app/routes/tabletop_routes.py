@@ -13250,6 +13250,18 @@ async def cast_spell(
         # rerolls up to CHA-mod lowest damage dice and drops the buff.
         # No-op when no buff is present (the regular dice_mod.roll path).
         empowered_log: dict | None = None
+        # v2.99.43 — Elemental Affinity (Draconic Bloodline Lv 6).
+        # Auto-fire +CHA mod to the damage roll if the spell's damage
+        # type matches the caster's ancestor. Appends "+N" to the
+        # damage expression so the bonus rolls through the existing
+        # `_roll_spell_damage_with_metamagic` path (and through
+        # Empowered's reroll if also armed). RAW "one damage roll"
+        # applies to the single-target damage site (target #0); AoE
+        # loop targets get the unmodified damage_expr.
+        _ea_bonus = _elemental_affinity_bonus(char.sheet, damage_type)
+        _ea_damage_expr = damage_expr
+        if _ea_bonus > 0 and damage_expr:
+            _ea_damage_expr = f"{damage_expr}+{_ea_bonus}"
         if (
             damage_expr
             and auto_save_target_kind == "npc"
@@ -13260,9 +13272,13 @@ async def cast_spell(
             try:
                 auto_save_damage_rolled, auto_save_damage_breakdown, empowered_log = (
                     await _roll_spell_damage_with_metamagic(
-                        campaign_id, char.id, damage_expr,
+                        campaign_id, char.id, _ea_damage_expr,
                     )
                 )
+                if _ea_bonus > 0:
+                    await _broadcast_elemental_affinity_bonus(
+                        campaign_id, char, damage_type, _ea_bonus,
+                    )
             except dice_mod.DiceParseError:
                 auto_save_damage_rolled = 0
             if auto_save_damage_rolled > 0:
@@ -22827,6 +22843,276 @@ async def use_metamagic_careful_spell(
         "protected_count": len(protected_ids),
         "max_allowed": cha_mod,
         "cast_id": cf_cast_id,
+    }
+
+
+# ----------- Elemental Affinity (Draconic Bloodline Sorcerer Lv 6) ----------
+# v2.99.43. RAW (PHB p.103): "At 6th level, when you cast a spell that
+# deals damage of the type associated with your draconic ancestry,
+# you can add your Charisma modifier to one damage roll of that
+# spell. At the same time, you can spend 1 sorcery point to gain
+# resistance to that damage type for 1 hour."
+#
+# Two parts:
+#   (1) Passive damage bonus — auto-fires at the /cast_spell
+#       single-target damage roll site when the spell's damage_type
+#       matches the caster's draconic ancestor type. v1 ship covers
+#       the single-target NPC save-for-half site (the canonical
+#       fixture path: Zara casts Fireball at a bandit → +CHA mod
+#       to the damage roll). AoE-loop wires + /place_aoe wire
+#       filed (RAW says "one damage roll" — the single-target
+#       site IS the canonical one roll for a typical cast).
+#   (2) Optional 1-hour resistance — opt-in endpoint
+#       /use_elemental_affinity. Costs 1 SP + installs a
+#       `elemental-affinity-resistance` buff carrying the damage
+#       type in `effects.resistance_to`. _resistance_halve already
+#       reads that field for buffs (the same field Rage installs
+#       for physical resistance), so the halving fires
+#       automatically as long as the buff is on the caster.
+
+_DRACONIC_DAMAGE_TYPE_MAP = {
+    "black": "acid",
+    "blue": "lightning",
+    "brass": "fire",
+    "bronze": "lightning",
+    "copper": "acid",
+    "gold": "fire",
+    "green": "poison",
+    "red": "fire",
+    "silver": "cold",
+    "white": "cold",
+}
+
+
+def _draconic_damage_type(sheet: "dict | None") -> str:
+    """Read `_draconic_ancestor` from the sheet and map to damage
+    type. Returns "" if the ancestor is missing or unrecognized.
+    """
+    if not sheet:
+        return ""
+    ancestor = (sheet.get("_draconic_ancestor") or "").strip().lower()
+    return _DRACONIC_DAMAGE_TYPE_MAP.get(ancestor, "")
+
+
+def _elemental_affinity_bonus(
+    sheet: "dict | None", damage_type: str,
+) -> int:
+    """v2.99.43 — return the +CHA mod bonus Elemental Affinity should
+    add to a damage roll, or 0 when the gate doesn't fire.
+
+    Gate: class==sorcerer AND subclass=="Draconic Bloodline" (or
+    legacy "draconic-bloodline" slug) AND level>=6 AND draconic
+    ancestor's damage type matches the spell's damage type.
+    """
+    if not sheet or not damage_type:
+        return 0
+    if (sheet.get("class") or "").strip().lower() != "sorcerer":
+        return 0
+    sub = (sheet.get("subclass") or "").strip().lower()
+    if "draconic" not in sub:
+        return 0
+    try:
+        level = int(sheet.get("level") or 0)
+    except (TypeError, ValueError):
+        level = 0
+    if level < 6:
+        return 0
+    drac_type = _draconic_damage_type(sheet)
+    if not drac_type or drac_type != (damage_type or "").strip().lower():
+        return 0
+    cha = int((sheet.get("abilities") or {}).get("CHA") or 10)
+    return (cha - 10) // 2
+
+
+async def _broadcast_elemental_affinity_bonus(
+    campaign_id: int, caster_char: "Character | None",
+    damage_type: str, bonus: int,
+) -> None:
+    """Companion broadcast when Elemental Affinity adds +CHA to a
+    damage roll. Emits `feature_used(source=elemental-affinity-bonus)`.
+    """
+    if not caster_char or bonus == 0:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": caster_char.id,
+            "character_name": caster_char.name,
+            "user_color": caster_char.color,
+            "feature_name": (
+                f"🐲 Elemental Affinity (+{bonus} {damage_type})"
+            ),
+            "feature_desc": (
+                f"{caster_char.name}'s draconic ancestry adds +{bonus} "
+                f"to the spell's {damage_type} damage."
+            ),
+            "source": "elemental-affinity-bonus",
+        },
+    })
+
+
+@router.post("/api/campaign/{campaign_id}/use_elemental_affinity")
+async def use_elemental_affinity(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.43 — Spend 1 SP to gain resistance to your draconic
+    ancestor's damage type for 1 hour. Body: `{character_id}`.
+
+    Validates Sorcerer + Draconic Bloodline + Lv 6+ + 1 SP. Installs
+    an `elemental-affinity-resistance` buff on the caster's combatant
+    carrying `effects.resistance_to: [damage_type]` so the existing
+    `_resistance_halve` helper picks it up. Duration 600 rounds
+    (= 1 hour in 6-second combat rounds).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    sub = (sheet.get("subclass") or "").strip().lower()
+    if "draconic" not in sub:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass",
+            "expected": "draconic-bloodline",
+            "got": sheet.get("subclass") or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 6:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 6, "got": level,
+        })
+    drac_type = _draconic_damage_type(sheet)
+    if not drac_type:
+        return JSONResponse(status_code=409, content={
+            "error": "no_draconic_ancestor",
+            "got": sheet.get("_draconic_ancestor") or "",
+        })
+
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_points", "required": 1, "have": sp_cur,
+        })
+
+    new_sp = sp_cur - 1
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    ea_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(ea_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "sorcery-points",
+        "amount": 1,
+        "source_label": (
+            f"Elemental Affinity Resistance ({drac_type})"
+        ),
+    })
+
+    # 1 hour = 600 rounds at 6 sec / round. duration_max also = 600 so
+    # the tracker's countdown is honest.
+    buff = {
+        "key": "elemental-affinity-resistance",
+        "name": f"Elemental Affinity — {drac_type} resist",
+        "icon": "🐲",
+        "source_char_id": char.id,
+        "duration_rounds": 600,
+        "duration_max": 600,
+        "concentration": False,
+        "effects": {
+            "resistance_to": [drac_type],
+            "draconic_ancestor": (sheet.get("_draconic_ancestor") or ""),
+            "cast_id": ea_cast_id,
+        },
+        "desc": (
+            f"Resistance to {drac_type} damage for 1 hour "
+            f"(Draconic Bloodline Lv 6)."
+        ),
+    }
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
+    await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    _log_damage_entry(ea_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": "elemental-affinity-resistance",
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": (
+                f"🐲 Elemental Affinity — {drac_type} resistance "
+                f"(1 SP, 1 hour)"
+            ),
+            "feature_desc": (
+                f"{char.name} channels draconic blood: resistance to "
+                f"{drac_type} damage for the next hour."
+            ),
+            "source": "elemental-affinity-resistance",
+            "cast_id": ea_cast_id,
+            "remaining": new_sp, "max": sp_max,
+            "damage_type": drac_type,
+        },
+    })
+
+    return {
+        "ok": True,
+        "sp_cost": 1,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "damage_type": drac_type,
+        "duration_rounds": 600,
+        "cast_id": ea_cast_id,
     }
 
 
