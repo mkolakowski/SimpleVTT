@@ -23475,6 +23475,187 @@ async def use_eldritch_master(
     }
 
 
+# ----------- API: Divine Intervention (Cleric Lv 10/20) ----------
+# v2.99.47. RAW (PHB p.59): "Beginning at 10th level, you can call
+# on your deity to intervene on your behalf when your need is great.
+# Imploring your deity's aid requires you to use your action.
+# Describe the assistance you seek, and roll percentile dice. If you
+# roll a number equal to or lower than your cleric level, your
+# deity intervenes. The DM chooses the nature of the intervention;
+# the effect of any cleric spell or cleric domain spell would be
+# appropriate. If your deity intervenes, you can't use this feature
+# again for 7 days. Otherwise, you can use it again after you finish
+# a long rest. At 20th level, your call for intervention succeeds
+# automatically, no roll required."
+#
+# v1 simplification: 1/long-rest cooldown regardless of success or
+# failure. The 7-day post-success cooldown is filed for a future
+# multi-day tracker (the daily-resource model doesn't carry a
+# "rests until refresh" counter today; the cooldown_rests pattern
+# would generalize for other multi-rest features too).
+
+
+@router.post("/api/campaign/{campaign_id}/use_divine_intervention")
+async def use_divine_intervention(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.47 — Implore your deity for aid. Body: `{character_id}`.
+
+    Validates Cleric + Lv 10+ + `divine-intervention-uses` resource
+    at >= 1. At Lv 10-19 rolls a d100; success when rolled <=
+    cleric level. At Lv 20 auto-succeeds (no roll). Atomically
+    decrements the daily counter + broadcasts `resource_update`
+    + `feature_used(source=divine-intervention)`.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls != "cleric":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "cleric", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 10:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 10, "got": level,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    di_row = None
+    di_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "divine-intervention-uses":
+            di_row = dict(r); di_idx = i; break
+    if di_row is None:
+        return JSONResponse(status_code=404, content={
+            "error": "no_divine_intervention_resource",
+            "hint": (
+                "Sheet doesn't carry a divine-intervention-uses resource. "
+                "Add one with current=1/max=1/reset=long."
+            ),
+        })
+    di_cur = int(di_row.get("current") or 0)
+    di_max = int(di_row.get("max") or 0)
+    if di_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left", "current": di_cur, "max": di_max,
+        })
+
+    # Roll d100 (or auto-success at Lv 20).
+    auto_success = level >= 20
+    rolled = 0
+    breakdown = ""
+    if not auto_success:
+        try:
+            r = dice_mod.roll("1d100")
+            rolled = int(r.total)
+            breakdown = r.breakdown
+        except dice_mod.DiceParseError:
+            rolled = 0
+            breakdown = ""
+    success = auto_success or (rolled > 0 and rolled <= level)
+
+    new_di = di_cur - 1
+    di_row["current"] = new_di
+    resources[di_idx] = di_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    di_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(di_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "divine-intervention-uses",
+        "amount": 1,
+        "source_label": (
+            "Divine Intervention "
+            f"({'success' if success else 'no answer'})"
+        ),
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "divine-intervention-uses",
+            "current": new_di, "max": di_max,
+        },
+    })
+    if auto_success:
+        feature_desc = (
+            f"{char.name} (Lv 20) calls on their deity — the call "
+            f"is answered automatically."
+        )
+    elif success:
+        feature_desc = (
+            f"{char.name} rolls {rolled} on d100 (≤ {level}) — their "
+            f"deity intervenes."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} rolls {rolled} on d100 (> {level}) — their "
+            f"prayer goes unanswered. Try again after a long rest."
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                "✨ Divine Intervention "
+                f"({'success' if success else 'no answer'})"
+            ),
+            "feature_desc": feature_desc,
+            "source": "divine-intervention",
+            "cast_id": di_cast_id,
+            "success": success,
+            "auto_success": auto_success,
+            "rolled": rolled if not auto_success else None,
+            "threshold": level,
+            "remaining": new_di, "max": di_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "success": success,
+        "auto_success": auto_success,
+        "rolled": rolled if not auto_success else None,
+        "breakdown": breakdown if not auto_success else "",
+        "threshold": level,
+        "remaining": new_di,
+        "max": di_max,
+        "cast_id": di_cast_id,
+    }
+
+
 # ----------- API: Second Wind (Fighter Lv 1) -----------
 
 @router.post("/api/campaign/{campaign_id}/use_second_wind")

@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.47] - 2026-06-01 — "The Answered Prayer"
+
+**Schema version:** 64
+**Commit summary:** **Divine Intervention — Cleric Lv 10/20 feature — d100 prayer with Lv 20 auto-success.** RAW (PHB p.59): "Beginning at 10th level, you can call on your deity to intervene on your behalf when your need is great. ... Roll percentile dice. If you roll a number equal to or lower than your cleric level, your deity intervenes. ... At 20th level, your call for intervention succeeds automatically, no roll required." New endpoint `/use_divine_intervention` validates Cleric + Lv 10+ + `divine-intervention-uses` resource at >= 1. At Lv 10-19 rolls a `1d100`; success when rolled <= cleric level. At Lv 20 auto-succeeds (no roll). Atomically decrements + broadcasts `resource_update` + `feature_used(source=divine-intervention)` naming the outcome.
+**Description:** Endpoint follows the capstone-feature shape established in v2.99.39 (Sorcerous Restoration) / v2.99.44 (Superior Inspiration) / v2.99.45 (Mystic Arcanum) / v2.99.46 (Eldritch Master). The d100 roll uses the existing `dice_mod.roll("1d100")` path so the v2.49.12 `/api/test/dice/seed` deterministic-RNG endpoint covers test reproducibility. Lv 20 short-circuits the roll. Response carries `{success, auto_success, rolled, threshold, remaining, max, cast_id}`; `rolled` is null for the Lv 20 path and an int 1-100 otherwise.
+
+### Added
+- `/api/campaign/{campaign_id}/use_divine_intervention` endpoint. Body `{character_id}`. Validates Cleric + level >= 10 + daily counter. Atomic decrement + d100 roll (Lv 10-19) or auto-success (Lv 20) + `resource_update` + `feature_used` broadcasts + `resource_spend` undo log.
+- `divine-intervention-uses` resource on Brother Tavik Stonebrow's sheet (1/1, reset=long, class_slug=cleric).
+- `divine-intervention` class_features entry on Tavik's sheet (descriptive at Lv 8).
+- `tests/harness/test_use_divine_intervention.py` — 6 tests:
+  - `test_divine_intervention_auto_success_at_lv_20` — Lv 20 → `success: True`, `auto_success: True`, `rolled: None`, counter decrements + broadcast.
+  - `test_divine_intervention_roll_at_lv_10` — Lv 10 → d100 rolled (seeded for reproducibility), response carries `rolled: int`, `threshold: 10`, `success` matches `rolled <= 10`, counter decrements regardless of outcome.
+  - `test_divine_intervention_level_too_low` — Lv 8 → 409 level_too_low (required 10).
+  - `test_divine_intervention_wrong_class` — Krieger (Barbarian) → 409 wrong_class.
+  - `test_divine_intervention_no_uses_left` — second invocation → 409 no_uses_left.
+  - `test_divine_intervention_long_rest_refills` — spend → long rest → second invocation succeeds (Lv 20 path).
+
+### Changed
+- `docs/plans/class-content-status.md` — Cleric Lv 10 Divine Intervention row updated to ✅.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — 1 new endpoint + 1 demo-seed resource + 1 demo-seed class_feature + 6 tests. No schema change.
+- **7-day cooldown filed.** RAW says "If your deity intervenes, you can't use this feature again for 7 days. Otherwise, you can use it again after you finish a long rest." v1 simplifies to "1/long rest regardless of outcome." A future commit could add a `cooldown_rests: int` field on the resource that decrements per long rest (success sets it to 7 = effectively "7 long rests"; the resource skips refill while cooldown > 0). The cooldown_rests pattern would generalize to other multi-rest features. Filed.
+- **Lv 10 vs Lv 20 split.** The Lv 10-19 path rolls a real d100 through `dice_mod.roll("1d100")`. The Lv 20 path short-circuits the roll (no dice rolled — auto_success=True). Tests cover both branches; the v2.49.12 deterministic-RNG seed makes the Lv 10 roll reproducible.
+- **DM-narrated outcome.** The endpoint only reports success / failure; the actual intervention effect (which RAW says "the DM chooses") is left to the GM to narrate in chat. The `feature_desc` field on the broadcast gives the GM a hook to expand. Filed: future ship could surface a quick-pick list of intervention effects (cleric / domain spell cast).
+- **Capstone test pattern reused.** Tests use the v2.99.39 class-scoped `level` PATCH (bump Lv 8 → Lv 10 OR Lv 20, restore at finally). Same pattern as Sorcerous Restoration / Superior Inspiration / Mystic Arcanum / Eldritch Master.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 762 (was 756 in v2.99.46).
+
+---
+
 ## [2.99.46] - 2026-06-01 — "Patron's Return"
 
 **Schema version:** 64

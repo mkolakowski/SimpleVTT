@@ -741,6 +741,22 @@ def _cleric_sheet(name: str) -> dict:
                 "desc": "Use a domain-granted effect (Turn Undead, Preserve Life). 2/short rest at Lv 6+.",
                 "manual": False,
             },
+            # v2.99.47 — Divine Intervention (Cleric Lv 10+). Roll
+            # d100; if ≤ cleric level, deity intervenes (success).
+            # At Lv 20, auto-success (no roll). Once per long rest
+            # in v1 (RAW says 7-day cooldown on success — simplified
+            # to long-rest for v1; the 7-day cooldown is filed for a
+            # future multi-day tracker). Endpoint /use_divine_intervention
+            # enforces the Lv 10+ gate. Descriptive at Lv 8.
+            {
+                "key": "divine-intervention-uses",
+                "name": "Divine Intervention",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "cleric Lv 10 / Divine Intervention",
+                "class_slug": "cleric",
+                "desc": "Action (Lv 10+): roll d100, if ≤ cleric level your deity intervenes. Lv 20 auto-succeeds. 1/long rest in v1 (RAW: 7-day cooldown on success — simplified). Use /use_divine_intervention.",
+                "manual": False,
+            },
         ],
         # v2.57.1: Blessed Healer (Life Domain Lv 6+).
         # v2.58.0: ships with the heal-uplift hook
@@ -771,6 +787,15 @@ def _cleric_sheet(name: str) -> dict:
                 "key": "divine-strike",
                 "name": "Divine Strike",
                 "desc": "Passive (Life Domain Lv 8+) — once per turn, hits with a weapon attack deal an extra 1d8 radiant damage. Fires automatically via /attack hook (v2.60.0).",
+            },
+            # v2.99.47 — Divine Intervention (Cleric Lv 10+). PHB
+            # p.59. Action: roll d100; if ≤ cleric level, deity
+            # intervenes. At Lv 20, auto-success. Descriptive entry;
+            # endpoint /use_divine_intervention enforces the gate.
+            {
+                "key": "divine-intervention",
+                "name": "Divine Intervention (Lv 10)",
+                "desc": "Action: call on your deity to intervene. Roll d100; on a result equal to or less than your cleric level, your deity intervenes (DM narrates the help). At 20th level the call auto-succeeds. v1 ship: 1/long rest (RAW: 7-day cooldown on success — simplified). Use /use_divine_intervention.",
             },
         ],
     }
