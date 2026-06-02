@@ -1080,6 +1080,95 @@ async def test_oa_fires_when_one_side_is_neutral(
         await _set_team(gm_client, kr_tok["id"], "neutral")
 
 
+# ── v2.99.54 — plan-movement-oa-flow Phase 3: preview_move endpoint ──
+
+
+async def test_preview_move_returns_triggers_without_moving_token(
+    gm_client, roster,
+):
+    """v2.99.54: POST /token/{id}/preview_move returns the trigger
+    list a real /token/move would produce, AND leaves the token's
+    position unchanged.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok
+    await asyncio.sleep(0.15)
+
+    # Preview a move that would exit Tavik's 5 ft reach.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/preview_move",
+        json={"x": 700.0, "y": 350.0},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["would_trigger_oa"] is True
+    assert data["distance_ft"] > 0
+    triggers = [
+        t for t in data.get("triggers", [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert triggers, (
+        f"preview should surface a Tavik OA trigger; got {data['triggers']}"
+    )
+    assert triggers[0].get("trigger_type") == "exit"
+
+    # Token position MUST be unchanged (preview is read-only).
+    kr_tok_after = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok_after, "Krieger token still exists"
+    assert abs(kr_tok_after["x"] - 350.0) < 0.01, (
+        f"preview must not move token; expected x=350.0, got {kr_tok_after['x']}"
+    )
+    assert abs(kr_tok_after["y"] - 350.0) < 0.01, (
+        f"preview must not move token; expected y=350.0, got {kr_tok_after['y']}"
+    )
+
+
+async def test_preview_move_honors_same_team_filter(
+    gm_client, roster,
+):
+    """v2.99.54: preview respects the v2.99.52 same-team filter —
+    same-team move returns would_trigger_oa=False even if the
+    geometry would normally provoke an OA.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    tv_tok = await _get_token_for_char(gm_client, tavik["id"])
+    await _set_team(gm_client, kr_tok["id"], "hero")
+    await _set_team(gm_client, tv_tok["id"], "hero")
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/preview_move",
+            json={"x": 700.0, "y": 350.0},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["would_trigger_oa"] is False, (
+            f"same-team preview should report no triggers; got {data}"
+        )
+        assert data["triggers"] == [], (
+            f"same-team preview should return empty triggers; got {data['triggers']}"
+        )
+    finally:
+        await _set_team(gm_client, kr_tok["id"], "neutral")
+        await _set_team(gm_client, tv_tok["id"], "neutral")
+
+
 async def test_token_patch_team_field_persists_and_broadcasts(
     gm_client, gm_ws, roster,
 ):

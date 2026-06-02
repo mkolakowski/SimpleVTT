@@ -9334,6 +9334,89 @@ async def move_token(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/token/{token_id}/preview_move")
+async def preview_move_token(
+    campaign_id: int,
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.54 — plan-movement-oa-flow Phase 3.
+
+    Read-only "would this move trigger an OA?" probe. Same input
+    contract as ``POST /token/{id}/move`` (body: ``{x, y}``) and
+    same gates (campaign membership + token ownership), but does
+    NOT mutate the token's position and does NOT broadcast any
+    state change. Reuses ``_check_opportunity_attack_triggers`` so
+    the trigger list (and the v2.99.52 same-team filter) matches
+    what an actual move would emit.
+
+    Returns ``{would_trigger_oa: bool, distance_ft: float,
+    triggers: [...]}`` where each trigger entry has the same shape
+    surfaced on the v2.66.0 /token/move response. The client
+    (Phase 4) uses this to decide whether to open the pre-move
+    "Continue or Stop?" modal before posting the actual move.
+    """
+    body = await request.json()
+    try:
+        x = float(body.get("x", 0))
+        y = float(body.get("y", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "x and y must be numbers")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token or token.map.campaign_id != campaign_id:
+        raise HTTPException(404, "Token not found")
+    if not _user_can_move_token(db, user, token, campaign):
+        raise HTTPException(403, "You can't move that token")
+
+    from_x = float(token.x or 0)
+    from_y = float(token.y or 0)
+    grid_size_px = int(token.map.grid_size_px or 0)
+    grid_type = (
+        token.map.grid_type.value if token.map.grid_type else "square"
+    ).lower()
+    distance_ft = _distance_ft_between_points(
+        grid_size_px, grid_type, from_x, from_y, x, y,
+    )
+
+    # Same helper /token/move uses — the trigger list shape and the
+    # v2.99.52 same-team filter both come along for free.
+    oa_triggers: list[dict] = []
+    if distance_ft > 0:
+        try:
+            oa_triggers = _check_opportunity_attack_triggers(
+                db, campaign_id, int(token.id),
+                from_x, from_y, x, y,
+            )
+        except Exception:
+            # Defense-in-depth: a malformed battle state shouldn't
+            # break the preview probe. Fall through to "no
+            # triggers found" so the move-side flow can proceed.
+            oa_triggers = []
+
+    return {
+        "ok": True,
+        "would_trigger_oa": bool(oa_triggers),
+        "distance_ft": distance_ft,
+        "triggers": [
+            {
+                "watcher_combatant_id": t.get("watcher_combatant_id"),
+                "watcher_name": t.get("watcher_name"),
+                "watcher_char_id": t.get("watcher_char_id"),
+                "watcher_token_id": t.get("watcher_token_id"),
+                "watcher_reach_ft": t.get("watcher_reach_ft"),
+                "trigger_type": t.get("trigger_type") or "exit",
+            }
+            for t in oa_triggers
+        ],
+    }
+
+
 @router.get("/api/campaign/{campaign_id}/tokens")
 def list_tokens(
     campaign_id: int,

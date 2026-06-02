@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.54] - 2026-06-01 — "The Scout's Glance" — plan-movement-oa-flow Phase 3
+
+**Schema version:** 65
+**Commit summary:** **plan-movement-oa-flow Phase 3 — `POST /token/{id}/preview_move` read-only OA-trigger probe.** Server-side endpoint Phase 4's pre-move modal will call before committing a move. Same body contract as `/token/move` (`{x, y}`) and same gates (campaign membership + token ownership via `_user_can_move_token`), but does NOT mutate `token.x` / `token.y` and does NOT broadcast. Reuses `_check_opportunity_attack_triggers` so the trigger list — and the v2.99.52 same-team filter — match what an actual move would emit.
+**Description:** New endpoint added adjacent to `/token/move` in `app/routes/tabletop_routes.py` (line ~9337). Response shape `{ok: True, would_trigger_oa: bool, distance_ft: float, triggers: [...]}` mirrors the trigger entries on the v2.66.0 /token/move response (`watcher_combatant_id` / `watcher_name` / `watcher_char_id` / `watcher_token_id` / `watcher_reach_ft` / `trigger_type`). Defense-in-depth `except Exception → empty triggers` swallow on the helper call (a malformed battle state shouldn't break the probe — the move-side flow can still proceed with no preview info).
+
+### Added
+- `POST /api/campaign/{cid}/token/{id}/preview_move` endpoint. Body `{x, y}`. Returns `{ok, would_trigger_oa, distance_ft, triggers[]}` without mutating state.
+- 2 new tests in `tests/harness/test_opportunity_attack.py`:
+  - `test_preview_move_returns_triggers_without_moving_token` — preview surfaces the Tavik OA trigger that a real /token/move would emit, AND the token's x/y are unchanged after the call.
+  - `test_preview_move_honors_same_team_filter` — both Krieger and Tavik tagged `hero` → preview returns `would_trigger_oa: False` + empty triggers, proving the v2.99.52 same-team filter applies here too.
+
+### Changed
+- `docs/plans/movement-oa-flow.md` — Phase 3 status row flipped ⚪ → ✅.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — plan status pill flipped to "🟠 Phases 1–3 shipped".
+- `docs/test-harness-coverage.md` — total bumped 768 → 770.
+
+### Notes
+- **PATCH bump** — additive endpoint, no schema change, no client wiring yet. Phase 4 lands the client call.
+- **Same-team filter for free.** The endpoint calls `_check_opportunity_attack_triggers` directly, which already implements the v2.99.52 filter. No duplicated logic.
+- **No `oa_confirmation_required` 409 yet.** Per the plan, Phase 4 adds the server-side defense-in-depth that returns 409 when a client tries to `/token/move` without `oa_confirmed: true` on a triggering move. v2.99.54 is just the read-only probe.
+- **Distance is returned too.** Not strictly needed for the modal — but it's free (the helper computes it) and useful for the modal copy ("Continuing past this point will provoke OAs from … (~X ft into your move)").
+- **Defense-in-depth swallow.** If the OA-trigger helper raises (malformed battle state, missing map row, etc.) the preview returns `{would_trigger_oa: False, triggers: []}` instead of 500. The move-side flow can still proceed; if there genuinely was an OA, the legacy /token/move advisory will catch it. The trade-off is the modal won't fire for the corrupted-state case; the alternative (500) breaks user-visible movement entirely.
+- **Wiki surfacing.** Plan-status pill update touches landing + on-disk index per CLAUDE.md.
+- Total harness count: 770 (was 768 in v2.99.53).
+
+---
+
 ## [2.99.53] - 2026-06-01 — "The Pill Pass" — plan-movement-oa-flow Phase 2
 
 **Schema version:** 65
