@@ -33689,6 +33689,13 @@ _CLASS_SCOPED_KEYS = {
     "subclass_flavor",
     "subclass_features",
     "subclass_choice",
+    # v2.99.39 — class level. PATCH with `class_slug` routes the new
+    # level into the matching `classes[]` entry; the post-patch
+    # `normalize_dnd5e_sheet` call then mirrors it onto the top-level
+    # `sheet["level"]`. Without class scoping, a bare top-level PATCH
+    # would be silently undone by the next /rest call (which calls
+    # normalize and recomputes top-level level from classes[].level).
+    "level",
 }
 
 

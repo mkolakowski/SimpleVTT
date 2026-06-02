@@ -28,18 +28,24 @@ from .conftest import CAMPAIGN_ID
 
 @pytest_asyncio.fixture
 async def zara_at_lv_20(gm_client, roster):
-    """Bump Zara to Lv 20 for the test, restore at end."""
+    """Bump Zara to Lv 20 for the test, restore at end.
+
+    Uses the v2.99.39 class-scoped `level` patch — passes
+    `class_slug` so the patch routes into the matching `classes[]`
+    entry. Without `class_slug`, the next /rest's normalize would
+    silently revert sheet["level"] from classes[0].level.
+    """
     zara = roster["Zara Emberfire"]
     await gm_client.patch(
         f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/sheet-fields",
-        json={"level": 20},
+        json={"class_slug": "sorcerer", "level": 20},
     )
     yield zara
     # Restore Zara to Lv 5 so subsequent tests see her at the
     # canonical fixture level.
     await gm_client.patch(
         f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/sheet-fields",
-        json={"level": 5},
+        json={"class_slug": "sorcerer", "level": 5},
     )
 
 
@@ -105,7 +111,7 @@ async def test_sorcerous_restoration_skips_at_lv_19(
     zara = roster["Zara Emberfire"]
     await gm_client.patch(
         f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/sheet-fields",
-        json={"level": 19},
+        json={"class_slug": "sorcerer", "level": 19},
     )
     try:
         for _ in range(5):
@@ -137,7 +143,7 @@ async def test_sorcerous_restoration_skips_at_lv_19(
     finally:
         await gm_client.patch(
             f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/sheet-fields",
-            json={"level": 5},
+            json={"class_slug": "sorcerer", "level": 5},
         )
 
 
@@ -148,7 +154,7 @@ async def test_sorcerous_restoration_skips_for_non_sorcerer(
     krieger = roster["Krieger Stonefist"]
     await gm_client.patch(
         f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
-        json={"level": 20},
+        json={"class_slug": "barbarian", "level": 20},
     )
     try:
         gm_ws.mark()
@@ -177,7 +183,7 @@ async def test_sorcerous_restoration_skips_for_non_sorcerer(
         # seed changes. As of v2.99.39 Krieger is Lv 5.
         await gm_client.patch(
             f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
-            json={"level": 5},
+            json={"class_slug": "barbarian", "level": 5},
         )
 
 

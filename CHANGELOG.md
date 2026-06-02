@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.40] - 2026-06-01 — "The Roster Stamp"
+
+**Schema version:** 64
+**Commit summary:** **Fix v2.99.39 Sorcerous Restoration test — `level` must be class-scoped.** v2.99.39 added `level` to `_SHEET_PATCH_KEYS` so capstone harness tests could bump a fixture PC's level via the lightweight PATCH. But the patch landed only on top-level `sheet["level"]`, and the next `/rest` call (which runs `normalize_dnd5e_sheet`) silently reverted it from `classes[0].level` (still 5). The Sorcerous Restoration level gate then failed to fire even after the PATCH. Fix: add `level` to `_CLASS_SCOPED_KEYS` so a PATCH with `class_slug` routes the new level into the matching `classes[]` entry — the post-patch normalize then propagates to top-level cleanly. Tests updated to pass `class_slug` alongside `level`.
+**Description:** One-line addition to `_CLASS_SCOPED_KEYS` (`"level"`) + 5 test-fixture updates (`{"class_slug": "...", "level": N}` everywhere the v2.99.39 fixture passed bare `{"level": N}`). The fix establishes the canonical pattern for capstone tests: pass `class_slug` so the patch persists across subsequent normalize calls.
+
+### Fixed
+- v2.99.39 Sorcerous Restoration happy-path test failed because the PATCH-ed `sheet["level"]=20` was overwritten by the next `/rest` call's `normalize_dnd5e_sheet`, which derives top-level level from `classes[0].level` (which was still 5). Fix: route `level` through the class-scoped patch path by adding it to `_CLASS_SCOPED_KEYS`.
+- Test fixtures in `test_sorcerous_restoration.py` now pass `class_slug` alongside `level` so the patch lands in `classes[]` and survives normalize.
+
+### Notes
+- **PATCH bump** — one-line code fix + 5 test-call updates. No new endpoint, no schema change.
+- **Total harness count unchanged** at 731 — same 4 Sorcerous Restoration tests, now all passing.
+
+---
+
 ## [2.99.39] - 2026-06-01 — "The Twentieth Spark"
 
 **Schema version:** 64
