@@ -10,6 +10,46 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.38] - 2026-06-01 — "The Cautious Hand"
+
+**Schema version:** 64
+**Commit summary:** **Careful Spell metamagic — seventh metamagic ship, second mechanical intercept.** RAW (PHB p.102): 1 SP lets you protect up to CHA-mod creatures (min 1) from a save-spell's effects — those creatures auto-succeed on their first save. Endpoint takes `protected_combatant_ids: list[str]` (length-checked against CHA-mod). Arms a `metamagic-careful-pending` buff on the caster carrying the protected list in `effects.protected_combatant_ids`. The 3 save-roll construction sites (`/cast_spell` single-target PC + AoE PC loop + `/place_aoe` PC server-rolled) read the buff via `_caster_has_careful_pending_buff` + `_combatant_is_careful_protected(buff, target_combatant_id)`; on True the target's save d20 expression becomes `1d20+99` — mathematically guarantees PASS against any sane DC (< 100). Buff drops at END of cast (after all targets have rolled) — distinct from Heightened's RAW "ONE TARGET" one-use semantic, because Careful's RAW intent is to protect EVERY chosen creature in the cast.
+**Description:** New endpoint + 3 new helpers + 3-site wire + end-of-cast cleanup × 2 + demo seed entry + 5 tests. Uses the auto-pass-via-large-bonus approach so the roll mechanically resolves without forking the dice-mod layer or piling a "force pass" flag through the broadcast envelope. Composes cleanly with advantage / disadvantage sources — auto-pass wins because +99 dominates any roll variance.
+
+### Added
+- `_caster_has_careful_pending_buff(campaign_id, caster_char_id)` — returns the FULL buff dict (or None) so the same call covers both the gate check AND the protected-list lookup.
+- `_combatant_is_careful_protected(buff, target_combatant_id)` — list-membership check against `effects.protected_combatant_ids`.
+- `_broadcast_careful_protected(campaign_id, caster_char, target_name)` — companion broadcast emitting `feature_used(source=metamagic-careful-spell)` naming the protected creature.
+- `/api/campaign/{campaign_id}/use_metamagic_careful_spell` endpoint — body `{character_id, protected_combatant_ids: list[str]}`. Validates Sorcerer Lv 3+, 1 SP available, `1 ≤ len(protected) ≤ CHA-mod`. Atomically decrements 1 SP + installs `metamagic-careful-pending` buff on caster + broadcasts `resource_update` + `feature_used(source=metamagic-careful-spell-armed)` + logs `resource_spend` + `buff_install` undo entries.
+- `careful-spell` entry in Zara's `class_features` list.
+- 3 save-roll construction-site wires in `app/routes/tabletop_routes.py`:
+  - `/cast_spell` single-target PC save (line ~12978) — reads pending buff, checks `target_combatant_id` membership, swaps `1d20 → 1d20+99` on True + broadcast.
+  - `/cast_spell` AoE PC save loop (line ~13339) — same shape on `extra_id`.
+  - `/place_aoe` PC server-rolled save loop (line ~14324) — same shape on `tid`; auto-pass takes precedence over advantage sources but still broadcasts those triggers if they happened to fire.
+- End-of-cast buff drop in `/cast_spell` (after `auto_save_targets`) and `/place_aoe` (before `battle_update` broadcast). Drops the buff once after all protected targets in the cast have benefited.
+- `tests/harness/test_use_metamagic_careful.py` — 5 tests:
+  - `test_careful_arms_buff_and_decrements_sp` — happy arm.
+  - `test_careful_not_enough_points` — 409 when SP exhausted.
+  - `test_careful_wrong_class` — 409 for Tavik (Cleric).
+  - `test_careful_too_many_protected` — 409 when len > CHA-mod.
+  - `test_careful_auto_pass_on_save_swaps_to_force_pass` — Zara casts Hold Person at Pip with Careful armed protecting Pip → Pip's save `base_expression="1d20+99"` + protected broadcast + buff dropped at end of cast.
+
+### Changed
+- Zara's `_metamagic_options` extended 6 → 7 picks (now includes `careful-spell`). 7 of 8 RAW metamagics.
+- `docs/plans/class-content-status.md` — Sorcerer Metamagic row updated to credit Careful ✅.
+- `docs/test-harness-coverage.md` — total bumped.
+
+### Notes
+- **PATCH bump** — additive endpoint + 3 helpers + 3 site wires + 2 end-of-cast drops + demo seed line + 5 tests.
+- **7 of 8 metamagics shipped.** Remaining ⚪: Subtle (blocked on F7 component-tracking). Other RAW metamagics (Seeking, Transmuted, etc. from Tasha's) are out-of-scope for PHB-only coverage.
+- **Auto-pass via `1d20+99`.** The +99 bonus dominates any DC up to 99, which covers every RAW spell save DC (the maximum DC in PHB / official adventures is ~25). Keeps the dice-mod layer untouched and surfaces a "your save total: 100+" in the chat card so the player sees WHY they passed.
+- **Multi-target benefit.** Unlike Heightened's RAW "ONE TARGET" semantic (buff drops on first save), Careful's RAW intent is "those creatures auto-succeed" — plural. So the buff stays armed across the cast (all protected targets benefit) and drops once at end of cast.
+- **NPC saver Careful.** The 3 site wires apply to PC savers only. NPC savers from `/cast_spell` or `/place_aoe` aren't currently affected by Careful Spell. RAW says "creatures" (NPCs would qualify) but the demo's Fey ally / NPC familiar scenarios are filed for a follow-up. Filed.
+- **Wiki surfacing.** No allowlist / wiki landing-page edits needed.
+- Total harness count: 727 (was 722 in v2.99.37).
+
+---
+
 ## [2.99.37] - 2026-06-01 — "The Long Burn"
 
 **Schema version:** 64

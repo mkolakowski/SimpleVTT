@@ -2324,17 +2324,29 @@ def _sorcerer_sheet(name: str) -> dict:
                 "name": "Extended Spell (metamagic)",
                 "desc": "Spend 1 sorcery point: when you cast a spell with a duration ≥ 1 minute, double its duration (max 24 hours). v1: announce-only — GM applies the extended duration at cast time.",
             },
+            # v2.99.38 — Careful Spell. 1 SP flat. Mechanical: arms a
+            # `metamagic-careful-pending` buff on the caster with a
+            # list of protected combatant_ids; the next save-spell's
+            # save-roll construction sites read the buff + swap
+            # protected targets' d20 → "1d20+99" (auto-pass). PHB
+            # p.102.
+            {
+                "key": "careful-spell",
+                "name": "Careful Spell (metamagic)",
+                "desc": "Spend 1 sorcery point: when you cast a save-spell, choose up to CHA-mod creatures (min 1). Those creatures auto-succeed on their first saving throw vs the spell. Auto-consumed on the next save-roll resolution.",
+            },
         ],
         # Sorcerer's Metamagic at Lv 3 picks 2 options. Zara's picks:
         # Quickened (v2.6.0) + Empowered (v2.49.124) + Twinned
         # (v2.99.33) + Distant (v2.99.34) + Heightened (v2.99.35) +
-        # Extended (v2.99.37). 6 picks despite RAW Lv 3 = 2 known —
-        # demo expansion houserule so the test fixture exercises the
-        # full metamagic stack as it ships.
+        # Extended (v2.99.37) + Careful (v2.99.38). 7 picks despite
+        # RAW Lv 3 = 2 known — demo expansion houserule so the test
+        # fixture exercises the full metamagic stack as it ships.
         "_metamagic_options": [
             "quickened-spell", "empowered-spell",
             "twinned-spell", "distant-spell",
             "heightened-spell", "extended-spell",
+            "careful-spell",
         ],
         # Draconic Bloodline subclass picks an ancestor at Lv 1.
         # Red = fire (matches Tiefling's flame motif + Hellish

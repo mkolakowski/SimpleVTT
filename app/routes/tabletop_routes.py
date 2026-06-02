@@ -12975,6 +12975,27 @@ async def cast_spell(
                         campaign_id, int(char.id),
                         "metamagic-heightened-pending",
                     )
+                # v2.99.38 — Careful Spell metamagic auto-pass at the
+                # single-target PC save site. If the casting Sorcerer
+                # has a `metamagic-careful-pending` buff AND this
+                # target's combatant_id is in the protected list,
+                # swap the d20 → "1d20+99" — mathematically guarantees
+                # PASS against any sane DC (< 100). The buff stays
+                # armed across the cast (multiple protected targets
+                # all benefit); dropped at end of cast.
+                _careful_buff = _caster_has_careful_pending_buff(
+                    campaign_id, int(char.id),
+                )
+                _careful_target_id = target_combatant_id or (
+                    target_combatant.get("id") if target_combatant else ""
+                )
+                if _combatant_is_careful_protected(
+                    _careful_buff, _careful_target_id,
+                ):
+                    _ds_base = _ds_base.replace("1d20", "1d20+99", 1)
+                    await _broadcast_careful_protected(
+                        campaign_id, char, tgt_char.name,
+                    )
                 # v2.97.50 — PFE&G type-aware save advantage helper
                 # ``_saver_pfeag_save_advantage`` exists for future
                 # wiring (e.g. ongoing-effect saves once that flow
@@ -13335,6 +13356,22 @@ async def cast_spell(
                         campaign_id, int(char.id),
                         "metamagic-heightened-pending",
                     )
+                # v2.99.38 — Careful Spell auto-pass on AoE PC saves.
+                # Same shape as the single-target wire: check the
+                # caster's pending buff + protected list, swap to
+                # "1d20+99" auto-pass. Multiple protected PCs in the
+                # same AoE all benefit (buff stays armed across the
+                # cast).
+                _aoe_careful_buff = _caster_has_careful_pending_buff(
+                    campaign_id, int(char.id),
+                )
+                if _combatant_is_careful_protected(
+                    _aoe_careful_buff, extra_id,
+                ):
+                    _aoe_ds_base = _aoe_ds_base.replace("1d20", "1d20+99", 1)
+                    await _broadcast_careful_protected(
+                        campaign_id, char, extra_pc.name,
+                    )
                 _aoe_req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
@@ -13506,6 +13543,16 @@ async def cast_spell(
                 "damage_type": damage_type,
             })
         payload["auto_save_targets"] = auto_save_targets
+
+        # v2.99.38 — drop the Careful Spell pending buff at end of
+        # save resolution. The buff stayed armed across the cast so
+        # every protected target benefits; here we consume it once
+        # all targets have rolled. No-op if no buff was installed.
+        if _caster_has_careful_pending_buff(campaign_id, int(char.id)):
+            await _remove_buff(
+                campaign_id, int(char.id),
+                "metamagic-careful-pending",
+            )
 
         # v2.32.0 Phase T.3c: save-or-suck condition install. When the
         # spell has NO damage roll but DOES have a save_ability AND
@@ -14324,7 +14371,38 @@ async def place_aoe(
             _aoe_pl_heightened = _caster_has_heightened_pending(
                 campaign_id, int(ctx.get("caster_char_id") or 0),
             )
-            if _ds_pc_applies or _aoe_pl_race_applies or _aoe_pl_rage_str_save:
+            # v2.99.38 — Careful Spell auto-pass at /place_aoe PC
+            # server-rolled save site. If the caster's pending buff
+            # protects this target's combatant_id (tid), the PC's
+            # save becomes a guaranteed-pass "1d20+99+mod". Composes
+            # cleanly with advantage sources (auto-pass wins either
+            # way). Multiple protected targets in the same AoE all
+            # benefit (buff stays armed across the loop).
+            _aoe_pl_careful_buff = _caster_has_careful_pending_buff(
+                campaign_id, int(ctx.get("caster_char_id") or 0),
+            )
+            _aoe_pl_careful_fired = _combatant_is_careful_protected(
+                _aoe_pl_careful_buff, tid,
+            )
+            if _aoe_pl_careful_fired:
+                expr = f"1d20+99{pc_mod:+d}"
+                await _broadcast_careful_protected(
+                    campaign_id, _caster_char_for_broadcast, extra_pc.name,
+                )
+                # Still broadcast advantage triggers if they happened
+                # to fire, but the auto-pass takes precedence.
+                if _ds_pc_applies:
+                    await _broadcast_danger_sense(campaign_id, extra_pc)
+                if _aoe_pl_race_applies:
+                    await _broadcast_race_save_advantage(
+                        campaign_id, extra_pc,
+                        _aoe_pl_race_slug, _aoe_pl_race_name, save_ability,
+                    )
+                if _aoe_pl_rage_str_save:
+                    await _broadcast_rage_str_save_advantage(
+                        campaign_id, extra_pc,
+                    )
+            elif _ds_pc_applies or _aoe_pl_race_applies or _aoe_pl_rage_str_save:
                 expr = f"2d20kh1{pc_mod:+d}"
                 if _ds_pc_applies:
                     await _broadcast_danger_sense(campaign_id, extra_pc)
@@ -14485,6 +14563,19 @@ async def place_aoe(
             "damage_applied": dmg_applied,
             "damage_type": damage_type,
         })
+
+    # v2.99.38 — drop the Careful Spell pending buff at end of the
+    # /place_aoe loop. Same end-of-cast semantic as /cast_spell —
+    # the buff was armed across the loop so every protected target
+    # benefited; consume once after the last target rolls. No-op
+    # when no buff was installed.
+    _aoe_caster_id = int(ctx.get("caster_char_id") or 0)
+    if _aoe_caster_id and _caster_has_careful_pending_buff(
+        campaign_id, _aoe_caster_id,
+    ):
+        await _remove_buff(
+            campaign_id, _aoe_caster_id, "metamagic-careful-pending",
+        )
 
     # v2.48.5 — push one battle_update so every client's init tracker
     # repaints with the resolved state: auto-added NPC combatants +
@@ -22358,6 +22449,261 @@ async def use_metamagic_extended_spell(
         "sp_remaining": new_sp,
         "sp_max": sp_max,
         "cast_id": et_cast_id,
+    }
+
+
+# ----------- API: Metamagic Careful Spell (Sorcerer Lv 3+) ----------
+# v2.99.38 — seventh metamagic ship; SECOND mechanical save-roll
+# intercept (after v2.99.35 Heightened). RAW (PHB p.102): "When you
+# cast a spell that forces other creatures to make a saving throw,
+# you can protect some of those creatures from the spell's full
+# force. To do so, you spend 1 sorcery point and choose a number
+# of those creatures up to your Charisma modifier (minimum of one
+# creature). A chosen creature automatically succeeds on its
+# saving throw against the spell."
+#
+# Implementation:
+#   - Endpoint takes `protected_combatant_ids` (list, length 1 to
+#     CHA mod). Decrements 1 SP + installs
+#     `metamagic-careful-pending` buff on the caster carrying the
+#     protected list in `effects.protected_combatant_ids`.
+#   - Save-roll construction sites check `_caster_has_careful_pending`
+#     + `_combatant_is_careful_protected(buff, target_combatant_id)`.
+#     When True: the target's save expression becomes
+#     "1d20+99" + stat_mod — mathematically guarantees PASS against
+#     any sane DC (< 100). The target's roll_request still fires
+#     so the player + GM see the auto-pass clearly in the log.
+#   - Buff drops at end of cast (one-use). For AoE the buff covers
+#     ALL protected targets in the cast (not just the first).
+
+
+def _caster_has_careful_pending_buff(
+    campaign_id: int, caster_char_id: "int | None",
+) -> "dict | None":
+    """v2.99.38 — return the careful-pending buff dict (or None).
+    Caller reads `effects.protected_combatant_ids` to check
+    membership. Returns the FULL buff so the same call covers both
+    the gate check AND the protected-list lookup.
+    """
+    if not caster_char_id:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != caster_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "metamagic-careful-pending":
+                return b
+        return None
+    return None
+
+
+def _combatant_is_careful_protected(
+    buff: "dict | None", target_combatant_id: "str | None",
+) -> bool:
+    """Check if a target combatant_id is in the careful buff's
+    `effects.protected_combatant_ids` list.
+    """
+    if not buff or not target_combatant_id:
+        return False
+    effects = buff.get("effects") or {}
+    protected = effects.get("protected_combatant_ids") or []
+    if not isinstance(protected, list):
+        return False
+    return str(target_combatant_id) in [str(p) for p in protected]
+
+
+async def _broadcast_careful_protected(
+    campaign_id: int, caster_char: "Character | None", target_name: str,
+) -> None:
+    """Companion broadcast when Careful Spell auto-passes a save.
+    Emits `feature_used(source=metamagic-careful-spell)`.
+    """
+    if not caster_char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": caster_char.id,
+            "character_name": caster_char.name,
+            "user_color": caster_char.color,
+            "feature_name": "✨ Metamagic — Careful Spell (auto-pass)",
+            "feature_desc": (
+                f"{caster_char.name}'s Careful Spell protects "
+                f"{target_name or 'target'}: save auto-succeeds "
+                f"(1d20+99 ≥ any DC)."
+            ),
+            "source": "metamagic-careful-spell",
+        },
+    })
+
+
+@router.post("/api/campaign/{campaign_id}/use_metamagic_careful_spell")
+async def use_metamagic_careful_spell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend 1 SP + protect up to CHA-mod creatures from the next
+    save-spell's effects. Body: `{character_id,
+    protected_combatant_ids: list[str]}`.
+
+    Validates Sorcerer Lv 3+, 1 SP available, len(protected) in
+    [1, CHA-mod]. Installs `metamagic-careful-pending` buff on the
+    caster with the protected list; consumed at the next /cast_spell
+    save-roll resolution.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    protected_raw = body.get("protected_combatant_ids") or []
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not isinstance(protected_raw, list) or not protected_raw:
+        raise HTTPException(400, "protected_combatant_ids must be a non-empty list")
+    protected_ids = [str(x) for x in protected_raw if x][:10]
+    if not protected_ids:
+        raise HTTPException(400, "protected_combatant_ids must contain at least one id")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": level,
+        })
+
+    # CHA-mod cap (min 1 per RAW).
+    abilities = dict(sheet.get("abilities") or {})
+    cha = int(abilities.get("CHA") or 10)
+    cha_mod = max(1, (cha - 10) // 2)
+    if len(protected_ids) > cha_mod:
+        return JSONResponse(status_code=409, content={
+            "error": "too_many_protected",
+            "max_allowed": cha_mod,
+            "requested": len(protected_ids),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_points", "required": 1, "have": sp_cur,
+        })
+
+    new_sp = sp_cur - 1
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    cf_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(cf_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "sorcery-points",
+        "amount": 1,
+        "source_label": "Metamagic — Careful Spell",
+    })
+
+    buff = {
+        "key": "metamagic-careful-pending",
+        "name": "Careful Spell (pending)",
+        "icon": "✨",
+        "source_char_id": char.id,
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "metamagic_option": "careful-spell",
+            "protected_combatant_ids": protected_ids,
+            "cast_id": cf_cast_id,
+        },
+        "desc": (
+            f"Next save-spell cast: {len(protected_ids)} protected "
+            f"creature(s) auto-succeed their saving throws."
+        ),
+    }
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
+    await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    _log_damage_entry(cf_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": "metamagic-careful-pending",
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": (
+                f"✨ Metamagic — Careful Spell (1 SP, {len(protected_ids)} "
+                f"protected)"
+            ),
+            "feature_desc": (
+                f"Careful Spell armed. Next save-spell cast: the "
+                f"{len(protected_ids)} chosen creature(s) auto-pass "
+                f"their saves."
+            ),
+            "source": "metamagic-careful-spell-armed",
+            "cast_id": cf_cast_id,
+            "remaining": new_sp, "max": sp_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "sp_cost": 1,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "protected_count": len(protected_ids),
+        "max_allowed": cha_mod,
+        "cast_id": cf_cast_id,
     }
 
 
