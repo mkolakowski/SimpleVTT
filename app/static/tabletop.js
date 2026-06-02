@@ -5885,6 +5885,54 @@
                             + '✓ Resolved: ' + (opt.label || opt.key)
                             + '</span>'
                         );
+                        // v2.99.68 — chain the chosen OA attack roll
+                        // so the chat-card click yields a weapon
+                        // attack immediately. Mirrors the popup-side
+                        // _chainOaAttack in reaction_prompt.js.
+                        if (typeof opt.key === 'string'
+                                && opt.key.startsWith('take-the-oa:')
+                                && data.mover_combatant_id) {
+                            const p = opt.params || {};
+                            const isNpc = !!p.npc || !data.watcher_char_id;
+                            try {
+                                if (isNpc) {
+                                    await fetch(
+                                        `/api/campaign/${CAMPAIGN_ID}/npc_attack`,
+                                        {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            credentials: 'same-origin',
+                                            body: JSON.stringify({
+                                                combatant_id: data.watcher_combatant_id,
+                                                action_id: p.action_id || '',
+                                                action_name: p.action_name || '',
+                                                attack_bonus: p.attack_bonus || '',
+                                                damage: p.damage || '',
+                                                damage_type: p.damage_type || '',
+                                                range: p.range || '',
+                                                target_combatant_id: data.mover_combatant_id,
+                                            }),
+                                        },
+                                    );
+                                } else {
+                                    await fetch(
+                                        `/api/campaign/${CAMPAIGN_ID}/attack`,
+                                        {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            credentials: 'same-origin',
+                                            body: JSON.stringify({
+                                                character_id: data.watcher_char_id,
+                                                attack_index: p.attack_index,
+                                                target_combatant_id: data.mover_combatant_id,
+                                            }),
+                                        },
+                                    );
+                                }
+                            } catch (chainErr) {
+                                console.error('[oa-inline] auto-roll failed', chainErr);
+                            }
+                        }
                     } else {
                         // 409 prompt_already_resolved (cross-tab race)
                         // OR 400 (bad input). Either way, the chat row

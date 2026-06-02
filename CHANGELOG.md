@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.68] - 2026-06-02 — "Click and Swing" — Take OA auto-rolls the chosen attack + NPC picker
+
+**Schema version:** 65
+**Commit summary:** **Make "Take the Opportunity Attack" actually roll the attack.** User report: "when clicking 'take the opportunity attack' there is no selection popup to choose and roll the attack." Two compounding gaps: (1) NPC watchers only got the generic `take-the-oa` button — no per-weapon picker, no params for chaining. (2) Even PC watchers with picker options only had the buttons mark the reaction slot; v2.99.56 punted auto-execution to "v3 — needs a /attack refactor." v2.99.68 ships the v3 piece: NPC watchers now get one button per melee action (parses reach from monster action desc + range), the generic `take-the-oa` fallback is suppressed when picker options exist, and on picker click the client chains a POST to `/attack` (PC) or `/npc_attack` (NPC) with the chosen attack params + the provoker as target. End-to-end: one click on the popup or chat-card button → reaction slot marked → weapon-attack chat card appears with the rolled d20 + damage.
+**Description:** Server adds `_npc_melee_actions` mirroring `_pc_melee_attacks` but walking `_monster_template_to_sheet(tmpl).actions[]` and filtering for attack-roll actions with reach ≤ 15 ft (parsed from desc "reach N ft." or action.range). `_eligible_reactions[creature_exits_reach]` and `[creature_enters_reach]` build a `picker_opts` list (PC sheet.attacks OR NPC actions) and only append the generic `take-the-oa` button when the picker is empty. The OA prompt context now carries `mover_combatant_id` (looked up from hub state via source_token_id / char_id matching); the `_emit_reaction_prompt` broadcast surfaces it (plus `mover_name`) on the wire so the client can target the provoker without re-deriving. Client-side `reaction_prompt.js::_chainOaAttack` and the matching block in `tabletop.js::_injectOaButtonsToChatCard` chain to `/attack` (PC) or `/npc_attack` (NPC) after the `/use_reaction` POST returns 200, using the picker option's params + `data.mover_combatant_id` as target. PC chain uses `attack_index`. NPC chain uses inline action params (action_id, action_name, attack_bonus, damage, damage_type, range).
+
+### Added
+- `_npc_melee_actions(db, watcher_combatant, campaign_id)` in `app/routes/tabletop_routes.py` — parallel to `_pc_melee_attacks` for NPC watchers. Projects the monster template, filters `sheet.actions[]` to melee attack-roll actions with reach ≤ 15 ft.
+- `_chainOaAttack(data, opt)` in `app/static/reaction_prompt.js` — fires `/attack` (PC) or `/npc_attack` (NPC) after `/use_reaction` resolves a `take-the-oa:{idx}` key, with target = `data.mover_combatant_id`.
+- Same chain logic in `app/static/tabletop.js::_injectOaButtonsToChatCard` so the inline chat-card buttons also auto-roll.
+- `mover_combatant_id` + `mover_name` on the `reaction_prompt` broadcast data (when present in the prompt context — OA prompts only).
+- NPC picker options in `_eligible_reactions[creature_exits_reach]` + `[creature_enters_reach]`. Same `take-the-oa:{idx}` key shape as PC; params carry `action_id`, `action_name`, `attack_bonus`, `damage`, `damage_type`, `range`, `npc: True`.
+
+### Changed
+- Generic `take-the-oa` button is now a fallback — only emitted when neither the PC sheet-attacks picker nor the NPC actions picker yields any options. When the picker exists (almost always), the user sees one button per weapon and the generic vague button is suppressed. Closes the "no selection popup" UX gap.
+- OA prompt `context` now carries `mover_combatant_id` set at emit time (and propagated through the chain pop in `/use_reaction`).
+
+### Notes
+- **PATCH bump** — additive picker options + additive client chain. Existing PC-picker tests still pass (the per-attack keys behave the same on the server side; only the client now does the auto-roll chain). Existing generic `take-the-oa` dispatch path unchanged for the fallback case.
+- **Auth.** `/attack` requires the PC's owner or GM. `/npc_attack` is GM-only. The reaction popup's target_user_ids routes the OA prompt to the appropriate user already; the chain POST inherits that auth context from the same session cookie.
+- **Range / cover / advantage on the chained attack.** The chained POST uses the same body shape as a manual click from the watcher's sheet, so all server-side enforcement (range gate, cover bonus, advantage from buffs) runs identically.
+- **No new harness tests this commit.** The chained `/attack` / `/npc_attack` POSTs are client-side behavior — the harness already covers the server-side `take-the-oa:{idx}` dispatch path and the `/attack` / `/npc_attack` endpoints individually. Filing an end-to-end "click picker → reaction slot flips AND weapon_attack broadcast fires" test for a follow-up.
+- Total harness count: 785 (unchanged from v2.99.67).
+
+---
+
 ## [2.99.67] - 2026-06-02 — "Pin the Speed" — client-side speed_walk heal + move Delete to bottom of sheet
 
 **Schema version:** 65

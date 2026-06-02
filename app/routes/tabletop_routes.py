@@ -3311,6 +3311,78 @@ def _pc_melee_attacks(char) -> list[tuple[int, dict]]:
     return out
 
 
+def _npc_melee_actions(
+    db: Session, watcher_combatant: dict, campaign_id: int,
+) -> list[tuple[int, dict]]:
+    """v2.99.68 — NPC OA picker support. Parallel to
+    ``_pc_melee_attacks`` but for NPC watchers — projects the
+    monster template, walks ``sheet.actions``, and returns the
+    melee-attack subset with their action index.
+
+    Range detection: monster actions usually describe reach via
+    desc text ("reach 5 ft.", "reach 10 ft."). The action's own
+    ``range`` field may be empty. We extract the first reach
+    distance from the desc when present, otherwise fall back to
+    the action's range field, otherwise 5 ft (RAW default for
+    standard humanoid melee). Anything > 15 ft is rejected as a
+    ranged-or-special attack.
+
+    Returns ``[(action_index, action_dict), ...]`` sized by the
+    number of melee attack-roll actions on the template.
+    """
+    if not watcher_combatant:
+        return []
+    tmpl_id = watcher_combatant.get("token_template_id")
+    if not tmpl_id:
+        return []
+    try:
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(tmpl_id),
+        ).first()
+    except Exception:
+        tmpl = None
+    if not tmpl:
+        return []
+    sheet = _monster_template_to_sheet(tmpl, campaign_id)
+    actions = sheet.get("actions") or []
+    out: list[tuple[int, dict]] = []
+    import re as _re
+    for idx, a in enumerate(actions):
+        if not isinstance(a, dict):
+            continue
+        # Must be an attack-roll action with damage. Skip pure save
+        # actions (dragon breath) and pure narrative actions
+        # (Multiattack). Skip reactions too — RAW: an OA itself
+        # can't be a reaction-category action.
+        atk_bonus = (a.get("attack_bonus") or "").strip()
+        damage = (a.get("damage") or "").strip()
+        if not atk_bonus or not damage:
+            continue
+        if (a.get("category") or "").strip().lower() == "reaction":
+            continue
+        # Reach: parse from desc first, then range field.
+        reach = 5.0
+        desc = (a.get("desc") or "")
+        m = _re.search(r"reach\s+(\d+(?:\.\d+)?)\s*ft", desc, _re.IGNORECASE)
+        if m:
+            try:
+                reach = float(m.group(1))
+            except (TypeError, ValueError):
+                reach = 5.0
+        else:
+            rng = (a.get("range") or "").strip().lower()
+            if rng and "/" not in rng:
+                m2 = _re.match(r"^(\d+(?:\.\d+)?)\s*ft", rng)
+                if m2:
+                    try:
+                        reach = float(m2.group(1))
+                    except (TypeError, ValueError):
+                        reach = 5.0
+        if reach <= 15.0:
+            out.append((idx, a))
+    return out
+
+
 def _pc_has_war_caster_available(char) -> bool:
     """Detect War Caster feat + at-least-one-1-action-spell on a PC."""
     if not char or not char.sheet:
@@ -3621,21 +3693,12 @@ def _eligible_reactions(
     spell, feat, and item reactions per the plan doc's catalog.
     """
     if trigger_event == "creature_exits_reach":
-        opts: list[dict] = [{
-            "key": "take-the-oa",
-            "label": "⚔ Take the Opportunity Attack",
-            "kind": "implicit",
-            "resource_cost": "Reaction",
-            "params": {},
-            "available": True,
-            "unavailable_reason": None,
-        }]
-        # v2.99.56 — plan-movement-oa-flow Phase 5 attack picker.
-        # PC watchers get one option per melee attack from their
-        # sheet so the player picks which weapon to swing. Key
-        # shape: ``take-the-oa:{idx}`` where idx is the attack
-        # index in ``sheet.attacks``. NPC watchers stay on the
-        # generic key (GM rolls manually for v1).
+        # v2.99.68 — generic "take-the-oa" is now a FALLBACK option,
+        # only included when the per-attack picker is empty (no PC
+        # sheet attacks, no NPC template actions). When pickers are
+        # available the user sees one button per weapon instead of
+        # a vague "Take the OA" that doesn't roll anything.
+        picker_opts: list[dict] = []
         wchar = None
         if watcher_char_id:
             try:
@@ -3644,9 +3707,10 @@ def _eligible_reactions(
                 ).first()
             except Exception:
                 wchar = None
+        # v2.99.56 — PC picker via sheet.attacks.
         if wchar:
             for idx, atk in _pc_melee_attacks(wchar):
-                opts.append({
+                picker_opts.append({
                     "key": f"take-the-oa:{idx}",
                     "label": "⚔ " + (atk.get("name") or "Attack"),
                     "kind": "attack",
@@ -3661,6 +3725,51 @@ def _eligible_reactions(
                     "available": True,
                     "unavailable_reason": None,
                 })
+        # v2.99.68 — NPC picker via _monster_template_to_sheet.actions[].
+        # Watcher combatant_id lives in context (set by _emit_reaction_prompt).
+        if not wchar:
+            _wcid = context.get("watcher_combatant_id")
+            _wcomb = None
+            if _wcid:
+                _state = hub.get_battle(campaign_id) or {}
+                for _c in (_state.get("combatants") or []):
+                    if _c.get("id") == _wcid:
+                        _wcomb = _c
+                        break
+            if _wcomb:
+                for idx, act in _npc_melee_actions(db, _wcomb, campaign_id):
+                    picker_opts.append({
+                        "key": f"take-the-oa:{idx}",
+                        "label": "⚔ " + (act.get("name") or "Attack"),
+                        "kind": "attack",
+                        "resource_cost": "Reaction",
+                        "params": {
+                            "attack_index": idx,
+                            "action_id": act.get("id") or "",
+                            "action_name": act.get("name") or "",
+                            "attack_bonus": act.get("attack_bonus") or "",
+                            "damage": act.get("damage") or "",
+                            "damage_type": act.get("damage_type") or "",
+                            "range": act.get("range") or "",
+                            "npc": True,
+                        },
+                        "available": True,
+                        "unavailable_reason": None,
+                    })
+        opts: list[dict] = list(picker_opts)
+        if not picker_opts:
+            # No picker available — fall back to the generic key so
+            # the GM can at least mark the slot manually + roll the
+            # attack from the NPC's mini-sheet.
+            opts.append({
+                "key": "take-the-oa",
+                "label": "⚔ Take the Opportunity Attack",
+                "kind": "implicit",
+                "resource_cost": "Reaction",
+                "params": {},
+                "available": True,
+                "unavailable_reason": None,
+            })
         # v2.76.0 Phase 4c — War Caster cast-instead-of-OA option.
         # RAW: PC may cast a 1-action single-target spell at the
         # creature provoking the OA instead of making the weapon
@@ -3710,17 +3819,8 @@ def _eligible_reactions(
     # different copy + trigger event so the prompt summary can
     # explain the Polearm-Master-specific provoke.
     if trigger_event == "creature_enters_reach":
-        opts: list[dict] = [{
-            "key": "take-the-oa",
-            "label": "⚔ Take the Opportunity Attack (Polearm Master)",
-            "kind": "implicit",
-            "resource_cost": "Reaction",
-            "params": {},
-            "available": True,
-            "unavailable_reason": None,
-        }]
-        # v2.99.56 — Phase 5 attack picker for Polearm Master OA.
-        # Same shape as the exit-reach picker above.
+        # v2.99.68 — same picker-vs-generic gating as exit_reach above.
+        picker_opts: list[dict] = []
         wchar = None
         if watcher_char_id:
             try:
@@ -3731,7 +3831,7 @@ def _eligible_reactions(
                 wchar = None
         if wchar:
             for idx, atk in _pc_melee_attacks(wchar):
-                opts.append({
+                picker_opts.append({
                     "key": f"take-the-oa:{idx}",
                     "label": "⚔ " + (atk.get("name") or "Attack"),
                     "kind": "attack",
@@ -3746,6 +3846,46 @@ def _eligible_reactions(
                     "available": True,
                     "unavailable_reason": None,
                 })
+        if not wchar:
+            _wcid = context.get("watcher_combatant_id")
+            _wcomb = None
+            if _wcid:
+                _state = hub.get_battle(campaign_id) or {}
+                for _c in (_state.get("combatants") or []):
+                    if _c.get("id") == _wcid:
+                        _wcomb = _c
+                        break
+            if _wcomb:
+                for idx, act in _npc_melee_actions(db, _wcomb, campaign_id):
+                    picker_opts.append({
+                        "key": f"take-the-oa:{idx}",
+                        "label": "⚔ " + (act.get("name") or "Attack"),
+                        "kind": "attack",
+                        "resource_cost": "Reaction",
+                        "params": {
+                            "attack_index": idx,
+                            "action_id": act.get("id") or "",
+                            "action_name": act.get("name") or "",
+                            "attack_bonus": act.get("attack_bonus") or "",
+                            "damage": act.get("damage") or "",
+                            "damage_type": act.get("damage_type") or "",
+                            "range": act.get("range") or "",
+                            "npc": True,
+                        },
+                        "available": True,
+                        "unavailable_reason": None,
+                    })
+        opts: list[dict] = list(picker_opts)
+        if not picker_opts:
+            opts.append({
+                "key": "take-the-oa",
+                "label": "⚔ Take the Opportunity Attack (Polearm Master)",
+                "kind": "implicit",
+                "resource_cost": "Reaction",
+                "params": {},
+                "available": True,
+                "unavailable_reason": None,
+            })
         # v2.76.0 Phase 4c — War Caster also applies for enter-reach
         # OA (Polearm Master + War Caster combo: when an enemy enters
         # the polearm wielder's reach, they OA — War Caster lets that
@@ -4373,6 +4513,13 @@ async def _emit_reaction_prompt(
         "resolved": False,
     }
     _active_reaction_prompts[prompt_id] = entry
+    # v2.99.68 — surface the mover/provoker combatant id on the
+    # broadcast so OA-popup click handlers can auto-chain the
+    # chosen attack at the provoker without re-deriving from
+    # mover_token_id. Reads context.mover_combatant_id when set
+    # (OA prompts); other prompt types don't populate it.
+    _mover_comb_id = context.get("mover_combatant_id") if context else None
+    _mover_name = context.get("mover_name") if context else None
     await hub.broadcast(int(campaign.id), {
         "type": "reaction_prompt",
         "data": {
@@ -4386,6 +4533,8 @@ async def _emit_reaction_prompt(
             "trigger_summary": summary,
             "target_user_ids": target_user_ids,
             "options": options,
+            "mover_combatant_id": _mover_comb_id,
+            "mover_name": _mover_name,
         },
     })
     return prompt_id
@@ -9658,12 +9807,26 @@ async def move_token(
                     }
                     for t in _group[1:]
                 ]
+                # v2.99.68 — include mover_combatant_id so the
+                # client can auto-chain the chosen OA attack via
+                # /attack (PC watcher) or /npc_attack (NPC watcher)
+                # against the provoker. Find by source_token_id
+                # match in hub state; fall back to char_id match.
+                _mover_comb_id = None
+                _state2 = hub.get_battle(campaign_id) or {}
+                for _mc in (_state2.get("combatants") or []):
+                    if _mc.get("source_token_id") == int(token.id):
+                        _mover_comb_id = _mc.get("id")
+                        break
+                    if token.character_id and _mc.get("char_id") == int(token.character_id):
+                        _mover_comb_id = _mc.get("id")
                 await _emit_reaction_prompt(
                     db, campaign, _head_watcher_combatant,
                     trigger_event=_head_evt,
                     summary=_head_summary,
                     context={
                         "mover_token_id": int(token.id),
+                        "mover_combatant_id": _mover_comb_id,
                         "mover_name": mover_name,
                         "watcher_reach_ft": _head_reach_ft,
                         "trigger_type": _head_trig_type,
@@ -18122,6 +18285,11 @@ async def use_reaction(
                     summary=_next_summary,
                     context={
                         "mover_token_id": _ctx.get("mover_token_id"),
+                        # v2.99.68 — carry mover_combatant_id through
+                        # the chain so per-attack picker auto-roll
+                        # keeps targeting the provoker on every chained
+                        # OA prompt, not just the head.
+                        "mover_combatant_id": _ctx.get("mover_combatant_id"),
                         "mover_name": _ctx.get("mover_name"),
                         "watcher_reach_ft": _next_reach,
                         "trigger_type": _head.get("trigger_type") or "exit",

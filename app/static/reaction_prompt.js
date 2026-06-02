@@ -176,7 +176,7 @@
 
     async function _spendReaction(promptId, reactionKey, watcherCharId, node) {
         const cid = _campaignId();
-        if (cid == null) return;
+        if (cid == null) return false;
         // Disable all buttons during the fetch to prevent double-clicks.
         node.querySelectorAll('button').forEach(b => { b.disabled = true; });
         try {
@@ -199,16 +199,68 @@
                 if (resp.status !== 409) {
                     console.warn('use_reaction failed', resp.status, await resp.text());
                 }
-                return;
+                return false;
             }
             // Server will broadcast reaction_prompt_resolved which
             // removes our popup; remove locally too for snappy UX.
             _removePopup(promptId);
+            return true;
         } catch (err) {
             console.error('use_reaction request errored', err);
             // Re-enable so the user can retry; but only if popup
             // wasn't auto-dismissed.
             node.querySelectorAll('button').forEach(b => { b.disabled = false; });
+            return false;
+        }
+    }
+
+    // v2.99.68 — after the OA reaction slot is marked, automatically
+    // roll the chosen attack against the provoker so the user gets a
+    // weapon-attack chat card instead of having to manually fire
+    // /attack from the watcher's sheet. PC: /attack with attack_index.
+    // NPC: /npc_attack with inline action params. Both need
+    // target_combatant_id = the provoker (from data.mover_combatant_id).
+    async function _chainOaAttack(data, opt) {
+        const cid = _campaignId();
+        if (cid == null) return;
+        const params = (opt && opt.params) || {};
+        const target = data && data.mover_combatant_id;
+        if (!target) {
+            console.warn('[oa-chain] no mover_combatant_id; skipping auto-roll');
+            return;
+        }
+        const isNpc = !!params.npc || !data.watcher_char_id;
+        try {
+            if (isNpc) {
+                await fetch(`/api/campaign/${cid}/npc_attack`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        combatant_id: data.watcher_combatant_id,
+                        action_id: params.action_id || '',
+                        action_name: params.action_name || '',
+                        attack_bonus: params.attack_bonus || '',
+                        damage: params.damage || '',
+                        damage_type: params.damage_type || '',
+                        range: params.range || '',
+                        target_combatant_id: target,
+                    }),
+                });
+            } else {
+                await fetch(`/api/campaign/${cid}/attack`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        character_id: data.watcher_char_id,
+                        attack_index: params.attack_index,
+                        target_combatant_id: target,
+                    }),
+                });
+            }
+        } catch (err) {
+            console.error('[oa-chain] auto-roll failed', err);
         }
     }
 
@@ -253,10 +305,20 @@
                     btn.title = opt.unavailable_reason;
                 }
             } else {
-                btn.addEventListener('click', () => {
-                    _spendReaction(
+                btn.addEventListener('click', async () => {
+                    const ok = await _spendReaction(
                         data.prompt_id, opt.key, data.watcher_char_id, card,
                     );
+                    // v2.99.68 — chain the chosen OA attack roll on
+                    // success so the user gets a weapon-attack chat
+                    // card immediately. Generic take-the-oa (no
+                    // attack_index in params) falls through to the
+                    // old manual-roll behavior. War Caster / Skip /
+                    // other reaction keys are unaffected.
+                    if (ok && typeof opt.key === 'string'
+                            && opt.key.startsWith('take-the-oa:')) {
+                        await _chainOaAttack(data, opt);
+                    }
                 });
             }
             card.appendChild(btn);
