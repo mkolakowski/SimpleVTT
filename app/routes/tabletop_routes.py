@@ -2735,6 +2735,25 @@ def _check_opportunity_attack_triggers(
                 Token.character_id == int(c["char_id"]),
                 Token.map_id == map_row.id,
             ).first()
+        # v2.99.62 — NPC watcher fallback. The demo's seed_encounter
+        # (and most encounter saves) only carries ``token_template_id``
+        # + ``name`` on NPC combatants — no ``source_token_id``. After
+        # encounter Load the OLD Token rows are deleted and NEW ones
+        # created with fresh ids; the combatants list still references
+        # the old ids OR carries no link at all. The two lookups above
+        # both fail for NPCs (no source_token_id, no char_id), so the
+        # NPC watcher was silently skipped — no OA fired when a hero
+        # walked past a bandit. The fallback matches by
+        # token_template_id + label on the active map; for typical
+        # encounters (unique NPC names) this resolves cleanly. For
+        # duplicate-name NPCs (rare) the first match wins; a future
+        # ship could add position-tiebreaking.
+        if watcher_token is None and c.get("token_template_id") and c.get("name"):
+            watcher_token = db.query(Token).filter(
+                Token.token_template_id == int(c["token_template_id"]),
+                Token.label == c["name"],
+                Token.map_id == map_row.id,
+            ).first()
         if watcher_token is None:
             continue
         if int(watcher_token.id) == int(mover_token_id):

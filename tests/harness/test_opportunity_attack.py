@@ -1085,6 +1085,88 @@ async def test_oa_fires_when_one_side_is_neutral(
         await _set_team(gm_client, kr_tok["id"], "neutral")
 
 
+# ── v2.99.62 — NPC watcher Token fallback (template + label) ──
+
+
+async def test_oa_fires_for_npc_watcher_without_source_token_id(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.62 — regression test for the demo OA bug. The demo's
+    seed_encounter populates NPC combatants with only
+    ``token_template_id`` + ``name`` (no ``source_token_id``, no
+    ``char_id``). Pre-v2.99.62 the OA helper's Token lookup tried
+    source_token_id then char_id then gave up — silently skipping
+    NPC watchers. v2.99.62's fallback matches by
+    token_template_id + label on the active map.
+
+    Geometry: Krieger at (350, 350). Bandit NPC at (420, 350) —
+    5 ft east, in melee reach. Drag Krieger to (700, 350) — out
+    of reach. The bandit is in init with only template + name
+    (no source_token_id). OA should still fire.
+    """
+    krieger = roster["Krieger Stonefist"]
+
+    # Create a bandit template + token.
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    tok_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/tokens",
+        json={
+            "token_template_id": bandit_tmpl["id"],
+            "label": "Goon",
+            "x": 420.0, "y": 350.0,
+            "color": "#c84a4a",
+            "size": 1,
+        },
+    )
+    assert tok_resp.status_code == 200, tok_resp.text
+
+    # Seed the battle with the NPC combatant WITHOUT source_token_id.
+    # This is the demo's exact shape — token_template_id + name +
+    # nothing linking to the Token row id.
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        {
+            "id": "tok_npc_fallback_test",
+            "char_id": None,
+            "token_template_id": bandit_tmpl["id"],
+            "name": "Goon",  # matches the Token row's label
+            "initiative": 8,
+            "hp_current": 11, "hp_max": 11,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+            # NO source_token_id field — this is the bug case
+        },
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Drag Krieger out of the bandit's reach.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0, "oa_confirmed": True},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    triggers = [
+        t for t in (data.get("opportunity_attack_triggers") or [])
+        if t.get("watcher_combatant_id") == "tok_npc_fallback_test"
+    ]
+    assert triggers, (
+        f"NPC fallback (token_template_id + label match) should have "
+        f"surfaced the Goon's OA; got {data.get('opportunity_attack_triggers')}"
+    )
+
+
 # ── v2.99.60 — path-aware OA detection ──
 
 

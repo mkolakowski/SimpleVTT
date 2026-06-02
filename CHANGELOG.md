@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.62] - 2026-06-02 — "Find the Goon" — fix the demo OA-doesn't-fire bug
+
+**Schema version:** 65
+**Commit summary:** **Fix `_check_opportunity_attack_triggers` silently skipping every NPC watcher in the demo.** User report: dragging a hero across the Tavern Brawl past Vex / a bandit didn't fire the OA popup, even though the encounter was loaded and the init tracker showed everyone. Root cause: the OA helper's watcher Token lookup tried `source_token_id` (NPC combatants in the demo don't have it), then `char_id` (NPC combatants don't have one either), and gave up — silently skipping every NPC watcher. The bug existed since v2.66.0 but was masked by the v2.66.0/v2.66.2 tests that explicitly set `source_token_id` on their NPC combatants. The demo's `seed_encounter` (and most encounter saves) doesn't. Fix: third lookup-fallback that matches by `token_template_id` + `label` on the active map. NPC watchers in the demo now resolve cleanly.
+**Description:** Single-block addition to `_check_opportunity_attack_triggers` (line ~2740). When `source_token_id` is missing AND `char_id` is None AND the combatant has `token_template_id` + `name`, query for a Token on the active map matching both. For typical encounters (unique NPC labels) this resolves to exactly one Token. For duplicate-name NPCs the first match wins; a future ship could add position-tiebreaking but the demo + most authored encounters use unique labels.
+
+### Fixed
+- `_check_opportunity_attack_triggers` now resolves NPC watchers that have `token_template_id` + `name` but no `source_token_id` / `char_id` — the demo's `seed_encounter` shape. Pre-v2.99.62 the helper silently skipped these and no OA fired.
+- The user's "hero moves past villain in the demo Tavern Brawl → no popup" report is closed.
+
+### Added
+- `tests/harness/test_opportunity_attack.py::test_oa_fires_for_npc_watcher_without_source_token_id` — regression test. Creates a bandit token + a combatant with ONLY `token_template_id` + `name` (no `source_token_id`, no `char_id`). Drags Krieger out of reach. Asserts the OA trigger fires.
+
+### Notes
+- **PATCH bump** — additive fallback, no API change, no schema change.
+- **Why the bug wasn't caught earlier.** Every existing NPC OA test (v2.66.0 Hill Giant, Sentinel NPC-attack, v2.99.59 presence routing) explicitly set `source_token_id` on the seeded combatant dict. The demo's `seed_encounter` doesn't — but the demo flows weren't covered by an end-to-end harness test until v2.99.62. The regression test added in this commit closes that gap.
+- **What about future encounter saves.** Encounters saved via "Save from Map" go through `payload_from_map` which DOES populate `source_token_id` via the Token row's actual id at save time. But on Load the OLD tokens are deleted + NEW ones created with fresh ids; the saved combatants' `source_token_id` now points to dead rows. The v2.99.62 fallback catches that case too — when source_token_id fails to resolve a Token row, the template+label fallback kicks in.
+- **Long-term cleanup filed.** `_perform_encounter_load` could backfill combatants' `source_token_id` to point to the newly-created Token rows; that would be the structurally clean fix. Filed for a follow-up — v2.99.62's fallback works in the meantime.
+- **No new tests in test_reaction_prompt.py.** The fallback path is geometry-side; the prompt routing tests already cover the broadcast / target_user_ids flow.
+- Total harness count: 782 (was 781 in v2.99.61).
+
+---
+
 ## [2.99.61] - 2026-06-02 — "Surface the Cross"
 
 **Schema version:** 65
