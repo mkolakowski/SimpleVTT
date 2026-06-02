@@ -2946,26 +2946,31 @@ def seed_tokens(
     # (Sir Caelan / Lyra / Mira / Garrik / Kael / Rowan) remain in
     # the roster but aren't visible on the map until the GM
     # drag-spawns them from the Characters drawer.
+    # v2.99.58 — every player token lands on team="hero" so the
+    # v2.99.52 same-team filter (Phase 1 of plan-movement-oa-flow)
+    # is exercised out of the box. The GM can override per-token
+    # via the Token Management edit toggle (Phase 2) if a PC ever
+    # needs to be tagged villain (mind-controlled / charmed flavor).
     tokens.append(Token(
         map_id=map_.id, character_id=chars[0].id,
         controller_user_id=users["alice"].id,
         label=chars[0].name, color="#6cb4ff",
         image_url="/static/demo/tokens/rogue.jpg",
-        x=350, y=490, size=1,
+        x=350, y=490, size=1, team="hero",
     ))
     tokens.append(Token(
         map_id=map_.id, character_id=chars[1].id,
         controller_user_id=users["bob"].id,
         label=chars[1].name, color="#4ade80",
         image_url="/static/demo/tokens/wizard.jpg",
-        x=420, y=560, size=1,
+        x=420, y=560, size=1, team="hero",
     ))
     tokens.append(Token(
         map_id=map_.id, character_id=chars[2].id,
         controller_user_id=users["gm"].id,
         label=chars[2].name, color="#f5b75c",
         image_url="/static/demo/tokens/cleric.jpg",
-        x=420, y=420, size=1,
+        x=420, y=420, size=1, team="hero",
     ))
     # Zara Emberfire (Sorcerer, chars[8]) — back-line caster on the
     # west flank, Fire Bolt's 120 ft covers the NPC cluster.
@@ -2974,7 +2979,7 @@ def seed_tokens(
         controller_user_id=users["gm"].id,
         label=chars[8].name, color="#c4452a",
         image_url=None,
-        x=280, y=490, size=1,
+        x=280, y=490, size=1, team="hero",
     ))
     # Krieger Stonefist (Barbarian, chars[9]) — front-line tank,
     # Half-Orc Speed 40 closes ground first.
@@ -2983,7 +2988,7 @@ def seed_tokens(
         controller_user_id=users["gm"].id,
         label=chars[9].name, color="#993333",
         image_url=None,
-        x=490, y=420, size=1,
+        x=490, y=420, size=1, team="hero",
     ))
     # Magnus Hexbinder (Warlock, chars[11]) — far west flank,
     # Eldritch Blast 120 ft covers the whole map.
@@ -2992,7 +2997,7 @@ def seed_tokens(
         controller_user_id=users["gm"].id,
         label=chars[11].name, color="#6a3a8e",
         image_url=None,
-        x=210, y=490, size=1,
+        x=210, y=490, size=1, team="hero",
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -3031,6 +3036,11 @@ def seed_tokens(
         tmpl = templates.get(slug)
         if not tmpl:
             continue
+        # v2.99.58 — NPCs default to villain. Same plan-movement-oa-flow
+        # Phase 1 reasoning as the hero-tag block above: out-of-the-
+        # box same-team filter coverage so Bandit Alpha doesn't OA
+        # Bandit Beta on a flanking maneuver, and the demo encounter
+        # exercises the team filter end-to-end on the FIRST load.
         tokens.append(Token(
             map_id=map_.id,
             character_id=None,
@@ -3038,7 +3048,7 @@ def seed_tokens(
             label=label,
             color=color,
             image_url=(f"/static/demo/tokens/{image}" if image else None),
-            x=x, y=y, size=1,
+            x=x, y=y, size=1, team="villain",
         ))
 
     db.add_all(tokens)
@@ -3637,6 +3647,11 @@ def seed_encounter(
                 "x": float(t.x or 0),
                 "y": float(t.y or 0),
                 "is_hidden": bool(t.is_hidden),
+                # v2.99.58 — propagate the v2.99.52 team field through
+                # the encounter payload so Load preserves the same-
+                # team filter the FIRST tabletop view already
+                # exercised.
+                "team": t.team or "neutral",
             }
             for t in tokens
         ],

@@ -9996,6 +9996,9 @@ def _snapshot_encounter_payload(db: Session, campaign: Campaign) -> dict:
                 "x": float(t.x or 0),
                 "y": float(t.y or 0),
                 "is_hidden": bool(t.is_hidden),
+                # v2.99.58 — persist the team field so Save → Load
+                # round-trips the plan-movement-oa-flow Phase 1 tag.
+                "team": (t.team or "neutral"),
             })
     # Battle hub state is opaque to the server — JS PUTs the canonical
     # shape via /api/campaign/.../battle. We snapshot it whole so a load
@@ -10508,6 +10511,17 @@ async def _perform_encounter_load(
                     f"Player character #{char_id} no longer exists; skipping their saved token."
                 )
                 continue
+            # v2.99.58 — propagate the team field from the
+            # encounter payload through Load. Fallback for older
+            # payloads without team: PC tokens default to "hero"
+            # so plan-movement-oa-flow's same-team filter is exercised
+            # out of the box on demo Load.
+            _team_pc = (
+                tok_def.get("team")
+                or "hero"
+            ).strip().lower()
+            if _team_pc not in ("hero", "villain", "neutral"):
+                _team_pc = "hero"
             new_token = Token(
                 map_id=target_map_id,
                 character_id=char.id,
@@ -10519,6 +10533,7 @@ async def _perform_encounter_load(
                 y=float(tok_def.get("y", 100)),
                 size=int(tok_def.get("size", 1) or 1),
                 is_hidden=bool(tok_def.get("is_hidden", False)),
+                team=_team_pc,
             )
             db.add(new_token)
             created_tokens.append(new_token)
@@ -10541,6 +10556,13 @@ async def _perform_encounter_load(
         label = (tok_def.get("label_override") or (tmpl.name if tmpl else "Token"))[:120]
         color = (tok_def.get("color_override") or "#cc3333")[:20]
         image_url = tok_def.get("image_url") or (tmpl.image_url if tmpl else None)
+        # v2.99.58 — NPC team field. Fallback for older payloads:
+        # tokens spawned from a TokenTemplate default to "villain"
+        # so plan-movement-oa-flow's same-team filter doesn't fire
+        # OAs between bandits flanking each other.
+        _team_npc = (tok_def.get("team") or "villain").strip().lower()
+        if _team_npc not in ("hero", "villain", "neutral"):
+            _team_npc = "villain"
         new_token = Token(
             map_id=target_map_id,
             token_template_id=tmpl.id if tmpl else None,
@@ -10551,6 +10573,7 @@ async def _perform_encounter_load(
             y=float(tok_def.get("y", 100)),
             size=int(tok_def.get("size", 1) or 1),
             is_hidden=bool(tok_def.get("is_hidden", False)),
+            team=_team_npc,
         )
         db.add(new_token)
         created_tokens.append(new_token)
@@ -10580,6 +10603,8 @@ async def _perform_encounter_load(
                     f"Spawn-point character #{char_id} no longer exists; skipping."
                 )
                 continue
+            # v2.99.58 — spawn-point PC tokens default to hero too,
+            # mirroring the saved-payload PC branch above.
             new_token = Token(
                 map_id=target_map_id,
                 character_id=char.id,
@@ -10590,6 +10615,7 @@ async def _perform_encounter_load(
                 x=float(x),
                 y=float(y),
                 size=1,
+                team="hero",
             )
             db.add(new_token)
             created_tokens.append(new_token)

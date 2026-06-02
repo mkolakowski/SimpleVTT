@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.58] - 2026-06-02 — "Pre-Tagged for the Brawl"
+
+**Schema version:** 65
+**Commit summary:** **Demo seed pre-fills the v2.99.52 `team` field on every token; encounter Load + Save round-trip the field with sensible fallbacks.** The full 6-phase plan-movement-oa-flow shipped against a default of `team="neutral"`, which makes the same-team filter dormant unless the GM manually tags tokens via the v2.99.53 Edit toggle. v2.99.58 fixes the "fresh visitor can't tell the OA flow is wired" gap: PC tokens land as `hero`, NPC tokens land as `villain`, both in the demo seed AND in the encounter payload AND in the encounter-Load fallback path. Net effect: a fresh demo visitor clicks Load Encounter once and gets a correctly-team-tagged Tavern Brawl out of the box.
+**Description:** Three-file commit. (1) `app/demo_seed.py`: every `seed_tokens` PC `Token(...)` call gets `team="hero"` + every NPC token gets `team="villain"`. The encounter payload's per-token dict now includes `"team": t.team or "neutral"` so Save/Load round-trips the field. (2) `app/routes/tabletop_routes.py::_perform_encounter_load` — PC branch reads `tok_def.get("team")` falling back to `"hero"`; NPC branch falls back to `"villain"`. Spawn-point PC tokens get the same `"hero"` fallback. Unknown values (typos, future strings) clamp to the side-appropriate default. (3) The "Save from Map" encounter snapshot also captures `team` per token so a GM-customized encounter preserves their tagging on next Load.
+
+### Added
+- `team="hero"` on every PC `Token(...)` call in `seed_tokens` (Pip, Thalindra, Tavik, Zara, Krieger, Magnus — the 6 tokenized demo PCs).
+- `team="villain"` on the NPC placement loop (Vex, three bandits, Thug, Grixxa, Soren).
+- `team` field in the encounter payload's per-token dict (both seed-time `seed_encounter` AND runtime "Save from Map" snapshot).
+- `team` propagation in `_perform_encounter_load` — PC branch defaults missing `team` to `"hero"`; NPC branch defaults to `"villain"`; spawn-point PC branch defaults to `"hero"`. Unknown values clamp to the side-appropriate default.
+
+### Changed
+- Demo Tavern Brawl encounter now ships pre-team-tagged. Existing demos pick up the tagging on the next "Load Encounter" click (old payloads without `team` flow through the Load fallback).
+
+### Notes
+- **PATCH bump** — data + seed change. No schema bump, no new endpoint, no client wiring.
+- **Why no inline migration backfill.** A `_apply_inline_migrations` block that sets `team='hero'` for char_id-bound rows + `team='villain'` for template_id-bound rows would touch every existing campaign's token rows on next boot. That's invasive for a single-table data tweak. The Load-fallback path achieves the same effect for the demo (click Load → tokens recreated with correct team) without forcing the migration on every install.
+- **Existing demo: one click to apply.** A user on the existing v2.99.57 demo opens the Tavern Brawl, clicks "Load Encounter," and the recreated tokens come up with `team="hero"` or `team="villain"` per the v2.99.58 Load fallbacks — even though the underlying payload was seeded before this commit.
+- **Fresh installs / reseeds.** A `docker compose down -v` + `up -d --build` wipes the DB and re-seeds via the v2.99.58 demo seed. Both the underlying Token rows AND the encounter payload carry the new team values.
+- **GM override unchanged.** Tagging a PC as `villain` (mind-controlled / charmed) or a bandit as `hero` (rescued ally) still works via the v2.99.53 Edit toggle. Defaults are seed-time only.
+- **Wiki surfacing.** No new doc surface — the OA flow's behavior is unchanged, only its out-of-the-box defaults shifted.
+- Total harness count unchanged: 777 (the team-defaulting flows through existing v2.99.52 / v2.99.57 tests that already exercise the team filter).
+
+---
+
 ## [2.99.57] - 2026-06-02 — "Each Player's Turn" — plan-movement-oa-flow Phase 6 (plan closes ✅)
 
 **Schema version:** 65
