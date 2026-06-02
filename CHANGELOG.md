@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.53] - 2026-06-01 — "The Pill Pass" — plan-movement-oa-flow Phase 2
+
+**Schema version:** 65
+**Commit summary:** **plan-movement-oa-flow Phase 2 — Token Management UI overhaul.** Surfaces v2.99.52's `team` field in the GM-only Token Management panel: non-edit mode shows ownership + team as colored pills before the action buttons, edit mode swaps the pills for select dropdowns (owner + team). Adds an `✎ Edit` toggle button next to Refresh that flips between modes. Removes the 🖼 upload-art file-input from per-token rows per the to-do — token art now lives in the character sheet / template editor.
+**Description:** Three-file UI commit. `tabletop.html` (line ~3871) gets the `✎ Edit` toggle button + new `.tm-pill` / `.tt-team` CSS rules. `tabletop.js` `renderTokenTracker` gets a session-scoped `_tmEditMode` flag, two new helpers (`_ownerLabel`, `_teamLabel`), and a refactored row template that renders pills in non-edit mode + select dropdowns in edit mode. The upload-art `<label class="tt-art-label">` block + its change handler are removed. Team color accents: amber border-left for Hero, deep-red border-left for Villain, muted "—" pill for Neutral so untagged tokens stand out at a glance.
+
+### Added
+- `✎ Edit` toggle button next to Refresh / Add Token in the Token Management panel header. Title text flips between "Edit ownership + team per token" and "Stop editing (return to pill view)" so the affordance is self-documenting.
+- `_tmEditMode` session flag + `toggleTokenTrackerEdit` global function (exposed as `window.toggleTokenTrackerEdit`).
+- `_ownerLabel(t)` + `_teamLabel(team)` helpers in `renderTokenTracker`.
+- Non-edit mode pills: `<span class="tm-pill tm-pill-owner|tm-pill-owner-gm">` for ownership + `<span class="tm-pill tm-pill-team-{hero|villain|neutral}">` for team. Pills render BEFORE the existing action buttons.
+- Edit mode: `<select class="tt-ctrl">` for owner (already existed as a row item — moved to its new position) + new `<select class="tt-team">` with Neutral / Hero / Villain options.
+- `.tm-pill` / `.tt-team` CSS rules in `tabletop.html`'s `<style>` block — small rounded badges with team-color accents (amber for hero, deep-red for villain, muted for neutral). Owner pills accent with `var(--accent)` (member) or `var(--fg-mute)` (GM).
+
+### Removed
+- 🖼 Upload-art `<label class="tt-art-label">` + its file-input + change handler from every token row. Token art is set via the character sheet (PC) or template editor (NPC). The image upload endpoint (`POST /token/{id}/image`) is unchanged — non-UI callers (homebrew tooling, future bulk-import scripts) can still hit it.
+
+### Changed
+- `docs/plans/movement-oa-flow.md` — Phase 2 status row flipped ⚪ → ✅.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — plan status pill flipped to "🟠 Phases 1–2 shipped".
+
+### Notes
+- **PATCH bump** — UI-only, no schema change, no endpoint behavior change. The PATCH endpoint already accepted `team` from v2.99.52; this commit just wires the dropdown to send it.
+- **Edit mode is session-scoped.** `_tmEditMode` is a module-local `let` that resets on page reload. Persisting GM preference is filed — the v1 simplification is that the GM toggles edit mode when they actively need to assign teams.
+- **No backwards-compat shim for upload art.** The file input row was a quick-upload affordance that bypassed the character-sheet portrait flow; the to-do explicitly asked to remove it. Players moving forward set portraits via the sheet edit panel. The image API (`/token/{id}/image`) is untouched for callers who hit it directly.
+- **Why pills + dropdowns instead of always-pills.** Always-pill makes the row read like data (clear) but takes 2 clicks to change (click pill → modal → close). Edit toggle is one click → in-row dropdowns → instant change → toggle back. The GM rarely changes ownership / team mid-combat; the edit toggle costs nothing while not in use.
+- **Color choices.** Amber Hero accent matches v2.99.49's reaction-popup amber pulse — same "hero / friendly / your team" visual cue. Deep-red Villain matches the demo seed's bandit `#a23030`. Neutral is muted opacity so untagged tokens are obvious.
+- **Phase 3 unblocked.** The `team` data is now surfaced in the GM-facing UI; the preview endpoint (Phase 3) can land next. Phase 4 needs Phase 3.
+- **Wiki surfacing.** Plan-status pill update touches landing + on-disk index per CLAUDE.md.
+- Total harness count unchanged: 768 (UI smoke test for Phase 2 deferred to the harness_ui suite per the plan; v2.99.52's tests already cover the data-layer contract).
+
+---
+
 ## [2.99.52] - 2026-06-01 — "The Colors of War" — plan-movement-oa-flow Phase 1
 
 **Schema version:** 65

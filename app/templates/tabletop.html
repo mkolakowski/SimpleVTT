@@ -1500,6 +1500,47 @@
     .tt-art-label { cursor: pointer; display: flex; align-items: center; }
     .tt-ctrl { font-size: 10px; background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-mute); border-radius: 3px; max-width: 90px; padding: 2px 3px; flex-shrink: 0; min-height: 36px; }
 
+    /* v2.99.53 — plan-movement-oa-flow Phase 2 pills + team select.
+       Pills surface ownership + team in non-edit mode so the GM gets
+       a quick visual scan without dropdowns dominating the row. Edit
+       mode swaps these for selects via the .tt-ctrl / .tt-team
+       classes above + below. The team-color accents are subtle
+       (border-left amber/violet) so a hero/villain split is obvious
+       at a glance but doesn't dominate the row. */
+    .tm-pill {
+        display: inline-flex; align-items: center; gap: 3px;
+        font-size: 10px; padding: 2px 7px; border-radius: 999px;
+        background: var(--bg-2); border: 1px solid var(--border);
+        color: var(--fg-mute); white-space: nowrap;
+        line-height: 1.4; flex-shrink: 0; max-width: 110px;
+        overflow: hidden; text-overflow: ellipsis;
+    }
+    .tm-pill.tm-pill-team-hero {
+        border-left: 3px solid #ffb74d;   /* amber: hero */
+        color: var(--fg);
+    }
+    .tm-pill.tm-pill-team-villain {
+        border-left: 3px solid #a23030;   /* deep red: villain */
+        color: var(--fg);
+    }
+    .tm-pill.tm-pill-team-neutral {
+        opacity: 0.65;                    /* muted: not yet tagged */
+    }
+    .tm-pill.tm-pill-owner {
+        border-left: 3px solid var(--accent, #a78bfa);
+        color: var(--fg);
+    }
+    .tm-pill.tm-pill-owner-gm {
+        border-left: 3px solid var(--fg-mute);
+        opacity: 0.85;
+    }
+    .tt-team {
+        font-size: 10px; background: var(--bg-2);
+        border: 1px solid var(--border); color: var(--fg-mute);
+        border-radius: 3px; max-width: 80px; padding: 2px 3px;
+        flex-shrink: 0; min-height: 36px;
+    }
+
     /* ── Initiative Tracker ── */
     /* v2.49.99: match the .roll-card visual treatment so the init
        tracker entries feel like the roll log cards floating on the
@@ -3871,6 +3912,17 @@
             <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:6px;">
                 <button type="button" onclick="renderTokenTracker()" title="Refresh token list"
                         style="font-size:11px;padding:3px 8px;">⟳ Refresh</button>
+                {# v2.99.53 — plan-movement-oa-flow Phase 2 Edit toggle.
+                   Non-edit shows ownership + team as pills before the
+                   action buttons; edit mode swaps the pills for select
+                   dropdowns so the GM can re-assign without retyping.
+                   Removes the file-input "🖼 Upload art" row item in
+                   both modes — token art now lives in the character
+                   sheet / template editor. #}
+                <button type="button" id="tm-edit-toggle"
+                        onclick="window.toggleTokenTrackerEdit && window.toggleTokenTrackerEdit()"
+                        title="Edit ownership + team per token"
+                        style="font-size:11px;padding:3px 8px;">✎ Edit</button>
                 <button type="button" id="add-token-btn"
                         style="font-size:11px;padding:3px 10px;">+ Add Token</button>
             </div>

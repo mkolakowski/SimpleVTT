@@ -6307,6 +6307,26 @@
         });
     }
 
+    // v2.99.53 — plan-movement-oa-flow Phase 2 edit-mode flag. Per
+    // session, not persisted. Non-edit (default) renders ownership +
+    // team as pills + hides the player-assignment dropdown + the
+    // upload-art input. Edit mode swaps the pills for select
+    // dropdowns. Toggled by the "✎ Edit" button next to Refresh in
+    // tabletop.html.
+    let _tmEditMode = false;
+    function toggleTokenTrackerEdit() {
+        _tmEditMode = !_tmEditMode;
+        const btn = document.getElementById('tm-edit-toggle');
+        if (btn) {
+            btn.textContent = _tmEditMode ? '✓ Done' : '✎ Edit';
+            btn.title = _tmEditMode
+                ? 'Stop editing (return to pill view)'
+                : 'Edit ownership + team per token';
+        }
+        renderTokenTracker();
+    }
+    window.toggleTokenTrackerEdit = toggleTokenTrackerEdit;
+
     function renderTokenTracker() {
         const list = document.getElementById('token-tracker-list');
         if (!list) return;
@@ -6331,13 +6351,28 @@
             h.innerHTML = `${label} <span style="color:var(--fg);font-weight:400;font-size:10px;letter-spacing:0;">(${count})</span>`;
             list.appendChild(h);
         }
+        // v2.99.53 — plan-movement-oa-flow Phase 2 helpers.
+        // Owner label for the non-edit pill: "👤 Alice" for a
+        // member-controlled token, "⚙ GM" for NPC / blank tokens.
+        function _ownerLabel(t) {
+            if (t.controller_user_id == null) return '⚙ GM';
+            const member = (typeof MEMBERS !== 'undefined' ? MEMBERS : [])
+                .find(m => m.id === t.controller_user_id);
+            return '👤 ' + (member ? member.name : 'Unknown');
+        }
+        // Team label + the team-color class on the pill. "neutral"
+        // shows muted dash so the GM can see at a glance which
+        // tokens still need tagging.
+        function _teamLabel(team) {
+            const t = String(team || 'neutral').toLowerCase();
+            if (t === 'hero')    return '🦸 Hero';
+            if (t === 'villain') return '👹 Villain';
+            return '—';
+        }
         function _renderToken(t) {
             const row = document.createElement('div');
             row.className = 'tt-row';
             row.dataset.id = t.id;
-            const memberOpts = (typeof MEMBERS !== 'undefined' ? MEMBERS : [])
-                .map(m => `<option value="${m.id}"${t.controller_user_id === m.id ? ' selected' : ''}>${escapeHTML(m.name)}</option>`)
-                .join('');
             let portraitUrl = t.image_url || null;
             if (!portraitUrl && t.character_id) {
                 const ch = characters.find(c => c.id === t.character_id);
@@ -6368,19 +6403,47 @@
             // marked.
             const isTargeted = _targeting && _targeting.isTargeted(t.id);
             const targetBtnHtml = `<button class="tt-btn tt-target${isTargeted ? ' tt-target-on' : ''}" title="${isTargeted ? 'Clear target' : 'Set as target'}" data-token-id="${t.id}">🎯</button>`;
+
+            // v2.99.53 — plan-movement-oa-flow Phase 2: non-edit shows
+            // owner + team as pills BEFORE the action buttons; edit
+            // mode swaps them for select dropdowns. The 🖼 upload-art
+            // file input was removed in v2.99.53 per the to-do —
+            // token art now lives in the character sheet / template
+            // editor.
+            const teamRaw = String(t.team || 'neutral').toLowerCase();
+            let infoHtml = '';
+            if (_tmEditMode) {
+                const memberOpts = (typeof MEMBERS !== 'undefined' ? MEMBERS : [])
+                    .map(m => `<option value="${m.id}"${t.controller_user_id === m.id ? ' selected' : ''}>${escapeHTML(m.name)}</option>`)
+                    .join('');
+                const teamOpt = (v, label) =>
+                    `<option value="${v}"${teamRaw === v ? ' selected' : ''}>${escapeHTML(label)}</option>`;
+                infoHtml = `
+                    <select class="tt-ctrl" title="Ownership">
+                        <option value="">GM</option>
+                        ${memberOpts}
+                    </select>
+                    <select class="tt-team" title="Team — used by the OA filter">
+                        ${teamOpt('neutral', '— Neutral')}
+                        ${teamOpt('hero', '🦸 Hero')}
+                        ${teamOpt('villain', '👹 Villain')}
+                    </select>`;
+            } else {
+                const ownerLabel = _ownerLabel(t);
+                const ownerClass = (t.controller_user_id == null)
+                    ? 'tm-pill-owner-gm' : 'tm-pill-owner';
+                infoHtml = `
+                    <span class="tm-pill ${ownerClass}" title="Ownership">${escapeHTML(ownerLabel)}</span>
+                    <span class="tm-pill tm-pill-team-${escapeHTML(teamRaw)}" title="Team: ${escapeHTML(teamRaw)}">${escapeHTML(_teamLabel(teamRaw))}</span>`;
+            }
+
             row.innerHTML = `
                 ${avatarHtml}
                 <span class="tt-name" contenteditable="true" spellcheck="false">${escapeHTML(t.label)}</span>
+                ${infoHtml}
                 <button class="tt-btn tt-vis" title="${t.is_hidden ? 'Show token' : 'Hide token'}">${t.is_hidden ? '🚫' : '👁'}</button>
                 ${targetBtnHtml}
                 ${sheetBtnHtml}
-                <label class="tt-btn tt-art-label" title="Upload art">
-                    🖼<input class="tt-art-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
-                </label>
-                <select class="tt-ctrl">
-                    <option value="">GM</option>
-                    ${memberOpts}
-                </select>
                 <button class="tt-btn tt-del" title="Delete token">🗑</button>`;
             // v2.38.0 Phase T.9: wire the target button — tap toggles.
             const targetBtn = row.querySelector('.tt-target');
@@ -6407,19 +6470,21 @@
                 patchToken(t.id, { is_hidden: !t.is_hidden });
             });
 
-            row.querySelector('.tt-art-input').addEventListener('change', async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const fd = new FormData();
-                fd.append('image', file);
-                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/token/${t.id}/image`, { method: 'POST', body: fd });
-                if (!resp.ok) alert('Image upload failed');
-            });
-
-            row.querySelector('.tt-ctrl').addEventListener('change', (e) => {
-                const val = e.target.value;
-                patchToken(t.id, { controller_user_id: val ? parseInt(val, 10) : null });
-            });
+            // v2.99.53 — edit-mode dropdowns. Only present when
+            // _tmEditMode is true (the row template above gates them).
+            const ctrlSel = row.querySelector('.tt-ctrl');
+            if (ctrlSel) {
+                ctrlSel.addEventListener('change', (e) => {
+                    const val = e.target.value;
+                    patchToken(t.id, { controller_user_id: val ? parseInt(val, 10) : null });
+                });
+            }
+            const teamSel = row.querySelector('.tt-team');
+            if (teamSel) {
+                teamSel.addEventListener('change', (e) => {
+                    patchToken(t.id, { team: e.target.value || 'neutral' });
+                });
+            }
 
             row.querySelector('.tt-del').addEventListener('click', () => {
                 if (!confirm(`Delete "${t.label}"?`)) return;
