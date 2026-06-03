@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.145] - 2026-06-03 — "Speaking to the Wolves" — Beast Speech (Warlock invocation) audit endpoint
+
+**Schema version:** 65
+**Commit summary:** **Ship Beast Speech as a dedicated `/use_beast_speech` endpoint that broadcasts a `feature_used` audit when a Warlock declares they're casting Speak with Animals at will.** RAW (PHB p.110): "You can cast Speak with Animals at will, without expending a spell slot." v1 ships the audit + invocation gate only — SimpleVTT has no animal-NPC dialog layer today, so the interaction is narrative. Mirror of v2.99.138 Eldritch Sight / v2.99.141 Ascendant Step / v2.99.143 Beguiling Influence. Magnus's seed gains the invocation on his feats list.
+**Description:** Three edits. (1) New `POST /api/campaign/{cid}/use_beast_speech` endpoint. Validates `character_id`, caster ownership/GM, and the invocation via `_pc_has_eldritch_invocation(sheet, "beast-speech")` (409 `missing_invocation`). On success, broadcasts `feature_used` with `source: "beast-speech"`, `duration_rounds: 100` (10 minutes at 6s/round). (2) `app/demo_seed.py` — Magnus's feats list gains `eldritch-invocation-beast-speech`. (3) `tests/harness/test_use_beast_speech.py` — 3 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_beast_speech` endpoint.
+- `eldritch-invocation-beast-speech` on Magnus's feats list.
+- `feature_used` broadcast with `source: "beast-speech"`, `duration_rounds: 100`.
+- `tests/harness/test_use_beast_speech.py` — 3 tests: happy path (Magnus → 200 + WS audit), missing invocation gate (Krieger → 409), missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + demo seed edit + 3 tests. No schema change.
+- **What's filed.** An animal-NPC dialog layer (chat-input box that ranges questions to a free-text response field). Today the endpoint emits the audit so the GM sees when the warlock declares Speak with Animals; transcripting the actual conversation lives in the chat log.
+- **Magnus's invocation roster.** 14 of the SRD's ~20 Eldritch Invocations now mechanically wired. The remaining ~6 (Eyes of the Rune Keeper, Visions of Distant Realms, Whispers of the Grave, Thief of Five Fates, Bewitching Whispers, Sign of Ill Omen) are mostly audit-only or registry-routed.
+- **Total harness count: 1008** (was 1005 in v2.99.144).
+
+---
+
 ## [2.99.144] - 2026-06-03 — "Reach of the Patron" — Eldritch Spear (Warlock invocation) extends Eldritch Blast to 300 ft
 
 **Schema version:** 65

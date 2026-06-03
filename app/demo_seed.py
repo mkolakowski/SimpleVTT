@@ -1659,6 +1659,11 @@ def _warlock_sheet(name: str) -> dict:
             # invocation is present and the attack is Eldritch Blast.
             {"slug": "eldritch-invocation-eldritch-spear", "name": "Eldritch Invocation: Eldritch Spear",
              "desc": "Eldritch Blast range extends to 300 ft (was 120 ft) — auto-applied at /attack time per v2.99.144. RAW prereq Lv 2 Warlock."},
+            # v2.99.145 — Beast Speech: cast Speak with Animals at
+            # will. Audit-only endpoint /use_beast_speech broadcasts
+            # the cast. RAW prereq Lv 2 Warlock.
+            {"slug": "eldritch-invocation-beast-speech", "name": "Eldritch Invocation: Beast Speech",
+             "desc": "At will: cast Speak with Animals without expending a spell slot — routed via /use_beast_speech per v2.99.145. RAW prereq Lv 2 Warlock."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],
