@@ -6062,14 +6062,13 @@
                         },
                     );
                     if (resp.ok) {
-                        row.innerHTML = (
-                            '<span style="font-size:12px;opacity:0.8;">'
-                            + '✓ Resolved: ' + (opt.label || opt.key)
-                            + '</span>'
-                        );
-                        // v2.99.74 — clear the action-needed border now
-                        // that the row no longer has anything actionable.
-                        targetLi.classList.remove('action-needed');
+                        // v2.99.75 — drop the entire "Opportunity
+                        // Attack triggered" chat-card LI on resolve
+                        // (was: swap row.innerHTML to "✓ Resolved").
+                        // The weapon_attack card (is_oa=true) is the
+                        // audit; the trigger row is noise once acted.
+                        // Skip resolves leave no card at all.
+                        targetLi.remove();
                         // v2.99.68 — chain the chosen OA attack roll
                         // so the chat-card click yields a weapon
                         // attack immediately. Mirrors the popup-side
@@ -6096,6 +6095,8 @@
                                                 damage_type: p.damage_type || '',
                                                 range: p.range || '',
                                                 target_combatant_id: data.mover_combatant_id,
+                                                // v2.99.75 — OA hint
+                                                is_opportunity_attack: true,
                                             }),
                                         },
                                     );
@@ -6110,6 +6111,7 @@
                                                 character_id: data.watcher_char_id,
                                                 attack_index: p.attack_index,
                                                 target_combatant_id: data.mover_combatant_id,
+                                                is_opportunity_attack: true,
                                             }),
                                         },
                                     );
@@ -6120,15 +6122,10 @@
                         }
                     } else {
                         // 409 prompt_already_resolved (cross-tab race)
-                        // OR 400 (bad input). Either way, the chat row
-                        // shows that the prompt is no longer actionable.
-                        row.innerHTML = (
-                            '<span style="font-size:12px;opacity:0.8;">'
-                            + '✓ Already resolved'
-                            + '</span>'
-                        );
-                        // v2.99.74 — clear the action-needed border.
-                        targetLi.classList.remove('action-needed');
+                        // OR 400 (bad input). v2.99.75 — drop the
+                        // trigger card; another surface already resolved
+                        // and there's nothing meaningful left to show.
+                        targetLi.remove();
                         if (resp.status !== 409) {
                             console.warn(
                                 '[oa-inline] /use_reaction failed',
@@ -6156,33 +6153,32 @@
         targetLi.classList.add('action-needed');
     }
 
-    // v2.99.74 — strip the action-needed border + collapse the
-    // chat-card action row when the prompt is resolved on ANY
-    // surface (popup click, another tab, /use_reaction race). The
-    // resolved broadcast doesn't tell us which watcher_combatant_id
-    // was the head, but it carries that id directly so we can find
-    // the matching un-resolved OA card.
+    // v2.99.75 — remove the OA "Opportunity Attack triggered"
+    // chat-card LI entirely on resolve, per the user's request to
+    // drop the legacy "triggered" + "OA Attack chosen" cards from
+    // the roll log once a choice is made. The weapon_attack card
+    // (now marked is_oa) carries the audit trail; the trigger row
+    // is just noise once the user has acted. Covers cross-tab
+    // races (popup-resolved → resolved broadcast → this clears the
+    // matching chat-card on every tab) and the local click path
+    // (see the inline button handler in _injectOaButtonsToChatCard
+    // — it also calls _removeOaTriggerCard).
     function _markOaCardResolved(data) {
         if (!data || typeof data !== 'object') return;
         const wcid = data.watcher_combatant_id;
         if (!wcid) return;
+        _removeOaTriggerCard(wcid);
+    }
+
+    function _removeOaTriggerCard(watcherCombatantId) {
         const ul = document.getElementById('roll-list');
         if (!ul) return;
         const cards = ul.querySelectorAll(
-            'li[data-source="opportunity-attack-trigger"]'
-            + '.action-needed',
+            'li[data-source="opportunity-attack-trigger"]',
         );
         for (let i = cards.length - 1; i >= 0; i--) {
-            if (String(cards[i].dataset.watcherCombatantId) === String(wcid)) {
-                const row = cards[i].querySelector('.oa-action-row');
-                if (row && row.querySelector('button')) {
-                    row.innerHTML = (
-                        '<span style="font-size:12px;opacity:0.8;">'
-                        + '✓ Resolved'
-                        + '</span>'
-                    );
-                }
-                cards[i].classList.remove('action-needed');
+            if (String(cards[i].dataset.watcherCombatantId) === String(watcherCombatantId)) {
+                cards[i].remove();
                 break;
             }
         }
@@ -6267,6 +6263,15 @@
             : '';
 
         const targetTagHtml = _targetTagHtml(d);
+        // v2.99.75 — OA chain marker. When the chained /attack
+        // (or /npc_attack) carried `is_opportunity_attack: true`
+        // the broadcast surfaces `is_oa: true`. Swap the slot
+        // label from "⚔ Attack" to "⚔ Opportunity Attack" and
+        // tag the weapon name so the chat-card reads as an OA
+        // without a redundant audit row above it.
+        const isOa = !!d.is_oa;
+        const slotLabel = isOa ? '⚔ Opportunity Attack' : '⚔ Attack';
+        const weaponPrefix = isOa ? 'OA — ' : '';
         const li = document.createElement('li');
         li.dataset.attackId = d.id;
         li.innerHTML = `
@@ -6275,12 +6280,12 @@
                     <div class="roll-card-avatar">${avatarInner}</div>
                     <span class="roll-card-user" data-uid="${d.caster_user_id}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(dispName)}</span>
                     ${targetTagHtml}
-                    <span class="spell-cast-slot">⚔ Attack</span>
+                    <span class="spell-cast-slot">${slotLabel}</span>
                     <span class="roll-card-time">${timeStr}</span>
                 </div>
                 <div class="spell-cast-body">
                     <div class="spell-cast-name-row">
-                        <span class="spell-cast-name">🗡 ${escapeHTML(d.attack_name || 'Attack')}</span>
+                        <span class="spell-cast-name">🗡 ${weaponPrefix}${escapeHTML(d.attack_name || 'Attack')}</span>
                         ${metaBits.length ? `<span class="spell-cast-meta-inline">· ${metaBits.join(' · ')}</span>` : ''}
                     </div>
                     ${pillsHtml}

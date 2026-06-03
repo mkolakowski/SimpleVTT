@@ -247,10 +247,14 @@
             damage_type: params.damage_type || '',
             range: params.range || '',
             target_combatant_id: target,
+            // v2.99.75 — mark the chained attack as an OA so the
+            // weapon_attack chat card chrome renders "OA — {weapon}".
+            is_opportunity_attack: true,
         } : {
             character_id: data.watcher_char_id,
             attack_index: params.attack_index,
             target_combatant_id: target,
+            is_opportunity_attack: true,
         };
         try {
             const resp = await fetch(url, {

@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.75] - 2026-06-02 — "One Card, One OA" — drop OA trigger + chosen-attack audit cards, mark weapon_attack as OA
+
+**Schema version:** 65
+**Commit summary:** **Collapse the three-card OA chat-log trail down to ONE card per resolution.** User report: "can you remove the Opportunity Attack — OA Attack and Opportunity Attack triggered messages after a choice has been chosen? can you update the attack to show that it's an OA? no message needed to show that an OA has been skipped." Pre-v2.99.75 every resolved OA emitted three chat entries: (1) the "⚔ Opportunity Attack triggered" advisory (broadcast at /token/move time), (2) the "⚔ Opportunity Attack — Greataxe" audit card (broadcast on the take-the-oa: dispatch), and (3) the actual weapon_attack roll from the v2.99.68 auto-chain. v2.99.75 drops the first two and decorates the third: the trigger card is removed on resolve (click, cross-tab race, or `reaction_prompt_resolved` broadcast); the audit card is no longer broadcast at all; the weapon_attack card's slot label flips to "⚔ Opportunity Attack" and the weapon name gets an "OA — " prefix when the chain passed `is_opportunity_attack: true`. Skip resolutions leave NO card at all — the trigger row drops, no new card replaces it.
+**Description:** Five-file change. (1) `app/routes/tabletop_routes.py::/use_reaction` — removed the `take-the-oa:` `oa-attack-chosen` broadcast (lines ~17303-17342) and the `skip-oa` `oa-skipped` broadcast (lines ~17343-17369); both replaced with comments explaining the new flow. (2) `/attack` and `/npc_attack` now read `is_opportunity_attack` from the body and surface `is_oa` in the `weapon_attack` payload. (3) `app/static/reaction_prompt.js::_chainOaAttack` adds `is_opportunity_attack: true` to both the `/attack` (PC) and `/npc_attack` (NPC) request bodies. (4) `app/static/tabletop.js` — same flag added to the chat-card inline chain. (5) `appendWeaponAttack` reads `d.is_oa` and renders the slot as "⚔ Opportunity Attack" + the weapon name as "🗡 OA — {weapon}" when set. `_markOaCardResolved` (was: clear `.action-needed` class) now removes the trigger LI entirely via the new `_removeOaTriggerCard(wcid)` helper. The inline click handler does the same on both success and on the 409 already-resolved path.
+
+### Removed
+- `feature_used(source=oa-attack-chosen)` broadcast in `/use_reaction`'s `take-the-oa:` handler. The chained weapon_attack card with `is_oa: true` is the only audit needed.
+- `feature_used(source=oa-skipped)` broadcast in `/use_reaction`'s `skip-oa` handler. Per the user's request, Skip leaves no chat-log card; the trigger row drops via the resolved broadcast.
+
+### Added
+- `is_opportunity_attack` body field on `/attack` and `/npc_attack`. Pure UX hint — no gating change. Server reads it and surfaces `is_oa: true` in the `weapon_attack` broadcast.
+- `is_oa` field on `weapon_attack` broadcasts. Client renders the chat card with "⚔ Opportunity Attack" slot label + "OA — {weapon}" name prefix.
+- `_removeOaTriggerCard(watcherCombatantId)` helper in `app/static/tabletop.js`. Walks the roll log, finds the matching `[data-source="opportunity-attack-trigger"]` LI, drops it. Called from `_markOaCardResolved` (resolved broadcast) and from the inline click handler on success + 409.
+
+### Changed
+- `_chainOaAttack` (popup-side) and the chat-card inline chain both pass `is_opportunity_attack: true` to the attack endpoint so the weapon_attack card is marked.
+- `appendWeaponAttack` renders OA-tagged attacks with "⚔ Opportunity Attack" slot label and "OA — {weapon}" name prefix. Standard attacks unchanged.
+- `_markOaCardResolved` semantics: was "strip `.action-needed` border + collapse action row." Now: remove the LI entirely. The accent-border visual from v2.99.74 still fires while the prompt is pending; on resolve the row is gone.
+- Inline button click handler: on success + on 409, removes `targetLi` (was: `row.innerHTML` swap to "✓ Resolved").
+
+### Notes
+- **PATCH bump** — UI flow simplification + small server-side broadcast deletions. No schema change, no API contract change. Existing harness tests that asserted on the `oa-attack-chosen` / `oa-skipped` broadcasts may need an update — none currently do (the v2.99.56 phase 5 tests assert on the prompt resolve, not the audit cards).
+- **Why `is_oa` instead of inferring server-side.** The /attack handler doesn't know the call originated from an OA picker click — only the client (which just clicked `take-the-oa:{idx}`) knows. Surfacing the intent as a body field keeps the handler stateless + lets future non-popup OA paths (a GM-panel button, an AI-bot click) reuse the marker. Server treats it as pure passthrough — no auth changes, no economy changes.
+- **What stays in the roll log on a resolved OA.** One card: the weapon_attack roll, marked "⚔ Opportunity Attack — Greataxe". On Skip: nothing.
+- **What about the v2.99.74 accent border.** Still applies while the prompt is pending. The trigger card briefly draws the eye with the active-turn border until the user clicks; on resolve the card is removed (so the border too). No regression there — the border was a "waiting on you" cue; once you've acted, the card and the cue both leave.
+- **No new harness tests this commit.** The removed broadcasts weren't covered by the harness; the surviving `weapon_attack` + reaction_prompt_resolved contracts are unchanged on the server side (just an added optional field).
+- Total harness count: 785 (unchanged from v2.99.74).
+
+---
+
 ## [2.99.74] - 2026-06-02 — "Find the Action" — active-turn-style border on roll-log entries that need interaction
 
 **Schema version:** 65

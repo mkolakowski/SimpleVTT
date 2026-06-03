@@ -17297,76 +17297,27 @@ async def use_reaction(
                 await _mark_battle_economy_by_combatant_id(
                     campaign_id, str(watcher_combatant_id), "reaction",
                 )
-        # If this is a picker key (with :{idx}), surface the chosen
-        # attack name via a feature_used broadcast so the chat-log
-        # shows the audit trail.
-        if reaction_key.startswith("take-the-oa:"):
-            try:
-                _picked = next(
-                    (o for o in (entry.get("options") or [])
-                     if o.get("key") == reaction_key),
-                    None,
-                )
-            except Exception:
-                _picked = None
-            if _picked:
-                _params = (_picked.get("params") or {})
-                _name = _params.get("attack_name") or "OA Attack"
-                _watcher_name = _picked.get("watcher_name") or ""
-                # Pull the watcher name from the prompt entry's
-                # watcher_combatant_id → state lookup (more reliable
-                # than picker meta).
-                try:
-                    _state = hub.get_battle(campaign_id) or {}
-                    for _c in (_state.get("combatants") or []):
-                        if _c.get("id") == entry.get("watcher_combatant_id"):
-                            _watcher_name = _c.get("name") or _watcher_name
-                            break
-                except Exception:
-                    pass
-                await hub.broadcast(campaign_id, {
-                    "type": "feature_used",
-                    "data": {
-                        "character_id": watcher_char_id,
-                        "character_name": _watcher_name,
-                        "feature_name": f"⚔ Opportunity Attack — {_name}",
-                        "feature_desc": (
-                            f"{_watcher_name or 'Watcher'} swings {_name} "
-                            f"as their Opportunity Attack. (Click the "
-                            f"weapon's Attack button to roll the swing.)"
-                        ),
-                        "source": "oa-attack-chosen",
-                        "attack_name": _name,
-                        "attack_index": _params.get("attack_index"),
-                    },
-                })
+        # v2.99.75 — removed the legacy "⚔ Opportunity Attack —
+        # {weapon}" audit broadcast. The v2.99.68 auto-chained
+        # /attack already lands a weapon_attack chat card carrying
+        # the watcher + attack + roll outcome; v2.99.75 marks that
+        # card with `is_oa: True` (see /attack handler) so the
+        # chrome reads "OA — Greataxe" without a redundant audit
+        # row above it. The v2.99.74 .action-needed row is removed
+        # by the client on reaction_prompt_resolved (see
+        # _markOaCardResolved), so the resolved OA leaves exactly
+        # one chat entry: the weapon-attack roll.
     elif reaction_key == "skip-oa":
         # v2.99.56 — plan-movement-oa-flow Phase 5 skip. Resolves
         # the prompt WITHOUT marking the watcher's reaction so the
         # slot stays available for another trigger this round.
-        # Audit broadcast names who passed.
-        _watcher_name = ""
-        try:
-            _state = hub.get_battle(campaign_id) or {}
-            for _c in (_state.get("combatants") or []):
-                if _c.get("id") == entry.get("watcher_combatant_id"):
-                    _watcher_name = _c.get("name") or ""
-                    break
-        except Exception:
-            pass
-        await hub.broadcast(campaign_id, {
-            "type": "feature_used",
-            "data": {
-                "character_id": watcher_char_id,
-                "character_name": _watcher_name,
-                "feature_name": "✋ OA skipped",
-                "feature_desc": (
-                    f"{_watcher_name or 'Watcher'} chose NOT to take the "
-                    f"Opportunity Attack. Reaction is still available."
-                ),
-                "source": "oa-skipped",
-            },
-        })
+        # v2.99.75 — removed the "✋ OA skipped" audit broadcast
+        # per user request ("no message needed to show that an oa
+        # has been skipped"). The reaction_prompt_resolved
+        # broadcast still fires; the client removes the trigger
+        # card from the roll log so a Skip resolution leaves the
+        # log clean.
+        pass
     elif reaction_key == "uncanny-dodge-ack":
         # v2.67.2 Phase 2a — informational ack. Uncanny Dodge already
         # auto-fired in ``_apply_damage_to_combatant``; this resolves
@@ -30554,6 +30505,14 @@ async def use_attack(
     if char_id <= 0 or attack_index < 0:
         raise HTTPException(400, "character_id and attack_index are required")
 
+    # v2.99.75 — OA chain hint. The v2.99.68 client chain POSTs
+    # /attack after the user picks a take-the-oa:{idx} key on the
+    # OA popup. We surface this in the weapon_attack broadcast so
+    # the chat card chrome can read "OA — Greataxe" instead of a
+    # bare attack roll that loses the OA context. Pure UX hint —
+    # no server-side gating changes.
+    is_oa = bool(body.get("is_opportunity_attack"))
+
     # v2.20.0 Phase B: optional target_combatant_id for buff-driven
     # uplifts that need to know the target (Hunter's Mark / Hex match,
     # Colossus Slayer below-max-HP check).
@@ -31371,6 +31330,9 @@ async def use_attack(
         # entry mirrors the legacy fields and additional entries
         # describe each subsequent target's fresh attack + damage roll.
         "auto_attack_targets": auto_attack_targets,
+        # v2.99.75 — OA hint propagated from the body. Client renders
+        # the weapon-attack card chrome with "⚔ OA — {weapon}" when set.
+        "is_oa": is_oa,
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
     # v2.99.21 — Halfling Lucky attack-roll companion broadcast. Fires
@@ -31793,6 +31755,8 @@ async def use_npc_attack(
     damage_expr_raw = str(body.get("damage") or "").strip()
     damage_type = str(body.get("damage_type") or "").strip()
     range_str = str(body.get("range") or "").strip()
+    # v2.99.75 — OA chain hint (mirrors /attack).
+    is_oa = bool(body.get("is_opportunity_attack"))
 
     target_combatant_id = (
         str(body.get("target_combatant_id") or "").strip() or None
@@ -31974,6 +31938,8 @@ async def use_npc_attack(
         "auto_attack_targets": [],
         "is_npc_attack": True,
         "npc_action_id": action_id,
+        # v2.99.75 — OA hint propagated from the body.
+        "is_oa": is_oa,
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
     # v2.66.6 — Sentinel feat advisory for NPC attacks. Mirrors the
