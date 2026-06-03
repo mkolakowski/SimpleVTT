@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.149] - 2026-06-03 — "An Ill Star" — Sign of Ill Omen (Warlock invocation) wires Bestow Curse through the v2.99.140 router
+
+**Schema version:** 65
+**Commit summary:** **Ship Sign of Ill Omen as the fourth consumer of the v2.99.140 invocation-cast registry.** RAW (PHB p.111): "Prerequisite: 5th level. You can cast Bestow Curse once using a warlock spell slot. You can't do so again until you finish a long rest." Magnus qualifies natively at Lv 5 — first registry-routed invocation where the demo seed doesn't have to overprovision the prereq. Adds the `sign-of-ill-omen` registry entry → Bestow Curse, a new `/cast_bestow_curse` endpoint (spell-side: slot + concentration anchor + invocation gate + audit), Magnus's seed gains the invocation + a 1/long-rest gating resource. Continues to prove the v2.99.140 abstraction generalizes — four target spells (Slow L3, Polymorph L4, Compulsion L4, Bestow Curse L3) now route through the same registry without per-spell duplicate validation code.
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — `sign-of-ill-omen` entry added to `_INVOCATION_SPELL_CAST_REGISTRY` mapping to `bestow-curse`. (2) New `POST /cast_bestow_curse` endpoint mirrors `/cast_compulsion`'s shape: validates class (Bard / Cleric / Wizard / Warlock), routes Warlock through the registry (must match `spell_slug == "bestow-curse"`), validates `slot_level >= 3` + action economy gate, calls `_validate_invocation_cast` early to short-circuit on missing-invocation / missing-resource / not-enough-uses, decrements slot + resource via the same helpers, installs `concentration-bestow-curse` caster anchor (10 rounds = 1 minute at base L3). Broadcasts `roll` (chat log), `spell_slot_update`, and `feature_used` events. (3) `app/demo_seed.py` — Magnus's feats gain `eldritch-invocation-sign-of-ill-omen`; his resources gain `sign-of-ill-omen-uses` 1/long-rest. (4) `tests/harness/test_cast_bestow_curse.py` — 6 regression tests.
+
+### Added
+- `sign-of-ill-omen` registry entry in `_INVOCATION_SPELL_CAST_REGISTRY` mapping to Bestow Curse (Warlock).
+- `POST /api/campaign/{cid}/cast_bestow_curse` endpoint (L3 Necromancy, concentration 1 minute, Bard/Cleric/Wizard/Warlock-via-invocation).
+- `eldritch-invocation-sign-of-ill-omen` on Magnus's feats list.
+- `sign-of-ill-omen-uses` 1/long-rest resource on Magnus.
+- `tests/harness/test_cast_bestow_curse.py` — 6 tests: Sign of Ill Omen happy path (slot + resource + concentration anchor, no slot patching since Magnus has L3 natively); Warlock without via_invocation → 409 missing_invocation; Warlock with wrong via_invocation slug → 409 missing_invocation; second cast same long rest → 409 not_enough_uses; L2 slot → 400; missing character_id → 400.
+
+### Notes
+- **PATCH bump** — one new endpoint + registry entry + demo seed extension + 6 tests. No schema change. Same helpers as v2.99.137 + v2.99.142 + v2.99.148.
+- **Magnus's invocation roster.** 18 of the SRD's ~20 Eldritch Invocations now mechanically wired. Remaining: Visions of Distant Realms, Thief of Five Fates (both can ship next as v2.99.150/.151).
+- **What's filed.** (1) Per-target WIS save resolution + the four curse-effect picker (disadvantage on ability checks, disadvantage on attack rolls against caster, lose-action WIS save at start of each turn, +1d8 necrotic on caster's attacks). (2) Upcast scaling: L4-L8 makes the spell non-concentration / longer duration; L9 makes it permanent. v1 ships the base concentration only.
+- **Router proof — fourth target spell.** Four invocations now go through one registry: Slow (L3 via Mire the Mind), Polymorph (L4 via Sculptor of Flesh), Compulsion (L4 via Bewitching Whispers), Bestow Curse (L3 via Sign of Ill Omen). Adding the fifth (Bane via Thief of Five Fates) or sixth (Confusion via Dreadful Word) only requires a registry row + a thin endpoint that calls the same helpers.
+- **Total harness count: 1026** (was 1020 in v2.99.148).
+
+---
+
 ## [2.99.148] - 2026-06-03 — "Marching Orders" — Bewitching Whispers (Warlock invocation) wires Compulsion through the v2.99.140 router
 
 **Schema version:** 65

@@ -31759,12 +31759,23 @@ _INVOCATION_SPELL_CAST_REGISTRY: dict[str, dict] = {
         "resource_key": "bewitching-whispers-uses",
         "bypass_spell_list_check": True,
     },
+    # v2.99.149 — Sign of Ill Omen: cast Bestow Curse once per
+    # long rest using a Warlock spell slot. RAW prereq Lv 5
+    # Warlock. Routed via /cast_bestow_curse with
+    # via_invocation="sign-of-ill-omen". Fourth consumer of the
+    # registry.
+    "sign-of-ill-omen": {
+        "spell_slug": "bestow-curse",
+        "spell_name": "Bestow Curse",
+        "class_slug": "warlock",
+        "resource_key": "sign-of-ill-omen-uses",
+        "bypass_spell_list_check": True,
+    },
     # Future entries (filed): "visions-of-distant-realms" → arcane
     # eye, "thief-of-five-fates" → bane, "dreadful-word" →
-    # confusion, "sign-of-ill-omen" → bestow curse, "minions-of-
-    # chaos" → conjure elemental. Each needs its own /cast_<spell>
-    # wiring + demo-seed resource entry; the router metadata stays
-    # here.
+    # confusion, "minions-of-chaos" → conjure elemental. Each
+    # needs its own /cast_<spell> wiring + demo-seed resource
+    # entry; the router metadata stays here.
 }
 
 
@@ -32565,6 +32576,223 @@ async def cast_compulsion(
         "via_invocation": via_invocation or None,
         "duration_rounds": 10,
         "range_ft": 30,
+        "concentration": True,
+    }
+
+
+# ----------- API: cast Bestow Curse (3rd-level Necromancy, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_bestow_curse")
+async def cast_bestow_curse(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.149 — Cast Bestow Curse: prepare the spell cast (slot
+    + concentration anchor + audit). RAW (PHB p.218): L3
+    Necromancy, 1 action, touch, concentration up to 1 minute.
+    Target a creature; on a failed WIS save the caster picks one
+    of four curse effects (disadvantage on ability checks tied to
+    one ability, disadvantage on attack rolls against the caster,
+    WIS save at start of each turn or wasted turn, +1d8 necrotic
+    damage from caster's attacks/spells).
+
+    Classes that get Bestow Curse: Bard, Cleric, Wizard. Warlock-
+    only via the v2.99.149 Sign of Ill Omen invocation (PHB
+    p.111: "Prerequisite: 5th level. You can cast Bestow Curse
+    once using a warlock spell slot. You can't do so again until
+    you finish a long rest.").
+
+    Fourth consumer of the v2.99.140 invocation-cast registry,
+    mirror of /cast_compulsion + /cast_polymorph. v1 ships the
+    spell-side audit (slot + resource + concentration anchor);
+    per-target WIS save resolution + the four curse-effect buffs
+    are filed.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 3
+    override = bool(body.get("override"))
+    via_invocation = (body.get("via_invocation") or "").strip().lower()
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("bard", "cleric", "wizard", "warlock"):
+        raise HTTPException(
+            400, "class_slug must be bard, cleric, wizard, or warlock",
+        )
+    if class_slug == "warlock":
+        # v2.99.149 — Warlock can only cast Bestow Curse via a
+        # registered invocation that maps to it (Sign of Ill Omen).
+        _meta_for_class = _get_invocation_cast_meta(via_invocation)
+        if not _meta_for_class or _meta_for_class.get("spell_slug") != "bestow-curse":
+            return JSONResponse(status_code=409, content={
+                "error": "missing_invocation",
+                "invocation": "sign-of-ill-omen",
+            })
+    if slot_level < 3:
+        raise HTTPException(400, "slot_level must be >= 3 (Bestow Curse is L3)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    # v2.99.140 — invocation-cast router (fourth consumer).
+    invocation_meta = _get_invocation_cast_meta(via_invocation)
+    if invocation_meta:
+        bad = _validate_invocation_cast(sheet, via_invocation)
+        if bad is not None:
+            return bad
+    if not invocation_meta or not invocation_meta.get("bypass_spell_list_check"):
+        spells = list(sheet.get("spells") or [])
+        has_bc = any(
+            (s.get("_slug") == "bestow-curse") or
+            (str(s.get("name", "")).lower() == "bestow curse")
+            for s in spells
+        )
+        if not has_bc:
+            return JSONResponse(status_code=409, content={
+                "error": "spell_not_known",
+                "spell": "bestow-curse",
+            })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Bestow Curse",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "bestow-curse",
+            "label": "Bestow Curse",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    _consume_invocation_resource(sheet, via_invocation)
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Caster concentration anchor (1 minute = 10 rounds at base L3;
+    # upcast at L4-L8 → 10 min concentration; L9 → 1 day. v1 stamps
+    # the base 10 rounds, callers can adjust the anchor's duration
+    # downstream if upcast handling is wired).
+    await _install_caster_concentration_anchor(
+        campaign_id, char, "bestow-curse", "Bestow Curse",
+        duration_rounds=10, icon="🕷️",
+    )
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    invocation_tag = (
+        f" via {invocation_meta['spell_name']}-invocation "
+        f"({via_invocation})"
+        if invocation_meta else ""
+    )
+    note = (
+        f"🕷️ {char.name} casts Bestow Curse (L{slot_level}){invocation_tag} — "
+        f"touch range, WIS save filed (v1 stops at the cast)"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🕷️ Bestow Curse",
+            "feature_desc": (
+                f"{char.name} casts Bestow Curse. Target makes a "
+                f"WIS save (per-target save + curse-effect picker "
+                f"filed)."
+            ),
+            "source": (
+                "sign-of-ill-omen" if via_invocation == "sign-of-ill-omen"
+                else "bestow-curse"
+            ),
+            "via_invocation": via_invocation or None,
+            "duration_rounds": 10,
+            "range_ft": 5,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "via_invocation": via_invocation or None,
+        "duration_rounds": 10,
+        "range_ft": 5,
         "concentration": True,
     }
 
