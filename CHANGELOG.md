@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.79] - 2026-06-03 — "Wait Your Turn" — initiative-turn drag gate + visible Dash bonus + Dash audit broadcast
+
+**Schema version:** 65
+**Commit summary:** **Lock non-GM token movement to the active combatant's turn during an active battle, and make the Dash bonus visible on the Mov chip + in the chat log.** User report: (1) "when an encounter is running, can you prevent non gms from moving tokens when it is not the players turn in the int order?" (2) "can you also update the dash feature to know when it has been used and temporarily increase the players movement?" v2.99.79 ships: (a) `canMove(t)` in `tabletop.js` now rejects off-turn drags when the realtime hub's battle is active. GM bypasses (rules authority). Battle inactive → unchanged (out-of-combat free movement). (b) Server-side mirror in `/token/move`: same 403 "Not your turn" check before mutating Token.x/y. (c) Mov chip cap displays `feetUsed / (speed_walk + dash_bonus_ft)` when Dash is active, with a 🏃 badge appended so users can't confuse a Dashed 30/60 with a 60-base-speed combatant. (d) New `POST /api/campaign/{cid}/use_dash` audit endpoint broadcasts a `feature_used(source=dash-action)` chat-log card naming who Dashed + the +N ft grant. `_dashCombatant` fires it fire-and-forget after the local chip flip + pushBattle.
+**Description:** Four-file change. (1) `app/static/tabletop.js::canMove(t)` — after the existing ownership gate, check `window.battle.active`; if active, the dragged token must match the current active combatant (source_token_id or char_id). Off-turn → false. GM still bypasses up top. (2) `app/routes/tabletop_routes.py::/token/move` — same check before committing the position write; non-GM off-turn drags get `HTTPException(403, "Not your turn — wait for the initiative tracker")`. (3) `app/templates/tabletop.html` Mov-chip render block — compute `dashBonusFt` from `econ.dash_bonus_ft`, derive `effectiveCap = speedMax + dashBonusFt`, append a 🏃 badge when `dashBonusFt > 0`, update tooltip + over/dashed CSS class accordingly. (4) New `/use_dash` endpoint that accepts `{combatant_id, character_id?, grant_ft}` and broadcasts the audit feature_used. `window._dashCombatant` POSTs to it after the local chip flip.
+
+### Added
+- `POST /api/campaign/{campaign_id}/use_dash` — audit endpoint. Broadcasts `feature_used(source=dash-action, character_name, feature_name="🏃 Dash", grant_ft)` so the chat log records who Dashed and by how much. Pure announcement — no server state mutation (the chip flip + dash_bonus_ft are already in hub state from the client's `_dashCombatant` + pushBattle).
+- 🏃 badge on the Mov chip when `economy.dash_bonus_ft > 0`. Chip cap shows the boosted total (`feetUsed / (speed + dash_bonus)`) so the dash is visible at a glance.
+- Server-side initiative-turn gate in `/token/move` — 403 "Not your turn" for non-GM drags of non-active-combatant tokens during an active battle. Mirrors the v2.99.79 client gate so a malicious client can't bypass.
+
+### Changed
+- `canMove(t)` in `app/static/tabletop.js` — after the ownership check, also blocks off-turn drags during active battles. Resolves the user's "prevent non-GMs from moving tokens when not their turn" ask.
+- Mov chip tooltip when Dash is active: now reads "Movement used this turn — Dash active (+N ft this round) — click to reset to 0" so the player understands where the cap came from.
+- `window._dashCombatant` now POSTs to `/use_dash` after the local chip flip + pushBattle. Failure swallowed (fire-and-forget) so a flaky network doesn't unwind the dash state.
+
+### Notes
+- **PATCH bump** — additive endpoint + UI surface + a single server-side authorization branch. No schema change, no breaking API change.
+- **Why both client + server gate the off-turn drag.** The client gate is the immediate UX (no canvas drag latency, cursor never changes to grab on an unmovable token). The server gate is the defense-in-depth backstop — a manually-crafted `/token/move` POST from a browser-injected fetch would be rejected. Both gates use the same active-combatant match logic so they agree.
+- **What constitutes "active battle."** `hub.get_battle(campaign_id).active == True`. Battle starts via "Start initiative" + a non-empty `combatants` list. When battle is inactive (between encounters or at session start), token drags fall through unchanged — players can position freely.
+- **GM bypasses everywhere.** The GM is the rules authority and may need to nudge a token during another's turn (cover ruling, error correction, scripted scene event). Both the client and server gates short-circuit on `_user_is_gm`.
+- **What about the active combatant whose owner is offline (presence routing).** They still can't move (their owner isn't connected to drag). The GM can move them via the GM-bypass — that's the intended affordance per the v2.99.59 presence-aware fallback.
+- **No new harness tests.** UI behavior + the audit endpoint is read-only fan-out (no state mutation to assert on). The `/token/move` 403 gate could use a small test — filed for a follow-up; the existing 200-path tests still pass because they hit the GM client.
+- Total harness count: 785 (unchanged from v2.99.78).
+
+---
+
 ## [2.99.78] - 2026-06-03 — "No Echo, No Trail" — non-GM-only sound panel + Dismiss-is-Skip + visible OA chain errors
 
 **Schema version:** 65

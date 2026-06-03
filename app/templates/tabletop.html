@@ -6319,9 +6319,29 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         if (!combatant) return;
         _ensureEconomy(combatant);
         combatant.economy.action = true;
-        combatant.economy.dash_bonus_ft = (Number(combatant.economy.dash_bonus_ft) || 0) + (Number(combatant.speed_walk) || 30);
+        const grant = Number(combatant.speed_walk) || 30;
+        combatant.economy.dash_bonus_ft = (Number(combatant.economy.dash_bonus_ft) || 0) + grant;
         pushBattle();
         renderBattle();
+        // v2.99.79 — broadcast a feature_used so the chat-log
+        // shows "🏃 Dash" with the +grant ft bonus. The
+        // localStorage + pushBattle above already mutates the chip
+        // strip's cap; this is the audit trail so the table knows
+        // who Dashed (especially when the GM takes Dash on behalf
+        // of an absent player). Fire-and-forget; failures don't
+        // unwind the chip flip.
+        try {
+            fetch(`/api/campaign/${CAMPAIGN_ID}/use_dash`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    combatant_id: combatant.id,
+                    character_id: combatant.char_id || null,
+                    grant_ft: grant,
+                }),
+            }).catch(() => {});
+        } catch (_) {}
     };
 
     /* v2.5.3: action-economy Phase 2 helpers — map a spell's
@@ -7037,14 +7057,33 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 let movClass = 'mov';
                 if (feetUsed > speedMax) movClass += ' over';
                 else if (feetUsed >= speedMax - 5 && feetUsed > 0) movClass += ' near';
+                // v2.99.79 — surface the active Dash bonus on the
+                // Mov chip so the eye can see "this combatant has
+                // taken Dash, their cap is doubled." The chip cap
+                // becomes (speedWalk + dash_bonus_ft) when the
+                // bonus is non-zero, and a "🏃" badge is appended
+                // so users don't conflate "30/60" with a 60-ft
+                // base speed. Recomputed each render so reset-Dash
+                // (click the Act chip while Dashed) cleanly returns
+                // to the unbuffed display.
+                const dashBonusFt = Number(econ.dash_bonus_ft) || 0;
+                const effectiveCap = speedMax + dashBonusFt;
+                const dashTag = dashBonusFt > 0 ? ' 🏃' : '';
+                if (dashBonusFt > 0) {
+                    if (feetUsed > effectiveCap) movClass = movClass.replace(' over', '') + ' over';
+                    else if (feetUsed > speedMax) movClass = movClass + ' dashed';
+                }
                 // v2.49.101 — "ft" unit dropped from the chip label
                 // per user request. The tooltip still says "Movement"
                 // so context isn't lost; the X/Y shape reads as
                 // distance unambiguously in the init-tracker context.
+                const movTitle = dashBonusFt > 0
+                    ? `Movement used this turn — Dash active (+${dashBonusFt} ft this round) — click to reset to 0`
+                    : 'Movement used this turn — click to reset to 0';
                 const movChip = `<button type="button" class="econ-chip ${movClass}"
                     data-idx="${i}" data-slot="movement"
-                    title="Movement used this turn — click to reset to 0">
-                    ${feetUsed % 1 === 0 ? feetUsed : feetUsed.toFixed(1)}/${speedMax}
+                    title="${movTitle}">
+                    ${feetUsed % 1 === 0 ? feetUsed : feetUsed.toFixed(1)}/${effectiveCap}${dashTag}
                 </button>`;
                 // v2.49.101 — three-letter labels restored (user
                 // request). The strip stays inline with Init/HP via

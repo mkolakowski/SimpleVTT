@@ -9625,6 +9625,32 @@ async def move_token(
     if not _user_can_move_token(db, user, token, campaign):
         raise HTTPException(403, "You can't move that token")
 
+    # v2.99.79 — initiative-turn enforcement. When a battle is active
+    # in the realtime hub AND the dragger is a non-GM, the token they're
+    # moving must be the ACTIVE combatant's token. Off-turn drags are
+    # rejected so players can't reposition pieces during another
+    # combatant's turn. GM bypass (the rules authority). Battle
+    # inactive → unchanged behavior.
+    if not _user_is_gm(user, campaign, db):
+        _state = hub.get_battle(campaign_id) or {}
+        if bool(_state.get("active")):
+            _combs = _state.get("combatants") or []
+            _idx = _state.get("turn_index")
+            if (_combs and isinstance(_idx, int)
+                    and 0 <= _idx < len(_combs)):
+                _active = _combs[_idx]
+                _is_active_token = (
+                    (_active.get("source_token_id") == int(token.id))
+                    or (
+                        token.character_id is not None
+                        and _active.get("char_id") == int(token.character_id)
+                    )
+                )
+                if not _is_active_token:
+                    raise HTTPException(
+                        403, "Not your turn — wait for the initiative tracker",
+                    )
+
     # v2.6.2: Phase 5 movement tracker. Capture the prior position
     # before the mutation so the broadcast can carry both endpoints +
     # the computed distance in feet. The action-economy chip strip on
@@ -9980,6 +10006,79 @@ async def move_token(
             for t in oa_triggers
         ],
     }
+
+
+@router.post("/api/campaign/{campaign_id}/use_dash")
+async def use_dash(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.79 — Dash audit broadcast.
+
+    The client-side ``window._dashCombatant`` helper (Battle IIFE in
+    ``tabletop.html``) marks the action chip + extends
+    ``economy.dash_bonus_ft`` directly on the in-browser battle dict
+    and pushBattles the change so other clients pick it up via the
+    standard battle_update path. This endpoint adds the chat-log
+    audit: a single ``feature_used`` broadcast naming who Dashed +
+    how many feet the bonus grants. Pure announcement — no
+    server-side state is mutated (the chip flip + dash_bonus_ft are
+    already in hub state by the time this fires).
+
+    Body: ``{combatant_id, character_id?, grant_ft}``.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    body = await request.json()
+    combatant_id = (body.get("combatant_id") or "").strip() or None
+    character_id_raw = body.get("character_id")
+    try:
+        character_id = int(character_id_raw) if character_id_raw else None
+    except (TypeError, ValueError):
+        character_id = None
+    try:
+        grant_ft = int(body.get("grant_ft") or 0)
+    except (TypeError, ValueError):
+        grant_ft = 0
+
+    # Resolve the dasher's display name. PC: Character row name.
+    # NPC: combatant.name from hub state. Fallback: "Combatant".
+    dasher_name = "Combatant"
+    if character_id:
+        char = db.query(Character).filter(
+            Character.id == character_id,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if char:
+            dasher_name = char.name
+    elif combatant_id:
+        _state = hub.get_battle(campaign_id) or {}
+        for _c in (_state.get("combatants") or []):
+            if _c.get("id") == combatant_id:
+                dasher_name = _c.get("name") or dasher_name
+                break
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": character_id,
+            "character_name": dasher_name,
+            "feature_name": "🏃 Dash",
+            "feature_desc": (
+                f"{dasher_name} took the Dash action. Movement cap "
+                f"extends by +{grant_ft} ft this turn."
+                if grant_ft > 0
+                else f"{dasher_name} took the Dash action."
+            ),
+            "source": "dash-action",
+            "grant_ft": grant_ft,
+        },
+    })
+    return {"ok": True, "grant_ft": grant_ft}
 
 
 @router.post("/api/campaign/{campaign_id}/token/{token_id}/preview_move")

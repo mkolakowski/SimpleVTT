@@ -3095,10 +3095,42 @@
     function canMove(t) {
         if (ME.isGm) return true;
         if (t.is_hidden) return false;
-        if (t.controller_user_id != null && t.controller_user_id === ME.id) return true;
-        if (!t.character_id) return false;
-        const c = characters.find(c => c.id === t.character_id);
-        return c && c.owner_user_id === ME.id;
+        // Base ownership gate — must be the dragger's PC or a token
+        // they're an explicit controller of.
+        const ownsByController = (
+            t.controller_user_id != null && t.controller_user_id === ME.id
+        );
+        let ownsByChar = false;
+        if (!ownsByController) {
+            if (!t.character_id) return false;
+            const c = characters.find(c => c.id === t.character_id);
+            ownsByChar = !!(c && c.owner_user_id === ME.id);
+            if (!ownsByChar) return false;
+        }
+        // v2.99.79 — initiative-turn gate. When a battle is ACTIVE
+        // (init started), non-GMs may only drag the token of the
+        // CURRENT active combatant. Off-turn drags are rejected at
+        // the canvas layer so players can't reposition their PC
+        // (or any token they own) while it's not their turn. GM
+        // already bypassed up top. Battle inactive → fall through
+        // to the legacy ownership-only gate so out-of-combat
+        // exploration / shuffling still works freely.
+        const b = window.battle;
+        if (b && b.active && Array.isArray(b.combatants)
+                && b.combatants.length
+                && Number.isFinite(b.turn_index)) {
+            const active = b.combatants[b.turn_index % b.combatants.length];
+            if (active) {
+                const activeMatchesThisToken = (
+                    (active.source_token_id != null
+                     && active.source_token_id === t.id)
+                    || (active.char_id != null
+                        && active.char_id === t.character_id)
+                );
+                if (!activeMatchesThisToken) return false;
+            }
+        }
+        return true;
     }
 
     function clientToCanvas(ev) {
