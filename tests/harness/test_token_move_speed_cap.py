@@ -71,21 +71,21 @@ async def _move(gm_client, token_id, x, y, over_speed_confirmed=False):
 
 
 @pytest_asyncio.fixture
-async def garrik_active(gm_client, roster):
+async def pip_active(gm_client, roster):
     """Set up Garrik as the active combatant with a known starting
     position. Restore stale state on teardown.
     """
-    garrik = roster["Garrik Ironside"]
+    pip = roster["Pip Quickfingers"]
     tokens = await _tokens_by_char(gm_client)
-    assert garrik["id"] in tokens, "no Garrik token"
-    tok = tokens[garrik["id"]]
+    assert pip["id"] in tokens, "no Pip token"
+    tok = tokens[pip["id"]]
     # Park Garrik at a known position (350, 350).
     await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{tok['id']}/move",
         json={"x": 350.0, "y": 350.0, "over_speed_confirmed": True,
               "oa_confirmed": True},
     )
-    yield garrik, tok
+    yield pip, tok
     # Teardown clears the battle so other tests see a fresh slate.
     await gm_client.put(
         f"/api/campaign/{CAMPAIGN_ID}/battle",
@@ -94,14 +94,14 @@ async def garrik_active(gm_client, roster):
     )
 
 
-async def test_move_within_cap_returns_200(gm_client, garrik_active):
+async def test_move_within_cap_returns_200(gm_client, pip_active):
     """Control: a 25 ft move (5 cells) within Garrik's 30 ft cap
     returns 200, no 409.
     """
-    garrik, tok = garrik_active
-    garrik_combat_tok = f"tok_speed_cap_{garrik['id']}"
+    pip, tok = pip_active
+    pip_combat_tok = f"tok_speed_cap_{pip['id']}"
     await _seed_battle(gm_client, [
-        _mkc(garrik_combat_tok, garrik["id"], name=garrik["name"],
+        _mkc(pip_combat_tok, pip["id"], name=pip["name"],
              source_token_id=tok["id"], speed_walk=30, movement=0),
     ])
     # Grid is 70 px / cell, 5 ft / cell. 350 + (5 × 70) = 700 → 25 ft.
@@ -110,15 +110,15 @@ async def test_move_within_cap_returns_200(gm_client, garrik_active):
 
 
 async def test_move_over_cap_without_flag_returns_409(
-    gm_client, garrik_active,
+    gm_client, pip_active,
 ):
     """A 35 ft move with no `over_speed_confirmed` flag exceeds
     Garrik's 30 ft cap → 409 over_speed_cap.
     """
-    garrik, tok = garrik_active
-    garrik_combat_tok = f"tok_speed_cap_{garrik['id']}"
+    pip, tok = pip_active
+    pip_combat_tok = f"tok_speed_cap_{pip['id']}"
     await _seed_battle(gm_client, [
-        _mkc(garrik_combat_tok, garrik["id"], name=garrik["name"],
+        _mkc(pip_combat_tok, pip["id"], name=pip["name"],
              source_token_id=tok["id"], speed_walk=30, movement=0),
     ])
     # 350 + (7 × 70) = 840 → 35 ft (over 30 ft cap).
@@ -131,13 +131,13 @@ async def test_move_over_cap_without_flag_returns_409(
 
 
 async def test_move_over_cap_with_flag_returns_200(
-    gm_client, garrik_active,
+    gm_client, pip_active,
 ):
     """Passing `over_speed_confirmed: true` bypasses the gate."""
-    garrik, tok = garrik_active
-    garrik_combat_tok = f"tok_speed_cap_{garrik['id']}"
+    pip, tok = pip_active
+    pip_combat_tok = f"tok_speed_cap_{pip['id']}"
     await _seed_battle(gm_client, [
-        _mkc(garrik_combat_tok, garrik["id"], name=garrik["name"],
+        _mkc(pip_combat_tok, pip["id"], name=pip["name"],
              source_token_id=tok["id"], speed_walk=30, movement=0),
     ])
     resp = await _move(gm_client, tok["id"], 840.0, 350.0,
@@ -145,12 +145,12 @@ async def test_move_over_cap_with_flag_returns_200(
     assert resp.status_code == 200, resp.text
 
 
-async def test_off_turn_drag_is_not_gated(gm_client, garrik_active, roster):
+async def test_off_turn_drag_is_not_gated(gm_client, pip_active, roster):
     """When the dragger isn't the active combatant (here Garrik
     moves but the battle's active combatant is Tavik), the over-
     speed gate doesn't apply. GM-side bypass.
     """
-    garrik, tok = garrik_active
+    pip, tok = pip_active
     tavik = roster["Brother Tavik Stonebrow"]
     tokens = await _tokens_by_char(gm_client)
     tavik_tok_entry = tokens.get(tavik["id"])
@@ -160,11 +160,11 @@ async def test_off_turn_drag_is_not_gated(gm_client, garrik_active, roster):
         # only applies when the dragged token IS the active
         # combatant's, so we make Tavik active and drag Garrik.
         pass
-    garrik_combat_tok = f"tok_speed_cap_off_{garrik['id']}"
+    pip_combat_tok = f"tok_speed_cap_off_{pip['id']}"
     tavik_combat_tok = f"tok_speed_cap_off_tav_{tavik['id']}"
     await _seed_battle(gm_client, [
         _mkc(tavik_combat_tok, tavik["id"], name=tavik["name"]),
-        _mkc(garrik_combat_tok, garrik["id"], name=garrik["name"],
+        _mkc(pip_combat_tok, pip["id"], name=pip["name"],
              source_token_id=tok["id"], speed_walk=30, movement=0),
     ], turn_index=0)  # Tavik active, Garrik off-turn.
     # 35 ft move on Garrik (off-turn for him) → no 409.
@@ -173,17 +173,17 @@ async def test_off_turn_drag_is_not_gated(gm_client, garrik_active, roster):
 
 
 async def test_lance_of_lethargy_reduces_effective_cap(
-    gm_client, garrik_active,
+    gm_client, pip_active,
 ):
     """A combatant with a `lance-of-lethargy` buff carrying
     `effects.speed_reduction_ft: 10` has effective_cap = 20 ft.
     A 25 ft move that would PASS without the buff (≤ 30) now 409s
     against the reduced 20 ft cap.
     """
-    garrik, tok = garrik_active
-    garrik_combat_tok = f"tok_speed_cap_lol_{garrik['id']}"
+    pip, tok = pip_active
+    pip_combat_tok = f"tok_speed_cap_lol_{pip['id']}"
     await _seed_battle(gm_client, [
-        _mkc(garrik_combat_tok, garrik["id"], name=garrik["name"],
+        _mkc(pip_combat_tok, pip["id"], name=pip["name"],
              source_token_id=tok["id"], speed_walk=30, movement=0,
              buffs=[{
                  "key": "lance-of-lethargy",

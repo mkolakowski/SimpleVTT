@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.100] - 2026-06-03 — "The Wrong Roommate" — fix v2.99.99 fixture: use Pip (has a map token) instead of Garrik (doesn't)
+
+**Schema version:** 65
+**Commit summary:** **Test-only follow-up to v2.99.99 — the `garrik_active` fixture assumed Garrik had a token on the active map, but the Tavern Brawl encounter only places 3 PCs (Pip / Thalindra / Tavik) on the map by default.** Fixture renamed to `pip_active`, all references updated. Production code (the v2.99.99 over-speed gate itself) is unchanged. After the swap all 5 regression tests pass against the live container.
+**Description:** Two-character swap in `tests/harness/test_token_move_speed_cap.py`: `garrik` → `pip`, `roster["Garrik Ironside"]` → `roster["Pip Quickfingers"]`, fixture name + all callers updated. Pip is a Rogue Lv 7 with token id 1 on the demo map; the `_mkc` helper in the test still synthesizes the combatant dict with `speed_walk=30` so the speed math from v2.99.99's CHANGELOG entry (25 ft within cap, 35 ft over, etc.) all hold.
+
+### Changed
+- Fixture name: `garrik_active` → `pip_active` (rename only; the setup/teardown shape is unchanged).
+- All test references to `garrik` swapped to `pip`. The `_mkc(speed_walk=30, ...)` helper means the underlying sheet's speed doesn't affect the test math; the fixture just needs a PC with a token on the active map.
+
+### Notes
+- **PATCH bump** — test fixture fix only. The production v2.99.99 over-speed gate is byte-identical. Filed: a more robust fixture helper that picks "any PC with a token" rather than hardcoding a name would prevent this kind of regression when the demo's encounter composition shifts.
+- **Why this slipped past v2.99.99 ship.** I assumed Garrik (Fighter, a frequent test target for fighting-style work) was on the map. He isn't — the Tavern Brawl encounter only places the 3 starter-demo PCs. Lesson: when authoring a test that needs a map token, GET /tokens once during draft to verify the target is present.
+- **Total harness count: 850** (unchanged from v2.99.99).
+
+---
+
 ## [2.99.99] - 2026-06-03 — "The Server Holds the Line" — /token/move gates on the effective speed cap (defense-in-depth)
 
 **Schema version:** 65
