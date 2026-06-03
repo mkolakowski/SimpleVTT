@@ -21625,6 +21625,22 @@ def _attack_is_eldritch_blast(attack: dict) -> bool:
     return "eldritch blast" in (attack.get("name") or "").strip().lower()
 
 
+def _pc_eldritch_spear_range_ft(sheet: dict, attack: dict) -> int:
+    """v2.99.144 — Eldritch Spear invocation (Warlock Lv 2+, PHB
+    p.110): "When you cast Eldritch Blast, its range is 300 feet."
+
+    Returns 300 when the attacker has the invocation AND the attack
+    is Eldritch Blast; otherwise 0 (caller falls back to the attack's
+    sheet-authored range). Mirrors `_pc_agonizing_blast_bonus`'s
+    invocation-gating pattern.
+    """
+    if not _attack_is_eldritch_blast(attack):
+        return 0
+    if not _pc_has_eldritch_invocation(sheet, "eldritch-spear"):
+        return 0
+    return 300
+
+
 def _pc_agonizing_blast_bonus(sheet: dict, attack: dict) -> int:
     """v2.99.89 — Agonizing Blast invocation (Warlock Lv 2+, PHB
     p.110): "When you cast Eldritch Blast, add your Charisma
@@ -35709,6 +35725,15 @@ async def use_attack(
     damage_expr_raw = (attack.get("damage") or "").strip()
     damage_type = (attack.get("damage_type") or "").strip()
     range_str = (attack.get("range") or "").strip()
+    # v2.99.144 — Eldritch Spear invocation extends Eldritch Blast
+    # range from 120 ft to 300 ft (PHB p.110). When the helper
+    # returns a non-zero value, override the sheet-authored range
+    # so the v2.49.76 _check_cast_range gate accepts long-range
+    # shots. The original `range_str` is preserved on the response
+    # via `range_ft_base` for chat-card display continuity.
+    _eldritch_spear_ft = _pc_eldritch_spear_range_ft(sheet, attack)
+    if _eldritch_spear_ft > 0:
+        range_str = f"{_eldritch_spear_ft} ft"
     save_dc = int(attack.get("save_dc") or 0)
     save_ability = (attack.get("save_ability") or "").strip().upper()
     desc = (attack.get("desc") or "").strip()

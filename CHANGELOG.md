@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.144] - 2026-06-03 — "Reach of the Patron" — Eldritch Spear (Warlock invocation) extends Eldritch Blast to 300 ft
+
+**Schema version:** 65
+**Commit summary:** **Ship Eldritch Spear as a server-side range override that extends Eldritch Blast's range from 120 ft to 300 ft.** RAW (PHB p.110): "When you cast Eldritch Blast, its range is 300 feet." Adds `_pc_eldritch_spear_range_ft(sheet, attack)` mirror of v2.99.89 `_pc_agonizing_blast_bonus` — returns 300 when the attacker has `eldritch-invocation-eldritch-spear` AND the attack is Eldritch Blast (via the existing `_attack_is_eldritch_blast` heuristic). The `/attack` endpoint overrides `range_str` to "300 ft" before the v2.49.76 `_check_cast_range` gate fires, so the chat-card display + the range-enforcement check both see the extended range. First invocation that modifies attack mechanics (not damage like Agonizing Blast / Lifedrinker, not push like Repelling Blast, not name-gate like Hex Warrior — this is a pure range-field override).
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new helper `_pc_eldritch_spear_range_ft` next to the Agonizing Blast helper. Helper returns 300 when both gates pass (Eldritch Blast name + invocation on feats), else 0. Hook in `/attack` overrides `range_str = "300 ft"` when the helper returns non-zero, fired right after the sheet-authored `range_str` is read and before the range-gate + broadcast payload. (2) `app/demo_seed.py` — Magnus's feats list gains `eldritch-invocation-eldritch-spear`. (3) `tests/harness/test_eldritch_spear.py` — 3 regression tests covering the override + the EB-only + invocation-gated paths.
+
+### Added
+- `_pc_eldritch_spear_range_ft(sheet, attack)` helper in `app/routes/tabletop_routes.py`.
+- `eldritch-invocation-eldritch-spear` on Magnus's feats list.
+- `tests/harness/test_eldritch_spear.py` — 3 tests: Magnus's EB broadcast carries `range: "300 ft"`; Magnus's Quarterstaff stays at 5 ft (non-EB gate); Krieger (no invocation) with a synthetic EB attack keeps 120 ft (invocation gate).
+
+### Changed
+- `/attack` endpoint reads the helper after the sheet-authored `range_str` is computed and overrides to "300 ft" when applicable. The override is invisible to non-Eldritch-Blast attacks and non-invocation casters — both gates short-circuit on the helper's name + feats checks.
+
+### Notes
+- **PATCH bump** — single helper + /attack hook + demo seed edit + 3 tests. No schema change. No new endpoint.
+- **Why this works through the range gate.** The v2.49.76 `_check_cast_range` parses the supplied `range_str` against the caster + target token positions. Since we override `range_str` BEFORE that gate fires, the helper extends the accepted distance to 300 ft for Magnus's EB shots — a player calling `/attack` from outside 120 ft (but within 300 ft) won't 409 with `out_of_range`. The GM still auto-bypasses range checks (Tier 1 in the override semantics), so behavior is unchanged when the GM is the caller.
+- **What's filed.** (1) A chat-card badge labeling the extended range with the source ("Eldritch Spear: 300 ft" instead of just "300 ft"); the helper's source is invisible in the response payload today. (2) A future combined "Eldritch Blast: per-beam decision UI" that lets the player pick which beam targets which creature when the targets are spread across the 300-ft range.
+- **Magnus's invocation roster.** 13 of the SRD's ~20 Eldritch Invocations now mechanically wired. The remaining ~7 (Beast Speech, Eyes of the Rune Keeper, Visions of Distant Realms, Thief of Five Fates, Bewitching Whispers, Whispers of the Grave, Sign of Ill Omen) are mostly audit-only or registry-routed.
+- **Total harness count: 1005** (was 1002 in v2.99.143).
+
+---
+
 ## [2.99.143] - 2026-06-03 — "The Honeyed Tongue" — Beguiling Influence (Warlock invocation) — and the suite crosses 1000 tests
 
 **Schema version:** 65

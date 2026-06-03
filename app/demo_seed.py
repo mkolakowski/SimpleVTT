@@ -1651,6 +1651,14 @@ def _warlock_sheet(name: str) -> dict:
             # see the bonus claimed.
             {"slug": "eldritch-invocation-beguiling-influence", "name": "Eldritch Invocation: Beguiling Influence",
              "desc": "Passive: gain proficiency in Deception + Persuasion (CHA) — granted at seed. Audit declaration via /use_beguiling_influence per v2.99.143. RAW prereq Lv 2 Warlock."},
+            # v2.99.144 — Eldritch Spear: extends Eldritch Blast's
+            # range from 120 ft to 300 ft. Wired into the /attack
+            # range-enforcement gate (v2.49.76 _check_cast_range) via
+            # `_pc_eldritch_spear_range_ft` — the sheet-authored
+            # range_str is overridden to "300 ft" when the
+            # invocation is present and the attack is Eldritch Blast.
+            {"slug": "eldritch-invocation-eldritch-spear", "name": "Eldritch Invocation: Eldritch Spear",
+             "desc": "Eldritch Blast range extends to 300 ft (was 120 ft) — auto-applied at /attack time per v2.99.144. RAW prereq Lv 2 Warlock."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],
