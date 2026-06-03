@@ -161,6 +161,59 @@ async def test_channel_divinity_turn_the_unholy(gm_client, gm_ws, roster):
     assert "Turn The Unholy" in msg["data"]["feature_name"] or "Turn the Unholy" in msg["data"]["feature_name"]
 
 
+async def test_channel_divinity_read_thoughts(gm_client, gm_ws, roster):
+    """v2.99.80 — Lv 6 Knowledge Domain CD option. /use_feature
+    accepts the key (subclass + level filtering is client-side
+    in the v2.99.80 picker level-gate); server still resolves
+    slot=action via the _FEATURE_ECONOMY table + broadcasts
+    feature_used naming Read Thoughts.
+    """
+    tavik = roster["Brother Tavik Stonebrow"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/rest",
+        json={"type": "long"},
+    )
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": tavik["id"],
+            "feature_key": "channel-divinity",
+            "option_key": "read-thoughts",
+            "label": "Channel Divinity",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slot"] == "action"
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Read Thoughts" in msg["data"]["feature_name"]
+
+
+async def test_channel_divinity_cloak_of_shadows(gm_client, gm_ws, roster):
+    """v2.99.80 — Lv 6 Trickery Domain CD option. Same shape as
+    Read Thoughts above.
+    """
+    tavik = roster["Brother Tavik Stonebrow"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/rest",
+        json={"type": "long"},
+    )
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": tavik["id"],
+            "feature_key": "channel-divinity",
+            "option_key": "cloak-of-shadows",
+            "label": "Channel Divinity",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slot"] == "action"
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Cloak Of Shadows" in msg["data"]["feature_name"] or "Cloak of Shadows" in msg["data"]["feature_name"]
+
+
 async def test_channel_divinity_preserve_life(gm_client, gm_ws, roster):
     """Preserve Life is Life-Domain-specific. /use_feature itself
     doesn't filter by subclass — the v2.9.0 picker does — so the

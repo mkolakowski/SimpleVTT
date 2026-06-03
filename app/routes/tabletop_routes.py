@@ -179,6 +179,14 @@ _FEATURE_ECONOMY: dict[str, dict] = {
                 },
             },
             "turn-the-unholy":     {"desc": "Each fiend or undead within 30 ft that can see/hear you must succeed on a Wisdom save or be turned for 1 minute."},
+            # v2.99.80 — Cleric Lv 6 CD options. Knowledge gets Read
+            # Thoughts; Trickery gets Cloak of Shadows. The client-side
+            # picker level-gates these to Lv 6+; server still accepts
+            # the keys at any level (no double-gate — the picker is the
+            # only entry point, and a homebrew Lv 2 unlock for these
+            # via a custom subclass would route through the same key).
+            "read-thoughts":      {"desc": "Action (Lv 6+ Knowledge Cleric): one creature within 60 ft makes a Wisdom save. On a failure, you can read its surface thoughts for 1 minute (concentration), and as a bonus action while concentrating, force-cast Suggestion on it without a slot (target auto-fails the save)."},
+            "cloak-of-shadows":   {"desc": "Action (Lv 6+ Trickery Cleric): become invisible until end of your next turn. Invisibility ends early if you attack, cast a spell, or force a creature to make a saving throw."},
         },
     },
     "lay-on-hands": {

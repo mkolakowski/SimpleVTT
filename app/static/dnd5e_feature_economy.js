@@ -149,6 +149,15 @@ window._FEATURE_ECONOMY = {
             'touch-of-death': { label: 'Touch of Death', desc: 'When you hit a creature with a melee weapon attack, you can spend Channel Divinity to deal extra necrotic damage equal to 5 + 2 × cleric level.', class: 'cleric', subclass: 'death' },
             'arcane-abjuration': { label: 'Arcane Abjuration', desc: 'Action — choose a celestial, elemental, fey, or fiend within 30 ft. Wis save or be turned for 1 minute. At Lv 5+ low-CR creatures of those types are banished to their home plane on failed save (same Destroy CR thresholds as Destroy Undead).', class: 'cleric', subclass: 'arcana' },
             'balm-of-peace': { label: 'Balm of Peace', desc: 'When you move on your turn, you can move through allies\' spaces. Each ally you move within 5 ft of can be healed 2d6 + WIS mod (once each per use of this Channel Divinity).', class: 'cleric', subclass: 'peace' },
+            // ── v2.99.80: Lv 6 Channel Divinity options ───────
+            // Knowledge and Trickery domains each unlock a second
+            // CD option at Cleric Lv 6. min_level: 6 is read by
+            // the picker filter in sheet_dnd5e.html — options
+            // with min_level set are hidden when the matching
+            // class entry's level is below it. Other Lv 2 options
+            // omit the field and remain available from Lv 2 onward.
+            'read-thoughts': { label: 'Read Thoughts', desc: 'Action (Lv 6+): one creature within 60 ft makes a Wisdom save. On a failure, you can read its surface thoughts for 1 minute (concentration) — and as a bonus action while concentrating, cast Suggestion on it without expending a slot (target auto-fails the save). On a success, you learn it succeeded and can\'t use this on it again for 24 hours.', class: 'cleric', subclass: 'knowledge', min_level: 6 },
+            'cloak-of-shadows': { label: 'Cloak of Shadows', desc: 'Action (Lv 6+): you become invisible until end of your next turn. The invisibility ends early if you attack, cast a spell, or force a creature to make a saving throw.', class: 'cleric', subclass: 'trickery', min_level: 6 },
             // ── Paladin options (v2.14.3) ─────────────────────
             'sacred-weapon': { label: 'Sacred Weapon', desc: 'Imbue a weapon you hold with positive energy for 1 minute: +CHA mod to attack rolls, deals magical damage, emits 20 ft bright light.', class: 'paladin', subclass: 'devotion' },
             'turn-the-unholy': { label: 'Turn the Unholy', desc: 'Each fiend or undead within 30 ft that can see/hear you must succeed on a Wisdom save or be turned for 1 minute.', class: 'paladin', subclass: 'devotion' },

@@ -7623,7 +7623,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             .replace(/^school of\s+/, '')
                             .replace(/^path of\s+(the\s+)?/, '')
                             .trim();
-                        classEntries.push({ cls, sub });
+                        // v2.99.80 — capture the class level so the
+                        // picker filter can level-gate options whose
+                        // min_level exceeds the character's level in
+                        // that class. Pre-v2.99.80 every Lv 2 option
+                        // showed regardless of level; that was fine
+                        // while the curated options were all Lv 2,
+                        // but Knowledge / Trickery now have Lv 6
+                        // options too.
+                        const lvl = parseInt(cc.level, 10) || 0;
+                        classEntries.push({ cls, sub, lvl });
                     });
                 }
                 const cdEntry = window._FEATURE_ECONOMY && window._FEATURE_ECONOMY['channel-divinity'];
@@ -7633,9 +7642,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     const opt = allOpts[optKey];
                     const optCls = (opt.class || 'any').toLowerCase();
                     const optSub = (opt.subclass || 'any').toLowerCase();
+                    const optMinLevel = parseInt(opt.min_level, 10) || 0;
                     const matches = classEntries.some(ce =>
                         (optCls === 'any' || optCls === ce.cls) &&
-                        (optSub === 'any' || optSub === ce.sub || (ce.sub && ce.sub.indexOf(optSub) !== -1))
+                        (optSub === 'any' || optSub === ce.sub || (ce.sub && ce.sub.indexOf(optSub) !== -1)) &&
+                        (optMinLevel === 0 || ce.lvl >= optMinLevel)
                     );
                     if (matches) {
                         filtered.push({ key: optKey, label: opt.label, desc: opt.desc });

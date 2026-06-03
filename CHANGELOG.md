@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.80] - 2026-06-03 — "Mind and Shadow" — Cleric Lv 6 Channel Divinity options (Knowledge + Trickery)
+
+**Schema version:** 65
+**Commit summary:** **Add Read Thoughts (Knowledge Domain Lv 6+) and Cloak of Shadows (Trickery Domain Lv 6+) to the curated Channel Divinity picker, with a min_level filter so they only show at Lv 6+.** Resumes the class-work cycle paused after v2.99.47's Divine Intervention ship. v2.56.2 noted these two Lv 6 options + a picker level-gate as filed; v2.99.80 ships them. Four-file change: (1) `app/static/dnd5e_feature_economy.js::channel-divinity.options` gets two new entries with `min_level: 6`. (2) `app/templates/sheet_dnd5e.html` picker filter at the CD click-handler reads `cc.level` per class entry and only includes options whose `min_level` is satisfied. (3) `app/routes/tabletop_routes.py::_FEATURE_ECONOMY["channel-divinity"]["options"]` adds the matching server-side keys (desc only — the resource decrement + audit broadcast already route through the parent feature's `resource_key: "channel-divinity"`). (4) `tests/harness/test_use_feature.py` adds two regression tests parallel to the existing per-option pattern.
+**Description:** Read Thoughts (PHB p.59): action, target Wis save, on failure read surface thoughts for 1 minute (concentration) + bonus-action force-cast Suggestion without a slot. Cloak of Shadows (PHB p.62): action, become invisible until end of next turn; ends on attack / cast / save-force. Both announce-only on the chip flip + chat-log card per the convention; the GM applies the effect manually. The client-side `min_level` filter checks `cc.level >= optMinLevel` per class entry (computed from `cc.level` in `_mcRoster`), so a Lv 5 Knowledge Cleric won't see Read Thoughts in the picker; a Lv 6+ Knowledge Cleric will. Server still accepts the keys at any level — no double-gate, the picker is the only entry point.
+
+### Added
+- `read-thoughts` Channel Divinity option in `app/static/dnd5e_feature_economy.js` and `app/routes/tabletop_routes.py::_FEATURE_ECONOMY` — Lv 6+ Knowledge Domain. `min_level: 6` on the client option dict; server desc carries the gate's flavor text.
+- `cloak-of-shadows` Channel Divinity option in the same two surfaces — Lv 6+ Trickery Domain. Same shape.
+- `min_level` field on Channel Divinity options. Read by the picker's filter at `sheet_dnd5e.html::~7635`; options without the field stay available from Lv 2 onward (unchanged behavior for Turn Undead / Preserve Life / Sacred Weapon / etc.).
+- `cc.level` extraction in the picker's `classEntries` derivation. Pre-v2.99.80 the picker discarded the level since every curated option was Lv 2; v2.99.80 captures it so the filter can level-gate.
+- 2 harness regression tests in `tests/harness/test_use_feature.py` — `test_channel_divinity_read_thoughts` + `test_channel_divinity_cloak_of_shadows`. Same shape as the existing per-option tests; assert 200 + slot=action + feature_used broadcast naming the option.
+
+### Notes
+- **PATCH bump** — additive (two new option keys + a non-breaking filter extension that no-ops on options without `min_level`). No schema change, no API contract change.
+- **No new demo fixture.** The demo's Cleric (Brother Tavik) is Life Domain Lv 5, so neither new option appears in his picker. A Knowledge or Trickery Cleric campaign authored by an end user — or a homebrew subclass that points at the same domain slug — will see them at Lv 6. The harness tests PATCH Tavik's sheet implicitly (via `/use_feature` accepting any option_key without subclass validation on the server side).
+- **Why announce-only.** Same convention as the other curated CD options. The mechanical effects (concentration, charmed targets, invisibility) need per-table adjudication for cover, targeting rules, etc., so the GM applies them manually after the chip flip + broadcast. A future ship could wire the Suggestion auto-fail or the invisibility buff install.
+- **Filed for follow-up.** Picker UX polish: a "(Lv 6)" suffix on level-gated options so the player understands why a future option will unlock. Today they just appear when the level threshold passes.
+- Total harness count: 787 (was 785 in v2.99.79).
+
+---
+
 ## [2.99.79] - 2026-06-03 — "Wait Your Turn" — initiative-turn drag gate + visible Dash bonus + Dash audit broadcast
 
 **Schema version:** 65
