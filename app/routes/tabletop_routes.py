@@ -31747,12 +31747,24 @@ _INVOCATION_SPELL_CAST_REGISTRY: dict[str, dict] = {
         "resource_key": "sculptor-of-flesh-uses",
         "bypass_spell_list_check": True,
     },
-    # Future entries (filed): "bewitching-whispers" → compulsion,
-    # "visions-of-distant-realms" → arcane eye, "thief-of-five-fates"
-    # → bane, "dreadful-word" → confusion, "sign-of-ill-omen" →
-    # bestow curse, "minions-of-chaos" → conjure elemental.
-    # Each needs its own /cast_<spell> wiring + demo-seed resource
-    # entry; the router metadata stays here.
+    # v2.99.148 — Bewitching Whispers: cast Compulsion once per
+    # long rest using a Warlock spell slot. RAW prereq Lv 7
+    # Warlock. Routed via /cast_compulsion with
+    # via_invocation="bewitching-whispers". Third consumer of
+    # the registry — proves the abstraction generalizes.
+    "bewitching-whispers": {
+        "spell_slug": "compulsion",
+        "spell_name": "Compulsion",
+        "class_slug": "warlock",
+        "resource_key": "bewitching-whispers-uses",
+        "bypass_spell_list_check": True,
+    },
+    # Future entries (filed): "visions-of-distant-realms" → arcane
+    # eye, "thief-of-five-fates" → bane, "dreadful-word" →
+    # confusion, "sign-of-ill-omen" → bestow curse, "minions-of-
+    # chaos" → conjure elemental. Each needs its own /cast_<spell>
+    # wiring + demo-seed resource entry; the router metadata stays
+    # here.
 }
 
 
@@ -32331,6 +32343,229 @@ async def cast_polymorph(
         "duration_rounds": 600,
         "concentration": True,
         "ready_to_transform": True,
+    }
+
+
+# ----------- API: cast Compulsion (4th-level Enchantment, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_compulsion")
+async def cast_compulsion(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.148 — Cast Compulsion: prepare the spell cast (slot +
+    concentration anchor + audit). RAW (PHB p.224): L4 Enchantment,
+    1 action, 30 ft (caster radius), concentration up to 1 minute.
+    Each creature in range (caster's choice) makes a WIS save; on
+    fail, the caster designates a direction on each of the
+    target's turns and the target must use all of its movement
+    in that direction.
+
+    v1 ships the spell-side audit (slot + resource + concentration
+    anchor + chat-log audit). The WIS save resolution per target
+    + the per-turn movement compulsion are filed — they need a
+    `compelled_direction` buff that the speed engine's movement
+    enforcement consults.
+
+    Body: ``{character_id, class_slug, slot_level, via_invocation?,
+    override?}``.
+
+    Classes that get Compulsion: Bard, Wizard. Warlock-only via
+    the v2.99.148 Bewitching Whispers invocation (PHB p.110:
+    "Prerequisite: 7th level. You can cast Compulsion once using
+    a warlock spell slot. You can't do so again until you finish
+    a long rest.").
+
+    Third consumer of the v2.99.140 invocation-cast registry —
+    after v2.99.137 Mire the Mind and v2.99.142 Sculptor of Flesh.
+    Reuses the same helpers (`_get_invocation_cast_meta`,
+    `_validate_invocation_cast`, `_consume_invocation_resource`)
+    without adding new validation code.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 4
+    override = bool(body.get("override"))
+    via_invocation = (body.get("via_invocation") or "").strip().lower()
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("bard", "wizard", "warlock"):
+        raise HTTPException(
+            400, "class_slug must be bard, wizard, or warlock",
+        )
+    if class_slug == "warlock":
+        # v2.99.148 — Warlock can only cast Compulsion via a
+        # registered invocation that maps to it (Bewitching
+        # Whispers).
+        _meta_for_class = _get_invocation_cast_meta(via_invocation)
+        if not _meta_for_class or _meta_for_class.get("spell_slug") != "compulsion":
+            return JSONResponse(status_code=409, content={
+                "error": "missing_invocation",
+                "invocation": "bewitching-whispers",
+            })
+    if slot_level < 4:
+        raise HTTPException(400, "slot_level must be >= 4 (Compulsion is L4)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    # v2.99.140 — invocation-cast router (third consumer after
+    # /cast_slow + /cast_polymorph). Same helper chain.
+    invocation_meta = _get_invocation_cast_meta(via_invocation)
+    if invocation_meta:
+        bad = _validate_invocation_cast(sheet, via_invocation)
+        if bad is not None:
+            return bad
+    if not invocation_meta or not invocation_meta.get("bypass_spell_list_check"):
+        spells = list(sheet.get("spells") or [])
+        has_comp = any(
+            (s.get("_slug") == "compulsion") or
+            (str(s.get("name", "")).lower() == "compulsion")
+            for s in spells
+        )
+        if not has_comp:
+            return JSONResponse(status_code=409, content={
+                "error": "spell_not_known",
+                "spell": "compulsion",
+            })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Compulsion",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "compulsion",
+            "label": "Compulsion",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    _consume_invocation_resource(sheet, via_invocation)
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Caster concentration anchor (1 minute = 10 rounds).
+    await _install_caster_concentration_anchor(
+        campaign_id, char, "compulsion", "Compulsion",
+        duration_rounds=10, icon="🎭",
+    )
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    invocation_tag = (
+        f" via {invocation_meta['spell_name']}-invocation "
+        f"({via_invocation})"
+        if invocation_meta else ""
+    )
+    note = (
+        f"🎭 {char.name} casts Compulsion (L{slot_level}){invocation_tag} — "
+        f"target WIS saves filed (v1 stops at the cast)"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🎭 Compulsion",
+            "feature_desc": (
+                f"{char.name} casts Compulsion. Each creature in "
+                f"30 ft makes a WIS save (per-target saves filed)."
+            ),
+            "source": (
+                "bewitching-whispers" if via_invocation == "bewitching-whispers"
+                else "compulsion"
+            ),
+            "via_invocation": via_invocation or None,
+            "duration_rounds": 10,
+            "range_ft": 30,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "via_invocation": via_invocation or None,
+        "duration_rounds": 10,
+        "range_ft": 30,
+        "concentration": True,
     }
 
 

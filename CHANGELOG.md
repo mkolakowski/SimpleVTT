@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.148] - 2026-06-03 — "Marching Orders" — Bewitching Whispers (Warlock invocation) wires Compulsion through the v2.99.140 router
+
+**Schema version:** 65
+**Commit summary:** **Ship Bewitching Whispers as the third consumer of the v2.99.140 invocation-cast registry.** RAW (PHB p.110): "Prerequisite: 7th level. You can cast Compulsion once using a warlock spell slot. You can't do so again until you finish a long rest." Adds the `bewitching-whispers` registry entry → Compulsion, a new `/cast_compulsion` endpoint (spell-side: slot + concentration anchor + invocation gate + audit), Magnus's seed gains the invocation + a 1/long-rest gating resource. After v2.99.137 Mire the Mind and v2.99.142 Sculptor of Flesh, this is the third spell wired through the same registry pattern — the abstraction continues to scale to new target spells (L3 Slow, L4 Polymorph, now L4 Compulsion) without per-spell duplicate validation code.
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — `bewitching-whispers` entry added to `_INVOCATION_SPELL_CAST_REGISTRY` mapping to `compulsion`. (2) New `POST /cast_compulsion` endpoint mirrors `/cast_polymorph`'s shape: validates class (Bard / Wizard / Warlock), routes Warlock through the registry (must match `spell_slug == "compulsion"`), validates `slot_level >= 4` + action economy gate, calls `_validate_invocation_cast` early to short-circuit on missing-invocation / missing-resource / not-enough-uses, decrements slot + resource via the same helpers, installs `concentration-compulsion` caster anchor (10 rounds = 1 minute). Broadcasts `roll` (chat log), `spell_slot_update`, and `feature_used` events. (3) `app/demo_seed.py` — Magnus's feats gain `eldritch-invocation-bewitching-whispers`; his resources gain `bewitching-whispers-uses` 1/long-rest. (4) `tests/harness/test_cast_compulsion.py` — 6 regression tests.
+
+### Added
+- `bewitching-whispers` registry entry in `_INVOCATION_SPELL_CAST_REGISTRY` mapping to Compulsion (Warlock).
+- `POST /api/campaign/{cid}/cast_compulsion` endpoint (L4 Enchantment, concentration 1 minute, Bard/Wizard/Warlock-via-invocation).
+- `eldritch-invocation-bewitching-whispers` on Magnus's feats list.
+- `bewitching-whispers-uses` 1/long-rest resource on Magnus.
+- `tests/harness/test_cast_compulsion.py` — 6 tests: Bewitching Whispers happy path (slot + resource + concentration anchor); Warlock without via_invocation → 409 missing_invocation; Warlock with wrong via_invocation slug (Mire the Mind, spell_slug mismatch) → 409 missing_invocation; second cast same long rest → 409 not_enough_uses; L3 slot → 400; missing character_id → 400.
+
+### Notes
+- **PATCH bump** — one new endpoint + registry entry + demo seed extension + 6 tests. No schema change. Same helpers as v2.99.137 + v2.99.142 — proof that adding the fourth, fifth, etc. invocation just adds a row.
+- **What's filed.** (1) Per-target WIS save resolution on the caster's targets (30 ft radius). (2) The `compelled_direction` buff that gets stamped on failed-save targets so the speed engine's movement enforcement reads it and limits the target's movement direction. (3) End-of-turn save for the compelled target (RAW: "On each of its turns, the target can use its action to repeat the WIS save").
+- **Magnus's invocation roster.** 17 of the SRD's ~20 Eldritch Invocations now mechanically wired. Remaining: Visions of Distant Realms, Thief of Five Fates, Sign of Ill Omen.
+- **Router proof.** Three different target spells now route through the v2.99.140 registry (Slow L3, Polymorph L4, Compulsion L4). Adding the next invocation that grants a spell cast — e.g. Sign of Ill Omen → Bestow Curse, Thief of Five Fates → Bane — only needs a registry row + a thin `/cast_<spell>` endpoint that calls the same helpers. No new validation code expected.
+- **Total harness count: 1020** (was 1014 in v2.99.147).
+
+---
+
 ## [2.99.147] - 2026-06-03 — "The Crypt's Whisper" — Whispers of the Grave (Warlock invocation) audit endpoint
 
 **Schema version:** 65

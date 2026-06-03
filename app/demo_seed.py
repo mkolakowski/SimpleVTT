@@ -1641,6 +1641,13 @@ def _warlock_sheet(name: str) -> dict:
             # Mire the Mind to a different target spell.
             {"slug": "eldritch-invocation-sculptor-of-flesh", "name": "Eldritch Invocation: Sculptor of Flesh",
              "desc": "1/long rest: cast Polymorph using a Warlock spell slot — routed via /cast_polymorph with class_slug=\"warlock\" + via_invocation=\"sculptor-of-flesh\" per v2.99.142. RAW prereq Lv 7 Warlock. Target the transform via /transform with source=\"polymorph\" after the cast."},
+            # v2.99.148 — Bewitching Whispers: 1/long-rest cast
+            # Compulsion using a Warlock spell slot. RAW prereq Lv
+            # 7 Warlock; demo seed grants at Lv 5 for endpoint
+            # coverage. Third consumer of the v2.99.140 invocation-
+            # cast registry.
+            {"slug": "eldritch-invocation-bewitching-whispers", "name": "Eldritch Invocation: Bewitching Whispers",
+             "desc": "1/long rest: cast Compulsion using a Warlock spell slot — routed via /cast_compulsion with class_slug=\"warlock\" + via_invocation=\"bewitching-whispers\" per v2.99.148. RAW prereq Lv 7 Warlock."},
             # v2.99.143 — Beguiling Influence: passive proficiency in
             # Deception + Persuasion. Magnus's Charlatan background
             # already granted Deception, so the invocation's net add
@@ -1717,6 +1724,20 @@ def _warlock_sheet(name: str) -> dict:
                 "source": "warlock Lv 7 / Eldritch Invocation",
                 "class_slug": "warlock",
                 "desc": "1/long rest: cast Polymorph using a Warlock spell slot — routed via /cast_polymorph with class_slug=\"warlock\" + via_invocation=\"sculptor-of-flesh\" per v2.99.142.",
+                "manual": False,
+            },
+            # v2.99.148 — Bewitching Whispers 1/long-rest resource.
+            # /cast_compulsion with via_invocation="bewitching-whispers"
+            # gates on this row being current >= 1 + decrements on
+            # cast. Third consumer of the v2.99.140 invocation-cast
+            # registry.
+            {
+                "key": "bewitching-whispers-uses",
+                "name": "Bewitching Whispers",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "warlock Lv 7 / Eldritch Invocation",
+                "class_slug": "warlock",
+                "desc": "1/long rest: cast Compulsion using a Warlock spell slot — routed via /cast_compulsion with class_slug=\"warlock\" + via_invocation=\"bewitching-whispers\" per v2.99.148.",
                 "manual": False,
             },
             # v2.99.45 — Mystic Arcanum L6 (Warlock Lv 11+ capstone-ish
