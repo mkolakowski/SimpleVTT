@@ -21498,6 +21498,57 @@ def _make_web_buff(
     )
 
 
+async def _install_caster_concentration_anchor(
+    campaign_id: int,
+    char,
+    spell_slug: str,
+    spell_name: str,
+    *,
+    duration_rounds: int,
+    icon: str = "🌀",
+) -> bool:
+    """v2.99.109 — install a caster-side concentration anchor buff
+    after a /cast_<spell> endpoint succeeds. The anchor's role:
+
+      1. Hooks into the v2.49.51 "you lose concentration when you
+         cast a new concentration spell" replacement logic. Casting
+         a NEW concentration spell automatically drops this anchor
+         AND every target-side buff sourced from this caster (via
+         ``_drop_paired_concentration_buffs``).
+      2. Lets /end_buff with this anchor key fire the same paired-
+         cleanup. The GM (or the caster) can end the spell mid-
+         duration without manually clearing each target's buff.
+
+    The anchor key is ``concentration-<spell_slug>`` so multiple
+    concurrent concentration spells from different casters don't
+    collide. ``source_char_id`` matches the caster so the v2.99.1
+    cascade lookup binds correctly.
+
+    Returns True if the install succeeded (caster is in init);
+    False if the caster isn't tracked in the active battle. The
+    target-side buffs are still installed in either case — they
+    just won't auto-cleanup via the cascade until the caster
+    joins init.
+    """
+    anchor = {
+        "key": f"concentration-{spell_slug}",
+        "name": f"Concentrating: {spell_name}",
+        "icon": icon,
+        "duration_rounds": duration_rounds,
+        "duration_max": duration_rounds,
+        "concentration": True,
+        "source": f"{spell_slug}-anchor",
+        "source_char_id": int(char.id),
+        "source_char_name": char.name,
+        # The mechanical effect on the caster is nothing — the
+        # anchor's only job is to be a trigger for cascade
+        # cleanup. effects stays empty so it doesn't bleed into
+        # the auto-AC / speed engine for the caster.
+        "effects": {},
+    }
+    return await _install_buff(campaign_id, int(char.id), anchor)
+
+
 async def _apply_repelling_blast_push(
     db: Session, campaign_id: int, campaign: "Campaign",
     attacker_char_id: int, attacker_sheet: dict,
@@ -30056,6 +30107,17 @@ async def cast_slow(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.99.109 — install caster-side concentration anchor BEFORE
+    # the target buffs. Any prior concentration on the caster
+    # (Hex / Hunter's Mark / etc.) is dropped via the
+    # `_install_buff` v2.19.1 RAW concentration-swap; the cascade
+    # then clears that prior spell's target buffs cleanly before
+    # the new Slow targets get installed.
+    await _install_caster_concentration_anchor(
+        campaign_id, char, "slow", "Slow",
+        duration_rounds=10, icon="🐢",
+    )
+
     # Install slow buff on each target.
     affected: list[dict] = []
     unaffected: list[dict] = []
@@ -30277,6 +30339,12 @@ async def cast_hold_person(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.99.109 — caster-side concentration anchor for paired cleanup.
+    await _install_caster_concentration_anchor(
+        campaign_id, char, "hold-person", "Hold Person",
+        duration_rounds=10, icon="🥶",
+    )
+
     affected: list[dict] = []
     unaffected: list[dict] = []
     for tid in target_combatant_ids:
@@ -30488,6 +30556,12 @@ async def cast_hold_monster(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.99.109 — caster-side concentration anchor for paired cleanup.
+    await _install_caster_concentration_anchor(
+        campaign_id, char, "hold-monster", "Hold Monster",
+        duration_rounds=10, icon="🥶",
+    )
+
     affected: list[dict] = []
     unaffected: list[dict] = []
     for tid in target_combatant_ids:
@@ -30691,6 +30765,14 @@ async def cast_web(
     char.sheet = sheet
     flag_modified(char, "sheet")
     db.commit()
+
+    # v2.99.109 — caster-side concentration anchor. Web's duration
+    # is up to 1 hour (600 rounds at 6 s / round); the anchor
+    # carries that so /end_buff timing matches.
+    await _install_caster_concentration_anchor(
+        campaign_id, char, "web", "Web",
+        duration_rounds=600, icon="🕸",
+    )
 
     affected: list[dict] = []
     unaffected: list[dict] = []

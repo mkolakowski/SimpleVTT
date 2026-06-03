@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.109] - 2026-06-03 — "Cut the Tether" — caster-side concentration anchors for the four speed spells; paired cleanup cascade wires through
+
+**Schema version:** 65
+**Commit summary:** **Wire `_drop_paired_concentration_buffs` (v2.38.0) through to the four v2.99.101–.108 speed spells via a new `_install_caster_concentration_anchor` helper.** Pre-v2.99.109 each `/cast_<spell>` endpoint installed only the target-side condition buff with `source_char_id: caster.id` + `concentration: True`. When the caster's concentration ended (manual /end_buff, damage CON save, or a new concentration cast), nothing on the caster matched the cascade lookup — the target's slow/web/paralyzed buffs were stranded indefinitely. v2.99.109 installs a `concentration-<spell_slug>` buff on the caster after each cast. /end_buff on the anchor triggers the v2.49.51 cleanup cascade, which finds all `source_char_id == caster.id + concentration: True` buffs on every combatant and removes them in lock-step.
+**Description:** Six edits. (1) `app/routes/tabletop_routes.py` — new `_install_caster_concentration_anchor(campaign_id, char, spell_slug, spell_name, *, duration_rounds, icon)` helper. Installs a `concentration-<spell_slug>` keyed buff via `_install_buff` (PC-only path; an NPC equivalent is filed). The anchor's `source_char_id` matches the caster so the v2.99.1 cascade lookup binds. Effects dict is empty — the anchor's only job is to be a cascade trigger. (2-5) `/cast_slow`, `/cast_hold_person`, `/cast_hold_monster`, `/cast_web` each call the helper after the slot decrement but BEFORE the target install loop (so any prior concentration on the caster is dropped first, clearing its targets, before the new spell's targets install). (6) `tests/harness/test_concentration_cleanup_speed_spells.py` — 3 regression tests (Slow + Web + Hold Person end-to-end cascade).
+
+### Added
+- `_install_caster_concentration_anchor(campaign_id, char, spell_slug, spell_name, *, duration_rounds, icon)` async helper.
+- Anchor install call in each of `/cast_slow`, `/cast_hold_person`, `/cast_hold_monster`, `/cast_web`.
+- `tests/harness/test_concentration_cleanup_speed_spells.py` — 3 tests: Slow + Web + Hold Person. Each casts the spell, verifies the caster's anchor + target's condition buff are both present, then posts /end_buff on the anchor and verifies the target's buff is cleared by the cascade.
+
+### Changed
+- `/cast_slow`, `/cast_hold_person`, `/cast_hold_monster`, `/cast_web` now install the caster-side anchor BEFORE the target install loop. This matters in the cross-spell case: if the caster already has Hex up and casts Slow, the anchor install fires `_install_buff`'s v2.19.1 concentration-swap, which drops Hex's anchor + cascades to remove Hex's target buffs cleanly, before the new Slow targets get installed. RAW-correct.
+
+### Notes
+- **PATCH bump** — additive helper + 4 endpoint hooks + 3 tests. No schema change. The anchor is a new buff key but the existing `_drop_paired_concentration_buffs` already handled the cascade; this just supplies the trigger.
+- **Why before the target install loop.** Order matters when the caster has prior concentration. If the new anchor were installed AFTER the target buffs, the anchor's concentration-swap drop on the prior anchor (say Hex) would cascade and incorrectly remove the freshly-installed new spell targets too (they match the same `source_char_id` + concentration). Installing the anchor first means the cascade only targets the prior spell's targets; the new spell's targets install after the prior is fully cleared.
+- **NPC anchor parity filed.** `_install_caster_concentration_anchor` uses `_install_buff` (PC path). NPC casters need a parallel via `_install_buff_on_combatant_id` that finds the caster's combatant_id (not char_id). Today /cast_slow etc. require a `character_id` so only PC casters route through; an NPC version of these endpoints isn't shipped yet. Filed for the Phase 7 NPC-spell-cast catalog.
+- **No new test for the prior-concentration replacement path.** A focused test would: cast Hex, verify target gets Hex weapon-hit-rider buff, cast Slow, verify Hex's target loses its buff AND Slow's target gets the slow buff. That's a 5-step test; the v2.99.1 RAW cascade already has dedicated coverage in `test_swap_preserves_paired_buffs.py` / `test_swap_concentration_log.py` etc., so the new anchor benefits from existing infrastructure. Filed: an explicit "Slow over Hex" regression test.
+- **/cast_hold_monster anchor uses the same shape.** Test focuses on Slow + Web + Hold Person — the Hold Monster cascade works through the same code path so a 4th test would be near-redundant. Filed.
+- **Concentration-on-damage CON save.** RAW: when a concentrating caster takes damage, they make a CON save (DC = max(10, half damage)). On failure, concentration drops + the cascade fires. The damage pipeline already handles this; the anchor install is what makes the cascade actually have something to find for these four spells.
+- **Total harness count: 884** (was 881 in v2.99.108).
+
+---
+
 ## [2.99.108] - 2026-06-03 — "Hold Anything That Moves" — /cast_hold_monster endpoint as the L5 cousin to Hold Person
 
 **Schema version:** 65
