@@ -1655,6 +1655,13 @@
        reflowing the card. */
     .init-entry.active-turn { border:2px solid var(--accent); box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 4px 18px color-mix(in srgb, var(--accent) 50%, rgba(0,0,0,.28)); }
     .init-entry.active-turn .mini-header { background:linear-gradient(135deg,rgba(167,139,250,.28),rgba(108,180,255,.18)); }
+    /* v2.99.74 — roll-log entries that have a pending interaction
+       (OA action buttons, future reaction picker rows, etc.) borrow
+       the active-turn accent border + halo so the eye finds them
+       at a glance in a long log. Class is added by
+       _injectOaButtonsToChatCard and removed when the row resolves
+       (user click, reaction_prompt_resolved broadcast, race 409). */
+    #roll-list li.action-needed { border:2px solid var(--accent); border-radius:8px; box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 4px 18px color-mix(in srgb, var(--accent) 50%, rgba(0,0,0,.28)); padding:6px; margin:4px 0; }
     /* v2.3.33: per-entry "Open Sheet" button. Compact (32px min-height to
        hit the dense-panel floor per CLAUDE.md), purple palette matching
        the 2.3.14 monster-sheet link affordance, sits between the header

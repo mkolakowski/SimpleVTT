@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.74] - 2026-06-02 — "Find the Action" — active-turn-style border on roll-log entries that need interaction
+
+**Schema version:** 65
+**Commit summary:** **Roll-log OA cards now get the same accent border + halo the init tracker uses for the active-turn entry, so the eye finds "this row needs you to click something" without scrolling.** User report: "can you put a border around messages in the roll log that need interacted with, such as the OA messages. can the border look like the one that shows up around the card for the entity that is active in the int order?" v2.99.74 adds a generic `.action-needed` class on the roll-log LI when an OA prompt is injected with action buttons, paired with a CSS rule that mirrors `.init-entry.active-turn` (2 px solid `var(--accent)` border + 0/0/0/1 inner glow + 0/4/18 outer shadow). The class drops on click, on `reaction_prompt_resolved` broadcast, and on 409 already-resolved races, so the border is a real-time signal of "this row is still waiting on you." Generalizable: any future popup framework can mark its chat-card with `.action-needed` and reuse the styling.
+**Description:** Three-file change. (1) `app/static/tabletop.js::_injectOaButtonsToChatCard` adds `targetLi.classList.add('action-needed')` after populating the action row. The click handler removes the class on success AND on the 409 / already-resolved branch. (2) New `_markOaCardResolved(data)` helper listens for the `reaction_prompt_resolved` WS broadcast and clears `.action-needed` + collapses the action row on the matching watcher_combatant_id card (covers cross-tab races + popup-side resolves that don't flow through the chat-card click path). WS dispatch added at line ~4310. (3) `app/templates/tabletop.html` CSS: `#roll-list li.action-needed { border: 2px solid var(--accent); ...mirror of .init-entry.active-turn... }` — same accent color, same halo, scaled-down padding/radius for the roll-log card geometry.
+
+### Added
+- `.action-needed` class on roll-log LIs that have pending interaction (OA action buttons). Applied by `_injectOaButtonsToChatCard` after population; removed on click resolve, 409 already-resolved, and `reaction_prompt_resolved` broadcast.
+- `_markOaCardResolved(data)` in `app/static/tabletop.js` — listens for `reaction_prompt_resolved` WS events and clears `.action-needed` + collapses the action row on the matching card. Covers the cross-tab race where the popup-side resolves the prompt but the chat-card on this tab still drew the border.
+- `#roll-list li.action-needed` CSS rule mirroring `.init-entry.active-turn` — same `var(--accent)` border, same `box-shadow` halo, with `padding: 6px` + `margin: 4px 0` + `border-radius: 8px` scaled for the roll-log row geometry.
+
+### Notes
+- **PATCH bump** — additive UI polish. No server change, no API change. Existing OA chat-cards without `.action-needed` (resolved before this commit landed) render identically to before.
+- **Why generalize via class instead of per-trigger styling.** The user explicitly said "such as the OA messages" — implying this should apply to other interactive roll-log entries too. Marking the row with `.action-needed` lets any future popup framework opt in (Sentinel-strike prompt, save-prompt with manual roll button, Counterspell pick, etc.) by adding the same class. Single CSS rule covers them all.
+- **Why the same accent + halo as active-turn.** The user pointed at the active-turn border as the reference look. Using `var(--accent)` + the same `color-mix` glow keeps the visual language consistent — the GM/player learns one cue ("purple border + glow = something is waiting on me") and it carries across the init tracker and the roll log.
+- **What stays unchanged.** The OA card's chrome (the inner `.roll-card.feature-used-card` div, the timestamp, the feature-name + desc text) is untouched. The `.action-needed` border wraps the LI itself, so the existing card layout doesn't reflow.
+- **No new harness tests.** Pure CSS / class-toggle behavior; UI-only. Covered by the deferred `harness_ui` Playwright suite.
+- Total harness count: 785 (unchanged from v2.99.73).
+
+---
+
 ## [2.99.73] - 2026-06-02 — "Bind the Token" — source_token_id heal + chain auto-roll diagnostics
 
 **Schema version:** 65

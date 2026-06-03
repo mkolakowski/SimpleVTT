@@ -4301,6 +4301,15 @@
                 try { _injectOaButtonsToChatCard(msg.data); } catch (e) {
                     console.warn('[oa-inline] inject failed', e);
                 }
+            } else if (msg.type === 'reaction_prompt_resolved') {
+                // v2.99.74 — when ANY surface resolves the prompt
+                // (popup click in another tab, GM clicking through
+                // the panel, /use_reaction race), strip the
+                // .action-needed border + collapse the chat-card
+                // action row so the row stops drawing the eye.
+                try { _markOaCardResolved(msg.data); } catch (e) {
+                    console.warn('[oa-inline] resolved-mark failed', e);
+                }
             } else if (msg.type === 'presence_update') {
                 _renderPresence(msg.data);
             } else if (msg.type === 'character_hp_update') {
@@ -6058,6 +6067,9 @@
                             + '✓ Resolved: ' + (opt.label || opt.key)
                             + '</span>'
                         );
+                        // v2.99.74 — clear the action-needed border now
+                        // that the row no longer has anything actionable.
+                        targetLi.classList.remove('action-needed');
                         // v2.99.68 — chain the chosen OA attack roll
                         // so the chat-card click yields a weapon
                         // attack immediately. Mirrors the popup-side
@@ -6115,6 +6127,8 @@
                             + '✓ Already resolved'
                             + '</span>'
                         );
+                        // v2.99.74 — clear the action-needed border.
+                        targetLi.classList.remove('action-needed');
                         if (resp.status !== 409) {
                             console.warn(
                                 '[oa-inline] /use_reaction failed',
@@ -6131,6 +6145,47 @@
         });
         row.style.display = 'flex';
         targetLi.setAttribute('data-prompt-injected', 'true');
+        // v2.99.74 — highlight the chat-card with the same accent
+        // border the init tracker uses for the active-turn entry,
+        // so the eye finds "this row needs you to click something"
+        // without scrolling. Removed in the click handler above
+        // when the user resolves the row (innerHTML swap to
+        // "✓ Resolved" replaces the buttons; we strip the class
+        // here for clarity since the same row may chain another
+        // prompt later).
+        targetLi.classList.add('action-needed');
+    }
+
+    // v2.99.74 — strip the action-needed border + collapse the
+    // chat-card action row when the prompt is resolved on ANY
+    // surface (popup click, another tab, /use_reaction race). The
+    // resolved broadcast doesn't tell us which watcher_combatant_id
+    // was the head, but it carries that id directly so we can find
+    // the matching un-resolved OA card.
+    function _markOaCardResolved(data) {
+        if (!data || typeof data !== 'object') return;
+        const wcid = data.watcher_combatant_id;
+        if (!wcid) return;
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+        const cards = ul.querySelectorAll(
+            'li[data-source="opportunity-attack-trigger"]'
+            + '.action-needed',
+        );
+        for (let i = cards.length - 1; i >= 0; i--) {
+            if (String(cards[i].dataset.watcherCombatantId) === String(wcid)) {
+                const row = cards[i].querySelector('.oa-action-row');
+                if (row && row.querySelector('button')) {
+                    row.innerHTML = (
+                        '<span style="font-size:12px;opacity:0.8;">'
+                        + '✓ Resolved'
+                        + '</span>'
+                    );
+                }
+                cards[i].classList.remove('action-needed');
+                break;
+            }
+        }
     }
 
     // ---------- Weapon-attack card ----------
