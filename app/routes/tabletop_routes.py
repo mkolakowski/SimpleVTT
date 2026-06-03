@@ -32108,6 +32108,17 @@ async def cast_flesh_to_stone(
             repeated_save_ability="CON",
             repeated_save_dc=dc,
         )
+        # v2.99.135 — strike-counter stamps for the staged RAW flow.
+        # The v2.97.62 framework rolls the CON save at end of each
+        # target turn; future engine wiring (filed) will read these
+        # counters + auto-transition on 3 of either. v1 stamps the
+        # fields so the GM UI can render the progress and a future
+        # commit can implement the transition without changing the
+        # data shape.
+        buff["strike_counter"] = True
+        buff["success_count"] = 0
+        buff["failure_count"] = 0
+        buff["strike_threshold"] = 3
     else:  # stage == "petrified"
         buff = _make_flesh_to_stone_petrified_buff(
             target_speed_walk=base_speed,

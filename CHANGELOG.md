@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.135] - 2026-06-03 — "Counting the Strikes" — stamp strike-counter fields on the Flesh to Stone Restrained buff
+
+**Schema version:** 65
+**Commit summary:** **Stamp `strike_counter: True, success_count: 0, failure_count: 0, strike_threshold: 3` on the Flesh to Stone Restrained buff at install time.** Closes half of the v2.99.130 filed item: the data shape is now ready for the GM UI to render a running CON-save progress indicator (e.g., "Krieger: 1 success / 2 fails — needs 1 more fail for Petrification") and for a future engine commit to implement the auto-transition (Restrained → Petrified on 3 fails; spell ends on 3 successes). v1 ships the install stamps only; engine wiring is filed.
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — `/cast_flesh_to_stone` with `stage="restrained"` now stamps the four strike-counter fields on the buff dict after `_make_restrained_buff` builds it. Pre-v2.99.135 the buff had `repeated_save_ability/dc` (for the v2.97.62 framework auto-fire) but no counter fields. (2) `tests/harness/test_flesh_to_stone_strike_counter_stamps.py` — 2 regression tests.
+
+### Added
+- `strike_counter: True` on FtS Restrained buff (marker for engine wiring).
+- `success_count: 0` on FtS Restrained buff (initial value).
+- `failure_count: 0` on FtS Restrained buff (initial value).
+- `strike_threshold: 3` on FtS Restrained buff (RAW threshold).
+- `tests/harness/test_flesh_to_stone_strike_counter_stamps.py` — 2 tests: stage=restrained buff carries all four stamps with initial values; stage=petrified buff DOESN'T carry them (Petrified is the post-3-fails state, not a Restrained-stage concept).
+
+### Notes
+- **PATCH bump** — additive field stamps + 2 tests. No engine code change.
+- **What's still filed.** The engine that READS these stamps + implements the auto-transition. Specifically: after `_resolve_repeated_save_for_buff` resolves a save, when the buff has `strike_counter: True`, increment `success_count` (on pass) or `failure_count` (on fail), broadcast a `strike_counter_update` event, suppress the default "drop on pass" behavior until `success_count >= 3`, and on `failure_count >= 3` drop the Restrained buff + install a Petrified buff (via `_make_flesh_to_stone_petrified_buff` v2.99.119 wrapper). Plus PC-sheet mirror updates and the v2.97.77 undo plumbing.
+- **Why split this ship.** The install-time stamp is a 4-line edit + 2 tests; the engine wiring would touch the shared `_resolve_repeated_save_for_buff` (5+ consumer sites: /use_repeated_save, end-of-turn auto-fire, damage-triggered saves on PC + NPC) and needs careful guards to avoid breaking Hold Person / Fear / Confusion / Slow / Web / Grapple repeated saves. Separating the data-shape change from the engine change keeps each commit small + reversible.
+- **Backward-compatible field shape.** Pre-v2.99.135 callers that read `buff.success_count` will see `0` instead of `None`/missing — additive shape change. Future engine reads gain a stable default.
+- **Total harness count: 973** (was 971 in v2.99.134).
+
+---
+
 ## [2.99.134] - 2026-06-03 — "Brave in Two Voices" — unify Heroism's frightened immunity with the v2.99.128 install-gate engine
 
 **Schema version:** 65
