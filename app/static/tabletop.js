@@ -3744,10 +3744,23 @@
                     const _speed = Number(_active.speed_walk) || 30;
                     const _cap = _speed + _dashBonus;
                     _projectedOverrun = (_used + _projectedDistance) > _cap + 0.001;
-                    // Dash helps only when the move actually exceeds
-                    // remaining movement AND the active combatant
-                    // hasn't already used their action this turn.
-                    _needsDash = _projectedOverrun && !_econ.action;
+                    // v2.99.77 — broaden the Dash-modal gate. Show
+                    // the sequential Dash → OA flow whenever the
+                    // dragger IS the active combatant AND the action
+                    // slot is still available (regardless of whether
+                    // the current move alone exceeds the cap). The
+                    // v2.99.72 gate (`overrun && !action`) was too
+                    // narrow — players reported the modal "not
+                    // working" because their first OA-provoking drag
+                    // of the turn typically stayed within the cap,
+                    // so they jumped straight to the bare OA prompt
+                    // with no Dash option. Showing Dash for every
+                    // OA-provoking move on YOUR turn matches the
+                    // user's mental model ("offer me Dash before I
+                    // commit a move that's going to provoke");
+                    // unavailable action still hides it (no double-
+                    // spend of the action slot).
+                    _needsDash = !_econ.action;
                 }
             }
         }
@@ -5988,6 +6001,30 @@
         }
         const wcid = data.watcher_combatant_id;
         if (!wcid) return;
+        // v2.99.77 — only inject the action buttons for users who
+        // are actually allowed to act on this prompt: the GM (always
+        // sees + can roll) OR a member of the prompt's
+        // target_user_ids (the watcher's PC owner under the v2.99.59
+        // presence routing, or the GM-as-fallback when the owner is
+        // offline). Other players see the trigger card but no
+        // buttons + no action-needed border, so they're aware
+        // something happened without clutter on their UI.
+        const meId = (typeof ME !== 'undefined' && ME && ME.id != null)
+            ? Number(ME.id) : null;
+        const meIsGm = !!(typeof ME !== 'undefined' && ME && ME.isGm);
+        const targets = Array.isArray(data.target_user_ids)
+            ? data.target_user_ids.map(Number) : [];
+        const canAct = meIsGm || (meId != null && targets.includes(meId));
+        if (!canAct) {
+            console.log(
+                '[oa-inline] user not in target_user_ids;',
+                'skip buttons + border.',
+                'me=' + meId,
+                'gm=' + meIsGm,
+                'targets=[' + targets.join(',') + ']',
+            );
+            return;
+        }
         // Diagnostic log so the user can see (in DevTools Console)
         // that the OA prompt arrived AND was matched to a card.
         console.log(

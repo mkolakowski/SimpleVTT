@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.77] - 2026-06-03 — "One Row, Right Hands" — fold Settings into Tools, single-line tabs, gate OA buttons to the actor
+
+**Schema version:** 65
+**Commit summary:** **Four-in-one UX cleanup.** User requests: (1) "move the player volume controls to the tools tab and remove the settings tab in the tabletop." (2) "ensure that all the buttons are in the same line." (3) "make it so that only the GM or the player thats making the OA can see and click the buttons to attack or skip." (4) "the combined dash oa message is not working for players." Fixes: (1) The `#player-sound-panel` (volume slider, mute toggle, now-playing label) moves verbatim from `#settings-drawer` into the top of `#gm-tools-drawer`; the Settings tab + drawer are removed. The audio.js bindings keep working because the panel + button ids are preserved. (2) `.tt-tab-card` drops `width:480px` + `flex-wrap:wrap` and gains `flex-wrap:nowrap` (with `.drawer-tab-bar` matching) — Ruler + Roll Log + Battle + Characters + Tools stay on a single row at every viewport width that fits them. (3) `_injectOaButtonsToChatCard` checks `ME.isGm OR ME.id ∈ data.target_user_ids` before injecting buttons + the v2.99.74 action-needed border; other users see the trigger card without the interactive surface (audit-only). (4) The Dash-modal precondition in `_commitTokenMove` broadens from `(projected > effective_cap) && !econ.action` to `!econ.action` — Dash now offers whenever the active combatant has an action available + their move provokes OA, matching the user's "offer me Dash before I commit" mental model.
+**Description:** Two-file change. (1) `app/templates/tabletop.html` — remove the `#settings-drawer` block + the `<button class="drawer-tab-btn" data-target="settings-drawer">⚙ Settings</button>` tab; add the same player-sound-panel markup verbatim to the top of `#gm-tools-drawer .drawer-body`; tighten `.tt-tab-card` CSS (drop fixed width, flip wrap to nowrap, add inner `.drawer-tab-bar` nowrap so the tab cluster doesn't wrap inside the card). (2) `app/static/tabletop.js::_injectOaButtonsToChatCard` early-return when neither GM nor in target_user_ids; `_commitTokenMove` simplified Dash gate.
+
+### Removed
+- `#settings-drawer` panel and its `data-target="settings-drawer"` tab button. The sole content (player sound panel) lives in the Tools drawer now.
+
+### Added
+- Player sound panel (volume + mute + now-playing label) at the top of `#gm-tools-drawer`. Visible to GM and players; each browser controls its own local audio output volume.
+
+### Changed
+- `.tt-tab-card` CSS — no more fixed `width: 480px`, no more `flex-wrap: wrap`. The card sizes to its content and stays on one row. Ruler + Roll Log + Battle + Characters + Tools all align horizontally at the standard viewport widths.
+- `.tt-tab-card .drawer-tab-bar` now `flex-wrap: nowrap` so the tab cluster inside the card doesn't wrap to a second line.
+- `_injectOaButtonsToChatCard` now checks GM-or-target before injecting. Non-target players see the trigger card but no buttons and no v2.99.74 action-needed border (no "click me" affordance for users who can't act on it).
+- Dash modal precondition relaxed from `_projectedOverrun && !_econ.action` to just `!_econ.action`. Dash now offers on every OA-provoking move on the active combatant's turn whose action slot is still free. Closes the user's "combined dash oa message is not working for players" report (typical first-of-turn drags stayed within the cap and skipped Dash entirely pre-v2.99.77).
+
+### Notes
+- **PATCH bump** — UI-only changes (tab consolidation, CSS, click gating, modal precondition). No server change, no API change, no schema change.
+- **Why audio.js bindings keep working.** The script reads `#audio-volume`, `#audio-mute`, `#audio-enable`, `#audio-now-playing`, `#audio-panel`, and `#player-sound-panel` by id. All ids are preserved verbatim at the new mount point — only the parent drawer changed. The mute + volume slider keep their existing event listeners; the now-playing label keeps its server-rendered initial text.
+- **Why fold Settings into Tools instead of removing it outright.** The settings page (full preferences UI) is still reachable via the Quick Links panel inside Tools. The Settings TAB on the tabletop was redundant once its only content (sound panel) moved out — the Tools drawer is the single non-game UI surface now.
+- **Why GM auth on the OA buttons.** Pre-v2.99.77 every connected user's chat-log injected the same Take/Skip buttons regardless of presence-aware routing — non-actors saw clickable buttons that would 409 on click (server-side `_active_reaction_prompts` only honors a target_user_ids match). Cleaner to hide the affordance: the trigger card still appears so the audit trail is complete, but only the actor sees + clicks the buttons.
+- **Dash-gate broadening.** The v2.99.72 narrow gate was a fix for "Dash showing on GM-dragged off-turn moves" — that root cause is the active-combatant match (separately gated). The remaining `_needsDash` precondition just needed to be "action is still spendable." A typical first-of-turn drag stays within the cap, so the v2.99.72 gate hid Dash entirely. v2.99.77 says "you have an action, you may want Dash before this OA-provoking move" — that's the question worth asking the user.
+- **No new harness tests this commit.** UI-only behavior.
+- Total harness count: 785 (unchanged from v2.99.76).
+
+---
+
 ## [2.99.76] - 2026-06-03 — "Trail Restored" — robust active-combatant match for the movement breadcrumb + don't stomp NPC speed_walk
 
 **Schema version:** 65
