@@ -5908,15 +5908,22 @@ async def _apply_damage_to_combatant(
     hp_max = int(target.get("hp_max") or 0)
     # v2.49.109: NPCs now get resistance halving via the template's
     # ``damage_resistances`` list + the combatant's own ``buffs``.
-    # Pre-v2.49.109 this branch hardcoded ``applied = damage_amount``
-    # so a bandit with template-listed fire resistance still took
-    # full Fireball damage. See ``_resistance_halve_npc`` for the
-    # contract; damage immunity + vulnerability are not yet applied
-    # (filed for follow-up).
-    applied, resistance_applied = _resistance_halve_npc(
+    # v2.99.125 — closes the v2.99.124 filed item: NPC immunity engine
+    # mirror. ``_immunity_zero_npc`` reads template + buff immunities
+    # with the same "all" wildcard semantics as the PC helper.
+    # Immunity is checked FIRST (RAW: supersedes resistance); falls
+    # through to ``_resistance_halve_npc`` when no immunity matches.
+    applied, immunity_applied = _immunity_zero_npc(
         damage_amount, damage_type, target, db,
         is_magical=is_magical,
     )
+    if immunity_applied:
+        resistance_applied = False
+    else:
+        applied, resistance_applied = _resistance_halve_npc(
+            damage_amount, damage_type, target, db,
+            is_magical=is_magical,
+        )
     new_hp = max(0, hp_cur - applied)
     target["hp_current"] = new_hp
     hub.set_battle(campaign_id, state)
@@ -24135,6 +24142,70 @@ def _resistance_matches_damage(
     if r in nonmagical_variants:
         return not is_magical
     return False
+
+
+def _immunity_zero_npc(
+    damage_amount: int, damage_type: str, combatant: dict, db: Session,
+    *, is_magical: bool = False,
+) -> tuple[int, bool]:
+    """v2.99.125 — NPC-side damage immunity. Mirror of
+    ``_immunity_zero`` for non-PC combatants. Reads:
+      - TokenTemplate's ``sheet.damage_immunities`` list (SRD stat-
+        block "Damage Immunities" parsed via ``_split_defense``)
+      - Combatant-level buff immunities via
+        ``effects.immunity_to`` on the hub combatant's ``buffs`` list
+
+    Returns ``(0, True)`` on match (RAW: immunity = 0 damage), else
+    ``(damage_amount, False)``. Same wildcard semantics as the PC
+    helper: ``"all"`` matches any damage type. ``is_magical`` flag
+    is forwarded to ``_resistance_matches_damage`` for the same
+    "nonmagical-X" SRD phrasing handling as the resistance engine.
+
+    The damage application caller checks immunity FIRST, then
+    resistance — immunity supersedes per RAW (PHB p.197).
+    """
+    if damage_amount <= 0 or not damage_type:
+        return damage_amount, False
+    damage_type_l = damage_type.strip().lower()
+    # (1) Permanent template-listed immunities.
+    tmpl_id = combatant.get("token_template_id")
+    if tmpl_id:
+        tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id).first()
+        if tmpl:
+            tmpl_sheet = tmpl.sheet or {}
+            tmpl_immunes = tmpl_sheet.get("damage_immunities") or []
+            if isinstance(tmpl_immunes, str):
+                tmpl_immunes = [
+                    p.strip() for p in tmpl_immunes.split(",") if p.strip()
+                ]
+            if isinstance(tmpl_immunes, list):
+                normalized = {
+                    (str(r) or "").strip().lower() for r in tmpl_immunes
+                }
+                if "all" in normalized:
+                    return 0, True
+                for r in tmpl_immunes:
+                    if isinstance(r, str) and _resistance_matches_damage(
+                        r, damage_type_l, is_magical=is_magical,
+                    ):
+                        return 0, True
+    # (2) Combatant-level buff immunities. Same dict-shaped
+    # `effects.immunity_to` contract as the PC `_buffs_active` path.
+    for b in (combatant.get("buffs") or []):
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        immunes = [
+            (str(r) or "").strip().lower()
+            for r in (effects.get("immunity_to") or [])
+        ]
+        if "all" in immunes:
+            return 0, True
+        if damage_type_l in immunes:
+            return 0, True
+    return damage_amount, False
 
 
 def _resistance_halve_npc(

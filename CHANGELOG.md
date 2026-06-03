@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.125] - 2026-06-03 — "Steel Doesn't Bite Stone" — NPC immunity engine mirror closes the v2.99.124 filed item
+
+**Schema version:** 65
+**Commit summary:** **Add `_immunity_zero_npc` as the NPC mirror to v2.99.124's `_immunity_zero` and wire it into the NPC branch of `_apply_damage_to_combatant`.** Closes the v2.99.124 filed item ("NPC immunity engine via mirror"). Reads both template-level `sheet.damage_immunities` (SRD stat-block phrases parsed by `_split_defense` — already populated for many monster templates) and combatant-level `buffs[].effects.immunity_to` (dict-shape immunities installed at runtime). Same `"all"` wildcard semantics as the PC helper; immunity checked BEFORE resistance (RAW: supersedes). Pre-v2.99.125 monster templates with stat-block "Damage Immunities" entries (Skeleton: poison; Iron Golem: fire/poison/non-magical/non-adamantine; dragons by ancestry, etc.) still took full damage — descriptive only.
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — new `_immunity_zero_npc(damage_amount, damage_type, combatant, db, *, is_magical=False) -> tuple[int, bool]` helper. Reads template + buff immunities with "all" wildcard support. Per-type matches use `_resistance_matches_damage` for the same "nonmagical-X" SRD phrasing handling as the resistance engine. Returns (0, True) on match. (2) NPC branch of `_apply_damage_to_combatant` calls `_immunity_zero_npc` BEFORE `_resistance_halve_npc`. On match: `applied=0`, `resistance_applied=False`. Falls through to `_resistance_halve_npc` when no immunity matches. (3) `tests/harness/test_npc_damage_immunity.py` — 3 regression tests.
+
+### Added
+- `_immunity_zero_npc(damage_amount, damage_type, combatant, db, *, is_magical=False)` helper.
+- Damage immunity gate at the start of `_apply_damage_to_combatant`'s NPC path.
+- `tests/harness/test_npc_damage_immunity.py` — 3 tests: bandit with `effects.immunity_to: ["all"]` takes 0 damage from Tavik's Warhammer; bandit with per-type bludgeoning immunity → Warhammer component zeroed, Divine Strike radiant passes; control bandit with no immunity buff takes full damage.
+
+### Changed
+- `_apply_damage_to_combatant` NPC path now checks immunity FIRST, then resistance. Backward-compatible: a template/combatant without `damage_immunities` populated, OR with descriptive entries not matching the damage type, falls through to the existing `_resistance_halve_npc` logic unchanged.
+
+### Notes
+- **PATCH bump** — additive helper + 1 wire-in + 3 tests. No schema change. Backward-compatible.
+- **In-play impact.** Templates with stat-block immunities now actually apply them: Skeletons take 0 from poison spells; Iron Golems take 0 from fire breath; the demo bandit (no immunities) is unaffected. This is the highest-impact in-play gameplay change since v2.49.109 closed the NPC resistance gap.
+- **Why not also vulnerability.** RAW vulnerability doubles damage instead of zeroing it. Mirror of resistance/immunity pattern but opposite direction. Filed: `_vulnerability_double` + `_vulnerability_double_npc` ship.
+- **PC + NPC engines now symmetric.** Both check immunity first, then resistance, with "all" wildcard support at sheet + buff levels. Future damage modifiers (vulnerability) can mirror the same shape.
+- **Total harness count: 947** (was 944 in v2.99.124).
+
+---
+
 ## [2.99.124] - 2026-06-03 — "Nothing Gets Through" — damage immunity engine + "all" wildcard wired into the PC damage path
 
 **Schema version:** 65
