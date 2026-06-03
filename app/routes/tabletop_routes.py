@@ -21144,8 +21144,13 @@ def _make_slow_buff(
     for follow-up. v1 ships only the speed reduction; the GM can
     narrate the rest via the buff's ``raw_effects`` list.
     """
+    # v2.99.103 — same falsy-zero fix as the endpoint: explicit
+    # None-check so `0` (already-webbed target) stays 0 instead of
+    # being lifted back to the 30 default.
     try:
-        base = int(target_speed_walk or 30)
+        base = (
+            int(target_speed_walk) if target_speed_walk is not None else 30
+        )
     except (TypeError, ValueError):
         base = 30
     if base <= 0:

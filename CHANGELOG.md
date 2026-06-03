@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.103] - 2026-06-03 — "Same Trap, Different Function" — fix `_make_slow_buff`'s identical falsy-zero bug
+
+**Schema version:** 65
+**Commit summary:** **Apply the v2.99.102 fix to the OTHER falsy-int trap in `_make_slow_buff` itself.** v2.99.102 fixed the endpoint's `c.get("speed_walk") or 30` read, but the helper had the same `int(target_speed_walk or 30)` pattern inside it — so even after the endpoint passed `0` through correctly, the helper still re-lifted it to 30 and produced a 15 ft reduction. Replace with the same `x if x is not None else default` pattern.
+**Description:** Three-line edit inside `_make_slow_buff`. Behavior is identical for any non-zero input; only the `0` edge case shifts from "treated as missing → 30" to "treated as explicit 0 → 0". After the fix the 4th test passes (was failing identically to v2.99.101 because the helper still tripped the trap).
+
+### Changed
+- `_make_slow_buff` now distinguishes `None` from `0` for the `target_speed_walk` arg.
+
+### Notes
+- **PATCH bump** — helper fix only. No schema change.
+- **Why the bug survived v2.99.102.** I only fixed the endpoint's read — didn't audit the helper that took the value. Both had identical falsy-int patterns. Lesson: when fixing a falsy-int trap, grep for ALL instances of `or N` involving the same variable in the call chain.
+- **Total harness count: 854** (unchanged — now 4/4 instead of 3/4).
+
+---
+
 ## [2.99.102] - 2026-06-03 — "Falsy Zero, Truthy Bug" — fix /cast_slow lifting speed_walk=0 back to 30
 
 **Schema version:** 65
