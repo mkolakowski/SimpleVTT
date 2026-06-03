@@ -83,9 +83,10 @@ async def garrik_defense_setup(gm_client, roster):
 async def test_defense_adds_one_to_ac_when_wearing_armor(
     gm_client, garrik_defense_setup,
 ):
-    """Garrik wears chain mail (sheet says equipped: True) and now
-    has fighting_style="defense". target_ac should be 19 (base 18
-    + Defense +1).
+    """Garrik wears chain mail (sheet says equipped: True; sheet AC
+    is 16 — no shield because he wields a two-handed Greatsword).
+    PATCH'd to fighting_style="defense" → target_ac should be 17
+    (base 16 + Defense +1).
     """
     garrik, tavik = garrik_defense_setup
     garrik_tok = f"tok_def_{garrik['id']}"
@@ -95,15 +96,15 @@ async def test_defense_adds_one_to_ac_when_wearing_armor(
         _mkc(garrik_tok, garrik["id"], name=garrik["name"]),
     ])
     target_ac = await _attack_for_target_ac(gm_client, tavik["id"], garrik_tok)
-    assert target_ac == 19, (
-        f"Defense should add +1 to Garrik's AC 18 → expected 19; "
+    assert target_ac == 17, (
+        f"Defense should add +1 to Garrik's AC 16 → expected 17; "
         f"got {target_ac!r}"
     )
 
 
 async def test_no_defense_no_bonus(gm_client, roster):
     """Control: Garrik's stock fighting_style is "great_weapon".
-    target_ac should be exactly 18 (sheet value, no +1).
+    target_ac should be exactly 16 (sheet value, no +1).
     """
     garrik = roster["Garrik Ironside"]
     tavik = roster["Brother Tavik Stonebrow"]
@@ -114,8 +115,8 @@ async def test_no_defense_no_bonus(gm_client, roster):
         _mkc(garrik_tok, garrik["id"], name=garrik["name"]),
     ])
     target_ac = await _attack_for_target_ac(gm_client, tavik["id"], garrik_tok)
-    assert target_ac == 18, (
-        f"Without Defense style, Garrik's AC should be base 18; "
+    assert target_ac == 16, (
+        f"Without Defense style, Garrik's AC should be base 16; "
         f"got {target_ac!r}"
     )
 

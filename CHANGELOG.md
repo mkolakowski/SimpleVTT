@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.96] - 2026-06-03 — "Read the Sheet, Not the Comment" — fix Defense AC assertions for Garrik's actual sheet value
+
+**Schema version:** 65
+**Commit summary:** **Fix the v2.99.95 Defense Fighting Style harness test assertions — Garrik's sheet AC is 16 (chain mail only, no shield because of the two-handed Greatsword build), not 18 (which was a misread of the demo seed comment for Tavik).** The Defense +1 IS firing correctly; the assertions just needed the right base value. Happy: expected 19 → fixed to 17 (16 + 1). Control: expected 18 → fixed to 16. The unarmored Kael test was already correct (AC 16 → 16, no change). No production code changes.
+**Description:** Test-only edit. The v2.99.95 ship was correct end-to-end — `_pc_defense_ac_bonus` returns +1 for Garrik (PATCH'd to "defense", chain mail equipped), and the auto-AC engine correctly sums it. The first test run hit `target_ac == 17` (16 + 1), which is the right answer — the assertion was wrong because the harness author misread Tavik's "ac": 18 line as Garrik's. Garrik's actual sheet (`app/demo_seed.py:2580`) reads "ac": 16 with the comment "chain mail 16 (no shield — two-handed Greatsword)". This commit corrects both assertions and updates the test docstrings to reflect the real values.
+
+### Changed
+- `test_defense_adds_one_to_ac_when_wearing_armor` — assertion `target_ac == 19` → `target_ac == 17`. Docstring updated to mention Garrik's two-handed Greatsword build (no shield).
+- `test_no_defense_no_bonus` — assertion `target_ac == 18` → `target_ac == 16`. Docstring updated.
+
+### Notes
+- **PATCH bump** — assertion-only fix. Production code unchanged from v2.99.95. The auto-AC engine + helpers were always correct; this just realigns the test expectations.
+- **Why this slipped past the v2.99.95 ship.** The harness assertions were written from CHANGELOG memory ("Garrik chain mail + shield AC 18") rather than re-reading the live sheet. Lesson: when authoring a test that pins on a numeric sheet value, grep the seed for the exact field before writing the assertion. Filed: a future test-helper that fetches the live sheet AC as the test baseline would be more robust than hardcoded numbers.
+- **Total harness count: 829** (unchanged from v2.99.95).
+
+---
+
 ## [2.99.95] - 2026-06-03 — "The Quiet Plus One" — Defense Fighting Style + auto-AC engine hook
 
 **Schema version:** 65
