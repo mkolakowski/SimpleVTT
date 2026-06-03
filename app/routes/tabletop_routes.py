@@ -5757,21 +5757,33 @@ async def _apply_damage_to_combatant(
                         )
                 except Exception:
                     pass
-        # v2.99.124 — immunity check BEFORE resistance. RAW: immunity
-        # supersedes resistance (a Petrified target immune to poison
-        # takes 0 from a Poison Spray, not "half of full"). Falls
-        # through to resistance halving when no immunity matches.
+        # v2.99.124 — immunity check BEFORE resistance/vulnerability.
+        # RAW: immunity supersedes both (a Petrified target immune to
+        # poison takes 0 from Poison Spray, even if it's somehow also
+        # vulnerable or resistant to poison). v2.99.127 — vulnerability
+        # engine added; RAW PHB p.197: vuln + resist on same type cancel
+        # out (taken normally); vuln alone doubles; resist alone halves.
         applied, immunity_applied = _immunity_zero(
             damage_amount, damage_type, sheet,
         )
-        if immunity_applied:
-            resistance_applied = False
-        else:
-            # Apply resistance (Phase B) BEFORE _apply_hp_change so the
-            # massive-damage threshold uses the post-resistance number.
-            applied, resistance_applied = _resistance_halve(
+        resistance_applied = False
+        vulnerability_applied = False
+        if not immunity_applied:
+            _, vulnerability_applied = _vulnerability_double(
                 damage_amount, damage_type, sheet,
             )
+            _, resistance_applied = _resistance_halve(
+                damage_amount, damage_type, sheet,
+            )
+            if vulnerability_applied and resistance_applied:
+                # Cancel: damage taken normally.
+                applied = damage_amount
+            elif vulnerability_applied:
+                applied = damage_amount * 2
+            elif resistance_applied:
+                applied = damage_amount // 2
+            else:
+                applied = damage_amount
         new_hp = max(0, hp_cur - applied)
         result = _apply_hp_change(
             char, new_hp,
@@ -5908,22 +5920,32 @@ async def _apply_damage_to_combatant(
     hp_max = int(target.get("hp_max") or 0)
     # v2.49.109: NPCs now get resistance halving via the template's
     # ``damage_resistances`` list + the combatant's own ``buffs``.
-    # v2.99.125 — closes the v2.99.124 filed item: NPC immunity engine
-    # mirror. ``_immunity_zero_npc`` reads template + buff immunities
-    # with the same "all" wildcard semantics as the PC helper.
-    # Immunity is checked FIRST (RAW: supersedes resistance); falls
-    # through to ``_resistance_halve_npc`` when no immunity matches.
+    # v2.99.125 — NPC immunity engine. v2.99.127 — NPC vulnerability
+    # engine + RAW vuln + resist cancellation (PHB p.197). Symmetric
+    # with the PC path above.
     applied, immunity_applied = _immunity_zero_npc(
         damage_amount, damage_type, target, db,
         is_magical=is_magical,
     )
-    if immunity_applied:
-        resistance_applied = False
-    else:
-        applied, resistance_applied = _resistance_halve_npc(
+    resistance_applied = False
+    vulnerability_applied = False
+    if not immunity_applied:
+        _, vulnerability_applied = _vulnerability_double_npc(
             damage_amount, damage_type, target, db,
             is_magical=is_magical,
         )
+        _, resistance_applied = _resistance_halve_npc(
+            damage_amount, damage_type, target, db,
+            is_magical=is_magical,
+        )
+        if vulnerability_applied and resistance_applied:
+            applied = damage_amount
+        elif vulnerability_applied:
+            applied = damage_amount * 2
+        elif resistance_applied:
+            applied = damage_amount // 2
+        else:
+            applied = damage_amount
     new_hp = max(0, hp_cur - applied)
     target["hp_current"] = new_hp
     hub.set_battle(campaign_id, state)
@@ -24106,6 +24128,56 @@ def _immunity_zero(
     return damage_amount, False
 
 
+def _vulnerability_double(
+    damage_amount: int, damage_type: str, target_sheet: dict,
+) -> tuple[int, bool]:
+    """v2.99.127 — damage vulnerability engine. Mirror of
+    ``_resistance_halve`` but returns ``(damage_amount * 2, True)``
+    on match. RAW PHB p.197: "If a creature or an object has
+    vulnerability to a damage type, damage of that type is doubled
+    against it."
+
+    Reads from BOTH:
+      - sheet-level ``damage_vulnerabilities`` list (per-type strings;
+        ``"all"`` wildcard supported)
+      - buff-level ``effects.vulnerability_to`` on active
+        ``_buffs_active`` buffs
+
+    Returns ``(2 * damage_amount, True)`` on match, else
+    ``(damage_amount, False)``. The caller handles RAW interaction
+    with resistance (PHB p.197: "If a target has both resistance and
+    vulnerability to a single damage type, the two effectively
+    cancel each other out, and damage is taken normally.").
+    """
+    if damage_amount <= 0 or not damage_type:
+        return damage_amount, False
+    damage_type_l = damage_type.strip().lower()
+    sheet_vuln = (target_sheet or {}).get("damage_vulnerabilities") or []
+    if isinstance(sheet_vuln, str):
+        sheet_vuln = [p.strip() for p in sheet_vuln.split(",") if p.strip()]
+    if isinstance(sheet_vuln, list):
+        normalized = {(str(r) or "").strip().lower() for r in sheet_vuln}
+        if "all" in normalized:
+            return damage_amount * 2, True
+        if damage_type_l in normalized:
+            return damage_amount * 2, True
+    for b in (target_sheet or {}).get("_buffs_active") or []:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        vulns = [
+            (str(r) or "").strip().lower()
+            for r in (effects.get("vulnerability_to") or [])
+        ]
+        if "all" in vulns:
+            return damage_amount * 2, True
+        if damage_type_l in vulns:
+            return damage_amount * 2, True
+    return damage_amount, False
+
+
 def _resistance_matches_damage(
     resist_entry: str, damage_type_l: str, *, is_magical: bool,
 ) -> bool:
@@ -24145,6 +24217,62 @@ def _resistance_matches_damage(
     if r in nonmagical_variants:
         return not is_magical
     return False
+
+
+def _vulnerability_double_npc(
+    damage_amount: int, damage_type: str, combatant: dict, db: Session,
+    *, is_magical: bool = False,
+) -> tuple[int, bool]:
+    """v2.99.127 — NPC-side damage vulnerability. Mirror of
+    ``_vulnerability_double`` for non-PC combatants. Reads template
+    + buff vulnerabilities with the same "all" wildcard semantics
+    as the PC helper. ``is_magical`` flag forwarded to
+    ``_resistance_matches_damage`` for the same "nonmagical-X" SRD
+    phrasing handling.
+
+    Returns ``(2 * damage_amount, True)`` on match, else
+    ``(damage_amount, False)``. Caller handles RAW vuln + resist
+    cancellation.
+    """
+    if damage_amount <= 0 or not damage_type:
+        return damage_amount, False
+    damage_type_l = damage_type.strip().lower()
+    tmpl_id = combatant.get("token_template_id")
+    if tmpl_id:
+        tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id).first()
+        if tmpl:
+            tmpl_sheet = tmpl.sheet or {}
+            tmpl_vulns = tmpl_sheet.get("damage_vulnerabilities") or []
+            if isinstance(tmpl_vulns, str):
+                tmpl_vulns = [
+                    p.strip() for p in tmpl_vulns.split(",") if p.strip()
+                ]
+            if isinstance(tmpl_vulns, list):
+                normalized = {
+                    (str(r) or "").strip().lower() for r in tmpl_vulns
+                }
+                if "all" in normalized:
+                    return damage_amount * 2, True
+                for r in tmpl_vulns:
+                    if isinstance(r, str) and _resistance_matches_damage(
+                        r, damage_type_l, is_magical=is_magical,
+                    ):
+                        return damage_amount * 2, True
+    for b in (combatant.get("buffs") or []):
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        vulns = [
+            (str(r) or "").strip().lower()
+            for r in (effects.get("vulnerability_to") or [])
+        ]
+        if "all" in vulns:
+            return damage_amount * 2, True
+        if damage_type_l in vulns:
+            return damage_amount * 2, True
+    return damage_amount, False
 
 
 def _immunity_zero_npc(

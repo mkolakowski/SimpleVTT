@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.127] - 2026-06-03 — "Glass Skin" — damage vulnerability engine + RAW vuln/resist cancellation
+
+**Schema version:** 65
+**Commit summary:** **Ship the damage vulnerability engine (PC + NPC). New `_vulnerability_double` + `_vulnerability_double_npc` helpers mirror the v2.99.124/.125 immunity engines but double damage on match. Wires the RAW vuln/resist cancellation: PHB p.197 — "If a target has both resistance and vulnerability to a single damage type, the two effectively cancel each other out, and damage is taken normally."** Pre-v2.99.127 the `damage_vulnerabilities` field was stored on sheets and templates but NEVER read by the damage application code — full vulnerability was descriptive only. v2.99.127 closes that gap.
+**Description:** Four edits in `app/routes/tabletop_routes.py`. (1) New `_vulnerability_double(damage_amount, damage_type, target_sheet) -> tuple[int, bool]` — PC helper. Reads sheet-level `damage_vulnerabilities` + buff-level `effects.vulnerability_to` with `"all"` wildcard support at both levels. (2) New `_vulnerability_double_npc(damage_amount, damage_type, combatant, db, *, is_magical=False)` — NPC mirror. Reads template-level `sheet.damage_vulnerabilities` + buff-level `effects.vulnerability_to`. Both helpers return `(2 * damage_amount, True)` on match. (3) PC path of `_apply_damage_to_combatant` refactored: after the immunity check (still BEFORE everything), if no immunity, both vuln + resist are checked together; cancellation is applied per RAW. (4) NPC path mirror with the same refactor. (5) `tests/harness/test_damage_vulnerability.py` — 4 regression tests.
+
+### Added
+- `_vulnerability_double(damage_amount, damage_type, target_sheet) -> tuple[int, bool]` PC helper.
+- `_vulnerability_double_npc(damage_amount, damage_type, combatant, db, *, is_magical=False)` NPC helper.
+- Vulnerability + cancellation gate in both PC and NPC paths of `_apply_damage_to_combatant`.
+- `tests/harness/test_damage_vulnerability.py` — 4 tests: PC vulnerability doubles damage, PC vuln+resist cancel (taken normally), NPC vulnerability via buff doubles, baseline control with no vulnerability.
+
+### Changed
+- `_apply_damage_to_combatant` PC + NPC paths now compute vuln + resist jointly. The previous "immunity OR resistance" logic becomes "immunity OR (vuln XOR resist OR neither OR cancel)". Backward-compatible: targets without `damage_vulnerabilities` populated, or with descriptive entries not matching the damage type, fall through to the existing resistance-only logic unchanged.
+
+### Notes
+- **PATCH bump** — 2 new helpers + 2 wire-in refactors + 4 tests. No schema change. Backward-compatible.
+- **Why immunity still goes first.** RAW PHB p.197 is silent on the explicit interaction of immunity + vuln + resist all hitting the same type, but the spirit of "immunity = 0 damage" is absolute — 0 doubled is still 0, 0 halved is still 0. Checking immunity first short-circuits cleanly.
+- **Cancellation is RAW canon.** From PHB p.197: "If a target has both resistance and vulnerability to a single damage type, the two effectively cancel each other out, and damage is taken normally." Many tables homebrew this differently (e.g., "vuln first then resist": 2x then //2 → effectively the same as cancel for even numbers, but 3x//2 = 1 for odd damage breaks). v1 ships RAW-strict; future GM toggle for the order-of-ops variant is filed.
+- **Vulnerability sources.** RAW SRD: Vampires (radiant), Werewolves (silver), Mummies (fire), and a handful of specific monsters. Sheet-level `damage_vulnerabilities` is populated for these templates already; v2.99.127 just makes them apply.
+- **PC + NPC engines now fully symmetric.** Both check immunity → cancellation → vuln-only / resist-only / neither. Same wildcard + per-type semantics + same "all" support at sheet and buff levels.
+- **Response shape unchanged.** The `target_resistance_applied` field still reflects whether the resistance branch fired. A future `target_vulnerability_applied` field could be added; v1 keeps the shape minimal. Filed.
+- **Total harness count: 952** (was 948 in v2.99.126).
+
+---
+
 ## [2.99.126] - 2026-06-03 — "Stone Doesn't Bleed" — stamp poison immunity on the Petrified buff
 
 **Schema version:** 65
