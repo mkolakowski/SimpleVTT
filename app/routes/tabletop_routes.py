@@ -20562,6 +20562,119 @@ def _pc_dueling_bonus(sheet: dict, attack: dict) -> int:
     return 2 if _attack_is_one_handed_melee(attack) else 0
 
 
+def _attack_is_two_handed_melee(attack: dict) -> bool:
+    """v2.99.85 — does this attack count as a 2H melee weapon for
+    Fighting Style: Great Weapon Fighting? Heuristic: melee range
+    (≤ 15 ft, no slash) AND desc explicitly mentions "two-handed"
+    or "2-handed" (covers Greatsword, Greataxe, Maul, Glaive,
+    Halberd, etc.). Versatile weapons that COULD be wielded 2H
+    (Longsword, Battleaxe, Warhammer, Quarterstaff) require the
+    "two-handed grip" marker in desc — by RAW Versatile + GWF
+    only triggers when actually held 2-handed.
+    """
+    if not attack:
+        return False
+    rng = (attack.get("range") or "").strip().lower()
+    if not rng or "/" in rng:
+        return False
+    import re as _re
+    m = _re.match(r"^(\d+(?:\.\d+)?)\s*ft", rng)
+    if not m:
+        return False
+    try:
+        if float(m.group(1)) > 15.0:
+            return False
+    except (TypeError, ValueError):
+        return False
+    desc = (attack.get("desc") or "").lower()
+    return ("two-handed" in desc) or ("2-handed" in desc) or ("two handed" in desc)
+
+
+def _pc_great_weapon_fighting_eligible(sheet: dict, attack: dict) -> bool:
+    """v2.99.85 — returns True when the attacker has the Great
+    Weapon Fighting style + the attack is a 2H melee weapon.
+    Drives the per-die reroll in _apply_great_weapon_fighting_reroll.
+    """
+    if _pc_fighting_style(sheet) != "great_weapon":
+        return False
+    return _attack_is_two_handed_melee(attack)
+
+
+def _apply_great_weapon_fighting_reroll(damage_expr: str):
+    """v2.99.85 — RAW (PHB p.72): "When you roll a 1 or 2 on a
+    damage die for an attack you make with a melee weapon that
+    you are wielding with two hands, you can reroll the die and
+    must use the new roll, even if the new roll is a 1 or a 2."
+
+    Input: ``damage_expr`` like ``"2d6+4"``.
+    Output: ``(damage_total, damage_breakdown)`` tuple matching
+    ``dice_mod.roll(...)``'s ``r.total`` / ``r.breakdown`` shape so
+    callers can swap a normal roll for this without restructuring.
+
+    Implementation: split the leading die expression and the
+    modifier tail. Roll each die separately. For each die result
+    of 1 or 2, roll once more (keep the new result — RAW: "must
+    use the new roll" even if it's still 1/2). Reconstruct the
+    breakdown showing the original → rerolled face: "2d6[2→5, 3]+4".
+    """
+    import re as _re
+    expr = (damage_expr or "").strip()
+    if not expr:
+        return None, ""
+    m = _re.match(r"^\s*(\d*)d(\d+)(.*)$", expr, _re.IGNORECASE)
+    if not m:
+        # Not a die expression — fall back to dice_mod.roll for the
+        # tail-only / flat-bonus cases. Caller should treat None
+        # total as "use the normal roll path."
+        return None, ""
+    count = int(m.group(1) or 1)
+    face = int(m.group(2))
+    tail = m.group(3) or ""
+    if count <= 0 or face <= 0:
+        return None, ""
+    # Roll each die, track originals + the kept (post-reroll) value.
+    import random as _rand
+    parts = []
+    kept_sum = 0
+    for _ in range(count):
+        original = _rand.randint(1, face)
+        if original <= 2:
+            new = _rand.randint(1, face)
+            parts.append(f"{original}→{new}")
+            kept_sum += new
+        else:
+            parts.append(str(original))
+            kept_sum += original
+    # Tail can carry "+4", "+DEX", etc. For numerical tails parse
+    # the int and add; for non-numerical, delegate to dice_mod.roll
+    # on the tail-only string to compute the modifier contribution.
+    tail_clean = tail.strip()
+    tail_value = 0
+    tail_breakdown = ""
+    if tail_clean:
+        m2 = _re.match(r"^([+\-]\s*\d+)$", tail_clean)
+        if m2:
+            tail_value = int(m2.group(1).replace(" ", ""))
+            tail_breakdown = tail_clean
+        else:
+            # Mixed expression — let dice_mod handle the tail.
+            try:
+                r = dice_mod.roll("0" + tail_clean) if not tail_clean.startswith(
+                    ("+", "-"),
+                ) else dice_mod.roll("0" + tail_clean)
+                tail_value = r.total
+                tail_breakdown = tail_clean
+            except Exception:
+                tail_value = 0
+                tail_breakdown = tail_clean
+    total = kept_sum + tail_value
+    breakdown = f"{count}d{face}[{', '.join(parts)}]"
+    if tail_breakdown:
+        breakdown += tail_breakdown
+    breakdown += f" => {total}"
+    return total, breakdown
+
+
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
     """v2.99.81 — swap the leading die on an unarmed/monk-weapon
     attack with the Monk's Martial Arts die when it's larger.
@@ -31229,13 +31342,28 @@ async def use_attack(
     if damage_expr_raw and is_crit:
         damage_expr_effective = _double_dice_for_crit(damage_expr_raw)
     if damage_expr_effective:
-        try:
-            r = dice_mod.roll(damage_expr_effective)
-            damage_total = r.total
-            damage_breakdown = r.breakdown
-        except dice_mod.DiceParseError:
-            damage_total = None
-            damage_breakdown = ""
+        # v2.99.85 — Fighting Style: Great Weapon Fighting. When the
+        # attacker has the GWF style + the attack is 2H melee, reroll
+        # 1s and 2s on the damage dice once each (keep new result per
+        # RAW). Falls back to the standard dice_mod.roll when the
+        # helper can't parse the expression.
+        used_gwf = False
+        if _pc_great_weapon_fighting_eligible(sheet, attack):
+            gwf_total, gwf_breakdown = _apply_great_weapon_fighting_reroll(
+                damage_expr_effective,
+            )
+            if gwf_total is not None:
+                damage_total = gwf_total
+                damage_breakdown = gwf_breakdown
+                used_gwf = True
+        if not used_gwf:
+            try:
+                r = dice_mod.roll(damage_expr_effective)
+                damage_total = r.total
+                damage_breakdown = r.breakdown
+            except dice_mod.DiceParseError:
+                damage_total = None
+                damage_breakdown = ""
 
     # v2.20.0 Phase B: auto-uplifts from attacker's buffs + class
     # features. Reads the hub state for active buffs (Rage / Hunter's

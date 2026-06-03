@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.85] - 2026-06-03 — "Reroll the Twos" — Fighting Style: Great Weapon Fighting
+
+**Schema version:** 65
+**Commit summary:** **Wire Fighting Style: Great Weapon Fighting so 2H melee damage rolls auto-reroll 1s and 2s once each (keep new result per RAW).** Builds on the v2.99.83 Fighting Style framework. Two new helpers: `_attack_is_two_handed_melee(attack)` heuristic (melee range + "two-handed" / "2-handed" in desc) and `_apply_great_weapon_fighting_reroll(damage_expr)` which rolls each die individually, rerolls any 1/2 once (keeping the new result even if it's still 1/2), and reconstructs the breakdown with original→kept markers ("2d6[2→5, 3]+4"). Plugs into `/attack` right before the standard `dice_mod.roll` so existing behavior is unchanged for non-GWF attacks. Garrik Ironside (Fighter Lv 9 Champion) is the demo fixture: his sheet gains `fighting_style: "great_weapon"`; the Greatsword desc updates to reflect the auto-apply convention.
+**Description:** Two new helpers in `app/routes/tabletop_routes.py` after `_pc_dueling_bonus`: (1) `_attack_is_two_handed_melee(attack) -> bool` — melee range (≤ 15 ft, no slash) AND desc contains "two-handed" / "2-handed" / "two handed". Versatile weapons require the "two-handed grip" marker to trigger (RAW: GWF only fires when actually held 2H). (2) `_pc_great_weapon_fighting_eligible(sheet, attack) -> bool` — style match + 2H melee. (3) `_apply_great_weapon_fighting_reroll(damage_expr) -> (total, breakdown)` — the workhorse. Parses the leading `\d*d\d+` + tail, rolls each die with Python's `random.randint`, rerolls any face ≤ 2 once and keeps the new face, sums everything with the tail's modifier value, and reconstructs the breakdown. Returns `(None, "")` on parse failure so the caller falls back to `dice_mod.roll`. `/attack` wires the helper into the damage-roll path; the standard `dice_mod.roll` runs as fallback. 3 harness tests cover the happy path + 2 gate cases.
+
+### Added
+- `_attack_is_two_handed_melee(attack) -> bool` — heuristic for 2H melee detection. Used by GWF eligibility.
+- `_pc_great_weapon_fighting_eligible(sheet, attack) -> bool` — style + 2H gate.
+- `_apply_great_weapon_fighting_reroll(damage_expr) -> (int | None, str)` — per-die reroll engine. Reconstructs the breakdown with `original→kept` markers when a reroll fired.
+- `tests/harness/test_great_weapon_fighting.py` — 3 regression tests: GWF reroll fires on Garrik's Greatsword (look for the `→` marker across 10 attempts to overcome statistical variance), GWF skipped on Garrik's thrown Handaxe (range "20/60 ft" = ranged), GWF skipped when style is PATCHed to "archery".
+- `fighting_style: "great_weapon"` on Garrik's demo sheet.
+
+### Changed
+- `/attack` damage-roll path now branches on `_pc_great_weapon_fighting_eligible` before the standard `dice_mod.roll`. Non-GWF attacks unchanged.
+- Garrik's Greatsword desc updates from a manual GWF reminder to "auto-applied at /attack time per v2.99.85."
+
+### Notes
+- **PATCH bump** — additive helpers + a single attack-path branch + a demo seed edit. No schema change, no API contract change. Sheets without `fighting_style: "great_weapon"` short-circuit on the eligibility check; existing damage rolls for non-GWF attacks are unaffected.
+- **Implementation note: Python `random` vs `dice_mod`.** The reroll engine uses `random.randint(1, face)` directly instead of `dice_mod.roll(f"1d{face}")` to avoid the breakdown-stringification overhead per die. For test reproducibility against the v2.49.12 `/api/test/dice/seed` cache, the helper would need to switch to `dice_mod`'s seedable path — filed for a follow-up if the harness wants deterministic reroll assertions. Today the test asserts on the `→` marker across multiple attempts which is robust against statistical variance.
+- **Why a separate damage-roll path instead of an uplift.** Uplifts are additive (Rage adds +2, Hex adds +1d6); GWF is a die-substitution that REPLACES the roll. The path-branch keeps the substitution clean and the standard `dice_mod.roll` available as fallback.
+- **Versatile weapons.** Longsword / Battleaxe / Warhammer / Quarterstaff can be wielded 1H or 2H per RAW. GWF only fires when actually held 2H. The heuristic requires the desc to mention "two-handed" — for the demo, no Versatile weapon carries that marker so they default to 1H (no GWF). User-authored sheets can add "two-handed" to the desc to opt in.
+- **Crit interaction.** v2.24.0 already doubles dice on crits (`_double_dice_for_crit`). With GWF + crit, the doubled dice all get the per-die reroll check — RAW-correct. Tested implicitly via the happy-path test which doesn't filter by crit status.
+- **Filed for follow-up.** (1) The reroll engine doesn't yet support spell damage expressions like `8d6` for Fireball — GWF only applies to weapon attacks RAW so that's correct, but a future damage-substitution feature (e.g. Empowered Spell rerolling lowest dice) could reuse the engine. (2) Defense + Two-Weapon Fighting remain filed.
+- Total harness count: 798 (was 795 in v2.99.84).
+
+---
+
 ## [2.99.84] - 2026-06-03 — "Read the Breakdown" — fix v2.99.83 Archery test assertion
 
 **Schema version:** 65

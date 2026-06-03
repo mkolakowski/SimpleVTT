@@ -2523,11 +2523,17 @@ def _fighter_sheet(name: str) -> dict:
             "Perception":  {"ability": "WIS", "proficient": True, "expertise": False},
             "Survival":    {"ability": "WIS", "proficient": True, "expertise": False},
         },
+        # v2.99.85 — Fighting Style: Great Weapon Fighting. Pre-v2.99.85
+        # the style was only referenced in the Greatsword desc as a
+        # manual reminder; v2.99.85's _apply_great_weapon_fighting_reroll
+        # auto-rerolls 1s and 2s on the damage roll at /attack time
+        # when sheet.fighting_style == "great_weapon" + attack is 2H melee.
+        "fighting_style": "great_weapon",
         "attacks": [
             # v2.56.0: attack bonuses bumped +7 → +8 (STR +4 + prof +4).
             {"name": "Greatsword", "attack_bonus": "+8", "damage": "2d6+4",
              "damage_type": "slashing", "range": "5 ft",
-             "desc": "Two-handed, heavy. Great Weapon Fighting (Lv 1 style): reroll 1s and 2s on the damage roll once each — keep the new result."},
+             "desc": "Two-handed, heavy. Great Weapon Fighting (Lv 1 style): reroll 1s and 2s on the damage roll once each — auto-applied at /attack time per v2.99.85."},
             {"name": "Handaxe (thrown)", "attack_bonus": "+8", "damage": "1d6+4",
              "damage_type": "slashing", "range": "20/60 ft",
              "desc": "Light, thrown. Can also be wielded melee. Garrik carries two so an Action Surge thrown-attack combo is possible."},
