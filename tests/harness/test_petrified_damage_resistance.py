@@ -133,10 +133,13 @@ async def test_all_resistance_halves_then_pin_engine(
                 f"target_resistance_applied={data.get('target_resistance_applied')}, "
                 f"damage_applied={data.get('damage_applied')}"
             )
-            # The damage is reasonable: Warhammer base 1d8+3 = 4-11;
-            # halved = 2-5 (floor). Pin the upper bound.
-            assert data["damage_applied"] <= 5, (
-                f"halved bludgeoning shouldn't exceed 5 (1d8+3 // 2); "
+            # Warhammer base 1d8+3 = 4-11 (non-crit) / 5-19 (crit
+            # 2d8+3). Halved upper bound: 5 / 9. Pin to 9 to cover
+            # both, then cross-check via the is_crit flag.
+            upper = 9 if data.get("is_crit") else 5
+            assert data["damage_applied"] <= upper, (
+                f"halved bludgeoning shouldn't exceed {upper} "
+                f"(crit={data.get('is_crit')}); "
                 f"got {data['damage_applied']}"
             )
             return

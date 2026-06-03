@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.122] - 2026-06-03 — "The Crit Slipped Past The Bound" — fix v2.99.121 test upper bound to allow for Warhammer crits
+
+**Schema version:** 65
+**Commit summary:** **Fix the v2.99.121 `_all_resistance_halves_then_pin_engine` test upper bound — it pinned `damage_applied <= 5` based on non-crit Warhammer math (1d8+3 → halved max 5), but a crit doubles dice (2d8+3 max 19 → halved max 9). The engine WAS halving correctly; the test was just too strict on the upper bound.** Test-only fix; the v2.99.121 production code (the "all" wildcard in `_resistance_halve` + the factory stamp) is unchanged. The assertion now reads `is_crit` from the response and picks the right ceiling: 9 for crits, 5 for non-crits.
+**Description:** Single-block edit in `tests/harness/test_petrified_damage_resistance.py`. The fixed assertion: `upper = 9 if data.get("is_crit") else 5; assert data["damage_applied"] <= upper`. Diagnostic message updated to surface the crit flag for easier debugging.
+
+### Changed
+- Test upper bound is crit-aware: 9 for crits, 5 for non-crits.
+
+### Notes
+- **PATCH bump** — test fix only. Production v2.99.121 unchanged. The engine HAS been halving "all" resistance damage correctly since v2.99.121 commit; the failing test was a false negative because crits doubled the raw damage past the original 5-damage ceiling.
+- **Why the bound was wrong originally.** Wrote the test thinking only of non-crit Warhammer (4-11 → 2-5 halved). Forgot that the dice roller can crit and double dice. RAW: crits double the dice rolled, not the modifier. 2d8+3 = 5..19; halved = 2..9. Should have read `is_crit` from the response from the start.
+- **Total harness count: 941** (unchanged from v2.99.121).
+
+---
+
 ## [2.99.121] - 2026-06-03 — "Stone Shrugs the Sword" — wire Petrified's "resistance to all damage" into the damage engine
 
 **Schema version:** 65
