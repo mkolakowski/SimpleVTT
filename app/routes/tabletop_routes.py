@@ -30399,6 +30399,13 @@ async def use_grapple(
         char_id = 0
     target_combatant_id = (body.get("target_combatant_id") or "").strip()
     override = bool(body.get("override"))
+    # v2.99.113 — optional pre-rolled contested check totals. When
+    # BOTH are supplied, the server compares them and only installs
+    # the grappled buff on grappler-win. Either missing → legacy
+    # v2.99.112 "always install" behavior (assumes GM resolved the
+    # check externally and is just marking the grapple).
+    attacker_check_total_raw = body.get("attacker_check_total")
+    target_check_total_raw = body.get("target_check_total")
 
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
@@ -30438,6 +30445,92 @@ async def use_grapple(
             "strict": strict,
         })
 
+    # v2.99.113 — auto-resolved contested check when both totals are
+    # supplied. RAW PHB Grapple: STR (Athletics) check contested by
+    # the target's STR (Athletics) or DEX (Acrobatics). Grappler
+    # must STRICTLY beat the target (RAW: "you fail on a tie").
+    attacker_total: int | None = None
+    target_total: int | None = None
+    if (
+        attacker_check_total_raw is not None
+        and target_check_total_raw is not None
+    ):
+        try:
+            attacker_total = int(attacker_check_total_raw)
+            target_total = int(target_check_total_raw)
+        except (TypeError, ValueError):
+            return JSONResponse(status_code=400, content={
+                "error": "bad_check_totals",
+                "attacker_check_total": str(attacker_check_total_raw),
+                "target_check_total": str(target_check_total_raw),
+            })
+
+    if attacker_total is not None and target_total is not None:
+        if attacker_total > target_total:
+            outcome = "grappler_won"
+        elif attacker_total < target_total:
+            outcome = "target_won"
+        else:
+            outcome = "tie"  # RAW: target wins on ties → no grapple
+    else:
+        outcome = "auto"  # legacy v2.99.112 path: install unconditionally
+
+    target_name = target.get("name") or "Target"
+    # Action is spent on the attempt regardless of outcome.
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # On a failed grapple (target_won OR tie), short-circuit before
+    # the buff install + grapple-success broadcasts. Still emit a
+    # short audit so the chat log shows "tried and failed".
+    if outcome in ("target_won", "tie"):
+        outcome_copy = (
+            "target broke free"
+            if outcome == "target_won"
+            else "tied — target wins by RAW"
+        )
+        note = (
+            f"🤼 {char.name}'s grapple on {target_name} failed "
+            f"({outcome_copy}: {attacker_total} vs {target_total})"
+        )
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "character_name": char.name,
+                "feature_name": "🤼 Grapple (failed)",
+                "feature_desc": note,
+                "source": "grapple-action",
+                "target_combatant_id": target_combatant_id,
+                "target_name": target_name,
+                "outcome": outcome,
+                "attacker_check_total": attacker_total,
+                "target_check_total": target_total,
+            },
+        })
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": "",
+                "total": 0,
+                "breakdown": note,
+                "note": note,
+                "user_name": char.name,
+                "char_name": char.name,
+                "visibility": Visibility.PUBLIC.value,
+            },
+        })
+        return {
+            "ok": True,
+            "outcome": outcome,
+            "grappler_character_id": char.id,
+            "grappler_name": char.name,
+            "target_combatant_id": target_combatant_id,
+            "target_name": target_name,
+            "installed": False,
+            "attacker_check_total": attacker_total,
+            "target_check_total": target_total,
+        }
+
     # Pull the target's speed_walk for the buff math. Same falsy-
     # zero guard as the spell endpoints.
     _raw_speed = target.get("speed_walk")
@@ -30455,10 +30548,12 @@ async def use_grapple(
         campaign_id, target_combatant_id, buff,
     )
 
-    await _mark_battle_economy(campaign_id, char.id, "action")
-
-    target_name = target.get("name") or "Target"
     note = f"🤼 {char.name} grapples {target_name} (speed → 0)"
+    if outcome == "grappler_won":
+        note = (
+            f"🤼 {char.name} grapples {target_name} "
+            f"({attacker_total} vs {target_total} → grappler wins)"
+        )
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -30476,6 +30571,9 @@ async def use_grapple(
             "target_combatant_id": target_combatant_id,
             "target_name": target_name,
             "speed_reduction_ft": buff["effects"]["speed_reduction_ft"],
+            "outcome": outcome,
+            "attacker_check_total": attacker_total,
+            "target_check_total": target_total,
         },
     })
     await hub.broadcast(campaign_id, {
@@ -30493,6 +30591,7 @@ async def use_grapple(
 
     return {
         "ok": True,
+        "outcome": outcome,
         "grappler_character_id": char.id,
         "grappler_name": char.name,
         "target_combatant_id": target_combatant_id,
@@ -30501,6 +30600,8 @@ async def use_grapple(
         "speed_reduction_ft": buff["effects"]["speed_reduction_ft"],
         "installed": installed,
         "duration_rounds": 10,
+        "attacker_check_total": attacker_total,
+        "target_check_total": target_total,
     }
 
 

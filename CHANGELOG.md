@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.113] - 2026-06-03 — "Both Wrists Locked" — /use_grapple auto-resolves the contested STR (Athletics) check
+
+**Schema version:** 65
+**Commit summary:** **Close the v2.99.112 filed item: `/use_grapple` now accepts optional `attacker_check_total` + `target_check_total` body fields; when both are supplied the server compares them and only installs the grappled buff on grappler-win.** RAW PHB Grapple: contested STR (Athletics) check; grappler must strictly beat the target. Ties go to the target (RAW: "you fail on a tie" — narrower than the homebrew "ties to attacker"). Backward-compatible: if either total is missing, the endpoint falls through to the v2.99.112 "legacy" path that always installs the buff (assumes the GM resolved the check externally).
+**Description:** Two edits in `app/routes/tabletop_routes.py`. (1) `/use_grapple` parses two new optional body fields, normalizes them to int (400 `bad_check_totals` on non-numeric input), and computes `outcome ∈ {grappler_won, target_won, tie, auto}` based on the comparison (or "auto" when at least one is missing). (2) On `target_won` / `tie`, the endpoint short-circuits before the buff install, still marks the action economy (the action was spent on the attempt), and broadcasts a "grapple failed" audit instead of the success audit. The response always carries `outcome`, `attacker_check_total`, `target_check_total` so the client can render the chat card uniformly. (3) `tests/harness/test_grapple_contested_check.py` — 6 regression tests.
+
+### Added
+- Optional `attacker_check_total` + `target_check_total` body fields on `/use_grapple`.
+- `outcome` field on the `/use_grapple` response (`grappler_won`, `target_won`, `tie`, `auto`).
+- `attacker_check_total` + `target_check_total` echoed on the response + the WS broadcasts.
+- `tests/harness/test_grapple_contested_check.py` — 6 tests: grappler wins (buff installs), target wins (no buff), tie (RAW: no buff), legacy mode (no totals → auto + install), only one total supplied (falls through to legacy), bad totals → 400.
+
+### Changed
+- `/use_grapple` response shape extended with `outcome` + check-total echo fields. Pre-v2.99.113 callers that don't read those fields are unaffected.
+- WS broadcast `feature_used` for grapples now carries `outcome` + check totals. v2.99.112's test_grapple_broadcasts_feature_used_audit doesn't assert on field absence, so it stays green.
+
+### Notes
+- **PATCH bump** — additive body fields + extended response/broadcast shape + 6 tests. No schema change. Legacy callers (no check totals) behave identically.
+- **Why ties go to the target.** RAW PHB p.195: "If your check succeeds." The contested check rules (PHB p.174) clarify ties = no winner = the contest's "effect" doesn't happen. For Grapple, the effect is the Grappled condition, so a tie = no condition. Many tables homebrew "ties to attacker" for action economy; v1 ships RAW-strict + a future commit could add a `ties_to_attacker: true` body flag for tables that want the homebrew behavior.
+- **Action economy fires regardless of outcome.** RAW: the grappler spent their action on the attempt. Even a failed grapple costs the action. The `_mark_battle_economy` call moves up before the outcome short-circuit so the action is marked in all paths.
+- **Why not auto-roll the totals server-side.** The grappler's STR (Athletics) modifier depends on their sheet (STR mod + Athletics proficiency + Expertise). The target's reactive check is THEIR choice between STR (Athletics) and DEX (Acrobatics); the server can't choose for the target without knowing their stats AND their preference. Today the GM rolls both sides via /roll (which already handles modifier composition + bless/bane/advantage/disadvantage) and passes the totals to /use_grapple. A future commit could add `auto_resolve_against: "athletics" | "acrobatics"` to let the server pick the better option for the target — filed.
+- **Total harness count: 899** (was 893 in v2.99.112).
+
+---
+
 ## [2.99.112] - 2026-06-03 — "Hands On Throat" — /use_grapple endpoint installs the RAW-correct Grappled condition
 
 **Schema version:** 65
