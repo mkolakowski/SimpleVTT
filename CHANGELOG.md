@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.71] - 2026-06-02 — "Stay Open" — fix left-docked roll log collapsing on auto-focus
+
+**Schema version:** 65
+**Commit summary:** **Fix the v2.99.68 OA-auto-roll regression that collapsed the left-docked roll log on every weapon_attack broadcast.** User report: "roll log collapses when set to open on left after clicking an attack after an OA is triggered." Root cause: `openPanel()` (in `app/templates/tabletop.html`) has a v2.49.244 toggle-on-click branch that closes the left-side roll log if it's already open — designed for user clicks on the Roll Log tab. But `_focusRollLogIfLocal()` (in `app/static/tabletop.js`) also calls `openPanel()` after every weapon_attack the local user fired, including the v2.99.68 OA auto-roll. So the first OA-triggered attack ran auto-focus → openPanel → already-open + left-docked → toggle-close branch fired → panel collapsed. Pre-v2.99.68 this latent bug was masked because PC OA had no auto-roll chain; v2.99.68 made every OA → weapon_attack, surfacing it on every OA in the demo. Fix: openPanel now accepts an `{auto: true}` opts dict that skips the toggle branch when the call is programmatic auto-focus (vs. a tab click). `_focusRollLogIfLocal` passes `{auto: true}`. User clicks on the Roll Log tab still toggle as before.
+**Description:** Two-file change. (1) `app/templates/tabletop.html::openPanel(targetId, opts)` — new `opts.auto` parameter (default false). When `auto` is set AND the panel is already open in the left sidebar, return early with no-op (don't toggle, don't double-write localStorage). When `auto` is unset (the user-click path), behavior is unchanged. (2) `app/static/tabletop.js::_focusRollLogIfLocal` — passes `{auto: true}` so weapon_attack / feature_used / roll broadcasts auto-focusing the panel never inadvertently close it.
+
+### Fixed
+- `openPanel('roll-log-drawer')` no longer collapses the left-docked roll log when called programmatically by `_focusRollLogIfLocal` after a weapon_attack / feature_used / roll broadcast. The panel stays open across the OA auto-roll chain, regular attack rolls, and every other broadcast that triggers auto-focus.
+
+### Notes
+- **PATCH bump** — UI-only fix. No server change. No API change. The v2.49.244 tab-click toggle behavior is preserved verbatim for user-initiated clicks (only auto-focus callers opt into the new branch).
+- **Why the bug was latent pre-v2.99.68.** Auto-focus on weapon_attack has existed since the v2.49.244 left-dock support. Regular attack-button clicks from the GM's own sheet ALSO triggered auto-focus and would have collapsed the panel. But most regular attack flows were single events and the user could re-click the tab. The v2.99.68 OA auto-roll added a second weapon_attack on top of the existing roll log entries that arrived in quick succession, making the collapse extremely noticeable. Fixing it at the openPanel level closes the bug for both old and new flows.
+- **Future framework rule.** Any caller of `window._openDrawerPanel` that is NOT a user click (auto-focus on broadcast arrival, programmatic open on action result, etc.) should pass `{auto: true}`. The default (no opts) preserves toggle-on-click semantics for the tab handler.
+- **No new harness tests.** UI-only behavior. Covered by the deferred `harness_ui` Playwright suite.
+- Total harness count: 785 (unchanged from v2.99.70).
+
+---
+
 ## [2.99.70] - 2026-06-02 — "The Empty Chair" — presence-aware routing for ALL popup frameworks
 
 **Schema version:** 65

@@ -4255,21 +4255,38 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         return !!panel.closest('.drawer-sidebar--left');
     }
 
-    function openPanel(targetId) {
+    function openPanel(targetId, opts) {
         const panel = document.getElementById(targetId);
         if (!panel) return;
         const wrap = _wrapperOf(panel);
         const tab  = [...tabs].find(t => t.dataset.target === targetId);
+        // v2.99.71 — distinguish user-click (toggle) vs auto-focus
+        // (ensure-open). Pre-v2.99.71 EVERY call to openPanel ran
+        // the toggle-close branch when the left-side panel was
+        // already open — including the _focusRollLogIfLocal call
+        // chained from a weapon_attack broadcast. So if the user
+        // had the roll log docked open on the left, the first
+        // attack auto-focus collapsed it. Auto-focus callers now
+        // pass {auto: true} which skips the toggle and treats
+        // already-open as a no-op success.
+        const _auto = !!(opts && opts.auto);
 
         /* v2.49.244 — toggle-on-click for the left-side drawer.
            If the left-side roll-log panel is already open and the user
            clicks Roll Log again, close it. The right-side sidebar still
            uses the original mutex-within-wrapper behavior since one of
            its tabs is always meant to be active. */
-        if (_isLeftSidebar(panel) && panel.classList.contains('open')) {
+        if (!_auto && _isLeftSidebar(panel) && panel.classList.contains('open')) {
             panel.classList.remove('open');
             if (tab) tab.classList.remove('active');
             try { localStorage.setItem(STORAGE_KEY + '_left_open', '0'); } catch (e) {}
+            return;
+        }
+        // v2.99.71 — auto-focus on already-open left-side panel:
+        // nothing to do, the panel is already in the desired state.
+        // Return early so we don't re-add classes (no-op) and don't
+        // double-write the localStorage flag.
+        if (_auto && _isLeftSidebar(panel) && panel.classList.contains('open')) {
             return;
         }
 

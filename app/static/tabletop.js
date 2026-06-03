@@ -4427,7 +4427,12 @@
         if (actorUserId == null) return;
         if (actorUserId !== ME.id) return;
         if (typeof window._openDrawerPanel === 'function') {
-            try { window._openDrawerPanel('roll-log-drawer'); } catch (_) {}
+            // v2.99.71 — pass {auto: true} so this auto-focus call
+            // doesn't toggle-close the left-docked roll log if it's
+            // already open. Pre-v2.99.71 the first weapon_attack after
+            // an OA auto-roll collapsed the panel because openPanel's
+            // toggle-on-click branch fired on every already-open call.
+            try { window._openDrawerPanel('roll-log-drawer', { auto: true }); } catch (_) {}
         }
     }
 
