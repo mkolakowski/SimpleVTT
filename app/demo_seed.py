@@ -1664,6 +1664,11 @@ def _warlock_sheet(name: str) -> dict:
             # the cast. RAW prereq Lv 2 Warlock.
             {"slug": "eldritch-invocation-beast-speech", "name": "Eldritch Invocation: Beast Speech",
              "desc": "At will: cast Speak with Animals without expending a spell slot — routed via /use_beast_speech per v2.99.145. RAW prereq Lv 2 Warlock."},
+            # v2.99.146 — Eyes of the Rune Keeper: passive, read all
+            # writing. Audit endpoint /use_eyes_of_the_rune_keeper
+            # broadcasts the cast. RAW prereq Lv 2 Warlock.
+            {"slug": "eldritch-invocation-eyes-of-the-rune-keeper", "name": "Eldritch Invocation: Eyes of the Rune Keeper",
+             "desc": "Passive: can read all writing (Druidic, Thieves' Cant, ancient glyphs, etc.) without Comprehend Languages — audit declaration via /use_eyes_of_the_rune_keeper per v2.99.146. RAW prereq Lv 2 Warlock."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],

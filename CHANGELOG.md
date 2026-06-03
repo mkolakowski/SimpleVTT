@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.146] - 2026-06-03 — "The Rune Keeper's Gaze" — Eyes of the Rune Keeper (Warlock invocation) audit endpoint
+
+**Schema version:** 65
+**Commit summary:** **Ship Eyes of the Rune Keeper as a dedicated `/use_eyes_of_the_rune_keeper` endpoint that broadcasts a `feature_used` audit when the Warlock declares they're decoding a piece of writing.** RAW (PHB p.110): "You can read all writing." The invocation is purely narrative in SimpleVTT — there's no "writing layer" — but the endpoint records the declaration in the chat log so the GM + table know the bonus was claimed. Mirror of the v2.99.138/.141/.143/.145 audit-only pattern. Magnus's seed gains the invocation on his feats list.
+**Description:** Three edits. (1) New `POST /api/campaign/{cid}/use_eyes_of_the_rune_keeper` endpoint. Validates `character_id`, caster ownership/GM, and the invocation via `_pc_has_eldritch_invocation(sheet, "eyes-of-the-rune-keeper")` (409 `missing_invocation`). On success, broadcasts `feature_used` with `source: "eyes-of-the-rune-keeper"`. (2) `app/demo_seed.py` — Magnus's feats list gains `eldritch-invocation-eyes-of-the-rune-keeper`. (3) `tests/harness/test_use_eyes_of_the_rune_keeper.py` — 3 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_eyes_of_the_rune_keeper` endpoint.
+- `eldritch-invocation-eyes-of-the-rune-keeper` on Magnus's feats list.
+- `feature_used` broadcast with `source: "eyes-of-the-rune-keeper"`.
+- `tests/harness/test_use_eyes_of_the_rune_keeper.py` — 3 tests: happy path (Magnus → 200 + WS audit), missing invocation gate (Krieger → 409), missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + demo seed edit + 3 tests. No schema change.
+- **What's filed.** A "writing layer" — handouts the GM places on the map that the player can decode in-game with this invocation. The endpoint surface is ready; the content/asset plumbing is a separate UI ship.
+- **Magnus's invocation roster.** 15 of the SRD's ~20 Eldritch Invocations now mechanically wired. The remaining ~5 (Visions of Distant Realms, Whispers of the Grave, Thief of Five Fates, Bewitching Whispers, Sign of Ill Omen) are mostly audit-only or registry-routed.
+- **Total harness count: 1011** (was 1008 in v2.99.145).
+
+---
+
 ## [2.99.145] - 2026-06-03 — "Speaking to the Wolves" — Beast Speech (Warlock invocation) audit endpoint
 
 **Schema version:** 65

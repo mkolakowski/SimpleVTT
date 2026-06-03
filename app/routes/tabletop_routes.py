@@ -10577,6 +10577,82 @@ async def use_beast_speech(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_eyes_of_the_rune_keeper")
+async def use_eyes_of_the_rune_keeper(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.146 — Eyes of the Rune Keeper (Warlock Lv 2+
+    invocation).
+
+    RAW (PHB p.110): "You can read all writing."
+
+    A passive invocation — the warlock can read any script (Druidic,
+    Thieves' Cant, ancient glyphs, etc.) without needing the
+    Comprehend Languages spell. There's no "writing layer" in
+    SimpleVTT today, so the mechanical effect is narrative. The
+    endpoint broadcasts the cast so the chat log records when the
+    warlock declares they're decoding a piece of writing.
+
+    Body: ``{character_id}``.
+
+    Validation:
+      - Caller has `eldritch-invocation-eyes-of-the-rune-keeper` on
+        feats (409 missing_invocation if not)
+      - 403 when not the GM and not the caster's owner
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_invocation(sheet, "eyes-of-the-rune-keeper"):
+        return JSONResponse(status_code=409, content={
+            "error": "missing_invocation",
+            "invocation": "eyes-of-the-rune-keeper",
+        })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "📜 Eyes of the Rune Keeper",
+            "feature_desc": (
+                f"{char.name} reads the writing — any script, "
+                f"any language, any glyph, no Comprehend Languages "
+                f"required."
+            ),
+            "source": "eyes-of-the-rune-keeper",
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,
