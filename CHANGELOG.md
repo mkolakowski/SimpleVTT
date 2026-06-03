@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.111] - 2026-06-03 — "Slow Pulls Free" — extend the v2.99.110 repeated-save stamps to /cast_slow
+
+**Schema version:** 65
+**Commit summary:** **Extend the v2.99.110 Hold-spells repeated-save pattern to `/cast_slow`.** The slow buff now carries `repeated_save_ability: "WIS"` + `repeated_save_dc: <caster's spell save DC>` so the v2.97.62 end-of-turn auto-fire framework rolls Krieger's WIS save automatically at the end of each of his turns. RAW Slow: "A creature affected by this spell makes a new Wisdom saving throw at the end of each of its turns. On a successful save, the effect ends for it."
+**Description:** Two edits in `app/routes/tabletop_routes.py`. (1) `_make_slow_buff` gets a `spell_save_dc: int | None = None` kwarg; when supplied, stamps `repeated_save_ability: "WIS"` + `repeated_save_dc: <dc>` on the buff. (2) `/cast_slow` computes the DC via the v2.99.110 `_compute_spell_save_dc_from_sheet(sheet)` helper and passes it. (3) `tests/harness/test_slow_repeated_save_stamps.py` — 2 regression tests.
+
+### Added
+- `spell_save_dc` kwarg on `_make_slow_buff`.
+- DC plumbing in `/cast_slow`.
+- `tests/harness/test_slow_repeated_save_stamps.py` — 2 tests: slow buff carries WIS+DC>0, /use_repeated_save endpoint callable against the buff.
+
+### Notes
+- **PATCH bump** — kwarg + DC pass-through + 2 tests. No schema change. The slow buff is backward-compatible: pre-v2.99.111 callers without the kwarg get a stamp-less buff (the auto-fire framework walks past it silently).
+- **Why not also Web / Lance of Lethargy.** Web's break-free is STR (Athletics) check vs the spell DC, NOT a save — needs a separate Athletics-check framework (filed). Lance of Lethargy is 1-round duration with no break-free save RAW; it just expires. Hex / Hunter's Mark also don't have end-of-turn saves. The repeated-save stamps belong on save-or-suck spells specifically.
+- **Total harness count: 889** (was 887 in v2.99.110).
+
+---
+
 ## [2.99.110] - 2026-06-03 — "One More Shake" — Hold Person + Hold Monster stamp repeated-save fields so the v2.97.62 end-of-turn auto-fire fires
 
 **Schema version:** 65

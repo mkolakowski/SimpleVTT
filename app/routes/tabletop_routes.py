@@ -21220,6 +21220,8 @@ def _make_slow_buff(
     target_speed_walk: int,
     source_char_id: int | None,
     source_char_name: str,
+    *,
+    spell_save_dc: int | None = None,
 ) -> dict:
     """v2.99.101 — build the Slow spell's target-side buff dict.
     Mechanical effect: speed halved (RAW). Stored as a flat
@@ -21251,7 +21253,7 @@ def _make_slow_buff(
         half = (base // 2 // 5) * 5
         if half <= 0:
             half = 0
-    return {
+    buff = {
         "key": "slow",
         "name": "Slow",
         "icon": "🐢",
@@ -21272,6 +21274,16 @@ def _make_slow_buff(
             "spell delay roll on action-cast spells (filed)",
         ],
     }
+    # v2.99.111 — end-of-turn WIS save stamps (RAW: "A creature
+    # affected by this spell makes a new Wisdom saving throw at the
+    # end of each of its turns. On a successful save, the effect
+    # ends for it."). The v2.97.62 framework reads these to fire the
+    # save at end of each target's turn. Stamps only fire when DC
+    # is supplied — older callers without the kwarg skip the stamp.
+    if spell_save_dc and int(spell_save_dc) > 0:
+        buff["repeated_save_ability"] = "WIS"
+        buff["repeated_save_dc"] = int(spell_save_dc)
+    return buff
 
 
 _PARALYZED_CORE_RAW_EFFECTS: list[str] = [
@@ -30189,6 +30201,7 @@ async def cast_slow(
             target_speed_walk=base_speed,
             source_char_id=char.id,
             source_char_name=char.name,
+            spell_save_dc=_compute_spell_save_dc_from_sheet(sheet),
         )
         installed = await _install_buff_on_combatant_id(
             campaign_id, tid, buff,
