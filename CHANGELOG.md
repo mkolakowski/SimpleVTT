@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.105] - 2026-06-03 — "Sticky Threads" — /cast_web endpoint installs full-base speed reduction (Restrained → speed 0)
+
+**Schema version:** 65
+**Commit summary:** **Ship the Web spell as a dedicated `/cast_web` endpoint that installs a `web` buff with `effects.speed_reduction_ft: base_speed_walk` — full reduction so the v2.99.98 engine clamps the target's effective speed to 0.** Third consumer of the speed-engine after Lance of Lethargy (-10) and Slow (-half). Sets the precedent that "speed → 0" effects (Web, future Hold spells, Grapple, Spider Climb against grease) all install as full-base reductions. Other Restrained effects (attack/save disadvantages, advantage to attackers, fire damage if web ignited) are surfaced as `raw_effects` tooltips for GM narration; mechanical enforcement is filed pending a standalone `restrained` condition buff that other Restraining content can share.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `_make_web_buff(target_speed_walk, source_char_id, source_char_name)` builder. Mirrors `_make_slow_buff` shape; the only mechanical difference is `reduction = max(0, base)` (full base) instead of `base // 2 // 5 * 5` (half rounded to 5). (2) New `POST /api/campaign/{cid}/cast_web` endpoint mirroring `/cast_slow`'s structure: validates class (wizard/sorcerer), Web on spell list, Lv 2+ slot, Phase 4 action-economy gate, then iterates target_combatant_ids and installs the web buff on each. Returns `{affected, unaffected, duration_rounds: 600, concentration: true}` (1 hour = 600 rounds). (3) `app/demo_seed.py` — adds Web to Thalindra Moonwhisper's spell list between Scorching Ray and Fireball. (4) `tests/harness/test_cast_web.py` — 5 regression tests.
+
+### Added
+- `_make_web_buff(target_speed_walk, source_char_id, source_char_name)` builder.
+- `POST /api/campaign/{cid}/cast_web` endpoint.
+- "Web" entry on Thalindra's spell list (slug `web`, level 2, save_ability DEX, casting_time "1 action").
+- `tests/harness/test_cast_web.py` — 5 tests: happy path (Krieger 40 ft base → 40 ft reduction = effective speed 0), wrong class (cleric → 400), missing targets (empty list → 400), wrong slot level (Lv 1 → 400 since Web is L2), zero-speed target (already 0 → reduction 0, no negative).
+
+### Notes
+- **PATCH bump** — new endpoint + helper + demo edit + 5 tests. No schema change.
+- **Pattern: "speed → 0" effects install as full-base reductions.** Web, Hold spells (when wired), Grapple, Tasha's Hideous Laughter (RAW: prone + incapacitated, but speed is implicitly 0 since prone reduces movement), etc. All can use the same `_make_*_buff(base_speed, ...)` shape with `reduction = max(0, base)`. A future `_make_speed_zero_buff(key, name, ...)` factory could consolidate them; today the per-spell builders are explicit.
+- **Why not split Restrained into a standalone condition buff yet.** Web's RAW Restrained effects are shared with Grapple, Hold spells, Wrath of the Storm (when caught in a hard tackle), and several monster grappler features. A `restrained` condition buff with all mechanical hooks would be the right home. The split is filed for a dedicated commit so the breaking change to the per-spell builders is one atomic refactor rather than scattered across the next 5 ships.
+- **Duration 1 hour = 600 rounds.** Same as Mask of Many Faces (v2.99.104). Matches the Web RAW duration.
+- **No AoE sweep yet.** Like Slow + Sleep, /cast_web receives pre-resolved target IDs. A future ruler/range commit can add `cast_point: {x, y}` + a 20-ft cube AoE sweep; filed.
+- **No caster-side concentration buff.** Same v2.99.101 filed item — the existing concentration framework expects install via /cast_spell. /cast_web doesn't install the paired buff today; GM /end_buff manually on each target when concentration drops.
+- **Total harness count: 863** (was 858 in v2.99.104).
+
+---
+
 ## [2.99.104] - 2026-06-03 — "A Hundred Borrowed Faces" — Mask of Many Faces (Warlock invocation) at-will Disguise Self
 
 **Schema version:** 65

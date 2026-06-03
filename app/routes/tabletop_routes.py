@@ -21274,6 +21274,54 @@ def _make_slow_buff(
     }
 
 
+def _make_web_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+) -> dict:
+    """v2.99.105 — build the Web spell's target-side buff dict.
+    Mechanical effect: speed reduced to 0 (Restrained) — stored as
+    `speed_reduction_ft = base` so the v2.99.98 engine clamps the
+    effective speed to 0.
+
+    Other Restrained effects (attacks vs target have advantage,
+    target's attacks have disadvantage, disadvantage on DEX saves)
+    are surfaced as `raw_effects` tooltips on the buff for GM
+    narration. A future `restrained` condition buff can split
+    these out so other Restraining content (Grapple, Hold spells,
+    monster grapplers) shares the mechanics; today the effects
+    ride on the web buff.
+    """
+    try:
+        base = (
+            int(target_speed_walk) if target_speed_walk is not None else 30
+        )
+    except (TypeError, ValueError):
+        base = 30
+    # Web reduces speed to 0 → reduction = base (whatever the
+    # target's speed is). Clamp to ≥ 0 just in case.
+    reduction = max(0, base)
+    return {
+        "key": "web",
+        "name": "Webbed (Restrained)",
+        "icon": "🕸",
+        "duration_rounds": 600,  # 1 hour at 6 s / round
+        "concentration": True,
+        "source": "web-spell",
+        "source_char_id": int(source_char_id) if source_char_id else None,
+        "source_char_name": source_char_name or "",
+        "effects": {"speed_reduction_ft": reduction},
+        "raw_effects": [
+            "Restrained: speed 0",
+            "Restrained: attacks vs target have advantage (filed)",
+            "Restrained: target's attacks have disadvantage (filed)",
+            "Restrained: disadvantage on DEX saves (filed)",
+            "STR (Athletics) check vs DC to break free (action)",
+            "Flammable: take 2d4 fire damage if web ignited (filed)",
+        ],
+    }
+
+
 async def _apply_repelling_blast_push(
     db: Session, campaign_id: int, campaign: "Campaign",
     attacker_char_id: int, attacker_sheet: dict,
@@ -29909,6 +29957,208 @@ async def cast_slow(
         "affected": affected,
         "unaffected": unaffected,
         "duration_rounds": 10,
+        "concentration": True,
+    }
+
+
+# ----------- API: cast Web (2nd-level Conjuration, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_web")
+async def cast_web(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.105 — Cast Web on target combatants in the AoE.
+
+    Body: ``{character_id, class_slug, slot_level, target_combatant_ids,
+    override?}``.
+
+    RAW (PHB Web, 2nd-level Conjuration): 1 action, 60 ft range, 20-ft
+    cube AoE, concentration up to 1 hour, DEX save. v1 ships the
+    speed→0 effect (full base reduction so the v2.99.98 engine
+    clamps effective speed to 0). Other Restrained effects
+    (attack/save disadvantages, advantage to attackers) are surfaced
+    as `raw_effects` tooltips for GM narration; mechanical
+    enforcement is filed pending a standalone `restrained` condition
+    buff.
+
+    Save logic is a v1 simplification: caller passes the failed-save
+    set as `target_combatant_ids`. Auto-rolled saves + the 20-ft
+    cube AoE sweep can wire into this endpoint via /respond + a
+    future cast-point coordinate; filed.
+
+    Validation: caster has class + Web on spell list + Lv 2+ slot +
+    Phase 4 action gate (overrideable). Mirrors /cast_slow.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 2
+    target_combatant_ids = body.get("target_combatant_ids") or []
+    override = bool(body.get("override"))
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("wizard", "sorcerer"):
+        raise HTTPException(400, "class_slug must be wizard or sorcerer")
+    if slot_level < 2:
+        raise HTTPException(400, "slot_level must be >= 2 (Web is L2)")
+    if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
+        raise HTTPException(400, "target_combatant_ids must be a non-empty list")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_web = any(
+        (s.get("_slug") == "web") or
+        (str(s.get("name", "")).lower() == "web")
+        for s in spells
+    )
+    if not has_web:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "web",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Web",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "web",
+            "label": "Web",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    affected: list[dict] = []
+    unaffected: list[dict] = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        c = _lookup_combatant(campaign_id, tid)
+        if not c:
+            unaffected.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        _raw_speed = c.get("speed_walk")
+        try:
+            base_speed = int(_raw_speed) if _raw_speed is not None else 30
+        except (TypeError, ValueError):
+            base_speed = 30
+        buff = _make_web_buff(
+            target_speed_walk=base_speed,
+            source_char_id=char.id,
+            source_char_name=char.name,
+        )
+        installed = await _install_buff_on_combatant_id(
+            campaign_id, tid, buff,
+        )
+        affected.append({
+            "combatant_id": tid,
+            "name": c.get("name") or "",
+            "base_speed_walk": base_speed,
+            "speed_reduction_ft": buff["effects"]["speed_reduction_ft"],
+            "installed": installed,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    affected_summary = ", ".join(
+        f"{a['name']} (speed → 0)" for a in affected
+    ) or "no one"
+    note = f"🕸 Web (L{slot_level}) → {affected_summary}"
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": (
+                f"Web installed on {len(affected)} target(s). "
+                f"Concentration up to 1 hour. Restrained (speed 0, "
+                f"attack/save disadvantages — GM narrate). "
+                f"STR (Athletics) check to break free."
+            ),
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "affected": affected,
+        "unaffected": unaffected,
+        "duration_rounds": 600,  # 1 hour
         "concentration": True,
     }
 

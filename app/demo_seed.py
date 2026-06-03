@@ -463,6 +463,18 @@ def _wizard_sheet(name: str) -> dict:
             {"name": "Shield", "level": 1, "prepared": True, "_slug": "shield", "casting_time": "1 reaction"},
             {"name": "Misty Step", "level": 2, "prepared": True, "_slug": "misty-step", "casting_time": "1 bonus action"},
             {"name": "Scorching Ray", "level": 2, "prepared": True, "_slug": "scorching-ray", "casting_time": "1 action"},
+            # v2.99.105 — Web. Lv 2 Conjuration, concentration up to
+            # 1 hour, DEX save. Routed via /cast_web (NOT /cast_spell)
+            # for the same reasons as Slow (v2.99.101) — dict-shape
+            # mechanical effects don't fit the existing list-shape
+            # _SPELL_CONDITION_MAP. Installs a `web` buff with
+            # `effects.speed_reduction_ft: base` (clamps speed to 0)
+            # on each target; descriptive Restrained effects
+            # (advantage/disadvantage) surface as raw_effects bullets
+            # for GM narration.
+            {"name": "Web", "level": 2, "prepared": True, "_slug": "web",
+             "casting_time": "1 action", "save_ability": "DEX",
+             "desc": "60 ft, 20-ft cube, concentration up to 1 hour, DEX save DC 14. v1: routed via /cast_web; installs a per-target Restrained buff with speed_reduction_ft = base (→ speed 0). STR (Athletics) check to break free."},
             {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball", "casting_time": "1 action"},
             # v2.46.0 T.7a — Lightning Bolt exercises the line-shape
             # AoE picker (100 ft × 5 ft from the caster). Sits AFTER
