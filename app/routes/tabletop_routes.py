@@ -20827,6 +20827,61 @@ def _pc_agonizing_blast_bonus(sheet: dict, attack: dict) -> int:
         return 0
 
 
+def _attack_is_hex_warrior_bound(attack: dict) -> bool:
+    """v2.99.93 — does this attack represent a Hex Warrior-bound
+    weapon? Reads the explicit ``attack.hex_warrior`` flag. The
+    demo seed marks Magnus's Quarterstaff with it.
+    """
+    if not attack:
+        return False
+    return bool(attack.get("hex_warrior"))
+
+
+def _pc_hex_warrior_bonus(sheet: dict, attack: dict) -> int:
+    """v2.99.93 — Hex Warrior invocation (Warlock Lv 2+, PHB
+    p.111): use CHA instead of STR/DEX for attack + damage rolls
+    with a bound weapon (touched after a long rest, lacking the
+    two-handed property).
+
+    Returns the delta ``CHA_mod - original_mod`` to append to both
+    the attack-roll and damage expressions. Original mod is derived
+    from ``attack_bonus − proficiency_bonus`` (same heuristic as
+    Two-Weapon Fighting). Returns 0 when the gate fails (no
+    invocation, no hex_warrior flag, no CHA score, no PB → can't
+    derive original mod).
+
+    Example: Magnus's Quarterstaff attack_bonus=+4 (STR +1 + PB +3).
+    CHA 17 mod = +3. Delta = +3 - +1 = +2. The attack rolls become
+    ``1d20+4+2`` and damage becomes ``1d6+1+2``.
+    """
+    if not _attack_is_hex_warrior_bound(attack):
+        return 0
+    if not _pc_has_eldritch_invocation(sheet, "hex-warrior"):
+        return 0
+    abilities = sheet.get("abilities") or {}
+    try:
+        cha_mod = (int(abilities.get("CHA")) - 10) // 2
+    except (TypeError, ValueError):
+        return 0
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        return 0
+    raw = str(attack.get("attack_bonus") or "").strip()
+    if not raw:
+        return 0
+    import re as _re
+    m = _re.match(r"^\s*([+\-]?\d+)", raw)
+    if not m:
+        return 0
+    try:
+        bonus = int(m.group(1))
+        original_mod = bonus - pb
+    except (TypeError, ValueError):
+        return 0
+    delta = cha_mod - original_mod
+    return delta
+
+
 async def _apply_lance_of_lethargy(
     campaign_id: int, attacker_char_id: int, attacker_name: str,
     attacker_sheet: dict, attack: dict, target_combatant: dict | None,
@@ -31429,6 +31484,19 @@ async def use_attack(
             f"{damage_expr_raw}+{_agonizing}" if _agonizing > 0
             else f"{damage_expr_raw}{_agonizing}"
         )
+    # v2.99.93 — Hex Warrior damage swap. Mirror of the attack-roll
+    # delta above: append the CHA - original ability mod delta to
+    # the damage expression so the bound weapon's damage uses CHA
+    # instead of STR/DEX. Same helper, no recompute needed for
+    # consistency — both calls return identical deltas for the
+    # same (sheet, attack) tuple.
+    _hex_warrior_delta_dmg = _pc_hex_warrior_bonus(sheet, attack)
+    if _hex_warrior_delta_dmg and damage_expr_raw:
+        damage_expr_raw = (
+            f"{damage_expr_raw}+{_hex_warrior_delta_dmg}"
+            if _hex_warrior_delta_dmg > 0
+            else f"{damage_expr_raw}{_hex_warrior_delta_dmg}"
+        )
 
     is_save = save_dc > 0 and save_ability
 
@@ -31627,6 +31695,17 @@ async def use_attack(
         _archery = _pc_archery_bonus(sheet, attack)
         if _archery:
             atk_expr += f"+{_archery}"
+        # v2.99.93 — Eldritch Invocation: Hex Warrior. When the
+        # attacker has the invocation + the attack is bound, swap
+        # the original ability mod (STR/DEX) for CHA. Same delta
+        # appended to both the attack roll AND the damage expression
+        # (see the damage block below).
+        _hex_warrior_delta = _pc_hex_warrior_bonus(sheet, attack)
+        if _hex_warrior_delta:
+            atk_expr += (
+                f"+{_hex_warrior_delta}" if _hex_warrior_delta > 0
+                else f"{_hex_warrior_delta}"
+            )
         # v2.97.34 — append buff-driven attack modifiers (Sacred
         # Weapon / Bless / Bane). The suffix is "" when none apply,
         # so this is a no-op for ordinary attacks.

@@ -1402,9 +1402,17 @@ def _warlock_sheet(name: str) -> dict:
             "Sleight of Hand": {"ability": "DEX", "proficient": True, "expertise": False},
         },
         "attacks": [
+            # v2.99.93 — Hex Warrior bound weapon. Magnus's Quarterstaff
+            # is the bound weapon (touched after long rest, lacks the
+            # two-handed property in its 1H grip — note RAW: must lack
+            # the two-handed property, which Versatile satisfies in 1H
+            # mode). With the Hex Warrior invocation, /attack swaps
+            # STR (+1) for CHA (+3) on both attack roll AND damage,
+            # appending a +2 delta to both. End-roll: 1d20+6 attack,
+            # 1d6+3 damage (was 1d20+4 / 1d6+1).
             {"name": "Quarterstaff", "attack_bonus": "+4", "damage": "1d6+1",
-             "damage_type": "bludgeoning", "range": "5 ft",
-             "desc": "Versatile (1d8). Magnus carries one mostly for poking around dark places; he'd rather Eldritch Blast you."},
+             "damage_type": "bludgeoning", "range": "5 ft", "hex_warrior": True,
+             "desc": "Versatile (1d8). Hex Warrior bound weapon (Lv 2+ invocation): uses CHA in place of STR for attack + damage — auto-applied at /attack time per v2.99.93. Magnus carries one mostly for poking around dark places; he'd rather Eldritch Blast you."},
             # v2.99.89 — Agonizing Blast +CHA mod is now auto-applied
             # at /attack time per _pc_agonizing_blast_bonus. Pre-v2.99.89
             # the +3 (CHA 17 mod) was pre-baked into the damage; v2.99.89
@@ -1534,6 +1542,14 @@ def _warlock_sheet(name: str) -> dict:
             # via _apply_lance_of_lethargy at /attack time.
             {"slug": "eldritch-invocation-lance-of-lethargy", "name": "Eldritch Invocation: Lance of Lethargy",
              "desc": "When you hit a creature with Eldritch Blast, you can reduce that creature's speed by 10 ft until end of your next turn — buff auto-installed at /attack time per v2.99.92."},
+            # v2.99.93 — Hex Warrior: swap STR/DEX for CHA on a
+            # bound weapon's attack + damage rolls. Magnus's
+            # Quarterstaff is flagged ``hex_warrior: True``;
+            # _pc_hex_warrior_bonus appends the CHA - original_mod
+            # delta to both atk_expr and damage_expr_raw at /attack
+            # time.
+            {"slug": "eldritch-invocation-hex-warrior", "name": "Eldritch Invocation: Hex Warrior",
+             "desc": "Touch a weapon you're proficient with (lacking the two-handed property) after a long rest; you can use CHA in place of STR or DEX for attack + damage rolls with it — auto-applied at /attack time per v2.99.93."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],

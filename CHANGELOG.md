@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.93] - 2026-06-03 — "Charisma Sings the Steel" — Hex Warrior (Warlock invocation) swaps STR/DEX for CHA on bound weapons
+
+**Schema version:** 65
+**Commit summary:** **Wire the Hex Warrior Eldritch Invocation so a bound non-two-handed weapon uses CHA in place of STR/DEX for attack + damage rolls.** Builds on the v2.99.89/.90/.92 invocation framework. Two new helpers — `_attack_is_hex_warrior_bound(attack)` reads the explicit `attack.hex_warrior` flag; `_pc_hex_warrior_bonus(sheet, attack)` returns the delta `CHA_mod − original_mod` when the invocation is on the feats list AND the attack carries the flag. Original mod derived from `attack_bonus − proficiency_bonus` (same heuristic as v2.99.87 Two-Weapon Fighting). The delta is appended to BOTH the attack-roll expression (in the d20+bonus path) AND the damage expression (after Agonizing Blast). Magnus's demo Quarterstaff gains `hex_warrior: True`; his feats list gains the invocation.
+**Description:** `_pc_hex_warrior_bonus(sheet, attack) -> int` is the new workhorse. Five short-circuits: (1) no `attack.hex_warrior` flag, (2) no invocation on feats, (3) no CHA score on the sheet, (4) no proficiency_bonus, (5) attack_bonus missing or non-numeric. On all-pass: parses the leading integer of `attack_bonus`, subtracts PB → derives the original ability mod, computes `CHA - original`, and returns the delta (positive or negative). The /attack wire-ins append the delta to `atk_expr` right after the v2.99.83 Archery hook AND to `damage_expr_raw` right after the v2.99.89 Agonizing Blast hook — both calls return identical values for the same (sheet, attack) tuple (deterministic helper). Magnus's demo Quarterstaff has STR mod +1 + PB +3 + CHA mod +3 → delta = +2; attack rolls become `1d20+4+2` and damage `1d6+1+2`. Hex Warrior delta only fires on the flagged weapon; Eldritch Blast and other attacks are untouched even with the invocation present.
+
+### Added
+- `_attack_is_hex_warrior_bound(attack) -> bool` — reads `attack.hex_warrior`.
+- `_pc_hex_warrior_bonus(sheet, attack) -> int` — returns the swap delta. Same return value on both /attack call sites for a given (sheet, attack); idempotent in that sense.
+- Two /attack wire-ins: one in the d20+bonus path (after Archery), one in the damage path (after Agonizing Blast). Both append `+{delta}` (or `{delta}` for negative deltas).
+- `hex_warrior: True` flag on Magnus's Quarterstaff in the demo seed.
+- `eldritch-invocation-hex-warrior` entry on Magnus's `feats` list.
+- `tests/harness/test_hex_warrior.py` — 3 regression tests: happy (delta +2 visible on both atk + damage), invocation gate (drop the feat, delta disappears), flag gate (Eldritch Blast without the hex_warrior flag stays unaffected even with the invocation present).
+
+### Notes
+- **PATCH bump** — additive helpers + two /attack appends + a demo seed edit + 3 tests. No schema change.
+- **Why a delta instead of a full ability swap.** The /attack endpoint already takes the sheet-authored `attack_bonus` and `damage` expressions and feeds them to the dice roller verbatim. Computing a delta and APPENDING it leaves the original expression intact (visible in the chat-card audit trail) while the rolled total reflects the CHA-swap. A full ability swap would require parsing+rewriting the damage modifier in place — more brittle, no audit-trail benefit.
+- **Negative deltas.** If a Warlock has CHA < STR (e.g. a swashbuckler-flavored multiclass), the delta is negative. The expression then reads `1d20+4-2` (with the minus sign), which the dice roller handles natively. The damage path uses the same negative-aware concatenation. Tested implicitly by the helper's signed-return logic; a specific negative-delta test is filed.
+- **Why a delta-based approach for both rolls.** The same `_pc_hex_warrior_bonus(sheet, attack)` call returns identical values from both /attack code paths (the bonus-derivation is deterministic from sheet + attack). Recomputing is cheap; passing a precomputed value would couple the two append sites for no real benefit.
+- **Versatile weapons.** RAW: Hex Warrior requires the weapon to lack the two-handed property. Versatile weapons (Quarterstaff, Longsword, Battleaxe, Warhammer) qualify when wielded 1H. The helper doesn't gate on the two-handed property — the GM authoring the sheet is responsible for only flagging non-two-handed weapons. A future helper could parse the weapon's `properties` field for "two-handed" and reject; filed.
+- **Stacks with Repelling Blast / Lance of Lethargy on Eldritch Blast?** No — Hex Warrior gates on the `hex_warrior` flag, not the attack name. Magnus's EB doesn't carry the flag; the Hex Warrior helper short-circuits even with the invocation. EB still benefits from Agonizing Blast (+CHA per beam via the `_pc_agonizing_blast_bonus` helper, which is a separate code path).
+- **Pact of the Blade interaction.** RAW: a Warlock with Pact of the Blade + Hex Warrior can use Hex Warrior on the pact weapon, even if it's two-handed. The flag-based gate works for that — flag the pact weapon and the invocation fires. The pact-weapon-spawn endpoint is filed; today the GM hand-authors the weapon entry.
+- **Total harness count: 818** (was 815 in v2.99.92).
+
+---
+
 ## [2.99.92] - 2026-06-03 — "Slow the Hit" — Lance of Lethargy (Warlock invocation) installs speed-reduction buff
 
 **Schema version:** 65
