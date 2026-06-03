@@ -1411,8 +1411,9 @@ def _warlock_sheet(name: str) -> dict:
             # appending a +2 delta to both. End-roll: 1d20+6 attack,
             # 1d6+3 damage (was 1d20+4 / 1d6+1).
             {"name": "Quarterstaff", "attack_bonus": "+4", "damage": "1d6+1",
-             "damage_type": "bludgeoning", "range": "5 ft", "hex_warrior": True,
-             "desc": "Versatile (1d8). Hex Warrior bound weapon (Lv 2+ invocation): uses CHA in place of STR for attack + damage — auto-applied at /attack time per v2.99.93. Magnus carries one mostly for poking around dark places; he'd rather Eldritch Blast you."},
+             "damage_type": "bludgeoning", "range": "5 ft",
+             "hex_warrior": True, "pact_weapon": True,
+             "desc": "Versatile (1d8). Hex Warrior bound weapon (Lv 2+ invocation): uses CHA in place of STR for attack + damage — auto-applied at /attack time per v2.99.93. Also flagged ``pact_weapon: True`` for the v2.99.97 Lifedrinker invocation (Lv 12+ gate; the helper rejects at Magnus's Lv 5 until PATCH'd up). Magnus carries one mostly for poking around dark places; he'd rather Eldritch Blast you."},
             # v2.99.89 — Agonizing Blast +CHA mod is now auto-applied
             # at /attack time per _pc_agonizing_blast_bonus. Pre-v2.99.89
             # the +3 (CHA 17 mod) was pre-baked into the damage; v2.99.89
@@ -1550,6 +1551,15 @@ def _warlock_sheet(name: str) -> dict:
             # time.
             {"slug": "eldritch-invocation-hex-warrior", "name": "Eldritch Invocation: Hex Warrior",
              "desc": "Touch a weapon you're proficient with (lacking the two-handed property) after a long rest; you can use CHA in place of STR or DEX for attack + damage rolls with it — auto-applied at /attack time per v2.99.93."},
+            # v2.99.97 — Lifedrinker: on a pact-weapon hit, the target
+            # takes extra necrotic damage equal to CHA mod (min 1).
+            # Requires Lv 12 + Pact of the Blade — auto-uplift fires
+            # at /attack time per _pc_lifedrinker_bonus. Magnus's
+            # Quarterstaff is flagged ``pact_weapon: True``;
+            # descriptive at Lv 5 (the helper rejects on the Lv 12
+            # gate until the harness PATCHes Magnus up).
+            {"slug": "eldritch-invocation-lifedrinker", "name": "Eldritch Invocation: Lifedrinker",
+             "desc": "Prerequisite: Lv 12+ Warlock, Pact of the Blade. When you hit a creature with your pact weapon, the creature takes extra necrotic damage equal to your CHA mod (minimum 1) — auto-applied at /attack time per v2.99.97."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],

@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.97] - 2026-06-03 — "Drink Deep, Pact-Bound" — Lifedrinker (Warlock Lv 12 invocation) adds +CHA necrotic on pact-weapon hits
+
+**Schema version:** 65
+**Commit summary:** **Wire the Lifedrinker Eldritch Invocation so a Lv 12+ Warlock with Pact of the Blade gets +CHA mod necrotic (min 1) on every hit with their pact weapon.** Builds on the v2.99.89/.90/.92/.93 invocation framework. Three new helpers — `_warlock_level_from_sheet(sheet)` (mirrors `_cleric_level_from_sheet`), `_attack_is_pact_weapon(attack)` (reads `attack.pact_weapon` flag), `_pc_lifedrinker_bonus(sheet, attack)` (returns CHA mod clamped to ≥1 when all four gates pass: pact flag + invocation feat + Warlock Lv 12+ + CHA score). Unlike Agonizing Blast / Hex Warrior (which append to the main damage expression), Lifedrinker fires as a **separate uplift** with `damage_type="necrotic"` — the necrotic damage doesn't blend with the weapon's bludgeoning/slashing/piercing. Wired via a new optional `attack: dict | None = None` parameter on `_compute_attack_auto_uplifts` so the existing call site can pass the resolved attack dict.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. (1) Three new helpers near the other invocation helpers (after Hex Warrior). (2) New optional `attack` param on `_compute_attack_auto_uplifts` + a Lifedrinker block that runs when `attack` is truthy and returns a separate `{source: "lifedrinker", damage_type: "necrotic", expression: "+N", total: N}` uplift. (3) The /attack call site at line ~32028 now passes `attack=attack`. Magnus's demo `feats` list gains `eldritch-invocation-lifedrinker`; his Quarterstaff (which was already Hex Warrior bound) gains `pact_weapon: True`. Magnus is sheet Lv 5 — below the Lv 12 prerequisite — so the demo entry is descriptive; the harness PATCHes him to Lv 12 to verify the uplift fires.
+
+### Added
+- `_warlock_level_from_sheet(sheet) -> int` — single-class + multi-class Warlock level reader.
+- `_attack_is_pact_weapon(attack) -> bool` — reads `attack.pact_weapon`.
+- `_pc_lifedrinker_bonus(sheet, attack) -> int` — returns CHA mod (min 1) when all four gates pass; else 0.
+- Optional `attack: dict | None = None` parameter on `_compute_attack_auto_uplifts`. Pre-v2.99.97 call sites that don't pass it skip the Lifedrinker block (helper returns 0 when `attack is None`).
+- Lifedrinker block in `_compute_attack_auto_uplifts` (item #5 in the numbered uplift list). Fires on every hit (no once-per-turn lock — RAW has no rate limit).
+- /attack call site passes `attack=attack` so the local resolved attack dict reaches the helper.
+- `eldritch-invocation-lifedrinker` on Magnus's `feats` list in the demo seed.
+- `pact_weapon: True` flag on Magnus's Quarterstaff (alongside the existing `hex_warrior: True`).
+- `tests/harness/test_lifedrinker.py` — 3 regression tests: happy (PATCH Magnus to Lv 12, attack Krieger with the pact Quarterstaff, assert uplift = +3 necrotic), level gate (stock Lv 5 Magnus → no uplift even with all other gates satisfied), weapon gate (Lv 12 Magnus's Eldritch Blast → no uplift because pact_weapon flag is absent).
+
+### Changed
+- `_compute_attack_auto_uplifts` now accepts an optional `attack` kwarg. The /attack call site passes the resolved attack dict; default `None` keeps any future call sites that don't pass it backwards-compatible.
+
+### Notes
+- **PATCH bump** — additive helpers + a single uplift block + a demo seed edit + 3 tests. No schema change.
+- **Why a separate uplift instead of appending to damage_expr.** Lifedrinker's damage is necrotic, which is different from the weapon's bludgeoning. Appending would blend the two damage types in the breakdown. The separate-uplift pattern (mirroring Divine Strike) keeps the necrotic damage rolled + reported independently, which the v2.97.x resistance/immunity engine can then apply per-type correctly (e.g. a target resistant to bludgeoning but not necrotic takes full Lifedrinker damage even though the weapon's swing is halved).
+- **Why no once-per-turn lock.** RAW: Lifedrinker has no rate limit — every successful pact-weapon hit triggers it. This makes it the only invocation that auto-uplifts every hit (Agonizing Blast does too, but it appends to the main expression). Twin-attack builds (Polearm Master, Extra Attack, Action Surge) fire Lifedrinker on each hit. No `economy.lifedrinker_used` flag needed.
+- **Why min 1.** RAW: "a minimum of 1". A Warlock with CHA 8 (-1 mod) still deals 1 necrotic per hit. The helper clamps with `max(1, cha_mod)`.
+- **Stacks with Hex Warrior.** Magnus's Quarterstaff is BOTH a Hex Warrior bound weapon AND a Pact-of-the-Blade pact weapon. Both invocations fire on the same swing: Hex Warrior swaps STR for CHA in the main attack/damage expressions (v2.99.93 delta append); Lifedrinker adds the +CHA necrotic uplift. The two are independent code paths — disabling one via the feats list doesn't affect the other.
+- **Pact of the Blade feature itself.** Lifedrinker's RAW prerequisite is "Pact of the Blade feature." v2.99.97 doesn't model the Pact Boon choice as a sheet field — the helper just reads the `attack.pact_weapon` flag as the proxy. The intent: any weapon the GM flags as the pact weapon is treated as such. A future ship can add a `sheet.pact_boon = "blade"` field + gate the Lifedrinker helper on it for stricter RAW; today the simpler flag-based gate is enough.
+- **Filed.** (1) Pact weapon summon UI — a button that flags an inventory weapon as the pact weapon at runtime. (2) Pact boon picker on character creation. (3) Devil's Sight wiring — Magnus already has the invocation descriptively, but the vision/lighting layer isn't built yet. (4) Mask of Many Faces — Disguise Self at-will toggle.
+- **Total harness count: 832** (was 829 in v2.99.96).
+
+---
+
 ## [2.99.96] - 2026-06-03 — "Read the Sheet, Not the Comment" — fix Defense AC assertions for Garrik's actual sheet value
 
 **Schema version:** 65

@@ -19550,6 +19550,7 @@ def _compute_attack_auto_uplifts(
     attack_damage_type: str,
     is_crit: bool = False,
     weapon_damage_expr: str = "",
+    attack: dict | None = None,
 ) -> list[dict]:
     """Compute auto-applied uplifts from attacker's buffs + class
     features at /attack time.
@@ -19563,6 +19564,11 @@ def _compute_attack_auto_uplifts(
     helpers — this function reads the flag from the hub combatant but
     doesn't mutate it (the GM-side turn-advance handler resets the
     flag alongside action chips).
+
+    v2.99.97 added the optional ``attack`` param so the Lifedrinker
+    invocation (Warlock Lv 12+ Pact of the Blade) can read the
+    ``attack.pact_weapon`` flag. Pre-v2.99.97 call sites that don't
+    pass ``attack`` simply skip the Lifedrinker block.
     """
     uplifts: list[dict] = []
     state = hub.get_battle(campaign_id)
@@ -19726,7 +19732,26 @@ def _compute_attack_auto_uplifts(
                 except dice_mod.DiceParseError:
                     pass
 
-    # 5. v2.99.23 — Half-Orc Savage Attacks. RAW (PHB p.41): "When
+    # 5. v2.99.97 — Lifedrinker (Warlock Lv 12+ + Pact of the Blade
+    #    invocation, PHB p.111). +CHA necrotic on every pact-weapon
+    #    hit (min 1). Unlike Divine Strike / Colossus Slayer, this
+    #    fires on every hit (RAW has no rate limit). The bonus is
+    #    flat (no die); wrap it as "+N" so the breakdown reads
+    #    uniformly with Rage / Dueling. Gated on attack.pact_weapon,
+    #    which we receive via the optional ``attack`` param.
+    if attack:
+        ld_bonus = _pc_lifedrinker_bonus(attacker_sheet, attack)
+        if ld_bonus > 0:
+            uplifts.append({
+                "label": "Lifedrinker",
+                "expression": f"+{ld_bonus}",
+                "total": ld_bonus,
+                "breakdown": f"+{ld_bonus}",
+                "damage_type": "necrotic",
+                "source": "lifedrinker",
+            })
+
+    # 6. v2.99.23 — Half-Orc Savage Attacks. RAW (PHB p.41): "When
     #    you score a critical hit with a melee weapon attack, you
     #    can roll one of the weapon's damage dice one additional
     #    time and add it to the extra damage of the critical hit."
@@ -20910,6 +20935,73 @@ def _pc_hex_warrior_bonus(sheet: dict, attack: dict) -> int:
         return 0
     delta = cha_mod - original_mod
     return delta
+
+
+def _warlock_level_from_sheet(sheet: dict) -> int:
+    """v2.99.97 — read the Warlock level out of a sheet (single-class
+    or multi-class). Mirrors `_cleric_level_from_sheet`. Used by the
+    Lifedrinker invocation Lv 12 prerequisite gate.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "warlock":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "warlock":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _attack_is_pact_weapon(attack: dict) -> bool:
+    """v2.99.97 — does this attack represent a Pact of the Blade
+    pact weapon? Reads the explicit ``attack.pact_weapon`` flag.
+    The demo seed marks Magnus's Quarterstaff with it (the same
+    weapon is also Hex Warrior bound — RAW the bound weapon is a
+    natural fit for the pact weapon and both invocations stack).
+    """
+    if not attack:
+        return False
+    return bool(attack.get("pact_weapon"))
+
+
+def _pc_lifedrinker_bonus(sheet: dict, attack: dict) -> int:
+    """v2.99.97 — Lifedrinker invocation (Warlock Lv 12+,
+    Pact of the Blade, PHB p.111): "When you hit a creature with
+    your pact weapon, the creature takes extra necrotic damage
+    equal to your Charisma modifier (a minimum of 1)."
+
+    Returns the CHA mod (clamped to ≥1) when all four gates pass:
+      1. attack.pact_weapon is True
+      2. invocation on feats list
+      3. Warlock level ≥ 12
+      4. sheet has a CHA score
+
+    Returns 0 on any gate miss. The caller (the uplift framework
+    in _compute_attack_auto_uplifts) appends a separate necrotic
+    uplift; this helper just produces the magnitude.
+    """
+    if not _attack_is_pact_weapon(attack):
+        return 0
+    if not _pc_has_eldritch_invocation(sheet, "lifedrinker"):
+        return 0
+    if _warlock_level_from_sheet(sheet) < 12:
+        return 0
+    abilities = sheet.get("abilities") or {}
+    cha = abilities.get("CHA")
+    try:
+        cha_mod = (int(cha) - 10) // 2
+    except (TypeError, ValueError):
+        return 0
+    # RAW: "a minimum of 1" — even a Warlock with CHA 8 (-1) deals
+    # 1 necrotic, not -1. Clamp.
+    return max(1, cha_mod)
 
 
 async def _apply_lance_of_lethargy(
@@ -31937,6 +32029,7 @@ async def use_attack(
         attack_damage_type=damage_type,
         is_crit=is_crit,
         weapon_damage_expr=damage_expr_raw,
+        attack=attack,
     )
     # v2.60.0 — defer the mark-as-used calls for on-hit-only uplifts
     # (Colossus Slayer + Divine Strike) until after hit determination
