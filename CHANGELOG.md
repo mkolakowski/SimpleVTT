@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.91] - 2026-06-03 — "Catch the Status" — sync class-content-status.md to the v2.99.80→.90 ships
+
+**Schema version:** 65
+**Commit summary:** **Doc-only pass to flip the 9 recent class-feature ships (v2.99.80 → v2.99.90) on the class-content-status table from 🟡 / 🟢 to 🟢 / ✅ with full notes.** The status doc was 11 versions behind the code; this commit catches it up so the next planning cycle reads against reality. No code changes; the doc-surface rule (every doc edit also visible from `/wiki`) is satisfied — `class-content-status.md` is already in the `_DOC_ALLOWLIST` and surfaced via `wiki.html` + `docs/wiki/README.md`.
+**Description:** Six row updates in `docs/plans/class-content-status.md`. (1) Cleric Channel Divinity — appended v2.99.80 Lv 6 options (Read Thoughts + Cloak of Shadows) + the picker `min_level` gate. (2) Monk Lv 1 Martial Arts — flipped 🟡 → ✅ with the v2.99.81 die progression helpers + harness fixtures. (3) Fighter Lv 1 Fighting Style — flipped 🟡 → 🟢 with the full Archery/Dueling/GWF/TWF wired + Defense filed. (4) Paladin Lv 2 Fighting Style — same flip with a note pointing at the Fighter row's helpers. (5) Ranger Lv 2 Fighting Style — same flip, Rowan demo fixture called out. (6) Warlock Lv 2 Eldritch Invocations — flipped 🟡 → 🟢 with the v2.99.89 Agonizing Blast + v2.99.90 Repelling Blast wired. (7) Warlock Mystic Arcanum — flipped 🟢 → ✅ with the v2.99.86 L7/L8/L9 tier resources + the v2.99.88 free-cast routing through `/cast_spell`.
+
+### Changed
+- `docs/plans/class-content-status.md` — 6 rows updated to reflect v2.99.80 → v2.99.90 ships. Each row carries the version, the helper / endpoint names, the demo fixture, and a pointer to the harness file. Pre-v2.99.91 the doc claimed Fighting Style was "🟡 description visible," Mystic Arcanum was "🟢 L6 tier only," and Eldritch Invocations had "no picker UI" — all stale.
+
+### Notes
+- **PATCH bump** — doc-only ship. No code changes. The doc-surface rule is satisfied (existing wiki nav row).
+- **What's still 🟡 / 🟡-shaped after this pass.** Defense Fighting Style (+1 AC, needs auto-AC engine), Two-Weapon Fighting's "no other weapon" inventory gate, Eldritch Invocation picker UI, most other invocations (Devil's Sight, Mask of Many Faces, Lifedrinker, Hex Warrior, Eyes of the Rune Keeper, Lance of Lethargy, etc.), Cleric Divine Strike for non-Life domains (Death / War / Tempest), Monk Patient Defense / Step of the Wind Phase B effect integration. Each gets its own row update when shipped.
+- **What this doesn't touch.** Subclass-feature rows (e.g. Champion Improved Critical, Way of the Open Hand, Hunter's Prey) — those are in a separate table and weren't ship targets this session.
+- **No new tests.** Doc-only.
+- **Total harness count: 813** (unchanged from v2.99.90).
+
+---
+
 ## [2.99.90] - 2026-06-03 — "Push Past the Pact" — Repelling Blast (Warlock invocation) pushes targets 10 ft
 
 **Schema version:** 65
