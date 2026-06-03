@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.133] - 2026-06-03 — "Find the Other Return" — patch v2.99.132 to add `target_vulnerability_applied` to ALL /attack response paths
+
+**Schema version:** 65
+**Commit summary:** **Patch v2.99.132 — the field was added to two of four response dicts (broadcast path + multi-target list at line 35412); the actual primary /attack return at line ~35777 was missed.** The test caught it via a real attack: response shape carried `target_resistance_applied: False` but no `target_vulnerability_applied`, so the assertion failed even though the engine WAS doubling the damage (damage_applied = 18 from a normal-roll attack, well into 2× territory). v2.99.133 adds the missing field stamps to the primary /attack return + the auto_attack_targets list entry.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. (1) The primary /attack return at line ~35777 now includes `target_vulnerability_applied`. (2) The `auto_attack_targets` list entry at line 35412 now includes it too — for chat-card multi-target rendering. Same field shape in both places.
+
+### Changed
+- `target_vulnerability_applied` now appears in ALL four /attack response paths: broadcast (v2.99.132 covered), primary return (v2.99.133 fixes), multi-target list entry (v2.99.133 fixes), and second-path attack response (v2.99.132 covered).
+
+### Notes
+- **PATCH bump** — additive field stamps in two response dicts I missed in v2.99.132. No engine change.
+- **Why this slipped past v2.99.132.** There are FOUR places where `target_resistance_applied` appears in the /attack code (response builders + per-target list). I edited the two that looked obviously like "the response", but the v2.99.132 tests went through a code path that returned the THIRD dict. Lesson: when adding a field to the /attack response, grep for ALL `target_resistance_applied` references and patch each one. The v2.49.43 / v2.63.0 history notes that this expansion happened in stages — each response builder gets its own copy because the various /attack call paths terminate at slightly different return points.
+- **Total harness count: 968** (unchanged from v2.99.132).
+
+---
+
 ## [2.99.132] - 2026-06-03 — "Show the Badge" — surface `target_vulnerability_applied` in the /attack response
 
 **Schema version:** 65

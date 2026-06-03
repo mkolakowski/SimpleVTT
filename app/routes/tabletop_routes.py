@@ -35410,6 +35410,8 @@ async def use_attack(
                 "target_hp_before": target_hp_before,
                 "target_hp_after": target_hp_after,
                 "target_resistance_applied": target_resistance_applied,
+                # v2.99.132 — vulnerability flag for the chat-card badge.
+                "target_vulnerability_applied": target_vulnerability_applied,
                 "target_dying": target_dying,
                 "target_dead": target_dead,
             })
@@ -35775,6 +35777,8 @@ async def use_attack(
         # included it). Chat-card render reads this to label the
         # damage as "resisted" or "full".
         "target_resistance_applied": target_resistance_applied,
+        # v2.99.132 — vulnerability flag for the chat-card badge.
+        "target_vulnerability_applied": target_vulnerability_applied,
         "auto_applied": bool(campaign.auto_apply_damage),
         "attack_name": name,
         "damage_type": damage_type,
