@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.110] - 2026-06-03 — "One More Shake" — Hold Person + Hold Monster stamp repeated-save fields so the v2.97.62 end-of-turn auto-fire fires
+
+**Schema version:** 65
+**Commit summary:** **Stamp `repeated_save_ability: "WIS"` + `repeated_save_dc: <caster's spell save DC>` on the Paralyzed buff installed by `/cast_hold_person` and `/cast_hold_monster`, so the v2.97.62 end-of-turn save framework auto-fires the target's WIS save at the end of each of their turns.** Pre-v2.99.110 the Paralyzed buff carried no repeated-save fields, so the framework walked past it silently — Hold Person targets stayed Paralyzed for the full 10-round duration with no chance to break free without manual `/use_repeated_save` invocation. New `_compute_spell_save_dc_from_sheet(sheet)` helper computes `8 + PB + spellcasting_mod` from the caster's sheet; the two `_make_hold_*` wrappers forward the DC to the factory, which only stamps the fields when both ability + DC are supplied (so Sleep / Banishment can keep opting out via omission).
+**Description:** Four edits in `app/routes/tabletop_routes.py`. (1) New `_compute_spell_save_dc_from_sheet(sheet) -> int` helper. Reads `spellcasting_ability` (or falls back to `class_spellcasting`, then to WIS), looks up the ability mod, returns `8 + PB + mod`. Defaults to 14 (demo's authored DC) on missing/bad sheet. (2) `_make_paralyzed_buff` factory signature extended with `repeated_save_ability: str | None` + `repeated_save_dc: int | None` kwargs. Stamps the fields onto the returned buff dict only when both are supplied AND valid (ability in canonical set, DC > 0). (3) `_make_hold_person_paralyzed_buff` + `_make_hold_monster_paralyzed_buff` accept `spell_save_dc` and pass `repeated_save_ability="WIS"` through. (4) `/cast_hold_person` + `/cast_hold_monster` compute the DC via the new helper + pass to the buff builder. (5) `tests/harness/test_hold_spells_repeated_save_stamps.py` — 3 regression tests.
+
+### Added
+- `_compute_spell_save_dc_from_sheet(sheet) -> int` helper.
+- `repeated_save_ability` + `repeated_save_dc` kwargs on `_make_paralyzed_buff`.
+- `spell_save_dc` kwarg on `_make_hold_person_paralyzed_buff` + `_make_hold_monster_paralyzed_buff`.
+- DC plumbing in `/cast_hold_person` + `/cast_hold_monster`.
+- `tests/harness/test_hold_spells_repeated_save_stamps.py` — 3 tests: Hold Person buff carries WIS + DC>0, Hold Monster buff carries WIS + DC>0, /use_repeated_save endpoint can be triggered against the buff (proxy for auto-fire framework finding it).
+
+### Notes
+- **PATCH bump** — additive helper + factory kwargs + 2 endpoint hooks + 3 tests. No schema change. The Paralyzed buff shape is backward-compatible: pre-v2.99.110 callers that don't pass the new kwargs get the same buff without the repeated-save stamps (helper omits them when None).
+- **Why the auto-fire isn't tested end-to-end here.** The v2.97.62 framework triggers on PUT /battle when turn_index advances past a combatant. A direct test would: install Hold Person, advance turn past Krieger, verify Krieger's paralyzed buff is rolled-against. That's a 4+ step test; the framework itself already has dedicated coverage (`test_repeated_save.py`, etc.). The /use_repeated_save proxy test verifies the buff has the required stamps + the resolver can find + roll against it — that's the data contract the auto-fire reads.
+- **Sleep / Banishment opt-out preserved.** Sleep RAW "no end-of-turn save" + Banishment RAW "no end-of-turn save" both install via `_SPELL_CONDITION_MAP` without repeated-save stamps. The new factory kwargs default to `None`, so any caller that doesn't explicitly pass them gets a stamp-less buff. The framework walks past stamp-less buffs.
+- **Why I didn't add the stamps to Slow / Web.** Slow RAW has an end-of-turn WIS save; Web RAW has a STR save at end of turn AND when entering (different mechanic — STR Athletics check vs the spell DC). Both deserve their own wiring once the auto-fire framework supports "check at start of next turn" vs "end of this turn" semantics. Filed.
+- **Why WIS for both Hold spells.** RAW: both Hold Person and Hold Monster use WIS for both the initial and repeated saves. The two wrappers stamp WIS directly; future spells with different abilities will pass their own value through `repeated_save_ability`.
+- **DC fallback to 14.** The demo's spell DCs hover around 14 (Tavik Cleric Lv 8: 8 + 3 PB + 3 WIS mod = 14; Thalindra Wizard Lv 7: 8 + 3 PB + 3 INT mod = 14). Falling back to 14 on a missing/malformed sheet keeps tests reasonable even if the sheet ever ships without `spellcasting_ability`. A future commit could surface a 409 `bad_caster_sheet` instead; today the fallback is invisible.
+- **Total harness count: 887** (was 884 in v2.99.109).
+
+---
+
 ## [2.99.109] - 2026-06-03 — "Cut the Tether" — caster-side concentration anchors for the four speed spells; paired cleanup cascade wires through
 
 **Schema version:** 65

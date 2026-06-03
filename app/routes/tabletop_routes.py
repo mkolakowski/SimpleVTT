@@ -21284,6 +21284,30 @@ _PARALYZED_CORE_RAW_EFFECTS: list[str] = [
 ]
 
 
+def _compute_spell_save_dc_from_sheet(sheet: dict) -> int:
+    """v2.99.110 — compute the caster's spell save DC from their
+    sheet. Formula: 8 + proficiency + spellcasting ability mod.
+    Falls back to 14 (the demo's authored DC) when the sheet is
+    missing fields. Mirrors the inline calculation already done in
+    /cast_spell at the v2.97.60 install path.
+    """
+    if not sheet:
+        return 14
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    spc = (sheet.get("spellcasting_ability") or "").strip().upper()[:3]
+    if spc not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+        # Fall back to class_spellcasting (older sheet shape) or WIS.
+        spc = (
+            (sheet.get("class_spellcasting") or "").strip().upper()[:3]
+            or "WIS"
+        )
+    if spc not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+        spc = "WIS"
+    ab = int((sheet.get("abilities") or {}).get(spc, 10))
+    mod = (ab - 10) // 2
+    return 8 + prof + mod
+
+
 def _make_paralyzed_buff(
     target_speed_walk: int,
     source_char_id: int | None,
@@ -21295,6 +21319,8 @@ def _make_paralyzed_buff(
     duration_rounds: int,
     concentration: bool,
     source_specific_raw_effects: list[str] | None = None,
+    repeated_save_ability: str | None = None,
+    repeated_save_dc: int | None = None,
 ) -> dict:
     """v2.99.107 — canonical Paralyzed-condition buff factory.
 
@@ -21327,7 +21353,7 @@ def _make_paralyzed_buff(
     raw = list(_PARALYZED_CORE_RAW_EFFECTS)
     if source_specific_raw_effects:
         raw.extend(source_specific_raw_effects)
-    return {
+    buff = {
         "key": "paralyzed",
         "name": display_name,
         "icon": icon,
@@ -21339,12 +21365,29 @@ def _make_paralyzed_buff(
         "effects": {"speed_reduction_ft": reduction},
         "raw_effects": raw,
     }
+    # v2.99.110 — repeated-save install-time stamps so the v2.97.62
+    # end-of-turn auto-fire framework (Hold Person / Hold Monster /
+    # Fear / Confusion etc.) picks up the save trigger without any
+    # per-spell wiring. Stamps are written only when BOTH ability +
+    # DC are supplied so callers that don't want auto-fire (Sleep,
+    # Banishment) can opt out by omitting them.
+    if (
+        repeated_save_ability
+        and repeated_save_ability.upper() in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}
+        and repeated_save_dc
+        and int(repeated_save_dc) > 0
+    ):
+        buff["repeated_save_ability"] = repeated_save_ability.upper()
+        buff["repeated_save_dc"] = int(repeated_save_dc)
+    return buff
 
 
 def _make_hold_monster_paralyzed_buff(
     target_speed_walk: int,
     source_char_id: int | None,
     source_char_name: str,
+    *,
+    spell_save_dc: int | None = None,
 ) -> dict:
     """v2.99.108 — Hold Monster's Paralyzed buff. Same shape as
     Hold Person (v2.99.107) but RAW affects any creature except
@@ -21367,6 +21410,8 @@ def _make_hold_monster_paralyzed_buff(
             "WIS save at end of each turn to break free",
             "Affects any creature except Undead (RAW)",
         ],
+        repeated_save_ability="WIS",
+        repeated_save_dc=spell_save_dc,
     )
 
 
@@ -21374,6 +21419,8 @@ def _make_hold_person_paralyzed_buff(
     target_speed_walk: int,
     source_char_id: int | None,
     source_char_name: str,
+    *,
+    spell_save_dc: int | None = None,
 ) -> dict:
     """v2.99.107 — Hold Person's Paralyzed buff. Thin wrapper over
     ``_make_paralyzed_buff``. RAW: "humanoid must succeed on a
@@ -21398,6 +21445,8 @@ def _make_hold_person_paralyzed_buff(
             "WIS save at end of each turn to break free",
             "Only affects Humanoids (RAW)",
         ],
+        repeated_save_ability="WIS",
+        repeated_save_dc=spell_save_dc,
     )
 
 
@@ -30363,6 +30412,7 @@ async def cast_hold_person(
             target_speed_walk=base_speed,
             source_char_id=char.id,
             source_char_name=char.name,
+            spell_save_dc=_compute_spell_save_dc_from_sheet(sheet),
         )
         installed = await _install_buff_on_combatant_id(
             campaign_id, tid, buff,
@@ -30580,6 +30630,7 @@ async def cast_hold_monster(
             target_speed_walk=base_speed,
             source_char_id=char.id,
             source_char_name=char.name,
+            spell_save_dc=_compute_spell_save_dc_from_sheet(sheet),
         )
         installed = await _install_buff_on_combatant_id(
             campaign_id, tid, buff,
