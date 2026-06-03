@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.87] - 2026-06-03 — "Off-Hand, On Damage" — Fighting Style: Two-Weapon Fighting
+
+**Schema version:** 65
+**Commit summary:** **Wire Fighting Style: Two-Weapon Fighting so off-hand attacks restore the ability mod to damage when the style is set.** RAW (PHB p.195): off-hand attacks don't add the ability mod to damage by default; the TWF style (PHB p.72) restores it. v2.99.87 adds three new helpers (`_attack_is_off_hand`, `_pc_two_weapon_fighting_eligible`, `_two_weapon_fighting_ability_mod`) and a one-line wire-in in `/attack`. Demo fixture: Rowan Quickbow's Shortsword gets `off_hand: True` + the authored damage drops from "1d6+4" to "1d6" (RAW no-mod baseline). His actual style is "archery"; the tests PATCH him to "two_weapon" to exercise the restoration. The ability mod is derived from `attack_bonus − proficiency_bonus` (with a DEX/STR sheet-side fallback for sheets without proficiency_bonus or non-numeric bonuses).
+**Description:** Three new helpers in `app/routes/tabletop_routes.py` after `_pc_dueling_bonus`: (1) `_attack_is_off_hand(attack)` reads the explicit `attack.off_hand` flag. (2) `_pc_two_weapon_fighting_eligible(sheet, attack)` gates on style match + off-hand flag. (3) `_two_weapon_fighting_ability_mod(sheet, attack)` derives the ability mod from the attack_bonus, falling back to DEX (for finesse-tagged attacks) or STR. The wire-in in `/attack` happens right after the Dueling block: when eligible AND the derived mod is non-zero, append `+{mod}` (or `{mod}` if negative) to the damage expression. Demo seed flips Rowan's Shortsword damage from "1d6+4" to "1d6" + adds `off_hand: True`.
+
+### Added
+- `_attack_is_off_hand(attack) -> bool` — reads `attack.off_hand`.
+- `_pc_two_weapon_fighting_eligible(sheet, attack) -> bool` — style + off-hand gate.
+- `_two_weapon_fighting_ability_mod(sheet, attack) -> int` — derives the mod from `attack_bonus − proficiency_bonus`; fallback to DEX (finesse-tagged desc) or STR.
+- `/attack` wire-in: when eligible + mod non-zero, append `+{mod}` to `damage_expr_raw`. Negative mods still apply per RAW (TWF restores the mod regardless of sign).
+- `tests/harness/test_two_weapon_fighting.py` — 3 regression tests: TWF + off-hand Shortsword adds +4 DEX mod, default Archery on the same Shortsword stays "1d6" (no mod), TWF + main-hand Longbow doesn't fire (TWF only on off-hand).
+- `attack.off_hand: True` on Rowan's Shortsword + damage stripped of the mod baseline.
+
+### Changed
+- Rowan's Shortsword authored damage: `"1d6+4"` → `"1d6"`. End damage is identical when TWF is the style (helper appends +4); when Rowan keeps Archery (the default), the off-hand hit drops to `1d6` per RAW.
+- Rowan's Shortsword desc updated to reflect the auto-apply convention: "RAW: no ability mod on damage; Two-Weapon Fighting style adds it."
+
+### Notes
+- **PATCH bump** — additive helpers + a single attack-path append + a demo seed edit. No schema change. The `attack.off_hand` flag is the only new sheet field; sheets without it default to `False` and skip the TWF append.
+- **Why derive the mod from attack_bonus.** A per-attack `ability_used` field would be cleaner but isn't in the sheet schema. The `attack_bonus − proficiency_bonus` heuristic works for any RAW-shaped weapon attack on a single-class PC; multiclassed PCs share `proficiency_bonus` so the derivation still holds. The DEX/STR fallback covers cases where `attack_bonus` is missing or non-numeric.
+- **Filed for follow-up.** (1) Per-attack `ability_used` schema field — cleaner derivation, no fallback heuristics. (2) Inventory-based dual-wielder detection — the v1 helper only checks the attack's own `off_hand` flag; a future ship could read the equipped weapons list and validate that both are light melee (RAW requirement for the Attack action's two-weapon bonus action). (3) Bonus-action attack chip integration — RAW the off-hand attack uses the bonus action slot; the v1 helper doesn't auto-mark the slot. The GM clicks the bonus action chip manually today.
+- **Total harness count: 806** (was 803 in v2.99.86).
+
+---
+
 ## [2.99.86] - 2026-06-03 — "Stack the Arcana" — Mystic Arcanum L7/L8/L9 tier resources
 
 **Schema version:** 65

@@ -1712,9 +1712,19 @@ def _ranger_sheet(name: str) -> dict:
             {"name": "Longbow", "attack_bonus": "+7", "damage": "1d8+4",
              "damage_type": "piercing", "range": "150/600 ft",
              "desc": "Two-handed, heavy. Fighting Style: Archery (+2 to ranged attack — auto-applied at attack time, no pre-baked bonus). Sharpshooter feat: optional -5 attack / +10 damage trade + ignore cover up to total cover."},
-            {"name": "Shortsword", "attack_bonus": "+7", "damage": "1d6+4",
-             "damage_type": "piercing", "range": "5 ft",
-             "desc": "Finesse, light. Off-hand melee — Rowan doesn't want enemies in his face but keeps a shortsword for when they get there anyway."},
+            # v2.99.87 — off_hand flag + damage stripped of the DEX
+            # mod baseline. RAW (PHB p.195): off-hand attacks don't
+            # add the ability modifier to damage UNLESS the attacker
+            # has the Two-Weapon Fighting style (PHB p.72). The
+            # v2.99.87 _pc_two_weapon_fighting_bonus helper appends
+            # the mod at /attack time when style == "two_weapon" +
+            # attack.off_hand. Damage drops 1d6+4 → 1d6 to reflect
+            # the no-TWF baseline; Rowan (Archery) takes 1d6 on this
+            # weapon; a PATCH to "two_weapon" + this same Shortsword
+            # rolls 1d6+4. The +4 is DEX mod (finesse weapon).
+            {"name": "Shortsword", "attack_bonus": "+7", "damage": "1d6",
+             "damage_type": "piercing", "range": "5 ft", "off_hand": True,
+             "desc": "Finesse, light, off-hand. RAW: no ability mod on damage; Two-Weapon Fighting style adds it. Rowan keeps it for when enemies close — but his style is Archery, so the off-hand bite stays modest."},
         ],
         # Hunter Ranger Lv 5: Lv 1-2 spells, 4/2 slots. Spells known is
         # the Ranger's known-not-prepared list (Lv 5 = 4 known).

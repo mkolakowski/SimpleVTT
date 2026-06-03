@@ -20675,6 +20675,65 @@ def _apply_great_weapon_fighting_reroll(damage_expr: str):
     return total, breakdown
 
 
+def _attack_is_off_hand(attack: dict) -> bool:
+    """v2.99.87 — does this attack represent an off-hand attack in
+    a two-weapon-fighting routine? Reads the explicit
+    ``attack.off_hand`` flag (the demo seed marks Rowan's
+    Shortsword with it). Off-hand attacks by RAW don't add the
+    ability mod to damage; Two-Weapon Fighting style restores it.
+    """
+    if not attack:
+        return False
+    return bool(attack.get("off_hand"))
+
+
+def _pc_two_weapon_fighting_eligible(sheet: dict, attack: dict) -> bool:
+    """v2.99.87 — style match + off-hand attack gate."""
+    if _pc_fighting_style(sheet) != "two_weapon":
+        return False
+    return _attack_is_off_hand(attack)
+
+
+def _two_weapon_fighting_ability_mod(sheet: dict, attack: dict) -> int:
+    """v2.99.87 — derive the ability-mod the off-hand attack would
+    add under Two-Weapon Fighting. Heuristic order:
+
+      1. If the sheet has a ``proficiency_bonus`` AND the attack
+         has an ``attack_bonus`` like "+7", subtract PB from the
+         leading integer of the bonus → that's the ability mod.
+      2. Otherwise, fall back to the sheet's DEX mod if the attack
+         desc contains "finesse", else the STR mod.
+
+    This handles the demo case (Rowan's Shortsword "+7" - PB 3 = 4
+    = DEX mod) without needing a per-attack ability_used field.
+    A future schema bump could add ``attack.ability_used`` for
+    cleaner derivation; today the heuristic is enough.
+    """
+    if not sheet or not attack:
+        return 0
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    raw = str(attack.get("attack_bonus") or "").strip()
+    if raw and pb > 0:
+        import re as _re
+        m = _re.match(r"^\s*([+\-]?\d+)", raw)
+        if m:
+            try:
+                bonus = int(m.group(1))
+                derived = bonus - pb
+                if derived != 0:
+                    return derived
+            except (TypeError, ValueError):
+                pass
+    abilities = sheet.get("abilities") or {}
+    desc = (attack.get("desc") or "").lower()
+    use_dex = "finesse" in desc
+    score = abilities.get("DEX" if use_dex else "STR")
+    try:
+        return (int(score) - 10) // 2
+    except (TypeError, ValueError):
+        return 0
+
+
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
     """v2.99.81 — swap the leading die on an unarmed/monk-weapon
     attack with the Monk's Martial Arts die when it's larger.
@@ -31018,6 +31077,21 @@ async def use_attack(
     _dueling = _pc_dueling_bonus(sheet, attack)
     if _dueling and damage_expr_raw:
         damage_expr_raw = f"{damage_expr_raw}+{_dueling}"
+    # v2.99.87 — Fighting Style: Two-Weapon Fighting. Off-hand
+    # attacks (attack.off_hand=True) by RAW don't add the ability
+    # mod to damage. With the TWF style, the mod is restored —
+    # appended to the damage expression here. _two_weapon_fighting_ability_mod
+    # derives the mod from attack_bonus − proficiency_bonus (with
+    # a DEX/STR sheet-side fallback). Negative mods still apply
+    # (RAW: "unless that modifier is negative" for off-hand without
+    # TWF; with TWF the mod always applies, even if negative).
+    if _pc_two_weapon_fighting_eligible(sheet, attack) and damage_expr_raw:
+        _twf_mod = _two_weapon_fighting_ability_mod(sheet, attack)
+        if _twf_mod != 0:
+            damage_expr_raw = (
+                f"{damage_expr_raw}+{_twf_mod}" if _twf_mod > 0
+                else f"{damage_expr_raw}{_twf_mod}"
+            )
 
     is_save = save_dc > 0 and save_ability
 
