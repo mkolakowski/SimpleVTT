@@ -21529,7 +21529,17 @@ def _make_petrified_buff(
         "source": source,
         "source_char_id": int(source_char_id) if source_char_id else None,
         "source_char_name": source_char_name or "",
-        "effects": {"speed_reduction_ft": reduction},
+        # v2.99.121 — `resistance_to: ["all"]` engages the v2.99.121
+        # extension to `_resistance_halve` which halves ANY incoming
+        # damage when "all" is in the list. Petrified RAW grants
+        # resistance to all damage; the wildcard captures that without
+        # listing each type. Other RAW Petrified effects (immunity to
+        # poison/disease, weight ×10, aging stops) are still descriptive
+        # in raw_effects — mechanical hooks filed.
+        "effects": {
+            "speed_reduction_ft": reduction,
+            "resistance_to": ["all"],
+        },
         "raw_effects": raw,
     }
     if (
@@ -23991,6 +24001,13 @@ def _resistance_halve(
     if isinstance(sheet_resists, str):
         sheet_resists = [p.strip() for p in sheet_resists.split(",") if p.strip()]
     if isinstance(sheet_resists, list):
+        # v2.99.121 — "all" wildcard at the sheet level too. Petrified
+        # (RAW) AND any future sheet-level "all damage resistance"
+        # source (Heroes' Feast lesser variant, GM hand-applied)
+        # bypass the per-type loop.
+        normalized = {(str(r) or "").strip().lower() for r in sheet_resists}
+        if "all" in normalized:
+            return damage_amount // 2, True
         for r in sheet_resists:
             if (str(r) or "").strip().lower() == damage_type_l:
                 return damage_amount // 2, True
@@ -24008,6 +24025,14 @@ def _resistance_halve(
         if not isinstance(effects, dict):
             continue
         resists = [str(r).strip().lower() for r in (effects.get("resistance_to") or [])]
+        # v2.99.121 — "all" wildcard: Petrified (RAW PHB p.290) grants
+        # "resistance to all damage". Any damage type halved when "all"
+        # is in the resistance_to list. Future "resistance to all
+        # damage" sources (Blade Ward, Heroes' Feast for the lesser
+        # protection variant, GM-applied buffs) can install with the
+        # same field shape.
+        if "all" in resists:
+            return damage_amount // 2, True
         if damage_type_l in resists:
             return damage_amount // 2, True
     return damage_amount, False

@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.121] - 2026-06-03 — "Stone Shrugs the Sword" — wire Petrified's "resistance to all damage" into the damage engine
+
+**Schema version:** 65
+**Commit summary:** **Extend `_resistance_halve` with an "all" wildcard so Petrified targets (RAW PHB p.290 "resistance to all damage") actually take half damage server-side via the existing damage pipeline.** Pre-v2.99.121 the Petrified buff carried "resistance to all damage" as a descriptive raw_effects bullet only — the v2.97.x damage engine read `damage_resistances` for specific types but had no way to express "everything". v2.99.121 adds "all" as a wildcard in BOTH branches of `_resistance_halve` (sheet-level `damage_resistances: ["all"]` and buff-level `effects.resistance_to: ["all"]`), and stamps the field on `_make_petrified_buff`'s output. Any incoming damage type on a "all"-resistant target halves correctly.
+**Description:** Three edits. (1) `_resistance_halve` in `app/routes/tabletop_routes.py` — both branches (sheet `damage_resistances` + buff `effects.resistance_to`) recognize the `"all"` wildcard and return `(damage // 2, True)` when present. The check fires BEFORE the per-type loop so it short-circuits cleanly. (2) `_make_petrified_buff` factory output's `effects` dict now stamps `"resistance_to": ["all"]` alongside `speed_reduction_ft`. (3) Updated `tests/harness/test_petrified_buff_factory.py` with a `test_factory_stamps_resistance_to_all_in_effects` pin. (4) New `tests/harness/test_petrified_damage_resistance.py` with 2 end-to-end tests: baseline (no resistance, full damage applies), and Krieger PATCH'd with `damage_resistances: ["all"]` → Tavik's Warhammer halved.
+
+### Added
+- `"all"` wildcard support in `_resistance_halve` (both branches).
+- `effects.resistance_to: ["all"]` stamp on `_make_petrified_buff` output.
+- `test_factory_stamps_resistance_to_all_in_effects` in the Petrified factory unit suite.
+- `tests/harness/test_petrified_damage_resistance.py` — 2 end-to-end tests: baseline + "all"-resistant target.
+
+### Changed
+- `_resistance_halve` checks for "all" in the normalized resistance set before the per-type loop. Backward-compatible: existing per-type resistances (Tiefling Hellish to fire, Dwarven Resilience to poison, Dragonborn ancestry) still halve correctly.
+- The Petrified factory's `effects` dict is now `{"speed_reduction_ft": N, "resistance_to": ["all"]}` instead of `{"speed_reduction_ft": N}`. The v2.99.98 speed engine reads `speed_reduction_ft` unchanged; the v2.99.121-extended resistance engine reads `resistance_to`.
+
+### Notes
+- **PATCH bump** — additive wildcard + factory stamp + 3 tests. No schema change. Backward-compatible.
+- **Why the wildcard works at the sheet level too.** A future hand-rolled GM scenario (custom potion of stone form, homebrew creature) can PATCH the target's sheet with `damage_resistances: ["all"]` directly without installing a Petrified buff. The sheet-level branch lets that work without going through the factory. Same shape on both sides reduces special-casing.
+- **What's still descriptive on Petrified.** RAW also grants immunity to poison + disease, weight ×10, aging stops. Immunity is a separate engine (`damage_immunities` list); v1 keeps the immunity descriptive. Weight + aging have no mechanical effect at the table. Filed: poison/disease immunity hook + `damage_immunities: ["poison"]` stamp on the Petrified buff.
+- **"all" wildcard normalization.** The check builds a lowercase set + does `"all" in normalized`. Catches `["all"]`, `["All"]`, `["ALL"]`, `["all", "fire"]` (which redundantly resists fire AND all — the wildcard wins). Doesn't match `["alls"]` (non-equal string).
+- **Why not also add immunity wildcard.** RAW: immunity reduces damage to 0 (vs resistance's halve). The pipeline doesn't have an "immunity_to: ["all"]" path yet; the per-type immunity list is the canonical source. Adding "all" would surprise existing builds that have type-specific immunities. Filed as a separate ship.
+- **Total harness count: 941** (was 938 in v2.99.120).
+
+---
+
 ## [2.99.120] - 2026-06-03 — "Tear Yourself Free" — wire restrained buff into the v2.97.62 end-of-turn save framework
 
 **Schema version:** 65

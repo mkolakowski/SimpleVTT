@@ -96,6 +96,23 @@ def test_factory_core_raw_effects_always_present():
         )
 
 
+def test_factory_stamps_resistance_to_all_in_effects():
+    """v2.99.121 — the buff's effects dict now carries
+    `resistance_to: ["all"]` so the v2.99.121-extended
+    `_resistance_halve` engine halves any damage type. Pin the
+    field shape here.
+    """
+    buff = _make_petrified_buff(
+        target_speed_walk=30,
+        source_char_id=None,
+        source_char_name="",
+        source="x", display_name="x", icon="x",
+        duration_rounds=10, concentration=False,
+    )
+    effects = buff.get("effects") or {}
+    assert effects.get("resistance_to") == ["all"], buff
+
+
 def test_factory_includes_resistance_to_all_damage_bullet():
     """Petrified is the only condition factory whose canonical
     raw_effects include 'resistance to all damage' (RAW PHB p.290).
