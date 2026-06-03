@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.124] - 2026-06-03 — "Nothing Gets Through" — damage immunity engine + "all" wildcard wired into the PC damage path
+
+**Schema version:** 65
+**Commit summary:** **Ship the damage immunity engine. New `_immunity_zero(damage_amount, damage_type, target_sheet)` helper mirrors `_resistance_halve` but returns 0 on match (RAW: immunity = 0 damage; supersedes resistance).** Pre-v2.99.124 the `damage_immunities` field was stored on sheets but NEVER read by the damage application code — full immunity was descriptive only. v2.99.124 wires the engine into `_apply_damage_to_combatant`'s PC path BEFORE the resistance check, supports the `"all"` wildcard at both sheet-level (`damage_immunities: ["all"]`) and buff-level (`effects.immunity_to: ["all"]` on active buffs), and includes per-type matches too. NPC mirror filed for follow-up.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. (1) New `_immunity_zero(damage_amount, damage_type, target_sheet) -> tuple[int, bool]` helper. Reads sheet-level `damage_immunities` (list or comma-string) + buff-level `effects.immunity_to` (mirror of v2.99.121 `resistance_to` shape). Both branches support "all" wildcard + per-type matches. Returns (0, True) on match, (damage_amount, False) otherwise. (2) PC path of `_apply_damage_to_combatant` calls `_immunity_zero` BEFORE `_resistance_halve` (~line 5762). On immunity match: `applied = 0`, `resistance_applied = False` (immunity supersedes resistance — they don't stack). Falls through to the standard `_resistance_halve` call when no immunity matches. (3) `tests/harness/test_damage_immunity_all.py` — 3 regression tests.
+
+### Added
+- `_immunity_zero(damage_amount, damage_type, target_sheet) -> tuple[int, bool]` helper.
+- Damage immunity gate at the start of `_apply_damage_to_combatant`'s PC path.
+- `tests/harness/test_damage_immunity_all.py` — 3 tests: "all" wildcard zeros damage_applied + suppresses resistance flag, per-type immunity (bludgeoning) zeros the Warhammer component (Tavik's Divine Strike radiant rider isn't bludgeoning, so it passes through — pin captures the max radiant remainder), no-immunity baseline shows full damage applied.
+
+### Changed
+- `_apply_damage_to_combatant` PC path now checks immunity FIRST, then resistance. Backward-compatible: pre-v2.99.124 sheets without `damage_immunities` populated, OR with descriptive entries not matching the damage type, fall through to the existing resistance logic unchanged.
+
+### Notes
+- **PATCH bump** — new engine helper + 1 wire-in + 3 tests. No schema change. Backward-compatible: an empty or absent `damage_immunities` field is the same as no immunity.
+- **Why immunity supersedes resistance (not stacks).** RAW PHB p.197: "If a creature or an object has resistance to a damage type, damage of that type is halved against it. If a creature or an object has immunity to a damage type, it takes no damage of that type." The two rules are about the SAME damage type from independent sources; they're not multiplicative. A Petrified creature immune to poison takes 0 from a poison attack — the Petrified resistance (all damage halved) doesn't apply because the immunity already zeroed it.
+- **Why no NPC mirror in this commit.** `_apply_damage_to_combatant`'s NPC branch uses `_resistance_halve_npc` which reads the template's `damage_resistances` list. A parallel `_immunity_zero_npc` is needed to read `damage_immunities` from the template; that's a separate ship to avoid mixing PC + NPC engine work in one commit. NPC monster templates already carry `damage_immunities` fields (the dragon's age has fire/poison/etc.) — the data is ready, just needs the engine hook.
+- **Why the per-type immunity test only pins an upper bound, not zero.** Tavik's attack composes Warhammer (1d8+3 bludgeoning) + Divine Strike (+1d8 radiant). With bludgeoning immunity only, the Warhammer component zeros but the Divine Strike radiant passes through. `damage_applied` is therefore "max 1d8 (non-crit) / max 2d8 (crit)" → 8 or 16. The test pins that upper bound; it can't pin exactly 0 because Divine Strike still applies. Filed: a damage breakdown response field that exposes the per-component contribution + per-component immunity application so tests can pin exact mid-computation values.
+- **Filed.** (1) NPC immunity engine via `_immunity_zero_npc` mirror. (2) Per-damage-component breakdown in the /attack response (so tests can pin per-type immunity zero precisely). (3) Vulnerability engine (2× damage, opposite direction from resistance) — mirror of the resistance/immunity pattern.
+- **Total harness count: 944** (was 941 in v2.99.123).
+
+---
+
 ## [2.99.123] - 2026-06-03 — "Divine Strike Adds Up" — fix v2.99.121 test bound to account for Tavik's Divine Strike uplift
 
 **Schema version:** 65

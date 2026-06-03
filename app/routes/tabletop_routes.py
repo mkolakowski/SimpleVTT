@@ -5757,11 +5757,21 @@ async def _apply_damage_to_combatant(
                         )
                 except Exception:
                     pass
-        # Apply resistance (Phase B) BEFORE _apply_hp_change so the
-        # massive-damage threshold uses the post-resistance number.
-        applied, resistance_applied = _resistance_halve(
+        # v2.99.124 — immunity check BEFORE resistance. RAW: immunity
+        # supersedes resistance (a Petrified target immune to poison
+        # takes 0 from a Poison Spray, not "half of full"). Falls
+        # through to resistance halving when no immunity matches.
+        applied, immunity_applied = _immunity_zero(
             damage_amount, damage_type, sheet,
         )
+        if immunity_applied:
+            resistance_applied = False
+        else:
+            # Apply resistance (Phase B) BEFORE _apply_hp_change so the
+            # massive-damage threshold uses the post-resistance number.
+            applied, resistance_applied = _resistance_halve(
+                damage_amount, damage_type, sheet,
+            )
         new_hp = max(0, hp_cur - applied)
         result = _apply_hp_change(
             char, new_hp,
@@ -24035,6 +24045,54 @@ def _resistance_halve(
             return damage_amount // 2, True
         if damage_type_l in resists:
             return damage_amount // 2, True
+    return damage_amount, False
+
+
+def _immunity_zero(
+    damage_amount: int, damage_type: str, target_sheet: dict,
+) -> tuple[int, bool]:
+    """v2.99.124 — damage immunity engine. Mirror of
+    ``_resistance_halve`` but returns ``(0, True)`` on match. RAW:
+    immunity supersedes resistance — a Petrified creature with
+    "immunity to poison" takes 0 from a poison spell regardless of
+    its general "resistance to all damage". Callers should check
+    immunity FIRST, then fall through to resistance if no match.
+
+    Reads from BOTH:
+      - sheet-level ``damage_immunities`` (list of damage type
+        strings; matches a v2.99.124 ``"all"`` wildcard too)
+      - buff-level ``effects.immunity_to`` on active ``_buffs_active``
+        buffs (mirrors the v2.99.121 ``effects.resistance_to`` shape)
+
+    Returns ``(0, True)`` on immunity match, else
+    ``(damage_amount, False)``.
+    """
+    if damage_amount <= 0 or not damage_type:
+        return damage_amount, False
+    damage_type_l = damage_type.strip().lower()
+    sheet_immune = (target_sheet or {}).get("damage_immunities") or []
+    if isinstance(sheet_immune, str):
+        sheet_immune = [p.strip() for p in sheet_immune.split(",") if p.strip()]
+    if isinstance(sheet_immune, list):
+        normalized = {(str(r) or "").strip().lower() for r in sheet_immune}
+        if "all" in normalized:
+            return 0, True
+        if damage_type_l in normalized:
+            return 0, True
+    for b in (target_sheet or {}).get("_buffs_active") or []:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        immunes = [
+            (str(r) or "").strip().lower()
+            for r in (effects.get("immunity_to") or [])
+        ]
+        if "all" in immunes:
+            return 0, True
+        if damage_type_l in immunes:
+            return 0, True
     return damage_amount, False
 
 
