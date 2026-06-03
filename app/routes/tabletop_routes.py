@@ -20413,6 +20413,104 @@ def _monk_level_from_sheet(sheet: dict) -> int:
     return 0
 
 
+def _monk_martial_arts_die(sheet: dict) -> str:
+    """v2.99.81 — Martial Arts (Monk Lv 1) damage die progression.
+
+    RAW (PHB p.78): unarmed strikes + monk weapons use these dice in
+    place of the weapon's normal damage die:
+
+        Lv 1-4   → 1d4
+        Lv 5-10  → 1d6
+        Lv 11-16 → 1d8
+        Lv 17+   → 1d10
+
+    Returns an empty string when the character isn't a Monk so callers
+    can short-circuit without an extra level check. Mirrors the
+    ``_*_die`` helper pattern (Bardic Inspiration die, Sneak Attack
+    die, etc.).
+    """
+    lv = _monk_level_from_sheet(sheet)
+    if lv <= 0:
+        return ""
+    if lv >= 17:
+        return "1d10"
+    if lv >= 11:
+        return "1d8"
+    if lv >= 5:
+        return "1d6"
+    return "1d4"
+
+
+# v2.99.81 — Martial Arts substitution. Matches the attack's NAME
+# (case-insensitive) so future monk-weapon entries can opt in by
+# naming themselves "X (Martial Arts)" or "Unarmed Strike (foo)".
+# Strict name-prefix match means a non-monk's "Unarmed Strike" entry
+# (e.g. a Fighter sheet with a placeholder) still uses 1d4 only when
+# the sheet flags Monk class. The bonus expression (e.g. "+4") is
+# preserved verbatim — Martial Arts swaps the die, not the modifier.
+_MARTIAL_ARTS_NAME_PATTERNS = (
+    "unarmed strike",
+    "martial arts",
+)
+
+
+def _attack_is_martial_arts_candidate(attack_name: str) -> bool:
+    name = (attack_name or "").strip().lower()
+    if not name:
+        return False
+    return any(p in name for p in _MARTIAL_ARTS_NAME_PATTERNS)
+
+
+def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
+    """v2.99.81 — swap the leading die on an unarmed/monk-weapon
+    attack with the Monk's Martial Arts die when it's larger.
+
+    Input: ``damage_expr`` like ``"1d6+4"`` (the sheet's stored die +
+    modifier). Output: same shape with the die portion replaced when
+    the MA die is bigger, else unchanged. Examples:
+
+      Kael Lv 5 unarmed "1d6+4" → MA die 1d6 → unchanged ("1d6+4")
+      Kael Lv 11 unarmed "1d6+4" → MA die 1d8 → "1d8+4"
+      Kael Lv 4 unarmed "1d4+4" → MA die 1d4 → unchanged ("1d4+4")
+      Kael Lv 1 unarmed "1d6+4" → MA die 1d4 → unchanged (NEVER
+                                                downgrade — sheet wins)
+
+    Non-Monk sheet → returns input unchanged.
+    Non-MA attack name → returns input unchanged.
+    No-die expression (e.g. "+3" flat) → returns input unchanged.
+    """
+    if not _attack_is_martial_arts_candidate(attack_name):
+        return damage_expr
+    ma_die = _monk_martial_arts_die(sheet)
+    if not ma_die:
+        return damage_expr
+    expr = (damage_expr or "").strip()
+    if not expr:
+        return expr
+    import re as _re
+    m = _re.match(r"^\s*(\d*)d(\d+)(.*)$", expr, _re.IGNORECASE)
+    if not m:
+        return expr
+    try:
+        sheet_face = int(m.group(2))
+    except (TypeError, ValueError):
+        return expr
+    ma_m = _re.match(r"^(\d+)d(\d+)$", ma_die)
+    if not ma_m:
+        return expr
+    try:
+        ma_face = int(ma_m.group(2))
+    except (TypeError, ValueError):
+        return expr
+    if ma_face <= sheet_face:
+        return expr  # never downgrade — the sheet's authored die wins
+    # Preserve the count if present (defaults to 1) + tail
+    # ("+4", "+DEX", etc.) verbatim.
+    count = m.group(1) or "1"
+    tail = m.group(3) or ""
+    return f"{count}d{ma_face}{tail}"
+
+
 def _target_uses_evasion(
     db: Session, campaign_id: int, target_combatant_id: str | None,
 ) -> tuple[bool, "Character | None"]:
@@ -30686,6 +30784,16 @@ async def use_attack(
     save_dc = int(attack.get("save_dc") or 0)
     save_ability = (attack.get("save_ability") or "").strip().upper()
     desc = (attack.get("desc") or "").strip()
+    # v2.99.81 — Monk Martial Arts die substitution. RAW (PHB p.78):
+    # unarmed strikes + monk weapons use a level-scaling die in
+    # place of the weapon's normal damage. Only upgrades (never
+    # downgrades) so a sheet-authored larger die wins. The attack
+    # name is the gate (must contain "unarmed strike" or "martial
+    # arts" — see _attack_is_martial_arts_candidate). Non-Monk
+    # sheets short-circuit on _monk_martial_arts_die returning "".
+    damage_expr_raw = _apply_monk_martial_arts_die(
+        sheet, str(attack.get("name") or ""), damage_expr_raw,
+    )
 
     is_save = save_dc > 0 and save_ability
 

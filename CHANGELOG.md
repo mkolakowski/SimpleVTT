@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.81] - 2026-06-03 — "Fists of Stages" — Monk Martial Arts die progression (Lv 1+)
+
+**Schema version:** 65
+**Commit summary:** **Wire the Monk Martial Arts unarmed-strike + monk-weapon die progression so unarmed attacks scale 1d4 → 1d6 → 1d8 → 1d10 with Monk level at `/attack` time.** Three-file change: (1) `_monk_martial_arts_die(sheet)` helper returns "1d4"/"1d6"/"1d8"/"1d10" based on the Monk level read by the existing `_monk_level_from_sheet`. (2) `_apply_monk_martial_arts_die(sheet, attack_name, damage_expr)` swaps the leading die portion when the attack name matches "unarmed strike" or "martial arts" (case-insensitive substring) AND the MA die is bigger than the authored die (never downgrades — sheet-authored larger dice win). (3) `/attack` calls the helper right after parsing `damage_expr_raw` from the sheet's attack entry; the swap happens before the dice are rolled so the broadcast carries the upgraded expression. 5 harness tests cover Lv 5 / Lv 11 / Lv 17 happy paths + the class gate + the attack-name gate.
+**Description:** RAW (PHB p.78): Lv 1-4 use 1d4, Lv 5-10 use 1d6, Lv 11-16 use 1d8, Lv 17+ use 1d10 on unarmed strikes and monk weapons. Kael Brightleaf (Way of the Open Hand Lv 7) is the demo fixture; his sheet has "Unarmed Strike" with authored 1d6+4 (correct for Lv 7). The harness PATCHes him to Lv 5/11/17 to exercise each tier. The name gate matches "unarmed strike" and "martial arts" so the demo's "Quarterstaff (Martial Arts)" entry also picks up the swap. Non-Monk PCs short-circuit on `_monk_level == 0`.
+
+### Added
+- `_monk_martial_arts_die(sheet) -> str` in `app/routes/tabletop_routes.py` — returns the MA die based on Monk level. Empty string when char isn't a Monk.
+- `_attack_is_martial_arts_candidate(attack_name) -> bool` — case-insensitive substring match on "unarmed strike" or "martial arts" (extensible via `_MARTIAL_ARTS_NAME_PATTERNS`).
+- `_apply_monk_martial_arts_die(sheet, attack_name, damage_expr) -> str` — die swap. Regex-parses the leading `\d*d\d+`, compares face values, swaps when MA face is bigger. Preserves the count + tail (e.g. "+4") verbatim. Never downgrades.
+- Wire-in at `/attack` (`app/routes/tabletop_routes.py::use_attack` at ~line 30787) — `damage_expr_raw = _apply_monk_martial_arts_die(sheet, attack["name"], damage_expr_raw)` right after the sheet read.
+- `tests/harness/test_monk_martial_arts.py` — 5 regression tests using the v2.99.39 capstone-test pattern (class-scoped level PATCH) to flip Kael between Lv 5 / 7 / 11 / 17.
+
+### Notes
+- **PATCH bump** — additive helper + one-line wire-in. No schema change, no API contract change. Non-Monk sheets pass through unchanged. Non-MA-named attacks pass through unchanged. Sheet-authored dice larger than the MA die also pass through (never downgrade — protects homebrew Monk weapons with custom dice).
+- **Why name-based, not flag-based.** RAW Monk weapons are "shortswords + any simple melee weapon that isn't 2-handed or heavy" — that's a broad category and the existing sheet schema doesn't carry per-attack monk-weapon tags. The name heuristic ("Quarterstaff (Martial Arts)") is the demo seed's convention; user-authored sheets that follow the same naming opt in automatically. A future commit could add an explicit `attack.monk_weapon: true` flag for finer control without touching the helper.
+- **Why never downgrade.** A homebrew variant Monk weapon might be authored as 1d8 from Lv 1 (e.g. a magical staff). Downgrading to 1d4 would surprise the player. The "MA die wins only when bigger" rule respects authored intent + matches RAW's "use the larger of the two" reading.
+- **Demo fixture.** Kael Brightleaf (Way of the Open Hand Lv 7 — Wood Elf, DEX 18, Unarmored Defense AC 16, Wood Elf Fleet of Foot speed 45). His current 1d6+4 unarmed at Lv 7 stays 1d6+4 (MA die equals sheet die → no swap). Bumping him to Lv 11 in a campaign would auto-swap to 1d8+4 without touching the sheet.
+- **Mark on the class-content-status doc.** Monk Lv 1 Martial Arts flips 🟡 → ✅. The companion ✅ for Unarmored Defense (Lv 1) is still filed pending an auto-AC engine.
+- Total harness count: 792 (was 787 in v2.99.80).
+
+---
+
 ## [2.99.80] - 2026-06-03 — "Mind and Shadow" — Cleric Lv 6 Channel Divinity options (Knowledge + Trickery)
 
 **Schema version:** 65
