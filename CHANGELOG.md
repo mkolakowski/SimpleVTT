@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.104] - 2026-06-03 — "A Hundred Borrowed Faces" — Mask of Many Faces (Warlock invocation) at-will Disguise Self
+
+**Schema version:** 65
+**Commit summary:** **Ship the Mask of Many Faces Eldritch Invocation as a dedicated `/use_mask_of_many_faces` endpoint that broadcasts a `feature_used` audit when a Warlock with the invocation casts Disguise Self at-will.** v1 ships the audit only — no mechanical buff install, no class-feature button (filed). RAW: "You can cast Disguise Self at will, without expending a spell slot." The audit makes who-is-disguised-as-what visible in the roll log; the GM narrates the illusion's mechanical effect (RAW: "this spell isn't actually a transformation of any kind"). Magnus has the invocation already on his feats list from v2.99.93's Eldritch Invocations work, so no demo seed change is needed.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. (1) New `POST /api/campaign/{cid}/use_mask_of_many_faces` endpoint. Validates `character_id` (400 when missing), caster ownership / GM (403), and the invocation gate via `_pc_has_eldritch_invocation(sheet, "mask-of-many-faces")` (409 `missing_invocation`). On success, broadcasts a `feature_used` with `source: "mask-of-many-faces"`, the caster's name, and the optional `disguise_desc` from the body. (2) `tests/harness/test_use_mask_of_many_faces.py` — 4 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_mask_of_many_faces` endpoint.
+- `feature_used` broadcast with `source: "mask-of-many-faces"` carrying `disguise_desc` for the roll log.
+- `tests/harness/test_use_mask_of_many_faces.py` — 4 tests: happy path (Magnus + disguise_desc → 200 + WS audit), gate (Krieger has no invocation → 409 missing_invocation), validation (missing character_id → 400), empty-desc fallback (no desc → "1 hour duration" boilerplate in the feature_desc).
+
+### Notes
+- **PATCH bump** — single new endpoint + 4 tests. No schema change.
+- **No buff install / no class-feature button yet.** Disguise Self is purely illusory by RAW (no AC change, no save granted, no save-vs-disbelieve unless the disguise is interacted with closely). v1 keeps the install minimal: just the audit so the GM has a paper trail. A future ship can install a cosmetic `disguised` buff with the disguise text + add a class-feature button to the sheet that posts to this endpoint.
+- **No action-economy mark.** Disguise Self RAW is 1 action, but practical table convention is to cast it out-of-combat. Marking the action would require either a body flag (`in_combat: true`) or always-mark. Filed: a `cost_action: true` body opt-in that defaults to false so the endpoint stays out-of-combat-friendly.
+- **Duration 1 hour = 600 rounds.** Returned as `duration_rounds: 600` so a future buff-install can pick it up directly. 6-second rounds × 60 minutes × 10 rounds per minute = 600.
+- **Total harness count: 858** (was 854 in v2.99.103).
+
+---
+
 ## [2.99.103] - 2026-06-03 — "Same Trap, Different Function" — fix `_make_slow_buff`'s identical falsy-zero bug
 
 **Schema version:** 65

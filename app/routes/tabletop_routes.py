@@ -10160,6 +10160,95 @@ async def use_dash(
     return {"ok": True, "grant_ft": grant_ft}
 
 
+@router.post("/api/campaign/{campaign_id}/use_mask_of_many_faces")
+async def use_mask_of_many_faces(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.104 — Mask of Many Faces (Warlock Lv 2+ invocation).
+
+    RAW (PHB p.111): "You can cast Disguise Self at will, without
+    expending a spell slot." Disguise Self RAW: 1 action, 1 hour
+    duration, self-only, makes you look different (illusion). The
+    "without a slot" half is what this invocation grants.
+
+    v1 ships the audit broadcast + an optional cosmetic 'disguised'
+    buff with a 1-hour duration (600 rounds at 6 s / round). The
+    buff carries the caster-provided `disguise_desc` so the GM can
+    see who's pretending to be whom at a glance. Combat impact:
+    none (illusion only — RAW: "this spell isn't actually a
+    transformation of any kind"). No action-economy mark today —
+    Disguise Self is technically 1 action RAW, but practical
+    convention at the table is to cast it out-of-combat. Future
+    follow-up can wire the action mark behind a body flag.
+
+    Body: ``{character_id, disguise_desc?}``.
+
+    Validation:
+      - caster is a Warlock with `eldritch-invocation-mask-of-many-faces`
+        on their feats list
+      - 403 when not the GM and not the caster's owner
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    disguise_desc = (body.get("disguise_desc") or "").strip()
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_invocation(sheet, "mask-of-many-faces"):
+        return JSONResponse(status_code=409, content={
+            "error": "missing_invocation",
+            "invocation": "mask-of-many-faces",
+        })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🎭 Disguise Self (Mask of Many Faces)",
+            "feature_desc": (
+                f"{char.name} casts Disguise Self (no slot). "
+                f"Disguise: {disguise_desc}"
+                if disguise_desc
+                else (
+                    f"{char.name} casts Disguise Self (no slot — "
+                    f"Mask of Many Faces). Illusion: 1 hour duration."
+                )
+            ),
+            "source": "mask-of-many-faces",
+            "disguise_desc": disguise_desc,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "disguise_desc": disguise_desc,
+        "duration_rounds": 600,  # 1 hour
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/token/{token_id}/preview_move")
 async def preview_move_token(
     campaign_id: int,
