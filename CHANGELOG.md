@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.99] - 2026-06-03 — "The Server Holds the Line" — /token/move gates on the effective speed cap (defense-in-depth)
+
+**Schema version:** 65
+**Commit summary:** **Add a server-side 409 `over_speed_cap` gate to /token/move so a scripted client can't bypass the v2.99.79 Dash modal.** Pre-v2.99.99 the speed-cap check was purely client-side (Mov chip color + Dash modal); a scripted move past the cap committed silently. v2.99.99 uses the v2.99.98 `_effective_speed_walk` helper to compute the active combatant's effective cap (base - Lance of Lethargy / Slow reductions + Dash bonus), checks `economy.movement + this_move > cap + 0.01`, and rejects with 409 unless the client passes `over_speed_confirmed: true`. The client's `postMove` now passes that flag from the Dash modal's "Just move" path and from the OA Continue path so legit user flows never see the 409 — it's pure defense-in-depth against bypass attempts. Mirror of the v2.99.55 OA 409 gate pattern.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` /token/move — new block right before the OA 409 gate that:  resolves the active combatant from the hub; verifies the dragged token IS the active combatant's (via `source_token_id` OR `char_id` match); reads `economy.movement` + `economy.dash_bonus_ft`; calls `_effective_speed_walk` to get the post-reduction speed; sums to get the effective cap. If projected total > cap + 0.01 tolerance, returns 409 with `{error: "over_speed_cap", distance_ft, used_ft, cap_ft, base_speed_walk, dash_bonus_ft, speed_reduction_ft}`. Token position unchanged on 409, mirroring the OA gate's behavior. (2) `app/static/tabletop.js` — `postMove(oaConfirmed, overSpeedConfirmed)` signature extended; Dash modal's "Just move" handler passes `over_speed_confirmed: true`; OA Continue handler now passes both flags so the user-facing flow doesn't re-prompt. (3) `tests/harness/test_token_move_speed_cap.py` — 5 regression tests.
+
+### Added
+- /token/move 409 `over_speed_cap` gate with the structured payload above.
+- `over_speed_confirmed` body field on /token/move (boolean, default false).
+- `postMove(oaConfirmed, overSpeedConfirmed)` second parameter in `tabletop.js`.
+- `tests/harness/test_token_move_speed_cap.py` — 5 regression tests: within-cap → 200, over-cap-no-flag → 409, over-cap-with-flag → 200, off-turn-dragger → 200 (gate doesn't apply), Lance of Lethargy buff → 409 at the reduced threshold.
+
+### Changed
+- Dash modal "Just move" path now posts `over_speed_confirmed: true`. Pre-v2.99.99 it omitted the flag and pre-v2.99.99 server didn't gate, so the new flag is additive.
+- OA Continue path posts `over_speed_confirmed: true` alongside `oa_confirmed: true`. The user has reached the OA modal via the Dash → OA sequence (or directly when no Dash was needed); their intent to commit the move is already confirmed by that point.
+
+### Notes
+- **PATCH bump** — additive defense-in-depth gate + a body field + 5 tests. No schema change. Legitimate client flows behave identically (the new flag is set transparently); only scripted bypass attempts see the 409.
+- **Why scope the gate to the active combatant.** Out-of-combat token drags (GM repositioning before init starts) and off-turn drags (GM moving NPC tokens during a PC's turn) shouldn't be gated. The v2.99.79 turn-enforcement block already blocks non-GM off-turn drags; this gate just narrows further to "the dragged token is the active combatant's" so the GM bypass for NPC tokens still works.
+- **Tolerance of 0.01 ft.** Float drift on Chebyshev / Euclidean distance compute can produce 30.00001 ft for an exactly-30 ft move when the grid_size_px has fractional component. The 0.01 tolerance absorbs that without letting a real 0.5 ft overrun through.
+- **Why both flags on OA Continue.** Reaching the OA Continue button means the user came through the pre-move modal chain (Dash → OA or OA-only). Their over-speed intent is implicitly confirmed by that point — re-prompting via a second 409 would surprise the user. The Dash decision is reflected in the server's `dash_bonus_ft` already (via the prior `/use_dash` if taken); the flag just suppresses the cap re-check.
+- **Filed.** (1) The Mov chip "you've already used X" should pre-warn when the next legitimate drag will exceed the effective cap. (2) A "Reset Mov" GM-side button to clear `economy.movement` mid-turn (already exists for Dash; movement is read-only today). (3) Server-side `/token/move` flag for "is this move a single-cell snap" so 5 ft moves can skip the gate entirely as a micro-optimization (current cost is one hub state read + arithmetic; negligible).
+- **Total harness count: 850** (was 845 in v2.99.98).
+
+---
+
 ## [2.99.98] - 2026-06-03 — "The Snail Shows Up" — Mov chip + breadcrumb + Dash modal read Lance of Lethargy's speed reduction
 
 **Schema version:** 65

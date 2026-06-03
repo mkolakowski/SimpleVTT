@@ -9694,6 +9694,62 @@ async def move_token(
         grid_size_px, grid_type, from_x, from_y, x, y,
     )
 
+    # v2.99.99 — server-side over-speed gate. Mirrors the OA 409
+    # pattern: if this move would put the active combatant's
+    # cumulative `economy.movement` past the EFFECTIVE cap
+    # (base speed - Lance of Lethargy / Slow / web reductions
+    # + Dash bonus), return 409 `over_speed_cap` UNLESS the client
+    # passes `over_speed_confirmed: true`. Pre-v2.99.99 the
+    # Dash/overrun gate was purely client-side advisory; this is
+    # the defense-in-depth that catches malicious / scripted
+    # clients bypassing the modal.
+    #
+    # Only fires when (a) a battle is active AND (b) the mover IS
+    # the active combatant. Out-of-combat drags / off-turn drags
+    # are not gated (off-turn already blocks at the v2.99.79 turn
+    # check above for non-GMs). GM drags of NPC tokens during a PC's
+    # turn aren't gated either — the GM is the arbiter and may
+    # reposition pieces narratively.
+    if distance_ft > 0 and not bool(body.get("over_speed_confirmed")):
+        _state_for_cap = hub.get_battle(campaign_id) or {}
+        if bool(_state_for_cap.get("active")):
+            _combs_cap = _state_for_cap.get("combatants") or []
+            _idx_cap = _state_for_cap.get("turn_index")
+            if (_combs_cap and isinstance(_idx_cap, int)
+                    and 0 <= _idx_cap < len(_combs_cap)):
+                _active_cap = _combs_cap[_idx_cap]
+                _is_active_for_cap = (
+                    (_active_cap.get("source_token_id") == int(token.id))
+                    or (
+                        token.character_id is not None
+                        and _active_cap.get("char_id") == int(token.character_id)
+                    )
+                )
+                if _is_active_for_cap:
+                    _econ_cap = _active_cap.get("economy") or {}
+                    _used_ft = float(_econ_cap.get("movement") or 0)
+                    _dash_bonus_ft = float(
+                        _econ_cap.get("dash_bonus_ft") or 0
+                    )
+                    _eff_speed = _effective_speed_walk(_active_cap)
+                    _eff_cap = _eff_speed + _dash_bonus_ft
+                    _projected_total = _used_ft + distance_ft
+                    # Tolerance: 0.01 ft to absorb float drift in the
+                    # Chebyshev / Euclidean distance derivation.
+                    if _projected_total > _eff_cap + 0.01:
+                        return JSONResponse(status_code=409, content={
+                            "error": "over_speed_cap",
+                            "distance_ft": distance_ft,
+                            "used_ft": _used_ft,
+                            "cap_ft": _eff_cap,
+                            "base_speed_walk": int(
+                                _active_cap.get("speed_walk") or 30
+                            ),
+                            "dash_bonus_ft": _dash_bonus_ft,
+                            "speed_reduction_ft":
+                                _effective_speed_reduction_ft(_active_cap),
+                        })
+
     # v2.99.55 — plan-movement-oa-flow Phase 4 defense-in-depth gate.
     # Compute OA triggers BEFORE committing the move. If any fire
     # AND the client didn't pass ``oa_confirmed: true``, return 409

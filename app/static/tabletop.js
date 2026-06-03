@@ -3695,9 +3695,15 @@
         // gate below sets it to true after the user clicks Continue.
         // No flag = first try; if the server returns 409 the snapback
         // fires + the legacy advisory still surfaces on the chat-log.
-        const postMove = (oaConfirmed = false) => {
+        const postMove = (oaConfirmed = false, overSpeedConfirmed = false) => {
             const body = { x: sx, y: sy };
             if (oaConfirmed) body.oa_confirmed = true;
+            /* v2.99.99 — Dash-modal accept path passes
+             * over_speed_confirmed:true so the v2.99.99 server 409
+             * gate is bypassed cleanly. The user already saw the
+             * client modal and chose to proceed; the gate exists
+             * to catch scripted clients, not to double-prompt. */
+            if (overSpeedConfirmed) body.over_speed_confirmed = true;
             return fetch(`/api/campaign/${CAMPAIGN_ID}/token/${tokenId}/move`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -3824,7 +3830,15 @@
                 tokenLabel: token.label || 'Token',
                 triggers: _oaTriggers,
                 distanceFt: _previewDistanceFt,
-                onContinue: () => postMove(true),
+                /* v2.99.99 — reaching the OA Continue button means
+                 * the user has already seen the pre-move chain
+                 * (Dash → OA when _needsDash, OA-only otherwise) and
+                 * made their intent clear. Pass over_speed_confirmed
+                 * so the v2.99.99 server gate doesn't double-prompt
+                 * via a second 409. The Dash decision is reflected
+                 * in the combatant's dash_bonus_ft on the server
+                 * already (via the prior /use_dash if taken). */
+                onContinue: () => postMove(true, true),
                 onStop: snapBack,
             });
             if (_needsDash && _activeForDash) {
@@ -3881,7 +3895,13 @@
             speedCap: _speedOv,
             dashed: _dashBonusOv > 0,
             onCancel: snapBack,
-            onMove: postMove,
+            /* v2.99.99 — when the user accepts the overrun via
+             * "Just move", pass over_speed_confirmed:true so the
+             * server 409 gate (v2.99.99) lets it through. The Dash
+             * path doesn't need the flag — installing the dash
+             * bonus raises the server's effective cap so the
+             * subsequent /token/move stays under the threshold. */
+            onMove: () => postMove(false, true),
             onDash: () => {
                 if (typeof window._dashCombatant === 'function') {
                     window._dashCombatant(_activeForDash);
