@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.147] - 2026-06-03 — "The Crypt's Whisper" — Whispers of the Grave (Warlock invocation) audit endpoint
+
+**Schema version:** 65
+**Commit summary:** **Ship Whispers of the Grave as a dedicated `/use_whispers_of_the_grave` endpoint that broadcasts a `feature_used` audit when the Warlock declares they're casting Speak with Dead at will.** RAW (PHB p.111): "Prerequisite: 9th level. You can cast Speak with Dead at will, without expending a spell slot." v1 ships the audit + invocation gate only — there's no corpse-interrogation dialog layer in SimpleVTT today. Mirror of v2.99.138/.141/.145/.146 audit pattern. Magnus's seed gains the invocation on his feats list (demo seed grants at Lv 5 despite the RAW Lv 9 prereq, for endpoint coverage).
+**Description:** Three edits. (1) New `POST /api/campaign/{cid}/use_whispers_of_the_grave` endpoint. Validates `character_id`, caster ownership/GM, and the invocation via `_pc_has_eldritch_invocation(sheet, "whispers-of-the-grave")` (409 `missing_invocation`). On success, broadcasts `feature_used` with `source: "whispers-of-the-grave"`, `duration_rounds: 100` (10 minutes), `questions: 5` (RAW corpse-question cap). (2) `app/demo_seed.py` — Magnus's feats list gains `eldritch-invocation-whispers-of-the-grave`. (3) `tests/harness/test_use_whispers_of_the_grave.py` — 3 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_whispers_of_the_grave` endpoint.
+- `eldritch-invocation-whispers-of-the-grave` on Magnus's feats list.
+- `feature_used` broadcast with `source: "whispers-of-the-grave"`, `duration_rounds: 100`, `questions: 5`.
+- `tests/harness/test_use_whispers_of_the_grave.py` — 3 tests: happy path (Magnus → 200 + WS audit with questions + duration), missing invocation gate (Krieger → 409), missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + demo seed edit + 3 tests. No schema change.
+- **What's filed.** A corpse-NPC dialog modal (5-question budget, the corpse only knows what it knew in life). The endpoint surface stamps the question cap in the audit; tracking the per-cast question count + the corpse's identity is filed.
+- **Magnus's invocation roster.** 16 of the SRD's ~20 Eldritch Invocations now mechanically wired. The remaining ~4 (Visions of Distant Realms, Thief of Five Fates, Bewitching Whispers, Sign of Ill Omen) are registry-routed casts.
+- **Total harness count: 1014** (was 1011 in v2.99.146).
+
+---
+
 ## [2.99.146] - 2026-06-03 — "The Rune Keeper's Gaze" — Eyes of the Rune Keeper (Warlock invocation) audit endpoint
 
 **Schema version:** 65

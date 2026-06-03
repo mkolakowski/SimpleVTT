@@ -10653,6 +10653,85 @@ async def use_eyes_of_the_rune_keeper(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_whispers_of_the_grave")
+async def use_whispers_of_the_grave(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.147 — Whispers of the Grave (Warlock Lv 9+ invocation).
+
+    RAW (PHB p.111): "Prerequisite: 9th level. You can cast Speak
+    with Dead at will, without expending a spell slot."
+
+    v1 ships the audit broadcast + invocation gate only — there's
+    no corpse-interrogation dialog layer in SimpleVTT today. The
+    endpoint broadcasts the cast so the chat log records when the
+    warlock declares they're questioning the dead.
+
+    Body: ``{character_id}``.
+
+    Validation:
+      - Caller has `eldritch-invocation-whispers-of-the-grave` on
+        feats (409 missing_invocation if not)
+      - 403 when not the GM and not the caster's owner
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_invocation(sheet, "whispers-of-the-grave"):
+        return JSONResponse(status_code=409, content={
+            "error": "missing_invocation",
+            "invocation": "whispers-of-the-grave",
+        })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "💀 Speak with Dead (Whispers of the Grave)",
+            "feature_desc": (
+                f"{char.name} casts Speak with Dead at will. "
+                f"Can ask a corpse up to 5 questions over 10 "
+                f"minutes — corpse must have a mouth, not be Undead, "
+                f"and hasn't been Spoken With in the last 10 days."
+            ),
+            "source": "whispers-of-the-grave",
+            "duration_rounds": 100,  # 10 minutes at 6s/round
+            "questions": 5,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "duration_rounds": 100,
+        "questions": 5,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,

@@ -1669,6 +1669,11 @@ def _warlock_sheet(name: str) -> dict:
             # broadcasts the cast. RAW prereq Lv 2 Warlock.
             {"slug": "eldritch-invocation-eyes-of-the-rune-keeper", "name": "Eldritch Invocation: Eyes of the Rune Keeper",
              "desc": "Passive: can read all writing (Druidic, Thieves' Cant, ancient glyphs, etc.) without Comprehend Languages — audit declaration via /use_eyes_of_the_rune_keeper per v2.99.146. RAW prereq Lv 2 Warlock."},
+            # v2.99.147 — Whispers of the Grave: cast Speak with
+            # Dead at will. RAW prereq Lv 9 Warlock; demo seed
+            # grants at Lv 5 for endpoint coverage.
+            {"slug": "eldritch-invocation-whispers-of-the-grave", "name": "Eldritch Invocation: Whispers of the Grave",
+             "desc": "At will: cast Speak with Dead without expending a spell slot — routed via /use_whispers_of_the_grave per v2.99.147. RAW prereq Lv 9 Warlock."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],
