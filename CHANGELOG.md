@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.140] - 2026-06-03 — "The Switchboard" — Unified invocation-driven spell-cast router
+
+**Schema version:** 65
+**Commit summary:** **Extract the per-invocation inline branches in `/cast_slow` into a shared `_INVOCATION_SPELL_CAST_REGISTRY` + three reusable helpers (`_get_invocation_cast_meta`, `_validate_invocation_cast`, `_consume_invocation_resource`).** Closes the v2.99.137 filed item. Pre-v2.99.140 the Mire the Mind warlock-spell-cast wiring lived inline inside `/cast_slow`: a hardcoded `via_invocation == "mire-the-mind"` branch checked the invocation gate + resource consumption. Future invocations that grant spell casts (Sculptor of Flesh → Polymorph, Bewitching Whispers → Compulsion, Visions of Distant Realms → Arcane Eye, etc.) would each have needed an identical inline implementation in their target `/cast_<spell>` endpoint. The registry collapses that into a single table of metadata + three helper functions that any `/cast_<spell>` endpoint can call.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `_INVOCATION_SPELL_CAST_REGISTRY` dict keyed by invocation slug, with metadata fields `spell_slug`, `spell_name`, `class_slug`, `resource_key`, `bypass_spell_list_check`. Three helpers: `_get_invocation_cast_meta(slug)` looks up the metadata; `_validate_invocation_cast(sheet, slug)` returns either `None` (success) or a 409 `JSONResponse` for `missing_invocation` / `missing_resource` / `not_enough_uses`; `_consume_invocation_resource(sheet, slug)` decrements the gating resource in place. (2) `/cast_slow` refactored — the Warlock-class check now consults the registry (`spell_slug == "slow"`) instead of a hardcoded `"mire-the-mind"` string; the spell-list bypass is keyed off `bypass_spell_list_check`; the resource decrement is a single helper call. Behavior is unchanged for both Wizard/Sorcerer and Warlock + Mire the Mind callers. (3) `tests/harness/test_invocation_cast_router.py` — 3 router-specific regression tests.
+
+### Added
+- `_INVOCATION_SPELL_CAST_REGISTRY` registry with the Mire the Mind entry.
+- `_get_invocation_cast_meta(slug)`, `_validate_invocation_cast(sheet, slug)`, `_consume_invocation_resource(sheet, slug)` helpers in `app/routes/tabletop_routes.py`.
+- `tests/harness/test_invocation_cast_router.py` — 3 tests: unknown invocation slug + Warlock → 409 `missing_invocation`; Wizard + registered slug without feats → 409 `missing_invocation`; Wizard + no via_invocation → normal route still works.
+
+### Changed
+- `/cast_slow` no longer inlines `via_invocation == "mire-the-mind"`. Registry-driven dispatch handles the Warlock route. v2.99.137's existing `tests/harness/test_mire_the_mind.py` is the behavior-preservation regression net.
+
+### Notes
+- **PATCH bump** — refactor + helper extraction + 3 router tests. No schema change. No new endpoint. Behavior preserved.
+- **How a future invocation lands its cast.** (a) Add the registry entry (e.g. `"sculptor-of-flesh": {spell_slug: "polymorph", class_slug: "warlock", resource_key: "sculptor-of-flesh-uses", bypass_spell_list_check: True}`). (b) Inside the target `/cast_<spell>` endpoint, call `_get_invocation_cast_meta(via_invocation)` + `_validate_invocation_cast(sheet, via_invocation)` early; on success, skip the spell-list check when `bypass_spell_list_check` is True; after the slot decrement, call `_consume_invocation_resource(sheet, via_invocation)`. (c) Add the invocation slug to the caster's `feats[]` + the resource key to their `resources[]` on the seed.
+- **What's still filed.** A dedicated `POST /api/campaign/{cid}/use_invocation_spell` dispatcher endpoint that takes `{character_id, invocation_slug, ...spell_fields}` and forwards to the right `/cast_<spell>` internal helper — the registry has the data shape for this today, but the dispatcher would need a per-spell-cast-helper function-pointer table to call into. Today each `/cast_<spell>` is its own route handler with shared validation.
+- **Total harness count: 990** (was 987 in v2.99.139).
+
+---
+
 ## [2.99.139] - 2026-06-03 — "The Statue Stays" — Permanent Petrification when Flesh to Stone concentration runs the full minute
 
 **Schema version:** 65

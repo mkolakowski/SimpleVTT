@@ -31293,6 +31293,135 @@ async def cast_sleep(
     }
 
 
+# ----------- v2.99.140 — Invocation-driven spell-cast router -----------
+#
+# Closes the v2.99.137 filed item. Some Eldritch Invocations grant
+# the warlock the ability to cast a spell (e.g. Mire the Mind →
+# Slow, Sculptor of Flesh → Polymorph, Bewitching Whispers →
+# Compulsion). Pre-v2.99.140 each /cast_<spell> endpoint that
+# accepted an invocation route had to inline the slug check, the
+# resource lookup, and the spell-list bypass logic — see
+# v2.99.137's /cast_slow for the original inline implementation.
+#
+# This registry + the three helpers below extract that pattern. To
+# wire a new invocation:
+#
+#   1. Add an entry to ``_INVOCATION_SPELL_CAST_REGISTRY`` keyed by
+#      the invocation slug (without the ``eldritch-invocation-``
+#      prefix — same convention as ``_pc_has_eldritch_invocation``).
+#   2. Call ``_validate_invocation_cast(sheet, via_invocation)`` at
+#      the top of the target /cast_<spell> endpoint. A non-None
+#      return is a JSONResponse to surface directly to the caller.
+#   3. When ``bypass_spell_list_check`` is True, skip the standard
+#      "spell on caster's spell list" check (the invocation grants
+#      the cast, so the spell isn't on the class list).
+#   4. After the slot decrement, call
+#      ``_consume_invocation_resource(sheet, via_invocation)`` to
+#      decrement the 1/long-rest gating resource in place.
+#
+# The /cast_slow endpoint is the first consumer; future
+# invocations will land their own /cast_<spell> wiring and reuse
+# these helpers without duplicating the validation chain.
+
+_INVOCATION_SPELL_CAST_REGISTRY: dict[str, dict] = {
+    "mire-the-mind": {
+        "spell_slug": "slow",
+        "spell_name": "Slow",
+        "class_slug": "warlock",
+        "resource_key": "mire-the-mind-uses",
+        "bypass_spell_list_check": True,
+    },
+    # Future entries (filed): "sculptor-of-flesh" → polymorph,
+    # "bewitching-whispers" → compulsion, "visions-of-distant-realms"
+    # → arcane eye, etc. Each needs its own /cast_<spell> wiring +
+    # demo-seed resource entry; the router metadata stays here.
+}
+
+
+def _get_invocation_cast_meta(invocation_slug: str) -> dict | None:
+    """v2.99.140 — return the spell-cast metadata for an invocation,
+    or None if the slug isn't a registered spell-cast invocation."""
+    if not invocation_slug:
+        return None
+    return _INVOCATION_SPELL_CAST_REGISTRY.get(
+        invocation_slug.strip().lower()
+    )
+
+
+def _validate_invocation_cast(
+    sheet: dict, invocation_slug: str,
+) -> JSONResponse | None:
+    """v2.99.140 — verify the caster has the invocation on their
+    feats list AND a use is available on the gating resource.
+
+    Returns ``None`` on success or a ready-to-return JSONResponse
+    with the appropriate 409 error on failure. Callers should
+    short-circuit their endpoint when this returns non-None.
+
+    Used by /cast_<spell> endpoints that accept a ``via_invocation``
+    body field. Returns ``None`` (i.e. "pass-through, run normal
+    validation") when the invocation slug isn't registered — that
+    way an unrecognized via_invocation falls through to the standard
+    spell-list check.
+    """
+    meta = _get_invocation_cast_meta(invocation_slug)
+    if not meta:
+        return None
+    if not _pc_has_eldritch_invocation(sheet, invocation_slug):
+        return JSONResponse(status_code=409, content={
+            "error": "missing_invocation",
+            "invocation": invocation_slug,
+        })
+    resource_key = meta.get("resource_key")
+    if resource_key:
+        resources = list(sheet.get("resources") or [])
+        idx = next(
+            (i for i, r in enumerate(resources)
+             if (r.get("key") or "").lower() == resource_key.lower()),
+            -1,
+        )
+        if idx < 0:
+            return JSONResponse(status_code=409, content={
+                "error": "missing_resource",
+                "resource_key": resource_key,
+            })
+        cur = int(resources[idx].get("current") or 0)
+        if cur < 1:
+            return JSONResponse(status_code=409, content={
+                "error": "not_enough_uses",
+                "resource_key": resource_key,
+                "have": cur,
+            })
+    return None
+
+
+def _consume_invocation_resource(sheet: dict, invocation_slug: str) -> dict:
+    """v2.99.140 — decrement the gating resource for an invocation
+    cast in the given sheet dict (in place). No-op if the slug
+    isn't registered or has no gating resource. Returns the same
+    sheet dict for chaining; caller persists via flag_modified +
+    commit.
+    """
+    meta = _get_invocation_cast_meta(invocation_slug)
+    if not meta:
+        return sheet
+    resource_key = meta.get("resource_key")
+    if not resource_key:
+        return sheet
+    resources = list(sheet.get("resources") or [])
+    idx = next(
+        (i for i, r in enumerate(resources)
+         if (r.get("key") or "").lower() == resource_key.lower()),
+        -1,
+    )
+    if idx >= 0:
+        row = dict(resources[idx])
+        row["current"] = max(0, int(row.get("current") or 0) - 1)
+        resources[idx] = row
+        sheet["resources"] = resources
+    return sheet
+
+
 # ----------- API: cast Slow (3rd-level Transmutation, concentration) -----------
 
 @router.post("/api/campaign/{campaign_id}/cast_slow")
@@ -31344,13 +31473,18 @@ async def cast_slow(
         raise HTTPException(
             400, "class_slug must be wizard, sorcerer, or warlock",
         )
-    if class_slug == "warlock" and via_invocation != "mire-the-mind":
-        # Warlock without the invocation can't cast Slow (RAW: Slow
-        # isn't a Warlock spell). The invocation is the only path.
-        return JSONResponse(status_code=409, content={
-            "error": "missing_invocation",
-            "invocation": "mire-the-mind",
-        })
+    if class_slug == "warlock":
+        # v2.99.140 — Warlock can only cast Slow via a registered
+        # invocation that maps to it (Mire the Mind today; future
+        # invocations register additional routes). Verified against
+        # ``_INVOCATION_SPELL_CAST_REGISTRY`` instead of a hardcoded
+        # slug check.
+        _meta_for_class = _get_invocation_cast_meta(via_invocation)
+        if not _meta_for_class or _meta_for_class.get("spell_slug") != "slow":
+            return JSONResponse(status_code=409, content={
+                "error": "missing_invocation",
+                "invocation": "mire-the-mind",
+            })
     if slot_level < 3:
         raise HTTPException(400, "slot_level must be >= 3 (Slow is L3)")
     if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
@@ -31389,41 +31523,23 @@ async def cast_slow(
                 "got": primary_class or "",
             })
 
-    # v2.99.137 — Mire the Mind branch: validate the invocation is on
-    # the caster's feats AND a Mire the Mind use is available. Skip
-    # the standard "Slow on spell list" check since Slow isn't a
-    # Warlock spell; the invocation is what grants it. Otherwise
-    # (Wizard/Sorcerer or warlock without the flag) the standard
-    # spell-list check runs.
-    mire_uses_remaining = None
-    if via_invocation == "mire-the-mind":
-        if not _pc_has_eldritch_invocation(sheet, "mire-the-mind"):
-            return JSONResponse(status_code=409, content={
-                "error": "missing_invocation",
-                "invocation": "mire-the-mind",
-            })
-        # Look up the Mire the Mind resource (1/long rest gate).
-        resources = list(sheet.get("resources") or [])
-        mire_idx = next(
-            (i for i, r in enumerate(resources)
-             if (r.get("key") or "").lower() == "mire-the-mind-uses"),
-            -1,
-        )
-        if mire_idx < 0:
-            return JSONResponse(status_code=409, content={
-                "error": "missing_resource",
-                "resource_key": "mire-the-mind-uses",
-            })
-        mire_row = dict(resources[mire_idx])
-        mire_cur = int(mire_row.get("current") or 0)
-        if mire_cur < 1:
-            return JSONResponse(status_code=409, content={
-                "error": "not_enough_uses",
-                "resource_key": "mire-the-mind-uses",
-                "have": mire_cur,
-            })
-        mire_uses_remaining = mire_cur - 1
-    else:
+    # v2.99.140 — invocation-cast router. When ``via_invocation`` is
+    # set AND the slug is registered in
+    # ``_INVOCATION_SPELL_CAST_REGISTRY`` (e.g. "mire-the-mind"),
+    # ``_validate_invocation_cast`` checks the feats list + the
+    # gating resource (1/long-rest). If the invocation has
+    # ``bypass_spell_list_check: True``, the standard "Slow on the
+    # caster's spell list" check is skipped (the invocation is the
+    # cast source). Pre-v2.99.140 this was inline; the helpers
+    # extract the pattern for future invocations (Sculptor of Flesh
+    # → Polymorph etc.) without each /cast_<spell> re-implementing
+    # the validation chain.
+    invocation_meta = _get_invocation_cast_meta(via_invocation)
+    if invocation_meta:
+        bad = _validate_invocation_cast(sheet, via_invocation)
+        if bad is not None:
+            return bad
+    if not invocation_meta or not invocation_meta.get("bypass_spell_list_check"):
         spells = list(sheet.get("spells") or [])
         has_slow = any(
             (s.get("_slug") == "slow") or
@@ -31468,21 +31584,11 @@ async def cast_slow(
     per_class[str(slot_level)] = slot
     all_slots[class_slug] = per_class
     sheet["spell_slots"] = all_slots
-    # v2.99.137 — Mire the Mind: also decrement the 1/long-rest
-    # resource. The lookup + validation happened above; here we
-    # commit. Mirrors the Pact Magic slot commit pattern.
-    if via_invocation == "mire-the-mind":
-        resources = list(sheet.get("resources") or [])
-        mire_idx = next(
-            (i for i, r in enumerate(resources)
-             if (r.get("key") or "").lower() == "mire-the-mind-uses"),
-            -1,
-        )
-        if mire_idx >= 0:
-            mire_row = dict(resources[mire_idx])
-            mire_row["current"] = max(0, int(mire_row.get("current") or 0) - 1)
-            resources[mire_idx] = mire_row
-            sheet["resources"] = resources
+    # v2.99.140 — also decrement the invocation's gating resource if
+    # the cast was routed through one (e.g. Mire the Mind's
+    # "mire-the-mind-uses" 1/long-rest). No-op for non-invocation
+    # casts (Wizard / Sorcerer route).
+    _consume_invocation_resource(sheet, via_invocation)
     from sqlalchemy.orm.attributes import flag_modified
     char.sheet = sheet
     flag_modified(char, "sheet")
