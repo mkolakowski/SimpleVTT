@@ -29748,7 +29748,14 @@ async def cast_slow(
         if not c:
             unaffected.append({"combatant_id": tid, "reason": "not_found"})
             continue
-        base_speed = int(c.get("speed_walk") or 30)
+        # v2.99.102 — explicitly handle speed_walk=0 (e.g. already
+        # webbed). `or 30` would trip the falsy-int trap and lift a
+        # 0 back to 30; default-only-on-None preserves the zero case.
+        _raw_speed = c.get("speed_walk")
+        try:
+            base_speed = int(_raw_speed) if _raw_speed is not None else 30
+        except (TypeError, ValueError):
+            base_speed = 30
         buff = _make_slow_buff(
             target_speed_walk=base_speed,
             source_char_id=char.id,

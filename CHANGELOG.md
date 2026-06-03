@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.102] - 2026-06-03 — "Falsy Zero, Truthy Bug" — fix /cast_slow lifting speed_walk=0 back to 30
+
+**Schema version:** 65
+**Commit summary:** **Fix the v2.99.101 `/cast_slow` speed read: `int(c.get("speed_walk") or 30)` tripped the falsy-int trap when the target's `speed_walk` was 0 (e.g. already webbed), promoting it back to 30 and yielding a 15 ft reduction instead of 0.** Replace with an explicit None-check so 0 stays 0. The `_make_slow_buff` helper already clamps to `half = 0` when `base <= 0`, so the bug was purely in the endpoint's speed read.
+**Description:** Three-line edit. The lookup now reads `c.get("speed_walk")` into `_raw_speed`, then casts to int only if not None — defaulting to 30 on None/missing-field and falling back to 30 on TypeError/ValueError. After the fix, the v2.99.101 4-test suite all passes (was 3/4).
+
+### Changed
+- `/cast_slow` target speed read now distinguishes "missing field" (→ 30 default) from "explicit zero" (→ 0 preserved).
+
+### Notes
+- **PATCH bump** — endpoint fix only. No schema change, no API contract change. Same response shape.
+- **Why this slipped past v2.99.101.** Python's `0 or 30` evaluates to 30 because 0 is falsy. The test caught it — control test included a `speed_walk=0` combatant precisely because zero is the edge case that exposes the falsy-int trap. The helper already had the right clamp; the bug was upstream in the endpoint's defensive default. Lesson: prefer `x if x is not None else default` over `x or default` whenever 0 is a valid value.
+- **Total harness count: 854** (unchanged from v2.99.101 — same 4 tests now all green).
+
+---
+
 ## [2.99.101] - 2026-06-03 — "Time Crawls Around You" — /cast_slow endpoint installs speed-halving buff that the v2.99.98/.99 engine honors
 
 **Schema version:** 65
