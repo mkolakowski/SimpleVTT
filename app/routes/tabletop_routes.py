@@ -21895,6 +21895,8 @@ def _make_restrained_buff(
     duration_rounds: int,
     concentration: bool,
     source_specific_raw_effects: list[str] | None = None,
+    repeated_save_ability: str | None = None,
+    repeated_save_dc: int | None = None,
 ) -> dict:
     """v2.99.106 — canonical Restrained-condition buff factory.
 
@@ -21932,7 +21934,7 @@ def _make_restrained_buff(
     raw = list(_RESTRAINED_CORE_RAW_EFFECTS)
     if source_specific_raw_effects:
         raw.extend(source_specific_raw_effects)
-    return {
+    buff = {
         "key": "restrained",
         "name": display_name,
         "icon": icon,
@@ -21944,18 +21946,41 @@ def _make_restrained_buff(
         "effects": {"speed_reduction_ft": reduction},
         "raw_effects": raw,
     }
+    # v2.99.120 — optional repeated-save stamps for the v2.97.62
+    # end-of-turn auto-fire framework. Web RAW grants a STR check
+    # at the end of each turn to break free; future Restrained
+    # sources (Entangle, Bigby's Hand) can opt in by passing the
+    # ability + DC. Stamp-less callers (Grapple → handled by
+    # `_make_grappled_buff` separately; legacy installs) just get
+    # the buff without auto-fire.
+    if (
+        repeated_save_ability
+        and repeated_save_ability.upper() in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}
+        and repeated_save_dc
+        and int(repeated_save_dc) > 0
+    ):
+        buff["repeated_save_ability"] = repeated_save_ability.upper()
+        buff["repeated_save_dc"] = int(repeated_save_dc)
+    return buff
 
 
 def _make_web_buff(
     target_speed_walk: int,
     source_char_id: int | None,
     source_char_name: str,
+    *,
+    spell_save_dc: int | None = None,
 ) -> dict:
     """v2.99.105 — Web spell's Restrained buff. v2.99.106 refactored
     to a thin wrapper over the shared ``_make_restrained_buff``
-    factory; the only Web-specific bits are the display name,
-    icon, source slug, and the two web-flavored raw_effects (break
-    free check + flammable note).
+    factory. v2.99.120 adds the optional ``spell_save_dc`` kwarg so
+    the buff stamps STR end-of-turn save fields for the v2.97.62
+    framework. RAW Web: "A creature restrained by the webs can use
+    its action to make a Strength check against your spell save DC.
+    If it succeeds, it is no longer restrained." v1 simplification:
+    the save framework rolls a STR save (modifier = STR + STR-save
+    proficiency), not a STR check (modifier = STR + Athletics
+    proficiency). Filed: Athletics-check framework.
     """
     return _make_restrained_buff(
         target_speed_walk=target_speed_walk,
@@ -21970,6 +21995,8 @@ def _make_web_buff(
             "STR (Athletics) check vs DC to break free (action)",
             "Flammable: take 2d4 fire damage if web ignited (filed)",
         ],
+        repeated_save_ability="STR" if spell_save_dc else None,
+        repeated_save_dc=spell_save_dc,
     )
 
 
@@ -31752,6 +31779,7 @@ async def cast_web(
             target_speed_walk=base_speed,
             source_char_id=char.id,
             source_char_name=char.name,
+            spell_save_dc=_compute_spell_save_dc_from_sheet(sheet),
         )
         installed = await _install_buff_on_combatant_id(
             campaign_id, tid, buff,

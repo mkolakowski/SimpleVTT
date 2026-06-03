@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.120] - 2026-06-03 — "Tear Yourself Free" — wire restrained buff into the v2.97.62 end-of-turn save framework
+
+**Schema version:** 65
+**Commit summary:** **Stamp `repeated_save_ability: "STR"` + `repeated_save_dc: <caster's spell save DC>` on the restrained buff installed by `/cast_web`.** Mirrors v2.99.117's Grapple wiring + v2.99.110's Hold Person/Slow pattern. RAW Web: "A creature restrained by the webs can use its action to make a Strength check against your spell save DC. If it succeeds, it is no longer restrained." Pre-v2.99.120 Web targets stayed Restrained for the full 1-hour duration with no break-free unless `/escape_grapple` style endpoint was invoked manually. v2.99.120 adds the auto-fire stamps so the v2.97.62 framework rolls the STR break-free at end of each target's turn.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. (1) `_make_restrained_buff(...)` factory signature extended with optional `repeated_save_ability` + `repeated_save_dc` kwargs (mirror of how the v2.99.107 Paralyzed / v2.99.112 Grappled / v2.99.115 Stunned / v2.99.119 Petrified factories were updated). (2) `_make_web_buff(...)` thin wrapper extended with `spell_save_dc: int | None = None` kwarg; when supplied, forwards as `repeated_save_ability="STR"` + DC. (3) `/cast_web` computes the DC via the v2.99.110 `_compute_spell_save_dc_from_sheet(sheet)` helper + passes through. (4) `tests/harness/test_web_repeated_save_stamps.py` — 2 regression tests.
+
+### Added
+- `repeated_save_ability` + `repeated_save_dc` kwargs on `_make_restrained_buff`.
+- `spell_save_dc` kwarg on `_make_web_buff`.
+- DC plumbing in `/cast_web`.
+- `tests/harness/test_web_repeated_save_stamps.py` — 2 tests: restrained buff carries STR + DC > 0, /use_repeated_save endpoint callable against the buff.
+
+### Notes
+- **PATCH bump** — factory kwargs + endpoint hook + 2 tests. No schema change. Backward-compatible: pre-v2.99.120 callers without the kwargs get a stamp-less buff (framework walks past).
+- **Same RAW imprecision as v2.99.117.** Web RAW says STR (Athletics) CHECK, not STR save. The framework rolls a save (STR + STR-save proficiency); Wizards aren't proficient in STR saves. The math comes out approximately right for the Tavik/Krieger-type "STR+Athletics" defenders but underestimates non-STR characters. Filed: dedicated Athletics-check framework that doesn't repurpose the save path.
+- **Why STR, not DEX.** RAW: Web explicitly says STR check. Some restraining sources (Bigby's Hand, Entangle) use different abilities; their respective wrappers can pass `repeated_save_ability="DEX"` (or another).
+- **Why this works for the v2.99.106 `key="restrained"` dedupe.** The framework reads `combatant.buffs[].repeated_save_*` from whatever Restrained buff is installed. A target restrained by both Web AND Grapple has only one buff at a time (dedupe on key="restrained") — the most recent installer's stamps win. RAW imprecise but practical.
+- **Total harness count: 938** (was 936 in v2.99.119).
+
+---
+
 ## [2.99.119] - 2026-06-03 — "The Statue Garden" — Petrified condition factory + Flesh to Stone wrapper (eighth speed-engine consumer)
 
 **Schema version:** 65
