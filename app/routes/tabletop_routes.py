@@ -20827,6 +20827,63 @@ def _pc_agonizing_blast_bonus(sheet: dict, attack: dict) -> int:
         return 0
 
 
+async def _apply_lance_of_lethargy(
+    campaign_id: int, attacker_char_id: int, attacker_name: str,
+    attacker_sheet: dict, attack: dict, target_combatant: dict | None,
+) -> dict | None:
+    """v2.99.92 — Lance of Lethargy invocation (Warlock Lv 2+, PHB
+    p.111): "When you hit a creature with Eldritch Blast, you can
+    reduce that creature's speed by 10 ft until the end of your
+    next turn."
+
+    v1 ship: installs a ``lance-of-lethargy`` buff on the target
+    combatant carrying ``effects.speed_reduction_ft: 10`` and
+    ``duration_rounds: 1``. The buff is visible on the chip strip;
+    the speed reduction is informational at the mechanical layer
+    (the Mov chip / movement enforcement reading the effects is
+    filed for a follow-up). Returns a summary dict on success or
+    None on a gate miss.
+    """
+    # Gate 1: attack must be Eldritch Blast.
+    if not _attack_is_eldritch_blast(attack):
+        return None
+    # Gate 2: attacker must have the invocation.
+    if not _pc_has_eldritch_invocation(attacker_sheet, "lance-of-lethargy"):
+        return None
+    # Gate 3: a target combatant is required (RAW: "you hit a creature").
+    if not target_combatant:
+        return None
+    target_combatant_id = target_combatant.get("id")
+    if not target_combatant_id:
+        return None
+    # Install the buff.
+    buff = {
+        "key": "lance-of-lethargy",
+        "name": "Lance of Lethargy",
+        "icon": "🐌",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {"speed_reduction_ft": 10},
+        "desc": (
+            f"Speed reduced by 10 ft until end of "
+            f"{attacker_name or 'the caster'}'s next turn."
+        ),
+        "source": "lance-of-lethargy",
+        "source_char_id": int(attacker_char_id) if attacker_char_id else None,
+    }
+    ok = await _install_buff_on_combatant_id(
+        campaign_id, str(target_combatant_id), buff,
+    )
+    if not ok:
+        return None
+    return {
+        "target_combatant_id": str(target_combatant_id),
+        "target_name": target_combatant.get("name") or "Target",
+        "speed_reduction_ft": 10,
+    }
+
+
 async def _apply_repelling_blast_push(
     db: Session, campaign_id: int, campaign: "Campaign",
     attacker_char_id: int, attacker_sheet: dict,
@@ -31906,6 +31963,44 @@ async def use_attack(
             target_resistance_applied = apply_result["resistance_applied"]
             target_dying = apply_result["is_dying"]
             target_dead = apply_result["is_dead"]
+
+        # v2.99.92 — Lance of Lethargy invocation. On a successful
+        # Eldritch Blast hit, reduce the target's speed by 10 ft
+        # until end of caster's next turn (RAW PHB p.111). v1
+        # installs a 1-round buff on the target; the mechanical
+        # speed reduction at the Mov chip / movement-enforcement
+        # layer is filed for a follow-up (the buff carries
+        # effects.speed_reduction_ft so future readers can pick it
+        # up). Skipped on dead targets.
+        if hit and not target_dead:
+            try:
+                lol_result = await _apply_lance_of_lethargy(
+                    campaign_id, char.id, char.name,
+                    sheet, attack, target_combatant,
+                )
+                if lol_result is not None:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "feature_name": "🐌 Lance of Lethargy",
+                            "feature_desc": (
+                                f"{char.name} slows "
+                                f"{lol_result['target_name']} by 10 ft "
+                                f"until end of next turn."
+                            ),
+                            "source": "lance-of-lethargy",
+                            "target_combatant_id": lol_result["target_combatant_id"],
+                            "target_name": lol_result["target_name"],
+                            "speed_reduction_ft": lol_result["speed_reduction_ft"],
+                        },
+                    })
+            except Exception:
+                logging.exception(
+                    "Lance of Lethargy install failed for char_id=%s",
+                    char.id,
+                )
 
         # v2.99.90 — Repelling Blast invocation. On a successful
         # Eldritch Blast hit, push the target up to 10 ft away in

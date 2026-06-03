@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.92] - 2026-06-03 — "Slow the Hit" — Lance of Lethargy (Warlock invocation) installs speed-reduction buff
+
+**Schema version:** 65
+**Commit summary:** **Wire the Lance of Lethargy Eldritch Invocation so a successful Eldritch Blast hit installs a 1-round 10-ft speed-reduction buff on the target.** Builds on the v2.99.89/.90 invocation framework. New `_apply_lance_of_lethargy(...)` async helper runs at /attack time after the hit + damage-application path: when the attacker has the invocation, the attack is Eldritch Blast, the target was hit, and the target isn't dead, the helper installs a `lance-of-lethargy` buff on the target combatant carrying `effects.speed_reduction_ft: 10` and `duration_rounds: 1`. v1 ships the buff install + audit; the mechanical speed reduction at the Mov chip / movement-enforcement layer is filed for follow-up (the buff carries the effects field so future readers can pick it up). Stacks with Repelling Blast — both fire on the same EB hit. Magnus's demo `feats` list gains the invocation.
+**Description:** New `_apply_lance_of_lethargy(campaign_id, attacker_char_id, attacker_name, attacker_sheet, attack, target_combatant)` async helper in `app/routes/tabletop_routes.py`. Three gates: (1) attack name doesn't contain "eldritch blast", (2) sheet doesn't have the invocation on its feats list, (3) no target_combatant. On all-pass: builds the buff dict (`key: "lance-of-lethargy"`, `name`, `icon: 🐌`, `duration_rounds: 1`, `effects.speed_reduction_ft: 10`, `source: "lance-of-lethargy"`) and calls `_install_buff_on_combatant_id` to mutate the hub state + broadcast `battle_update`. The /attack wire-in at the post-hit/post-damage site invokes the helper inside a try/except so install failures don't unwind the attack; on success, fires `feature_used(source=lance-of-lethargy)` audit broadcast carrying target_combatant_id + target_name + speed_reduction_ft. Magnus's demo `feats` list gains `eldritch-invocation-lance-of-lethargy`. The helper is placed before the Repelling Blast wire-in so both can fire on the same hit; LoL doesn't depend on the push happening (it keys on combatant id, not position).
+
+### Added
+- `_apply_lance_of_lethargy(...)` async helper. Installs the `lance-of-lethargy` buff via `_install_buff_on_combatant_id` + returns a summary dict for the caller's audit broadcast.
+- Wire-in at `/attack` next to Repelling Blast (LoL first, then RB) so both fire on the same hit.
+- `feature_used(source="lance-of-lethargy")` broadcast carrying target_combatant_id + target_name + speed_reduction_ft + the Magnus character info.
+- `eldritch-invocation-lance-of-lethargy` on Magnus's `feats` list in the demo seed.
+- `tests/harness/test_lance_of_lethargy.py` — 2 regression tests: happy path (Magnus + Krieger setup; EB hit installs the buff; assert buffs list carries `lance-of-lethargy` with effects.speed_reduction_ft=10 + the feature_used broadcast fires) + name gate (Quarterstaff doesn't install the buff).
+
+### Notes
+- **PATCH bump** — additive helper + a single attack-path block + a demo seed edit. No schema change. The buff install is opt-in via the invocation; sheets without it pass through unchanged.
+- **Why buff install only (no mechanical speed reduction yet).** The Mov chip in the init tracker reads `combatant.speed_walk` directly; it doesn't yet walk `combatant.buffs[].effects.speed_reduction_ft` to subtract. Wiring that requires a render-time mutation similar to v2.99.79's Dash bonus surface — out of scope for this ship. The buff install + the chat-card audit make the effect visible immediately; mechanical enforcement is the next ship.
+- **Stacks with Repelling Blast.** Both run in the same post-hit block. RB pushes the target 10 ft away; LoL installs the speed buff on the (post-push) target. The two are independent — disabling one via the feats list doesn't affect the other.
+- **Buff expiry.** The standard 1-round duration is consumed at the next turn boundary by the existing buff-expiry walker (the GM-side nextTurn handler decrements `duration_rounds` and drops 0-duration entries). RAW "until end of your next turn" maps cleanly to 1 round on Magnus's turn since LoL is installed during the turn it fires; the buff expires when Magnus's NEXT turn ends (1 round counter starts at install).
+- **Filed.** (1) Mov chip rendering: subtract `effects.speed_reduction_ft` when computing the cap. (2) /token/move enforcement: read the buff at movement-cap check time so a slowed target physically can't move 35 ft. (3) Combine with the Slow spell + similar speed-reduction effects via a shared `_effective_speed_walk(combatant)` helper. (4) Optional-decision UI ("you can reduce... can"): per-hit confirm modal. Same scope as Repelling Blast's filed opt-in.
+- **Total harness count: 815** (was 813 in v2.99.91).
+
+---
+
 ## [2.99.91] - 2026-06-03 — "Catch the Status" — sync class-content-status.md to the v2.99.80→.90 ships
 
 **Schema version:** 65

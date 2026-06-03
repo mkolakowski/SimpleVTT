@@ -1528,6 +1528,12 @@ def _warlock_sheet(name: str) -> dict:
             # _apply_repelling_blast_push at /attack time.
             {"slug": "eldritch-invocation-repelling-blast", "name": "Eldritch Invocation: Repelling Blast",
              "desc": "When you hit a creature with Eldritch Blast, you can push the creature up to 10 ft away in a straight line — auto-applied at /attack time per v2.99.90."},
+            # v2.99.92 — Lance of Lethargy: on a successful Eldritch
+            # Blast hit, reduce the target's speed by 10 ft until
+            # end of caster's next turn. Installs a 1-round buff
+            # via _apply_lance_of_lethargy at /attack time.
+            {"slug": "eldritch-invocation-lance-of-lethargy", "name": "Eldritch Invocation: Lance of Lethargy",
+             "desc": "When you hit a creature with Eldritch Blast, you can reduce that creature's speed by 10 ft until end of your next turn — buff auto-installed at /attack time per v2.99.92."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],
