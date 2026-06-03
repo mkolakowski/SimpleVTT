@@ -30605,6 +30605,221 @@ async def use_grapple(
     }
 
 
+# ----------- API: Escape Grapple action (PHB p.195) -----------
+
+@router.post("/api/campaign/{campaign_id}/escape_grapple")
+async def escape_grapple(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.114 — Use an action to escape a grapple.
+
+    Body: ``{character_id, escapee_check_total?, grappler_check_total?,
+    override?}``.
+
+    RAW (PHB p.195): "A grappled creature can use its action to
+    escape. To do so, it must succeed on a Strength (Athletics) or
+    Dexterity (Acrobatics) check contested by the grappler's
+    Strength (Athletics) check." The escapee chooses which ability
+    to use; this endpoint doesn't gate on the choice — the GM does
+    the rolls externally and passes both totals when the contested
+    check should be auto-resolved.
+
+    Body is the mirror of /use_grapple (v2.99.113):
+      - When BOTH check totals are supplied, the server compares
+        them. Escapee must strictly beat the grappler to break
+        free (RAW: ties go to the contesting party = grappler).
+      - When either is missing, the endpoint falls through to
+        "legacy auto" mode: assumes the GM decided escape succeeds
+        and removes the grappled buff unconditionally.
+
+    Action economy fires regardless of outcome (RAW: the action
+    was spent on the attempt). Validates the caller actually has
+    the grappled buff (409 not_grappled if absent).
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    override = bool(body.get("override"))
+    escapee_total_raw = body.get("escapee_check_total")
+    grappler_total_raw = body.get("grappler_check_total")
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Escapee not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    # Verify the caller has the grappled buff. Read from hub state
+    # so we can also surface the grappler's identity in the audit.
+    state = hub.get_battle(campaign_id)
+    escapee_cb = None
+    if state:
+        for c in state.get("combatants") or []:
+            if c.get("char_id") == char.id:
+                escapee_cb = c
+                break
+    grappled_buff = None
+    if escapee_cb:
+        for b in (escapee_cb.get("buffs") or []):
+            if (b or {}).get("key") == "grappled":
+                grappled_buff = b
+                break
+    if not grappled_buff:
+        return JSONResponse(status_code=409, content={
+            "error": "not_grappled",
+            "character_id": char.id,
+        })
+
+    # Parse + validate contested-check totals.
+    escapee_total: int | None = None
+    grappler_total: int | None = None
+    if escapee_total_raw is not None and grappler_total_raw is not None:
+        try:
+            escapee_total = int(escapee_total_raw)
+            grappler_total = int(grappler_total_raw)
+        except (TypeError, ValueError):
+            return JSONResponse(status_code=400, content={
+                "error": "bad_check_totals",
+                "escapee_check_total": str(escapee_total_raw),
+                "grappler_check_total": str(grappler_total_raw),
+            })
+
+    if escapee_total is not None and grappler_total is not None:
+        if escapee_total > grappler_total:
+            outcome = "escaped"
+        elif escapee_total < grappler_total:
+            outcome = "still_grappled"
+        else:
+            outcome = "tie"  # RAW: contesting party (grappler) wins
+    else:
+        outcome = "auto"  # legacy path: always escape
+
+    grappler_name = grappled_buff.get("source_char_name") or "Grappler"
+    grappler_char_id = grappled_buff.get("source_char_id")
+
+    # Action is spent on the attempt regardless of outcome.
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # On a failed escape, short-circuit + broadcast a "still
+    # grappled" audit.
+    if outcome in ("still_grappled", "tie"):
+        outcome_copy = (
+            "couldn't break free"
+            if outcome == "still_grappled"
+            else "tied — grappler holds by RAW"
+        )
+        note = (
+            f"🤼 {char.name} fails to escape {grappler_name}'s grapple "
+            f"({outcome_copy}: {escapee_total} vs {grappler_total})"
+        )
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "character_name": char.name,
+                "feature_name": "🤼 Escape Grapple (failed)",
+                "feature_desc": note,
+                "source": "escape-grapple-action",
+                "outcome": outcome,
+                "grappler_name": grappler_name,
+                "grappler_char_id": grappler_char_id,
+                "escapee_check_total": escapee_total,
+                "grappler_check_total": grappler_total,
+            },
+        })
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": "",
+                "total": 0,
+                "breakdown": note,
+                "note": note,
+                "user_name": char.name,
+                "char_name": char.name,
+                "visibility": Visibility.PUBLIC.value,
+            },
+        })
+        return {
+            "ok": True,
+            "outcome": outcome,
+            "character_id": char.id,
+            "character_name": char.name,
+            "removed": False,
+            "grappler_char_id": grappler_char_id,
+            "grappler_name": grappler_name,
+            "escapee_check_total": escapee_total,
+            "grappler_check_total": grappler_total,
+        }
+
+    # Escape succeeded — remove the grappled buff.
+    removed = await _remove_buff(campaign_id, char.id, "grappled")
+
+    if outcome == "auto":
+        note = f"🤼 {char.name} escapes {grappler_name}'s grapple"
+    else:
+        note = (
+            f"🤼 {char.name} escapes {grappler_name}'s grapple "
+            f"({escapee_total} vs {grappler_total} → escapee wins)"
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🤼 Escape Grapple",
+            "feature_desc": (
+                f"{char.name} breaks free of {grappler_name}'s grapple. "
+                f"The Grappled condition ends."
+            ),
+            "source": "escape-grapple-action",
+            "outcome": outcome,
+            "grappler_name": grappler_name,
+            "grappler_char_id": grappler_char_id,
+            "escapee_check_total": escapee_total,
+            "grappler_check_total": grappler_total,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    return {
+        "ok": True,
+        "outcome": outcome,
+        "character_id": char.id,
+        "character_name": char.name,
+        "removed": removed,
+        "grappler_char_id": grappler_char_id,
+        "grappler_name": grappler_name,
+        "escapee_check_total": escapee_total,
+        "grappler_check_total": grappler_total,
+    }
+
+
 # ----------- API: cast Hold Person (2nd-level Enchantment, concentration) -----------
 
 @router.post("/api/campaign/{campaign_id}/cast_hold_person")

@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.114] - 2026-06-03 — "One Hand Free" — /escape_grapple closes the Grapple loop with the mirror contested check
+
+**Schema version:** 65
+**Commit summary:** **Ship `/escape_grapple` as the mirror of v2.99.112-.113's `/use_grapple`.** Target spends an action + STR (Athletics) or DEX (Acrobatics) check contested by the grappler's STR (Athletics) to break free. New endpoint validates the caller has a `grappled` buff (409 `not_grappled` if absent), optionally auto-resolves the contested check when both totals are supplied, and removes the buff via `_remove_buff` on escape success. RAW-strict: escapee must STRICTLY beat the grappler; ties go to the grappler (contesting party).
+**Description:** Two edits in `app/routes/tabletop_routes.py`. (1) New `POST /api/campaign/{cid}/escape_grapple` endpoint mirroring `/use_grapple`'s shape. Reads the caller's `grappled` buff from hub state, extracts grappler attribution from `source_char_id` + `source_char_name`, parses optional `escapee_check_total` + `grappler_check_total` body fields (400 `bad_check_totals` on non-numeric), computes `outcome ∈ {escaped, still_grappled, tie, auto}`, marks action economy regardless, removes the buff on success or short-circuits with a "still grappled" audit on failure. (2) `tests/harness/test_escape_grapple.py` — 6 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/escape_grapple` endpoint.
+- `escapee_check_total` + `grappler_check_total` optional body fields with the same auto-resolve semantics as `/use_grapple`.
+- `outcome` field on the response (`escaped`, `still_grappled`, `tie`, `auto`).
+- `tests/harness/test_escape_grapple.py` — 6 tests: escapee wins (buff removed), grappler wins (buff stays), tie (RAW: grappler wins), legacy mode (no totals → auto + remove), 409 not_grappled when caller has no buff, 400 bad_check_totals.
+
+### Notes
+- **PATCH bump** — new endpoint + 6 tests. No schema change.
+- **Why ties go to the grappler.** Symmetric with `/use_grapple` (v2.99.113): the contesting party (the one whose status is at stake — Grappled stays / Grappled ends) wins ties. For `/use_grapple` the contesting party is the target (no Grappled). For `/escape_grapple` the contesting party is the grappler (Grappled stays). Both endpoints use the same "strictly beat" rule so the math composes cleanly.
+- **Why a separate endpoint instead of a body flag on /use_grapple.** The two actions have different actors (escapee vs grappler), different action-economy charges (escapee's action vs grappler's action), different short-circuit paths (remove vs install), and different audit copy. Splitting them keeps each endpoint focused and avoids a tangled if/else around the same handler. The mirror naming (`/use_grapple` + `/escape_grapple`) reads cleanly.
+- **`_remove_buff` is the cleanup path.** It already broadcasts `buff_update` with the new (now buff-free) list, mirrors the buff back to the sheet for PCs, and is consistent with how /end_buff works. Re-using it means the escape path goes through the same code as a manual GM-side end.
+- **No concentration cascade.** The grappled buff installs without `concentration: True` (it's not a spell), so removing it doesn't trigger `_drop_paired_concentration_buffs`. Correct RAW: a grappler doesn't have any concentration on the grapple — they just hold the target by virtue of the contested check.
+- **Filed.** (1) Auto-sense the escapee's better ability (STR vs DEX) and let the server pick which to use. (2) Allow the escapee to use a free hand to escape a one-handed grapple (RAW does not list this, but homebrew). (3) Multi-grappler scenarios (e.g. two Krieger-types grappling Tavik together) — today the buff dedupes, so only the most recent grapple is tracked.
+- **Total harness count: 905** (was 899 in v2.99.113).
+
+---
+
 ## [2.99.113] - 2026-06-03 — "Both Wrists Locked" — /use_grapple auto-resolves the contested STR (Athletics) check
 
 **Schema version:** 65
