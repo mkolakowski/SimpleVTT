@@ -1614,6 +1614,12 @@ def _warlock_sheet(name: str) -> dict:
             # via_invocation="mire-the-mind".
             {"slug": "eldritch-invocation-mire-the-mind", "name": "Eldritch Invocation: Mire the Mind",
              "desc": "Prerequisite: Lv 5+ Warlock. Once per long rest, cast Slow using a Warlock spell slot — routed via /cast_slow with via_invocation=\"mire-the-mind\" per v2.99.137."},
+            # v2.99.138 — Eldritch Sight: cast Detect Magic at will.
+            # Audit-only endpoint /use_eldritch_sight broadcasts the
+            # cast; the full magic-aura visualization layer is
+            # filed (no map magic-aura layer in SimpleVTT today).
+            {"slug": "eldritch-invocation-eldritch-sight", "name": "Eldritch Invocation: Eldritch Sight",
+             "desc": "At will: cast Detect Magic without expending a spell slot — routed via /use_eldritch_sight per v2.99.138. Aura-on-map visualization is filed."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],

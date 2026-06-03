@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.138] - 2026-06-03 — "Reading the Glow" — Eldritch Sight (Warlock invocation) audit endpoint
+
+**Schema version:** 65
+**Commit summary:** **Ship Eldritch Sight as a dedicated `/use_eldritch_sight` endpoint that broadcasts a `feature_used` audit when a Warlock casts Detect Magic at will.** RAW (PHB p.110): "You can cast Detect Magic at will, without expending a spell slot." v1 ships the audit + invocation gate only — SimpleVTT doesn't have a "magic aura" map layer yet, so the visualization is filed. Mirror of v2.99.104 Mask of Many Faces and v2.99.131 Devil's Sight. Magnus's seed gains the invocation on his feats list.
+**Description:** Three edits. (1) New `POST /api/campaign/{cid}/use_eldritch_sight` endpoint. Validates `character_id`, caster ownership/GM, and the invocation via `_pc_has_eldritch_invocation(sheet, "eldritch-sight")` (409 `missing_invocation`). On success, broadcasts `feature_used` with `source: "eldritch-sight"`, `range_ft: 30`, `duration_rounds: 100` (10 minutes concentration at 6s/round). (2) `app/demo_seed.py` — Magnus's feats list gains `eldritch-invocation-eldritch-sight`. (3) `tests/harness/test_use_eldritch_sight.py` — 3 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_eldritch_sight` endpoint.
+- `eldritch-invocation-eldritch-sight` on Magnus's feats list.
+- `feature_used` broadcast with `source: "eldritch-sight"`, `range_ft: 30`, `duration_rounds: 100`.
+- `tests/harness/test_use_eldritch_sight.py` — 3 tests: happy path (Magnus → 200 + WS audit), missing invocation gate (Krieger → 409), missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + demo seed edit + 3 tests. No schema change.
+- **What's filed.** A "magic aura" map layer that shows where magical effects are within 30 ft. The endpoint emits the audit so the GM sees when Magnus declares the cast; rendering the aura on the map is a separate UI ship.
+- **Magnus's invocation roster.** Agonizing Blast, Hex Warrior, Mask of Many Faces, Repelling Blast, Lance of Lethargy, Lifedrinker, Devil's Sight, Mire the Mind, and now Eldritch Sight. That's 9 of the SRD's ~20 Eldritch Invocations.
+- **Total harness count: 983** (was 980 in v2.99.137).
+
+---
+
 ## [2.99.137] - 2026-06-03 — "Slowed by Whispers" — Mire the Mind (Warlock invocation) routed through /cast_slow
 
 **Schema version:** 65
