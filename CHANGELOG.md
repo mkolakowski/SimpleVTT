@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.115] - 2026-06-03 — "The Air Goes Out" — Stunned condition factory + Stunning Strike wrapper (seventh speed-engine consumer)
+
+**Schema version:** 65
+**Commit summary:** **Add the Stunned condition factory `_make_stunned_buff(...)` and a `_make_stunning_strike_stunned_buff(...)` thin wrapper as the seventh speed-engine consumer.** Mirrors the v2.99.106 (Restrained), v2.99.107 (Paralyzed), and v2.99.112 (Grappled) factory pattern with the canonical Stunned raw_effects (incapacitated, can't move, can speak falteringly, auto-fail STR/DEX saves, attacker advantage — but NO auto-crit, distinguishing Stunned from Paralyzed). Buff `key="stunned"` for canonical condition lookup. Factory accepts optional `repeated_save_*` kwargs for future Stunned spells with end-of-turn saves; Stunning Strike RAW has fixed duration with no break-free save, so the wrapper omits them.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. (1) New `_STUNNED_CORE_RAW_EFFECTS` module constant (5 canonical Stunned bullets). (2) New `_make_stunned_buff(...)` factory mirroring `_make_paralyzed_buff`'s signature including the optional `repeated_save_ability` + `repeated_save_dc` stamps. (3) New `_make_stunning_strike_stunned_buff(...)` thin wrapper with Stunning Strike-specific args (icon "💫", source "stunning-strike", duration 1 round = "until end of your next turn", 3 source-specific bullets). (4) `tests/harness/test_stunned_buff_factory.py` — 13 unit tests covering the factory + wrapper.
+
+### Added
+- `_STUNNED_CORE_RAW_EFFECTS` module constant (5 canonical Stunned bullets).
+- `_make_stunned_buff(...)` factory with optional repeated-save stamps.
+- `_make_stunning_strike_stunned_buff(...)` thin wrapper.
+- `tests/harness/test_stunned_buff_factory.py` — 13 unit tests: 8 for the factory (key, speed reduction, zero/none defaults, core raw_effects, source-specific extension, repeated-save stamp on/off) and 5 for the Stunning Strike wrapper (key, source, duration, no-save-stamps, source-specific bullets).
+
+### Notes
+- **PATCH bump** — additive factory + wrapper + 13 unit tests. No new endpoint, no API contract change. No demo seed edit needed (Kael already has Ki points + the Stunning Strike feature is descriptive on his sheet).
+- **Why no `/use_stunning_strike` endpoint yet.** Stunning Strike RAW triggers off a melee weapon attack hit — it composes with the existing /attack flow, not as a standalone action. The right wiring is a post-hit uplift in `_compute_attack_auto_uplifts` that the /attack endpoint reads, gated on a body flag like `stunning_strike: true` + Ki decrement + target's CON save. That's a larger ship; filed as the natural follow-up. The factory + wrapper land first so the auto-uplift commit can call them directly.
+- **Why Stunned isn't built on Paralyzed.** RAW: Paralyzed = Stunned + auto-crit on melee within 5 ft. The auto-crit is the only mechanical difference; the rest of the conditions (incapacitated, speed 0, auto-fail STR/DEX saves, attacker advantage) are identical. A super-factory could parameterize Stunned/Paralyzed by a `auto_crit_melee_5ft` flag, but the explicit per-condition factories keep the RAW distinctions visible in the helper names.
+- **Why no save stamps on Stunning Strike.** RAW (PHB p.79): "The target must succeed on a Constitution saving throw or be stunned until the end of your next turn." The initial save happens at install time — once stunned, the duration is fixed. No end-of-turn save to break free. Different from Hold Person (WIS save at end of each turn) and Slow (same).
+- **Where this fits.** Speed-engine consumers: Lance of Lethargy (-10), Slow (half), Web (Restrained → 0), Hold Person (Paralyzed → 0), Hold Monster (Paralyzed → 0), Grapple (Grappled → 0), Stunning Strike (Stunned → 0). Seven total. The factory pattern is mature; future conditions (Petrified, Knocked Out, Charmed) all fit the same shape.
+- **Total harness count: 918** (was 905 in v2.99.114).
+
+---
+
 ## [2.99.114] - 2026-06-03 — "One Hand Free" — /escape_grapple closes the Grapple loop with the mirror contested check
 
 **Schema version:** 65

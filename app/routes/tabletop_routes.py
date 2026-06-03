@@ -21462,6 +21462,129 @@ def _make_hold_person_paralyzed_buff(
     )
 
 
+_STUNNED_CORE_RAW_EFFECTS: list[str] = [
+    "Stunned: speed 0",
+    "Stunned: incapacitated (no actions or reactions)",
+    "Stunned: can speak only falteringly",
+    "Stunned: auto-fail STR / DEX saves",
+    "Stunned: attacks vs target have advantage",
+]
+
+
+def _make_stunned_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+    *,
+    source: str,
+    display_name: str,
+    icon: str,
+    duration_rounds: int,
+    concentration: bool,
+    source_specific_raw_effects: list[str] | None = None,
+    repeated_save_ability: str | None = None,
+    repeated_save_dc: int | None = None,
+) -> dict:
+    """v2.99.115 — canonical Stunned-condition buff factory.
+
+    Mirror of `_make_restrained_buff` (v2.99.106), `_make_paralyzed_buff`
+    (v2.99.107), and `_make_grappled_buff` (v2.99.112) but for the
+    Stunned condition specifically.
+
+    RAW distinctions vs neighboring conditions:
+      - vs Paralyzed: Stunned does NOT auto-crit on melee within 5
+        ft (Paralyzed does). Stunned + Paralyzed both auto-fail
+        STR/DEX saves AND grant advantage to attackers.
+      - vs Restrained: Stunned IS incapacitated (no actions OR
+        reactions). Restrained still has actions + reactions.
+      - vs Grappled: Stunned auto-fails STR/DEX saves + grants
+        attacker advantage. Grappled has neither.
+
+    Speed → 0 via the v2.99.98 engine. Other mechanical effects
+    (incapacitated → no actions/reactions, auto-fail saves,
+    attacker advantage) are surfaced as raw_effects today; the
+    incapacitated marker is recognized by the v2.49.51 hook that
+    drops the target's own concentration.
+
+    Buff `key == "stunned"` so condition-aware code can look up
+    the condition by a single canonical key. Re-imposing Stunned
+    from a different source REPLACES the existing buff (same
+    dedupe semantics as Restrained / Paralyzed / Grappled).
+    """
+    try:
+        base = (
+            int(target_speed_walk) if target_speed_walk is not None else 30
+        )
+    except (TypeError, ValueError):
+        base = 30
+    reduction = max(0, base)
+    raw = list(_STUNNED_CORE_RAW_EFFECTS)
+    if source_specific_raw_effects:
+        raw.extend(source_specific_raw_effects)
+    buff = {
+        "key": "stunned",
+        "name": display_name,
+        "icon": icon,
+        "duration_rounds": duration_rounds,
+        "concentration": concentration,
+        "source": source,
+        "source_char_id": int(source_char_id) if source_char_id else None,
+        "source_char_name": source_char_name or "",
+        "effects": {"speed_reduction_ft": reduction},
+        "raw_effects": raw,
+    }
+    # v2.99.115 — repeated-save stamps for end-of-turn saves
+    # (Power Word Stun: no save once installed, opt out by omitting;
+    # Banshee Wail: no Stunned RAW; future Tasha's Mind Whip etc.).
+    # Stunning Strike (Monk) RAW has fixed duration "until end of
+    # your next turn" with no save — omit by default.
+    if (
+        repeated_save_ability
+        and repeated_save_ability.upper() in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}
+        and repeated_save_dc
+        and int(repeated_save_dc) > 0
+    ):
+        buff["repeated_save_ability"] = repeated_save_ability.upper()
+        buff["repeated_save_dc"] = int(repeated_save_dc)
+    return buff
+
+
+def _make_stunning_strike_stunned_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+) -> dict:
+    """v2.99.115 — Stunning Strike (Monk Lv 5) Stunned buff. Thin
+    wrapper over `_make_stunned_buff`.
+
+    RAW (PHB p.79): "When you hit another creature with a melee
+    weapon attack, you can spend 1 ki point to attempt a stunning
+    strike. The target must succeed on a Constitution saving throw
+    or be stunned until the end of your next turn." Duration is
+    fixed — RAW grants no end-of-turn save to break free early,
+    so the factory's `repeated_save_*` stamps are omitted.
+
+    duration_rounds=1 represents "until end of your next turn" —
+    one full round at 6 s / round. The v2.97.62 framework decrements
+    duration at end of the source's turn.
+    """
+    return _make_stunned_buff(
+        target_speed_walk=target_speed_walk,
+        source_char_id=source_char_id,
+        source_char_name=source_char_name,
+        source="stunning-strike",
+        display_name="Stunned (Stunning Strike)",
+        icon="💫",
+        duration_rounds=1,
+        concentration=False,
+        source_specific_raw_effects=[
+            "Triggered by a melee weapon attack hit + 1 Ki point",
+            "CON save vs Monk's spell save DC (8 + PB + WIS mod)",
+            "No save to break free — duration fixed (RAW)",
+        ],
+    )
+
+
 _GRAPPLED_CORE_RAW_EFFECTS: list[str] = [
     "Grappled: speed 0",
     "Grappled: can't benefit from speed bonuses (Haste / Dash via Cunning Action / etc.)",
