@@ -226,41 +226,55 @@
         const params = (opt && opt.params) || {};
         const target = data && data.mover_combatant_id;
         if (!target) {
-            console.warn('[oa-chain] no mover_combatant_id; skipping auto-roll');
+            console.warn(
+                '[oa-chain] no mover_combatant_id on the prompt — '
+                + 'skipping auto-roll. Server-side mover lookup in '
+                + '/token/move may have failed.',
+                data,
+            );
             return;
         }
         const isNpc = !!params.npc || !data.watcher_char_id;
+        const url = isNpc
+            ? `/api/campaign/${cid}/npc_attack`
+            : `/api/campaign/${cid}/attack`;
+        const body = isNpc ? {
+            combatant_id: data.watcher_combatant_id,
+            action_id: params.action_id || '',
+            action_name: params.action_name || '',
+            attack_bonus: params.attack_bonus || '',
+            damage: params.damage || '',
+            damage_type: params.damage_type || '',
+            range: params.range || '',
+            target_combatant_id: target,
+        } : {
+            character_id: data.watcher_char_id,
+            attack_index: params.attack_index,
+            target_combatant_id: target,
+        };
         try {
-            if (isNpc) {
-                await fetch(`/api/campaign/${cid}/npc_attack`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({
-                        combatant_id: data.watcher_combatant_id,
-                        action_id: params.action_id || '',
-                        action_name: params.action_name || '',
-                        attack_bonus: params.attack_bonus || '',
-                        damage: params.damage || '',
-                        damage_type: params.damage_type || '',
-                        range: params.range || '',
-                        target_combatant_id: target,
-                    }),
-                });
-            } else {
-                await fetch(`/api/campaign/${cid}/attack`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({
-                        character_id: data.watcher_char_id,
-                        attack_index: params.attack_index,
-                        target_combatant_id: target,
-                    }),
-                });
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(body),
+            });
+            // v2.99.73 — surface non-2xx so silent /attack failures
+            // (auth, missing field, out-of-range) don't masquerade
+            // as the popup-side "OA roll didn't come through" bug.
+            if (!resp.ok) {
+                let errBody = '';
+                try { errBody = await resp.text(); } catch (_) {}
+                console.error(
+                    '[oa-chain] auto-roll POST failed',
+                    'url=' + url,
+                    'status=' + resp.status,
+                    'body=' + errBody,
+                    'request=', body,
+                );
             }
         } catch (err) {
-            console.error('[oa-chain] auto-roll failed', err);
+            console.error('[oa-chain] auto-roll fetch errored', err, body);
         }
     }
 

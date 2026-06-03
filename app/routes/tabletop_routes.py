@@ -9857,16 +9857,32 @@ async def move_token(
                 # v2.99.68 — include mover_combatant_id so the
                 # client can auto-chain the chosen OA attack via
                 # /attack (PC watcher) or /npc_attack (NPC watcher)
-                # against the provoker. Find by source_token_id
-                # match in hub state; fall back to char_id match.
+                # against the provoker. v2.99.73 — extend the
+                # lookup to also try token_template_id + label
+                # for NPC movers whose combatants don't carry
+                # source_token_id (the demo's seed_encounter shape
+                # pre-v2.99.73). Without the fallback the chain
+                # silently broke for every NPC-provoking-PC OA.
                 _mover_comb_id = None
                 _state2 = hub.get_battle(campaign_id) or {}
-                for _mc in (_state2.get("combatants") or []):
+                _movers = (_state2.get("combatants") or [])
+                for _mc in _movers:
                     if _mc.get("source_token_id") == int(token.id):
                         _mover_comb_id = _mc.get("id")
                         break
-                    if token.character_id and _mc.get("char_id") == int(token.character_id):
-                        _mover_comb_id = _mc.get("id")
+                if _mover_comb_id is None and token.character_id:
+                    for _mc in _movers:
+                        if _mc.get("char_id") == int(token.character_id):
+                            _mover_comb_id = _mc.get("id")
+                            break
+                if _mover_comb_id is None and token.token_template_id and token.label:
+                    for _mc in _movers:
+                        if (
+                            _mc.get("token_template_id") == int(token.token_template_id)
+                            and _mc.get("name") == token.label
+                        ):
+                            _mover_comb_id = _mc.get("id")
+                            break
                 await _emit_reaction_prompt(
                     db, campaign, _head_watcher_combatant,
                     trigger_event=_head_evt,
@@ -11071,13 +11087,48 @@ async def _perform_encounter_load(
         # 35, Hill Giant 40, etc.). Project the speed from the
         # linked Character / TokenTemplate sheet so the field is
         # populated before the hub.set_battle push.
+        #
+        # v2.99.73 — ALSO heal source_token_id. Encounter Load
+        # deletes old Tokens + creates fresh ones; the saved
+        # combatants' source_token_id (if present) points to
+        # dead rows. Build an index of the freshly-created tokens
+        # by (character_id) for PCs and (token_template_id, label)
+        # for NPCs and re-bind source_token_id on each combatant.
+        # Without this, the v2.99.68 OA auto-roll chain breaks
+        # because the mover_combatant_id lookup in /token/move's
+        # OA emit needs an unambiguous join from the moved Token
+        # back to its combatant.
+        _new_tokens = db.query(Token).filter(
+            Token.map_id == target_map_id,
+        ).all()
+        _by_char = {
+            int(t.character_id): t for t in _new_tokens
+            if t.character_id is not None
+        }
+        _by_tmpl_label: dict[tuple[int, str], Token] = {}
+        for t in _new_tokens:
+            if t.token_template_id is not None and t.label:
+                _key = (int(t.token_template_id), t.label)
+                _by_tmpl_label.setdefault(_key, t)
         for _c in (battle_state.get("combatants") or []):
             _sw = _c.get("speed_walk")
-            if isinstance(_sw, (int, float)) and _sw > 0:
-                continue
-            _c["speed_walk"] = _resolve_combatant_speed_walk(
-                db, campaign_id, _c,
-            )
+            if not (isinstance(_sw, (int, float)) and _sw > 0):
+                _c["speed_walk"] = _resolve_combatant_speed_walk(
+                    db, campaign_id, _c,
+                )
+            # Re-resolve source_token_id to the fresh post-Load
+            # token. PC: char_id → new token. NPC: template+label.
+            _matched = None
+            _cid = _c.get("char_id")
+            if _cid is not None:
+                _matched = _by_char.get(int(_cid))
+            if _matched is None:
+                _tmpl = _c.get("token_template_id")
+                _name = _c.get("name")
+                if _tmpl is not None and _name:
+                    _matched = _by_tmpl_label.get((int(_tmpl), _name))
+            if _matched is not None:
+                _c["source_token_id"] = int(_matched.id)
         hub.set_battle(campaign_id, battle_state)
 
     # ── Broadcasts ──

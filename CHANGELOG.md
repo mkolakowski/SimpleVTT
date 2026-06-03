@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.73] - 2026-06-02 — "Bind the Token" — source_token_id heal + chain auto-roll diagnostics
+
+**Schema version:** 65
+**Commit summary:** **Heal `source_token_id` on every combatant so the v2.99.68 OA auto-roll chain works for NPC-provoked PC OAs, and surface chain failures in the console instead of swallowing them silently.** User report (a) "player rolls are not coming through when OAs from NPCs trigger them" and (b) "the NPC distance tracker does not appear to be triggering as expected." Both share a root cause: the demo's `seed_encounter` never wrote `source_token_id` on combatants, so every server-side AND client-side join that keys on it (the v2.99.68 mover_combatant_id lookup, the v2.6.2 client token_move handler for the Mov chip, the strict-mode movement audit, the breadcrumb) had to fall back to `token_template_id + label` matching. For NPCs the mover lookup didn't have that fallback yet — `mover_combatant_id` was null → the OA prompt broadcast had a null target → the chain skipped silently. v2.99.73 ships three layered fixes: (1) `seed_encounter` writes `source_token_id` at seed time. (2) `_perform_encounter_load` heals `source_token_id` by re-binding combatants to the freshly-created post-Load tokens (PC by `char_id`, NPC by `template+label`). (3) The mover lookup in `/token/move` adds a `template+label` fallback as a safety net for any combatant the heal misses. (4) The client-side `_chainOaAttack` now surfaces non-2xx `/attack` / `/npc_attack` responses with status + body + request payload so future regressions show up in DevTools.
+**Description:** Four-file change. `app/demo_seed.py::seed_encounter` writes `source_token_id: tok.id` on each combatant entry. `app/routes/tabletop_routes.py::_perform_encounter_load` indexes the freshly-created tokens by `char_id` (PC) and `(token_template_id, label)` (NPC) once, then rebinds every combatant's `source_token_id` to the matching live token before pushing to the hub. The OA mover lookup in `/token/move` adds a third fallback (`token_template_id + token.label`) so NPC movers without a healed combatant still resolve. `app/static/reaction_prompt.js::_chainOaAttack` switches from "await fetch then return" to "await fetch, check resp.ok, log status + body on failure" — catches both silent server errors (400 missing field, 403 auth, etc.) and network errors with full request context for diagnosis.
+
+### Fixed
+- v2.99.68 OA auto-roll chain now fires for NPC-provoked PC OAs (the GM moves a bandit out of Krieger's reach → Krieger's owner gets the popup → click Greataxe → `weapon_attack` chat card appears with the rolled d20 + damage). Pre-v2.99.73 the mover_combatant_id lookup couldn't resolve NPC movers without `source_token_id`, so the prompt's broadcast carried null, the chain saw "no mover_combatant_id" and bailed.
+- NPC movement on token drag now correctly identifies the moving NPC's combatant in the client's `token_move` handler (Mov chip update, breadcrumb path append, strict-mode overrun audit). Pre-v2.99.73 the client's source_token_id lookup failed for demo NPCs → the lookup fell to `token_template_id + label` which works for unique labels but is fragile for duplicate-template NPCs (3 bandits, etc.).
+- Encounter Load now rebinds `source_token_id` on every combatant to the freshly-created post-Load tokens. Pre-v2.99.73 saved encounters from before this fix referenced dead token ids; the OA mover lookup, client move handler, and other source-token-id-keyed joins all silently fell back to fragile name matching.
+
+### Added
+- `seed_encounter` writes `source_token_id` per combatant at seed time so fresh demos no longer rely on the Load heal.
+- `_perform_encounter_load` builds a `(char_id → Token)` + `((template_id, label) → Token)` index once per Load and binds `source_token_id` on every combatant before the `hub.set_battle` push.
+- Third fallback `token_template_id + token.label` in the OA mover-combatant-id lookup in `/token/move`.
+- Client-side error logging in `_chainOaAttack`: surfaces non-2xx responses with URL, status, response body, and the request payload so the user can see exactly what `/attack` / `/npc_attack` rejected. Silent swallowing is over.
+
+### Notes
+- **PATCH bump** — additive heals + defensive fallback + better diagnostics. No schema change, no API contract change. Saved encounters from before v2.99.73 are automatically healed on the next Load.
+- **Why `source_token_id` matters beyond the OA chain.** It's the unambiguous join from a Token row to its in-battle combatant. Client uses it in `token_move`, `attack_resolved`, `damage_applied` handlers. Server uses it in `_check_opportunity_attack_triggers`, the strict-mode movement audit, the action-economy chip updates, and any future per-combatant broadcast targeting the right row. Healing it once on Load closes the structural gap that's caused at least three OA-flow bugs (v2.99.62 NPC watcher lookup, v2.99.68 mover_combatant_id, today's chain failure).
+- **Demo template uniqueness assumption.** The Load heal's NPC binding uses `(token_template_id, label)`. If two combatants share both, the first match wins (same caveat as v2.99.62). All shipped demo encounters use unique labels (Goblin Captain, Bandit Alpha/Beta/Gamma, Thug — distinct each); user-saved encounters with `Bandit / Bandit / Bandit` would all bind to the first Token row. Documented as a known limitation; the v2.99.55 ID-explicit picker in the GM panel is the recommended path for those encounters.
+- **Why surface fetch errors.** Pre-v2.99.73 the chain's `try { await fetch } catch` only logged thrown errors. `fetch` resolves with `.ok = false` on HTTP errors without throwing, so 400/403/500 from `/attack` were swallowed and the user saw "no roll happened" with no console signal. v2.99.73 logs status + body on failure; the next Time We Hit This the user can paste the console output and we'll diagnose in seconds instead of hours.
+- **No new harness tests this commit.** The server-side `mover_combatant_id` lookup is covered indirectly by `test_oa_chain_multi_npc_watchers_all_get_to_attack` (the chained prompt carries the mover field via the new lookup); the Load heal is covered by the existing `test_load_encounter_heals_missing_speed_walk` shape (same pattern, different field). The chain error logging is pure diagnostic — no new contract to test.
+- Total harness count: 785 (unchanged from v2.99.72).
+
+---
+
 ## [2.99.72] - 2026-06-02 — "Spend What You Have" — gate Dash modal on actual need + drop GM overrun bypass
 
 **Schema version:** 65

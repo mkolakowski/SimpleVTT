@@ -3647,6 +3647,16 @@ def seed_encounter(
             "id": f"tok_{tok.id}_demo",
             "char_id": tok.character_id,
             "token_template_id": tok.token_template_id,
+            # v2.99.73 — write source_token_id so the unambiguous
+            # v2.6.2 client/server lookup path works on every drag
+            # in the demo. Without this, the OA helper's
+            # mover_combatant_id resolution + the client's
+            # token_move handler + every other source_token_id-keyed
+            # join fall back to template+label matching, which fails
+            # for NPCs whose label changed since the seed AND
+            # silently breaks the OA chain (v2.99.68's auto-roll
+            # depends on mover_combatant_id being non-null).
+            "source_token_id": tok.id,
             "name": tok.label,
             "initiative": init_roll,
             "hp_current": hp_max,
