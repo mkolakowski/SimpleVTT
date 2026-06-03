@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.119] - 2026-06-03 — "The Statue Garden" — Petrified condition factory + Flesh to Stone wrapper (eighth speed-engine consumer)
+
+**Schema version:** 65
+**Commit summary:** **Add the Petrified condition factory `_make_petrified_buff(...)` and a `_make_flesh_to_stone_petrified_buff(...)` thin wrapper as the eighth speed-engine consumer.** Mirrors the v2.99.106 / .107 / .112 / .115 condition factory pattern. Petrified is RAW the strongest speed→0 condition — adds "resistance to all damage" + "immune to poison/disease" + "weight ×10 + aging stops" on top of the standard Paralyzed mechanics. Buff `key="petrified"` is already in `_INCAPACITATING_BUFF_KEYS` so the v2.49.51 incapacitation hook auto-drops the target's own concentration on install. Factory accepts optional `repeated_save_*` kwargs for spells with end-of-turn break-free saves; Flesh to Stone wrapper supplies CON + the caller-provided spell save DC (RAW: 3 successes ends the petrification).
+**Description:** Two edits in `app/routes/tabletop_routes.py`. (1) New `_PETRIFIED_CORE_RAW_EFFECTS` module constant (8 canonical Petrified bullets including the unique-to-Petrified "resistance to all damage", "immune to poison/disease", "weight ×10 + aging stops"). (2) New `_make_petrified_buff(...)` factory mirroring the `_make_paralyzed_buff` signature including optional repeated-save stamps. (3) New `_make_flesh_to_stone_petrified_buff(...)` thin wrapper with Flesh-to-Stone-specific args (icon "🗿", source "flesh-to-stone-spell", duration 10 rounds, concentration=True, 4 source-specific bullets including the "3 successes ends" + "Greater Restoration cures" notes, CON save stamps). (4) `tests/harness/test_petrified_buff_factory.py` — 14 unit tests covering the factory + wrapper.
+
+### Added
+- `_PETRIFIED_CORE_RAW_EFFECTS` module constant (8 canonical Petrified bullets).
+- `_make_petrified_buff(...)` factory with optional repeated-save stamps.
+- `_make_flesh_to_stone_petrified_buff(...)` thin wrapper.
+- `tests/harness/test_petrified_buff_factory.py` — 14 unit tests: 8 for the factory (key, speed reduction, zero/none defaults, core raw_effects, resistance-to-all-damage bullet pin, immune-to-poison pin, repeated-save stamp on/off) and 6 for the Flesh to Stone wrapper (key + source, duration 10 rounds + concentration, CON save stamps when DC supplied, no stamps when omitted, source-specific bullets, speed reduction).
+
+### Notes
+- **PATCH bump** — additive factory + wrapper + 14 unit tests. No new endpoint, no API contract change. No demo seed edit needed.
+- **Why no `/cast_flesh_to_stone` endpoint yet.** Flesh to Stone has an unusual two-stage flow: RAW first installs Restrained on the target, then if the target stays Restrained for 3 turns AND fails 3 CON saves, transforms to Petrified. The full endpoint would need to model the staged transition (Restrained → Petrified) + the 3-successes-ends count + the permanent-if-sustained-for-full-minute branch. That's a larger ship. The factory + wrapper land first so a future `/cast_flesh_to_stone` commit can call them directly without recreating the buff shape. v1 assumes the caller has resolved the staged transition externally and is just installing the final Petrified state.
+- **Why Petrified isn't built on Paralyzed.** Mechanical overlap is high (speed 0, incapacitated, auto-fail STR/DEX, advantage to attackers) but Petrified adds resistance to all damage + immunity to poison/disease + the weight/aging flavor. The explicit factory makes the differences visible at the helper-name level. A `_make_condition_buff(condition: str, ...)` super-factory could parameterize but loses the RAW-distinction readability.
+- **"Resistance to all damage" + "immune to poison" are descriptive today.** Mechanical hooks into the damage resistance engine are filed. The v2.97.x damage pipeline reads `sheet.damage_resistances` / `sheet.damage_immunities`; a future commit could install Petrified with `effects.damage_resistances: ["all"]` + `effects.damage_immunities: ["poison"]` and extend the resistance reader to walk buff effects. Today the GM narrates these.
+- **Where this fits.** Speed-engine consumers: Lance of Lethargy (-10), Slow (half), Web (Restrained → 0), Hold Person (Paralyzed → 0), Hold Monster (Paralyzed → 0), Grapple (Grappled → 0), Stunning Strike (Stunned → 0), Flesh to Stone (Petrified → 0). Eight total. The factory pattern is now fully mature for speed→0 conditions.
+- **Total harness count: 936** (was 922 in v2.99.118).
+
+---
+
 ## [2.99.118] - 2026-06-03 — "One Hit Breaks The Spell" — end-to-end regression: damage → failed CON save → cascade clears speed-spell targets
 
 **Schema version:** 65

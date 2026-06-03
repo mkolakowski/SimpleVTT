@@ -21462,6 +21462,138 @@ def _make_hold_person_paralyzed_buff(
     )
 
 
+_PETRIFIED_CORE_RAW_EFFECTS: list[str] = [
+    "Petrified: speed 0",
+    "Petrified: incapacitated (no actions or reactions)",
+    "Petrified: can't move or speak, unaware of surroundings",
+    "Petrified: attacks vs target have advantage",
+    "Petrified: auto-fail STR / DEX saves",
+    "Petrified: resistance to all damage",
+    "Petrified: immune to poison and disease (existing infections suspended)",
+    "Petrified: weight increases 10×, aging stops",
+]
+
+
+def _make_petrified_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+    *,
+    source: str,
+    display_name: str,
+    icon: str,
+    duration_rounds: int,
+    concentration: bool,
+    source_specific_raw_effects: list[str] | None = None,
+    repeated_save_ability: str | None = None,
+    repeated_save_dc: int | None = None,
+) -> dict:
+    """v2.99.119 — canonical Petrified-condition buff factory.
+
+    Mirror of the v2.99.106 (Restrained), v2.99.107 (Paralyzed),
+    v2.99.112 (Grappled), and v2.99.115 (Stunned) condition
+    factories. RAW (PHB p.290): Petrified is the strongest of the
+    speed→0 conditions — it adds "resistance to all damage" +
+    "immune to poison/disease" + "weight ×10 + aging stops" on top
+    of the standard Paralyzed mechanics. Mechanically the most
+    permanent: cures require Greater Restoration or Stone to Flesh.
+
+    Speed → 0 via the v2.99.98 engine. "Resistance to all damage"
+    and "immune to poison/disease" are surfaced as raw_effects
+    today; mechanical enforcement at the damage pipeline is filed
+    (would need `effects.damage_resistance_all` or a similar dict
+    field that the resistance engine reads).
+
+    Buff `key == "petrified"` — already in the v2.49.51
+    `_INCAPACITATING_BUFF_KEYS` set so the incapacitation hook
+    drops the target's own concentration when installed. Re-imposing
+    Petrified from a different source REPLACES the existing buff
+    (same dedupe as the other condition factories).
+    """
+    try:
+        base = (
+            int(target_speed_walk) if target_speed_walk is not None else 30
+        )
+    except (TypeError, ValueError):
+        base = 30
+    reduction = max(0, base)
+    raw = list(_PETRIFIED_CORE_RAW_EFFECTS)
+    if source_specific_raw_effects:
+        raw.extend(source_specific_raw_effects)
+    buff = {
+        "key": "petrified",
+        "name": display_name,
+        "icon": icon,
+        "duration_rounds": duration_rounds,
+        "concentration": concentration,
+        "source": source,
+        "source_char_id": int(source_char_id) if source_char_id else None,
+        "source_char_name": source_char_name or "",
+        "effects": {"speed_reduction_ft": reduction},
+        "raw_effects": raw,
+    }
+    if (
+        repeated_save_ability
+        and repeated_save_ability.upper() in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}
+        and repeated_save_dc
+        and int(repeated_save_dc) > 0
+    ):
+        buff["repeated_save_ability"] = repeated_save_ability.upper()
+        buff["repeated_save_dc"] = int(repeated_save_dc)
+    return buff
+
+
+def _make_flesh_to_stone_petrified_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+    *,
+    spell_save_dc: int | None = None,
+) -> dict:
+    """v2.99.119 — Flesh to Stone's Petrified buff. Thin wrapper.
+
+    RAW (PHB p.243): "You attempt to turn one creature that you can
+    see within range into stone. If the target's body is made of
+    flesh, the creature must make a Constitution saving throw. On a
+    failed save, it is Restrained as its flesh begins to harden. On
+    a successful save, the creature isn't affected. A creature
+    Restrained by this spell must make another Constitution saving
+    throw at the end of each of its turns. If it successfully saves
+    against this spell three times, the spell ends. If it fails its
+    saves three times, it is turned to stone and subjected to the
+    Petrified condition for the duration."
+
+    v1 wrapper assumes the spell has already reached the Petrified
+    stage (caller is responsible for the Restrained→Petrified
+    progression). The factory output is the final Petrified state.
+
+    Duration is concentration up to 1 minute (10 rounds at 6 s /
+    round). Once the spell ends (concentration drops OR duration
+    expires), the Petrified condition lifts UNLESS the caster
+    sustained concentration for the full minute, in which case it
+    becomes permanent. v1 ships the 10-round version; permanent
+    petrification is a GM `/end_buff` decision today.
+    """
+    return _make_petrified_buff(
+        target_speed_walk=target_speed_walk,
+        source_char_id=source_char_id,
+        source_char_name=source_char_name,
+        source="flesh-to-stone-spell",
+        display_name="Petrified (Flesh to Stone)",
+        icon="🗿",
+        duration_rounds=10,
+        concentration=True,
+        source_specific_raw_effects=[
+            "RAW: target was Restrained for 3 turns, then failed 3 CON saves",
+            "CON save at end of each turn to break free (RAW: 3 successes ends)",
+            "Permanent if caster sustains concentration for full 1 minute",
+            "Cures: Greater Restoration or Stone to Flesh",
+        ],
+        repeated_save_ability="CON",
+        repeated_save_dc=spell_save_dc,
+    )
+
+
 _STUNNED_CORE_RAW_EFFECTS: list[str] = [
     "Stunned: speed 0",
     "Stunned: incapacitated (no actions or reactions)",
