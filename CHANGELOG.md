@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.94] - 2026-06-03 — "Strike at Every Altar" — Divine Strike for the other seven domains
+
+**Schema version:** 65
+**Commit summary:** **Extend the v2.60.0 Life Domain Divine Strike to the seven other Divine-Strike-bearing Cleric domains via a subclass→damage_type map.** Pre-v2.99.94 only Life Domain wired Divine Strike (1d8 radiant); other domains' Lv 8 features were filed. v2.99.94 keeps the existing once-per-turn lock + 1d8/2d8 dice scaling and just generalizes the subclass check from `subclass_slug == "life"` to a dict lookup that covers Life / Tempest / Trickery / War / Death / Nature / Forge / Twilight. War Domain uses the WEAPON's damage type (per RAW: "any weapon you wield is charged with divine energy"); other domains use a fixed flavor (Tempest: thunder, Trickery: poison, Death: necrotic, Nature: fire, Forge: fire, Twilight: radiant). Domains that don't have Divine Strike (Light, Knowledge, Grave, Arcana, Peace, Order — they have Potent Spellcasting or a different Lv 8 feature) are absent from the map and the helper falls through with no uplift.
+**Description:** Single-block edit in `_compute_attack_auto_uplifts` (`app/routes/tabletop_routes.py`). The pre-v2.99.94 `if subclass_slug == "life":` becomes a `_DIVINE_STRIKE_BY_DOMAIN` dict lookup. When the subclass is in the map, the uplift fires with the mapped damage type (or, for War Domain where the map entry is None, the attack's `attack_damage_type` — letting the strike inherit the weapon's type). All other plumbing — the once-per-turn `divine_strike_used` flag, the `2d8` Lv 14+ bump, the breakdown formatting, the `source: "divine-strike"` audit — stays exactly as v2.60.0 wired it. 8 new harness tests in `tests/harness/test_divine_strike_domains.py` PATCH Tavik (Cleric Lv 6 Life Domain, bumped to Lv 8 via the capstone pattern) to each new subclass + assert the uplift's damage_type matches.
+
+### Added
+- `_DIVINE_STRIKE_BY_DOMAIN` dict in `_compute_attack_auto_uplifts`. Eight rows (Life / Tempest / Trickery / War / Death / Nature / Forge / Twilight). War's value is `None` to flag "use the weapon's damage type." Domains without Divine Strike are absent.
+- `tests/harness/test_divine_strike_domains.py` — 8 regression tests: 6 fixed-flavor domains (Tempest thunder, Trickery poison, Death necrotic, Nature fire, Forge fire, Twilight radiant), 1 weapon-typed (War bludgeoning), and 1 negative control (Light Domain doesn't trigger Divine Strike at all).
+
+### Changed
+- `_compute_attack_auto_uplifts`'s Divine Strike branch generalizes from a single-domain `if` to a dict-based dispatch. Life Domain behavior is byte-identical (still 1d8 radiant via the dict entry).
+
+### Notes
+- **PATCH bump** — additive domains + 8 new tests. No schema change, no API contract change. Pre-v2.99.94 Life Domain tests still pass unchanged.
+- **Why Nature → fire and not the RAW "DM choice."** RAW: Nature Domain Divine Strike "deals an extra 1d8 cold, fire, or lightning damage (your choice)." v1 picks fire because the demo doesn't expose a damage-type picker yet; filed for a follow-up that lets the player choose at attack time (similar to the Channel Divinity option picker).
+- **Why Twilight + Life both → radiant.** RAW: Twilight Domain (TCoE p.34) doesn't actually have Divine Strike — it has Twilight Sanctuary as its Channel Divinity option + Vigilant Blessing. v2.99.94 includes it in the map as radiant (matching its general "twilight glow" flavor) so future builds can opt in. If RAW-strict, the Twilight entry can be removed in a follow-up; until then the helper applies symmetrically.
+- **Knowledge / Arcana / Grave / Peace / Order domains.** These have Lv 8 features that aren't Divine Strike (Potent Spellcasting / Death Touch / Wrath of the Storm variant, etc.). They're absent from the map by design; future ships can add their respective Lv 8 features as new uplift sources (`source: "potent-spellcasting"` etc.) without touching the Divine Strike block.
+- **Light Domain control test.** Light Domain has Potent Spellcasting at Lv 8, not Divine Strike. The negative-control test verifies that the dict-absent path correctly returns no uplift.
+- **Total harness count: 826** (was 818 in v2.99.93).
+
+---
+
 ## [2.99.93] - 2026-06-03 — "Charisma Sings the Steel" — Hex Warrior (Warlock invocation) swaps STR/DEX for CHA on bound weapons
 
 **Schema version:** 65

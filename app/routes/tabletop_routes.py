@@ -19665,24 +19665,49 @@ def _compute_attack_auto_uplifts(
                 pass
 
     # 4. v2.60.0 — Divine Strike (Cleric Life Domain Lv 8+). Once
-    #    per turn: +1d8 radiant on weapon hits (Lv 8-13) / +2d8 radiant
-    #    (Lv 14+). Tracked via ``combatant.economy.divine_strike_used``
-    #    flag — reset at turn start by the GM-side nextTurn handler
-    #    alongside action chips + the Colossus Slayer flag. Subclass-
-    #    gated: only Life Domain (other domains have different Lv 8
-    #    features — War Domain's War God's Blessing, Light's
-    #    Improved Flare, etc.). Future Death Domain Reaper Lv 8
-    #    feature would slot in here with a separate `source` tag.
+    #    per turn: +1d8 of the domain's flavor damage type on weapon
+    #    hits (Lv 8-13) / +2d8 (Lv 14+). Tracked via
+    #    ``combatant.economy.divine_strike_used`` flag — reset at turn
+    #    start by the GM-side nextTurn handler alongside action chips
+    #    + the Colossus Slayer flag.
+    #
+    #    v2.60.0 shipped Life Domain only (radiant); v2.99.94 extends
+    #    to the seven other Divine-Strike-bearing domains via a
+    #    subclass→damage_type map. War Domain uses the WEAPON's
+    #    damage type (per RAW: "any weapon you wield is charged with
+    #    divine energy"); other domains use a fixed flavor type.
+    #    Domains that DON'T have Divine Strike (Light / Knowledge /
+    #    Grave / Arcana / Peace / Order — they have Potent
+    #    Spellcasting or a different Lv 8 feature) are absent from
+    #    the map and fall through with no uplift.
     cleric_lv = _cleric_level_from_sheet(attacker_sheet)
     if cleric_lv >= 8 and target_combatant is not None:
         subclass_raw = (attacker_sheet.get("subclass") or "").strip().lower()
         subclass_slug = subclass_raw.replace(" domain", "").strip()
-        if subclass_slug == "life":
+        # v2.99.94 — Divine Strike damage type by domain. None marks
+        # "use the weapon's damage type" (War Domain). Twilight gets
+        # the same radiant flavor as Life (TCoE p.34); the other six
+        # are RAW canon.
+        _DIVINE_STRIKE_BY_DOMAIN = {
+            "life":     "radiant",
+            "tempest":  "thunder",
+            "trickery": "poison",
+            "war":      None,        # uses weapon's damage type
+            "death":    "necrotic",
+            "nature":   "fire",      # DM choice of cold/fire/lightning; v1 picks fire
+            "forge":    "fire",
+            "twilight": "radiant",
+        }
+        if subclass_slug in _DIVINE_STRIKE_BY_DOMAIN:
             already_used = bool(
                 (attacker_combatant or {}).get("economy", {}).get("divine_strike_used")
             )
             if not already_used:
                 ds_dice = "2d8" if cleric_lv >= 14 else "1d8"
+                ds_dmg_type = (
+                    _DIVINE_STRIKE_BY_DOMAIN[subclass_slug]
+                    or (attack_damage_type or "bludgeoning")
+                )
                 try:
                     r = dice_mod.roll(ds_dice)
                     uplifts.append({
@@ -19690,7 +19715,7 @@ def _compute_attack_auto_uplifts(
                         "expression": ds_dice,
                         "total": r.total,
                         "breakdown": r.breakdown,
-                        "damage_type": "radiant",
+                        "damage_type": ds_dmg_type,
                         "source": "divine-strike",
                     })
                 except dice_mod.DiceParseError:
