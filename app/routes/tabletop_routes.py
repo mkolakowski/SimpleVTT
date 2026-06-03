@@ -20774,6 +20774,59 @@ def _apply_great_weapon_fighting_reroll(damage_expr: str):
     return total, breakdown
 
 
+def _pc_has_eldritch_invocation(sheet: dict, invocation_slug: str) -> bool:
+    """v2.99.89 — does the PC have a specific Eldritch Invocation
+    (Warlock Lv 2+) on their feats list? RAW invocations are stored
+    in ``sheet.feats`` with slugs like
+    ``"eldritch-invocation-agonizing-blast"``. Matches by exact slug
+    OR by a "-{tail}" suffix check so callers can pass either the
+    full ``"eldritch-invocation-agonizing-blast"`` slug or the
+    shorter ``"agonizing-blast"`` tail.
+    """
+    if not sheet or not invocation_slug:
+        return False
+    needle = invocation_slug.strip().lower()
+    full = needle if needle.startswith("eldritch-invocation-") \
+        else f"eldritch-invocation-{needle}"
+    for f in (sheet.get("feats") or []):
+        if not isinstance(f, dict):
+            continue
+        slug = (f.get("slug") or "").strip().lower()
+        if slug == full or slug == needle:
+            return True
+    return False
+
+
+def _attack_is_eldritch_blast(attack: dict) -> bool:
+    """v2.99.89 — does this attack count as Eldritch Blast for the
+    Agonizing Blast invocation? Heuristic: name contains "eldritch
+    blast" (case-insensitive). Demo's "Eldritch Blast (cantrip)"
+    matches.
+    """
+    if not attack:
+        return False
+    return "eldritch blast" in (attack.get("name") or "").strip().lower()
+
+
+def _pc_agonizing_blast_bonus(sheet: dict, attack: dict) -> int:
+    """v2.99.89 — Agonizing Blast invocation (Warlock Lv 2+, PHB
+    p.110): "When you cast Eldritch Blast, add your Charisma
+    modifier to the damage of each beam it deals." Returns the
+    CHA mod when the attacker has the invocation AND the attack is
+    Eldritch Blast; otherwise 0.
+    """
+    if not _attack_is_eldritch_blast(attack):
+        return 0
+    if not _pc_has_eldritch_invocation(sheet, "agonizing-blast"):
+        return 0
+    abilities = sheet.get("abilities") or {}
+    cha = abilities.get("CHA")
+    try:
+        return (int(cha) - 10) // 2
+    except (TypeError, ValueError):
+        return 0
+
+
 def _attack_is_off_hand(attack: dict) -> bool:
     """v2.99.87 — does this attack represent an off-hand attack in
     a two-weapon-fighting routine? Reads the explicit
@@ -31191,6 +31244,20 @@ async def use_attack(
                 f"{damage_expr_raw}+{_twf_mod}" if _twf_mod > 0
                 else f"{damage_expr_raw}{_twf_mod}"
             )
+    # v2.99.89 — Eldritch Invocation: Agonizing Blast (Warlock
+    # Lv 2+, PHB p.110). When the Warlock has the invocation on
+    # their feats list AND the attack is Eldritch Blast, add the
+    # CHA modifier to each beam's damage. Pre-v2.99.89 Magnus's
+    # demo sheet baked the +3 into the Eldritch Blast damage
+    # ("1d10+3"); v2.99.89 strips it to "1d10" and adds it back
+    # here so the source of the +3 is visible in the audit trail
+    # (the same "+3 [Agonizing]" treatment as Rage / Hex / etc.).
+    _agonizing = _pc_agonizing_blast_bonus(sheet, attack)
+    if _agonizing and damage_expr_raw:
+        damage_expr_raw = (
+            f"{damage_expr_raw}+{_agonizing}" if _agonizing > 0
+            else f"{damage_expr_raw}{_agonizing}"
+        )
 
     is_save = save_dc > 0 and save_ability
 
@@ -36405,6 +36472,12 @@ _SHEET_PATCH_KEYS = {
     # reset cycle. Same restore-in-finally discipline as
     # `subclass` / `fighting_style` above.
     "resources",
+    # v2.99.89 — attacks list. Allowlisted for harness tests that
+    # need to inject a synthetic attack (Eldritch Blast on a
+    # non-Warlock to verify the class gate, off-hand to verify
+    # the Two-Weapon Fighting flag, etc.) without rebuilding the
+    # entire sheet. Restore-in-finally discipline applies.
+    "attacks",
     # v2.99.46 — spell_slots nested {class_slug: {lvl: {total, used,
     # reset}}}. Primarily for capstone harness tests that need to
     # drain a fixture PC's slots to exercise restore endpoints

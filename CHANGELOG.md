@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.89] - 2026-06-03 — "Eldritch Sting" — Agonizing Blast (Warlock invocation) auto-applies CHA mod
+
+**Schema version:** 65
+**Commit summary:** **Wire the Agonizing Blast Eldritch Invocation (Warlock Lv 2+, PHB p.110) so the +CHA mod auto-applies to Eldritch Blast damage at /attack time.** First mechanical wiring for an Eldritch Invocation — the picker UI for selecting invocations is filed for a follow-up, but the data layer (feats list with `eldritch-invocation-{slug}` shape) already exists in the seed. Three new helpers: `_pc_has_eldritch_invocation(sheet, slug)` walks the feats list with both full-slug and tail-slug matching; `_attack_is_eldritch_blast(attack)` checks for "eldritch blast" in the attack name; `_pc_agonizing_blast_bonus(sheet, attack)` combines the two gates + returns the CHA mod. Plugs into /attack right after the Two-Weapon Fighting block; appends `+CHA` to the damage expression. Magnus Hexbinder is the demo fixture: his Eldritch Blast damage drops from "1d10+3" (pre-baked CHA mod) to "1d10" so the auto-apply doesn't double; end damage is identical.
+**Description:** Three new helpers in `app/routes/tabletop_routes.py`: `_pc_has_eldritch_invocation(sheet, invocation_slug)` accepts either the full `"eldritch-invocation-agonizing-blast"` slug or the shorter `"agonizing-blast"` tail; matches against `sheet.feats[*].slug`. `_attack_is_eldritch_blast(attack)` is a case-insensitive substring match on the attack name. `_pc_agonizing_blast_bonus(sheet, attack)` returns the CHA modifier when both gates pass, else 0. The wire-in in `/attack` happens right after the v2.99.87 TWF block: when non-zero, append `+{mod}` (or `{mod}` for negative mods) to `damage_expr_raw`. Demo seed flips Magnus's Eldritch Blast damage from `"1d10+3"` to `"1d10"` + updates the desc. Also adds `"attacks"` to the `_SHEET_PATCH_KEYS` allowlist so harness tests can inject synthetic attacks for class-gate validation.
+
+### Added
+- `_pc_has_eldritch_invocation(sheet, invocation_slug) -> bool` — walks sheet.feats for matching slug. Accepts full or tail slug forms.
+- `_attack_is_eldritch_blast(attack) -> bool` — case-insensitive name heuristic.
+- `_pc_agonizing_blast_bonus(sheet, attack) -> int` — returns CHA mod when invocation + EB attack; else 0.
+- Wire-in at `/attack`: when non-zero, append the bonus to `damage_expr_raw`.
+- `"attacks"` on the `_SHEET_PATCH_KEYS` allowlist for harness tests that need to inject synthetic attacks.
+- `tests/harness/test_eldritch_invocations.py` — 3 regression tests: happy (Magnus's EB damage carries +3 CHA), name gate (Magnus's Quarterstaff doesn't get +3), class gate (PATCH a synthetic EB onto Krieger; no invocation on his feats → no +CHA).
+
+### Changed
+- Magnus's Eldritch Blast authored damage: `"1d10+3"` → `"1d10"`. End damage is identical (the helper appends +3 at /attack time).
+- Magnus's Eldritch Blast desc updated to reflect the auto-apply convention.
+
+### Notes
+- **PATCH bump** — additive helpers + a single attack-path append + a demo seed edit + an allowlist entry. No schema change.
+- **Why no new sheet field for invocations.** The demo already stores invocations as `sheet.feats[]` entries with the `eldritch-invocation-{slug}` naming convention; the new helper reads from that existing list. A dedicated `sheet.eldritch_invocations` field could clean up the data but isn't necessary for the v1 mechanical wiring. Filed.
+- **Picker UI filed.** v2.99.89 is the mechanical wiring; a sheet-side picker that lets the player CHOOSE invocations from a curated catalog (and the per-level slot tracking — 2 known at Lv 2, 3 at Lv 5, etc.) is a follow-up. Today the GM hand-edits Magnus's feats list to add/remove invocations.
+- **Other Eldritch Invocations filed.** Devil's Sight (magical-darkness vision), Eyes of the Rune Keeper (read any script), Mask of Many Faces (at-will Disguise Self), Hex Warrior (Pact of the Blade synergy), Repelling Blast (push 10 ft on EB hit), Lifedrinker (Pact of the Blade +CHA necrotic damage), etc. Each needs different machinery; Agonizing Blast is the simplest because it's a flat damage uplift on a single attack type. Filed for follow-ups.
+- **Eldritch Blast beam scaling.** RAW: Lv 1-4 = 1 beam, Lv 5-10 = 2 beams, Lv 11-16 = 3, Lv 17+ = 4. The player clicks the attack button once per beam. Agonizing Blast adds +CHA to EACH beam's damage — so a Lv 5 Warlock with Agonizing Blast does 2× (1d10 + CHA) per cast. v2.99.89's per-click wire matches this RAW exactly (the player clicks attack twice at Lv 5).
+- **Total harness count: 811** (was 808 in v2.99.88).
+
+---
+
 ## [2.99.88] - 2026-06-03 — "Free the Spell" — Mystic Arcanum free-cast routing through /cast_spell
 
 **Schema version:** 65

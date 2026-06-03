@@ -1405,9 +1405,14 @@ def _warlock_sheet(name: str) -> dict:
             {"name": "Quarterstaff", "attack_bonus": "+4", "damage": "1d6+1",
              "damage_type": "bludgeoning", "range": "5 ft",
              "desc": "Versatile (1d8). Magnus carries one mostly for poking around dark places; he'd rather Eldritch Blast you."},
-            {"name": "Eldritch Blast (cantrip)", "attack_bonus": "+6", "damage": "1d10+3",
+            # v2.99.89 — Agonizing Blast +CHA mod is now auto-applied
+            # at /attack time per _pc_agonizing_blast_bonus. Pre-v2.99.89
+            # the +3 (CHA 17 mod) was pre-baked into the damage; v2.99.89
+            # drops the baseline to "1d10" so the auto-apply doesn't
+            # double-add. End-roll is identical for Magnus.
+            {"name": "Eldritch Blast (cantrip)", "attack_bonus": "+6", "damage": "1d10",
              "damage_type": "force", "range": "120 ft",
-             "desc": "Two beams at Lv 5 (Eldritch Blast scales: Lv 5 = 2 beams). Agonizing Blast invocation adds CHA mod (+3) to each beam's damage. Spell attack, not weapon."},
+             "desc": "Two beams at Lv 5 (Eldritch Blast scales: Lv 5 = 2 beams). Agonizing Blast invocation adds CHA mod (+3) to each beam's damage — auto-applied at /attack time. Spell attack, not weapon."},
         ],
         # Warlock spells: known list (not prepared). Lv 5 = 6 known
         # spells + 3 known cantrips. All slots at L3 (Pact Magic table).
