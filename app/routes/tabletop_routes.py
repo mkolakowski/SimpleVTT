@@ -21274,6 +21274,104 @@ def _make_slow_buff(
     }
 
 
+_PARALYZED_CORE_RAW_EFFECTS: list[str] = [
+    "Paralyzed: speed 0",
+    "Paralyzed: incapacitated (no actions or reactions)",
+    "Paralyzed: can't speak",
+    "Paralyzed: auto-fail STR / DEX saves",
+    "Paralyzed: attacks vs target have advantage",
+    "Paralyzed: melee hits within 5 ft auto-crit",
+]
+
+
+def _make_paralyzed_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+    *,
+    source: str,
+    display_name: str,
+    icon: str,
+    duration_rounds: int,
+    concentration: bool,
+    source_specific_raw_effects: list[str] | None = None,
+) -> dict:
+    """v2.99.107 — canonical Paralyzed-condition buff factory.
+
+    Mirrors v2.99.106's `_make_restrained_buff` but for the
+    Paralyzed condition (Hold Person, Hold Monster, future ghoul
+    paralytic touch, Banshee Wail, etc.). The mechanical
+    distinctions vs Restrained:
+      - incapacitated (no actions or reactions)
+      - can't speak
+      - auto-fail STR / DEX saves (not just disadvantage)
+      - melee hits within 5 ft auto-crit (RAW: not just advantage)
+
+    Like Restrained, speed → 0 is the only mechanically-enforced
+    bit today (via `effects.speed_reduction_ft = base` + the
+    v2.99.98 engine); the auto-fail saves + auto-crit hooks are
+    filed for follow-up (RAW PHB p.290 "Paralyzed" condition).
+
+    Buff `key == "paralyzed"` so condition-aware code can look up
+    the condition by a single key; re-imposing Paralyzed from a
+    different source REPLACES the existing buff (same dedupe
+    semantics as Restrained).
+    """
+    try:
+        base = (
+            int(target_speed_walk) if target_speed_walk is not None else 30
+        )
+    except (TypeError, ValueError):
+        base = 30
+    reduction = max(0, base)
+    raw = list(_PARALYZED_CORE_RAW_EFFECTS)
+    if source_specific_raw_effects:
+        raw.extend(source_specific_raw_effects)
+    return {
+        "key": "paralyzed",
+        "name": display_name,
+        "icon": icon,
+        "duration_rounds": duration_rounds,
+        "concentration": concentration,
+        "source": source,
+        "source_char_id": int(source_char_id) if source_char_id else None,
+        "source_char_name": source_char_name or "",
+        "effects": {"speed_reduction_ft": reduction},
+        "raw_effects": raw,
+    }
+
+
+def _make_hold_person_paralyzed_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+) -> dict:
+    """v2.99.107 — Hold Person's Paralyzed buff. Thin wrapper over
+    ``_make_paralyzed_buff``. RAW: "humanoid must succeed on a
+    WIS save or be paralyzed for the duration. The target can make
+    another WIS save at the end of each of its turns."
+
+    The end-of-turn repeated save isn't installed on the buff
+    today; future hook can mirror the v2.97.62 end-of-turn save
+    auto-fire that other concentration spells (Fear / Confusion)
+    already wire.
+    """
+    return _make_paralyzed_buff(
+        target_speed_walk=target_speed_walk,
+        source_char_id=source_char_id,
+        source_char_name=source_char_name,
+        source="hold-person-spell",
+        display_name="Paralyzed (Hold Person)",
+        icon="🥶",
+        duration_rounds=10,  # 1 minute at 6 s / round
+        concentration=True,
+        source_specific_raw_effects=[
+            "WIS save at end of each turn to break free",
+            "Only affects Humanoids (RAW)",
+        ],
+    )
+
+
 _RESTRAINED_CORE_RAW_EFFECTS: list[str] = [
     "Restrained: speed 0",
     "Restrained: attacks vs target have advantage (filed)",
@@ -30007,6 +30105,226 @@ async def cast_slow(
         "unaffected": unaffected,
         "duration_rounds": 10,
         "concentration": True,
+    }
+
+
+# ----------- API: cast Hold Person (2nd-level Enchantment, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_hold_person")
+async def cast_hold_person(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.107 — Cast Hold Person on target combatants.
+
+    Body: ``{character_id, class_slug, slot_level, target_combatant_ids,
+    override?}``.
+
+    RAW (PHB Hold Person, 2nd-level Enchantment): 1 action, 60 ft,
+    concentration up to 1 minute, WIS save. Single-target at L2;
+    each upcast level adds one more humanoid target. v1 ships the
+    speed→0 (Paralyzed) effect via the v2.99.107 Paralyzed factory;
+    other Paralyzed effects (incapacitated, can't speak, auto-fail
+    STR/DEX saves, attacks have advantage, melee within 5 ft auto-
+    crits) surface as `raw_effects` for GM narration.
+
+    Save logic is a v1 simplification: caller passes the failed-
+    save target list. The end-of-turn WIS save (RAW) isn't auto-
+    fired today; mirror of the v2.97.62 end-of-turn save hook is
+    filed.
+
+    Classes that get Hold Person: Cleric, Bard, Sorcerer, Warlock,
+    Wizard (one of the widest cross-class spells in 5e).
+
+    Validation: caster has class + Hold Person on spell list +
+    Lv 2+ slot + Phase 4 action gate. Mirrors /cast_slow + /cast_web.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 2
+    target_combatant_ids = body.get("target_combatant_ids") or []
+    override = bool(body.get("override"))
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("cleric", "bard", "sorcerer", "warlock", "wizard"):
+        raise HTTPException(
+            400,
+            "class_slug must be cleric, bard, sorcerer, warlock, or wizard",
+        )
+    if slot_level < 2:
+        raise HTTPException(
+            400, "slot_level must be >= 2 (Hold Person is L2)",
+        )
+    if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
+        raise HTTPException(400, "target_combatant_ids must be a non-empty list")
+    # RAW: 1 humanoid at L2, +1 per upcast level. L2 → 1, L3 → 2,
+    # L4 → 3, etc. Cap targets at (slot_level - 1).
+    max_targets = max(1, slot_level - 1)
+    if len(target_combatant_ids) > max_targets:
+        return JSONResponse(status_code=409, content={
+            "error": "too_many_targets",
+            "max": max_targets,
+            "got": len(target_combatant_ids),
+            "slot_level": slot_level,
+        })
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_hp = any(
+        (s.get("_slug") == "hold-person") or
+        (str(s.get("name", "")).lower() == "hold person")
+        for s in spells
+    )
+    if not has_hp:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "hold-person",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Hold Person",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "hold-person",
+            "label": "Hold Person",
+            "strict": strict,
+        })
+
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    affected: list[dict] = []
+    unaffected: list[dict] = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        c = _lookup_combatant(campaign_id, tid)
+        if not c:
+            unaffected.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        _raw_speed = c.get("speed_walk")
+        try:
+            base_speed = int(_raw_speed) if _raw_speed is not None else 30
+        except (TypeError, ValueError):
+            base_speed = 30
+        buff = _make_hold_person_paralyzed_buff(
+            target_speed_walk=base_speed,
+            source_char_id=char.id,
+            source_char_name=char.name,
+        )
+        installed = await _install_buff_on_combatant_id(
+            campaign_id, tid, buff,
+        )
+        affected.append({
+            "combatant_id": tid,
+            "name": c.get("name") or "",
+            "base_speed_walk": base_speed,
+            "speed_reduction_ft": buff["effects"]["speed_reduction_ft"],
+            "installed": installed,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    affected_summary = ", ".join(
+        f"{a['name']} (Paralyzed)" for a in affected
+    ) or "no one"
+    note = f"🥶 Hold Person (L{slot_level}) → {affected_summary}"
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": (
+                f"Hold Person installed on {len(affected)} target(s). "
+                f"Concentration up to 1 min. Paralyzed: speed 0, "
+                f"incapacitated, auto-fail STR/DEX saves, attacks have "
+                f"advantage, melee within 5 ft auto-crits. WIS save at "
+                f"end of each turn to break free."
+            ),
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "affected": affected,
+        "unaffected": unaffected,
+        "duration_rounds": 10,  # 1 min
+        "concentration": True,
+        "max_targets": max_targets,
     }
 
 

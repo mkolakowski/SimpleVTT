@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.107] - 2026-06-03 — "Cold Stone Hold" — /cast_hold_person endpoint installs Paralyzed via shared factory; fourth speed-engine consumer
+
+**Schema version:** 65
+**Commit summary:** **Ship `/cast_hold_person` as the fourth speed-engine consumer, using a new `_make_paralyzed_buff` factory that mirrors the v2.99.106 Restrained-condition pattern.** Hold Person installs a `paralyzed` buff with `effects.speed_reduction_ft = base` so the v2.99.98 engine clamps the target's effective speed to 0. RAW Paralyzed is mechanically stronger than Restrained (auto-fail STR/DEX saves not just disadvantage; melee within 5 ft auto-crits not just advantage), so the new Paralyzed factory is parallel to (not built on top of) Restrained — the canonical raw_effects lists differ.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `_PARALYZED_CORE_RAW_EFFECTS` module constant (6 canonical Paralyzed bullets including "speed 0", "incapacitated", "can't speak", "auto-fail STR/DEX saves", "attacks have advantage", "melee within 5 ft auto-crit"). New `_make_paralyzed_buff(...)` factory mirroring `_make_restrained_buff`'s signature. New `_make_hold_person_paralyzed_buff(...)` thin wrapper with Hold Person-specific bits ("WIS save at end of each turn to break free", "Only affects Humanoids"). (2) New `POST /api/campaign/{cid}/cast_hold_person` endpoint with the full /cast_slow + /cast_web validation chain (class membership for cleric/bard/sorcerer/warlock/wizard, spell on list, Lv 2+ slot, action gate). Enforces RAW upcast cap (L2 → 1, L3 → 2, L4 → 3, ...) via 409 too_many_targets. (3) `tests/harness/test_cast_hold_person.py` — 5 regression tests.
+
+### Added
+- `_PARALYZED_CORE_RAW_EFFECTS` module constant.
+- `_make_paralyzed_buff(...)` factory.
+- `_make_hold_person_paralyzed_buff(...)` thin wrapper for Hold Person specifically.
+- `POST /api/campaign/{cid}/cast_hold_person` endpoint with RAW upcast target-count enforcement.
+- `tests/harness/test_cast_hold_person.py` — 5 tests: happy path (Tavik casts on Krieger, paralyzed buff with reduction 40), L4 upcast (3 targets allowed, max_targets=3), L2 with 2 targets (→ 409 too_many_targets), L1 slot (→ 400), wrong class (barbarian → 400).
+
+### Notes
+- **PATCH bump** — new endpoint + factory + 5 tests. No schema change. Coexists with the pre-existing `_SPELL_CONDITION_MAP["hold-person"]` entry which is still reachable via /cast_spell — that path stays as the descriptive/audit fallback. Future converge work can deprecate one or the other.
+- **Why Paralyzed isn't built on Restrained.** Same shape (key + factory + raw_effects + effects.speed_reduction_ft), but the mechanical bullets are different in RAW: Restrained gives DISadvantage on attacks/DEX saves (not auto-fail), advantage to attackers (not auto-crit). The two conditions are mechanical cousins, not the same. A `_make_condition_buff(condition: str, ...)` super-factory could consolidate them, but the explicit per-condition factories surface the RAW differences in the helper names — easier to read than a parameterized one-size-fits-all builder.
+- **Why the upcast cap check is a 409 not a 400.** It depends on slot_level (a body field), not the request shape — and the GM may want to know they tried to over-target so the modal can suggest "downgrade to L3 with 2 targets?" 409 fits the "request was valid but conflicts with state/RAW limit" pattern better than 400 (malformed input).
+- **Filed.** (1) End-of-turn WIS save auto-fire — RAW Hold Person grants the target a WIS save at end of EACH of its turns. The v2.97.62 / v2.97.65 end-of-turn save hooks already exist for Fear / Confusion / Hideous Laughter; Hold Person should ride the same. (2) "Only affects Humanoids" gate — today the endpoint accepts any combatant_id; a future check should read the target's creature_type and 409 with `wrong_creature_type` if non-humanoid. (3) Concentration drop → paired buff cleanup (same filed item as Slow + Web). (4) Upcast L9 → 8 targets — the cap arithmetic supports it; no need to special-case.
+- **Total harness count: 876** (was 871 in v2.99.106).
+
+---
+
 ## [2.99.106] - 2026-06-03 — "One Condition, Many Sources" — extract Restrained into a shared `_make_restrained_buff` factory
 
 **Schema version:** 65
