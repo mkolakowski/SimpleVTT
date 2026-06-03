@@ -1606,6 +1606,14 @@ def _warlock_sheet(name: str) -> dict:
             # gate until the harness PATCHes Magnus up).
             {"slug": "eldritch-invocation-lifedrinker", "name": "Eldritch Invocation: Lifedrinker",
              "desc": "Prerequisite: Lv 12+ Warlock, Pact of the Blade. When you hit a creature with your pact weapon, the creature takes extra necrotic damage equal to your CHA mod (minimum 1) — auto-applied at /attack time per v2.99.97."},
+            # v2.99.137 — Mire the Mind. Once per long rest, cast
+            # Slow using a Warlock spell slot. Magnus has L3 pact
+            # slots so the cast is feasible; the resource entry
+            # below carries the 1/long-rest gate. The cast routes
+            # through /cast_slow with class_slug="warlock" +
+            # via_invocation="mire-the-mind".
+            {"slug": "eldritch-invocation-mire-the-mind", "name": "Eldritch Invocation: Mire the Mind",
+             "desc": "Prerequisite: Lv 5+ Warlock. Once per long rest, cast Slow using a Warlock spell slot — routed via /cast_slow with via_invocation=\"mire-the-mind\" per v2.99.137."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],
@@ -1623,6 +1631,18 @@ def _warlock_sheet(name: str) -> dict:
                 "source": "dragonborn racial",
                 "class_slug": "dragonborn",
                 "desc": "Action — 5×30-ft line of lightning, 2d6 damage, DEX save DC 13 (8 + PB + CON mod) for half. Bronze Dragonborn ancestry. Refreshes on short rest.",
+                "manual": False,
+            },
+            # v2.99.137 — Mire the Mind 1/long-rest resource. /cast_slow
+            # with via_invocation="mire-the-mind" gates on this row
+            # being current >= 1 + decrements on cast.
+            {
+                "key": "mire-the-mind-uses",
+                "name": "Mire the Mind",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "warlock Lv 5 / Eldritch Invocation",
+                "class_slug": "warlock",
+                "desc": "1/long rest: cast Slow using a Warlock spell slot — routed via /cast_slow with class_slug=\"warlock\" + via_invocation=\"mire-the-mind\" per v2.99.137.",
                 "manual": False,
             },
             # v2.99.45 — Mystic Arcanum L6 (Warlock Lv 11+ capstone-ish

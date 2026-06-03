@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.137] - 2026-06-03 — "Slowed by Whispers" — Mire the Mind (Warlock invocation) routed through /cast_slow
+
+**Schema version:** 65
+**Commit summary:** **Wire Mire the Mind as a real spell-cast path through `/cast_slow` with `class_slug="warlock"` + `via_invocation="mire-the-mind"`.** RAW (PHB p.111): "Prerequisite: 5th level. You can cast Slow once using a warlock spell slot. You can't do so again until you finish a long rest." v2.99.137 extends `/cast_slow` to accept Warlock + the invocation flag, gates on a new 1/long-rest `mire-the-mind-uses` resource, skips the standard "Slow on spell list" check (Slow isn't a Warlock spell), and decrements both the Pact Magic slot AND the invocation resource on cast. Magnus's seed gains the invocation on his feats list + the resource entry.
+**Description:** Five edits. (1) `app/routes/tabletop_routes.py` — `/cast_slow` now accepts `class_slug="warlock"`. (2) Warlock without `via_invocation="mire-the-mind"` returns 409 `missing_invocation` (RAW: Slow isn't a Warlock spell, the invocation is the only path). (3) When the flag is set: validates `_pc_has_eldritch_invocation(sheet, "mire-the-mind")`, reads the `mire-the-mind-uses` resource (409 `missing_resource` if absent, 409 `not_enough_uses` if `current < 1`), and skips the "Slow on spell list" check. (4) Slot-decrement commit now also decrements the Mire the Mind resource by 1. (5) `app/demo_seed.py` — Magnus's feats list gains `eldritch-invocation-mire-the-mind`; resources list gains the `mire-the-mind-uses` 1/long-rest row. (6) `tests/harness/test_mire_the_mind.py` — 4 regression tests.
+
+### Added
+- `class_slug="warlock"` accepted by `/cast_slow`.
+- `via_invocation` optional body field on `/cast_slow` (currently recognized values: `"mire-the-mind"`).
+- `mire-the-mind-uses` resource on Magnus's demo seed (1/long rest).
+- `eldritch-invocation-mire-the-mind` on Magnus's feats list.
+- `tests/harness/test_mire_the_mind.py` — 4 tests: happy path (Warlock + invocation casts, buff installs), warlock without flag → 409 missing_invocation, second cast same long rest → 409 not_enough_uses, non-Warlock with the flag → 409 wrong_class (gated before invocation check).
+
+### Notes
+- **PATCH bump** — endpoint extension + demo seed + 4 tests. No schema change. Backward-compatible: existing Wizard/Sorcerer /cast_slow calls behave identically.
+- **Why the slot is consumed.** RAW: "You can cast Slow once using a warlock spell slot." The slot decrement fires alongside the resource decrement. Magnus has L3 Pact Magic slots at Lv 5 so the cast is feasible.
+- **Why no Slow on Magnus's spell list.** RAW: Slow isn't on the Warlock spell list. The invocation is what grants the cast; the spell isn't "known" in the normal sense. Skipping the spell-list check when `via_invocation` is set matches the RAW intent.
+- **Reset on long rest.** The standard long-rest path resets `reset: "long"` resources to their `max` value (1). After a long rest, Mire the Mind is available again. The test fixture long-rests Magnus before each test to ensure a fresh use.
+- **`via_invocation` as an extension point.** Future invocations that grant spell casts (Mire the Mind, Sculptor of Flesh, etc.) can use the same body-field pattern. Each registers its own resource key + spell endpoint. Filed: a unified "invocation-driven spell cast" router that pulls metadata from the catalog instead of inline branches.
+- **Total harness count: 980** (was 976 in v2.99.136).
+
+---
+
 ## [2.99.136] - 2026-06-03 — "Three Strikes, You're Stone" — strike-counter engine wiring auto-transitions Restrained → Petrified
 
 **Schema version:** 65

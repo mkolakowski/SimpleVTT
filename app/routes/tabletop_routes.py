@@ -31251,11 +31251,26 @@ async def cast_slow(
     slot_level = int(slot_level_raw) if slot_level_raw else 3
     target_combatant_ids = body.get("target_combatant_ids") or []
     override = bool(body.get("override"))
+    # v2.99.137 — Mire the Mind (Warlock invocation, PHB p.111).
+    # When ``via_invocation == "mire-the-mind"`` is set, the cast
+    # routes through the Mire the Mind 1/long-rest resource gate
+    # and skips the standard "Slow on spell list" check (Slow
+    # isn't a Warlock spell — the invocation is what grants it).
+    via_invocation = (body.get("via_invocation") or "").strip().lower()
 
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
-    if class_slug not in ("wizard", "sorcerer"):
-        raise HTTPException(400, "class_slug must be wizard or sorcerer")
+    if class_slug not in ("wizard", "sorcerer", "warlock"):
+        raise HTTPException(
+            400, "class_slug must be wizard, sorcerer, or warlock",
+        )
+    if class_slug == "warlock" and via_invocation != "mire-the-mind":
+        # Warlock without the invocation can't cast Slow (RAW: Slow
+        # isn't a Warlock spell). The invocation is the only path.
+        return JSONResponse(status_code=409, content={
+            "error": "missing_invocation",
+            "invocation": "mire-the-mind",
+        })
     if slot_level < 3:
         raise HTTPException(400, "slot_level must be >= 3 (Slow is L3)")
     if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
@@ -31294,17 +31309,52 @@ async def cast_slow(
                 "got": primary_class or "",
             })
 
-    spells = list(sheet.get("spells") or [])
-    has_slow = any(
-        (s.get("_slug") == "slow") or
-        (str(s.get("name", "")).lower() == "slow")
-        for s in spells
-    )
-    if not has_slow:
-        return JSONResponse(status_code=409, content={
-            "error": "spell_not_known",
-            "spell": "slow",
-        })
+    # v2.99.137 — Mire the Mind branch: validate the invocation is on
+    # the caster's feats AND a Mire the Mind use is available. Skip
+    # the standard "Slow on spell list" check since Slow isn't a
+    # Warlock spell; the invocation is what grants it. Otherwise
+    # (Wizard/Sorcerer or warlock without the flag) the standard
+    # spell-list check runs.
+    mire_uses_remaining = None
+    if via_invocation == "mire-the-mind":
+        if not _pc_has_eldritch_invocation(sheet, "mire-the-mind"):
+            return JSONResponse(status_code=409, content={
+                "error": "missing_invocation",
+                "invocation": "mire-the-mind",
+            })
+        # Look up the Mire the Mind resource (1/long rest gate).
+        resources = list(sheet.get("resources") or [])
+        mire_idx = next(
+            (i for i, r in enumerate(resources)
+             if (r.get("key") or "").lower() == "mire-the-mind-uses"),
+            -1,
+        )
+        if mire_idx < 0:
+            return JSONResponse(status_code=409, content={
+                "error": "missing_resource",
+                "resource_key": "mire-the-mind-uses",
+            })
+        mire_row = dict(resources[mire_idx])
+        mire_cur = int(mire_row.get("current") or 0)
+        if mire_cur < 1:
+            return JSONResponse(status_code=409, content={
+                "error": "not_enough_uses",
+                "resource_key": "mire-the-mind-uses",
+                "have": mire_cur,
+            })
+        mire_uses_remaining = mire_cur - 1
+    else:
+        spells = list(sheet.get("spells") or [])
+        has_slow = any(
+            (s.get("_slug") == "slow") or
+            (str(s.get("name", "")).lower() == "slow")
+            for s in spells
+        )
+        if not has_slow:
+            return JSONResponse(status_code=409, content={
+                "error": "spell_not_known",
+                "spell": "slow",
+            })
 
     all_slots = dict(sheet.get("spell_slots") or {})
     per_class = dict(all_slots.get(class_slug) or {})
@@ -31338,6 +31388,21 @@ async def cast_slow(
     per_class[str(slot_level)] = slot
     all_slots[class_slug] = per_class
     sheet["spell_slots"] = all_slots
+    # v2.99.137 — Mire the Mind: also decrement the 1/long-rest
+    # resource. The lookup + validation happened above; here we
+    # commit. Mirrors the Pact Magic slot commit pattern.
+    if via_invocation == "mire-the-mind":
+        resources = list(sheet.get("resources") or [])
+        mire_idx = next(
+            (i for i, r in enumerate(resources)
+             if (r.get("key") or "").lower() == "mire-the-mind-uses"),
+            -1,
+        )
+        if mire_idx >= 0:
+            mire_row = dict(resources[mire_idx])
+            mire_row["current"] = max(0, int(mire_row.get("current") or 0) - 1)
+            resources[mire_idx] = mire_row
+            sheet["resources"] = resources
     from sqlalchemy.orm.attributes import flag_modified
     char.sheet = sheet
     flag_modified(char, "sheet")
