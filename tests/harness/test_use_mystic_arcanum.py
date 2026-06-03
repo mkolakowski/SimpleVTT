@@ -176,3 +176,180 @@ async def test_mystic_arcanum_long_rest_refills(
     )
     assert r2.status_code == 200, r2.text
     assert r2.json()["remaining"] == 0
+
+
+# ── v2.99.86 — L7/L8/L9 tier resources on Magnus's sheet ──
+
+
+def _full_mystic_arcanum_resources():
+    """v2.99.86 — the canonical L6/L7/L8/L9 + Eldritch Master resource
+    list for Magnus's sheet. Used by the test fixture to PATCH the
+    resources allowlist entry so the L7/L8/L9 tier tests don't depend
+    on the running container being reseeded with v2.99.86's demo_seed
+    edit.
+    """
+    return [
+        {"key": "mystic-arcanum-l6", "name": "Mystic Arcanum (L6)",
+         "current": 1, "max": 1, "reset": "long",
+         "source": "warlock Lv 11 / Mystic Arcanum",
+         "class_slug": "warlock",
+         "desc": "1/long rest (Lv 11+)", "manual": False},
+        {"key": "mystic-arcanum-l7", "name": "Mystic Arcanum (L7)",
+         "current": 1, "max": 1, "reset": "long",
+         "source": "warlock Lv 13 / Mystic Arcanum",
+         "class_slug": "warlock",
+         "desc": "1/long rest (Lv 13+)", "manual": False},
+        {"key": "mystic-arcanum-l8", "name": "Mystic Arcanum (L8)",
+         "current": 1, "max": 1, "reset": "long",
+         "source": "warlock Lv 15 / Mystic Arcanum",
+         "class_slug": "warlock",
+         "desc": "1/long rest (Lv 15+)", "manual": False},
+        {"key": "mystic-arcanum-l9", "name": "Mystic Arcanum (L9)",
+         "current": 1, "max": 1, "reset": "long",
+         "source": "warlock Lv 17 / Mystic Arcanum",
+         "class_slug": "warlock",
+         "desc": "1/long rest (Lv 17+)", "manual": False},
+        {"key": "eldritch-master-uses", "name": "Eldritch Master",
+         "current": 1, "max": 1, "reset": "long",
+         "source": "warlock Lv 20 / Eldritch Master",
+         "class_slug": "warlock",
+         "desc": "1/long rest (Lv 20)", "manual": False},
+    ]
+
+
+@pytest_asyncio.fixture
+async def magnus_at_lv(gm_client, roster):
+    """Helper fixture factory — returns an async setter that flips
+    Magnus's warlock level. Restores Lv 5 in teardown.
+
+    Also PATCHes the full mystic-arcanum L6/L7/L8/L9 + eldritch-master
+    resource list so the tests don't depend on whether the running
+    container has been reseeded with v2.99.86's demo_seed edit.
+    """
+    magnus = roster["Magnus Hexbinder"]
+
+    # Ensure all 4 tiers + eldritch master are present.
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/sheet-fields",
+        json={"resources": _full_mystic_arcanum_resources()},
+    )
+
+    async def _set(level):
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/sheet-fields",
+            json={"class_slug": "warlock", "level": level},
+        )
+        return magnus
+
+    yield _set
+
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/sheet-fields",
+        json={"class_slug": "warlock", "level": 5},
+    )
+
+
+async def test_mystic_arcanum_l7_decrements_at_lv_13(
+    gm_client, gm_ws, magnus_at_lv,
+):
+    """v2.99.86 — bump Magnus to Lv 13; spending L7 arcanum →
+    200 + mystic-arcanum-l7 resource decremented.
+    """
+    magnus = await magnus_at_lv(13)
+    # Long-rest first so the resource counter is full regardless
+    # of prior test runs.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_mystic_arcanum",
+        json={"character_id": magnus["id"], "slot_level": 7},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["slot_level"] == 7
+    assert data["resource_key"] == "mystic-arcanum-l7"
+    assert data["remaining"] == 0
+
+
+async def test_mystic_arcanum_l8_decrements_at_lv_15(
+    gm_client, gm_ws, magnus_at_lv,
+):
+    """v2.99.86 — Lv 15 unlocks L8 arcanum. Spend → 200 +
+    mystic-arcanum-l8 decremented.
+    """
+    magnus = await magnus_at_lv(15)
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_mystic_arcanum",
+        json={"character_id": magnus["id"], "slot_level": 8},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["slot_level"] == 8
+    assert data["resource_key"] == "mystic-arcanum-l8"
+    assert data["remaining"] == 0
+
+
+async def test_mystic_arcanum_l9_decrements_at_lv_17(
+    gm_client, gm_ws, magnus_at_lv,
+):
+    """v2.99.86 — Lv 17 unlocks L9 arcanum. Spend → 200 +
+    mystic-arcanum-l9 decremented.
+    """
+    magnus = await magnus_at_lv(17)
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_mystic_arcanum",
+        json={"character_id": magnus["id"], "slot_level": 9},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["slot_level"] == 9
+    assert data["resource_key"] == "mystic-arcanum-l9"
+    assert data["remaining"] == 0
+
+
+async def test_mystic_arcanum_l8_level_too_low_at_lv_13(
+    gm_client, magnus_at_lv,
+):
+    """v2.99.86 gate: Lv 13 Magnus can spend L6 + L7 but NOT L8.
+    409 level_too_low with required=15.
+    """
+    magnus = await magnus_at_lv(13)
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_mystic_arcanum",
+        json={"character_id": magnus["id"], "slot_level": 8},
+    )
+    assert resp.status_code == 409, resp.text
+    err = resp.json()
+    assert err["error"] == "level_too_low"
+    assert err["required"] == 15
+    assert err["got"] == 13
+    assert err["slot_level"] == 8
+
+
+async def test_mystic_arcanum_l9_level_too_low_at_lv_15(
+    gm_client, magnus_at_lv,
+):
+    """v2.99.86 gate: Lv 15 Magnus can spend L6 + L7 + L8 but NOT L9.
+    409 level_too_low with required=17.
+    """
+    magnus = await magnus_at_lv(15)
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_mystic_arcanum",
+        json={"character_id": magnus["id"], "slot_level": 9},
+    )
+    assert resp.status_code == 409, resp.text
+    err = resp.json()
+    assert err["error"] == "level_too_low"
+    assert err["required"] == 17
+    assert err["got"] == 15
+    assert err["slot_level"] == 9

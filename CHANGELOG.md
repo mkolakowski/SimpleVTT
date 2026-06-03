@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.86] - 2026-06-03 — "Stack the Arcana" — Mystic Arcanum L7/L8/L9 tier resources
+
+**Schema version:** 65
+**Commit summary:** **Finish the v2.99.45 Mystic Arcanum ship by adding L7/L8/L9 tier resources to Magnus's sheet + harness tests for each tier.** The `/use_mystic_arcanum` endpoint already accepted `slot_level: 7/8/9` (per the v2.99.45 server-side gate). v2.99.45 punted on adding the resources to Magnus's demo sheet ("L7/L8/L9 tier resources filed — endpoint already accepts those slot_levels but Magnus's sheet doesn't carry them yet"). v2.99.86 lands the seed-side resources + 5 new harness tests covering Lv 13/15/17 happy paths + L8-at-Lv-13 / L9-at-Lv-15 level-gate denials. Also expands the `/sheet-fields` PATCH allowlist to include `resources` so capstone-test fixtures can inject the resource list without depending on the running container being reseeded.
+**Description:** Three-file change. (1) `app/demo_seed.py::_warlock_sheet` — adds `mystic-arcanum-l7`, `mystic-arcanum-l8`, `mystic-arcanum-l9` resource entries (each 1/1 long rest) below the existing L6 row. (2) `app/routes/tabletop_routes.py::_SHEET_PATCH_KEYS` — adds `"resources"` to the allowlist with a comment noting the capstone-test use case. (3) `tests/harness/test_use_mystic_arcanum.py` — new `magnus_at_lv` fixture factory that PATCHes the full 4-tier resource list at setup time, then exposes a setter for the warlock level. 5 new tests: L7 happy at Lv 13, L8 happy at Lv 15, L9 happy at Lv 17, L8 level-too-low at Lv 13, L9 level-too-low at Lv 15.
+
+### Added
+- L7/L8/L9 Mystic Arcanum resources on Magnus Hexbinder's demo sheet (each 1/1 long rest, gated to Lv 13/15/17 by the existing `/use_mystic_arcanum` endpoint).
+- `"resources"` in the `_SHEET_PATCH_KEYS` allowlist so harness tests can PATCH the resource list (capstone-test fixtures, missing-resource injection, etc.) without rebuilding the sheet. Standard restore-in-finally discipline applies — leaking a PATCH'd resources list would break other tests.
+- `tests/harness/test_use_mystic_arcanum.py::magnus_at_lv` fixture factory — PATCHes the full L6/L7/L8/L9 + Eldritch Master resource list at setup so the L7/L8/L9 tier tests pass regardless of the running container's seed state.
+- 5 new harness tests: `test_mystic_arcanum_l7_decrements_at_lv_13`, `test_mystic_arcanum_l8_decrements_at_lv_15`, `test_mystic_arcanum_l9_decrements_at_lv_17`, `test_mystic_arcanum_l8_level_too_low_at_lv_13`, `test_mystic_arcanum_l9_level_too_low_at_lv_15`.
+
+### Notes
+- **PATCH bump** — additive resources + a single allowlist entry + 5 tests. No schema change, no API contract change. The `/use_mystic_arcanum` endpoint contract is unchanged (v2.99.45 already supported all 4 tiers).
+- **Why the resources fixture PATCH instead of a fresh demo reseed.** Local dev containers typically run with `DEMO_MODE=false` (no boot reseed). The L7/L8/L9 resources I added to `demo_seed.py` will appear in a fresh demo deploy but not in an existing container's persisted state. Fixture-side PATCH closes that gap so the tests pass in any state without forcing a reseed.
+- **Restore concern with the resources PATCH.** The fixture overwrites Magnus's resources with the canonical 4-tier list at setup but does NOT restore the prior list at teardown. Magnus's seeded resources today are only L6 + Eldritch Master; the fixture provides those too, so the overwrite is idempotent against the seed. If a user-customized Magnus has additional resources, they would be wiped — accepted tradeoff for the test fixture, marked in the file's docstring + the PATCH allowlist comment.
+- **Filed for follow-up.** Free-cast routing — currently `/use_mystic_arcanum` is announce-only (decrement + broadcast). RAW lets the chosen arcanum spell cast WITHOUT consuming a Pact Magic slot; that requires an integration with `/cast_spell` to flag the spell as "free-cast via mystic arcanum." Smaller follow-up than the v1 announce ship.
+- Total harness count: 803 (was 798 in v2.99.85).
+
+---
+
 ## [2.99.85] - 2026-06-03 — "Reroll the Twos" — Fighting Style: Great Weapon Fighting
 
 **Schema version:** 65

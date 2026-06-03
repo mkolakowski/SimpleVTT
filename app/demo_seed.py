@@ -1542,7 +1542,10 @@ def _warlock_sheet(name: str) -> dict:
             # consuming a Pact Magic slot. The resource is shown at
             # 1/1 even at Lv 5 (descriptive); /use_mystic_arcanum
             # enforces the Lv 11+ gate before allowing the spend.
-            # L7/L8/L9 arcana (Lv 13/15/17) filed for tier follow-ups.
+            # v2.99.86 — L7/L8/L9 tier resources added below. Each
+            # is its own 1/long-rest resource so the per-tier gate
+            # in /use_mystic_arcanum can read each independently.
+            # Levels 13/15/17 enforced server-side.
             {
                 "key": "mystic-arcanum-l6",
                 "name": "Mystic Arcanum (L6)",
@@ -1550,6 +1553,33 @@ def _warlock_sheet(name: str) -> dict:
                 "source": "warlock Lv 11 / Mystic Arcanum",
                 "class_slug": "warlock",
                 "desc": "1/long rest (Lv 11+): cast a chosen 6th-level Warlock spell without expending a Pact Magic slot. Use /use_mystic_arcanum to spend the charge.",
+                "manual": False,
+            },
+            {
+                "key": "mystic-arcanum-l7",
+                "name": "Mystic Arcanum (L7)",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "warlock Lv 13 / Mystic Arcanum",
+                "class_slug": "warlock",
+                "desc": "1/long rest (Lv 13+): cast a chosen 7th-level Warlock spell without expending a Pact Magic slot.",
+                "manual": False,
+            },
+            {
+                "key": "mystic-arcanum-l8",
+                "name": "Mystic Arcanum (L8)",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "warlock Lv 15 / Mystic Arcanum",
+                "class_slug": "warlock",
+                "desc": "1/long rest (Lv 15+): cast a chosen 8th-level Warlock spell without expending a Pact Magic slot.",
+                "manual": False,
+            },
+            {
+                "key": "mystic-arcanum-l9",
+                "name": "Mystic Arcanum (L9)",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "warlock Lv 17 / Mystic Arcanum",
+                "class_slug": "warlock",
+                "desc": "1/long rest (Lv 17+): cast a chosen 9th-level Warlock spell without expending a Pact Magic slot.",
                 "manual": False,
             },
             # v2.99.46 — Eldritch Master (Warlock Lv 20 capstone).

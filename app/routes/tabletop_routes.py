@@ -36221,6 +36221,17 @@ _SHEET_PATCH_KEYS = {
     "subclass",
     "fighting_style",
     "level",
+    # v2.99.86 — class resources list (Mystic Arcanum L7/L8/L9,
+    # Channel Divinity slots, Ki points, Bardic Inspiration, etc.).
+    # Allowlisted for harness tests that need to inject or PATCH a
+    # specific resource without rebuilding the entire sheet. The
+    # /resources PATCH endpoint is the canonical production path
+    # for production sheet edits; this allowlist entry lets
+    # capstone-test fixtures (Mystic Arcanum L7 at Lv 13, etc.)
+    # ensure the resource exists without depending on a demo
+    # reset cycle. Same restore-in-finally discipline as
+    # `subclass` / `fighting_style` above.
+    "resources",
     # v2.99.46 — spell_slots nested {class_slug: {lvl: {total, used,
     # reset}}}. Primarily for capstone harness tests that need to
     # drain a fixture PC's slots to exercise restore endpoints
