@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.126] - 2026-06-03 — "Stone Doesn't Bleed" — stamp poison immunity on the Petrified buff
+
+**Schema version:** 65
+**Commit summary:** **Stamp `effects.immunity_to: ["poison"]` on `_make_petrified_buff`'s output so Petrified targets actually take 0 damage from poison-type attacks via the v2.99.124/.125 immunity engines.** RAW PHB p.290: a Petrified creature is "immune to poison and disease". Disease isn't a damage type in 5e (it's a condition), so v1 ships poison only. The buff's effects dict now carries `{speed_reduction_ft, resistance_to: ["all"], immunity_to: ["poison"]}` — three mechanical hooks composed through the existing engines. No new helpers; pure factory output change.
+**Description:** Two edits. (1) `_make_petrified_buff` in `app/routes/tabletop_routes.py` now stamps `"immunity_to": ["poison"]` in the buff's effects dict alongside the v2.99.121 `resistance_to: ["all"]`. (2) `tests/harness/test_petrified_buff_factory.py` adds a `test_factory_stamps_immunity_to_poison_in_effects` pin that asserts the new field shape. End-to-end mechanical verification follows by composition: v2.99.124 (PC) and v2.99.125 (NPC) immunity engine tests pin "all" + per-type matches; v2.99.126 just stamps the right per-type field on the Petrified factory output.
+
+### Added
+- `"immunity_to": ["poison"]` stamp on `_make_petrified_buff`'s output's `effects` dict.
+- `test_factory_stamps_immunity_to_poison_in_effects` in the Petrified factory unit suite.
+
+### Notes
+- **PATCH bump** — single field-shape change + 1 factory pin. No new engine code; mechanical correctness follows from the v2.99.124/.125 wiring.
+- **Why not also disease immunity.** Disease isn't a damage type in 5e RAW — it's a condition that can be inflicted by certain creatures (e.g., zombies' Slam attack). The condition immunity engine is filed separately (mirror of the damage immunity pattern but reads `condition_immunities`). For now Petrified's disease immunity is descriptive in raw_effects.
+- **PC vs NPC paths both pick this up.** The factory output is a buff dict; both `_immunity_zero` (PC, via `_buffs_active`) and `_immunity_zero_npc` (NPC, via `combatant.buffs`) read `effects.immunity_to` from the buff. A Petrified PC AND a Petrified NPC both take 0 poison damage going forward.
+- **The "all" resistance still halves bludgeoning/slashing/etc.** Immunity is checked FIRST per RAW PHB p.197; only poison-type attacks short-circuit to 0. Other damage types fall through to the resistance branch and halve via the "all" wildcard. Composition is correct: a Petrified target struck by Tavik's bludgeoning Warhammer halves (resistance branch); struck by a Poison Spray, zeroes (immunity branch).
+- **No new HTTP test.** The factory pin verifies the stamp shape; v2.99.124's `test_damage_immunity_all.py` + v2.99.125's `test_npc_damage_immunity.py` already pin the engine end-to-end for both per-type + wildcard. Adding a per-type-poison HTTP test would be redundant with the per-type-bludgeoning test in v2.99.125. Filed: a "Petrified-end-to-end-via-real-cast" test once `/cast_flesh_to_stone` ships.
+- **Total harness count: 948** (was 947 in v2.99.125).
+
+---
+
 ## [2.99.125] - 2026-06-03 — "Steel Doesn't Bite Stone" — NPC immunity engine mirror closes the v2.99.124 filed item
 
 **Schema version:** 65

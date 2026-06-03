@@ -21547,15 +21547,18 @@ def _make_petrified_buff(
         "source_char_id": int(source_char_id) if source_char_id else None,
         "source_char_name": source_char_name or "",
         # v2.99.121 — `resistance_to: ["all"]` engages the v2.99.121
-        # extension to `_resistance_halve` which halves ANY incoming
-        # damage when "all" is in the list. Petrified RAW grants
-        # resistance to all damage; the wildcard captures that without
-        # listing each type. Other RAW Petrified effects (immunity to
-        # poison/disease, weight ×10, aging stops) are still descriptive
-        # in raw_effects — mechanical hooks filed.
+        # wildcard in `_resistance_halve` (halves any damage type).
+        # v2.99.126 — `immunity_to: ["poison"]` engages the v2.99.124
+        # buff-level immunity engine (PC) + v2.99.125 (NPC). Poison-
+        # type damage to a Petrified target is now zeroed (RAW PHB
+        # p.290: "immune to poison and disease"). Disease isn't a
+        # damage type in 5e — it's a condition; the disease branch
+        # of RAW is still descriptive in raw_effects. Weight ×10 and
+        # aging stops have no mechanical hook at the table.
         "effects": {
             "speed_reduction_ft": reduction,
             "resistance_to": ["all"],
+            "immunity_to": ["poison"],
         },
         "raw_effects": raw,
     }

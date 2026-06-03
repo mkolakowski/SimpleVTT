@@ -96,6 +96,22 @@ def test_factory_core_raw_effects_always_present():
         )
 
 
+def test_factory_stamps_immunity_to_poison_in_effects():
+    """v2.99.126 — the buff's effects dict carries
+    `immunity_to: ["poison"]` so the v2.99.124/.125 buff-level
+    immunity engine zeroes poison damage. Pin the field shape.
+    """
+    buff = _make_petrified_buff(
+        target_speed_walk=30,
+        source_char_id=None,
+        source_char_name="",
+        source="x", display_name="x", icon="x",
+        duration_rounds=10, concentration=False,
+    )
+    effects = buff.get("effects") or {}
+    assert effects.get("immunity_to") == ["poison"], buff
+
+
 def test_factory_stamps_resistance_to_all_in_effects():
     """v2.99.121 — the buff's effects dict now carries
     `resistance_to: ["all"]` so the v2.99.121-extended
