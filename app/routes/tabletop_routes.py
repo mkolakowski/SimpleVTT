@@ -27787,18 +27787,34 @@ async def use_stunning_strike(
             })
             if not auto_save_passed:
                 cond = _SPELL_CONDITION_MAP["stunning-strike"]
-                buff = {
-                    "key": cond["key"],
-                    "name": cond["name"],
-                    "icon": cond.get("icon", "✨"),
-                    "source_char_id": char.id,
-                    "source_char_name": char.name,
-                    "source_spell": "Stunning Strike",
-                    "duration_rounds": int(cond.get("duration_rounds", 1)),
-                    "duration_max": int(cond.get("duration_rounds", 1)),
-                    "concentration": bool(cond.get("concentration", False)),
-                    "effects": list(cond.get("effects", [])),
-                }
+                # v2.99.116 — build the Stunned buff via the v2.99.115
+                # factory so the v2.99.98 speed engine reads its
+                # `effects.speed_reduction_ft` and clamps the target's
+                # effective speed to 0. Pre-v2.99.116 the buff carried
+                # the legacy list-shape `effects` from the cond map,
+                # which the engine silently skipped — Stunned targets
+                # could still be moved server-side. Factory output also
+                # carries `raw_effects` (the canonical Stunned bullets).
+                # We supplement with `duration_max` + `source_spell` to
+                # preserve the existing undo / chat-card UI contract.
+                _ts_raw = target_combatant.get("speed_walk")
+                try:
+                    _ts_base = (
+                        int(_ts_raw) if _ts_raw is not None else 30
+                    )
+                except (TypeError, ValueError):
+                    _ts_base = 30
+                buff = _make_stunning_strike_stunned_buff(
+                    target_speed_walk=_ts_base,
+                    source_char_id=char.id,
+                    source_char_name=char.name,
+                )
+                # Legacy compat fields the existing chat card + undo
+                # path read. `source_spell` groups the buff under the
+                # Stunning Strike cast; `duration_max` paces the
+                # existing duration-render UI.
+                buff["source_spell"] = "Stunning Strike"
+                buff["duration_max"] = buff["duration_rounds"]
                 # v2.97.25 — buff teardown for the TARGET's Stunned buff
                 # (NPC path; PC path installs via /respond and is filed
                 # separately because the buff install happens in a
@@ -27812,6 +27828,9 @@ async def use_stunning_strike(
                     campaign_id, target_combatant.get("id"), buff,
                 )
                 if installed:
+                    # Response shape stays "Stunned" for v2.49.55+
+                    # test/UI compat; the on-target buff display name
+                    # is the factory's richer "Stunned (Stunning Strike)".
                     auto_save_buff_installed = cond["name"]
                     _log_damage_entry(ss_cast_id, {
                         "kind": "buff_install",

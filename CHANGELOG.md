@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.116] - 2026-06-03 — "The Bandit Stops Moving" — refactor /use_stunning_strike NPC install path to use the v2.99.115 factory
+
+**Schema version:** 65
+**Commit summary:** **Refactor `/use_stunning_strike`'s NPC install path to build the Stunned buff via the v2.99.115 `_make_stunning_strike_stunned_buff` factory instead of the inline `_SPELL_CONDITION_MAP`-driven construction.** Pre-v2.99.116 the buff carried list-shape `effects` (descriptive bullets only) — the v2.99.98 `_effective_speed_reduction_ft` helper silently skipped non-dict effects, so Stunned NPCs could still be moved server-side via `/token/move`. v2.99.116 swaps to the factory output which carries dict-shape `effects.speed_reduction_ft = base` AND the canonical Stunned `raw_effects` list. Legacy compat fields (`source_spell: "Stunning Strike"`, `duration_max`) are stamped on top so the chat card + undo path stays unchanged. Response shape preserves `auto_save_buff_installed == "Stunned"` for v2.49.55+ test compat; only the on-target buff's display name shifts to the factory's richer "Stunned (Stunning Strike)".
+**Description:** Single-block edit in `app/routes/tabletop_routes.py` (`use_stunning_strike` NPC install path, ~line 27789). Pre-v2.99.116 the code read `cond = _SPELL_CONDITION_MAP["stunning-strike"]` and constructed an inline dict copying key/name/icon/effects from the cond. Post-v2.99.116 the code reads `target_combatant.speed_walk` (defaulting to 30 with the falsy-zero guard), calls `_make_stunning_strike_stunned_buff(target_speed_walk, char.id, char.name)` to get the factory shape, then patches `source_spell` + `duration_max` onto it. The install via `_install_buff_on_combatant_id` + the `_log_damage_entry` chain are unchanged. The PC install path (via `/respond` + the cond map) is unchanged — its refactor is filed.
+
+### Added
+- `tests/harness/test_stunning_strike_factory_integration.py` — 1 regression test that loops until a save fails, then asserts the bandit's Stunned buff carries dict-shape `effects.speed_reduction_ft` = bandit's base speed (30), `raw_effects` with the canonical Stunned + Stunning Strike bullets, `source: "stunning-strike"`, AND the legacy compat `source_spell: "Stunning Strike"` + `concentration: False` + `source_char_id`.
+
+### Changed
+- `/use_stunning_strike` NPC install path now uses `_make_stunning_strike_stunned_buff` for the buff construction. Buff fields that changed: `icon` (✨ → 💫, factory's choice), `name` ("Stunned" → "Stunned (Stunning Strike)"), `effects` (list → dict with `speed_reduction_ft`), addition of `raw_effects` + `source` fields. Backward-compatible for the existing tests: they check `key == "stunned"`, `concentration is False`, `source_char_id == kael["id"]` — all preserved.
+- The endpoint's response shape is unchanged. `auto_save_buff_installed == "Stunned"` (cond.name fallback) so existing tests + UI code stay green.
+
+### Notes
+- **PATCH bump** — internal refactor + 1 regression test. No new endpoint, no API contract change.
+- **Why PC install path isn't refactored in this commit.** The PC path runs through `/respond` (a different endpoint) which reads `cond["effects"]` and applies the buff via `_install_buff`. Changing that means either rewriting the install code in `/respond` to call the factory (touches many endpoints — Fear, Hold Person via /cast_spell, etc.) OR adding a "use factory" marker on the cond entry that the install path branches on (smaller but still cross-cutting). Filed — the right fix is a generic dispatcher that all cond consumers route through; today the NPC path is the only one wired to the factory.
+- **Stunned target now actually has speed 0 server-side.** The /token/move 409 over_speed_cap gate (v2.99.99) will fire when the GM tries to drag the Stunned bandit past its (now 0) effective cap. Pre-v2.99.116 the bandit could be moved freely despite "speed 0" being descriptive on the buff.
+- **The "icon ✨ → 💫" change is observable in the UI.** Existing chat cards / buff displays will render the new emoji. Filed: option to inherit the cond's icon when set so the factory's emoji is only used as a default.
+- **Total harness count: 919** (was 918 in v2.99.115).
+
+---
+
 ## [2.99.115] - 2026-06-03 — "The Air Goes Out" — Stunned condition factory + Stunning Strike wrapper (seventh speed-engine consumer)
 
 **Schema version:** 65
