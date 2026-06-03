@@ -475,6 +475,14 @@ def _wizard_sheet(name: str) -> dict:
             {"name": "Web", "level": 2, "prepared": True, "_slug": "web",
              "casting_time": "1 action", "save_ability": "DEX",
              "desc": "60 ft, 20-ft cube, concentration up to 1 hour, DEX save DC 14. v1: routed via /cast_web; installs a per-target Restrained buff with speed_reduction_ft = base (→ speed 0). STR (Athletics) check to break free."},
+            # v2.99.108 — Hold Monster. Lv 5 Enchantment,
+            # concentration up to 1 min, WIS save. Routed via
+            # /cast_hold_monster. Descriptive at Thalindra Lv 7
+            # since she has no L5 slot in the demo; the harness
+            # fixture PATCHes the slot in to exercise the endpoint.
+            {"name": "Hold Monster", "level": 5, "prepared": True, "_slug": "hold-monster",
+             "casting_time": "1 action", "save_ability": "WIS",
+             "desc": "90 ft, concentration up to 1 min, WIS save DC 14. Any creature except Undead. Paralyzed. 1 target at L5; +1 per upcast level."},
             {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball", "casting_time": "1 action"},
             # v2.46.0 T.7a — Lightning Bolt exercises the line-shape
             # AoE picker (100 ft × 5 ft from the caster). Sits AFTER

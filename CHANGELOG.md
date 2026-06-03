@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.108] - 2026-06-03 — "Hold Anything That Moves" — /cast_hold_monster endpoint as the L5 cousin to Hold Person
+
+**Schema version:** 65
+**Commit summary:** **Ship `/cast_hold_monster` as the L5 cousin to v2.99.107's Hold Person — fifth speed-engine consumer.** Reuses the v2.99.107 `_make_paralyzed_buff` factory via a thin `_make_hold_monster_paralyzed_buff` wrapper. The endpoint shape mirrors `/cast_hold_person` exactly except for: (a) class list is `bard / sorcerer / warlock / wizard` (no Cleric — Hold Monster isn't on the Cleric list RAW), (b) minimum slot is L5, (c) upcast cap arithmetic is `max(1, slot_level - 4)` (L5 → 1, L6 → 2, L7 → 3, etc.), (d) "any non-Undead" target restriction (descriptive only today; filed for creature_type gate). Adds Hold Monster to Thalindra Moonwhisper's spell list (descriptive at her Lv 7 since she doesn't have L5 slots in the demo; the harness fixture PATCHes spell_slots to inject an L5 slot for the validation).
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — new `_make_hold_monster_paralyzed_buff(...)` thin wrapper over `_make_paralyzed_buff` with Hold Monster-specific args (icon, display name, "Affects any creature except Undead" raw_effect). (2) New `POST /api/campaign/{cid}/cast_hold_monster` endpoint mirroring `/cast_hold_person` structure. (3) `app/demo_seed.py` — adds Hold Monster to Thalindra's spell list right after Web. (4) `tests/harness/test_cast_hold_monster.py` — 5 regression tests with a `thalindra_with_hold_monster` fixture that PATCHes a L5 slot in setup and restores stock spell_slots in teardown.
+
+### Added
+- `_make_hold_monster_paralyzed_buff(...)` thin wrapper over `_make_paralyzed_buff`.
+- `POST /api/campaign/{cid}/cast_hold_monster` endpoint.
+- "Hold Monster" entry on Thalindra's spell list (slug `hold-monster`, level 5, save_ability WIS).
+- `tests/harness/test_cast_hold_monster.py` — 5 tests: happy path at L5 (Krieger 40 ft → reduction 40), L6 upcast (max_targets=2), L5 with 2 targets (→ 409 too_many_targets), L4 slot (→ 400), Cleric class (→ 400, not on the spell list).
+
+### Notes
+- **PATCH bump** — new endpoint + helper + demo edit + 5 tests. No schema change.
+- **Why not a single factory parameterized by spell.** The Hold Person + Hold Monster wrappers diverge on display name, source slug, source-specific raw_effects (Humanoid-only vs Undead-excluded), and creature-type gate (filed). The per-spell wrappers surface those differences at the helper-name level instead of buried in a `spell_name` parameter.
+- **Spell-slot PATCH pattern in the test fixture.** Thalindra at Lv 7 has no L5 slot in the demo. Bumping her seed level (e.g. Lv 9 where the first L5 appears) would ripple into HP, PB, hit dice, and other tests that pin on her Lv 7 state. The cleaner path: PATCH her spell_slots to add the L5 slot in setup, restore the stock map in teardown. Future Slow / Web / Hold Person tests that need their own slot states can mirror this pattern.
+- **Filed (same as v2.99.107).** (1) End-of-turn WIS save auto-fire (mirror the v2.97.62 / v2.97.65 hooks). (2) `wrong_creature_type` 409 for Undead targets (Hold Monster) / non-Humanoid targets (Hold Person). (3) Concentration drop → paired buff cleanup.
+- **Total harness count: 881** (was 876 in v2.99.107).
+
+---
+
 ## [2.99.107] - 2026-06-03 — "Cold Stone Hold" — /cast_hold_person endpoint installs Paralyzed via shared factory; fourth speed-engine consumer
 
 **Schema version:** 65

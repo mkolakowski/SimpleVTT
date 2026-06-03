@@ -21341,6 +21341,35 @@ def _make_paralyzed_buff(
     }
 
 
+def _make_hold_monster_paralyzed_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+) -> dict:
+    """v2.99.108 — Hold Monster's Paralyzed buff. Same shape as
+    Hold Person (v2.99.107) but RAW affects any creature except
+    Undead, not just Humanoids. L5 base; +1 target per upcast.
+
+    The "any creature except Undead" gate isn't enforced today —
+    the endpoint accepts any combatant_id. Filed: a creature_type
+    check that 409s with `wrong_creature_type` for Undead targets.
+    """
+    return _make_paralyzed_buff(
+        target_speed_walk=target_speed_walk,
+        source_char_id=source_char_id,
+        source_char_name=source_char_name,
+        source="hold-monster-spell",
+        display_name="Paralyzed (Hold Monster)",
+        icon="🥶",
+        duration_rounds=10,  # 1 minute at 6 s / round
+        concentration=True,
+        source_specific_raw_effects=[
+            "WIS save at end of each turn to break free",
+            "Affects any creature except Undead (RAW)",
+        ],
+    )
+
+
 def _make_hold_person_paralyzed_buff(
     target_speed_walk: int,
     source_char_id: int | None,
@@ -30323,6 +30352,217 @@ async def cast_hold_person(
         "affected": affected,
         "unaffected": unaffected,
         "duration_rounds": 10,  # 1 min
+        "concentration": True,
+        "max_targets": max_targets,
+    }
+
+
+# ----------- API: cast Hold Monster (5th-level Enchantment, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_hold_monster")
+async def cast_hold_monster(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.108 — Cast Hold Monster on target combatants.
+
+    Body: ``{character_id, class_slug, slot_level, target_combatant_ids,
+    override?}``.
+
+    RAW (PHB Hold Monster, 5th-level Enchantment): 1 action, 90 ft,
+    concentration up to 1 minute, WIS save. Any creature except
+    Undead. Single-target at L5; each upcast level adds one more
+    target. Mirror of `/cast_hold_person` (v2.99.107) — same
+    Paralyzed factory + same upcast cap arithmetic + same
+    validation chain, just different class list (no Cleric — Hold
+    Monster isn't on the Cleric list) and L5 minimum slot.
+
+    Classes that get Hold Monster: Bard, Sorcerer, Warlock, Wizard.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 5
+    target_combatant_ids = body.get("target_combatant_ids") or []
+    override = bool(body.get("override"))
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("bard", "sorcerer", "warlock", "wizard"):
+        raise HTTPException(
+            400,
+            "class_slug must be bard, sorcerer, warlock, or wizard",
+        )
+    if slot_level < 5:
+        raise HTTPException(
+            400, "slot_level must be >= 5 (Hold Monster is L5)",
+        )
+    if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
+        raise HTTPException(400, "target_combatant_ids must be a non-empty list")
+    # RAW: 1 creature at L5, +1 per upcast level. L5 → 1, L6 → 2,
+    # L7 → 3, L8 → 4, L9 → 5.
+    max_targets = max(1, slot_level - 4)
+    if len(target_combatant_ids) > max_targets:
+        return JSONResponse(status_code=409, content={
+            "error": "too_many_targets",
+            "max": max_targets,
+            "got": len(target_combatant_ids),
+            "slot_level": slot_level,
+        })
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_hm = any(
+        (s.get("_slug") == "hold-monster") or
+        (str(s.get("name", "")).lower() == "hold monster")
+        for s in spells
+    )
+    if not has_hm:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "hold-monster",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Hold Monster",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "hold-monster",
+            "label": "Hold Monster",
+            "strict": strict,
+        })
+
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    affected: list[dict] = []
+    unaffected: list[dict] = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        c = _lookup_combatant(campaign_id, tid)
+        if not c:
+            unaffected.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        _raw_speed = c.get("speed_walk")
+        try:
+            base_speed = int(_raw_speed) if _raw_speed is not None else 30
+        except (TypeError, ValueError):
+            base_speed = 30
+        buff = _make_hold_monster_paralyzed_buff(
+            target_speed_walk=base_speed,
+            source_char_id=char.id,
+            source_char_name=char.name,
+        )
+        installed = await _install_buff_on_combatant_id(
+            campaign_id, tid, buff,
+        )
+        affected.append({
+            "combatant_id": tid,
+            "name": c.get("name") or "",
+            "base_speed_walk": base_speed,
+            "speed_reduction_ft": buff["effects"]["speed_reduction_ft"],
+            "installed": installed,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    affected_summary = ", ".join(
+        f"{a['name']} (Paralyzed)" for a in affected
+    ) or "no one"
+    note = f"🥶 Hold Monster (L{slot_level}) → {affected_summary}"
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": (
+                f"Hold Monster installed on {len(affected)} target(s). "
+                f"Concentration up to 1 min. Paralyzed: speed 0, "
+                f"incapacitated, auto-fail STR/DEX saves, attacks have "
+                f"advantage, melee within 5 ft auto-crits. WIS save at "
+                f"end of each turn to break free. Any creature except Undead."
+            ),
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "affected": affected,
+        "unaffected": unaffected,
+        "duration_rounds": 10,
         "concentration": True,
         "max_targets": max_targets,
     }
