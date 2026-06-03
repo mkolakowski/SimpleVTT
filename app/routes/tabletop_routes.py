@@ -21617,16 +21617,21 @@ def _make_petrified_buff(
         # v2.99.121 — `resistance_to: ["all"]` engages the v2.99.121
         # wildcard in `_resistance_halve` (halves any damage type).
         # v2.99.126 — `immunity_to: ["poison"]` engages the v2.99.124
-        # buff-level immunity engine (PC) + v2.99.125 (NPC). Poison-
-        # type damage to a Petrified target is now zeroed (RAW PHB
-        # p.290: "immune to poison and disease"). Disease isn't a
-        # damage type in 5e — it's a condition; the disease branch
-        # of RAW is still descriptive in raw_effects. Weight ×10 and
-        # aging stops have no mechanical hook at the table.
+        # buff-level damage immunity engine (PC + NPC). Poison damage
+        # is zeroed.
+        # v2.99.129 — `condition_immunity_to: ["poisoned"]` engages
+        # the v2.99.128 buff-level condition immunity engine.
+        # Petrified targets RAW immune to poison + disease can't be
+        # given the Poisoned condition by Stinking Cloud, Ray of
+        # Sickness, snake bites, etc. Disease isn't a damage type
+        # or a single condition in 5e — it's a category covering
+        # specific conditions (Cackle Fever, Sewer Plague, etc.);
+        # those need their own per-condition entries when shipped.
         "effects": {
             "speed_reduction_ft": reduction,
             "resistance_to": ["all"],
             "immunity_to": ["poison"],
+            "condition_immunity_to": ["poisoned"],
         },
         "raw_effects": raw,
     }

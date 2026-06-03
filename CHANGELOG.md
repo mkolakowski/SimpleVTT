@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.129] - 2026-06-03 — "Stone Doesn't Sicken" — stamp Poisoned condition immunity on the Petrified buff
+
+**Schema version:** 65
+**Commit summary:** **Stamp `effects.condition_immunity_to: ["poisoned"]` on `_make_petrified_buff`'s output so Petrified targets can't be given the Poisoned condition via the v2.99.128 engine.** Symmetric with v2.99.126's poison-damage immunity stamp. RAW PHB p.290 reads "immune to poison and disease" — poison covers both damage type (handled v2.99.126) AND condition (handled now). The Petrified buff now stamps four mechanical fields end-to-end: `speed_reduction_ft`, `resistance_to: ["all"]`, `immunity_to: ["poison"]`, `condition_immunity_to: ["poisoned"]`.
+**Description:** Two edits. (1) `_make_petrified_buff` factory's `effects` dict now also stamps `condition_immunity_to: ["poisoned"]` alongside the existing damage immunity. (2) `tests/harness/test_petrified_buff_factory.py` adds `test_factory_stamps_condition_immunity_to_poisoned` pin.
+
+### Added
+- `condition_immunity_to: ["poisoned"]` stamp on `_make_petrified_buff`'s `effects` dict.
+- `test_factory_stamps_condition_immunity_to_poisoned` factory pin.
+
+### Notes
+- **PATCH bump** — single field-shape change + 1 factory pin. No new engine code; mechanical correctness via composition through the v2.99.128 condition immunity engine.
+- **Why disease isn't a separate condition.** RAW uses "disease" as a category (Cackle Fever, Sewer Plague, etc.) — each is a specific condition with its own mechanics. Adding `condition_immunity_to: ["cackle-fever", "sewer-plague", ...]` would require enumerating each; v1 ships poisoned only and files the per-disease enumeration.
+- **PC + NPC paths both honor the stamp.** The condition immunity engine reads `effects.condition_immunity_to` from the buff regardless of whether the buff is on a PC sheet's `_buffs_active` or a NPC combatant's `buffs` list. Petrified PCs AND Petrified NPCs both resist Poisoned now.
+- **Composition with the existing v2.97.43 Heroism marker.** That marker is `effects.condition_immunity_frightened: True` (per-condition boolean). v2.99.128's `condition_immunity_to: ["frightened"]` is the list-shape equivalent. Both coexist; the gate reads the list shape. Filed: Heroism opt-in to the list shape for unification.
+- **Total harness count: 957** (was 956 in v2.99.128).
+
+---
+
 ## [2.99.128] - 2026-06-03 — "The Saint Doesn't Charm" — condition immunity engine for both PC and NPC targets
 
 **Schema version:** 65
