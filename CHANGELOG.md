@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.128] - 2026-06-03 — "The Saint Doesn't Charm" — condition immunity engine for both PC and NPC targets
+
+**Schema version:** 65
+**Commit summary:** **Ship the condition immunity engine. New `_target_condition_immune` (PC) + `_target_condition_immune_npc` (NPC) helpers + install-time gates in `_install_buff` and `_install_buff_on_combatant_id`.** Pre-v2.99.128 the `condition_immunities` field was stored on sheets and templates (Constructs immune to charmed/frightened/paralyzed/etc.) but NEVER read at install time — RAW immunity was descriptive only, and a Hold Person on a Construct would Paralyze it anyway. v2.99.128 closes the gap: failed-save condition installs check the target's immunity list and short-circuit when the buff's key matches.
+**Description:** Five edits in `app/routes/tabletop_routes.py`. (1) New `_target_condition_immune(target_sheet, buff_key) -> bool` — PC helper reading sheet's `condition_immunities` list + active buff-level `effects.condition_immunity_to`. Case-insensitive matching ("Paralyzed" in the list matches buff key "paralyzed"); supports "all" wildcard. (2) New `_target_condition_immune_npc(combatant, buff_key, db) -> bool` — NPC mirror reading the template's `sheet.condition_immunities` + combatant buff-level immunities. (3) `_install_buff` (PC path) gates at install time via a short-lived SessionLocal-fetched character sheet read. (4) `_install_buff_on_combatant_id` (the universal installer used by /cast_hold_person + many other endpoints) gates BOTH PC paths (when `combatant.char_id` is set) AND NPC paths (template fallback) — depending on target identity. (5) `tests/harness/test_condition_immunity.py` — 4 regression tests.
+
+### Added
+- `_target_condition_immune(target_sheet, buff_key) -> bool` helper (PC).
+- `_target_condition_immune_npc(combatant, buff_key, db) -> bool` helper (NPC).
+- Install-time condition immunity gates in `_install_buff` (PC) and `_install_buff_on_combatant_id` (PC + NPC, depending on target).
+- `tests/harness/test_condition_immunity.py` — 4 tests: PC with `condition_immunities: ["Paralyzed"]` suppresses Hold Person install, PC with `condition_immunities: ["all"]` suppresses Hold Person install (wildcard), NPC bandit with buff-level `effects.condition_immunity_to: ["paralyzed"]` suppresses install + reports `installed: false`, control with no immunity reports `installed: true`.
+
+### Changed
+- Both buff installers now check condition immunity before mutating state. Backward-compatible: targets without `condition_immunities` populated, OR with descriptive entries not matching the install's key, fall through unchanged.
+
+### Notes
+- **PATCH bump** — 2 new helpers + 2 wire-in gates + 4 tests. No schema change. Backward-compatible.
+- **Why a short-lived SessionLocal.** `_install_buff` doesn't take a `db` parameter, so the gate opens its own `SessionLocal()` context to fetch the character sheet. Defensive `try/except` falls through to install on any session error so the gate can't accidentally block legitimate installs.
+- **Case-insensitive matching.** Sheet entries phrased as "Paralyzed" (proper case from the SRD stat-block UI) match my buff factory's lowercased keys ("paralyzed"). Future content with "PARALYZED" or "paralyzed" all match equivalently.
+- **Why route via target type in `_install_buff_on_combatant_id`.** Same endpoint is called for PC and NPC targets (e.g., /cast_hold_person can target either). The combatant's `char_id` (PC) vs `token_template_id` (NPC) decides which helper to use — PC reads the character row's sheet, NPC reads the template's sheet.
+- **What v2.99.128 doesn't do.** It doesn't add a `installed: false, reason: "condition_immune"` field on the response so the chat card can display "Krieger was immune to Paralyzed". v2.99.128 just suppresses the install silently and trusts the existing `installed: false` flag in the response. Filed: a richer response shape that surfaces the immunity reason.
+- **Doesn't handle the Heroism `effects.condition_immunity_frightened: True` shape.** That's a per-condition boolean (older marker shape from v2.97.43) handled by the saver-side helper `_pc_has_heroism_frightened_immunity`. v2.99.128's `condition_immunity_to: ["frightened"]` is the list-shape equivalent. Both can coexist — Heroism uses the boolean, future buffs can use the list. Filed: a future unification that has Heroism opt into the list shape too.
+- **Total harness count: 956** (was 952 in v2.99.127).
+
+---
+
 ## [2.99.127] - 2026-06-03 — "Glass Skin" — damage vulnerability engine + RAW vuln/resist cancellation
 
 **Schema version:** 65

@@ -545,6 +545,26 @@ async def _install_buff(
     state = hub.get_battle(campaign_id)
     if not state:
         return False
+    # v2.99.128 — condition immunity gate. RAW: a creature immune to
+    # a condition (Construct → charmed/frightened/paralyzed/etc.;
+    # Ghost → grappled/paralyzed/petrified/...) doesn't get the
+    # condition installed on a failed save. Read the character's
+    # sheet's ``condition_immunities`` list + active buff-level
+    # ``effects.condition_immunity_to`` and short-circuit when the
+    # buff's key matches. Defensive try/except — any sheet-fetch
+    # error falls through to pre-v2.99.128 behavior (install).
+    try:
+        from app.database import SessionLocal as _CISessionLocal
+        with _CISessionLocal() as _ci_db:
+            _ci_char_row = _ci_db.query(Character).filter(
+                Character.id == int(character_id),
+            ).first()
+            if _ci_char_row and _target_condition_immune(
+                _ci_char_row.sheet or {}, str(buff.get("key") or ""),
+            ):
+                return False
+    except Exception:
+        pass
     target = None
     for c in state.get("combatants") or []:
         if c.get("char_id") == character_id:
@@ -1171,6 +1191,32 @@ async def _install_buff_on_combatant_id(
             break
     if target is None:
         return False
+    # v2.99.128 — condition immunity gate (PC + NPC). RAW: targets
+    # immune to a condition don't get the install on a failed save.
+    # The combatant may be a PC (char_id) or an NPC (template_id);
+    # we route to the right helper based on which is present.
+    try:
+        from app.database import SessionLocal as _CISessionLocal
+        with _CISessionLocal() as _ci_db:
+            buff_key_str = str(buff.get("key") or "")
+            if target.get("char_id"):
+                # PC target — read the character's sheet for
+                # condition_immunities.
+                _ci_char_row = _ci_db.query(Character).filter(
+                    Character.id == int(target["char_id"]),
+                ).first()
+                if _ci_char_row and _target_condition_immune(
+                    _ci_char_row.sheet or {}, buff_key_str,
+                ):
+                    return False
+            else:
+                # NPC target — read the template's sheet.
+                if _target_condition_immune_npc(
+                    target, buff_key_str, _ci_db,
+                ):
+                    return False
+    except Exception:
+        pass
     buffs = target.get("buffs")
     if not isinstance(buffs, list):
         buffs = []
@@ -23637,6 +23683,102 @@ async def _broadcast_rage_str_check_advantage(
             "source": "rage-str-check",
         },
     })
+
+
+def _target_condition_immune(
+    target_sheet: dict, buff_key: str,
+) -> bool:
+    """v2.99.128 — condition immunity engine. Returns True when the
+    target's ``condition_immunities`` list (sheet OR template) or
+    any active buff's ``effects.condition_immunity_to`` list
+    contains the given buff key.
+
+    Mirrors the damage immunity ("all" wildcard, per-type matches)
+    pattern but for the condition layer instead. Sheet-level reads
+    the canonical RAW condition_immunities list (Constructs are
+    immune to charmed/frightened/paralyzed/petrified/poisoned, etc.).
+    Buff-level reads dict-shaped buff effects.
+
+    The check is case-insensitive: sheet/template entries phrased as
+    ``"Paralyzed"`` or ``"PARALYZED"`` match a buff with
+    ``key == "paralyzed"``.
+
+    Returns False on missing sheet, missing buff_key, or no match.
+    Callers (``_install_buff`` + ``_install_buff_on_combatant_id``)
+    short-circuit the install when this returns True.
+    """
+    if not buff_key or not target_sheet:
+        return False
+    buff_key_l = str(buff_key).strip().lower()
+    if not buff_key_l:
+        return False
+    sheet_cond = target_sheet.get("condition_immunities") or []
+    if isinstance(sheet_cond, str):
+        sheet_cond = [p.strip() for p in sheet_cond.split(",") if p.strip()]
+    if isinstance(sheet_cond, list):
+        normalized = {(str(r) or "").strip().lower() for r in sheet_cond}
+        if "all" in normalized or buff_key_l in normalized:
+            return True
+    for b in target_sheet.get("_buffs_active") or []:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        immune_list = effects.get("condition_immunity_to") or []
+        if not isinstance(immune_list, list):
+            continue
+        immune_set = {
+            (str(r) or "").strip().lower() for r in immune_list
+        }
+        if "all" in immune_set or buff_key_l in immune_set:
+            return True
+    return False
+
+
+def _target_condition_immune_npc(
+    combatant: dict, buff_key: str, db: Session,
+) -> bool:
+    """v2.99.128 — NPC mirror of ``_target_condition_immune``. Reads
+    the TokenTemplate's ``sheet.condition_immunities`` list +
+    combatant buff-level ``effects.condition_immunity_to``. Same
+    case-insensitive matching + "all" wildcard semantics.
+    """
+    if not buff_key or not combatant:
+        return False
+    buff_key_l = str(buff_key).strip().lower()
+    if not buff_key_l:
+        return False
+    tmpl_id = combatant.get("token_template_id")
+    if tmpl_id:
+        tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id).first()
+        if tmpl and (tmpl.sheet or {}):
+            sheet_cond = (tmpl.sheet or {}).get("condition_immunities") or []
+            if isinstance(sheet_cond, str):
+                sheet_cond = [
+                    p.strip() for p in sheet_cond.split(",") if p.strip()
+                ]
+            if isinstance(sheet_cond, list):
+                normalized = {
+                    (str(r) or "").strip().lower() for r in sheet_cond
+                }
+                if "all" in normalized or buff_key_l in normalized:
+                    return True
+    for b in (combatant.get("buffs") or []):
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        immune_list = effects.get("condition_immunity_to") or []
+        if not isinstance(immune_list, list):
+            continue
+        immune_set = {
+            (str(r) or "").strip().lower() for r in immune_list
+        }
+        if "all" in immune_set or buff_key_l in immune_set:
+            return True
+    return False
 
 
 def _pc_has_heroism_frightened_immunity(
