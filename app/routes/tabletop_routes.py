@@ -12940,6 +12940,102 @@ async def cast_spell(
         if _range_err:
             return JSONResponse(status_code=409, content=_range_err)
 
+    # v2.99.88 — Mystic Arcanum free-cast routing. When the caller
+    # passes ``free_cast: true``, the spell is cast via the Warlock's
+    # Mystic Arcanum charge (PHB p.108) instead of consuming a Pact
+    # Magic slot. Server validates: (a) attacker is a Warlock, (b)
+    # warlock level >= gate for slot_level (Lv 11/13/15/17 for
+    # L6/L7/L8/L9), (c) ``mystic-arcanum-l{slot_level}`` resource has
+    # uses remaining. On valid: decrement the MA resource, skip the
+    # spell-slot decrement entirely, and broadcast a
+    # ``feature_used(source=mystic-arcanum-cast)`` audit alongside the
+    # standard spell-cast broadcast. On invalid: 409 with the
+    # specific gate error (wrong_class / level_too_low / no_uses_left).
+    free_cast = bool(body.get("free_cast"))
+    _ma_resource_key: str | None = None
+    if free_cast:
+        # Gate 1: Warlock class.
+        _cls_lower = (sheet.get("class") or "").strip().lower()
+        if _cls_lower != "warlock":
+            return JSONResponse(status_code=409, content={
+                "error": "free_cast_wrong_class",
+                "expected": "warlock", "got": _cls_lower or "",
+            })
+        # Gate 2: slot_level ∈ {6,7,8,9}.
+        if slot_level not in _MYSTIC_ARCANUM_LEVEL_GATE:
+            return JSONResponse(status_code=409, content={
+                "error": "free_cast_invalid_slot_level",
+                "slot_level": slot_level,
+                "valid": [6, 7, 8, 9],
+            })
+        # Gate 3: warlock level vs the per-tier gate.
+        _wlock_lv = int(sheet.get("level") or 1)
+        _required = _MYSTIC_ARCANUM_LEVEL_GATE[slot_level]
+        if _wlock_lv < _required:
+            return JSONResponse(status_code=409, content={
+                "error": "free_cast_level_too_low",
+                "required": _required, "got": _wlock_lv,
+                "slot_level": slot_level,
+            })
+        # Gate 4: the resource has uses left.
+        _ma_resource_key = f"mystic-arcanum-l{slot_level}"
+        _resources = list(sheet.get("resources") or [])
+        _ma_idx = -1
+        _ma_row = None
+        for _i, _r in enumerate(_resources):
+            if not isinstance(_r, dict):
+                continue
+            if (_r.get("key") or "").strip().lower() == _ma_resource_key:
+                _ma_row = dict(_r); _ma_idx = _i; break
+        if _ma_row is None:
+            return JSONResponse(status_code=404, content={
+                "error": "free_cast_no_arcanum_resource",
+                "resource_key": _ma_resource_key,
+            })
+        _ma_cur = int(_ma_row.get("current") or 0)
+        if _ma_cur < 1:
+            return JSONResponse(status_code=409, content={
+                "error": "free_cast_no_uses_left",
+                "resource_key": _ma_resource_key,
+                "current": _ma_cur,
+                "max": int(_ma_row.get("max") or 0),
+            })
+        # All gates passed. Atomically decrement the MA resource.
+        _ma_row["current"] = _ma_cur - 1
+        _resources[_ma_idx] = _ma_row
+        sheet["resources"] = _resources
+        char.sheet = sheet
+        db.commit()
+        # Audit broadcast — distinct from the existing spell-cast
+        # broadcasts so the chat log shows "(via Mystic Arcanum)"
+        # next to the spell entry.
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "character_name": char.name,
+                "feature_name": f"🌑 Mystic Arcanum (L{slot_level})",
+                "feature_desc": (
+                    f"{char.name} casts {spell.get('name') or 'a spell'} "
+                    f"via Mystic Arcanum — no Pact slot consumed."
+                ),
+                "source": "mystic-arcanum-cast",
+                "slot_level": slot_level,
+                "resource_key": _ma_resource_key,
+                "spell_name": spell.get("name") or "",
+            },
+        })
+        # Also broadcast the resource update so the sheet repaints.
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": _ma_resource_key,
+                "current": _ma_row["current"],
+                "max": int(_ma_row.get("max") or 0),
+            },
+        })
+
     # Decrement slot when this is a leveled spell (cantrips are free)
     # v2.92.0 — also stash a ``spell_slot_spend`` snapshot so the roll
     # log's ↶ Undo button can refund the slot. The snapshot carries
@@ -12950,7 +13046,10 @@ async def cast_spell(
     # the payload locally and log it once the id exists).
     updated_slot = None
     _slot_spend_for_undo: dict | None = None
-    if spell_level >= 1:
+    # v2.99.88 — when free_cast routed the spell through Mystic
+    # Arcanum (above), skip the spell-slot decrement entirely. The
+    # MA resource is already decremented and broadcast.
+    if spell_level >= 1 and not free_cast:
         all_slots = dict(sheet.get("spell_slots") or {})
         per_class = dict(all_slots.get(cslug) or {})
         slot_key = str(slot_level)

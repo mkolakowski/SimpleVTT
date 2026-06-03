@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.88] - 2026-06-03 — "Free the Spell" — Mystic Arcanum free-cast routing through /cast_spell
+
+**Schema version:** 65
+**Commit summary:** **Wire `/cast_spell` to accept a `free_cast: true` body flag that routes the cast through a Warlock's Mystic Arcanum charge instead of consuming a Pact Magic slot.** Closes the v2.99.45/86 announce-only gap — previously the user had to call `/use_mystic_arcanum` to decrement the daily charge AND separately call `/cast_spell` which still burned a Pact slot. v2.99.88 makes it one POST: pass `free_cast: true` + `slot_level: 6/7/8/9` + `class_slug: "warlock"` to `/cast_spell` and the server validates Warlock + level gate + arcanum resource has uses, then atomically decrements the `mystic-arcanum-l{N}` resource, SKIPS the Pact slot decrement, and broadcasts a `feature_used(source=mystic-arcanum-cast)` audit alongside the standard cast.
+**Description:** Single-file change in `app/routes/tabletop_routes.py::cast_spell`. New block right after the range gate parses `free_cast` from the body. When set, runs four gates (wrong_class / invalid_slot_level / level_too_low / no_arcanum_resource + no_uses_left) — each returns 409 with a specific error name + the relevant fields (required/got/etc.). On all-pass, decrements `mystic-arcanum-l{slot_level}` in the sheet, commits, and broadcasts `feature_used(source=mystic-arcanum-cast)` + `resource_update` for the resource drop. The existing Pact-slot decrement block at line ~12953 now gates on `if spell_level >= 1 and not free_cast:` so it's skipped entirely when the cast routed via MA.
+
+### Added
+- `free_cast: bool` body field on `/cast_spell`. When `True`, routes the cast through Mystic Arcanum instead of consuming a Pact Magic slot.
+- Five new 409 error codes for `/cast_spell` when `free_cast` is set:
+  - `free_cast_wrong_class` — sheet.class != "warlock"
+  - `free_cast_invalid_slot_level` — slot_level ∉ {6,7,8,9}
+  - `free_cast_level_too_low` — warlock level < per-tier gate (11/13/15/17)
+  - `free_cast_no_arcanum_resource` — `mystic-arcanum-l{N}` missing from the sheet
+  - `free_cast_no_uses_left` — resource current == 0
+- `feature_used(source="mystic-arcanum-cast")` broadcast carrying `slot_level`, `resource_key`, `spell_name`, and the character info — so the chat log shows "🌑 Mystic Arcanum (L6) — Magnus casts Disintegrate via Mystic Arcanum, no Pact slot consumed."
+- `resource_update` broadcast for the decremented `mystic-arcanum-l{N}` resource so the sheet repaints the pip immediately.
+- `tests/harness/test_mystic_arcanum_free_cast.py` — 2 regression tests covering the happy path (Lv 11 + slot_level=6 free_cast → MA decrements, Pact slot unchanged, broadcasts fire) and the level-gate denial (Lv 5 + free_cast L6 → 409 free_cast_level_too_low).
+
+### Changed
+- `/cast_spell`'s Pact-slot decrement block gate flips from `if spell_level >= 1:` to `if spell_level >= 1 and not free_cast:` so MA-routed casts skip the slot entirely.
+
+### Notes
+- **PATCH bump** — additive body field + new 409 paths + a single gate condition flip. Existing `/cast_spell` callers (no `free_cast` field) keep the unchanged behavior.
+- **Why the cast itself still uses /cast_spell.** The full spell-cast machinery (damage rolls, save prompts, target picker, range check, action chip) lives in /cast_spell. Re-implementing any of that in /use_mystic_arcanum would duplicate hundreds of lines of logic; routing through the existing endpoint with a flag is cleaner.
+- **Backward compatibility with /use_mystic_arcanum.** The v2.99.45 announce-only endpoint stays — it's the "spend the charge, narrate the cast manually" path for GMs who want to RP the casting beat without the full mechanical resolution. The v2.99.88 free_cast path is the "cast it now with the full machinery" path. Both decrement the same `mystic-arcanum-l{N}` resource; calling both for the same charge would double-decrement (the GM is responsible for picking one path per arcanum use).
+- **Undo coverage.** The v2.96.0 ↶ Undo button still works for the cast — it refunds the spell-slot (which wasn't consumed) and the cast damage. The MA resource decrement is NOT refunded by Undo today; filed for a follow-up that would add a `mystic_arcanum_spend` log entry alongside the existing `spell_slot_spend`.
+- **Filed.** Eldritch Master refresh interaction (also Lv 20 capstone) doesn't refill the MA resource — RAW says MA is its own 1/long-rest. The existing rest endpoint handles the long-rest refresh.
+- Total harness count: 808 (was 806 in v2.99.87).
+
+---
+
 ## [2.99.87] - 2026-06-03 — "Off-Hand, On Damage" — Fighting Style: Two-Weapon Fighting
 
 **Schema version:** 65
