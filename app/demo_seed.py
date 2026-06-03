@@ -473,6 +473,22 @@ def _wizard_sheet(name: str) -> dict:
              "casting_time": "1 action", "damage": "8d6", "save_ability": "DEX",
              "desc": "100 ft × 5 ft line from caster, DEX save DC 14 for half. 8d6 lightning."},
             {"name": "Counterspell", "level": 3, "prepared": True, "_slug": "counterspell", "casting_time": "1 reaction"},
+            # v2.99.101 — Slow. Lv 3 Transmutation, concentration.
+            # Halves up to 6 targets' speed (WIS save). v1 wires the
+            # speed-reduction effect into /cast_slow which installs a
+            # `slow` buff with `effects.speed_reduction_ft: base // 2`
+            # on each target. The reduced cap is honored by the
+            # v2.99.98 _effective_speed_walk engine + the v2.99.99
+            # /token/move 409 gate. Other Slow effects (-2 AC, no
+            # reactions, action OR bonus action, single attack, spell
+            # delay roll) are surfaced in the buff's raw_effects
+            # tooltip but not yet mechanically enforced. Routed via
+            # /cast_slow (NOT /cast_spell) so the multi-target install
+            # + speed math can run without a refactor of the
+            # _SPELL_CONDITION_MAP list-effects shape.
+            {"name": "Slow", "level": 3, "prepared": True, "_slug": "slow",
+             "casting_time": "1 action", "save_ability": "WIS",
+             "desc": "120 ft, 40-ft cube, concentration up to 1 min, WIS save DC 14. v1: routed via /cast_slow; installs a per-target speed-reduction buff (base // 2 ft) that the v2.99.98 engine reads at /token/move time."},
             # v2.49.58 — Sleep. RAW: 5d8 + 2d8/extra slot HP-pool that
             # affects creatures by ascending current HP, no save, no
             # concentration. Routed through the dedicated /cast_sleep

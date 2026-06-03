@@ -21127,6 +21127,59 @@ async def _apply_lance_of_lethargy(
     }
 
 
+def _make_slow_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+) -> dict:
+    """v2.99.101 — build the Slow spell's target-side buff dict.
+    Mechanical effect: speed halved (RAW). Stored as a flat
+    ``speed_reduction_ft`` int (target.base // 2 rounded down to
+    the nearest 5 ft to match RAW grid math). The v2.99.98
+    ``_effective_speed_walk`` engine then subtracts this value
+    from the combatant's speed_walk at display + /token/move time.
+
+    Other Slow effects (-2 AC, -2 DEX saves, no reactions, action
+    OR bonus action, single attack, spell delay roll) are filed
+    for follow-up. v1 ships only the speed reduction; the GM can
+    narrate the rest via the buff's ``raw_effects`` list.
+    """
+    try:
+        base = int(target_speed_walk or 30)
+    except (TypeError, ValueError):
+        base = 30
+    if base <= 0:
+        # Already at 0 from another effect — install 0 reduction so
+        # we don't push the cap into negatives via clamps elsewhere.
+        half = 0
+    else:
+        # Round down to the nearest 5 ft (matches RAW grid math).
+        half = (base // 2 // 5) * 5
+        if half <= 0:
+            half = 0
+    return {
+        "key": "slow",
+        "name": "Slow",
+        "icon": "🐢",
+        "duration_rounds": 10,  # 1 minute at 6s / round
+        "concentration": True,
+        "source": "slow-spell",
+        "source_char_id": int(source_char_id) if source_char_id else None,
+        "source_char_name": source_char_name or "",
+        "effects": {"speed_reduction_ft": half},
+        # v1 narrative fallback for the other RAW effects until the
+        # mechanical wires land. Surfaced in the buff tooltip.
+        "raw_effects": [
+            "speed halved",
+            "-2 AC and DEX saves (filed)",
+            "no reactions (filed)",
+            "action OR bonus action, not both (filed)",
+            "max one melee/ranged attack per turn (filed)",
+            "spell delay roll on action-cast spells (filed)",
+        ],
+    }
+
+
 async def _apply_repelling_blast_push(
     db: Session, campaign_id: int, campaign: "Campaign",
     attacker_char_id: int, attacker_sheet: dict,
@@ -29552,6 +29605,210 @@ async def cast_sleep(
         "affected": affected,
         "unaffected": unaffected,
         "duration_rounds": sleep_duration_rounds,
+    }
+
+
+# ----------- API: cast Slow (3rd-level Transmutation, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_slow")
+async def cast_slow(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.101 — Cast Slow on up to six target combatants.
+
+    Body: ``{character_id, class_slug, slot_level, target_combatant_ids,
+    override?}``.
+
+    RAW (PHB Slow, 3rd-level Transmutation): 1 action, 120 ft, 40-ft
+    cube, concentration up to 1 minute, Wisdom save. v1 ships the
+    speed-halving effect only (the mechanical hook into v2.99.98
+    `_effective_speed_walk`); the other Slow effects (-2 AC, no
+    reactions, action OR bonus action, single attack, spell delay
+    roll) are filed for follow-up and surfaced as `raw_effects`
+    bullets on the buff tooltip so the GM can narrate them today.
+
+    The save logic is also a v1 simplification: the caller passes
+    a pre-resolved list of target_combatant_ids (the "failed save"
+    set). Auto-rolled saves can wire into this endpoint via the
+    existing /respond pipeline in a follow-up.
+
+    Validation: caster has class + Slow on spell list + an available
+    Lv 3+ slot + Phase 4 action-economy gate (overrideable). RAW
+    caps at 6 targets — the endpoint enforces.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 3
+    target_combatant_ids = body.get("target_combatant_ids") or []
+    override = bool(body.get("override"))
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("wizard", "sorcerer"):
+        raise HTTPException(400, "class_slug must be wizard or sorcerer")
+    if slot_level < 3:
+        raise HTTPException(400, "slot_level must be >= 3 (Slow is L3)")
+    if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
+        raise HTTPException(400, "target_combatant_ids must be a non-empty list")
+    if len(target_combatant_ids) > 6:
+        return JSONResponse(status_code=409, content={
+            "error": "too_many_targets",
+            "max": 6,
+            "got": len(target_combatant_ids),
+        })
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_slow = any(
+        (s.get("_slug") == "slow") or
+        (str(s.get("name", "")).lower() == "slow")
+        for s in spells
+    )
+    if not has_slow:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "slow",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Slow",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "slow",
+            "label": "Slow",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install slow buff on each target.
+    affected: list[dict] = []
+    unaffected: list[dict] = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        c = _lookup_combatant(campaign_id, tid)
+        if not c:
+            unaffected.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        base_speed = int(c.get("speed_walk") or 30)
+        buff = _make_slow_buff(
+            target_speed_walk=base_speed,
+            source_char_id=char.id,
+            source_char_name=char.name,
+        )
+        installed = await _install_buff_on_combatant_id(
+            campaign_id, tid, buff,
+        )
+        affected.append({
+            "combatant_id": tid,
+            "name": c.get("name") or "",
+            "base_speed_walk": base_speed,
+            "speed_reduction_ft": buff["effects"]["speed_reduction_ft"],
+            "installed": installed,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    affected_summary = ", ".join(
+        f"{a['name']} (-{a['speed_reduction_ft']} ft)" for a in affected
+    ) or "no one"
+    note = f"🐢 Slow (L{slot_level}) → {affected_summary}"
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": (
+                f"Slow installed on {len(affected)} target(s). "
+                f"Concentration up to 1 min. Speed halved + other "
+                f"RAW effects (narrate). Targets: {affected_summary}."
+            ),
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "affected": affected,
+        "unaffected": unaffected,
+        "duration_rounds": 10,
+        "concentration": True,
     }
 
 

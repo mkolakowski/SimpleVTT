@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.101] - 2026-06-03 — "Time Crawls Around You" — /cast_slow endpoint installs speed-halving buff that the v2.99.98/.99 engine honors
+
+**Schema version:** 65
+**Commit summary:** **Ship the Slow spell's mechanical speed-halving via a dedicated `/cast_slow` endpoint that installs a `slow` buff with `effects.speed_reduction_ft: base // 2` on each target.** Second consumer of the v2.99.98 `_effective_speed_walk` engine (the first was Lance of Lethargy). The reduced cap is honored by the v2.99.98 Mov chip / breadcrumb / Dash modal AND the v2.99.99 `/token/move` 409 gate without any new wiring. RAW caps Slow at 6 targets; the endpoint enforces. Other Slow effects (-2 AC, no reactions, action OR bonus action, single attack, spell delay) are surfaced as `raw_effects` tooltips on the buff for GM narration but not yet mechanically enforced — filed for follow-up.
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — new `_make_slow_buff(target_speed_walk, source_char_id, source_char_name)` builder that halves the target's base speed and rounds down to the nearest 5 ft (matching RAW grid math). Clamps reductions to ≥ 0 (already-webbed 0-speed target → 0 reduction, not negative). (2) New `POST /api/campaign/{cid}/cast_slow` endpoint mirroring the `/cast_sleep` shape: validates class (wizard/sorcerer), Slow on spell list, Lv 3+ slot available, Phase 4 action-economy gate (overrideable). For each target_combatant_id, reads `combatant.speed_walk`, builds the slow buff, installs via `_install_buff_on_combatant_id`. Returns `{affected: [{combatant_id, base_speed_walk, speed_reduction_ft, installed}], unaffected, duration_rounds: 10, concentration: true}`. (3) `app/demo_seed.py` — adds Slow to Thalindra Moonwhisper's spell list at index right after Counterspell. (4) `tests/harness/test_cast_slow.py` — 4 regression tests.
+
+### Added
+- `_make_slow_buff(target_speed_walk, source_char_id, source_char_name)` builder.
+- `POST /api/campaign/{cid}/cast_slow` endpoint.
+- "Slow" entry on Thalindra's spell list (slug `slow`, level 3, save_ability WIS, casting_time "1 action").
+- `tests/harness/test_cast_slow.py` — 4 regression tests: happy path (Krieger 40 ft base → 20 ft reduction, buff installed), too-many-targets (7 → 409 with `error: "too_many_targets", max: 6`), wrong class (cleric → 400), zero-speed target (already at 0 → reduction 0, no negative).
+
+### Notes
+- **PATCH bump** — new endpoint + helper + demo edit + 4 tests. No schema change.
+- **Why a dedicated endpoint instead of `_SPELL_CONDITION_MAP`.** The existing condition map uses a string-list `effects` shape (descriptive bullet points like "incapacitated", "auto-fail STR / DEX saves"). The v2.99.98 `_effective_speed_reduction_ft` helper requires a dict-shape `effects` with the `speed_reduction_ft` int key. Folding Slow into the map would either break the existing list-effects shape for the 7 existing install sites OR require a parallel `mechanical_effects` field threaded through every install path — both bigger refactors than this ship warrants. The dedicated endpoint mirrors `/cast_sleep` (which is also outside the generic /cast_spell flow for its own RAW reasons).
+- **Why half the BASE speed and not the EFFECTIVE speed.** If a target is already Lance-of-Lethargied (-10 ft), then Slow halves base (30 → 15) so total reduction is 25 ft → 5 ft effective. RAW reads naturally as "halve their normal speed" rather than "halve their currently reduced speed." The dual interpretation is split among groups; v1 picks halve-base for cleaner math + predictable stacking.
+- **Why round DOWN to the nearest 5 ft.** 35 ft base → half = 17.5 → 15 ft reduction (not 17.5). Matches RAW grid math: speed is always a multiple of 5 in 5e. A future toggle could opt into "exact half" for theatre-of-mind play; filed.
+- **Other Slow effects not mechanical yet.** -2 AC, no reactions, action OR bonus action, single attack, spell delay roll — each needs a separate hook. Action OR bonus is the trickiest (intercepts at action-economy mark time); spell delay needs the spell-cast pipeline to read the buff and roll the d20. The `raw_effects` list on the buff surfaces these as tooltip bullets so the GM can narrate today. Filed.
+- **Caster-side concentration buff not installed yet.** /cast_slow doesn't install a `concentration-slow` buff on the caster today — the existing concentration framework expects the install to happen via /cast_spell or a similar pipeline that handles paired buffs. Filed: when concentration drops (manual /end_buff, failed CON save on damage, or new concentration spell), the slow buffs on targets should auto-clear via `_drop_paired_concentration_buffs`. Today the GM /end_buff on each target manually.
+- **No range / AoE check.** Like Sleep, /cast_slow receives pre-resolved target IDs without a cast-point coordinate. A future ruler/range commit can add `cast_point: {x, y}` + a 40-ft cube AoE sweep; filed.
+- **Total harness count: 854** (was 850 in v2.99.100).
+
+---
+
 ## [2.99.100] - 2026-06-03 — "The Wrong Roommate" — fix v2.99.99 fixture: use Pip (has a map token) instead of Garrik (doesn't)
 
 **Schema version:** 65
