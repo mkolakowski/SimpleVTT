@@ -3703,95 +3703,122 @@
             // Preview failed — fall through. The 409 gate on /move
             // is the safety net.
         }
+        // v2.99.72 — compute active-combatant + Dash-need ONCE up
+        // front so both the OA branch and the overrun branch read
+        // the same numbers. Previously the OA branch fired the Dash
+        // modal unconditionally (bug #1 in the user's v2.99.72
+        // report) and the overrun branch GM-bypassed (bug #2). Both
+        // are fixed by gating the Dash prompt on actual need
+        // (projected > effectiveCap AND action available) and by
+        // letting the overrun modal fire for GMs too as long as
+        // the dragged token IS the active combatant.
+        let _activeForDash = null;
+        let _projectedDistance = _previewDistanceFt;
+        let _projectedOverrun = false;
+        let _needsDash = false;
+        if (typeof window._getActiveCombatant === 'function') {
+            const _active = window._getActiveCombatant();
+            if (_active) {
+                const _matches = (
+                    (_active.source_token_id != null
+                     && _active.source_token_id === tokenId)
+                    || (_active.char_id != null
+                        && _active.char_id === token.character_id)
+                );
+                if (_matches) {
+                    _activeForDash = _active;
+                    // Use the server's preview distance when present;
+                    // fall back to a local Chebyshev / Euclidean
+                    // derivation when preview_move failed (offline
+                    // safety net).
+                    if (_projectedDistance <= 0 && gridSize > 0) {
+                        const _dx = sx - origX, _dy = sy - origY;
+                        const _cells = (gridType === 'square')
+                            ? Math.max(Math.abs(_dx), Math.abs(_dy)) / gridSize
+                            : Math.sqrt(_dx * _dx + _dy * _dy) / gridSize;
+                        _projectedDistance = Math.round(_cells * 5 * 10) / 10;
+                    }
+                    const _econ = _active.economy || {};
+                    const _used = Number(_econ.movement) || 0;
+                    const _dashBonus = Number(_econ.dash_bonus_ft) || 0;
+                    const _speed = Number(_active.speed_walk) || 30;
+                    const _cap = _speed + _dashBonus;
+                    _projectedOverrun = (_used + _projectedDistance) > _cap + 0.001;
+                    // Dash helps only when the move actually exceeds
+                    // remaining movement AND the active combatant
+                    // hasn't already used their action this turn.
+                    _needsDash = _projectedOverrun && !_econ.action;
+                }
+            }
+        }
+
         if (_oaTriggers.length > 0) {
-            // v2.99.69 — sequential Dash → OA modals. When the move
-            // would provoke OA, first ask the dragger if they want
-            // to take the Dash action (extends movement; doesn't
-            // prevent OA per RAW — Disengage does, filed for a
-            // follow-up). After the Dash decision, chain to the
-            // existing OA Continue/Stop modal.
-            _showPreMoveDashModal({
+            // v2.99.69 — sequential Dash → OA modals. v2.99.72 —
+            // the Dash modal is now gated on _needsDash so it
+            // doesn't appear when the active combatant still has
+            // movement budget. When Dash isn't needed (plenty of
+            // movement OR no active match OR action already spent),
+            // jump straight to the OA Continue/Stop modal.
+            const _openOaModal = () => _showPreMoveOaModal({
                 tokenLabel: token.label || 'Token',
                 triggers: _oaTriggers,
                 distanceFt: _previewDistanceFt,
-                onChoice: (tookDash) => {
-                    if (tookDash && typeof window._getActiveCombatant === 'function'
-                            && typeof window._dashCombatant === 'function') {
-                        const active = window._getActiveCombatant();
-                        if (active) {
-                            try { window._dashCombatant(active); } catch (e) {
+                onContinue: () => postMove(true),
+                onStop: snapBack,
+            });
+            if (_needsDash && _activeForDash) {
+                _showPreMoveDashModal({
+                    tokenLabel: token.label || 'Token',
+                    triggers: _oaTriggers,
+                    distanceFt: _previewDistanceFt,
+                    onChoice: (tookDash) => {
+                        if (tookDash && typeof window._dashCombatant === 'function') {
+                            try { window._dashCombatant(_activeForDash); }
+                            catch (e) {
                                 console.warn('[oa-dash] _dashCombatant failed', e);
                             }
                         }
-                    }
-                    _showPreMoveOaModal({
-                        tokenLabel: token.label || 'Token',
-                        triggers: _oaTriggers,
-                        distanceFt: _previewDistanceFt,
-                        onContinue: () => postMove(true),
-                        onStop: snapBack,
-                    });
-                },
-                onCancel: snapBack,
-            });
+                        _openOaModal();
+                    },
+                    onCancel: snapBack,
+                });
+            } else {
+                _openOaModal();
+            }
             return;
         }
 
-        // No gate when the dragger is GM, when window helpers aren't
-        // loaded, when the modal helper isn't available, or when init
-        // isn't actively running.
-        const me = (typeof ME !== 'undefined' && ME) || {};
-        if (me.isGm || typeof window._getActiveCombatant !== 'function'
-                || typeof window.showMovementOverrunModal !== 'function') {
+        // v2.99.72 — removed the GM bypass on the overrun gate.
+        // Pre-v2.99.72 a GM dragging the active combatant's token
+        // past the speed cap got NO prompt, so a 35 ft drag with a
+        // 30 ft cap silently committed. The active-combatant match
+        // check below still scopes the modal: GM drags of off-turn
+        // / NPC-side tokens still pass through without a modal.
+        if (typeof window.showMovementOverrunModal !== 'function') {
             postMove();
             return;
         }
-        const active = window._getActiveCombatant();
-        if (!active) { postMove(); return; }
-
-        // Match this token to the active combatant. Source-token-id is
-        // the unambiguous v2.6.2 path; fall back to char_id when an
-        // older combatant pre-dates that field.
-        const activeMatches = (
-            (active.source_token_id != null && active.source_token_id === tokenId)
-            || (active.char_id != null && active.char_id === token.character_id)
-        );
-        if (!activeMatches) { postMove(); return; }
-
-        // Distance math mirrors the server-side derivation in /move:
-        // Chebyshev for square grids, Euclidean otherwise. 5 ft per
-        // grid cell.
-        const dx = sx - origX;
-        const dy = sy - origY;
-        let distance = 0;
-        if (gridSize > 0) {
-            const cells = (gridType === 'square')
-                ? Math.max(Math.abs(dx), Math.abs(dy)) / gridSize
-                : Math.sqrt(dx * dx + dy * dy) / gridSize;
-            distance = Math.round(cells * 5 * 10) / 10;
+        if (!_activeForDash || !_projectedOverrun) {
+            // Either we're not the active combatant (off-turn drag)
+            // or the move fits inside the existing cap — no modal.
+            postMove();
+            return;
         }
-        if (distance <= 0) { postMove(); return; }
-
-        const econ = active.economy || {};
-        const currentUsed = Number(econ.movement) || 0;
-        const dashBonus = Number(econ.dash_bonus_ft) || 0;
-        const speedWalk = Number(active.speed_walk) || 30;
-        const effectiveCap = speedWalk + dashBonus;
-        const projected = currentUsed + distance;
-        if (projected <= effectiveCap + 0.001) { postMove(); return; }
-
-        // Over the cap — show the modal.
+        const _econOv = _activeForDash.economy || {};
+        const _usedOv = Number(_econOv.movement) || 0;
+        const _dashBonusOv = Number(_econOv.dash_bonus_ft) || 0;
+        const _speedOv = Number(_activeForDash.speed_walk) || 30;
         window.showMovementOverrunModal({
-            characterName: active.name,
-            currentUsed,
-            distanceFt: distance,
-            speedCap: speedWalk,
-            dashed: dashBonus > 0,
+            characterName: _activeForDash.name,
+            currentUsed: _usedOv,
+            distanceFt: _projectedDistance,
+            speedCap: _speedOv,
+            dashed: _dashBonusOv > 0,
             onCancel: snapBack,
             onMove: postMove,
             onDash: () => {
                 if (typeof window._dashCombatant === 'function') {
-                    window._dashCombatant(active);
+                    window._dashCombatant(_activeForDash);
                 }
                 postMove();
             },

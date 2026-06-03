@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.72] - 2026-06-02 — "Spend What You Have" — gate Dash modal on actual need + drop GM overrun bypass
+
+**Schema version:** 65
+**Commit summary:** **Fix two related Dash/overrun bugs: the Dash modal now only appears when Dash would actually help, and the GM no longer bypasses the overrun gate when dragging the active combatant's token past their speed cap.** User report: "(1) the dash popup is appearing when a OA is prompted, regardless if the pc/npc has movement still left. (2) if a token is moved 35 ft when they only have 30 to use, the tabletop lets them without prompting to use a dash." Root cause was the v2.99.69 OA branch firing the green Dash modal unconditionally on every OA-provoking move (bug #1) AND the v2.8.3 overrun gate explicitly skipping GMs (bug #2). v2.99.72 unifies the logic: compute `_needsDash` once up front (active-combatant match + `used + distance > speed + dash_bonus_ft` + action available), then gate the OA-branch Dash modal on it AND let the overrun modal fire regardless of GM as long as the dragged token IS the active combatant.
+**Description:** Single-file refactor of `_commitTokenMove` in `app/static/tabletop.js`. New up-front block computes `_activeForDash`, `_projectedDistance`, `_projectedOverrun`, and `_needsDash` once (using server preview distance when available, falling back to local Chebyshev/Euclidean derivation). The OA branch's Dash modal is now wrapped in `if (_needsDash && _activeForDash)` — when Dash isn't needed, the flow jumps directly to the OA Continue/Stop modal. The overrun branch drops `me.isGm` from its early-return condition; the active-combatant match (`activeMatches`) still scopes the modal to relevant drags so GM moves of off-turn / NPC tokens still pass through silently.
+
+### Fixed
+- Dash modal no longer fires when the active combatant has movement remaining (bug #1). Previously every OA-provoking move opened the Dash modal regardless of whether Dash would help.
+- GM dragging the active combatant's token past their speed cap now sees the overrun modal (bug #2). Pre-v2.99.72 the `me.isGm` bypass swallowed the gate silently — a 35 ft drag with a 30 ft cap committed with no prompt. Off-turn / NPC-side GM drags still pass through without a modal (no behavior change for those).
+
+### Changed
+- `_commitTokenMove` is restructured to compute Dash-need once up front; both branches (OA + overrun) share the same numbers. No external API change; the modal helpers' signatures are unchanged.
+- The overrun branch no longer falls back to `postMove()` on missing `_getActiveCombatant`. Instead it goes through `showMovementOverrunModal`-availability check first, then the active-match check, then `_projectedOverrun` check — cleaner gating, fewer GM-shaped escape hatches.
+
+### Notes
+- **PATCH bump** — UI-only behavior tightening. No server change, no API change, no schema change. The OA Continue/Stop modal still fires verbatim on every OA-provoking move; only the Dash-modal precondition is tightened.
+- **Why active-match still scopes the GM modal.** GMs drag many tokens at the table (placing NPCs, moving environmental tokens, etc.). Gating EVERY GM drag with a Dash prompt would be friction. The v2.99.72 fix only fires the modal when the GM drags the CURRENTLY-ACTIVE combatant's token AND it overruns. Off-turn drags + non-combatant drags still pass through.
+- **What still bypasses the gates.** GM-initiated token teleports via the Token Management panel (PATCH /token/{id}) don't go through `_commitTokenMove` — they're explicit position edits and out of scope for the action-economy gates. Same for `/place-token` and `/preview_move` direct calls.
+- **No new harness tests.** UI flow only; modal interaction is covered by the deferred `harness_ui` Playwright suite. Server-side `/token/move` enforcement is unchanged.
+- Total harness count: 785 (unchanged from v2.99.71).
+
+---
+
 ## [2.99.71] - 2026-06-02 — "Stay Open" — fix left-docked roll log collapsing on auto-focus
 
 **Schema version:** 65
