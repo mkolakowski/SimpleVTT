@@ -32511,6 +32511,168 @@ async def cast_flesh_to_stone(
     }
 
 
+# ----------- API: Flesh to Stone — permanent petrification on sustained concentration -----------
+
+@router.post("/api/campaign/{campaign_id}/use_flesh_to_stone_make_permanent")
+async def use_flesh_to_stone_make_permanent(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.139 — Flip a Flesh to Stone Petrified buff from
+    concentration-bonded to PERMANENT.
+
+    Closes the v2.99.136 filed item. RAW (PHB p.243): "If you maintain
+    your concentration on this spell for the entire possible duration,
+    the creature is turned to stone until the effect is ended by a
+    Greater Restoration spell or other magic." Today the Petrified buff
+    has a 10-round duration_max bonded to the caster's concentration
+    anchor — when the anchor drops, paired cleanup removes the
+    Petrified buff. This endpoint is the GM-callable "10 rounds done,
+    lock it in" trigger: drops the concentration link on the buff,
+    stamps `permanent: True`, extends the duration to effectively
+    forever, and cleanly drops the caster's concentration anchor
+    WITHOUT triggering paired cleanup against the now-permanent buff
+    (the anchor is removed surgically, not via the cascade).
+
+    Body: ``{character_id, target_combatant_id}``.
+
+    Validation:
+      - character_id required (the caster)
+      - target_combatant_id required
+      - Target must have a Petrified buff sourced from
+        ``"flesh-to-stone-spell"`` (409 no_flesh_to_stone_petrified)
+      - Buff's source_char_id must match the caller (409 not_your_spell)
+
+    After this fires, only Greater Restoration / Stone to Flesh / GM
+    `/end_buff` removes the Petrified condition.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return JSONResponse(status_code=409, content={
+            "error": "no_active_battle",
+        })
+
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant_id:
+            target = c
+            break
+    if target is None:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_found",
+            "target_combatant_id": target_combatant_id,
+        })
+
+    # Find the Flesh to Stone Petrified buff.
+    fts_buff = None
+    for b in target.get("buffs") or []:
+        if not isinstance(b, dict):
+            continue
+        if b.get("key") == "petrified" and b.get("source") == "flesh-to-stone-spell":
+            fts_buff = b
+            break
+    if fts_buff is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_flesh_to_stone_petrified",
+            "target_combatant_id": target_combatant_id,
+        })
+
+    # Caster must match the buff's source.
+    buff_source_id = fts_buff.get("source_char_id")
+    if buff_source_id is not None and int(buff_source_id) != int(char.id):
+        return JSONResponse(status_code=409, content={
+            "error": "not_your_spell",
+            "expected_caster_id": buff_source_id,
+        })
+
+    # Mutate the buff in place to permanent.
+    fts_buff["concentration"] = False
+    fts_buff["_dependent_on_caster_concentration"] = False
+    fts_buff["permanent"] = True
+    fts_buff["duration_rounds"] = 100000
+    fts_buff["duration_max"] = 100000
+    raw = list(fts_buff.get("raw_effects") or [])
+    raw.append(
+        "PERMANENT — caster sustained concentration for full 1 minute "
+        "(RAW). Cures: Greater Restoration or Stone to Flesh."
+    )
+    fts_buff["raw_effects"] = raw
+
+    # Surgically drop the caster's concentration-flesh-to-stone anchor
+    # WITHOUT going through paired cleanup (which would re-evaluate
+    # concentration buffs; the FtS Petrified is now concentration:False
+    # so it would survive, but we avoid the cascade to be safe).
+    anchor_key = "concentration-flesh-to-stone"
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != int(char.id):
+            continue
+        before = c.get("buffs") or []
+        c["buffs"] = [
+            b for b in before
+            if not (isinstance(b, dict) and b.get("key") == anchor_key)
+        ]
+        break
+
+    hub.set_battle(campaign_id, state)
+
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update",
+        "data": state,
+        "force_gm_sync": True,
+    })
+
+    target_name = target.get("name") or "Target"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": int(char.id),
+            "character_name": char.name,
+            "feature_name": "🗿 Flesh to Stone — Permanent",
+            "feature_desc": (
+                f"{char.name} sustained concentration for the full minute. "
+                f"{target_name} is turned to stone permanently — only "
+                f"Greater Restoration or Stone to Flesh will restore them."
+            ),
+            "source": "flesh-to-stone-permanent",
+            "target_combatant_id": target_combatant_id,
+            "target_name": target_name,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": int(char.id),
+        "character_name": char.name,
+        "target_combatant_id": target_combatant_id,
+        "target_name": target_name,
+        "permanent": True,
+        "concentration": False,
+    }
+
+
 # ----------- API: cast Hold Monster (5th-level Enchantment, concentration) -----------
 
 @router.post("/api/campaign/{campaign_id}/cast_hold_monster")

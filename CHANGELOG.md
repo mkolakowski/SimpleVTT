@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.139] - 2026-06-03 — "The Statue Stays" — Permanent Petrification when Flesh to Stone concentration runs the full minute
+
+**Schema version:** 65
+**Commit summary:** **Ship `POST /api/campaign/{cid}/use_flesh_to_stone_make_permanent` as the GM-callable trigger that flips a Flesh to Stone Petrified buff from concentration-bonded to PERMANENT.** Closes the v2.99.136 filed item. RAW (PHB p.243): "If you maintain your concentration on this spell for the entire possible duration, the creature is turned to stone until the effect is ended by a Greater Restoration spell or other magic." Pre-v2.99.139 the Petrified buff's `concentration: True` link meant any concentration-loss event (manual `/end_buff`, new concentration spell, CON-save fail on damage) dropped the petrification — even after the full 10 rounds elapsed. The new endpoint mutates the buff in place to drop the concentration link and stamps `permanent: True`, then surgically removes the caster's `concentration-flesh-to-stone` anchor without triggering the paired-cleanup cascade against the now-permanent buff.
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — new `POST /use_flesh_to_stone_make_permanent` endpoint after `/cast_flesh_to_stone`. Body: `{character_id, target_combatant_id}`. Validates caster ownership/GM, locates the Petrified buff on the target with `key=="petrified"` AND `source=="flesh-to-stone-spell"` (409 `no_flesh_to_stone_petrified`), verifies `source_char_id` matches the caller (409 `not_your_spell`), then mutates the buff: `concentration: False`, `_dependent_on_caster_concentration: False`, `permanent: True`, `duration_rounds: 100000`, `duration_max: 100000`, appends a "PERMANENT — caster sustained concentration for full 1 minute" line to `raw_effects`. Surgically removes the caster's `concentration-flesh-to-stone` anchor from their buff list. Broadcasts `battle_update` + `feature_used` with `source: "flesh-to-stone-permanent"`. (2) `tests/harness/test_use_flesh_to_stone_make_permanent.py` — 4 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_flesh_to_stone_make_permanent` endpoint.
+- `permanent: True` flag on Petrified buffs after make-permanent fires.
+- `feature_used` broadcast with `source: "flesh-to-stone-permanent"`.
+- `tests/harness/test_use_flesh_to_stone_make_permanent.py` — 4 tests: happy path (cast FtS petrified → make_permanent → buff dropped concentration, has permanent flag, large duration, caster's anchor gone), missing buff (target has no FtS Petrified → 409 `no_flesh_to_stone_petrified`), missing target_combatant_id → 400, missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + 4 tests. No schema change.
+- **Why a manual GM trigger and not a server-side 10-round timer.** Buff durations tick down client-side (see the v2.49.40 sync audit); the server has no scheduled-task framework to fire "10 rounds elapsed" automatically. The GM clicks the button when their session reaches the 1-minute mark; the endpoint trusts that decision the same way `/end_buff` does. A future server-side round-counter is filed.
+- **Why surgical anchor removal instead of `_drop_paired_concentration_buffs`.** The cascade scans for buffs with `concentration: True` matching the caster's `source_char_id`. We already flipped the FtS Petrified buff to `concentration: False` BEFORE removing the anchor, so the cascade would correctly skip it — but we avoid the cascade entirely as a safety belt against future engine changes that might check different fields. The anchor is removed in a single in-place buff-list filter.
+- **What's still filed.** (1) Strike-counter undo plumbing for the auto-Petrify transition (v2.97.77-style log entry so a misclicked save roll can be reverted). (2) GM-facing UI hint when the FtS concentration anchor reaches round 10 (so the GM remembers to fire this endpoint instead of letting paired cleanup drop the Petrified buff). (3) Server-side round-counter that fires the make-permanent transition automatically when the anchor's `duration_rounds` reaches 0.
+- **Total harness count: 987** (was 983 in v2.99.138).
+
+---
+
 ## [2.99.138] - 2026-06-03 — "Reading the Glow" — Eldritch Sight (Warlock invocation) audit endpoint
 
 **Schema version:** 65
