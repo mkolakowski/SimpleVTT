@@ -31412,10 +31412,22 @@ _INVOCATION_SPELL_CAST_REGISTRY: dict[str, dict] = {
         "resource_key": "mire-the-mind-uses",
         "bypass_spell_list_check": True,
     },
-    # Future entries (filed): "sculptor-of-flesh" → polymorph,
-    # "bewitching-whispers" → compulsion, "visions-of-distant-realms"
-    # → arcane eye, etc. Each needs its own /cast_<spell> wiring +
-    # demo-seed resource entry; the router metadata stays here.
+    # v2.99.142 — Sculptor of Flesh: cast Polymorph once per long
+    # rest using a Warlock spell slot. RAW prereq Lv 7 Warlock.
+    # Routed via /cast_polymorph with via_invocation="sculptor-of-flesh".
+    "sculptor-of-flesh": {
+        "spell_slug": "polymorph",
+        "spell_name": "Polymorph",
+        "class_slug": "warlock",
+        "resource_key": "sculptor-of-flesh-uses",
+        "bypass_spell_list_check": True,
+    },
+    # Future entries (filed): "bewitching-whispers" → compulsion,
+    # "visions-of-distant-realms" → arcane eye, "thief-of-five-fates"
+    # → bane, "dreadful-word" → confusion, "sign-of-ill-omen" →
+    # bestow curse, "minions-of-chaos" → conjure elemental.
+    # Each needs its own /cast_<spell> wiring + demo-seed resource
+    # entry; the router metadata stays here.
 }
 
 
@@ -31765,6 +31777,235 @@ async def cast_slow(
         "unaffected": unaffected,
         "duration_rounds": 10,
         "concentration": True,
+    }
+
+
+# ----------- API: cast Polymorph (4th-level Transmutation, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_polymorph")
+async def cast_polymorph(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.142 — Cast Polymorph: prepare the spell cast (slot +
+    concentration anchor + audit). The actual transformation runs
+    via the existing `/transform` endpoint with `source="polymorph"`
+    on the target combatant — this endpoint is the "spell-side" half
+    that handles the slot decrement + invocation gate + concentration
+    anchor + chat-log audit.
+
+    Body: ``{character_id, class_slug, slot_level, via_invocation?,
+    override?}``.
+
+    RAW (PHB p.266): L4 Transmutation, 1 action, 60 ft, concentration
+    up to 1 hour. Target a creature (target must be willing or fail a
+    WIS save) and transform it into a beast with CR ≤ target's level.
+    The CR cap + target validation happen on `/transform`; this
+    endpoint just consumes the slot + resource and broadcasts the
+    audit.
+
+    Classes that get Polymorph: Bard, Druid, Sorcerer, Wizard.
+    Warlock-only via the v2.99.142 Sculptor of Flesh invocation
+    (PHB p.111: "Prerequisite: 7th level. You can cast Polymorph
+    once using a warlock spell slot. You can't do so again until
+    you finish a long rest.").
+
+    Second consumer of the v2.99.140 invocation-cast registry. The
+    Sculptor of Flesh entry maps "sculptor-of-flesh" → polymorph;
+    on Warlock callers, `via_invocation` must resolve to a registry
+    entry whose `spell_slug == "polymorph"` (same pattern as the
+    /cast_slow + Mire the Mind route).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 4
+    override = bool(body.get("override"))
+    via_invocation = (body.get("via_invocation") or "").strip().lower()
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("bard", "druid", "sorcerer", "wizard", "warlock"):
+        raise HTTPException(
+            400,
+            "class_slug must be bard, druid, sorcerer, wizard, or warlock",
+        )
+    if class_slug == "warlock":
+        # v2.99.142 — Warlock can only cast Polymorph via a
+        # registered invocation that maps to it (Sculptor of Flesh).
+        _meta_for_class = _get_invocation_cast_meta(via_invocation)
+        if not _meta_for_class or _meta_for_class.get("spell_slug") != "polymorph":
+            return JSONResponse(status_code=409, content={
+                "error": "missing_invocation",
+                "invocation": "sculptor-of-flesh",
+            })
+    if slot_level < 4:
+        raise HTTPException(400, "slot_level must be >= 4 (Polymorph is L4)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    # v2.99.140 — invocation-cast router (second consumer after
+    # /cast_slow). When ``via_invocation`` resolves to a registry
+    # entry, ``_validate_invocation_cast`` checks the feats list +
+    # the gating resource. ``bypass_spell_list_check: True`` skips
+    # the standard "Polymorph on spell list" check (the invocation
+    # is the cast source).
+    invocation_meta = _get_invocation_cast_meta(via_invocation)
+    if invocation_meta:
+        bad = _validate_invocation_cast(sheet, via_invocation)
+        if bad is not None:
+            return bad
+    if not invocation_meta or not invocation_meta.get("bypass_spell_list_check"):
+        spells = list(sheet.get("spells") or [])
+        has_poly = any(
+            (s.get("_slug") == "polymorph") or
+            (str(s.get("name", "")).lower() == "polymorph")
+            for s in spells
+        )
+        if not has_poly:
+            return JSONResponse(status_code=409, content={
+                "error": "spell_not_known",
+                "spell": "polymorph",
+            })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Polymorph",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "polymorph",
+            "label": "Polymorph",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    # v2.99.140 — also decrement the invocation's gating resource if
+    # the cast was routed through one (Sculptor of Flesh's
+    # "sculptor-of-flesh-uses" 1/long-rest).
+    _consume_invocation_resource(sheet, via_invocation)
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Caster concentration anchor (1 hour = 600 rounds).
+    await _install_caster_concentration_anchor(
+        campaign_id, char, "polymorph", "Polymorph",
+        duration_rounds=600, icon="🐺",
+    )
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    invocation_tag = (
+        f" via {invocation_meta['spell_name']}-invocation "
+        f"({via_invocation})"
+        if invocation_meta else ""
+    )
+    note = (
+        f"🐺 {char.name} casts Polymorph (L{slot_level}){invocation_tag} — "
+        f"target via /transform"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🐺 Polymorph",
+            "feature_desc": (
+                f"{char.name} casts Polymorph. Pick a target via "
+                f"`/transform` with source=\"polymorph\"."
+            ),
+            "source": (
+                f"sculptor-of-flesh" if via_invocation == "sculptor-of-flesh"
+                else "polymorph"
+            ),
+            "via_invocation": via_invocation or None,
+            "duration_rounds": 600,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "via_invocation": via_invocation or None,
+        "duration_rounds": 600,
+        "concentration": True,
+        "ready_to_transform": True,
     }
 
 

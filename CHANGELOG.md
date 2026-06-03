@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.142] - 2026-06-03 — "The Sculptor's Hand" — Sculptor of Flesh (Warlock invocation) wires Polymorph through the v2.99.140 router
+
+**Schema version:** 65
+**Commit summary:** **Ship Sculptor of Flesh as the second consumer of the v2.99.140 invocation-cast registry.** RAW (PHB p.111): "Prerequisite: 7th level. You can cast Polymorph once using a warlock spell slot. You can't do so again until you finish a long rest." Adds the `sculptor-of-flesh` registry entry → Polymorph, a new `/cast_polymorph` endpoint (spell-side: slot + concentration anchor + invocation gate + audit), Magnus's seed gains the invocation + a 1/long-rest gating resource. The actual transformation runs through the existing `/transform` endpoint with `source="polymorph"` — this commit ships the cast-side half. Proves the v2.99.140 abstraction extends past Mire the Mind to a different target spell with the SAME helper functions (`_get_invocation_cast_meta`, `_validate_invocation_cast`, `_consume_invocation_resource`) — no new validation code added, only a registry row + a thin endpoint that calls into the existing helpers.
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — `sculptor-of-flesh` entry added to `_INVOCATION_SPELL_CAST_REGISTRY` mapping to `polymorph`. (2) New `POST /cast_polymorph` endpoint mirrors `/cast_slow`'s structure: validates class (Bard / Druid / Sorcerer / Wizard / Warlock), routes Warlock through the registry (must match `spell_slug == "polymorph"`), validates slot_level >= 4 + action economy gate, calls `_validate_invocation_cast` early to short-circuit on missing-invocation / missing-resource / not-enough-uses, decrements slot + resource, installs `concentration-polymorph` caster anchor (600 rounds = 1 hour). Broadcasts `roll` (chat log), `spell_slot_update`, and `feature_used` events. Returns `{ok, slot_level, ..., ready_to_transform: True}` so the caller knows to follow up with `/transform` for the actual transformation. (3) `app/demo_seed.py` — Magnus's feats gain `eldritch-invocation-sculptor-of-flesh`; his resources gain `sculptor-of-flesh-uses` 1/long-rest. (4) `tests/harness/test_cast_polymorph.py` — 6 regression tests covering happy path + 5 error/edge cases.
+
+### Added
+- `sculptor-of-flesh` registry entry in `_INVOCATION_SPELL_CAST_REGISTRY` mapping to Polymorph (Warlock).
+- `POST /api/campaign/{cid}/cast_polymorph` endpoint (L4 Transmutation, concentration 1 hour, Bard/Druid/Sorcerer/Wizard/Warlock-via-invocation).
+- `eldritch-invocation-sculptor-of-flesh` on Magnus's feats list.
+- `sculptor-of-flesh-uses` 1/long-rest resource on Magnus.
+- `tests/harness/test_cast_polymorph.py` — 6 tests: Sculptor of Flesh happy path (slot + resource + concentration anchor); Warlock without via_invocation → 409 missing_invocation; Warlock with wrong via_invocation slug (Mire the Mind, spell_slug mismatch) → 409 missing_invocation; second cast same long rest → 409 not_enough_uses; L3 slot → 400; missing character_id → 400.
+
+### Notes
+- **PATCH bump** — one new endpoint + registry entry + demo seed extension + 6 tests. No schema change. Reuses every v2.99.140 helper as-is.
+- **Why register only the cast-side half, not the transform.** Polymorph as a 5e spell is two coupled mechanics: (a) consume slot + start concentration + pick a target, and (b) replace the target's stat block with a beast's. (a) is the cast-side that's universal (slot rules, concentration, invocation gate). (b) is the transform, which already lives at `/transform` with `source="polymorph"`. This commit wires (a); the GM follows up with (b) using the existing endpoint. A future commit can wire `/cast_polymorph` to internally call into `/transform`'s body (or vice versa) — filed.
+- **Magnus's Pact Magic slots.** RAW Lv 5 Warlock has L3 slots only. Sculptor of Flesh per RAW needs an L4+ slot for Polymorph, which Magnus shouldn't have natively at Lv 5. The happy-path test patches in an L4 slot for coverage, then restores the seed default. A future commit can either: (a) extend the registry entry with a `pact_magic_slot_level: 4` field that overrides the slot-level check, OR (b) the GM can /upcast manually via the seed. Filed.
+- **What's filed.** (1) `/cast_polymorph` → `/transform` chain: the cast endpoint installs the concentration anchor, the transform endpoint does the actual stat swap. A future commit can fuse them. (2) Target-selection on the cast endpoint (the cast body could include `target_combatant_id` + auto-call `/transform` for the GM). (3) WIS save against unwilling targets — RAW: "If the target is unwilling, it can make a Wisdom saving throw" — not modeled today.
+- **Magnus's invocation roster.** 11 of the SRD's ~20 Eldritch Invocations now mechanically wired: Agonizing Blast, Hex Warrior, Mask of Many Faces, Repelling Blast, Lance of Lethargy, Lifedrinker, Devil's Sight, Mire the Mind, Eldritch Sight, Ascendant Step, Sculptor of Flesh.
+- **Total harness count: 999** (was 993 in v2.99.141).
+
+---
+
 ## [2.99.141] - 2026-06-03 — "Walking on Sky" — Ascendant Step (Warlock invocation) audit endpoint
 
 **Schema version:** 65

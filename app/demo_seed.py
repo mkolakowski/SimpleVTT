@@ -1628,6 +1628,14 @@ def _warlock_sheet(name: str) -> dict:
             # has no 2D-with-altitude layer today).
             {"slug": "eldritch-invocation-ascendant-step", "name": "Eldritch Invocation: Ascendant Step",
              "desc": "At will: cast Levitate on yourself without expending a spell slot — routed via /use_ascendant_step per v2.99.141. RAW prereq Lv 9 Warlock."},
+            # v2.99.142 — Sculptor of Flesh: 1/long-rest cast
+            # Polymorph using a Warlock spell slot. RAW prereq Lv
+            # 7 Warlock; demo seed grants it at Lv 5 for endpoint
+            # coverage. Second consumer of the v2.99.140 invocation-
+            # cast registry — proves the abstraction extends past
+            # Mire the Mind to a different target spell.
+            {"slug": "eldritch-invocation-sculptor-of-flesh", "name": "Eldritch Invocation: Sculptor of Flesh",
+             "desc": "1/long rest: cast Polymorph using a Warlock spell slot — routed via /cast_polymorph with class_slug=\"warlock\" + via_invocation=\"sculptor-of-flesh\" per v2.99.142. RAW prereq Lv 7 Warlock. Target the transform via /transform with source=\"polymorph\" after the cast."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],
@@ -1657,6 +1665,20 @@ def _warlock_sheet(name: str) -> dict:
                 "source": "warlock Lv 5 / Eldritch Invocation",
                 "class_slug": "warlock",
                 "desc": "1/long rest: cast Slow using a Warlock spell slot — routed via /cast_slow with class_slug=\"warlock\" + via_invocation=\"mire-the-mind\" per v2.99.137.",
+                "manual": False,
+            },
+            # v2.99.142 — Sculptor of Flesh 1/long-rest resource.
+            # /cast_polymorph with via_invocation="sculptor-of-flesh"
+            # gates on this row being current >= 1 + decrements on
+            # cast. Second consumer of the v2.99.140 invocation-cast
+            # registry.
+            {
+                "key": "sculptor-of-flesh-uses",
+                "name": "Sculptor of Flesh",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "warlock Lv 7 / Eldritch Invocation",
+                "class_slug": "warlock",
+                "desc": "1/long rest: cast Polymorph using a Warlock spell slot — routed via /cast_polymorph with class_slug=\"warlock\" + via_invocation=\"sculptor-of-flesh\" per v2.99.142.",
                 "manual": False,
             },
             # v2.99.45 — Mystic Arcanum L6 (Warlock Lv 11+ capstone-ish
