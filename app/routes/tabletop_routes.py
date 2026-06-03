@@ -1014,7 +1014,20 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         "concentration": True,
         "effects": {
             "heroism_temp_hp_per_turn": True,
+            # v2.97.43 — per-condition boolean marker. Read by the
+            # saver-side helper `_pc_has_heroism_frightened_immunity`
+            # to flip a CON-save / WIS-save against being frightened.
             "condition_immunity_frightened": True,
+            # v2.99.134 — list-shape marker (the canonical engine
+            # field added in v2.99.128). The v2.99.128 install-time
+            # gate in `_install_buff` / `_install_buff_on_combatant_id`
+            # reads `effects.condition_immunity_to` and suppresses
+            # the install when the buff's key matches. Heroism now
+            # opts in here too, so a Frightened install attempt is
+            # short-circuited at install time even before the
+            # save-side helper fires. Both markers coexist for the
+            # v2.97.43 path's backward compat.
+            "condition_immunity_to": ["frightened"],
         },
         "desc": "Immune to Frightened; gains caster's spellcasting modifier in temp HP at the start of each turn for up to 1 minute.",
     },

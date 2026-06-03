@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.134] - 2026-06-03 — "Brave in Two Voices" — unify Heroism's frightened immunity with the v2.99.128 install-gate engine
+
+**Schema version:** 65
+**Commit summary:** **Add `condition_immunity_to: ["frightened"]` to Heroism's catalog entry alongside the legacy `condition_immunity_frightened: True` boolean.** Closes a v2.99.128 filed item. Pre-v2.99.134 Heroism only opted into the v2.97.43 saver-side helper that flipped WIS saves against being frightened — the v2.99.128 install-time gate (a separate code path that reads the canonical list-shape `condition_immunity_to` field) didn't fire. Now both fire: saves are flipped (legacy) AND any frightened buff that somehow makes it past the save is also suppressed at install (canonical engine).
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — Heroism's `_SPELL_BUFF_MAP` entry now has both markers in `effects`. Backward-compatible: the legacy boolean is unchanged for the v2.97.43 helper. (2) `tests/harness/test_heroism_frightened_immunity_unified.py` — 3 in-process unit tests: catalog has both markers, Heroismed target blocks frightened install, Heroismed target doesn't block other conditions (specificity check).
+
+### Added
+- `condition_immunity_to: ["frightened"]` field on Heroism's `_SPELL_BUFF_MAP` entry.
+- `tests/harness/test_heroism_frightened_immunity_unified.py` — 3 in-process tests pinning the catalog field shape + the engine integration.
+
+### Notes
+- **PATCH bump** — single catalog field addition + 3 unit tests. No engine code change.
+- **Why keep the legacy boolean.** The v2.97.43 `_pc_has_heroism_frightened_immunity` saver-side helper reads `condition_immunity_frightened: True` to flip the WIS save before it rolls. Changing the marker shape would break that helper. The two markers coexist; future content can opt into the list shape only (the v2.97.43 helper would need to be updated to ALSO read `condition_immunity_to` for full unification — filed as the "Heroism helper unification" follow-up).
+- **Why the test is in-process not HTTP.** The `_SPELL_BUFF_MAP` is module-level — pinning it directly is the cheapest verification. HTTP-level integration would require routing through /cast_spell with the Heroism slug, which has multiple gates (Lyra demo Bard cast on Krieger, slot decrement, action check) that have their own failure modes. The 3 unit tests cover catalog + engine end-to-end without HTTP overhead.
+- **Total harness count: 971** (was 968 in v2.99.133).
+
+---
+
 ## [2.99.133] - 2026-06-03 — "Find the Other Return" — patch v2.99.132 to add `target_vulnerability_applied` to ALL /attack response paths
 
 **Schema version:** 65
