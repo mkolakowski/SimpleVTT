@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.132] - 2026-06-03 — "Show the Badge" — surface `target_vulnerability_applied` in the /attack response
+
+**Schema version:** 65
+**Commit summary:** **Add `target_vulnerability_applied: bool` to the /attack response alongside the existing `target_resistance_applied` so chat cards + UI can render the vulnerability badge symmetrically.** Closes a v2.99.127 filed item. `_apply_damage_to_combatant` already computed the flag for the modifier logic but didn't return it; this commit threads it through the function's return value (PC + NPC branches), captures it in both /attack code paths, and surfaces it on the response payload.
+**Description:** Four edits in `app/routes/tabletop_routes.py`. (1) `_apply_damage_to_combatant`'s PC branch return dict adds `"vulnerability_applied": vulnerability_applied`. (2) Same for the NPC branch. (3) Both /attack code paths now read `apply_result.get("vulnerability_applied", False)` into a `target_vulnerability_applied` local + add a `"target_vulnerability_applied": target_vulnerability_applied` entry to the response. (4) `tests/harness/test_attack_vulnerability_flag.py` — 2 regression tests.
+
+### Added
+- `vulnerability_applied` field on `_apply_damage_to_combatant`'s return dict (both PC + NPC branches).
+- `target_vulnerability_applied` field on the /attack response (both code paths).
+- `tests/harness/test_attack_vulnerability_flag.py` — 2 tests: baseline (no vulnerability → flag is False), PATCHed vulnerability (bludgeoning on Krieger → flag is True; resistance flag still False).
+
+### Notes
+- **PATCH bump** — additive response field + 2 tests. No schema change. Backward-compatible: pre-v2.99.132 clients that don't read the new field are unaffected.
+- **Why no UI change in this commit.** This is the back-end / API surface ship. The tabletop.html chat card already renders the resistance badge; a follow-up can add the vulnerability badge that mirrors. v2.99.127 shipped the engine; v2.99.132 surfaces the flag; UI is the next ship.
+- **Symmetry with target_resistance_applied.** Same field shape, same broadcast position in the response, same default of `False`. UI / chat-card code can treat the two fields identically (just different icons / colors).
+- **Total harness count: 968** (was 966 in v2.99.131).
+
+---
+
 ## [2.99.131] - 2026-06-03 — "Eyes That Pierce Darkness" — Devil's Sight (Warlock invocation) audit endpoint
 
 **Schema version:** 65

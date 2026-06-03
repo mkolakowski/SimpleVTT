@@ -5942,6 +5942,8 @@ async def _apply_damage_to_combatant(
             "hp_before": hp_cur,
             "hp_after": result["hp"]["current"],
             "resistance_applied": resistance_applied,
+            # v2.99.132 — surface the v2.99.127 vulnerability flag.
+            "vulnerability_applied": vulnerability_applied,
             "is_dying": result["death_saves"]["status"] == "dying",
             "is_dead": result["death_saves"]["status"] == "dead",
             "uncanny_dodge_used": uncanny_dodge_used,
@@ -6040,6 +6042,8 @@ async def _apply_damage_to_combatant(
         "hp_before": hp_cur,
         "hp_after": new_hp,
         "resistance_applied": resistance_applied,
+        # v2.99.132 — NPC branch returns the vulnerability flag too.
+        "vulnerability_applied": vulnerability_applied,
         "is_dying": False,
         "is_dead": new_hp == 0 and hp_max > 0,
         "uncanny_dodge_used": False,
@@ -35242,6 +35246,9 @@ async def use_attack(
     target_hp_before = None
     target_hp_after = None
     target_resistance_applied = False
+    # v2.99.132 — surface the v2.99.127 vulnerability flag in the
+    # /attack response so chat cards + UI can render the badge.
+    target_vulnerability_applied = False
     target_dying = False
     target_dead = False
     target_combatant = _lookup_combatant(campaign_id, target_combatant_id) if target_combatant_id else None
@@ -35289,6 +35296,10 @@ async def use_attack(
             target_hp_before = apply_result["hp_before"]
             target_hp_after = apply_result["hp_after"]
             target_resistance_applied = apply_result["resistance_applied"]
+            # v2.99.132 — capture the vulnerability flag too.
+            target_vulnerability_applied = apply_result.get(
+                "vulnerability_applied", False,
+            )
             target_dying = apply_result["is_dying"]
             target_dead = apply_result["is_dead"]
 
@@ -35592,6 +35603,8 @@ async def use_attack(
         "target_hp_before": target_hp_before,
         "target_hp_after": target_hp_after,
         "target_resistance_applied": target_resistance_applied,
+        # v2.99.132 — vulnerability flag for the chat-card badge.
+        "target_vulnerability_applied": target_vulnerability_applied,
         "target_dying": target_dying,
         "target_dead": target_dead,
         # Echo whether the campaign auto-applies damage so the chat
@@ -36144,6 +36157,9 @@ async def use_npc_attack(
     target_hp_before = None
     target_hp_after = None
     target_resistance_applied = False
+    # v2.99.132 — vulnerability flag (mirror of v2.99.127 / the other
+    # /attack code path above).
+    target_vulnerability_applied = False
     target_dying = False
     target_dead = False
     if target_combatant and attack_total is not None:
@@ -36163,6 +36179,9 @@ async def use_npc_attack(
             target_hp_before = apply_result["hp_before"]
             target_hp_after = apply_result["hp_after"]
             target_resistance_applied = apply_result["resistance_applied"]
+            target_vulnerability_applied = apply_result.get(
+                "vulnerability_applied", False,
+            )
             target_dying = apply_result["is_dying"]
             target_dead = apply_result["is_dead"]
 
@@ -36207,6 +36226,8 @@ async def use_npc_attack(
         "target_hp_before": target_hp_before,
         "target_hp_after": target_hp_after,
         "target_resistance_applied": target_resistance_applied,
+        # v2.99.132 — vulnerability flag for the chat-card badge.
+        "target_vulnerability_applied": target_vulnerability_applied,
         "target_dying": target_dying,
         "target_dead": target_dead,
         "auto_applied": bool(campaign.auto_apply_damage),
