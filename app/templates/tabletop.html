@@ -3708,12 +3708,17 @@
 <div id="gm-tools-drawer" class="drawer-panel">
     <div class="drawer-body">
         {# v2.99.77 — Sound panel relocated from the removed Settings
-           drawer. Visible to GM AND players (the GM has the music
-           control panel further down too; the volume slider is
-           per-client local browser audio so each user gets their
-           own). The #player-sound-panel + #audio-* ids are preserved
-           verbatim so audio.js bindings keep working without touching
-           the JS module. #}
+           drawer. v2.99.78 — only shown to NON-GM users. The GM's
+           #music-panel (further down inside this same drawer, gated
+           by {% if is_gm %}) already contains a #audio-volume +
+           #audio-mute pair; the v2.99.77 sound panel duplicated
+           those ids for the GM, which broke #audio.js bindings (the
+           first match wins). Gating to non-GM keeps players' volume
+           access while letting the GM's music panel be the single
+           source of truth for them. The #player-sound-panel +
+           #audio-* ids stay identical so audio.js binds correctly
+           in either branch. #}
+        {% if not is_gm %}
         <div id="player-sound-panel"
              style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
@@ -3735,6 +3740,7 @@
                 <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="0.6" style="flex:1;">
             </div>
         </div>
+        {% endif %}
         {# v2.90.0 — Quick Links panel. Surfaces the links + version
            that used to live in the topnav header (now hidden on the
            tabletop). Visible to everyone; the Admin link only renders

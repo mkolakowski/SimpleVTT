@@ -225,13 +225,29 @@
         if (cid == null) return;
         const params = (opt && opt.params) || {};
         const target = data && data.mover_combatant_id;
+        // v2.99.78 — entry-point log so the user can confirm the
+        // chain fired at all. Pairs with the failure logs below.
+        console.log(
+            '[oa-chain] firing',
+            'key=' + (opt && opt.key),
+            'watcher_char=' + (data && data.watcher_char_id),
+            'target=' + target,
+            'attack_index=' + params.attack_index,
+        );
         if (!target) {
-            console.warn(
+            const msg = (
                 '[oa-chain] no mover_combatant_id on the prompt — '
                 + 'skipping auto-roll. Server-side mover lookup in '
-                + '/token/move may have failed.',
-                data,
+                + '/token/move may have failed.'
             );
+            console.warn(msg, data);
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    'OA: could not target the mover (missing combatant_id). '
+                    + 'Roll the attack manually from the watcher\'s sheet.',
+                    'warning',
+                );
+            }
             return;
         }
         const isNpc = !!params.npc || !data.watcher_char_id;
@@ -276,9 +292,28 @@
                     'body=' + errBody,
                     'request=', body,
                 );
+                // v2.99.78 — surface the failure as a toast so the
+                // user knows the OA roll didn't fire silently. The
+                // browser-console log above carries the diagnostic
+                // detail; the toast is a "go look in DevTools"
+                // breadcrumb.
+                if (typeof window.showToast === 'function') {
+                    window.showToast(
+                        'OA roll failed (' + resp.status + '). '
+                        + 'Check DevTools Console for [oa-chain] details.',
+                        'error',
+                    );
+                }
             }
         } catch (err) {
             console.error('[oa-chain] auto-roll fetch errored', err, body);
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    'OA roll request errored. '
+                    + 'Check DevTools Console for [oa-chain] details.',
+                    'error',
+                );
+            }
         }
     }
 
@@ -346,14 +381,51 @@
         dismiss.type = 'button';
         dismiss.className = 'rp-dismiss';
         dismiss.textContent = 'Dismiss';
-        dismiss.addEventListener('click', () => _removePopup(data.prompt_id));
+        // v2.99.78 — Dismiss on an OA prompt now resolves the prompt
+        // with skip-oa server-side (was: local _removePopup only).
+        // Per the user's request: "remove the Opportunity Attack
+        // triggered message if the OA is not taken." Dismiss is the
+        // "I'm not taking it" gesture; calling /use_reaction fires
+        // reaction_prompt_resolved which clears the chat-card row
+        // on every connected client via _markOaCardResolved. For
+        // non-OA prompts we keep the legacy behavior (just hide
+        // the popup locally).
+        dismiss.addEventListener('click', async () => {
+            const isOa = (data.trigger_event === 'creature_exits_reach'
+                || data.trigger_event === 'creature_enters_reach');
+            if (isOa) {
+                // Reuse _spendReaction so the 409-cross-tab-race
+                // handling + button-disable logic is unified. The
+                // chain check below only fires for take-the-oa keys,
+                // so skip-oa naturally bypasses _chainOaAttack.
+                await _spendReaction(
+                    data.prompt_id, 'skip-oa', data.watcher_char_id, card,
+                );
+            } else {
+                _removePopup(data.prompt_id);
+            }
+        });
         card.appendChild(dismiss);
 
         host.appendChild(card);
         _popups.set(data.prompt_id, card);
 
-        // Auto-dismiss after the popup TTL.
-        setTimeout(() => _removePopup(data.prompt_id), POPUP_TTL_MS);
+        // Auto-dismiss after the popup TTL. v2.99.78 — for OA prompts,
+        // fire skip-oa on TTL expiry too so the chat-card clears across
+        // every tab when nobody acts. Mirrors the Dismiss-button gesture.
+        setTimeout(async () => {
+            // Re-check existence (the user may have clicked already).
+            if (!_popups.has(data.prompt_id)) return;
+            const isOa = (data.trigger_event === 'creature_exits_reach'
+                || data.trigger_event === 'creature_enters_reach');
+            if (isOa) {
+                await _spendReaction(
+                    data.prompt_id, 'skip-oa', data.watcher_char_id, card,
+                );
+            } else {
+                _removePopup(data.prompt_id);
+            }
+        }, POPUP_TTL_MS);
     }
 
     function _onMessage(ev) {

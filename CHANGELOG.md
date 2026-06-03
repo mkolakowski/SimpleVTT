@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.78] - 2026-06-03 — "No Echo, No Trail" — non-GM-only sound panel + Dismiss-is-Skip + visible OA chain errors
+
+**Schema version:** 65
+**Commit summary:** **Three follow-ups to the v2.99.77 cleanup.** User report: (a) "merge the volume controls into the music tab, please keep the music tab where it is" — v2.99.77 inserted the player sound panel at the top of the Tools drawer for everyone, but the GM's existing `#music-panel` further down already contains `#audio-volume` / `#audio-mute` / `#audio-enable` ids. Duplicate ids broke `getElementById` (first hit wins) and left the GM with two volume sliders. (b) "remove the Opportunity Attack triggered message if the OA is not taken" — Dismiss button on the popup AND the 30 s TTL auto-dismiss previously just hid the local popup without resolving the server-side prompt, so the `[data-source="opportunity-attack-trigger"]` chat-log card stayed forever. (c) "looks like the button to roll OA damage is no longer working either" — failures in the v2.99.68 `_chainOaAttack` POST (silent fetch errors, missing `mover_combatant_id`, non-2xx responses) only logged to DevTools Console with no on-screen breadcrumb. v2.99.78 ships: (1) `{% if not is_gm %}` around the v2.99.77 player sound panel so the GM only sees the music panel's volume controls. (2) Popup Dismiss now calls `/use_reaction` with `skip-oa` for OA prompts (was: local hide only); same for TTL expiry. The `reaction_prompt_resolved` broadcast triggers `_markOaCardResolved` on every connected client and the chat-card LI is removed. (3) `_chainOaAttack` now shows a `window.showToast` on non-2xx responses, on fetch errors, and on the missing-`mover_combatant_id` early return. Also added an entry-point `[oa-chain] firing` log so users can confirm the chain started at all.
+**Description:** Three-file change. (1) `app/templates/tabletop.html` — gate the v2.99.77 `#player-sound-panel` block with `{% if not is_gm %}`. (2) `app/static/reaction_prompt.js` — Dismiss-button click handler + TTL expiry both detect OA trigger events (`creature_exits_reach` / `creature_enters_reach`) and call `_spendReaction(prompt_id, 'skip-oa', ...)`. Non-OA prompts keep the legacy local-hide behavior. (3) `_chainOaAttack` adds entry log + `window.showToast` calls on the three failure paths (no target, non-2xx, fetch errored).
+
+### Fixed
+- GM's Tools drawer no longer shows a duplicate `#audio-volume` slider. The v2.99.77 player sound panel renders only for non-GM users; the GM keeps using the `#music-panel`'s built-in transport + volume row. Same `#audio-*` id contract for audio.js — only one set of bindings active at a time.
+- Dismissing the OA reaction popup (or letting the 30 s TTL expire without acting) now removes the "⚔ Opportunity Attack triggered" chat-card row across every connected client. Pre-v2.99.78 the chat row stayed indefinitely with the v2.99.74 accent border drawing the eye to an action the user already declined.
+
+### Added
+- `window.showToast` calls in `_chainOaAttack` on (a) missing `mover_combatant_id`, (b) non-2xx `/attack` / `/npc_attack` response, (c) fetch errored. Each toast points the user at the `[oa-chain]` DevTools log for the diagnostic detail.
+- Entry-point `[oa-chain] firing` console log capturing the key + watcher_char + target + attack_index so the user can confirm the chain fired at all (vs. failing the up-front `data.mover_combatant_id` check that didn't log entry).
+
+### Changed
+- Popup Dismiss button click handler: was `() => _removePopup(promptId)`; now an async handler that calls `_spendReaction(prompt_id, 'skip-oa', ...)` for OA prompts. Non-OA prompts (Shield, Counterspell, etc.) keep the legacy local-hide because their resolution semantics differ (skip vs. dismiss has different cost / state implications).
+- Popup TTL expiry: was `setTimeout(_removePopup, POPUP_TTL_MS)`; now the timeout calls `_spendReaction(..., 'skip-oa', ...)` for unresolved OA prompts. Mirrors Dismiss-is-Skip semantics so timeout = decline = clear chat-card row everywhere.
+
+### Notes
+- **PATCH bump** — UI-only changes (template gate, popup behavior, toast surface). No server change, no API change, no schema change.
+- **Why Dismiss-is-Skip is OA-only.** Non-OA reactions (Shield, Counterspell, Hellish Rebuke, Lucky, etc.) have richer resolution semantics — Shield's `skip` doesn't exist; you either cast it or you don't. Dismiss without resolve means "I'll roll Shield manually if I want it." OA is different: Skip is a first-class option that doesn't consume the watcher's reaction, so dismissing == skipping is a clean unification.
+- **What if the user re-enables the popup after dismissing.** They can't — once the prompt is resolved server-side (skip-oa), the `_active_reaction_prompts` entry is dropped. Re-dragging the same token from the same start position would fire a fresh trigger + a fresh prompt.
+- **OA chain diagnostic strategy.** Pre-v2.99.78 the chain silently logged to DevTools Console on every failure path; users without DevTools open saw "I clicked but nothing happened." v2.99.78 adds visible toasts to bridge the gap — the toast doesn't carry the diagnostic detail (the log still does) but it tells the user "go look in DevTools" instead of leaving them in the dark.
+- **Why not also gate the chat-card click chain.** The chain in `tabletop.js::_injectOaButtonsToChatCard` mirrors the same failure modes as the popup chain. v2.99.78 only adds toasts to the popup-side path; if the user reports the chat-card path still fails silently, a follow-up patch will mirror the toast calls there.
+- **No new harness tests.** UI / popup behavior only.
+- Total harness count: 785 (unchanged from v2.99.77).
+
+---
+
 ## [2.99.77] - 2026-06-03 — "One Row, Right Hands" — fold Settings into Tools, single-line tabs, gate OA buttons to the actor
 
 **Schema version:** 65
