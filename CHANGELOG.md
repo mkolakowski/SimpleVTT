@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.112] - 2026-06-03 — "Hands On Throat" — /use_grapple endpoint installs the RAW-correct Grappled condition
+
+**Schema version:** 65
+**Commit summary:** **Ship `/use_grapple` as the sixth speed-engine consumer.** Replaces one attack with a STR (Athletics) contested check → on success the target gets the Grappled condition (speed 0). New `_make_grappled_buff(...)` factory + `_make_grapple_action_buff(...)` thin wrapper mirror the v2.99.106 Restrained pattern but stamp `key="grappled"` and use the canonical Grappled raw_effects (no attack-roll modifiers — Grappled is mechanically weaker than Restrained per RAW PHB p.290). v1 ships the mechanical install + audit broadcast; the contested check is the GM's responsibility today (a future commit can add /respond-style auto-rolling).
+**Description:** Three edits in `app/routes/tabletop_routes.py`. (1) New `_GRAPPLED_CORE_RAW_EFFECTS` module constant (4 canonical Grappled bullets: speed 0, can't benefit from speed bonuses, ends if grappler incapacitated, ends if moved out of reach). (2) New `_make_grappled_buff(...)` factory mirroring the `_make_restrained_buff(...)` signature exactly except for the key, name, raw_effects. (3) New `_make_grapple_action_buff(...)` thin wrapper that calls the factory with `source="grapple-action"`, `display_name="Grappled"`, `icon="🤼"`, plus 2 grapple-specific bullets (escape check, drag-the-target rule). (4) New `POST /api/campaign/{cid}/use_grapple` endpoint that takes `{character_id, target_combatant_id, override?}`, validates, installs the buff via `_install_buff_on_combatant_id`, marks action economy, broadcasts feature_used + roll. (5) `tests/harness/test_use_grapple.py` — 4 regression tests.
+
+### Added
+- `_GRAPPLED_CORE_RAW_EFFECTS` module constant.
+- `_make_grappled_buff(...)` factory.
+- `_make_grapple_action_buff(...)` thin wrapper.
+- `POST /api/campaign/{cid}/use_grapple` endpoint.
+- `tests/harness/test_use_grapple.py` — 4 tests: happy path (Krieger grapples Tavik → buff installs with speed_reduction_ft=30, key="grappled"), missing target → 404 target_not_found, missing character_id → 400, feature_used broadcast carries `source: grapple-action` + target info.
+
+### Notes
+- **PATCH bump** — new endpoint + factory + 4 tests. No schema change.
+- **Why Grappled isn't built on Restrained.** RAW (PHB p.290): Grappled = "your speed becomes 0, and you can't benefit from any bonus to your speed. The condition ends if the grappler is incapacitated. The condition also ends if an effect removes the grappled creature from the reach of the grappler or grappling effect, such as when a creature is hurled away by the Thunderwave spell." NO attack-roll modifiers, NO save modifiers. Restrained on the other hand gives advantage to attackers + disadvantage on target's attacks + disadvantage on DEX saves — strictly stronger. Building Grapple on `_make_restrained_buff` would over-apply mechanical effects per RAW.
+- **Why I shipped without the auto-rolled contested check.** The /respond pipeline does single-roll vs DC saves; contested checks (both sides roll, higher wins) need a different framework. Filed: `/use_grapple` accepts optional `attacker_athletics_total` + `target_check_total` body fields; when both present, server compares and only installs the buff on grappler-win. Today the GM does the rolls via /roll and invokes /use_grapple when the grapple lands.
+- **Duration 10 rounds (1 minute) as v1 default.** RAW: indefinite until ended. The GM can /end_buff manually. A future Reactions-framework hook could end the buff when the grappler takes the Incapacitated condition.
+- **Where this fits in the speed-engine consumer count.** Lance of Lethargy (-10), Slow (half), Web (Restrained → 0), Hold Person (Paralyzed → 0), Hold Monster (Paralyzed → 0), Grapple (Grappled → 0). Six total. The factory pattern is now broadly reusable; the next conditions (Stunned, Petrified, Knocked Out) all fit the same shape with a new `_make_<condition>_buff` factory.
+- **Total harness count: 893** (was 889 in v2.99.111).
+
+---
+
 ## [2.99.111] - 2026-06-03 — "Slow Pulls Free" — extend the v2.99.110 repeated-save stamps to /cast_slow
 
 **Schema version:** 65

@@ -21462,6 +21462,105 @@ def _make_hold_person_paralyzed_buff(
     )
 
 
+_GRAPPLED_CORE_RAW_EFFECTS: list[str] = [
+    "Grappled: speed 0",
+    "Grappled: can't benefit from speed bonuses (Haste / Dash via Cunning Action / etc.)",
+    "Grappled: ends if grappler is incapacitated",
+    "Grappled: ends if moved out of grappler's reach (RAW: any effect that removes the target)",
+]
+
+
+def _make_grappled_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+    *,
+    source: str,
+    display_name: str,
+    icon: str,
+    duration_rounds: int,
+    concentration: bool,
+    source_specific_raw_effects: list[str] | None = None,
+) -> dict:
+    """v2.99.112 — canonical Grappled-condition buff factory.
+
+    Mirror of `_make_restrained_buff` (v2.99.106) and
+    `_make_paralyzed_buff` (v2.99.107) but for the Grappled
+    condition specifically. RAW distinction vs Restrained:
+      - Grappled has NO attack-roll modifiers (attackers don't gain
+        advantage; target's attacks aren't disadvantaged)
+      - Grappled has NO DEX-save disadvantage
+      - Grappled ends when grappler is incapacitated or moved out
+        of reach
+
+    Speed → 0 is the only mechanically-enforced effect (via
+    `effects.speed_reduction_ft = base` + the v2.99.98 engine).
+    Buff `key == "grappled"` so condition-aware code can look up
+    the condition; re-grappling from a different source REPLACES
+    the existing grappled buff (same dedupe semantics as
+    Restrained / Paralyzed).
+    """
+    try:
+        base = (
+            int(target_speed_walk) if target_speed_walk is not None else 30
+        )
+    except (TypeError, ValueError):
+        base = 30
+    reduction = max(0, base)
+    raw = list(_GRAPPLED_CORE_RAW_EFFECTS)
+    if source_specific_raw_effects:
+        raw.extend(source_specific_raw_effects)
+    return {
+        "key": "grappled",
+        "name": display_name,
+        "icon": icon,
+        "duration_rounds": duration_rounds,
+        "concentration": concentration,
+        "source": source,
+        "source_char_id": int(source_char_id) if source_char_id else None,
+        "source_char_name": source_char_name or "",
+        "effects": {"speed_reduction_ft": reduction},
+        "raw_effects": raw,
+    }
+
+
+def _make_grapple_action_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+) -> dict:
+    """v2.99.112 — Grapple action's Grappled buff. Thin wrapper
+    over `_make_grappled_buff`. RAW (PHB p.195): "If you're able to
+    make multiple attacks with the Attack action, this attack
+    replaces one of them. The target of your grapple must be no
+    more than one size larger than you ... Make a Strength
+    (Athletics) check contested by the target's Strength
+    (Athletics) or Dexterity (Acrobatics) check (the target chooses
+    the ability to use). You succeed automatically if the target is
+    incapacitated. If you succeed, you subject the target to the
+    grappled condition."
+
+    Duration is RAW-indefinite (until ended by an event). v1 uses
+    duration_rounds=10 (1 minute) as a reasonable default; the GM
+    can /end_buff manually for shorter grapples or extend via the
+    Reactions framework. Not a concentration spell.
+    """
+    return _make_grappled_buff(
+        target_speed_walk=target_speed_walk,
+        source_char_id=source_char_id,
+        source_char_name=source_char_name,
+        source="grapple-action",
+        display_name="Grappled",
+        icon="🤼",
+        duration_rounds=10,
+        concentration=False,
+        source_specific_raw_effects=[
+            "Escape: target uses an action to attempt STR (Athletics) or DEX (Acrobatics) vs grappler's STR (Athletics)",
+            "Drag: grappler moves target by spending equal movement (RAW: half speed)",
+        ],
+    )
+
+
 _RESTRAINED_CORE_RAW_EFFECTS: list[str] = [
     "Restrained: speed 0",
     "Restrained: attacks vs target have advantage (filed)",
@@ -30258,6 +30357,150 @@ async def cast_slow(
         "unaffected": unaffected,
         "duration_rounds": 10,
         "concentration": True,
+    }
+
+
+# ----------- API: Grapple action (PHB p.195) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_grapple")
+async def use_grapple(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.112 — Use the Grapple action on a target combatant.
+
+    Body: ``{character_id, target_combatant_id, override?}``.
+
+    RAW (PHB p.195): replace one attack with a STR (Athletics)
+    check contested by the target's STR (Athletics) or DEX
+    (Acrobatics) check (target chooses). Success → target Grappled.
+
+    v1 ships the mechanical install + audit broadcast. The
+    contested check itself is a v1 simplification — the GM
+    pre-decides the outcome via the standard /roll workflow and
+    invokes this endpoint when the grapple lands. A future commit
+    can add auto-rolled contested checks via /respond-style save
+    threading. The grapple action consumes the attacker's action
+    slot (overrideable).
+
+    Validation:
+      - character_id + target_combatant_id required
+      - target_combatant must exist in active battle
+      - action slot enforcement (overrideable per the standard
+        Phase 4 gate)
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+    override = bool(body.get("override"))
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Grappler not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target = _lookup_combatant(campaign_id, target_combatant_id)
+    if not target:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_found",
+            "target_combatant_id": target_combatant_id,
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "grapple",
+            "label": "Grapple",
+            "strict": strict,
+        })
+
+    # Pull the target's speed_walk for the buff math. Same falsy-
+    # zero guard as the spell endpoints.
+    _raw_speed = target.get("speed_walk")
+    try:
+        base_speed = int(_raw_speed) if _raw_speed is not None else 30
+    except (TypeError, ValueError):
+        base_speed = 30
+
+    buff = _make_grapple_action_buff(
+        target_speed_walk=base_speed,
+        source_char_id=char.id,
+        source_char_name=char.name,
+    )
+    installed = await _install_buff_on_combatant_id(
+        campaign_id, target_combatant_id, buff,
+    )
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    target_name = target.get("name") or "Target"
+    note = f"🤼 {char.name} grapples {target_name} (speed → 0)"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🤼 Grapple",
+            "feature_desc": (
+                f"{char.name} grapples {target_name}. "
+                f"Target is Grappled: speed 0, can't benefit from "
+                f"speed bonuses. Escape requires an action + STR "
+                f"(Athletics) or DEX (Acrobatics) vs grappler's "
+                f"STR (Athletics)."
+            ),
+            "source": "grapple-action",
+            "target_combatant_id": target_combatant_id,
+            "target_name": target_name,
+            "speed_reduction_ft": buff["effects"]["speed_reduction_ft"],
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    return {
+        "ok": True,
+        "grappler_character_id": char.id,
+        "grappler_name": char.name,
+        "target_combatant_id": target_combatant_id,
+        "target_name": target_name,
+        "base_speed_walk": base_speed,
+        "speed_reduction_ft": buff["effects"]["speed_reduction_ft"],
+        "installed": installed,
+        "duration_rounds": 10,
     }
 
 
