@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.118] - 2026-06-03 — "One Hit Breaks The Spell" — end-to-end regression: damage → failed CON save → cascade clears speed-spell targets
+
+**Schema version:** 65
+**Commit summary:** **Pure-regression commit: verify the third concentration drop path (damage → failed CON save → v2.99.109 anchor cascade) works end-to-end for the v2.99.101 speed spells.** The chain is already implemented across three places — `_maybe_concentration_save` (v2.19.1) rolls the CON save on damage, `_remove_buff` (v2.38.0 Phase T.3e) calls `_drop_paired_concentration_buffs` when the removed buff is concentration, and `_drop_paired_concentration_buffs` walks all combatants for `source_char_id == caster.id + concentration: True`. v2.99.109 wired the caster-side anchors. v2.99.118 confirms the full integration: cast Slow → damage Thalindra past the auto-fail threshold (DC = max(10, damage // 2) → impossible save) → Thalindra's `concentration-slow` anchor drops → cascade fires → Krieger's `slow` buff clears. No production code changes; just the verification test.
+**Description:** One edit. `tests/harness/test_concentration_on_damage_cascade.py` — single end-to-end test that casts Slow on Krieger, applies 100 damage to Thalindra via `PATCH /sheet-fields` with `hp_change_reason="damage"`, then asserts both the anchor + target buff are cleared.
+
+### Added
+- `tests/harness/test_concentration_on_damage_cascade.py` — 1 test: cast Slow, damage caster to 0 HP with 100 damage (DC 50 → impossible save), assert both `concentration-slow` (on Thalindra) and `slow` (on Krieger) are cleared.
+
+### Notes
+- **PATCH bump** — verification test only. No production code changes. The chain that the test exercises was already wired: v2.19.1 (CON save on damage) + v2.38.0 (paired-cleanup helper) + v2.99.109 (caster-side anchors). The test pins the integration so a future refactor can't silently break the cascade.
+- **Why 100 damage.** RAW: concentration save DC is `max(10, damage // 2)`. 100 damage → DC 50 → impossible to pass even with War Caster + perfect rolls. Forces the deterministic failure for the test.
+- **Three concentration drop paths now verified.** (1) Manual `/end_buff` on the anchor (v2.99.109 cascade tests). (2) Replaced by a new concentration cast (`_install_buff` v2.19.1 RAW swap → cascade). (3) Failed CON save on damage (v2.99.118 test). All three converge on the v2.38.0 helper that walks `source_char_id` + `concentration: True` matches.
+- **0 HP also auto-drops concentration.** v2.49.48: a creature at 0 HP automatically loses concentration (PHB p.203, independent of the save). The test drops Thalindra to 0 HP via the damage PATCH; the `forced_drop_on_zero_hp` branch in `_maybe_concentration_save` forces `passed=False` even if the save would have passed. So the test is doubly-robust: high damage AND 0 HP both force the drop.
+- **Total harness count: 922** (was 921 in v2.99.117).
+
+---
+
 ## [2.99.117] - 2026-06-03 — "One Twist Per Turn" — wire grappled buff into the v2.97.62 end-of-turn save framework
 
 **Schema version:** 65
