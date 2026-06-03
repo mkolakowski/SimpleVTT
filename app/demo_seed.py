@@ -1620,6 +1620,14 @@ def _warlock_sheet(name: str) -> dict:
             # filed (no map magic-aura layer in SimpleVTT today).
             {"slug": "eldritch-invocation-eldritch-sight", "name": "Eldritch Invocation: Eldritch Sight",
              "desc": "At will: cast Detect Magic without expending a spell slot — routed via /use_eldritch_sight per v2.99.138. Aura-on-map visualization is filed."},
+            # v2.99.141 — Ascendant Step: cast Levitate on self at
+            # will. RAW prereq is Lv 9 Warlock — Magnus is Lv 5 in
+            # the seed, but the demo seed grants the invocation for
+            # /use_ascendant_step coverage. Audit-only endpoint;
+            # vertical-position map plumbing is filed (SimpleVTT
+            # has no 2D-with-altitude layer today).
+            {"slug": "eldritch-invocation-ascendant-step", "name": "Eldritch Invocation: Ascendant Step",
+             "desc": "At will: cast Levitate on yourself without expending a spell slot — routed via /use_ascendant_step per v2.99.141. RAW prereq Lv 9 Warlock."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],

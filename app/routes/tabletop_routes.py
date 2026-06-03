@@ -10342,6 +10342,87 @@ async def use_eldritch_sight(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_ascendant_step")
+async def use_ascendant_step(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.141 — Ascendant Step (Warlock Lv 9+ invocation).
+
+    RAW (PHB p.110): "Prerequisite: 9th level. You can cast Levitate
+    on yourself at will, without expending a spell slot or material
+    components."
+
+    v1 ships the audit broadcast + invocation gate (mirror of
+    /use_eldritch_sight + /use_devils_sight). The full mechanical
+    effect (token-on-map vertical position, 20-ft altitude cap,
+    concentration up to 10 min) isn't modeled — SimpleVTT's map
+    layer is 2D, so vertical position is narrative. The endpoint
+    broadcasts the cast so the chat log records when the warlock
+    declares they're floating.
+
+    Body: ``{character_id}``.
+
+    Validation:
+      - Caller has `eldritch-invocation-ascendant-step` on feats
+      - 403 when not the GM and not the caster's owner
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_invocation(sheet, "ascendant-step"):
+        return JSONResponse(status_code=409, content={
+            "error": "missing_invocation",
+            "invocation": "ascendant-step",
+        })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🪶 Levitate (Ascendant Step)",
+            "feature_desc": (
+                f"{char.name} casts Levitate on themselves at will. "
+                f"Rises up to 20 ft for up to 10 minutes "
+                f"(concentration)."
+            ),
+            "source": "ascendant-step",
+            "altitude_ft": 20,
+            "duration_rounds": 100,  # 10 minutes at 6s/round
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "altitude_ft": 20,
+        "duration_rounds": 100,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,

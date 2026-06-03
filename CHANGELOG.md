@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.141] - 2026-06-03 — "Walking on Sky" — Ascendant Step (Warlock invocation) audit endpoint
+
+**Schema version:** 65
+**Commit summary:** **Ship Ascendant Step as a dedicated `/use_ascendant_step` endpoint that broadcasts a `feature_used` audit when a Warlock declares they're casting Levitate on themselves at will.** RAW (PHB p.110): "Prerequisite: 9th level. You can cast Levitate on yourself at will, without expending a spell slot or material components." v1 ships the audit + invocation gate only — SimpleVTT has no 2D-with-altitude map layer today, so the vertical-position plumbing (20-ft altitude cap, weight cap, line-of-effect changes) is filed. Mirror of v2.99.138 Eldritch Sight + v2.99.131 Devil's Sight. Magnus's seed gains the invocation on his feats list (RAW prereq is Lv 9, demo seed grants it at Lv 5 for endpoint coverage).
+**Description:** Three edits. (1) New `POST /api/campaign/{cid}/use_ascendant_step` endpoint. Validates `character_id`, caster ownership/GM, and the invocation via `_pc_has_eldritch_invocation(sheet, "ascendant-step")` (409 `missing_invocation`). On success, broadcasts `feature_used` with `source: "ascendant-step"`, `altitude_ft: 20`, `duration_rounds: 100` (10 minutes concentration at 6s/round). (2) `app/demo_seed.py` — Magnus's feats list gains `eldritch-invocation-ascendant-step`. (3) `tests/harness/test_use_ascendant_step.py` — 3 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_ascendant_step` endpoint.
+- `eldritch-invocation-ascendant-step` on Magnus's feats list.
+- `feature_used` broadcast with `source: "ascendant-step"`, `altitude_ft: 20`, `duration_rounds: 100`.
+- `tests/harness/test_use_ascendant_step.py` — 3 tests: happy path (Magnus → 200 + WS audit), missing invocation gate (Krieger → 409), missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + demo seed edit + 3 tests. No schema change.
+- **What's filed.** A 2D-with-altitude map layer that renders the levitating token's vertical offset. Today the endpoint emits the audit so the GM sees when Magnus declares the cast; rendering altitude on the map is a separate UI ship.
+- **Magnus's invocation roster.** Agonizing Blast, Hex Warrior, Mask of Many Faces, Repelling Blast, Lance of Lethargy, Lifedrinker, Devil's Sight, Mire the Mind, Eldritch Sight, and now Ascendant Step. That's 10 of the SRD's ~20 Eldritch Invocations — halfway through the list.
+- **Why Magnus has it at Lv 5.** RAW Ascendant Step requires Lv 9 Warlock. The demo seed grants the invocation regardless of his level for endpoint coverage; the endpoint itself doesn't gate on character level (consistent with the other audit-only invocation endpoints — the invocation-on-feats check IS the prereq enforcement, and the seed is responsible for handing it out correctly per character level in a real campaign).
+- **Total harness count: 993** (was 990 in v2.99.140).
+
+---
+
 ## [2.99.140] - 2026-06-03 — "The Switchboard" — Unified invocation-driven spell-cast router
 
 **Schema version:** 65
