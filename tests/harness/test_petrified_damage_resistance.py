@@ -133,12 +133,17 @@ async def test_all_resistance_halves_then_pin_engine(
                 f"target_resistance_applied={data.get('target_resistance_applied')}, "
                 f"damage_applied={data.get('damage_applied')}"
             )
-            # Warhammer base 1d8+3 = 4-11 (non-crit) / 5-19 (crit
-            # 2d8+3). Halved upper bound: 5 / 9. Pin to 9 to cover
-            # both, then cross-check via the is_crit flag.
-            upper = 9 if data.get("is_crit") else 5
+            # Tavik (Cleric Lv 8 Life Domain) hits with Warhammer
+            # AND triggers Divine Strike (+1d8 radiant) per v2.60.0.
+            # Total damage:
+            #   non-crit: 1d8+3 (4-11) + 1d8 (1-8) = 5-19 → halved 2-9
+            #   crit:     2d8+3 (5-19) + 2d8 (2-16) = 7-35 → halved 3-17
+            # Upper bound captures both branches. The crucial pin is
+            # `target_resistance_applied is True` (already asserted
+            # above); the damage assertion is a sanity ceiling.
+            upper = 17 if data.get("is_crit") else 9
             assert data["damage_applied"] <= upper, (
-                f"halved bludgeoning shouldn't exceed {upper} "
+                f"halved damage shouldn't exceed {upper} "
                 f"(crit={data.get('is_crit')}); "
                 f"got {data['damage_applied']}"
             )

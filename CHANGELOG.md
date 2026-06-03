@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.123] - 2026-06-03 — "Divine Strike Adds Up" — fix v2.99.121 test bound to account for Tavik's Divine Strike uplift
+
+**Schema version:** 65
+**Commit summary:** **Fix the v2.99.122 test bound — Tavik (Cleric Lv 8 Life Domain) adds Divine Strike (+1d8 radiant) on every weapon hit per v2.60.0, but the test bound only accounted for the Warhammer (1d8+3 bludgeoning). Total non-crit damage = 1d8+3 + 1d8 = 5-19 → halved 2-9. Crit = 2d8+3 + 2d8 = 7-35 → halved 3-17.** Test-only fix; the v2.99.121 production code is unchanged. The engine HAS been halving correctly across both damage components. Resistance also halves the radiant Divine Strike via the "all" wildcard, RAW-correctly.
+**Description:** Single-block edit in `tests/harness/test_petrified_damage_resistance.py`. Upper bound updated: non-crit 9, crit 17. Comment expanded to document the Divine Strike component.
+
+### Changed
+- Test upper bound now accounts for Tavik's Divine Strike: 9 (non-crit) / 17 (crit).
+
+### Notes
+- **PATCH bump** — second test fix. Production code unchanged across v2.99.121/.122/.123.
+- **Why this slipped past v2.99.122.** I corrected for the crit case but forgot that Tavik's attack triggers a second uplift (Divine Strike, +1d8 radiant) which adds to the total damage roll before resistance halves. Both halve correctly via the "all" wildcard since it doesn't gate on damage type. The fix just shifts the test bound to reflect the actual maximum.
+- **Lesson learned.** When testing damage halving with Tavik, account for every uplift his sheet enables (Divine Strike, Spiritual Weapon, Bless, etc.). A future helper test pattern could query the /attack response's `auto_uplifts` list and compute the upper bound dynamically — filed.
+- **Total harness count: 941** (unchanged from v2.99.121).
+
+---
+
 ## [2.99.122] - 2026-06-03 — "The Crit Slipped Past The Bound" — fix v2.99.121 test upper bound to allow for Warhammer crits
 
 **Schema version:** 65
