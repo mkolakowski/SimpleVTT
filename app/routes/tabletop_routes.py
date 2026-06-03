@@ -31843,6 +31843,235 @@ async def cast_hold_person(
     }
 
 
+# ----------- API: cast Flesh to Stone (6th-level Transmutation, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_flesh_to_stone")
+async def cast_flesh_to_stone(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.130 — Cast Flesh to Stone on a single target.
+
+    Body: ``{character_id, class_slug, slot_level, target_combatant_id,
+    stage?: "restrained" | "petrified", override?}``.
+
+    RAW (PHB p.243): L6 Transmutation, 1 action, 60 ft, concentration
+    up to 1 minute. CON save. On fail, target is Restrained as flesh
+    hardens; CON save at end of each turn — 3 successes end the
+    spell, 3 failures turn the target to stone (Petrified condition
+    for the duration). v1 simplification: the endpoint takes a
+    ``stage`` flag and installs ONE buff (Restrained OR Petrified)
+    based on the caller's decision. The full staged 3-strikes flow
+    requires a save-counter hook in the v2.97.62 framework — filed.
+    GMs resolve the staged transitions manually today: cast with
+    ``stage="restrained"``, then once 3 fails accumulate via
+    `/use_repeated_save`, /end_buff the restrained and re-cast with
+    ``stage="petrified"`` (no slot cost: pass ``override: true``).
+
+    Classes: Wizard, Sorcerer (the v6.E version also exists for the
+    Cleric Forge Domain at higher levels — out of scope today).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 6
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+    stage = (body.get("stage") or "restrained").strip().lower()
+    override = bool(body.get("override"))
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("wizard", "sorcerer"):
+        raise HTTPException(400, "class_slug must be wizard or sorcerer")
+    if slot_level < 6:
+        raise HTTPException(
+            400, "slot_level must be >= 6 (Flesh to Stone is L6)",
+        )
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+    if stage not in ("restrained", "petrified"):
+        raise HTTPException(
+            400, 'stage must be "restrained" or "petrified"',
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    spells = list(sheet.get("spells") or [])
+    has_fts = any(
+        (s.get("_slug") == "flesh-to-stone") or
+        (str(s.get("name", "")).lower() == "flesh to stone")
+        for s in spells
+    )
+    if not has_fts:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "flesh-to-stone",
+        })
+
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Flesh to Stone",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "flesh-to-stone",
+            "label": "Flesh to Stone",
+            "strict": strict,
+        })
+
+    # Resolve target.
+    target = _lookup_combatant(campaign_id, target_combatant_id)
+    if not target:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_found",
+            "target_combatant_id": target_combatant_id,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Caster-side concentration anchor.
+    await _install_caster_concentration_anchor(
+        campaign_id, char, "flesh-to-stone", "Flesh to Stone",
+        duration_rounds=10, icon="🗿",
+    )
+
+    # Target speed + DC.
+    _raw_speed = target.get("speed_walk")
+    try:
+        base_speed = int(_raw_speed) if _raw_speed is not None else 30
+    except (TypeError, ValueError):
+        base_speed = 30
+    dc = _compute_spell_save_dc_from_sheet(sheet)
+
+    if stage == "restrained":
+        buff = _make_restrained_buff(
+            target_speed_walk=base_speed,
+            source_char_id=char.id,
+            source_char_name=char.name,
+            source="flesh-to-stone-spell",
+            display_name="Restrained (Flesh to Stone)",
+            icon="🪨",
+            duration_rounds=10,
+            concentration=True,
+            source_specific_raw_effects=[
+                "Stage 1 of Flesh to Stone — flesh hardening",
+                "CON save at end of each turn; 3 successes end, "
+                "3 fails → Petrified",
+            ],
+            repeated_save_ability="CON",
+            repeated_save_dc=dc,
+        )
+    else:  # stage == "petrified"
+        buff = _make_flesh_to_stone_petrified_buff(
+            target_speed_walk=base_speed,
+            source_char_id=char.id,
+            source_char_name=char.name,
+            spell_save_dc=dc,
+        )
+
+    installed = await _install_buff_on_combatant_id(
+        campaign_id, target_combatant_id, buff,
+    )
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    target_name = target.get("name") or "Target"
+    note = (
+        f"🪨 {char.name} casts Flesh to Stone on {target_name} "
+        f"(stage={stage}, DC {dc})"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "target_combatant_id": target_combatant_id,
+        "target_name": target_name,
+        "stage": stage,
+        "save_dc": dc,
+        "installed": installed,
+        "duration_rounds": 10,
+        "concentration": True,
+    }
+
+
 # ----------- API: cast Hold Monster (5th-level Enchantment, concentration) -----------
 
 @router.post("/api/campaign/{campaign_id}/cast_hold_monster")

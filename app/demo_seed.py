@@ -483,6 +483,16 @@ def _wizard_sheet(name: str) -> dict:
             {"name": "Hold Monster", "level": 5, "prepared": True, "_slug": "hold-monster",
              "casting_time": "1 action", "save_ability": "WIS",
              "desc": "90 ft, concentration up to 1 min, WIS save DC 14. Any creature except Undead. Paralyzed. 1 target at L5; +1 per upcast level."},
+            # v2.99.130 — Flesh to Stone. L6 Transmutation,
+            # concentration up to 1 min, CON save. Descriptive at
+            # Thalindra Lv 7 (no L6 slot stock); the test fixture
+            # PATCHes a L6 slot to exercise the endpoint. Routes via
+            # /cast_flesh_to_stone with stage="restrained" (initial
+            # hardening) or stage="petrified" (after 3 fails — GM
+            # decides). 3-strikes save tracking is filed.
+            {"name": "Flesh to Stone", "level": 6, "prepared": True, "_slug": "flesh-to-stone",
+             "casting_time": "1 action", "save_ability": "CON",
+             "desc": "60 ft, concentration up to 1 min, CON save DC 14. On fail: Restrained as flesh hardens. CON save at end of each turn — 3 fails → Petrified for the duration (full minute = permanent). 3 successes end the spell."},
             {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball", "casting_time": "1 action"},
             # v2.46.0 T.7a — Lightning Bolt exercises the line-shape
             # AoE picker (100 ft × 5 ft from the caster). Sits AFTER

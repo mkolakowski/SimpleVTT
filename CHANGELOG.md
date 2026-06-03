@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.130] - 2026-06-03 — "Sculpting a Statue" — /cast_flesh_to_stone endpoint with staged Restrained → Petrified body flag
+
+**Schema function:** 65
+**Commit summary:** **Ship `/cast_flesh_to_stone` as the real cast path for the now-RAW-complete v2.99.119 Petrified factory.** L6 Transmutation, concentration up to 1 minute, CON save. Wizard / Sorcerer. v1 simplification: body takes a `stage: "restrained" | "petrified"` flag and installs the corresponding buff. The full RAW 3-strikes flow (3 CON save successes end / 3 fails Petrify) requires a strike-counter hook in the v2.97.62 framework — filed. GMs resolve the staged transition manually: cast with `stage="restrained"`, monitor the framework's auto-fired CON saves via /use_repeated_save, then /end_buff + re-cast with `stage="petrified"` (with `override: true` so the second cast doesn't consume another L6 slot) when 3 fails accumulate.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `POST /api/campaign/{cid}/cast_flesh_to_stone` endpoint mirroring `/cast_hold_person`'s validation shape (class membership for wizard/sorcerer, spell on list, L6+ slot, action gate). Resolves the target, decrements the slot, installs the caster-side concentration anchor via v2.99.109 `_install_caster_concentration_anchor`, then installs the buff: `stage="restrained"` calls `_make_restrained_buff` directly with FtS-specific args (source="flesh-to-stone-spell", icon="🪨", `repeated_save_ability="CON"` + DC); `stage="petrified"` calls `_make_flesh_to_stone_petrified_buff` (v2.99.119 wrapper). (2) `app/demo_seed.py` — adds Flesh to Stone to Thalindra's spell list right after Hold Monster. (3) `tests/harness/test_cast_flesh_to_stone.py` — 6 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/cast_flesh_to_stone` endpoint.
+- "Flesh to Stone" entry on Thalindra's spell list (slug `flesh-to-stone`, level 6, save_ability CON).
+- `tests/harness/test_cast_flesh_to_stone.py` — 6 tests: happy stage=restrained, happy stage=petrified, wrong class (cleric → 400), wrong slot (L5 → 400), bad stage value → 400, missing target → 404.
+
+### Notes
+- **PATCH bump** — new endpoint + demo edit + 6 tests. No schema change.
+- **Why the staged transition isn't auto-handled.** RAW Flesh to Stone tracks strike counts (3 successes vs 3 fails) on the target across multiple turns. The v2.97.62 framework auto-fires the CON save at end of each turn but doesn't track an outcome counter or trigger a "swap buff" action on the 3rd matching result. Wiring that requires: (a) install-time stamp on the buff for the success/fail counters; (b) a post-save hook in `_resolve_repeated_save_for_buff` that increments + checks the counter; (c) buff replacement logic on the 3rd fail (drop Restrained + install Petrified) or end-of-spell on the 3rd success (drop Restrained, leave caster's concentration intact for now or also drop it). v1 ships the stage flag as the GM-driven path and files the auto-counter.
+- **Why both stages use the same /cast_flesh_to_stone endpoint.** Single endpoint + `stage` flag keeps the spell name + caster + slot semantics consistent. A future GM UI can render the staged transition as a button click ("3 fails accumulated → Petrify Krieger") that posts to the same endpoint with `stage="petrified"` + `override: true`.
+- **Why the concentration anchor uses 10-round duration.** Matches the RAW 1-minute concentration duration. The same anchor remains attached whether the target is in stage 1 (Restrained) or stage 2 (Petrified) — dropping the caster's concentration cascades to clear both buffs via the v2.99.109 anchor cascade.
+- **Symmetry with the v2.99.107/.108 Hold spell pattern.** /cast_hold_person installs Paralyzed directly (no staged progression); /cast_hold_monster does the same. /cast_flesh_to_stone adds the optional `stage` discriminator since the spell has a real 2-stage RAW progression.
+- **Future filed.** (1) Strike counter on the buff + auto-transition on 3 fails. (2) "Permanent" Petrified after a full minute of caster concentration (RAW). (3) Upcast — Flesh to Stone has no upcast bonus per RAW; the endpoint validates `slot_level >= 6` but doesn't gate on upcast structure. (4) Range check (60 ft — not enforced today; filed alongside other spell range checks).
+- **Total harness count: 963** (was 957 in v2.99.129).
+
+---
+
 ## [2.99.129] - 2026-06-03 — "Stone Doesn't Sicken" — stamp Poisoned condition immunity on the Petrified buff
 
 **Schema version:** 65
