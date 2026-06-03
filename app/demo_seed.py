@@ -1522,6 +1522,12 @@ def _warlock_sheet(name: str) -> dict:
              "desc": "When you cast Eldritch Blast, add your Charisma modifier to the damage of each beam it deals."},
             {"slug": "eldritch-invocation-devils-sight", "name": "Eldritch Invocation: Devil's Sight",
              "desc": "You can see normally in darkness, both magical and nonmagical, to a distance of 120 feet."},
+            # v2.99.90 — Repelling Blast: on a successful Eldritch
+            # Blast hit, push the target up to 10 ft away in a
+            # straight line. Wired server-side via
+            # _apply_repelling_blast_push at /attack time.
+            {"slug": "eldritch-invocation-repelling-blast", "name": "Eldritch Invocation: Repelling Blast",
+             "desc": "When you hit a creature with Eldritch Blast, you can push the creature up to 10 ft away in a straight line — auto-applied at /attack time per v2.99.90."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],

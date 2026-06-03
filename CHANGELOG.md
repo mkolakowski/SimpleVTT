@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.90] - 2026-06-03 — "Push Past the Pact" — Repelling Blast (Warlock invocation) pushes targets 10 ft
+
+**Schema version:** 65
+**Commit summary:** **Wire the Repelling Blast Eldritch Invocation so a successful Eldritch Blast hit auto-pushes the target token 10 ft away in a straight line.** Builds on the v2.99.89 invocation framework. New `_apply_repelling_blast_push` helper runs at /attack time after the hit + damage-application path: when the attacker has the invocation, the attack is Eldritch Blast, the target was hit, and the target isn't dead, the helper computes the push vector (target − caster, normalized, scaled to 2 cells), snaps to grid, mutates the target token's x/y in the DB, and broadcasts `token_move` + `feature_used(source=repelling-blast)`. v1 makes the push automatic (the optional-decision UI is filed for follow-up). Magnus's demo fixture gets the invocation on his feats list.
+**Description:** New `_apply_repelling_blast_push(db, campaign_id, campaign, attacker_char_id, attacker_sheet, attack, target_combatant)` async helper. Five gates short-circuit: (1) attack name doesn't contain "eldritch blast", (2) sheet doesn't have the Repelling Blast invocation on its feats list, (3) no target_combatant supplied, (4) no active map / no grid_size_px, (5) caster or target token can't be found on the active map. On all-pass: computes the push vector from caster→target (Euclidean normalize), scales to `2 cells × grid_size_px`, snaps to nearest grid cell, commits the new position via direct ORM update, broadcasts `token_move` carrying from/to positions + distance_ft, and returns a summary dict for the caller's audit broadcast. The /attack wire-in at the post-hit/post-damage site invokes the helper inside a `try/except` so a push failure doesn't unwind the attack itself; on success, fires the `feature_used(source=repelling-blast)` audit broadcast. Magnus's demo `feats` list gains the `eldritch-invocation-repelling-blast` entry; `_SHEET_PATCH_KEYS` gets `"feats"` allowlisted so harness tests can inject invocations into other PCs.
+
+### Added
+- `_apply_repelling_blast_push(...)` async helper in `app/routes/tabletop_routes.py`. Pure side-effect function that mutates the target token's position + broadcasts.
+- Wire-in at `/attack` inside the post-damage block. Fires the helper + the `feature_used(source=repelling-blast)` audit broadcast on success. Wrapped in try/except so push failures don't unwind the attack.
+- `feature_used(source="repelling-blast")` broadcast carrying `from_x`, `from_y`, `to_x`, `to_y`, `distance_ft`, `target_name` so the chat log shows "💨 Repelling Blast — Magnus pushes Krieger ~10 ft in a straight line."
+- `eldritch-invocation-repelling-blast` entry on Magnus's `feats` list in the demo seed.
+- `"feats"` on the `_SHEET_PATCH_KEYS` allowlist so harness tests can PATCH Eldritch Invocations into non-Magnus PCs (e.g. a non-Warlock validation) without rebuilding the sheet.
+- `tests/harness/test_repelling_blast.py` — 2 regression tests: happy path (Magnus + Krieger placed 5 ft apart, Eldritch Blast hits, Krieger's token moves 10 ft east + feature_used fires) and the name gate (Quarterstaff doesn't trigger the push).
+
+### Notes
+- **PATCH bump** — additive helper + a single attack-path block + a demo seed edit + an allowlist entry. No schema change. The push is opt-in via the invocation; sheets without it pass through unchanged.
+- **Why automatic v1 instead of optional.** RAW says "you can push," implying a choice. Adding a per-hit UI confirm modal would require extending the attack chat-card with a click-to-push button (or a popup like the v2.99.55 OA prompt). v1 ships the mechanical effect with the optional UI filed; tables that want strict opt-in can disable the invocation on the sheet via a feat edit.
+- **Push direction handling.** The helper uses Euclidean normalize on the caster→target vector. For a target ON TOP of the caster (length ≤ 0.001), it returns None (RAW indeterminate). For a target adjacent in any direction, the push slides along that axis to the next 10 ft step.
+- **Grid snap.** The push lands at the nearest grid cell after the 10 ft offset — keeps tokens aligned to the grid lines (no off-cell drift from repeated pushes). On a hex grid the helper still uses Euclidean direction; hex-aligned snapping is filed for the next hex-grid touch-up.
+- **What if the target hits a wall / obstacle.** Server doesn't gate on obstacles (no wall geometry tracked yet — same as token drag). The push commits to the computed cell even if a wall would block it; the GM can manually adjust afterward. Wall integration is filed under the broader line-of-sight / wall-geometry roadmap.
+- **Filed follow-ups.** Optional-push UI (per-hit confirm); hex grid-aligned push; multi-target Eldritch Blast push (RAW: each beam can push separately if the invocation is on a per-beam basis); interaction with Repelling Blast + Lance of Lethargy (which slows the target — filed as a paired ship).
+- **Total harness count: 813** (was 811 in v2.99.89).
+
+---
+
 ## [2.99.89] - 2026-06-03 — "Eldritch Sting" — Agonizing Blast (Warlock invocation) auto-applies CHA mod
 
 **Schema version:** 65

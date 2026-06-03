@@ -20827,6 +20827,120 @@ def _pc_agonizing_blast_bonus(sheet: dict, attack: dict) -> int:
         return 0
 
 
+async def _apply_repelling_blast_push(
+    db: Session, campaign_id: int, campaign: "Campaign",
+    attacker_char_id: int, attacker_sheet: dict,
+    attack: dict, target_combatant: dict | None,
+) -> dict | None:
+    """v2.99.90 — Repelling Blast invocation (Warlock Lv 2+, PHB
+    p.111): "When you hit a creature with Eldritch Blast, you can
+    push the creature up to 10 feet away from you in a straight
+    line."
+
+    Wired into /attack right after the hit is determined. v1 makes
+    the push automatic on a successful Eldritch Blast hit (the
+    optional-decision UI is filed for follow-up).
+
+    Returns a summary dict ``{from_x, from_y, to_x, to_y, distance_ft,
+    target_name}`` on a successful push, or ``None`` when the gates
+    fail (wrong attack, no invocation, no map, no token).
+    """
+    # Gate 1: attack must be Eldritch Blast.
+    if not _attack_is_eldritch_blast(attack):
+        return None
+    # Gate 2: attacker must have the invocation.
+    if not _pc_has_eldritch_invocation(attacker_sheet, "repelling-blast"):
+        return None
+    # Gate 3: target must be a combatant (no push for an unkown
+    # target — RAW the spell affects "a creature you can see").
+    if not target_combatant:
+        return None
+    if not campaign or not campaign.active_map_id:
+        return None
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        return None
+    grid_size_px = int(map_row.grid_size_px)
+    # Find the caster's token on the active map.
+    caster_token = db.query(Token).filter(
+        Token.character_id == int(attacker_char_id),
+        Token.map_id == map_row.id,
+    ).first()
+    if caster_token is None:
+        return None
+    # Find the target's token: source_token_id → char_id → template+label.
+    target_token = None
+    _src = target_combatant.get("source_token_id")
+    if _src:
+        target_token = db.query(Token).filter(
+            Token.id == int(_src), Token.map_id == map_row.id,
+        ).first()
+    if target_token is None and target_combatant.get("char_id"):
+        target_token = db.query(Token).filter(
+            Token.character_id == int(target_combatant["char_id"]),
+            Token.map_id == map_row.id,
+        ).first()
+    if target_token is None and target_combatant.get("token_template_id") and target_combatant.get("name"):
+        target_token = db.query(Token).filter(
+            Token.token_template_id == int(target_combatant["token_template_id"]),
+            Token.label == target_combatant["name"],
+            Token.map_id == map_row.id,
+        ).first()
+    if target_token is None:
+        return None
+    # Push vector: from caster to target, normalized, scaled to 10 ft.
+    cx = float(caster_token.x or 0)
+    cy = float(caster_token.y or 0)
+    tx = float(target_token.x or 0)
+    ty = float(target_token.y or 0)
+    dx = tx - cx
+    dy = ty - cy
+    import math as _math
+    length = _math.sqrt(dx * dx + dy * dy)
+    if length <= 0.001:
+        # Target is on top of the caster — RAW indeterminate
+        # direction. v1: skip the push.
+        return None
+    # Normalize + scale by 10 ft (2 grid cells). Snap to nearest
+    # grid cell for a clean post-push position.
+    push_cells = 2  # 10 ft = 2 cells on a 5-ft grid
+    nx = dx / length
+    ny = dy / length
+    raw_new_x = tx + nx * (push_cells * grid_size_px)
+    raw_new_y = ty + ny * (push_cells * grid_size_px)
+    new_x = round(raw_new_x / grid_size_px) * grid_size_px
+    new_y = round(raw_new_y / grid_size_px) * grid_size_px
+    # Commit + broadcast.
+    from_x = tx
+    from_y = ty
+    target_token.x = new_x
+    target_token.y = new_y
+    db.commit()
+    # Distance in feet (Chebyshev-style for square grid).
+    distance_ft = _distance_ft_between_points(
+        grid_size_px,
+        (map_row.grid_type.value if map_row.grid_type else "square").lower(),
+        from_x, from_y, new_x, new_y,
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "token_move",
+        "data": {
+            "id": target_token.id,
+            "x": new_x, "y": new_y,
+            "from_x": from_x, "from_y": from_y,
+            "distance_ft": distance_ft,
+            "character_id": target_token.character_id,
+            "token_template_id": target_token.token_template_id,
+        },
+    })
+    return {
+        "from_x": from_x, "from_y": from_y,
+        "to_x": new_x, "to_y": new_y,
+        "distance_ft": distance_ft,
+        "target_name": target_combatant.get("name") or "Target",
+    }
+
+
 def _attack_is_off_hand(attack: dict) -> bool:
     """v2.99.87 — does this attack represent an off-hand attack in
     a two-weapon-fighting routine? Reads the explicit
@@ -31793,6 +31907,47 @@ async def use_attack(
             target_dying = apply_result["is_dying"]
             target_dead = apply_result["is_dead"]
 
+        # v2.99.90 — Repelling Blast invocation. On a successful
+        # Eldritch Blast hit, push the target up to 10 ft away in
+        # a straight line. RAW says "you can push" (optional); v1
+        # makes it automatic (the optional-decision UI is filed
+        # for follow-up). Skipped on dead targets (they're no
+        # longer threats to push).
+        if hit and not target_dead:
+            try:
+                push_result = await _apply_repelling_blast_push(
+                    db, campaign_id, campaign,
+                    char.id, sheet, attack, target_combatant,
+                )
+                if push_result is not None:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "feature_name": "💨 Repelling Blast",
+                            "feature_desc": (
+                                f"{char.name} pushes "
+                                f"{push_result['target_name']} "
+                                f"~{int(push_result['distance_ft'])} ft "
+                                f"in a straight line."
+                            ),
+                            "source": "repelling-blast",
+                            "from_x": push_result["from_x"],
+                            "from_y": push_result["from_y"],
+                            "to_x": push_result["to_x"],
+                            "to_y": push_result["to_y"],
+                            "distance_ft": push_result["distance_ft"],
+                            "target_name": push_result["target_name"],
+                        },
+                    })
+            except Exception:
+                # Fire-and-forget — a failed push shouldn't unwind
+                # the attack roll itself.
+                logging.exception(
+                    "Repelling Blast push failed for char_id=%s", char.id,
+                )
+
     # v2.49.85 — multi-target loop. The PRIMARY target (target #0) was
     # just resolved above; collect its outcome here, then iterate the
     # remaining targets with FRESH attack + damage rolls per RAW (each
@@ -36478,6 +36633,10 @@ _SHEET_PATCH_KEYS = {
     # the Two-Weapon Fighting flag, etc.) without rebuilding the
     # entire sheet. Restore-in-finally discipline applies.
     "attacks",
+    # v2.99.90 — feats list. Allowlisted for harness tests that
+    # need to inject an Eldritch Invocation (Repelling Blast etc.)
+    # without depending on a fresh demo reseed. Restore-in-finally.
+    "feats",
     # v2.99.46 — spell_slots nested {class_slug: {lvl: {total, used,
     # reset}}}. Primarily for capstone harness tests that need to
     # drain a fixture PC's slots to exercise restore endpoints
