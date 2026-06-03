@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.95] - 2026-06-03 — "The Quiet Plus One" — Defense Fighting Style + auto-AC engine hook
+
+**Schema version:** 65
+**Commit summary:** **Wire Defense Fighting Style so a PC with `fighting_style="defense"` AND an equipped armor item gets +1 to AC at hit-determination time.** Extends the auto-AC engine that already lives in `_read_target_ac` — the function /attack uses to read the target's AC — by adding a third addend alongside the existing base AC and buff `ac_bonus` sum. Two new helpers: `_pc_is_wearing_armor(sheet)` scans `sheet.inventory[]` for an entry with `type=="armor"` and `equipped is True`; `_pc_defense_ac_bonus(sheet)` returns +1 when both gates pass (style match + armor worn). Unarmored Defense builds (Monk, Barbarian, draconic Sorcerer) fail the armor gate by design — RAW: Defense requires actually wearing armor, not just having a high AC. No demo PC carries the style by default; Garrik (Fighter Lv 6, chain mail equipped, stock fighting_style="great_weapon") is the test subject — PATCH him to "defense" and target_ac jumps from 18 to 19.
+**Description:** Three small edits in `app/routes/tabletop_routes.py`. The two new helpers sit alongside the existing fighting-style helpers (`_pc_archery_bonus`, `_pc_dueling_bonus`, etc.) and follow the same shape — pure functions over the sheet that return an int (0 or +1) so the call site stays one line. `_read_target_ac` is refactored to capture the resolved PC sheet into a local `char_sheet` variable (was previously only read inside the `if char` block), then the new bonus is added in the same return statement that already sums `base_ac + buff_ac_bonus`. The refactor doesn't change the AC value for any pre-v2.99.95 path: when `fighting_style` is unset or armor isn't equipped, the helper returns 0 and the line collapses to the prior behavior. Stacks correctly with the v2.97.39 Shield of Faith / Mage Armor `ac_bonus` buff system — Defense's +1 sums in alongside, not instead of.
+
+### Added
+- `_pc_is_wearing_armor(sheet) -> bool` — scans inventory for any equipped armor item. Shield-only doesn't count (per RAW: Defense gates on "wearing armor", not "armored AC").
+- `_pc_defense_ac_bonus(sheet) -> int` — returns +1 when fighting_style + armor gates both pass; else 0.
+- A single `+ _pc_defense_ac_bonus(char_sheet)` term in `_read_target_ac`'s return statement, alongside the existing `+ buff_ac_bonus`.
+- `tests/harness/test_defense_fighting_style.py` — 3 regression tests: happy (PATCH Garrik to "defense", target_ac = 19 = 18 + 1), control (stock "great_weapon", target_ac = 18 exact), unarmored gate (Kael Brightleaf Monk with Unarmored Defense → PATCH to "defense" but no armor worn → AC stays at 16).
+
+### Changed
+- `_read_target_ac` now captures the PC's sheet into a local `char_sheet` dict (defaulting to `{}` when the combatant is an NPC or the char lookup misses). The helper then reads `char_sheet` rather than recomputing `char.sheet or {}` inline. Functionally identical for NPC paths (still falls through with no Defense bonus); shorter for the PC path.
+
+### Notes
+- **PATCH bump** — additive helpers + a single `+ helper()` term in the AC return. No schema change, no API contract change. No demo edit required (no PC defaults to Defense; the test PATCHes Garrik).
+- **Why gate on equipped armor and not just "AC value."** RAW: "While you are wearing armor, you gain a +1 bonus to AC." Unarmored Defense (Monk: `10 + DEX + WIS`; Barbarian: `10 + DEX + CON`; draconic Sorcerer: `13 + DEX`) doesn't count as "wearing armor" by RAW — the Sage Advice Compendium confirms. The helper checks the actual inventory state so a Monk multi-classed into Fighter and picking Defense doesn't get the bonus while in their Monk stance. If the player wants the bonus, they have to equip armor (and lose Unarmored Defense for the round per Monk's own gate).
+- **Stacks with buff `ac_bonus`.** A Garrik with Defense + Shield of Faith reads as base 18 + buff +2 + Defense +1 = 21. Both addends are independent — the helper doesn't care what other AC modifiers are stacked.
+- **No NPC path.** NPCs (token-template combatants) flow through the `else` branch in `_read_target_ac` where `char_sheet` stays `{}`. The helper short-circuits on `fighting_style != "defense"` immediately. A future homebrew NPC with a `fighting_style` field on its sheet WOULD pick up the bonus through this same code path — the helper is sheet-shape-driven, not character-type-driven.
+- **Why `_pc_is_wearing_armor` doesn't check `armor_type`.** Light, medium, and heavy armor all qualify by RAW. The helper just checks for `type=="armor"` + `equipped`. Future extensions (e.g. Heavy Armor Master, Medium Armor Master) can read `armor_type` from the same inventory entries — the structure is already there.
+- **Defense + shield.** A shield is `type=="shield"`, not `type=="armor"`. So a fighter wielding only a shield (no body armor) doesn't qualify for Defense — consistent with RAW. With armor + shield (Garrik's setup), the +1 fires.
+- **Total harness count: 829** (was 826 in v2.99.94).
+
+---
+
 ## [2.99.94] - 2026-06-03 — "Strike at Every Altar" — Divine Strike for the other seven domains
 
 **Schema version:** 65

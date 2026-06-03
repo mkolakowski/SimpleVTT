@@ -5001,11 +5001,13 @@ def _read_target_ac(
     if not combatant:
         return 10
     base_ac = 10
+    char_sheet: dict = {}
     char_id = combatant.get("char_id")
     if char_id:
         char = db.query(Character).filter(Character.id == char_id).first()
         if char:
-            ac = (char.sheet or {}).get("ac")
+            char_sheet = char.sheet or {}
+            ac = char_sheet.get("ac")
             try:
                 base_ac = int(ac) if ac is not None else 10
             except (TypeError, ValueError):
@@ -5041,7 +5043,10 @@ def _read_target_ac(
             buff_ac_bonus += int(effects.get("ac_bonus") or 0)
         except (TypeError, ValueError):
             pass
-    return base_ac + buff_ac_bonus
+    # v2.99.95 — Fighting Style: Defense (+1 AC when wearing armor).
+    # Only applies to PC combatants — NPC templates don't carry a
+    # fighting_style. Stacks with buff ac_bonus (Shield of Faith etc.).
+    return base_ac + buff_ac_bonus + _pc_defense_ac_bonus(char_sheet)
 
 
 def _pick_damage_tier(scaling: list | None, level: int) -> dict | None:
@@ -21135,6 +21140,42 @@ def _two_weapon_fighting_ability_mod(sheet: dict, attack: dict) -> int:
         return (int(score) - 10) // 2
     except (TypeError, ValueError):
         return 0
+
+
+def _pc_is_wearing_armor(sheet: dict) -> bool:
+    """v2.99.95 — does the sheet show any equipped armor? Scans
+    ``sheet.inventory[]`` for ``type == "armor"`` AND
+    ``equipped is True``. A shield alone doesn't count (RAW: Defense
+    Fighting Style is "while you are wearing armor"; a shield is not
+    armor). Unarmored Defense builds (Monk, Barbarian, draconic
+    Sorcerer) return False here even though their AC is high — the
+    Defense bonus is gated on actually wearing an armor item.
+    """
+    if not sheet:
+        return False
+    inv = sheet.get("inventory") or []
+    if not isinstance(inv, list):
+        return False
+    for it in inv:
+        if not isinstance(it, dict):
+            continue
+        if (it.get("type") or "").strip().lower() != "armor":
+            continue
+        if it.get("equipped") is True:
+            return True
+    return False
+
+
+def _pc_defense_ac_bonus(sheet: dict) -> int:
+    """v2.99.95 — Fighting Style: Defense returns +1 to AC when the
+    sheet has ``fighting_style == "defense"`` AND an equipped armor
+    item. Both gates apply: no armor → no bonus (RAW); no style → no
+    bonus. Returns 0 otherwise. Wired into ``_read_target_ac``'s
+    auto-AC engine alongside the existing buff ``ac_bonus`` sum.
+    """
+    if _pc_fighting_style(sheet) != "defense":
+        return 0
+    return 1 if _pc_is_wearing_armor(sheet) else 0
 
 
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
