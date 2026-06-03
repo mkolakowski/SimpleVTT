@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.76] - 2026-06-03 — "Trail Restored" — robust active-combatant match for the movement breadcrumb + don't stomp NPC speed_walk
+
+**Schema version:** 65
+**Commit summary:** **Fix the visual movement breadcrumb (the v2.8.1 green/red path drawn on the canvas while the active combatant moves) regressing after recent OA-flow ships.** User report: "looks like the visual distance tracker is no longer working." Two layered fixes: (1) The token_move WS handler used strict identity equality (`target === activeCombatant`) to gate the path-append; any future code path that rebuilds `battle` via a full-state swap (battle_update broadcast, localStorage rehydrate) returns a fresh combatant reference and the identity check fails — path never appends, canvas stays blank. v2.99.76 broadens the check to id-or-source_token_id match so the breadcrumb survives rebinds. Also adds an explicit `_updateMovementBreadcrumb()` call right after the path append (before `renderBattle()`) so the canvas refresh isn't gated on the downstream render chain succeeding. (2) The v2.99.67 client-side `_healCombatantSpeedWalk` over-eagerly stomped the server-healed `speed_walk` back to 30 for monster_slug-pointer NPCs (whose raw `tmpl.sheet` doesn't carry a direct `speed` field — the canonical value lives in the `_monster_template_to_sheet` server projection on `combatant.speed_walk` after the v2.99.65 Load heal). v2.99.76 only trusts the client projection when the raw sheet has a usable direct speed; otherwise leaves the server's value alone. Plus a diagnostic `[breadcrumb] no target for token_move` console.log when the WS handler can't find the combatant for the moved token, so future regressions show up immediately in DevTools.
+**Description:** Single-file change in `app/templates/tabletop.html`. (1) `token_move` WS handler (~7700): replace `target === activeCombatant` strict-equality with a three-way check (`identity || matching .id || matching .source_token_id`) wrapped in a `targetIsActive` flag. Add explicit `_updateMovementBreadcrumb()` call after the path append so canvas refresh runs even if `renderBattle` is short-circuited. Add a `console.log('[breadcrumb] no target ...')` diagnostic on the lookup-miss return path. (2) `_healCombatantSpeedWalk` (~6195): split the trust check into `canTrustClientProjection` — true for PC sheets (always carry direct speed) and for NPC templates whose raw sheet has a usable direct `speed` int or `{walk: n}` dict. False for monster_slug-pointer templates whose canonical speed only materializes after the server's `_monster_template_to_sheet` projection. The latter case now no-ops, leaving the v2.99.65 server heal untouched.
+
+### Fixed
+- Movement breadcrumb (canvas green/red path drawn on the active combatant's moves) now updates on every drag. Pre-v2.99.76 identity churn from a `battle_update` rebind, a localStorage rehydrate, or any code path that touched the active combatant could break the `target === activeCombatant` check and the path-append branch silently skipped.
+- v2.99.67 client-side speed_walk heal no longer stomps the server's healed value for monster_slug-pointer NPCs (Vex, Grixxa, demo bandits, Hill Giant template, etc.). Pre-v2.99.76 every render reset the Mov-chip cap to 30 regardless of the monster's real speed.
+
+### Added
+- Diagnostic `console.log('[breadcrumb] no target for token_move', ...)` in the WS handler's miss path so the user can see (in DevTools) which lookup fallback failed if the breadcrumb stops drawing again.
+- Explicit `_updateMovementBreadcrumb()` call after the active-combatant path append — defense in depth. Pre-v2.99.76 the canvas refresh relied solely on `renderBattle() → _updateMovementBreadcrumb() → _renderCanvas()` working end-to-end. Calling it inline closes the gap if any of those steps short-circuits.
+
+### Changed
+- Active-combatant match in `token_move` handler now accepts identity, matching `id`, or matching `source_token_id`. Pre-v2.99.76 only strict identity was checked.
+- `_healCombatantSpeedWalk` gates on `canTrustClientProjection`: PC sheets always trustable; NPC templates only when raw sheet has direct speed. Monster_slug pointers skip the client heal entirely.
+
+### Notes
+- **PATCH bump** — UI-only fix. No server change, no API change, no schema change.
+- **Why both fixes in one commit.** They're related: the v2.99.67 stomp was a render-time mutation that could trigger the v2.99.76 robustness fix's id-fallback path (if the heal swapped a combatant reference). Shipping them together prevents one fix from masking the other's signal.
+- **What if breadcrumb still doesn't appear after this commit.** Open DevTools Console + drag a token. If you see `[breadcrumb] no target for token_move tokenId=X charId=Y templateId=Z`, the issue is the WS handler can't match the moved token to a combatant — paste the log and we'll trace it back to a missing source_token_id or an unbinded char_id. If no log appears AND no path draws, the issue is `battle.active === false` (init not started) or `dist === 0` (zero-distance move) — both are intentional gates.
+- **The robustness fix doesn't change "off-turn drags skip breadcrumb."** That remains correct behavior. v2.99.76 only fixes the identity-mismatch case where the dragged token IS the active combatant but the strict-equality check fails.
+- **No new harness tests.** Client-side WS handler behavior; covered by the deferred `harness_ui` Playwright suite.
+- Total harness count: 785 (unchanged from v2.99.75).
+
+---
+
 ## [2.99.75] - 2026-06-02 — "One Card, One OA" — drop OA trigger + chosen-attack audit cards, mark weapon_attack as OA
 
 **Schema version:** 65

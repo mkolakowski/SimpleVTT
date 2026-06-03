@@ -6213,14 +6213,38 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     function _healCombatantSpeedWalk(c) {
         if (!c) return false;
         let sheet = null;
+        let canTrustClientProjection = false;
         if (c.char_id) {
             const ch = allChars.find(x => x.id === c.char_id);
-            if (ch) sheet = ch.sheet || null;
+            if (ch) {
+                sheet = ch.sheet || null;
+                // PC sheets always carry a direct ``sheet.speed`` int
+                // (demo / GM-authored), so _speedWalkFromSheet is
+                // authoritative.
+                canTrustClientProjection = true;
+            }
         } else if (c.token_template_id) {
             const tmpl = allTemplates.find(x => x.id === c.token_template_id);
-            if (tmpl) sheet = tmpl.sheet || null;
+            if (tmpl) {
+                sheet = tmpl.sheet || null;
+                // v2.99.76 — NPC templates that point at a monster_slug
+                // don't carry a top-level ``sheet.speed`` int — the
+                // canonical value comes from the server's
+                // _monster_template_to_sheet projection (and lives on
+                // combatant.speed_walk after the v2.99.65 Load heal).
+                // Only trust the client projection when the raw sheet
+                // has a usable direct speed; otherwise leave the
+                // server's value alone so we don't stomp 40 back to 30.
+                if (sheet && (
+                    typeof sheet.speed === 'number'
+                    || (sheet.speed && typeof sheet.speed === 'object'
+                        && typeof sheet.speed.walk === 'number')
+                )) {
+                    canTrustClientProjection = true;
+                }
+            }
         }
-        if (!sheet) return false;
+        if (!sheet || !canTrustClientProjection) return false;
         const next = _speedWalkFromSheet(sheet);
         const prev = (typeof c.speed_walk === 'number' && c.speed_walk > 0)
             ? c.speed_walk : 0;
@@ -7703,7 +7727,19 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     c.token_template_id === templateId
                     && (!label || c.name === label));
             }
-            if (!target) return;
+            if (!target) {
+                // v2.99.76 — diagnostic. User reported the visual
+                // distance tracker stopped working; if the lookup
+                // misses, log enough context to find which fallback
+                // failed. Cheap (one console.log per drag).
+                console.log(
+                    '[breadcrumb] no target for token_move',
+                    'tokenId=' + tokenId,
+                    'charId=' + charId,
+                    'templateId=' + templateId,
+                );
+                return;
+            }
             _ensureEconomy(target);
             target.economy.movement = Math.round(((Number(target.economy.movement) || 0) + dist) * 10) / 10;
             // v2.8.1: append a waypoint to the active combatant's
@@ -7716,8 +7752,28 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // push seeds the starting point from from_x/from_y (the
             // pre-drag position the server captured) so the line starts
             // at the token's prior square, not in mid-air.
-            const activeCombatant = battle.combatants[battle.turn_index];
-            if (target === activeCombatant) {
+            //
+            // v2.99.76 — robustness fix. Strict equality (target ===
+            // activeCombatant) breaks when the active combatant gets
+            // re-bound by an unrelated render pass (the v2.99.67
+            // _healCombatantSpeedWalk mutation doesn't replace, but a
+            // future battle_update broadcast that fully swaps `battle`
+            // and re-runs `find()` returns a fresh reference). Match by
+            // id-or-position so identity churn doesn't kill the path.
+            const activeIdx = (typeof battle.turn_index === 'number'
+                && battle.turn_index >= 0)
+                ? (battle.turn_index % (battle.combatants || []).length || 0)
+                : -1;
+            const activeCombatant = activeIdx >= 0 ? battle.combatants[activeIdx] : null;
+            const targetIsActive = !!activeCombatant && (
+                target === activeCombatant
+                || (target.id != null && target.id === activeCombatant.id)
+                || (
+                    target.source_token_id != null
+                    && target.source_token_id === activeCombatant.source_token_id
+                )
+            );
+            if (targetIsActive) {
                 if (target.movement_path == null || !Array.isArray(target.movement_path)) {
                     target.movement_path = [];
                 }
@@ -7730,6 +7786,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 target.movement_path.push({
                     x: data.x, y: data.y, distance_ft: dist,
                 });
+                // v2.99.76 — explicit breadcrumb refresh + canvas
+                // redraw. Pre-v2.99.76 the breadcrumb relied on
+                // renderBattle below calling _updateMovementBreadcrumb;
+                // any code path that short-circuited renderBattle (an
+                // exception in pushBattle's serialize, a queued render
+                // that lost the update on rebind, etc.) skipped the
+                // canvas refresh and the line stayed stale. Calling it
+                // here guarantees the path updates BEFORE any
+                // downstream rebuild.
+                _updateMovementBreadcrumb();
             }
             // GM owns the battle state; pushBattle to broadcast. Players
             // get the update via the regular battle_update path.
