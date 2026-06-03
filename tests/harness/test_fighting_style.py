@@ -52,36 +52,63 @@ async def _attack(gm_client, gm_ws, char_id, attack_index):
     return msg["data"]
 
 
+def _parse_breakdown_terms(bd):
+    """Parse the breakdown format ``1d20[17]=17 7 2  =>  26`` into
+    the list of integer addend terms ([17, 7, 2]) and the trailing
+    total (26). Returns (addends, total) or (None, None) if the
+    format doesn't match.
+    """
+    m = re.match(r".*?=(-?\d+)\s+(.*?)\s+=>\s+(-?\d+)$", bd or "")
+    if not m:
+        return None, None
+    d20_val = int(m.group(1))
+    mid = m.group(2).strip()
+    total = int(m.group(3))
+    extras = []
+    for tok in mid.split():
+        try:
+            extras.append(int(tok))
+        except ValueError:
+            pass
+    return [d20_val] + extras, total
+
+
 async def test_archery_applies_plus_2_to_ranged_attack(gm_client, gm_ws, roster):
-    """Rowan's Longbow (range "150/600 ft") → Archery fires. d20
-    bonus expression contains the +2 (visible in attack_breakdown).
+    """Rowan's Longbow (range "150/600 ft") → Archery fires. The
+    breakdown's addend list should include 7 (base) AND 2 (Archery).
     """
     rowan = roster["Rowan Quickbow"]
     # Longbow is attack index 0.
     data = await _attack(gm_client, gm_ws, rowan["id"], 0)
     bd = data.get("attack_breakdown") or ""
-    # Breakdown shows the rolled d20 + each bonus term. "+2" should
-    # appear at least once for Archery; +7 is the base.
-    assert "+2" in bd, (
-        f"Archery +2 should be in the attack breakdown; got {bd!r}"
+    addends, total = _parse_breakdown_terms(bd)
+    assert addends is not None, f"could not parse breakdown {bd!r}"
+    # d20 roll + 7 (base) + 2 (Archery) = three addends.
+    assert 7 in addends and 2 in addends, (
+        f"Archery +2 and base +7 should both be in the addends; "
+        f"got {addends} bd={bd!r}"
+    )
+    assert sum(addends) == total, (
+        f"breakdown total mismatch — addends {addends} sum != {total} ({bd!r})"
     )
 
 
 async def test_archery_skipped_on_melee_attack(gm_client, gm_ws, roster):
     """Rowan's Shortsword (range "5 ft", no slash) → Archery
-    short-circuits. Breakdown shouldn't contain the Archery +2
-    (only Rowan's base +7).
+    short-circuits. Breakdown should NOT contain the Archery +2;
+    only Rowan's base +7.
     """
     rowan = roster["Rowan Quickbow"]
     # Shortsword is attack index 1.
     data = await _attack(gm_client, gm_ws, rowan["id"], 1)
     bd = data.get("attack_breakdown") or ""
-    # +7 should be present (DEX+PB); +2 should NOT (Archery skipped).
-    # Use a count check: the only place +2 would come from is
-    # Archery; a melee attack has no other +2 source.
-    archery_hits = bd.count("+2")
-    assert archery_hits == 0, (
-        f"Archery should NOT fire on a melee shortsword; +2 count={archery_hits} bd={bd!r}"
+    addends, total = _parse_breakdown_terms(bd)
+    assert addends is not None, f"could not parse breakdown {bd!r}"
+    # Should only have d20 roll + 7 (base). No Archery +2.
+    assert 7 in addends, f"base +7 should be in addends; got {addends}"
+    assert 2 not in addends, (
+        f"Archery should NOT fire on a melee shortsword (no +2 addend); "
+        f"got {addends} bd={bd!r}"
     )
 
 

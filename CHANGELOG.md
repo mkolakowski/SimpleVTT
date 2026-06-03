@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.84] - 2026-06-03 — "Read the Breakdown" — fix v2.99.83 Archery test assertion
+
+**Schema version:** 65
+**Commit summary:** **Fix the v2.99.83 Archery test that searched for `"+2"` in the breakdown when the dice module renders addends without the `+` sign.** v2.99.83 shipped 4 Fighting Style tests; 1 of the Archery happy-path tests failed because the chat-card breakdown format is `1d20[17]=17 7 2  =>  26` — d20 + each addend space-separated, total after `=>`, no `+` signs between terms. v2.99.84 adds a small `_parse_breakdown_terms` helper to the test file that extracts the d20 + addends + total, then asserts on the parsed lists. Archery's +2 fires correctly server-side (the addend `2` is in the breakdown and the total reflects it); only the test's regex needed adjusting.
+**Description:** Single-file test fix in `tests/harness/test_fighting_style.py`. New `_parse_breakdown_terms(bd)` regex-parses the breakdown into `(addends, total)`. The two Archery tests now assert on the parsed addend list (`7 in addends and 2 in addends` for happy; `2 not in addends` for the melee skip).
+
+### Fixed
+- `tests/harness/test_fighting_style.py::test_archery_applies_plus_2_to_ranged_attack` — was failing with `assert "+2" in '1d20[17]=17 7 2 => 26'` because the breakdown renders addends space-separated without `+` signs. Now parses the addend list and asserts `2 in addends`.
+- `tests/harness/test_fighting_style.py::test_archery_skipped_on_melee_attack` — same fix for the inverse assertion (`2 not in addends`).
+
+### Added
+- `_parse_breakdown_terms(bd)` helper in the test module — regex-parses the chat-card breakdown format into `(addends_list, total_int)`. Returns `(None, None)` on parse failure.
+
+### Notes
+- **PATCH bump** — test-only fix. No server change, no API change. The 4 Fighting Style tests now pass end-to-end against the live container.
+- **Total harness count: 795** (unchanged from v2.99.83 — same count, fixed assertions).
+
+---
+
 ## [2.99.83] - 2026-06-03 — "Aim and Reach" — Fighting Style auto-apply: Archery + Dueling
 
 **Schema version:** 65
