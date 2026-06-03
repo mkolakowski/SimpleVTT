@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.98] - 2026-06-03 — "The Snail Shows Up" — Mov chip + breadcrumb + Dash modal read Lance of Lethargy's speed reduction
+
+**Schema version:** 65
+**Commit summary:** **Close the v2.99.92 Lance of Lethargy loop: the buff's `effects.speed_reduction_ft: 10` is now read by every speed-display + Dash-gate site.** Pre-v2.99.98 the buff installed cleanly but no consumer read the field — the Mov chip on the init tracker showed the unreduced base, the breadcrumb colored against the unreduced cap, and the Dash modal opened against the unreduced threshold. v2.99.98 ships two pure helpers (server-side `_effective_speed_walk` + `_effective_speed_reduction_ft`, JS-side `_effectiveSpeedWalk` + `_effectiveSpeedReductionFt`) that walk `combatant.buffs[]` for the field and subtract. Four client-side read sites wire to the helpers: the breadcrumb's color threshold, the Dash modal's effective-cap projection, the Dash overrun-check, and the init-tracker Mov chip's displayed cap + 🐌 reduction badge. Future speed-reduction sources (Slow spell, web, grease, monster grappler features) install the same field and the engine picks them up with no further wiring.
+**Description:** Five touch points. (1) `app/routes/tabletop_routes.py` — two new server-side helpers `_effective_speed_reduction_ft(combatant) -> int` (sums `effects.speed_reduction_ft` across active buffs, ignoring non-dict effects shapes) and `_effective_speed_walk(combatant) -> int` (returns `max(0, speed_walk - reduction)`). Pure derivations; do not mutate the combatant. Reserved for future server-side movement-cap gates (filed). (2) `app/templates/tabletop.html` — two new JS helpers `_effectiveSpeedReductionFt(c)` + `_effectiveSpeedWalk(c)` exposed on `window`. (3) The breadcrumb construction at `_updateMovementBreadcrumb` now publishes `speed_reduction_ft` alongside `speed_walk` + `dash_bonus_ft`. (4) `app/static/tabletop.js`'s `drawMovementBreadcrumb` subtracts `bc.speed_reduction_ft` from the cap; the Dash modal projection and overrun-check both read `_effectiveSpeedWalk(combatant)` instead of `Number(combatant.speed_walk) || 30`. (5) The init-tracker Mov chip computes `speedMax = max(0, base - reduction)` and renders a 🐌 badge after the cap when `speed_reduction_ft > 0` (mirror of the 🏃 Dash badge); the tooltip surfaces "Slowed (-N ft from active buffs)" so the user knows why the cap dropped.
+
+### Added
+- `_effective_speed_reduction_ft(combatant: dict | None) -> int` — server-side helper.
+- `_effective_speed_walk(combatant: dict | None) -> int` — server-side helper.
+- `_effectiveSpeedReductionFt(c)` — JS-side mirror, exposed on `window`.
+- `_effectiveSpeedWalk(c)` — JS-side mirror, exposed on `window`.
+- `speed_reduction_ft` field in the breadcrumb payload published by `_updateMovementBreadcrumb`.
+- 🐌 reduction badge in the init-tracker Mov chip when reduction > 0.
+- Slowed (-N ft from active buffs) tooltip annotation on the Mov chip.
+- `tests/harness/test_effective_speed_walk.py` — 13 unit tests covering both helpers: 0-reduction baseline, single buff, multi-buff sum, non-dict effects skipped, no-effects-field skipped, clamped at 0 floor, missing speed_walk defaults to 30, Kael 40-ft case, None combatant default.
+- `app/content/effective_speed.py` — leaf module hosting the pure helpers (`effective_speed_reduction_ft`, `effective_speed_walk`). `tabletop_routes.py` re-exports them under the legacy `_`-prefixed names for backward compat with existing call sites. The leaf placement is what lets the in-process unit tests import without pulling in fastapi.
+
+### Changed
+- `drawMovementBreadcrumb` in `tabletop.js` — `speedCap` calc now subtracts `bc.speed_reduction_ft`. Backward-compatible: pre-v2.99.98 breadcrumb payloads without the field fall through with 0.
+- The Dash modal projection (`_speed = _effectiveSpeedWalk(_active)`) + overrun-check (`_speedOv = _effectiveSpeedWalk(_activeForDash)`) read the helper. Pre-v2.99.98 they read `Number(_active.speed_walk) || 30` directly.
+- The init-tracker Mov chip's `speedMax` is now `max(0, speedBase - speedReductionFt)`. The 🐌 badge appears in the chip body before the 🏃 Dash badge when both are active.
+
+### Notes
+- **PATCH bump** — additive helpers + four read-site wirings + a tooltip + a badge. No schema change, no API contract change. Pre-v2.99.98 combatants with no `effects.speed_reduction_ft` field render identically (helpers return 0).
+- **Why no server-side /token/move enforcement yet.** Pre-v2.99.98 /token/move doesn't gate on the cap at all — the Dash modal is client-side advisory. Adding a server-side gate (e.g. return 409 `speed_cap_exceeded` for moves over the effective cap without dash confirmation) is a separate ship; the helper is in place for that future commit. Filed.
+- **Why a 🐌 emoji.** Mirrors the v2.99.79 🏃 Dash badge convention — both are 1-char visual cues in the dense init-tracker strip. The snail glyph reads as "slowed" without needing copy.
+- **Stacks with Dash.** A token with Lance of Lethargy + Dash shows the cap as `(base + dash_bonus - reduction)` with BOTH 🐌 and 🏃 badges. Net: `30 + 30 - 10 = 50`; the breadcrumb stays green up to 50 ft.
+- **Clamped at 0, not 1.** A 60-ft reduction on a 30-ft base reads as 0/0, not -30/0. RAW: speed can't go below 0 (the Slow spell explicitly halves; web reduces to 0 if save fails). The client + server both clamp.
+- **In-process unit tests pattern.** Mirrors `test_range_parser.py`'s in-process style — pure-Python tests that import the helper and assert without HTTP. Lives under `tests/harness/` so the existing CI workflow picks them up (no new job needed).
+- **Total harness count: 845** (was 832 in v2.99.97).
+
+---
+
 ## [2.99.97] - 2026-06-03 — "Drink Deep, Pact-Bound" — Lifedrinker (Warlock Lv 12 invocation) adds +CHA necrotic on pact-weapon hits
 
 **Schema version:** 65

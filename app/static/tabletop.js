@@ -2674,7 +2674,17 @@
         // standard reference, but the breadcrumb colors against the
         // post-Dash effective cap so a Dashed player sees green up to
         // their actual budget.
-        const speedCap = (Number(bc.speed_walk) || 30) + (Number(bc.dash_bonus_ft) || 0);
+        /* v2.99.98 — subtract the breadcrumb's speed_reduction_ft
+         * (sum of Lance of Lethargy + future Slow / web / etc.) so
+         * the red/green threshold honors active reduction effects.
+         * Falls back to 0 when the bc was built by a pre-v2.99.98
+         * client. */
+        const speedCap = Math.max(
+            0,
+            (Number(bc.speed_walk) || 30)
+                + (Number(bc.dash_bonus_ft) || 0)
+                - (Number(bc.speed_reduction_ft) || 0),
+        );
         const half = gridSize / 2;
 
         // First pass: stroke every segment + arrowhead, tracking the
@@ -3773,7 +3783,13 @@
                     const _econ = _active.economy || {};
                     const _used = Number(_econ.movement) || 0;
                     const _dashBonus = Number(_econ.dash_bonus_ft) || 0;
-                    const _speed = Number(_active.speed_walk) || 30;
+                    /* v2.99.98 — read the post-reduction effective
+                     * speed (Lance of Lethargy + future Slow / web).
+                     * Falls back to raw speed_walk when the global
+                     * helper hasn't loaded yet. */
+                    const _speed = (typeof window._effectiveSpeedWalk === 'function')
+                        ? window._effectiveSpeedWalk(_active)
+                        : (Number(_active.speed_walk) || 30);
                     const _cap = _speed + _dashBonus;
                     _projectedOverrun = (_used + _projectedDistance) > _cap + 0.001;
                     // v2.99.77 — broaden the Dash-modal gate. Show
@@ -3852,7 +3868,12 @@
         const _econOv = _activeForDash.economy || {};
         const _usedOv = Number(_econOv.movement) || 0;
         const _dashBonusOv = Number(_econOv.dash_bonus_ft) || 0;
-        const _speedOv = Number(_activeForDash.speed_walk) || 30;
+        /* v2.99.98 — Dash modal reads the post-reduction speed so
+         * the displayed cap (and the "you need to Dash" copy) reflect
+         * Lance of Lethargy / future speed-reduction effects. */
+        const _speedOv = (typeof window._effectiveSpeedWalk === 'function')
+            ? window._effectiveSpeedWalk(_activeForDash)
+            : (Number(_activeForDash.speed_walk) || 30);
         window.showMovementOverrunModal({
             characterName: _activeForDash.name,
             currentUsed: _usedOv,

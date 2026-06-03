@@ -2765,6 +2765,16 @@ def _resolve_combatant_speed_walk(
     return 30
 
 
+# v2.99.98 — leaf-module re-exports so existing call sites that
+# already imported these from tabletop_routes keep working without
+# a refactor. The pure helpers live in app/content/effective_speed.py
+# so the in-process unit tests can import without pulling in fastapi.
+from app.content.effective_speed import (
+    effective_speed_reduction_ft as _effective_speed_reduction_ft,
+    effective_speed_walk as _effective_speed_walk,
+)
+
+
 def _check_opportunity_attack_triggers(
     db: Session, campaign_id: int,
     mover_token_id: int,

@@ -6214,6 +6214,35 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         }
     }
 
+    /* v2.99.98 — sum the active speed-reduction effects on a
+     * combatant's buff list. Mirror of the server's
+     * `_effective_speed_reduction_ft`. Returns 0 when the
+     * combatant has no buffs or none of them carry the field. */
+    function _effectiveSpeedReductionFt(c) {
+        if (!c || !Array.isArray(c.buffs)) return 0;
+        let total = 0;
+        for (const b of c.buffs) {
+            if (!b || typeof b !== 'object') continue;
+            const effects = b.effects;
+            if (!effects || typeof effects !== 'object') continue;
+            const v = Number(effects.speed_reduction_ft);
+            if (Number.isFinite(v) && v > 0) total += v;
+        }
+        return total;
+    }
+
+    /* v2.99.98 — effective walking speed = base speed_walk minus
+     * the sum of speed-reduction effects, clamped to ≥ 0. Mirror of
+     * the server's `_effective_speed_walk` so display + future
+     * server-side movement-cap gates report the same value. */
+    function _effectiveSpeedWalk(c) {
+        if (!c) return 30;
+        const base = Number(c.speed_walk) > 0 ? Number(c.speed_walk) : 30;
+        return Math.max(0, base - _effectiveSpeedReductionFt(c));
+    }
+    window._effectiveSpeedWalk = _effectiveSpeedWalk;
+    window._effectiveSpeedReductionFt = _effectiveSpeedReductionFt;
+
     /* v2.99.67 — client-side speed_walk heal. Server-side v2.99.65
      * heals speed_walk on encounter Load, but the GM client carries
      * combatants in localStorage AND the battle_update broadcast is
@@ -6293,6 +6322,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 path: active.movement_path,
                 speed_walk: Number(active.speed_walk) || 30,
                 dash_bonus_ft: Number(econ.dash_bonus_ft) || 0,
+                /* v2.99.98 — sum speed-reduction effects (Lance of
+                 * Lethargy, future Slow / web / etc.) so the
+                 * breadcrumb colors against the reduced cap. */
+                speed_reduction_ft: _effectiveSpeedReductionFt(active),
                 char_id: active.char_id,
             };
         }
@@ -7051,8 +7084,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // sees overrun without needing to read the numbers. Click
                 // clears the running total — useful for Dash, Hasted,
                 // Step of the Wind, or any GM-discretion refund.
-                const speedMax = (typeof c.speed_walk === 'number' && c.speed_walk > 0)
+                // v2.99.98 — speedMax = post-reduction effective
+                // speed (Lance of Lethargy / Slow / web — sum of
+                // `effects.speed_reduction_ft` across buffs). The
+                // Mov chip displays the reduced cap so the eye sees
+                // "this token is slowed" without opening the buffs
+                // panel. A "🐌" badge is appended when the reduction
+                // is non-zero (mirror of the 🏃 Dash badge below).
+                const speedBase = (typeof c.speed_walk === 'number' && c.speed_walk > 0)
                     ? c.speed_walk : 30;
+                const speedReductionFt = _effectiveSpeedReductionFt(c);
+                const speedMax = Math.max(0, speedBase - speedReductionFt);
                 const feetUsed = Math.round(Number(econ.movement || 0) * 10) / 10;
                 let movClass = 'mov';
                 if (feetUsed > speedMax) movClass += ' over';
@@ -7069,6 +7111,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const dashBonusFt = Number(econ.dash_bonus_ft) || 0;
                 const effectiveCap = speedMax + dashBonusFt;
                 const dashTag = dashBonusFt > 0 ? ' 🏃' : '';
+                const reductionTag = speedReductionFt > 0 ? ' 🐌' : '';
                 if (dashBonusFt > 0) {
                     if (feetUsed > effectiveCap) movClass = movClass.replace(' over', '') + ' over';
                     else if (feetUsed > speedMax) movClass = movClass + ' dashed';
@@ -7077,13 +7120,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // per user request. The tooltip still says "Movement"
                 // so context isn't lost; the X/Y shape reads as
                 // distance unambiguously in the init-tracker context.
-                const movTitle = dashBonusFt > 0
-                    ? `Movement used this turn — Dash active (+${dashBonusFt} ft this round) — click to reset to 0`
-                    : 'Movement used this turn — click to reset to 0';
+                // v2.99.98 — tooltip surfaces the speed reduction
+                // amount when active so the user sees "Slowed (-10)"
+                // alongside the cap.
+                const reductionNote = speedReductionFt > 0
+                    ? ` — Slowed (-${speedReductionFt} ft from active buffs)`
+                    : '';
+                const movTitle = (dashBonusFt > 0
+                    ? `Movement used this turn — Dash active (+${dashBonusFt} ft this round)`
+                    : 'Movement used this turn')
+                    + reductionNote
+                    + ' — click to reset to 0';
                 const movChip = `<button type="button" class="econ-chip ${movClass}"
                     data-idx="${i}" data-slot="movement"
                     title="${movTitle}">
-                    ${feetUsed % 1 === 0 ? feetUsed : feetUsed.toFixed(1)}/${effectiveCap}${dashTag}
+                    ${feetUsed % 1 === 0 ? feetUsed : feetUsed.toFixed(1)}/${effectiveCap}${reductionTag}${dashTag}
                 </button>`;
                 // v2.49.101 — three-letter labels restored (user
                 // request). The strip stays inline with Init/HP via
