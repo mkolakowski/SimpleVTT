@@ -20597,6 +20597,146 @@ def _saver_bless_bane_save_suffix(
     return suffix
 
 
+def _increment_flesh_to_stone_strike_counter(
+    campaign_id: int,
+    is_pc: bool,
+    saver_char_id: int | None,
+    combatant: dict | None,
+    passed: bool,
+) -> tuple[int, int, str]:
+    """v2.99.136 — increment the v2.99.135 strike counters on the
+    Flesh to Stone Restrained buff. Walks the hub state to find the
+    target's `restrained` buff (with `source: "flesh-to-stone-spell"`),
+    increments success_count on pass or failure_count on fail, and
+    returns ``(successes, failures, action)`` where action is one of:
+      - "continue": counter < threshold, buff stays
+      - "drop_success": success_count reached threshold (spell ends)
+      - "transition_petrify": failure_count reached threshold
+        (Restrained → Petrified)
+
+    Returns ``(0, 0, "continue")`` on lookup miss.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return 0, 0, "continue"
+    target = None
+    for c in state.get("combatants") or []:
+        if is_pc and saver_char_id and c.get("char_id") == int(saver_char_id):
+            target = c
+            break
+        if not is_pc and combatant and c.get("id") == combatant.get("id"):
+            target = c
+            break
+    if target is None:
+        return 0, 0, "continue"
+    fts_buff = None
+    for b in target.get("buffs") or []:
+        if not isinstance(b, dict):
+            continue
+        if (b.get("key") == "restrained"
+                and b.get("source") == "flesh-to-stone-spell"):
+            fts_buff = b
+            break
+    if fts_buff is None:
+        return 0, 0, "continue"
+    if passed:
+        fts_buff["success_count"] = (
+            int(fts_buff.get("success_count") or 0) + 1
+        )
+    else:
+        fts_buff["failure_count"] = (
+            int(fts_buff.get("failure_count") or 0) + 1
+        )
+    successes = int(fts_buff.get("success_count") or 0)
+    failures = int(fts_buff.get("failure_count") or 0)
+    threshold = int(fts_buff.get("strike_threshold") or 3)
+    hub.set_battle(campaign_id, state)
+    if successes >= threshold:
+        return successes, failures, "drop_success"
+    if failures >= threshold:
+        return successes, failures, "transition_petrify"
+    return successes, failures, "continue"
+
+
+async def _flesh_to_stone_transition_to_petrified(
+    campaign_id: int,
+    is_pc: bool,
+    saver_char_id: int | None,
+    combatant: dict | None,
+    restrained_buff: dict,
+) -> bool:
+    """v2.99.136 — drop the Flesh to Stone Restrained buff and
+    install the Petrified buff via the v2.99.119 wrapper. Called
+    when the failure_count strike threshold (3) is hit.
+
+    Mutates hub state directly + broadcasts ``battle_update`` and
+    a ``feature_used`` audit. Returns True on success, False if the
+    target combatant couldn't be found.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    target = None
+    for c in state.get("combatants") or []:
+        if is_pc and saver_char_id and c.get("char_id") == int(saver_char_id):
+            target = c
+            break
+        if not is_pc and combatant and c.get("id") == combatant.get("id"):
+            target = c
+            break
+    if target is None:
+        return False
+    # Drop the Restrained buff.
+    target["buffs"] = [
+        b for b in (target.get("buffs") or [])
+        if not (
+            isinstance(b, dict)
+            and b.get("key") == "restrained"
+            and b.get("source") == "flesh-to-stone-spell"
+        )
+    ]
+    # Install the Petrified buff via the v2.99.119 wrapper.
+    try:
+        base_speed = int(target.get("speed_walk") or 30)
+    except (TypeError, ValueError):
+        base_speed = 30
+    src_char_id = restrained_buff.get("source_char_id")
+    src_char_name = restrained_buff.get("source_char_name", "")
+    try:
+        src_dc = int(restrained_buff.get("repeated_save_dc") or 14)
+    except (TypeError, ValueError):
+        src_dc = 14
+    petrified = _make_flesh_to_stone_petrified_buff(
+        target_speed_walk=base_speed,
+        source_char_id=src_char_id,
+        source_char_name=src_char_name,
+        spell_save_dc=src_dc,
+    )
+    target["buffs"].append(petrified)
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update",
+        "data": state,
+        "force_gm_sync": True,
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": src_char_id,
+            "character_name": src_char_name or "Caster",
+            "feature_name": "🗿 Flesh to Stone — Petrified",
+            "feature_desc": (
+                f"{target.get('name') or 'Target'} failed 3 CON saves; "
+                f"flesh hardens completely. Petrified for the duration."
+            ),
+            "source": "flesh-to-stone-transition",
+            "target_combatant_id": target.get("id"),
+            "target_name": target.get("name") or "Target",
+        },
+    })
+    return True
+
+
 async def _resolve_repeated_save_for_buff(
     campaign_id: int,
     db: "Session | None",
@@ -20703,6 +20843,54 @@ async def _resolve_repeated_save_for_buff(
             "dc": dc,
         },
     })
+
+    # v2.99.136 — Flesh to Stone strike-counter engine wiring. When
+    # the buff carries the v2.99.135 `strike_counter` marker, the
+    # default "drop on pass" behavior is intercepted: pass increments
+    # the success counter (drops the buff only on threshold), fail
+    # increments the failure counter (transitions to Petrified on
+    # threshold). Other buffs (Hold Person, Slow, Web, Grapple, etc.)
+    # are unchanged.
+    fts_action: str | None = None
+    if bool(buff.get("strike_counter")):
+        _ftss, _ftsf, fts_action = _increment_flesh_to_stone_strike_counter(
+            campaign_id, is_pc, saver_char_id, combatant, passed,
+        )
+        # Audit broadcast for the strike update.
+        _outcome = "success" if passed else "failure"
+        _label = (
+            f"🪨 Flesh to Stone — {_outcome} "
+            f"({_ftss}✓ / {_ftsf}✗)"
+        )
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_name": saver_name,
+                "feature_name": _label,
+                "feature_desc": (
+                    f"{saver_name} {('passed' if passed else 'failed')} "
+                    f"the CON save against Flesh to Stone "
+                    f"(running tally: {_ftss} successes, {_ftsf} failures; "
+                    f"3 of either ends the staged progression)."
+                ),
+                "source": "flesh-to-stone-strike-counter",
+                "successes": _ftss,
+                "failures": _ftsf,
+                "action": fts_action,
+            },
+        })
+        if fts_action == "continue":
+            # Suppress the natural drop on pass — buff stays.
+            passed = False
+        elif fts_action == "transition_petrify":
+            # Manually drop the Restrained buff + install Petrified.
+            # The buff_dropped flag stays False (the existing drop
+            # logic below would re-drop a buff that's already gone).
+            await _flesh_to_stone_transition_to_petrified(
+                campaign_id, is_pc, saver_char_id, combatant, buff,
+            )
+            passed = False  # skip the standard drop logic
+        # else "drop_success": let the existing drop logic fire below.
 
     buff_dropped = False
     undo_cast_id = ""

@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.136] - 2026-06-03 — "Three Strikes, You're Stone" — strike-counter engine wiring auto-transitions Restrained → Petrified
+
+**Schema version:** 65
+**Commit summary:** **Wire the v2.99.135 strike-counter stamps into `_resolve_repeated_save_for_buff`'s save-resolution path.** On a Flesh to Stone Restrained buff (carrying `strike_counter: True`), the engine now: increments `success_count` on pass / `failure_count` on fail, suppresses the default "drop on pass" behavior until either counter reaches 3, drops the buff on 3 successes (spell ends RAW), and transitions the target from Restrained to Petrified on 3 failures (RAW: "if it fails its saves three times, it is turned to stone"). Closes the second half of the v2.99.130 filed item.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. (1) New `_increment_flesh_to_stone_strike_counter(campaign_id, is_pc, saver_char_id, combatant, passed) -> tuple[int, int, str]` helper. Walks the hub state to find the target's `restrained` buff with `source: "flesh-to-stone-spell"`, increments the appropriate counter, returns `(successes, failures, action)` where action ∈ `{"continue", "drop_success", "transition_petrify"}`. (2) New `_flesh_to_stone_transition_to_petrified(campaign_id, is_pc, saver_char_id, combatant, restrained_buff)` async helper. Drops the Restrained buff, builds a Petrified buff via the v2.99.119 `_make_flesh_to_stone_petrified_buff` wrapper (preserving the caster's source attribution + spell save DC), broadcasts `battle_update` + `feature_used` audit. (3) `_resolve_repeated_save_for_buff` checks `buff.strike_counter` BEFORE the standard drop logic. On match: broadcasts a `feature_used` strike-counter audit, then dispatches per action — "continue" suppresses the drop (sets `passed = False`); "transition_petrify" calls the transition helper + skips the standard drop; "drop_success" falls through to the existing drop. (4) `tests/harness/test_flesh_to_stone_strike_counter_engine.py` — 3 regression tests using a synthetic pre-loaded buff (success_count=2 OR failure_count=2) + PATCHed Krieger STR score (30 for auto-pass, 1 for auto-fail) to trigger threshold events deterministically.
+
+### Added
+- `_increment_flesh_to_stone_strike_counter(...)` helper.
+- `_flesh_to_stone_transition_to_petrified(...)` async helper.
+- Strike-counter dispatch block in `_resolve_repeated_save_for_buff`.
+- `tests/harness/test_flesh_to_stone_strike_counter_engine.py` — 3 tests: 3 successes drops Restrained, 3 failures drops Restrained + installs Petrified, single save increments counter without dropping.
+
+### Changed
+- `_resolve_repeated_save_for_buff` now intercepts strike-counter buffs before the standard drop logic. Other buffs (Hold Person, Slow, Web, Grapple, Fear, etc.) are unchanged — their `strike_counter` field is absent, so the new block is a no-op for them. The v2.97.62 framework's end-of-turn auto-fire + the /use_repeated_save manual fire + the damage-triggered save hook all pick up the new behavior automatically (single helper consolidates them).
+
+### Notes
+- **PATCH bump** — 2 new helpers + 1 wire-in block + 3 tests. No schema change. Backward-compatible: pre-v2.99.135 Restrained buffs don't have the marker, so they fall through unchanged.
+- **Why a separate transition helper instead of inline.** The transition involves multiple mutations (drop one buff + install another + broadcast 2 events). Keeping it in its own helper makes the strike-counter dispatch in `_resolve_repeated_save_for_buff` short + readable. The transition helper is also reusable: a future "GM manually transition" UI button can call it directly without going through the save resolution path.
+- **Why the deterministic STR-score PATCH strategy.** Repeated-save outcomes are random (d20 roll). To pin success / failure deterministically in tests, the test PATCHes Krieger's STR to 30 (mod +10, vs DC 1 = always pass) or 1 (mod -5, vs DC 30 = always fail). The synthetic pre-loaded buff (success_count=2 or failure_count=2) means one save reaches the threshold. The teardown restores Krieger's stock abilities (STR 17 etc.) so subsequent tests aren't polluted.
+- **Petrified install preserves the spell source.** The transition helper reads the Restrained buff's `source_char_id` + `source_char_name` + `repeated_save_dc` and feeds them to `_make_flesh_to_stone_petrified_buff(spell_save_dc=dc)`. The Petrified buff's own end-of-turn CON save (RAW: separately granted) fires at the same DC as the original spell — symmetric.
+- **Filed.** (1) Permanent Petrification when the caster sustains concentration for the full minute (RAW: spell makes the petrification permanent). Today the Petrified buff has a 10-round duration; permanent-petrification needs a duration check + GM /end_buff to revert. (2) Strike-counter undo plumbing: a v2.97.77-style undo log entry for the transition so the GM can revert the auto-Petrify if a misclick triggered it. (3) The v2.97.77 undo plumbing for the strike-counter increment itself (so an accidentally-rolled save can be rolled back without losing the spell).
+- **Total harness count: 976** (was 973 in v2.99.135).
+
+---
+
 ## [2.99.135] - 2026-06-03 — "Counting the Strikes" — stamp strike-counter fields on the Flesh to Stone Restrained buff
 
 **Schema version:** 65
