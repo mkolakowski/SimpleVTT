@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.83] - 2026-06-03 — "Aim and Reach" — Fighting Style auto-apply: Archery + Dueling
+
+**Schema version:** 65
+**Commit summary:** **Wire two Fighting Style class features (Fighter/Paladin/Ranger Lv 1-2) so the +2 bonuses fire automatically at attack time.** Archery: +2 to ranged weapon attack rolls. Dueling: +2 to 1H melee weapon damage. Both gate on `sheet.fighting_style` (slug normalized to lowercase, dashes/spaces to underscores) + an attack-shape heuristic (range string for ranged-vs-melee detection). The bonuses surface in the chat-card breakdown via the existing roll expression — Archery appends "+2" to the d20+bonus expression; Dueling appends "+2" to the damage expression. Rowan Quickbow (Ranger Lv 5 Hunter, "archery") is the Archery demo fixture; his sheet's Longbow loses the pre-baked "+2" (was "+9" → now "+7") so the auto-apply doesn't double. Dueling has no demo PC; the harness PATCHes Caelan from Protection → Dueling, exercises the swap, restores.
+**Description:** Four new helpers in `app/routes/tabletop_routes.py`: (1) `_pc_fighting_style(sheet)` normalizes the slug. (2) `_attack_is_ranged_weapon(attack)` — range contains `/` OR > 15 ft. (3) `_attack_is_one_handed_melee(attack)` — range ≤ 15 ft, no `/`, no "two-handed"/"off-hand" in desc. (4) `_pc_archery_bonus(sheet, attack)` + `_pc_dueling_bonus(sheet, attack)` return 2 when style + shape match, else 0. `/attack` calls them: Archery appends to `atk_expr` right after the bonus-expr parse; Dueling appends to `damage_expr_raw` right after the Monk Martial Arts wire-in. Demo seed flips Rowan's Longbow from "+9" to "+7" + updates the desc to reflect the auto-apply convention. 4 harness tests cover Archery happy + skip-on-melee + Dueling happy + skip-when-style-not-set.
+
+### Added
+- `_pc_fighting_style(sheet)` — normalizes the slug from `sheet.fighting_style` (lowercase, dashes/spaces to underscores). Returns "" for sheets without a style.
+- `_attack_is_ranged_weapon(attack)` — heuristic: range string contains `/` (split short/long) OR a single range > 15 ft. Pure melee (5/10/15 ft no-slash) returns False.
+- `_attack_is_one_handed_melee(attack)` — heuristic: range ≤ 15 ft, no `/`, desc doesn't mention "two-handed" / "2-handed" / "off-hand".
+- `_pc_archery_bonus(sheet, attack) -> int` — returns 2 when style == "archery" + attack is ranged. 0 otherwise.
+- `_pc_dueling_bonus(sheet, attack) -> int` — returns 2 when style == "dueling" + attack is 1H melee. 0 otherwise.
+- Wire-ins in `/attack`: Archery appends `+2` to the d20+bonus expression; Dueling appends `+2` to the damage expression. Both run before the roller so the breakdown shows the bonus.
+- `tests/harness/test_fighting_style.py` — 4 regression tests: Archery on ranged (happy), Archery skip on melee (gate), Dueling on 1H melee with PATCH (happy), Dueling skip with default Protection (gate).
+
+### Changed
+- Rowan Quickbow's Longbow attack `attack_bonus` flipped from "+9" (with pre-baked Archery +2) to "+7" (DEX 18 mod +4 + Lv 5 PB +3). The Archery +2 now auto-applies at /attack time via `_pc_archery_bonus`. End roll is identical.
+- Rowan's Longbow desc updated: "+2 to attack — auto-applied at attack time, no pre-baked bonus."
+
+### Notes
+- **PATCH bump** — additive helpers + a single attack-bonus + damage-expr append + a demo seed sheet edit. No schema change, no API contract change. Sheets without `fighting_style` short-circuit on the empty slug; existing attacks for non-Fighter PCs are unaffected.
+- **Why not labeled uplifts via `_compute_attack_auto_uplifts`.** The flat +2s are simple expression additions; a uplift dict would require modifying the helper's signature to accept the full attack dict for the range-shape detection. The terse "+2" in the breakdown is enough audit for now; a future ship can promote both to labeled uplifts (e.g. "+2 [Archery]") when the broader Fighting Style framework grows (Defense AC, Great Weapon Fighting reroll, Two-Weapon Fighting off-hand damage).
+- **Why ranged heuristic uses range > 15 ft instead of a `is_ranged` flag.** Sheet attack schema doesn't carry an explicit ranged/melee flag. The heuristic catches bows ("150/600 ft"), crossbows, slings, and javelins ("30/120 ft" via the slash). False positives (a 20 ft reach melee weapon) are exceedingly rare in RAW — Polearm Master's biggest reach is 10 ft.
+- **Filed for follow-up.** (1) Dueling's RAW "no other weapon" clause needs inventory scanning for a second equipped melee weapon. (2) Defense Fighting Style: +1 AC needs the auto-AC engine (sheet.ac is currently hand-authored). (3) Great Weapon Fighting: reroll 1s/2s on damage needs the damage roller to support per-die-reroll semantics. (4) Two-Weapon Fighting: off-hand damage uplift needs an off-hand flag on attacks. (5) Protection style is already wired (v2.68.10 reactions panel).
+- **Class-content-status doc.** Fighting Style (Fighter / Paladin / Ranger / Bard Lv 2) row's "🟡 Description visible" gets updated in a follow-up doc pass to reflect "✅ partial — Archery + Dueling shipped; Defense + GWF + TWF + Protection filed."
+- Total harness count: 795 (was 791 in v2.99.82).
+
+---
+
 ## [2.99.82] - 2026-06-03 — "Drop the Bad Sample" — fix v2.99.81 non-Monk gate test
 
 **Schema version:** 65

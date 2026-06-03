@@ -1672,11 +1672,16 @@ def _ranger_sheet(name: str) -> dict:
             "Animal Handling": {"ability": "WIS", "proficient": True, "expertise": False},
             "Investigation":   {"ability": "INT", "proficient": True, "expertise": False},
         },
-        "fighting_style": "archery",  # +2 to ranged attack rolls
+        "fighting_style": "archery",  # +2 to ranged attack rolls (auto-applied at /attack time per v2.99.83)
         "attacks": [
-            {"name": "Longbow", "attack_bonus": "+9", "damage": "1d8+4",
+            # v2.99.83: Longbow attack_bonus was "+9" (DEX 18 mod +4
+            # + Lv 5 PB +3 + Archery +2 pre-baked). The Archery +2
+            # is now auto-applied server-side via
+            # _pc_archery_bonus(sheet, attack); base bonus drops to
+            # +7 (DEX 18 mod +4 + PB +3). End-roll is identical.
+            {"name": "Longbow", "attack_bonus": "+7", "damage": "1d8+4",
              "damage_type": "piercing", "range": "150/600 ft",
-             "desc": "Two-handed, heavy. Fighting Style: Archery (+2 to attack already included). Sharpshooter feat: optional -5 attack / +10 damage trade + ignore cover up to total cover."},
+             "desc": "Two-handed, heavy. Fighting Style: Archery (+2 to ranged attack — auto-applied at attack time, no pre-baked bonus). Sharpshooter feat: optional -5 attack / +10 damage trade + ignore cover up to total cover."},
             {"name": "Shortsword", "attack_bonus": "+7", "damage": "1d6+4",
              "damage_type": "piercing", "range": "5 ft",
              "desc": "Finesse, light. Off-hand melee — Rowan doesn't want enemies in his face but keeps a shortsword for when they get there anyway."},

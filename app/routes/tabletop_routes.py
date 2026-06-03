@@ -20461,6 +20461,107 @@ def _attack_is_martial_arts_candidate(attack_name: str) -> bool:
     return any(p in name for p in _MARTIAL_ARTS_NAME_PATTERNS)
 
 
+def _pc_fighting_style(sheet: dict) -> str:
+    """v2.99.83 — Fighting Style class feature (Fighter / Paladin /
+    Ranger Lv 1-2). Reads ``sheet.fighting_style`` and normalizes
+    to a lower-case slug. Returns "" when no style is set.
+
+    Canon slugs:
+      "archery"          — +2 ranged weapon attack rolls
+      "defense"          — +1 AC when wearing armor
+      "dueling"          — +2 damage with 1H melee weapon, no other weapon
+      "great_weapon"     — reroll 1s + 2s on 2H melee damage
+      "two_weapon"       — add ability mod to off-hand attack damage
+      "protection"       — reaction shield-bash; v2.68.10 reactions panel
+    """
+    if not sheet:
+        return ""
+    raw = (sheet.get("fighting_style") or "").strip().lower()
+    return raw.replace("-", "_").replace(" ", "_")
+
+
+def _attack_is_ranged_weapon(attack: dict) -> bool:
+    """v2.99.83 — does this attack count as a Ranged Weapon Attack
+    for Fighting Style: Archery? Heuristic: range string contains
+    "/" (split short/long ranged shape like "150/600 ft") OR has
+    no slash but the leading distance is > 15 ft (e.g. a thrown
+    spear "20 ft"). Pure melee (5 / 10 / 15 ft no-slash) returns
+    False. No range at all returns False (can't tell).
+    """
+    if not attack:
+        return False
+    rng = (attack.get("range") or "").strip().lower()
+    if not rng:
+        return False
+    if "/" in rng:
+        return True
+    import re as _re
+    m = _re.match(r"^(\d+(?:\.\d+)?)\s*ft", rng)
+    if not m:
+        return False
+    try:
+        return float(m.group(1)) > 15.0
+    except (TypeError, ValueError):
+        return False
+
+
+def _attack_is_one_handed_melee(attack: dict) -> bool:
+    """v2.99.83 — does this attack count as wielding a single 1H
+    melee weapon (Fighting Style: Dueling: "+2 dmg when wielding
+    a melee weapon in one hand and no other weapon")? Heuristic:
+    melee range (≤ 15 ft, no slash) AND desc doesn't mention
+    "two-handed" / "2-handed" / "off-hand" / "versatile (two-handed)".
+
+    The "no other weapon" half of RAW (Dueling forbids a second
+    weapon, including a hand crossbow) is filed for follow-up —
+    needs the inventory's equipped flag to detect a second melee
+    weapon. Today the helper assumes a single 1H weapon is wielded
+    when the heuristic matches.
+    """
+    if not attack:
+        return False
+    rng = (attack.get("range") or "").strip().lower()
+    if not rng or "/" in rng:
+        return False
+    import re as _re
+    m = _re.match(r"^(\d+(?:\.\d+)?)\s*ft", rng)
+    if not m:
+        return False
+    try:
+        if float(m.group(1)) > 15.0:
+            return False
+    except (TypeError, ValueError):
+        return False
+    desc = (attack.get("desc") or "").lower()
+    two_handed_markers = ("two-handed", "2-handed", "two handed", "off-hand", "offhand")
+    if any(m in desc for m in two_handed_markers):
+        return False
+    return True
+
+
+def _pc_archery_bonus(sheet: dict, attack: dict) -> int:
+    """v2.99.83 — Fighting Style: Archery returns +2 when the
+    attacker has Archery AND the attack is a ranged weapon attack;
+    otherwise 0. Applied at attack-bonus parse time (modifies the
+    d20 + bonus expression).
+    """
+    if _pc_fighting_style(sheet) != "archery":
+        return 0
+    return 2 if _attack_is_ranged_weapon(attack) else 0
+
+
+def _pc_dueling_bonus(sheet: dict, attack: dict) -> int:
+    """v2.99.83 — Fighting Style: Dueling returns +2 when the
+    attacker has Dueling AND the attack is a 1H melee weapon
+    attack; otherwise 0. Applied as a virtual damage uplift via
+    _compute_attack_auto_uplifts so it renders as "+2 [Dueling]"
+    in the breakdown alongside Rage / Hex / Hunter's Mark.
+    """
+    if _pc_fighting_style(sheet) != "dueling":
+        return 0
+    return 2 if _attack_is_one_handed_melee(attack) else 0
+
+
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
     """v2.99.81 — swap the leading die on an unarmed/monk-weapon
     attack with the Monk's Martial Arts die when it's larger.
@@ -30794,6 +30895,16 @@ async def use_attack(
     damage_expr_raw = _apply_monk_martial_arts_die(
         sheet, str(attack.get("name") or ""), damage_expr_raw,
     )
+    # v2.99.83 — Fighting Style: Dueling. +2 to damage when wielding
+    # a single 1H melee weapon. The helper short-circuits on style
+    # mismatch / non-melee attacks. Appended as "+2" to the damage
+    # expression so the breakdown reads "1d8+4+2" (the source is
+    # the sheet's authored Fighting Style — visible in the chat
+    # card's attack name + the next ship can replace with a labeled
+    # uplift via _compute_attack_auto_uplifts if needed).
+    _dueling = _pc_dueling_bonus(sheet, attack)
+    if _dueling and damage_expr_raw:
+        damage_expr_raw = f"{damage_expr_raw}+{_dueling}"
 
     is_save = save_dc > 0 and save_ability
 
@@ -30981,6 +31092,17 @@ async def use_attack(
             or any(c.isalpha() for c in attack_bonus_raw)\
             else "+" + attack_bonus_raw
         atk_expr = "1d20" + (bonus_expr if bonus_expr.startswith(("+", "-")) else "+" + bonus_expr)
+        # v2.99.83 — Fighting Style: Archery. +2 to the attack roll
+        # when the attacker has Archery style AND the attack is a
+        # ranged weapon attack (range contains "/" or has a single
+        # range > 15 ft). Pre-v2.99.83 the demo's Rowan had the +2
+        # baked into the sheet's attack_bonus; v2.99.83 strips the
+        # pre-bake (Longbow now "+7") and adds it here so the
+        # source of the +2 surfaces in the chat-card breakdown
+        # parallel to Rage / Bless / other auto-uplifts.
+        _archery = _pc_archery_bonus(sheet, attack)
+        if _archery:
+            atk_expr += f"+{_archery}"
         # v2.97.34 — append buff-driven attack modifiers (Sacred
         # Weapon / Bless / Bane). The suffix is "" when none apply,
         # so this is a no-op for ordinary attacks.
