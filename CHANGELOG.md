@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.106] - 2026-06-03 — "One Condition, Many Sources" — extract Restrained into a shared `_make_restrained_buff` factory
+
+**Schema version:** 65
+**Commit summary:** **Refactor: extract the Restrained-condition buff shape into a shared `_make_restrained_buff` factory so future Grapple, Hold spells, monster grappler features, Entangle, Bigby's Hand, etc. all install Restrained the same way.** Pre-v2.99.106 the Web buff carried the 4 canonical Restrained `raw_effects` bullets inline; future Restrained-bringing content would have had to copy-paste them. The factory centralizes the core mechanics + lets each source append its own bullets (Web: "Flammable", "STR Athletics to break free"; Grapple: "Drag with the grappler"; etc.). Buff `key` becomes `"restrained"` (was `"web"` in v2.99.105) so condition-aware code can dedupe / lookup by a single canonical key.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `_RESTRAINED_CORE_RAW_EFFECTS` module constant with the 4 canonical Restrained bullets ("speed 0", "attacks vs target have advantage", "target's attacks have disadvantage", "disadvantage on DEX saves"). New `_make_restrained_buff(target_speed_walk, source_char_id, source_char_name, *, source, display_name, icon, duration_rounds, concentration, source_specific_raw_effects?)` factory. Returns a dict with `key="restrained"`, `effects.speed_reduction_ft = base` (full reduction → speed 0), `raw_effects = core + source_specific`. (2) `_make_web_buff` becomes a thin wrapper that calls the factory with web-specific args. The mechanical output for Web is byte-identical except for the key (was `"web"`, now `"restrained"`) and the addition of source-specific raw_effects via the new param. (3) `tests/harness/test_restrained_buff_factory.py` — 8 unit tests covering the factory's return shape, edge cases, and Web's wrapper behavior.
+
+### Added
+- `_RESTRAINED_CORE_RAW_EFFECTS` module constant (4 canonical Restrained bullets).
+- `_make_restrained_buff(...)` factory — public to the module; future Restrained-bringing content calls this.
+- `tests/harness/test_restrained_buff_factory.py` — 8 unit tests: key="restrained", speed_reduction = base (40 ft case), zero-speed clamp, None-speed default 30, core raw_effects always present, source_specific extends (not replaces), source attribution plumb-through, Web wrapper produces the right combined buff.
+
+### Changed
+- Web buff `key` is now `"restrained"` (was `"web"` in v2.99.105 — never released in a stable for long; the swap is one commit later). Source attribution is preserved via the `source: "web-spell"` field.
+- `_make_web_buff(...)` is a thin wrapper around `_make_restrained_buff(...)` instead of a self-contained builder. Output is functionally identical for Web's mechanical bits; the key change is the one observable diff.
+
+### Notes
+- **PATCH bump** — refactor + new tests. No new endpoint, no API contract change. The `key="restrained"` change is observable via the buff list shape; the v2.99.105 `/cast_web` tests don't assert the key (they read `data.affected[*].speed_reduction_ft` only) so they still pass.
+- **Why `key="restrained"` instead of per-source keys.** RAW conditions like Restrained are unique on a target — being doubly-Restrained doesn't stack mechanics. The shared key means re-imposing Restrained from a second source REPLACES the first, which matches RAW's "you have the condition" semantics. The `source` field preserves attribution so the GM UI can still show who applied it.
+- **Future content checklist for adding a new Restrained source.** (1) Build the source-specific raw_effects list. (2) Call `_make_restrained_buff(..., source="my-source-slug", display_name="Display (Restrained)", icon="🧷", duration_rounds=N, concentration=False, source_specific_raw_effects=[...])`. (3) Install via `_install_buff_on_combatant_id`. The mechanical effects (speed → 0, advantage/disadvantage marker bullets) come for free.
+- **Filed.** (1) Standalone hooks for the canonical Restrained mechanics: advantage on attacks vs Restrained targets, disadvantage on the Restrained target's attacks + DEX saves. Today these are descriptive only. (2) Stacking semantics — RAW allows a Webbed-and-Grappled creature to be doubly-Restrained for narrative purposes; the shared-key install replaces. A future commit could surface the lost source in a "previously restrained by..." footnote on the chat card.
+- **In-process unit test pattern.** Imports from `app.routes.tabletop_routes` which transitively imports fastapi; the test guards the import with a try/except + skips when fastapi isn't installed locally. Runs in CI / docker image fine. (Same constraint as the v2.99.103 fix attempt to test `_make_slow_buff` directly — those tests went into `tests/harness/test_effective_speed_walk.py` only because the helper was moved to a leaf module.)
+- **Total harness count: 871** (was 863 in v2.99.105).
+
+---
+
 ## [2.99.105] - 2026-06-03 — "Sticky Threads" — /cast_web endpoint installs full-base speed reduction (Restrained → speed 0)
 
 **Schema version:** 65

@@ -21274,23 +21274,51 @@ def _make_slow_buff(
     }
 
 
-def _make_web_buff(
+_RESTRAINED_CORE_RAW_EFFECTS: list[str] = [
+    "Restrained: speed 0",
+    "Restrained: attacks vs target have advantage (filed)",
+    "Restrained: target's attacks have disadvantage (filed)",
+    "Restrained: disadvantage on DEX saves (filed)",
+]
+
+
+def _make_restrained_buff(
     target_speed_walk: int,
     source_char_id: int | None,
     source_char_name: str,
+    *,
+    source: str,
+    display_name: str,
+    icon: str,
+    duration_rounds: int,
+    concentration: bool,
+    source_specific_raw_effects: list[str] | None = None,
 ) -> dict:
-    """v2.99.105 — build the Web spell's target-side buff dict.
-    Mechanical effect: speed reduced to 0 (Restrained) — stored as
-    `speed_reduction_ft = base` so the v2.99.98 engine clamps the
-    effective speed to 0.
+    """v2.99.106 — canonical Restrained-condition buff factory.
 
-    Other Restrained effects (attacks vs target have advantage,
-    target's attacks have disadvantage, disadvantage on DEX saves)
-    are surfaced as `raw_effects` tooltips on the buff for GM
-    narration. A future `restrained` condition buff can split
-    these out so other Restraining content (Grapple, Hold spells,
-    monster grapplers) shares the mechanics; today the effects
-    ride on the web buff.
+    Any content that imposes the Restrained condition (Web, Grapple,
+    Hold spells, monster grapplers, future Entangle / Bigby's Hand
+    / Black Tentacles) calls this with source-specific args. The
+    output carries:
+
+      - ``key == "restrained"`` so future condition-aware code can
+        look up the condition by a single key. Re-imposing
+        Restrained from a different source REPLACES the existing
+        buff (key dedupe in ``_install_buff_on_combatant_id``) —
+        slightly off RAW (which lets multiple Restraining sources
+        stack), accepted v1 simplification since the mechanical
+        effect (speed 0, attack/save disadvantages) is the same
+        regardless of source count.
+      - ``effects.speed_reduction_ft = base`` so the v2.99.98 engine
+        clamps the effective speed to 0.
+      - ``raw_effects`` lists the canonical Restrained mechanics
+        plus any source-specific bullets (e.g. "STR (Athletics)
+        check to break free" for Web, "Drag with the grappler" for
+        Grapple).
+
+    The source attribution fields (``source``, ``source_char_id``,
+    ``source_char_name``) preserve who/what installed it so the GM
+    UI can show "Webbed by Thalindra" vs "Grappled by ogre".
     """
     try:
         base = (
@@ -21298,28 +21326,49 @@ def _make_web_buff(
         )
     except (TypeError, ValueError):
         base = 30
-    # Web reduces speed to 0 → reduction = base (whatever the
-    # target's speed is). Clamp to ≥ 0 just in case.
     reduction = max(0, base)
+    raw = list(_RESTRAINED_CORE_RAW_EFFECTS)
+    if source_specific_raw_effects:
+        raw.extend(source_specific_raw_effects)
     return {
-        "key": "web",
-        "name": "Webbed (Restrained)",
-        "icon": "🕸",
-        "duration_rounds": 600,  # 1 hour at 6 s / round
-        "concentration": True,
-        "source": "web-spell",
+        "key": "restrained",
+        "name": display_name,
+        "icon": icon,
+        "duration_rounds": duration_rounds,
+        "concentration": concentration,
+        "source": source,
         "source_char_id": int(source_char_id) if source_char_id else None,
         "source_char_name": source_char_name or "",
         "effects": {"speed_reduction_ft": reduction},
-        "raw_effects": [
-            "Restrained: speed 0",
-            "Restrained: attacks vs target have advantage (filed)",
-            "Restrained: target's attacks have disadvantage (filed)",
-            "Restrained: disadvantage on DEX saves (filed)",
+        "raw_effects": raw,
+    }
+
+
+def _make_web_buff(
+    target_speed_walk: int,
+    source_char_id: int | None,
+    source_char_name: str,
+) -> dict:
+    """v2.99.105 — Web spell's Restrained buff. v2.99.106 refactored
+    to a thin wrapper over the shared ``_make_restrained_buff``
+    factory; the only Web-specific bits are the display name,
+    icon, source slug, and the two web-flavored raw_effects (break
+    free check + flammable note).
+    """
+    return _make_restrained_buff(
+        target_speed_walk=target_speed_walk,
+        source_char_id=source_char_id,
+        source_char_name=source_char_name,
+        source="web-spell",
+        display_name="Webbed (Restrained)",
+        icon="🕸",
+        duration_rounds=600,  # 1 hour at 6 s / round
+        concentration=True,
+        source_specific_raw_effects=[
             "STR (Athletics) check vs DC to break free (action)",
             "Flammable: take 2d4 fire damage if web ignited (filed)",
         ],
-    }
+    )
 
 
 async def _apply_repelling_blast_push(
