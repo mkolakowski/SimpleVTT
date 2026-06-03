@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.131] - 2026-06-03 — "Eyes That Pierce Darkness" — Devil's Sight (Warlock invocation) audit endpoint
+
+**Schema version:** 65
+**Commit summary:** **Ship Devil's Sight as a dedicated `/use_devils_sight` endpoint that validates the invocation gate and broadcasts a `feature_used` audit when a Warlock declares they're using their 120 ft darkness vision.** RAW (PHB p.110): "You can see normally in darkness, both magical and nonmagical, to a distance of 120 feet." v1 ships the audit + gate only — the full vision/lighting engine that mechanically respects the marker isn't built yet (filed). Mirror of the v2.99.104 Mask of Many Faces pattern: audit-only endpoint that gives the chat log a record of when the invocation fires. Magnus already has `eldritch-invocation-devils-sight` on his feats list from v2.99.93's work.
+**Description:** Two edits. (1) New `POST /api/campaign/{cid}/use_devils_sight` endpoint mirroring `/use_mask_of_many_faces`'s shape. Validates `character_id`, caster ownership/GM, and the invocation via `_pc_has_eldritch_invocation(sheet, "devils-sight")` (409 `missing_invocation`). On success, broadcasts a `feature_used` with `source: "devils-sight"` + `range_ft: 120` for the chat log. (2) `tests/harness/test_use_devils_sight.py` — 3 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_devils_sight` endpoint.
+- `feature_used` broadcast with `source: "devils-sight"` + `range_ft: 120` for the audit log.
+- `tests/harness/test_use_devils_sight.py` — 3 tests: happy path (Magnus → 200 + WS audit), missing invocation gate (Krieger → 409), missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + 3 tests. No schema change.
+- **Why audit-only, no mechanical hook.** SimpleVTT doesn't have a lighting/vision engine. Attack rolls don't currently track illumination state — there's no concept of "the attacker is in darkness" or "the target is in dim light" that would interact with Devil's Sight. Wiring those mechanics requires: (a) a darkness/light marker on tokens or the map, (b) attack-time roll adjustments (disadvantage vs creatures in darkness for un-Devil's-Sight'd attackers; normal for Devil's Sight wielders), (c) the Devil's Sight detection at attack-resolution time. Filed as the "vision/lighting scaffold" prerequisite for several invocations (Devil's Sight, Eyes of the Rune Keeper, Ghostly Gaze, etc.).
+- **Why a separate endpoint vs class_feature_used trigger.** v1 keeps the endpoint pattern consistent with Mask of Many Faces and other audit-only invocation endpoints. A future unified `/use_invocation` endpoint with an `invocation_slug` body field could consolidate, but the per-endpoint pattern is more discoverable + easier to extend with per-invocation logic (e.g., range_ft for Devil's Sight vs disguise_desc for Mask of Many Faces).
+- **Magnus's full invocation roster.** Agonizing Blast (v2.99.89), Hex Warrior (v2.99.93), Mask of Many Faces (v2.99.104), Repelling Blast (v2.99.90), Lance of Lethargy (v2.99.92), Lifedrinker (v2.99.97), and now Devil's Sight (v2.99.131 audit-only). That's 7 of the SRD's ~20 Eldritch Invocations.
+- **Total harness count: 966** (was 963 in v2.99.130).
+
+---
+
 ## [2.99.130] - 2026-06-03 — "Sculpting a Statue" — /cast_flesh_to_stone endpoint with staged Restrained → Petrified body flag
 
 **Schema function:** 65

@@ -10245,6 +10245,84 @@ async def use_dash(
     return {"ok": True, "grant_ft": grant_ft}
 
 
+@router.post("/api/campaign/{campaign_id}/use_devils_sight")
+async def use_devils_sight(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.131 — Devil's Sight (Warlock Lv 2+ invocation).
+
+    RAW (PHB p.110): "You can see normally in darkness, both magical
+    and nonmagical, to a distance of 120 feet."
+
+    v1 ships the audit broadcast + the invocation gate. The full
+    lighting/vision engine that respects this marker isn't built yet
+    (filed) — today the endpoint emits a `feature_used` so the chat
+    log has a record when Magnus declares he's seeing through the
+    darkness. A future commit can wire a `_pc_sees_in_darkness(sheet)`
+    helper into a darkness-modifier resolver (e.g. for Pact of the
+    Blade weapon attacks while standing in Darkness, attacks vs.
+    creatures in Darkness, etc.).
+
+    Body: ``{character_id}``.
+
+    Validation:
+      - Caller has `eldritch-invocation-devils-sight` on feats list
+      - 403 when not the GM and not the caster's owner
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_invocation(sheet, "devils-sight"):
+        return JSONResponse(status_code=409, content={
+            "error": "missing_invocation",
+            "invocation": "devils-sight",
+        })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "👁 Devil's Sight",
+            "feature_desc": (
+                f"{char.name} sees through darkness — both magical "
+                f"and nonmagical — out to 120 ft."
+            ),
+            "source": "devils-sight",
+            "range_ft": 120,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "range_ft": 120,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_mask_of_many_faces")
 async def use_mask_of_many_faces(
     campaign_id: int,
