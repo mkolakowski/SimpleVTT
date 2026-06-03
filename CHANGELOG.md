@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.143] - 2026-06-03 — "The Honeyed Tongue" — Beguiling Influence (Warlock invocation) — and the suite crosses 1000 tests
+
+**Schema version:** 65
+**Commit summary:** **Ship Beguiling Influence as a passive sheet feature + `/use_beguiling_influence` audit endpoint.** RAW (PHB p.110): "You gain proficiency in the Deception and Persuasion skills." Three edits: registry-style invocation on Magnus's feats, Persuasion proficiency stamped on his skills dict at seed time, and an audit endpoint that mirrors the v2.99.138/.141 pattern for chat-log declarations in social scenes. Magnus's invocation roster crosses 12/20. **The harness suite crosses 1000 tests with this ship (1002 total) — a milestone the per-commit harness discipline rule (every endpoint = one harness test, every commit = a bump) compounded across the v2.99.x series of class-feature ships.**
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `POST /api/campaign/{cid}/use_beguiling_influence` endpoint. Validates `character_id`, caster ownership/GM, and the invocation via `_pc_has_eldritch_invocation(sheet, "beguiling-influence")` (409 `missing_invocation`). On success, broadcasts `feature_used` with `source: "beguiling-influence"` and `skill_proficiencies: ["Deception", "Persuasion"]`. (2) `app/demo_seed.py` — Magnus's feats list gains `eldritch-invocation-beguiling-influence`; his skills dict gains `Persuasion` with `proficient: True` and `source: "beguiling-influence"` (Deception was already stamped from his Charlatan background — RAW the invocation grants both, and the demo seed credits each correctly). (3) `tests/harness/test_use_beguiling_influence.py` — 3 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_beguiling_influence` endpoint.
+- `eldritch-invocation-beguiling-influence` on Magnus's feats list.
+- `Persuasion` proficiency stamped on Magnus's skills with `source: "beguiling-influence"`.
+- `feature_used` broadcast with `source: "beguiling-influence"` and `skill_proficiencies: ["Deception", "Persuasion"]`.
+- `tests/harness/test_use_beguiling_influence.py` — 3 tests: happy path (Magnus → 200 + WS audit), missing invocation gate (Krieger → 409), missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + demo seed edit + 3 tests. No schema change.
+- **Why also an endpoint for a passive feature.** Beguiling Influence's mechanical effect (proficiency in two CHA skills) lives on the sheet at seed time and applies automatically when the GM rolls Deception/Persuasion checks for Magnus. The `/use_beguiling_influence` endpoint is a chat-log declaration: when the warlock leans on the invocation explicitly ("I use my Beguiling Influence to charm the bartender"), the GM sees a `feature_used` audit so the table can mark the bonus claimed. Same pattern as v2.99.138 Eldritch Sight and v2.99.141 Ascendant Step (whose mechanical effect also lives elsewhere; the endpoint records the declaration).
+- **What's filed.** A runtime sheet-load hook that auto-stamps the invocation's skill proficiencies when `eldritch-invocation-beguiling-influence` is on the feats list — today the proficiency is stamped at seed time, so adding the invocation to an existing character via the sheet editor wouldn't grant the skills until the seed re-runs. Same filed pattern would apply to other proficiency-granting invocations (Eyes of the Rune Keeper, etc.) if they ship.
+- **Magnus's invocation roster.** 12 of the SRD's ~20 Eldritch Invocations now mechanically wired: Agonizing Blast, Hex Warrior, Mask of Many Faces, Repelling Blast, Lance of Lethargy, Lifedrinker, Devil's Sight, Mire the Mind, Eldritch Sight, Ascendant Step, Sculptor of Flesh, Beguiling Influence.
+- **Suite milestone.** The harness suite is now at **1002 tests** — past the 1000-test mark. The discipline rule that every endpoint commit lands at least one harness test is the reason; the v2.99.x series (44 ships from v2.99.95 through v2.99.143) added roughly 200 tests on a base of ~800.
+- **Total harness count: 1002** (was 999 in v2.99.142).
+
+---
+
 ## [2.99.142] - 2026-06-03 — "The Sculptor's Hand" — Sculptor of Flesh (Warlock invocation) wires Polymorph through the v2.99.140 router
 
 **Schema version:** 65

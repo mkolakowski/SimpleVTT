@@ -1446,6 +1446,11 @@ def _warlock_sheet(name: str) -> dict:
             "Intimidation":    {"ability": "CHA", "proficient": True, "expertise": False},
             "Deception":       {"ability": "CHA", "proficient": True, "expertise": False},
             "Sleight of Hand": {"ability": "DEX", "proficient": True, "expertise": False},
+            # v2.99.143 — Beguiling Influence (Eldritch Invocation)
+            # grants proficiency in Deception + Persuasion. Magnus
+            # already has Deception from his Charlatan background;
+            # this is the net add from the invocation.
+            "Persuasion":      {"ability": "CHA", "proficient": True, "expertise": False, "source": "beguiling-influence"},
         },
         "attacks": [
             # v2.99.93 — Hex Warrior bound weapon. Magnus's Quarterstaff
@@ -1636,6 +1641,16 @@ def _warlock_sheet(name: str) -> dict:
             # Mire the Mind to a different target spell.
             {"slug": "eldritch-invocation-sculptor-of-flesh", "name": "Eldritch Invocation: Sculptor of Flesh",
              "desc": "1/long rest: cast Polymorph using a Warlock spell slot — routed via /cast_polymorph with class_slug=\"warlock\" + via_invocation=\"sculptor-of-flesh\" per v2.99.142. RAW prereq Lv 7 Warlock. Target the transform via /transform with source=\"polymorph\" after the cast."},
+            # v2.99.143 — Beguiling Influence: passive proficiency in
+            # Deception + Persuasion. Magnus's Charlatan background
+            # already granted Deception, so the invocation's net add
+            # is Persuasion (now stamped on the skills dict below
+            # with source: "beguiling-influence"). The audit endpoint
+            # /use_beguiling_influence is a chat-log declaration for
+            # social-scene moments where the GM wants the table to
+            # see the bonus claimed.
+            {"slug": "eldritch-invocation-beguiling-influence", "name": "Eldritch Invocation: Beguiling Influence",
+             "desc": "Passive: gain proficiency in Deception + Persuasion (CHA) — granted at seed. Audit declaration via /use_beguiling_influence per v2.99.143. RAW prereq Lv 2 Warlock."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],

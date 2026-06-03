@@ -10423,6 +10423,84 @@ async def use_ascendant_step(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_beguiling_influence")
+async def use_beguiling_influence(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.143 — Beguiling Influence (Warlock Lv 2+ invocation).
+
+    RAW (PHB p.110): "You gain proficiency in the Deception and
+    Persuasion skills."
+
+    A passive invocation — the proficiency is granted at sheet
+    creation time (Magnus's seed already stamps Persuasion +
+    Deception with a note crediting Beguiling Influence). This
+    endpoint is the chat-log declaration: when the warlock leans
+    on the invocation in a social scene ("I use Beguiling
+    Influence to charm the bartender"), the GM sees the audit so
+    the table knows the bonus was claimed.
+
+    Body: ``{character_id}``.
+
+    Validation:
+      - Caller has `eldritch-invocation-beguiling-influence` on
+        feats (409 missing_invocation if not)
+      - 403 when not the GM and not the caster's owner
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_invocation(sheet, "beguiling-influence"):
+        return JSONResponse(status_code=409, content={
+            "error": "missing_invocation",
+            "invocation": "beguiling-influence",
+        })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🗣️ Beguiling Influence",
+            "feature_desc": (
+                f"{char.name} leans on Beguiling Influence — "
+                f"proficient in Deception + Persuasion (CHA)."
+            ),
+            "source": "beguiling-influence",
+            "skill_proficiencies": ["Deception", "Persuasion"],
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "skill_proficiencies": ["Deception", "Persuasion"],
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,
