@@ -21593,6 +21593,41 @@ _GRAPPLED_CORE_RAW_EFFECTS: list[str] = [
 ]
 
 
+def _compute_grappler_athletics_dc_from_sheet(sheet: dict) -> int:
+    """v2.99.117 — passive Athletics DC for the v2.97.62 end-of-turn
+    escape-save auto-fire. Formula: 10 + STR mod + (PB if proficient
+    in Athletics) + (extra PB if expertise). Mirrors the standard 5e
+    "passive check = 10 + modifiers" rule. Used by /use_grapple to
+    stamp `repeated_save_dc` on the grappled buff so the framework
+    can roll the escapee's break-free attempt automatically at end
+    of each of their turns.
+
+    Falls back to 10 (RAW: a target with no STR mod and no Athletics
+    needs to beat the grappler in a contested check). Future commits
+    can route through a dedicated Athletics-check framework instead
+    of repurposing the save-framework — filed.
+    """
+    if not sheet:
+        return 10
+    abilities = sheet.get("abilities") or {}
+    try:
+        str_mod = (int(abilities.get("STR", 10)) - 10) // 2
+    except (TypeError, ValueError):
+        str_mod = 0
+    dc = 10 + str_mod
+    skills = sheet.get("skills") or {}
+    ath = skills.get("Athletics") or {}
+    if ath.get("proficient"):
+        try:
+            pb = int(sheet.get("proficiency_bonus") or 2)
+        except (TypeError, ValueError):
+            pb = 2
+        dc += pb
+        if ath.get("expertise"):
+            dc += pb
+    return dc
+
+
 def _make_grappled_buff(
     target_speed_walk: int,
     source_char_id: int | None,
@@ -21604,6 +21639,8 @@ def _make_grappled_buff(
     duration_rounds: int,
     concentration: bool,
     source_specific_raw_effects: list[str] | None = None,
+    repeated_save_ability: str | None = None,
+    repeated_save_dc: int | None = None,
 ) -> dict:
     """v2.99.112 — canonical Grappled-condition buff factory.
 
@@ -21633,7 +21670,7 @@ def _make_grappled_buff(
     raw = list(_GRAPPLED_CORE_RAW_EFFECTS)
     if source_specific_raw_effects:
         raw.extend(source_specific_raw_effects)
-    return {
+    buff = {
         "key": "grappled",
         "name": display_name,
         "icon": icon,
@@ -21645,12 +21682,29 @@ def _make_grappled_buff(
         "effects": {"speed_reduction_ft": reduction},
         "raw_effects": raw,
     }
+    # v2.99.117 — repeated-save stamps for the v2.97.62 end-of-turn
+    # auto-fire. RAW Grapple escape is an ACTION + STR (Athletics) or
+    # DEX (Acrobatics) check, not a save — but the same framework
+    # plumbing works as long as the DC reflects the grappler's hold
+    # strength. Filed: a dedicated Athletics-check framework that
+    # doesn't repurpose the save path.
+    if (
+        repeated_save_ability
+        and repeated_save_ability.upper() in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}
+        and repeated_save_dc
+        and int(repeated_save_dc) > 0
+    ):
+        buff["repeated_save_ability"] = repeated_save_ability.upper()
+        buff["repeated_save_dc"] = int(repeated_save_dc)
+    return buff
 
 
 def _make_grapple_action_buff(
     target_speed_walk: int,
     source_char_id: int | None,
     source_char_name: str,
+    *,
+    grappler_athletics_dc: int | None = None,
 ) -> dict:
     """v2.99.112 — Grapple action's Grappled buff. Thin wrapper
     over `_make_grappled_buff`. RAW (PHB p.195): "If you're able to
@@ -21681,6 +21735,12 @@ def _make_grapple_action_buff(
             "Escape: target uses an action to attempt STR (Athletics) or DEX (Acrobatics) vs grappler's STR (Athletics)",
             "Drag: grappler moves target by spending equal movement (RAW: half speed)",
         ],
+        # v2.99.117 — pass-through to the underlying factory so the
+        # v2.97.62 framework auto-rolls escape attempts at end of each
+        # target's turn. RAW imprecision: the save framework rolls a
+        # STR save, not a STR (Athletics) check — close enough for v1.
+        repeated_save_ability="STR" if grappler_athletics_dc else None,
+        repeated_save_dc=grappler_athletics_dc,
     )
 
 
@@ -30685,6 +30745,9 @@ async def use_grapple(
         target_speed_walk=base_speed,
         source_char_id=char.id,
         source_char_name=char.name,
+        grappler_athletics_dc=_compute_grappler_athletics_dc_from_sheet(
+            char.sheet or {},
+        ),
     )
     installed = await _install_buff_on_combatant_id(
         campaign_id, target_combatant_id, buff,

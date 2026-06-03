@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.117] - 2026-06-03 — "One Twist Per Turn" — wire grappled buff into the v2.97.62 end-of-turn save framework
+
+**Schema version:** 65
+**Commit summary:** **Stamp `repeated_save_ability: "STR"` + `repeated_save_dc: <grappler's passive Athletics>` on the grappled buff at install time, so the v2.97.62 end-of-turn auto-fire framework rolls an escape attempt for the target at end of each of their turns.** Pre-v2.99.117 escape was action-only — the target had to spend their action + the GM (or `/escape_grapple`) had to invoke explicitly. v2.99.117 adds an automatic background roll so the framework checks every turn whether the target broke free. RAW imprecision: Grapple escape RAW is an ACTION + STR (Athletics) or DEX (Acrobatics) CHECK, not a save. v2.99.117 repurposes the save framework — the rolled modifier is STR-save not STR-Athletics — for the convenience of automatic resolution. A dedicated Athletics-check framework is filed.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. (1) New `_compute_grappler_athletics_dc_from_sheet(sheet) -> int` helper. Formula: `10 + STR mod + (PB if proficient in Athletics) + (extra PB if expertise)`. Mirrors standard 5e "passive check = 10 + modifiers". Falls back to 10 on missing sheet. (2) `_make_grappled_buff` factory signature extended with optional `repeated_save_ability` + `repeated_save_dc` kwargs (same shape as the v2.99.106 Restrained / v2.99.107 Paralyzed / v2.99.110 Hold / v2.99.111 Slow factories). When supplied + valid, the stamps are written onto the buff. (3) `_make_grapple_action_buff` wrapper accepts an optional `grappler_athletics_dc` kwarg; when supplied, forwards as `repeated_save_ability="STR"` + `repeated_save_dc=dc` to the underlying factory. (4) `/use_grapple` computes the DC via the new helper + passes to `_make_grapple_action_buff`. (5) `tests/harness/test_grapple_repeated_save_stamps.py` — 2 regression tests.
+
+### Added
+- `_compute_grappler_athletics_dc_from_sheet(sheet) -> int` helper.
+- `repeated_save_ability` + `repeated_save_dc` kwargs on `_make_grappled_buff`.
+- `grappler_athletics_dc` kwarg on `_make_grapple_action_buff`.
+- DC plumbing in `/use_grapple`.
+- `tests/harness/test_grapple_repeated_save_stamps.py` — 2 tests: grappled buff carries STR + DC > 0, /use_repeated_save endpoint callable against the buff.
+
+### Changed
+- `_make_grappled_buff` now writes `repeated_save_ability` + `repeated_save_dc` onto the buff when supplied. Backward-compatible: pre-v2.99.117 callers without the kwargs get a stamp-less buff (the framework walks past).
+- `/use_grapple` now stamps the grappled buff with the v2.97.62 framework-compatible fields. Existing tests don't assert on field absence so they stay green.
+
+### Notes
+- **PATCH bump** — additive helper + factory kwargs + endpoint hook + 2 tests. No schema change. Backward-compatible.
+- **Why repurpose the save framework instead of building an Athletics-check one.** The v2.97.62 framework is already wired into the turn-end pipeline; it walks `combatant.buffs[]` for the install-time stamps and rolls + resolves automatically. An Athletics-check framework would need its own turn-end hook, its own broadcast shape, its own resolution helper — a much bigger ship. The save framework gives 80% of the value (auto-fire at turn end) for 5% of the work. The RAW imprecision (STR save modifier instead of Athletics check modifier) is documented + filed.
+- **Why STR for the escape attempt vs DEX (Acrobatics).** RAW: the escapee chooses STR or DEX. v1 picks STR for the auto-fire (most escapees default to STR Athletics because grapplers are usually STR-based; mismatched ability scores are the minority case). Filed: a body flag on `/use_grapple` that lets the GM stamp `DEX` instead, or a per-target preference.
+- **Auto-fire doesn't replace /escape_grapple.** The v2.99.114 `/escape_grapple` endpoint stays the canonical "I deliberately use my action to break free" path. The v2.97.62 auto-fire is a passive "did I get lucky on a roll" attempt. Both can coexist: a target who doesn't break free passively can still spend their action to try again. RAW is unclear about this stacking; v1 ships both paths and the GM picks which they prefer.
+- **Passive Athletics DC for Krieger.** STR 17 (mod +3), Barbarian Athletics proficient, PB +3 at Lv 5 → DC = 10 + 3 + 3 = 16. The auto-rolled STR save vs 16 has reasonable variance — Tavik (STR 14 mod +2, no Athletics proficiency) rolls 1d20+2 vs 16, success on 14+ → 35% chance per turn. Feels right at the table.
+- **Total harness count: 921** (was 919 in v2.99.116).
+
+---
+
 ## [2.99.116] - 2026-06-03 — "The Bandit Stops Moving" — refactor /use_stunning_strike NPC install path to use the v2.99.115 factory
 
 **Schema version:** 65
