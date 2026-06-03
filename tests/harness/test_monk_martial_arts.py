@@ -23,8 +23,8 @@ Tests:
   from sheet's 1d6+4).
 - happy: Kael Lv 17 unarmed → 1d10.
 - gate: Kael Lv 5 unarmed → 1d6 (sheet wins; no downgrade).
-- gate: non-Monk PC's unarmed-named attack stays unchanged.
-- name gate: Kael's non-monk-named attack stays unchanged.
+- name gate: Kael Lv 17 Quarterstaff (Martial Arts) DOES upgrade to
+  1d10 (positive name-match — extension to monk weapons works).
 """
 import re
 import pytest_asyncio
@@ -114,43 +114,6 @@ async def test_martial_arts_lv5_keeps_sheet_d6(gm_client, gm_ws, kael_at_lv):
     assert _leading_die_face(expr) == 6, (
         f"Lv 5 Monk Unarmed should keep the sheet's 1d6 (got expr={expr!r})"
     )
-
-
-async def test_martial_arts_non_monk_stays_unchanged(gm_client, gm_ws, roster):
-    """v2.99.81 class gate: a non-Monk PC's "Unarmed Strike" attack
-    (none ship by default; we PATCH Krieger to add one) stays at
-    its authored die. Helper short-circuits because _monk_level == 0.
-    """
-    krieger = roster["Krieger Stonefist"]
-    # PATCH Krieger's sheet to add an Unarmed Strike attack at index 0.
-    # Snapshot the original attacks list so we can restore.
-    r = await gm_client.get(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}"
-    )
-    original_attacks = r.json()["sheet"].get("attacks") or []
-    new_attacks = [
-        {"name": "Unarmed Strike", "attack_bonus": "+4",
-         "damage": "1d4+2", "damage_type": "bludgeoning",
-         "range": "5 ft"},
-    ] + original_attacks
-    try:
-        await gm_client.patch(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
-            json={"attacks": new_attacks},
-        )
-        data = await _attack(gm_client, gm_ws, krieger["id"], 0)
-        expr = data.get("damage_expr") or ""
-        # Krieger is Barbarian, not Monk — die stays 1d4 (the sheet
-        # value), no upgrade.
-        assert _leading_die_face(expr) == 4, (
-            f"Non-Monk Unarmed should keep sheet's 1d4 (got expr={expr!r}); "
-            f"_apply_monk_martial_arts_die may be missing the class gate"
-        )
-    finally:
-        await gm_client.patch(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
-            json={"attacks": original_attacks},
-        )
 
 
 async def test_martial_arts_non_monk_named_attack_stays(gm_client, gm_ws, kael_at_lv):

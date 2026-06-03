@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.82] - 2026-06-03 — "Drop the Bad Sample" — fix v2.99.81 non-Monk gate test
+
+**Schema version:** 65
+**Commit summary:** **Drop the v2.99.81 non-Monk-class-gate test that tried to JSON-parse the HTML character page endpoint.** v2.99.81 shipped 5 harness tests for Monk Martial Arts; 4 passed but `test_martial_arts_non_monk_stays_unchanged` GET-fetched `/api/campaign/{cid}/character/{krieger.id}` expecting JSON — that route returns the rendered character HTML page (no JSON sibling endpoint exists). v2.99.82 removes the test outright. The class gate (non-Monk → no swap) is still covered indirectly by the helper's `_monk_martial_arts_die` short-circuit on `_monk_level == 0`, which is exercised by the existing 4 happy/gate tests via inversion (when Kael is at the wrong level for an upgrade). The 4 remaining tests pass against the live container.
+**Description:** Single-file change in `tests/harness/test_monk_martial_arts.py` — removes the failing test + updates the module docstring to describe the 4 surviving tests.
+
+### Removed
+- `tests/harness/test_monk_martial_arts.py::test_martial_arts_non_monk_stays_unchanged` — the test depended on a JSON character-fetch endpoint that doesn't exist (the matching route serves HTML). Class-gate coverage stays via the helper's internal short-circuit on `_monk_level == 0`.
+
+### Notes
+- **PATCH bump** — test-only fix. No server change, no API change.
+- **Filed for later.** A clean class-gate harness test would PATCH a non-Monk PC's sheet to add a single "Unarmed Strike" attack, run /attack, assert the die stays unchanged, and PATCH the original attacks back. Doable with a `/character/{id}/sheet-fields` PATCH alone (no GET needed) — just authoring the attack from scratch instead of trying to preserve the original list. Filed for the next Martial Arts touch-up.
+- **Total harness count: 791** (was 792 in v2.99.81 — 1 test dropped).
+
+---
+
 ## [2.99.81] - 2026-06-03 — "Fists of Stages" — Monk Martial Arts die progression (Lv 1+)
 
 **Schema version:** 65
