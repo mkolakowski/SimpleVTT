@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1220 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.225, 2026-06-04).
+**Total tests:** 1225 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.226, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,17 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_berserker_path.py`
+v2.99.226 — Path of the Berserker (PHB p.49) Frenzy (Lv 3) + Intimidating Presence (Lv 10). Krieger Stonefist is the demo fixture; IP test PATCHes him Lv 7 → 10.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_frenzy_after_rage` | `/use_rage` to install the rage buff, then `/use_frenzy` → 200 + `feature_used` broadcast (source `frenzy`). |
+| `test_use_frenzy_without_rage` | No rage buff → 409 `not_raging`. |
+| `test_use_frenzy_wrong_class` | Pip (Rogue) → 409 `wrong_subclass_or_level`. |
+| `test_use_intimidating_presence_at_lv10` | Krieger PATCH'd to Lv 10 → `dc == 10` (sheet prof +3 unchanged on level PATCH; CHA 8 → -1; 8 + 3 + (-1) = 10) + `target_name == "Bandit"` + broadcast. |
+| `test_use_intimidating_presence_level_gate` | Control: Krieger at Lv 7 → 409 `wrong_subclass_or_level`. |
 
 ### `test_evocation_school.py`
 v2.99.225 — Evocation Wizard (PHB p.117) Sculpt Spells (Lv 2) + Empowered Evocation (Lv 10). Thalindra Moonwhisper is the demo fixture; Empowered Evocation test PATCHes her Lv 7 → 10.

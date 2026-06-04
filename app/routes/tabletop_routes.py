@@ -25384,6 +25384,34 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_berserker_path(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.226 — RAW Path of the Berserker features (Barbarian,
+    PHB p.49): Frenzy (Lv 3), Mindless Rage (Lv 6 — already wired
+    via the v2.57.0 condition-install gate), Intimidating Presence
+    (Lv 10), Retaliation (Lv 14).
+
+    Returns True when the PC is a Barbarian with subclass slug
+    containing "berserker" + meets `min_level`. Gates each
+    Berserker-specific endpoint.
+
+    Phase E.8 of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "barbarian":
+        has_barb = any(
+            (entry.get("class") or "").strip().lower() == "barbarian"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_barb:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "berserker" not in subclass:
+        return False
+    return _barbarian_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_evocation_school(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.225 — RAW School of Evocation features (Wizard,
     PHB p.117): Evocation Savant + Sculpt Spells (Lv 2),
@@ -36319,6 +36347,238 @@ async def use_empowered_evocation(
         "ok": True,
         "feature": "empowered-evocation",
         "int_mod": int_mod,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_frenzy")
+async def use_frenzy(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.226 — Phase E.8 of the v2.99.193 phased completion
+    plan. Frenzy (Path of the Berserker Lv 3+, PHB p.49): "Starting
+    when you choose this path at 3rd level, you can go into a
+    frenzy when you rage. If you do so, for the duration of your
+    rage you can make a single melee weapon attack as a bonus
+    action on each of your turns after this one. When your rage
+    ends, you suffer one level of exhaustion (which you can't
+    remove until you finish a long rest)."
+
+    Body: ``{character_id, override?}``.
+
+    Validates Berserker Barbarian Lv 3+ + currently raging
+    (rage buff on the combatant) + Phase 4 bonus chip. Marks the
+    bonus slot + broadcasts. v1 announces only; the bonus-action
+    melee attack itself is rolled via the normal `/attack` path.
+
+    The "+1 exhaustion at rage-end" half is filed — would need a
+    hook into `/end_buff` (or rage-buff teardown) to bump
+    `sheet.exhaustion_level`. v1 GM-tracks manually.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Barbarian character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_berserker_path(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "berserker barbarian lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _barbarian_level_from_sheet(sheet),
+        })
+
+    # Frenzy RAW requires the barbarian to be raging — check the
+    # active rage buff on the hub-state combatant.
+    if not _pc_has_rage_active_buff(campaign_id, char.id):
+        return JSONResponse(status_code=409, content={
+            "error": "not_raging",
+            "expected": "rage buff active on combatant",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "frenzy",
+            "label": "Frenzy",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "💢 Frenzy — bonus melee attack",
+            "feature_desc": (
+                f"{char.name} frenzies — one melee weapon attack "
+                f"as a bonus action this turn. "
+                f"(Berserker Lv 3+ class feature; GM tracks the "
+                f"+1 exhaustion at rage-end.)"
+            ),
+            "source": "frenzy",
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "frenzy",
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_intimidating_presence")
+async def use_intimidating_presence(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.226 — Phase E.8 of the v2.99.193 phased completion
+    plan. Intimidating Presence (Path of the Berserker Lv 10+,
+    PHB p.49): "Beginning at 10th level, you can use your action
+    to frighten someone with your menacing presence. When you do
+    so, choose one creature that you can see within 30 feet of
+    you. If the creature can see or hear you, it must succeed on
+    a Wisdom saving throw (DC equal to 8 + your proficiency bonus
+    + your Charisma modifier) or be frightened of you until the
+    end of your next turn..."
+
+    Body: ``{character_id, target_name?, override?}``.
+
+    Validates Berserker Barbarian Lv 10+ + Phase 4 action chip.
+    Computes DC = 8 + prof + CHA mod. Marks the action chip +
+    broadcasts the DC for the GM to roll the target's Wis save
+    manually. v1 ships as announce-only — the actual Frightened
+    install on save-fail is the GM's call.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_name = (str(body.get("target_name") or "")).strip()[:80]
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Barbarian character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_berserker_path(sheet, 10):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "berserker barbarian lv 10+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _barbarian_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "intimidating-presence",
+            "label": "Intimidating Presence",
+            "strict": strict,
+        })
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    cha = int((sheet.get("abilities") or {}).get("CHA") or 10)
+    cha_mod = (cha - 10) // 2
+    dc = 8 + prof + cha_mod
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_phrase = f" vs {target_name}" if target_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"😨 Intimidating Presence — Wis DC {dc}"
+                f"{target_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} menaces the target{target_phrase}. "
+                f"Target makes a Wisdom save DC {dc} or be "
+                f"Frightened until the end of {char.name}'s next "
+                f"turn. (Berserker Lv 10+ class feature.)"
+            ),
+            "source": "intimidating-presence",
+            "dc": dc,
+            "target_name": target_name,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "intimidating-presence",
+        "dc": dc,
+        "target_name": target_name,
+        "over_budget": was_used,
     }
 
 

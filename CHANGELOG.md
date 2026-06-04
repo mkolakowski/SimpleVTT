@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.226] - 2026-06-04 — "The Frenzy and the Glare" — Berserker Frenzy + Intimidating Presence
+
+**Schema version:** 66
+**Commit summary:** **Phase E.8 of the v2.99.193 phased completion plan — Path of the Berserker.** RAW PHB p.49: (1) Frenzy (Lv 3) — while raging, a single melee weapon attack as a bonus action each turn (+1 exhaustion at rage-end, GM-tracked in v1). (2) Intimidating Presence (Lv 10) — action; target Wis save DC 8 + prof + CHA mod or be frightened until end of next turn. v2.99.226 ships announce endpoints for both. Retaliation (Lv 14) filed for a follow-up commit.
+**Description:** One helper + two endpoints. (1) `_pc_has_berserker_path(sheet, min_level)` returns True for Barbarian with subclass containing "berserker" at or above `min_level` (multiclass-aware). (2) `/use_frenzy` — body `{character_id, override?}`, validates Berserker Lv 3+ + currently raging (rage buff active on combatant via `_pc_has_rage_active_buff`) + Phase 4 bonus chip, marks chip, broadcasts. (3) `/use_intimidating_presence` — body `{character_id, target_name?, override?}`, validates Berserker Lv 10+ + Phase 4 action chip, computes DC = 8 + prof + CHA mod, marks chip, broadcasts. Krieger Stonefist (Barbarian Berserker Lv 7 default) is the demo fixture; the IP test PATCHes him Lv 7 → 10 (DC = 11). One new harness test file with 5 tests.
+
+### Added
+- `_pc_has_berserker_path(sheet, min_level)` helper gate (multiclass-aware).
+- `/api/campaign/{cid}/use_frenzy` endpoint.
+- `/api/campaign/{cid}/use_intimidating_presence` endpoint.
+- `tests/harness/test_berserker_path.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 2 endpoints + 5 regression tests. No schema change.
+- **Frenzy gates on the rage buff.** The v2.99.226 endpoint walks `hub.get_battle(campaign)`'s combatant list and asserts a buff with `key == "rage"` is installed on the caller's combatant. This is the same check `_pc_has_rage_active_buff` (v2.57.0) used for Mindless Rage's condition-install gate. RAW Frenzy can only be invoked "when you rage" so v1 ships the strict "must currently be raging" gate.
+- **+1 exhaustion at rage-end filed.** RAW: "When your rage ends, you suffer one level of exhaustion (which you can't remove until you finish a long rest)." v1 doesn't auto-apply — would need a hook into `/end_buff` (rage-buff teardown path) that scans for an active frenzy flag + bumps `sheet.exhaustion_level`. Future commit. The Frenzy feature_used broadcast names the GM-tracked exhaustion in its description.
+- **Mindless Rage already wired (v2.57.0).** The condition-install gate at `/roll_request/{id}/respond` short-circuits Charmed/Frightened installs when the saving PC is raging. Phase E.8 doesn't re-touch that gate.
+- **Retaliation (Lv 14) filed.** Reaction melee attack when damaged within 5 ft. Needs a `/take_damage`-side hook (compute hit-by-melee + within-range + reaction available) — left for a follow-up commit.
+- **Phase E ✅ 5/8.** E.3 + E.4 + E.5 + E.7 + E.8. Still ⚪: E.1 Battle Master, E.2 Eldritch Knight, E.6 Wild Magic.
+- **42 ships this session.**
+- **Total harness count: 1225** (was 1220 in v2.99.225).
+
+---
+
 ## [2.99.225] - 2026-06-04 — "The Sculpted Storm" — Evocation Wizard Sculpt Spells + Empowered Evocation
 
 **Schema version:** 66
