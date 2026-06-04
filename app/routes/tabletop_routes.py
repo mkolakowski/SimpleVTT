@@ -37001,6 +37001,161 @@ async def use_bend_luck(
     }
 
 
+_SPELL_BOMBARDMENT_DIE_SIZES = {4, 6, 8, 10, 12}
+
+
+def _is_spell_bombardment_used(
+    campaign_id: int, attacker_char_id: int,
+) -> bool:
+    """v2.99.231 — Returns True if the PC has already used Spell
+    Bombardment this turn. Tracked via
+    ``combatant.economy.spell_bombardment_used`` on the hub-state
+    combatant; reset client-side at turn-advance, same pattern as
+    Colossus Slayer (v2.60.0)."""
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == attacker_char_id:
+            econ = c.get("economy") or {}
+            return bool(isinstance(econ, dict) and econ.get("spell_bombardment_used"))
+    return False
+
+
+async def _mark_spell_bombardment_used(
+    campaign_id: int, attacker_char_id: int,
+) -> None:
+    """v2.99.231 — Set the spell_bombardment_used flag. Mirror of
+    `_mark_colossus_slayer_used`."""
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == attacker_char_id:
+            target = c
+            break
+    if target is None:
+        return
+    economy = target.get("economy") or {}
+    if not isinstance(economy, dict):
+        economy = {}
+        target["economy"] = economy
+    economy["spell_bombardment_used"] = True
+    hub.set_battle(campaign_id, state)
+
+
+@router.post("/api/campaign/{campaign_id}/use_spell_bombardment")
+async def use_spell_bombardment(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.231 — Phase E.6 Phase 5 of the v2.99.193 phased
+    completion plan. Spell Bombardment (Wild Magic Sorcerer Lv 18+,
+    PHB p.103): "Beginning at 18th level, the harmful energy of
+    your spells intensifies. When you roll damage for a spell and
+    roll the highest number possible on any of the dice, choose
+    one of those dice, roll it again and add that roll to the
+    damage. You can use the feature only once per turn."
+
+    Body: ``{character_id, die_size}`` where die_size in {4,6,8,10,12}.
+
+    Validates Wild Magic Lv 18+ + once-per-turn flag (combatant
+    economy `spell_bombardment_used`). Rolls 1d<die_size>, marks
+    the flag, broadcasts.
+
+    v1 ships announce-only — the player invokes this after seeing
+    their damage roll show a max die. The bonus damage is announced
+    via feature_used; the GM applies the bump to the existing
+    damage roll manually.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    die_size = int(body.get("die_size") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if die_size not in _SPELL_BOMBARDMENT_DIE_SIZES:
+        raise HTTPException(
+            400,
+            f"die_size must be one of {sorted(_SPELL_BOMBARDMENT_DIE_SIZES)}",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_wild_magic(sheet, 18):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "wild magic sorcerer lv 18+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _sorcerer_level_from_sheet(sheet),
+        })
+
+    if _is_spell_bombardment_used(campaign_id, char.id):
+        return JSONResponse(status_code=409, content={
+            "error": "once_per_turn",
+            "feature": "spell-bombardment",
+        })
+
+    try:
+        extra = dice_mod.roll(f"1d{die_size}").total
+    except Exception:
+        extra = die_size
+
+    await _mark_spell_bombardment_used(campaign_id, char.id)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"💥 Spell Bombardment — +{extra} damage (1d{die_size} reroll)"
+            ),
+            "feature_desc": (
+                f"{char.name} rerolls one max-rolled d{die_size} "
+                f"and adds {extra} to the damage of an evocation "
+                f"spell this turn. (Wild Magic Sorcerer Lv 18+ "
+                f"class feature; once per turn.)"
+            ),
+            "source": "spell-bombardment",
+            "die_size": die_size,
+            "extra_damage": extra,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "spell-bombardment",
+        "die_size": die_size,
+        "extra_damage": extra,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/select_hunters_prey")
 async def select_hunters_prey(
     campaign_id: int,

@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.231] - 2026-06-04 — "The Detonating Die" — Wild Magic Sorcerer Spell Bombardment (Phase 5, E.6 complete)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.6 Phase 5 (FINAL) of the v2.99.193 phased completion plan — Spell Bombardment.** RAW PHB p.103 (Wild Magic Sorcerer Lv 18+): on a spell damage roll, when any die shows its max value, reroll one and add it. Once per turn. v2.99.231 ships the announce endpoint + once-per-turn flag via the same `combatant.economy` channel as Colossus Slayer (v2.60.0). **Phase E.6 is now ✅ COMPLETE — all 5 plan phases shipped (v2.99.227-231).**
+**Description:** Two helpers + one endpoint. (1) `_is_spell_bombardment_used(campaign_id, char_id)` reads `combatant.economy.spell_bombardment_used` from hub state (False when no battle). (2) `_mark_spell_bombardment_used(campaign_id, char_id)` writes the flag (mirror of `_mark_colossus_slayer_used`). (3) `/use_spell_bombardment` — body `{character_id, die_size}` where `die_size ∈ {4,6,8,10,12}`. Validates Wild Magic Sorcerer Lv 18+ + once-per-turn flag; rolls 1d<die_size> via `dice_mod.roll`; marks the flag; broadcasts `feature_used` (source `spell-bombardment`) with `(die_size, extra_damage)`. v1 ships announce-only — the player invokes after seeing their damage roll show a max die; the GM applies the bump to the existing damage roll manually. Zara Emberfire is the demo fixture; tests PATCH her subclass to "Wild Magic" + level to 18 and seed her in a battle so the economy flag has a home. One new harness test file with 5 tests.
+
+### Added
+- `_is_spell_bombardment_used(campaign_id, char_id)` reader.
+- `_mark_spell_bombardment_used(campaign_id, char_id)` writer.
+- `_SPELL_BOMBARDMENT_DIE_SIZES = {4, 6, 8, 10, 12}` valid set.
+- `/api/campaign/{cid}/use_spell_bombardment` endpoint.
+- `tests/harness/test_wild_magic_spell_bombardment.py` — 5 tests.
+
+### Changed
+- `docs/plans/wild-magic.md` Phase 5 marked ✅ shipped → **plan now fully complete (Phases 1-5)**; wiki landing-page + on-disk index updated.
+
+### Notes
+- **PATCH bump** — 2 helpers + 1 endpoint + 1 set + 5 regression tests + plan-doc closure. No schema change.
+- **Mirror of Colossus Slayer.** The `combatant.economy.<flag>` once-per-turn pattern was first established by Colossus Slayer (v2.60.0); Divine Strike (Cleric) and Foe Slayer use the same. Spell Bombardment slots in cleanly: same mark / read / client-side reset at turn advance.
+- **Deep-wire follow-up filed.** A future commit would hook the `/cast_spell` damage-roll site to auto-detect when any spell damage die shows its max + broadcast a `bombardment_offer` event for the player to accept inline (vs. the v1 announce-after pattern). Filed but not blocking — the v1 path covers RAW.
+- **Phase E.6 ✅ COMPLETE.** All 5 Wild Magic subclass phases shipped end-to-end in 5 consecutive commits (v2.99.227-231):
+  1. Tides of Chaos announce + long-rest refill (v2.99.227).
+  2. Wild Magic Surge auto-roll on Lv 1+ sorcerer cast (v2.99.228).
+  3. Bend Luck reaction (v2.99.229).
+  4. Controlled Chaos roll-twice at Lv 14+ (v2.99.230).
+  5. Spell Bombardment damage reroll at Lv 18+ (v2.99.231).
+  The Wild Magic Sorcerer subclass is now fully wired in v1 announce form with deferred deep-wire items documented per phase.
+- **Phase E ✅ 6/8.** E.3 + E.4 + E.5 + E.6 + E.7 + E.8 done. Still ⚪: E.1 Battle Master + E.2 Eldritch Knight (each wants its own design plan).
+- **47 ships this session.**
+- **Total harness count: 1249** (was 1244 in v2.99.230).
+
+---
+
 ## [2.99.230] - 2026-06-04 — "The Two-Sided Surge" — Wild Magic Sorcerer Controlled Chaos (Phase 4)
 
 **Schema version:** 66

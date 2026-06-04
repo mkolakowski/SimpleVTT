@@ -3,9 +3,11 @@
 Phase E.6 of the [v2.99.193 class-content completion plan](class-content-status.md).
 Path: Sorcerous Origin: Wild Magic (PHB p.103).
 
-> **Status (v2.99.230):** 🟠 Phases 1-4 shipped (Tides + Surge +
-> Bend Luck + Controlled Chaos). Phase 5 (Spell Bombardment, Lv 18)
-> deferred.
+> **Status (v2.99.231):** ✅ All 5 phases shipped (Tides + Surge +
+> Bend Luck + Controlled Chaos + Spell Bombardment). The plan is
+> complete; the Wild Magic Sorcerer subclass is now fully wired
+> end-to-end with the v1 announce-only constraints documented per
+> phase.
 
 ## Why a plan doc
 
@@ -115,13 +117,26 @@ populated with `alternatives[0]` for backward-compat with any
 pre-v2.99.230 client. Future UI commit will render the picker
 when `controlled_chaos: true`.
 
-### Phase 5 — Spell Bombardment damage reroll (⚪ deferred)
+### Phase 5 — Spell Bombardment damage reroll (✅ v2.99.231)
 
-Lv 18. Post-damage hook in `/cast_spell` damage-roll site: if any
-die in the damage roll showed its max value, broadcast a
-`bombardment_offer` event that the player accepts to reroll one
-of those dice once per turn. Per-turn flag tracked via battle-
-economy slot like Foe Slayer (v2.99.216).
+**Endpoint:** `/use_spell_bombardment` — body `{character_id,
+die_size}` where die_size ∈ {4,6,8,10,12}. Validates Wild Magic
+Lv 18+ + once-per-turn flag (combatant economy
+`spell_bombardment_used`, mirror of Colossus Slayer's v2.60.0
+flag). Rolls 1d<die_size> server-side, marks the flag,
+broadcasts `feature_used` (source `spell-bombardment`) with
+`(die_size, extra_damage)`.
+
+**v1 ships announce-only.** The player invokes this after seeing
+their damage roll show a max die; the GM applies the bump to the
+existing damage roll manually. A deep-wire follow-up would hook
+the `/cast_spell` damage-roll site to auto-detect max-rolled dice
+and broadcast a `bombardment_offer` event for the player to
+accept inline.
+
+**Once-per-turn reset.** Tracked via
+`combatant.economy.spell_bombardment_used`; reset client-side at
+turn-advance, same plumbing as Colossus Slayer / Divine Strike.
 
 ## What this plan does NOT cover
 
