@@ -25363,6 +25363,32 @@ def _pc_has_foe_slayer(sheet: "dict | None") -> bool:
     return _ranger_level_from_sheet(sheet) >= 20
 
 
+def _pc_hunters_prey_pick(sheet: "dict | None") -> str:
+    """v2.99.223 — RAW Hunter's Prey (Hunter Ranger Lv 3+, PHB
+    p.93): pick ONE of Colossus Slayer / Giant Killer / Horde
+    Breaker.
+
+    Returns the slug of the picked option, or "" when none has
+    been chosen. Reads from `sheet.hunters_prey` (set by
+    `/select_hunters_prey`). Colossus Slayer is already wired
+    via `_compute_attack_auto_uplifts` (v2.60.0); v2.99.223 adds
+    the picker + announce endpoints for the other two.
+
+    Phase E.3 of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return ""
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        return ""
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "hunter" not in subclass:
+        return ""
+    if _ranger_level_from_sheet(sheet) < 3:
+        return ""
+    return (sheet.get("hunters_prey") or "").strip().lower()
+
+
 def _pc_has_primeval_awareness(sheet: "dict | None") -> bool:
     """v2.99.221 — RAW Primeval Awareness (Ranger Lv 3+, PHB
     p.92): "Beginning at 3rd level, you can use your action and
@@ -35838,6 +35864,283 @@ async def use_vanish(
         "feature": "vanish",
         "over_budget": was_used,
     }
+
+
+_HUNTERS_PREY_OPTIONS = {
+    "colossus-slayer", "giant-killer", "horde-breaker",
+}
+
+
+@router.post("/api/campaign/{campaign_id}/select_hunters_prey")
+async def select_hunters_prey(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.223 — Phase E.3 of the v2.99.193 phased completion
+    plan. Hunter's Prey (Hunter Ranger Lv 3, PHB p.93): pick ONE
+    of Colossus Slayer / Giant Killer / Horde Breaker.
+
+    Body: ``{character_id, option}``. option ∈ {colossus-slayer,
+    giant-killer, horde-breaker}.
+
+    Validates Hunter Ranger Lv 3+. Persists
+    `sheet.hunters_prey = <option>`. Colossus Slayer is already
+    wired via `_compute_attack_auto_uplifts` (v2.60.0); Giant
+    Killer + Horde Breaker get their own announce endpoints
+    (`/use_giant_killer` + `/use_horde_breaker`).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    option = (str(body.get("option") or "")).strip().lower()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if option not in _HUNTERS_PREY_OPTIONS:
+        raise HTTPException(
+            400,
+            f"option must be one of {sorted(_HUNTERS_PREY_OPTIONS)}",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "ranger",
+            "got": cls or "",
+        })
+    if "hunter" not in (sheet.get("subclass") or "").strip().lower():
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass",
+            "expected": "hunter",
+            "got": (sheet.get("subclass") or "").strip().lower(),
+        })
+    if _ranger_level_from_sheet(sheet) < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3,
+            "got": _ranger_level_from_sheet(sheet),
+        })
+
+    sheet["hunters_prey"] = option
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    pretty = option.replace("-", " ").title()
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"🏹 Hunter's Prey — {pretty}",
+            "feature_desc": (
+                f"{char.name} chose {pretty} as Hunter's Prey."
+            ),
+            "source": "hunters-prey-pick",
+            "option": option,
+        },
+    })
+
+    return {"ok": True, "option": option}
+
+
+@router.post("/api/campaign/{campaign_id}/use_giant_killer")
+async def use_giant_killer(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.223 — Giant Killer reaction announce. RAW PHB p.93:
+    "When a Large or larger creature within 5 feet of you hits
+    or misses you with an attack, you can use your reaction to
+    attack that creature immediately after its attack."
+
+    Body: ``{character_id, override?}``.
+
+    Validates Hunter Ranger Lv 3+ with `hunters_prey ==
+    "giant-killer"` + Phase 4 reaction slot gate. Marks the
+    reaction chip + broadcasts feature_used. The actual attack
+    is rolled normally via /attack.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    pick = _pc_hunters_prey_pick(sheet)
+    if pick != "giant-killer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_hunters_prey",
+            "expected": "giant-killer",
+            "got": pick,
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "giant-killer",
+            "label": "Giant Killer",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🐘 Giant Killer — reaction attack",
+            "feature_desc": (
+                f"{char.name} used Giant Killer — reaction attack "
+                f"on a Large+ creature within 5 ft. Roll the "
+                f"attack normally."
+            ),
+            "source": "giant-killer",
+            "over_budget": was_used,
+            "over_budget_slot": "reaction" if was_used else "",
+        },
+    })
+
+    return {"ok": True, "feature": "giant-killer",
+            "over_budget": was_used}
+
+
+@router.post("/api/campaign/{campaign_id}/use_horde_breaker")
+async def use_horde_breaker(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.223 — Horde Breaker free-action announce. RAW PHB
+    p.93: "Once on each of your turns when you make a weapon
+    attack, you can make another attack with the same weapon
+    against a different creature that is within 5 feet of the
+    original target and within range of your weapon."
+
+    Body: ``{character_id, target_name?, override?}``.
+
+    Validates Hunter Ranger Lv 3+ with `hunters_prey ==
+    "horde-breaker"`. No action-economy chip (RAW: the extra
+    attack is part of the Attack action, not a separate
+    action). Broadcasts feature_used naming the second target.
+    Per-turn tracking is filed (one extra attack per turn RAW).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_name = (str(body.get("target_name") or "")).strip()[:80]
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    pick = _pc_hunters_prey_pick(sheet)
+    if pick != "horde-breaker":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_hunters_prey",
+            "expected": "horde-breaker",
+            "got": pick,
+        })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_phrase = f" vs {target_name}" if target_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🐺 Horde Breaker — extra attack{target_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} used Horde Breaker — second weapon "
+                f"attack{target_phrase} (within 5 ft of original "
+                f"target). Roll the attack normally. Once per turn."
+            ),
+            "source": "horde-breaker",
+            "target_name": target_name,
+        },
+    })
+
+    return {"ok": True, "feature": "horde-breaker",
+            "target_name": target_name}
 
 
 @router.post("/api/campaign/{campaign_id}/use_primeval_awareness")
@@ -48356,6 +48659,11 @@ _SHEET_PATCH_KEYS = {
     # persist the Wizard Lv 18+ pick of {l1, l2} spell slugs. Test
     # teardown resets to {} after the test runs.
     "spell_mastery",
+    # v2.99.223 — hunters_prey. Read by /select_hunters_prey to
+    # persist the Hunter Ranger Lv 3 pick (colossus-slayer /
+    # giant-killer / horde-breaker). Allowlisted so the test can
+    # flip Rowan's pick without a full sheet rebuild.
+    "hunters_prey",
     # v2.99.218 — signature_spells. Read by /select_signature_spells
     # to persist the Wizard Lv 20+ pick of {spell_1, spell_2} L3
     # spell slugs + per-spell use flags. Test teardown resets to

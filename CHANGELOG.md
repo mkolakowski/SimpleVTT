@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.223] - 2026-06-04 — "The Hunter's Prey" — Hunter's Prey picker + Giant Killer + Horde Breaker
+
+**Schema version:** 66
+**Commit summary:** **Phase E.3 of the v2.99.193 phased completion plan — Hunter's Prey picker.** RAW PHB p.93: at Hunter Ranger Lv 3, pick one of Colossus Slayer / Giant Killer / Horde Breaker. Colossus Slayer was already wired via `_compute_attack_auto_uplifts` (v2.60.0). v2.99.223 ships the picker + announce endpoints for the other two: Giant Killer (reaction attack vs Large+ creature) + Horde Breaker (free second attack vs adjacent target).
+**Description:** Two helpers + three endpoints + 1 patch key. (1) `_pc_hunters_prey_pick(sheet)` returns the picked slug (or "" if not picked / wrong class / wrong subclass / wrong level). (2) `_HUNTERS_PREY_OPTIONS` set with the 3 valid slugs. (3) `/select_hunters_prey` — picker endpoint, validates Hunter Ranger Lv 3+ + option in set, persists `sheet.hunters_prey`. (4) `/use_giant_killer` — announce endpoint, validates Hunter's Prey == "giant-killer", marks reaction chip via Phase 4 gate. (5) `/use_horde_breaker` — announce endpoint, validates Hunter's Prey == "horde-breaker", broadcasts naming the second target. No action chip (RAW: free part of Attack action). (6) `hunters_prey` added to `_SHEET_PATCH_KEYS`. Rowan Quickbow (Ranger Hunter Lv 7 default) is the demo fixture. One new harness test file with 5 tests: picker happy + bad-option 400; Giant Killer happy + wrong-pick 409; Horde Breaker happy.
+
+### Added
+- `_pc_hunters_prey_pick(sheet)` helper returning the picked option slug.
+- `_HUNTERS_PREY_OPTIONS` set of valid picks.
+- `/api/campaign/{cid}/select_hunters_prey` picker endpoint.
+- `/api/campaign/{cid}/use_giant_killer` announce endpoint.
+- `/api/campaign/{cid}/use_horde_breaker` announce endpoint.
+- `hunters_prey` field in `_SHEET_PATCH_KEYS` for test scaffolding.
+- `tests/harness/test_hunters_prey_picker.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 2 helpers + 3 endpoints + 1 patch key + 5 regression tests. No schema change.
+- **Colossus Slayer is already wired (v2.60.0).** `_compute_attack_auto_uplifts` reads the Ranger Lv 3+ gate + the per-turn `colossus_slayer_used` flag on the combatant's economy. Picking Colossus Slayer via the new picker should just record the choice on the sheet; the existing uplift fires regardless of the picker value. Future polish: the uplift could gate on `hunters_prey == "colossus-slayer"` so a Giant Killer / Horde Breaker pick doesn't accidentally fire Colossus Slayer too.
+- **Giant Killer + Horde Breaker are announce-only.** RAW mechanical content is "you can attack" — the attack itself is rolled normally via `/attack`. The announce endpoints surface the chat-card trigger + manage the action-economy chip (reaction for Giant Killer, none for Horde Breaker).
+- **Per-turn tracking filed.** Horde Breaker is "once per turn"; v1 doesn't track. Future commit could add a `horde_breaker_used` flag on the combatant's economy (same pattern as `colossus_slayer_used`).
+- **Phase E ✅ 2/8.** E.5 (v2.99.222 Draconic Wings + Presence) + E.3 (v2.99.223 Hunter's Prey). Still ⚪: E.1 Battle Master, E.2 Eldritch Knight, E.4 Thief, E.6 Wild Magic, E.7 Evocation, E.8 Berserker.
+- **39 ships this session.**
+- **Total harness count: 1210** (was 1205 in v2.99.222).
+
+---
+
 ## [2.99.222] - 2026-06-04 — "Wings of the Dragon" — Draconic Wings + Draconic Presence (Sorcerer Draconic Bloodline)
 
 **Schema version:** 66
