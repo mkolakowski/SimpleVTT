@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.204] - 2026-06-04 — "Strength of the Mountain" — Indomitable Might (Barbarian Lv 18)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.1 cont'd of the v2.99.193 phased completion plan — Indomitable Might.** RAW PHB p.49: "Beginning at 18th level, if your total for a Strength check is less than your Strength score, you can use that score in place of the total." Server-side intercept on `/roll`: when the rolling PC is Barbarian Lv 18+ AND `stat_ability` is "STR" AND the roll isn't a save or attack, the result's total is floored at the PC's STR score. Mirrors the v2.99.197 Reliable Talent post-result intercept pattern but with the floor = `sheet.abilities.STR` instead of 10.
+**Description:** Three helpers + 1 intercept site + 1 note suffix. (1) `_pc_has_indomitable_might(sheet)` returns True for Barbarian Lv 18+. (2) `_apply_indomitable_might_floor(result, sheet)` reads `sheet.abilities.STR`, mutates the breakdown to suffix " → STR_SCORE (Indomitable Might floor)" and adjusts the total when total < STR. (3) `_broadcast_indomitable_might` emits a chat-card `feature_used(source="indomitable-might")` with `old_total` / `new_total` / `stat_key`. (4) Wired into `/roll` after Reliable Talent — gates on `stat_ability_raw == "STR"` + stat_key not containing "_save" / "_attack". (5) DiceRoll note gains a "💪 Indomitable Might floored N → M" trail. One new harness test file with 3 tests covering happy path (Lv 18 + Athletics + low d20 → floored at STR 18), level gate (Lv 7 → no floor), ability gate (DEX check at Lv 18 → no floor).
+
+### Added
+- `_pc_has_indomitable_might(sheet)` helper gate.
+- `_apply_indomitable_might_floor(result, sheet)` total-mutation helper.
+- `_broadcast_indomitable_might(...)` companion broadcast.
+- `/roll` Indomitable Might intercept (after Reliable Talent).
+- DiceRoll note appendix when the floor applies.
+- `tests/harness/test_indomitable_might.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 3 helpers + 1 intercept site + 1 note suffix + 3 regression tests. No schema change.
+- **Composes after Reliable Talent.** Both are post-result floors; Reliable Talent floors the d20 to 10 first, then Indomitable Might floors the total to STR score. Both can fire on a STR-skill check where the rogue is multi-classed Barbarian (rare, but handled).
+- **Capstone-test pattern.** Krieger PATCH'd Lv 7 → 18 + restored in finally. Seed-discovery loop runs at Lv 7 (pre-bump) to find a seed that produces total < STR; re-applies the seed post-bump to verify the floor.
+- **Phase F.1 ✅ 4/5.** Brutal Critical (v2.99.201) + Relentless Rage (v2.99.202) + Persistent Rage (v2.99.203) + Indomitable Might (v2.99.204) shipped. Still ⚪: Primal Champion (Lv 20 — STR + CON caps raise to 24).
+- **Total harness count: 1153** (was 1150 in v2.99.203).
+
+---
+
 ## [2.99.203] - 2026-06-04 — "The Eternal Fury" — Persistent Rage (Barbarian Lv 15)
 
 **Schema version:** 66

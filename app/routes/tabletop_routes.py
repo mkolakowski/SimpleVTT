@@ -13640,6 +13640,28 @@ async def roll_dice(
             result, expr,
         )
 
+    # v2.99.204 — Indomitable Might (Barbarian Lv 18+). Phase F.1
+    # cont'd of the v2.99.193 phased completion plan. RAW PHB
+    # p.49: when a STR check's total is less than the PC's STR
+    # score, treat the total as the STR score. Gate fires when:
+    # (a) PC is Barbarian Lv 18+, (b) stat_ability == "STR", (c)
+    # stat_key isn't a save or attack (which are routed through
+    # other paths). Composes after Reliable Talent — the order
+    # only matters when both fire on the same roll (rare; both
+    # being maxed) and the floor here is per-RAW: STR score.
+    _im_old_total: "int | None" = None
+    _im_str_score: "int | None" = None
+    if (
+        _char
+        and _pc_has_indomitable_might(_char.sheet)
+        and stat_ability_raw == "STR"
+        and "_save" not in stat_key_lc
+        and "_attack" not in stat_key_lc
+    ):
+        result, _im_old_total, _im_str_score = (
+            _apply_indomitable_might_floor(result, _char.sheet or {})
+        )
+
     rec = DiceRoll(
         campaign_id=campaign_id,
         user_id=user.id,
@@ -13656,6 +13678,11 @@ async def roll_dice(
             + (
                 f" | 🎯 Reliable Talent floored {_rt_old_d20} → 10"
                 if _rt_old_d20 is not None
+                else ""
+            )
+            + (
+                f" | 💪 Indomitable Might floored {_im_old_total} → {_im_str_score}"
+                if _im_old_total is not None
                 else ""
             )
         )[:200],
@@ -13755,6 +13782,14 @@ async def roll_dice(
     if _rt_old_d20 is not None and _char is not None:
         await _broadcast_reliable_talent(
             campaign_id, _char, _rt_old_d20, stat_key_raw,
+        )
+    # v2.99.204 — Indomitable Might companion broadcast. Fires
+    # when the floor applied (STR-check total was below STR score
+    # + Barbarian Lv 18+).
+    if _im_old_total is not None and _char is not None:
+        await _broadcast_indomitable_might(
+            campaign_id, _char, _im_old_total,
+            _im_str_score or 0, stat_key_raw,
         )
     # v2.99.28 — Rage STR-check advantage broadcast. Fires after the
     # roll lands so the chat card can show the trigger alongside the
@@ -25824,6 +25859,96 @@ def _pc_has_rage_active_from_sheet(sheet: "dict | None") -> bool:
         if (b.get("key") or "").strip().lower() == "rage":
             return True
     return False
+
+
+def _pc_has_indomitable_might(sheet: "dict | None") -> bool:
+    """v2.99.204 — RAW Indomitable Might (Barbarian Lv 18+, PHB
+    p.49): "Beginning at 18th level, if your total for a Strength
+    check is less than your Strength score, you can use that
+    score in place of the total."
+
+    Returns True when the PC is Barbarian Lv 18+. The
+    construction-time floor is applied by
+    `_apply_indomitable_might_floor` at /roll post-result, on
+    STR-ability checks only (saves and attacks are excluded).
+
+    Phase F.1 cont'd of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _barbarian_level_from_sheet(sheet) >= 18
+
+
+def _apply_indomitable_might_floor(
+    result: "object", sheet: "dict",
+) -> "tuple[object, int | None, int | None]":
+    """v2.99.204 — Floor the total of a STR check at the PC's STR
+    score. Returns `(new_result, old_total, str_score)` — old/new
+    are None when the floor didn't apply (total already >= STR
+    score, or sheet lacks STR).
+
+    Mutates the breakdown to suffix " (Indomitable Might floor)"
+    and adjusts the total to the STR score when below.
+    """
+    str_score = int((sheet.get("abilities") or {}).get("STR") or 0)
+    if str_score <= 0:
+        return result, None, None
+    try:
+        old_total = int(getattr(result, "total", 0) or 0)
+    except (TypeError, ValueError):
+        return result, None, None
+    if old_total >= str_score:
+        return result, None, None
+    breakdown = getattr(result, "breakdown", "") or ""
+    new_breakdown = (
+        f"{breakdown} → {str_score} (Indomitable Might floor)"
+    )
+    try:
+        import copy
+        new_result = copy.copy(result)
+        new_result.total = str_score
+        new_result.breakdown = new_breakdown
+    except Exception:
+        return result, None, None
+    return new_result, old_total, str_score
+
+
+async def _broadcast_indomitable_might(
+    campaign_id: int,
+    char: "Character | None",
+    old_total: int,
+    str_score: int,
+    stat_key: str,
+) -> None:
+    """v2.99.204 — Companion broadcast for the Indomitable Might
+    floor. Emits a `feature_used(source="indomitable-might")` so
+    the chat-card surfaces the trigger.
+    """
+    if not char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                f"💪 Indomitable Might — STR check {old_total} "
+                f"→ {str_score}"
+            ),
+            "feature_desc": (
+                f"{char.name} treated the STR check total "
+                f"({old_total}) as their STR score ({str_score}) "
+                f"for "
+                f"{stat_key or 'a Strength check'} "
+                f"(Barbarian Lv 18+ class feature)."
+            ),
+            "source": "indomitable-might",
+            "stat_key": stat_key or "",
+            "old_total": old_total,
+            "new_total": str_score,
+        },
+    })
 
 
 def _pc_has_persistent_rage(sheet: "dict | None") -> bool:
