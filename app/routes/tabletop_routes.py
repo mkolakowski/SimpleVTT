@@ -25206,6 +25206,25 @@ def _target_has_elusive(
     return False
 
 
+def _pc_has_vanish(sheet: "dict | None") -> bool:
+    """v2.99.215 — RAW Vanish (Ranger Lv 14+, PHB p.92):
+    "Starting at 14th level, you can use the Hide action as a
+    bonus action on your turn. Also, you can't be tracked by
+    nonmagical means, unless you choose to leave a trail."
+
+    Returns True for Ranger Lv 14+. Consumed by
+    `/use_vanish` (the bonus-action announce endpoint) and by
+    future tracking-check intercepts (the "can't be tracked by
+    nonmagical means" half — filed since SimpleVTT doesn't model
+    tracking checks today).
+
+    Phase F.3 cont'd of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _ranger_level_from_sheet(sheet) >= 14
+
+
 def _pc_has_hide_in_plain_sight(sheet: "dict | None") -> bool:
     """v2.99.214 — RAW Hide in Plain Sight (Ranger Lv 10+, PHB
     p.92): "Starting at 10th level, you can spend 1 minute
@@ -34588,6 +34607,122 @@ async def _resolve_target_combatant(
         if target_name and c.get("name") == target_name:
             return c.get("id"), c.get("name")
     return None, target_name
+
+
+@router.post("/api/campaign/{campaign_id}/use_vanish")
+async def use_vanish(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.215 — Phase F.3 cont'd of the v2.99.193 phased
+    completion plan. Vanish (Ranger Lv 14+, PHB p.92): "Starting
+    at 14th level, you can use the Hide action as a bonus action
+    on your turn. Also, you can't be tracked by nonmagical means,
+    unless you choose to leave a trail."
+
+    Body: ``{character_id, override?}``.
+
+    Validates Ranger Lv 14+ + Phase 4 bonus slot gate. Marks
+    the bonus slot (Hide-as-bonus-action half) + broadcasts
+    feature_used. v1 ships as announce-only — the actual Hide
+    action result (Stealth check) is rolled by the player via
+    the normal /roll path. The "can't be tracked by nonmagical
+    means" half is filed (SimpleVTT doesn't model tracking
+    checks today).
+
+    No resource cost RAW. No buff installation either; the GM
+    + player resolve the Hide check normally.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        has_ranger = any(
+            (entry.get("class") or "").strip().lower() == "ranger"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_ranger:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "ranger",
+                "got": cls or "",
+            })
+    ranger_lv = _ranger_level_from_sheet(sheet)
+    if ranger_lv < 14:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 14, "got": ranger_lv,
+        })
+
+    # Phase 4 over-budget gate (bonus slot). RAW: Hide as a BONUS
+    # action.
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "vanish",
+            "label": "Vanish (Hide bonus action)",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🌑 Vanish — Hide as bonus action",
+            "feature_desc": (
+                f"{char.name} used Vanish — Hide as a bonus "
+                f"action. Roll Stealth normally. (Ranger Lv 14+ "
+                f"class feature.) Also: can't be tracked by "
+                f"nonmagical means unless leaving a trail."
+            ),
+            "source": "vanish",
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "vanish",
+        "over_budget": was_used,
+    }
 
 
 @router.post("/api/campaign/{campaign_id}/use_hide_in_plain_sight")

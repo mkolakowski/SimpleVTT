@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.215] - 2026-06-04 — "The Vanishing Ranger" — Vanish (Ranger Lv 14)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.3 cont'd of the v2.99.193 phased completion plan — Vanish.** RAW PHB p.92: "Starting at 14th level, you can use the Hide action as a bonus action on your turn. Also, you can't be tracked by nonmagical means, unless you choose to leave a trail." v2.99.215 ships announce-style — `/use_vanish` marks the bonus action slot + broadcasts feature_used. The Stealth check is rolled normally via /roll. The "can't be tracked by nonmagical means" half is filed (SimpleVTT doesn't model tracking checks today).
+**Description:** One helper + 1 endpoint. (1) `_pc_has_vanish(sheet)` — Ranger Lv 14+ gate. (2) `/use_vanish` — validates Ranger Lv 14+ + Phase 4 bonus slot gate, marks the bonus slot, broadcasts feature_used. Rowan Quickbow PATCH'd Lv 7 → 14 for tests. One new harness test file with 2 tests: happy path, level gate.
+
+### Added
+- `_pc_has_vanish(sheet)` helper gate.
+- `/api/campaign/{cid}/use_vanish` endpoint.
+- `tests/harness/test_use_vanish.py` — 2 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 2 regression tests. No schema change.
+- **Why announce-style.** The actual Hide check is a standard Stealth roll the player makes via /roll. RAW Vanish's mechanical content is just "Hide is a bonus action instead of an action." The endpoint marks the bonus slot + announces; the GM and player handle the rest normally.
+- **The tracking immunity half is filed.** SimpleVTT doesn't model tracking checks today. When a future commit lands tracking (likely as a passive Wisdom (Survival) check intercept), it should consult `_pc_has_vanish` to skip the trail for Ranger Lv 14+ unless the player opts in.
+- **Phase F.3 cont'd ✅ 2/5.** Hide in Plain Sight (v2.99.214) + Vanish (v2.99.215) shipped. Still ⚪: Feral Senses (Lv 18), Foe Slayer (Lv 20), plus pure-descriptive mid-level features (Primeval Awareness Lv 3, Hide in Plain Sight prerequisites).
+- **Total harness count: 1182** (was 1180 in v2.99.214).
+
+---
+
 ## [2.99.214] - 2026-06-04 — "The Hidden Hunter" — Hide in Plain Sight (Ranger Lv 10)
 
 **Schema version:** 66
