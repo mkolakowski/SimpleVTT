@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.178] - 2026-06-03 — "The Open Stat Block" — Extend _SHEET_PATCH_KEYS to abilities + saving_throws
+
+**Schema version:** 66
+**Commit summary:** **Extend `_SHEET_PATCH_KEYS` to whitelist `abilities`, `saving_throws`, and `proficiency_bonus` so harness tests can manipulate raw ability scores + save proficiencies without rebuilding the entire sheet.** Closes the v2.99.177 filed item. v2.99.175 / v2.99.176 attempts to rig a guaranteed Polymorph WIS save pass via /sheet-fields PATCH failed because these fields were silently dropped by the v2.99.46 / v2.99.78 / v2.99.89 / v2.99.90 etc. allowlist. v2.99.178 lands the whitelist extension + upgrades the v2.99.177 invariant test to actually exercise the save-pass path. Restore-in-finally discipline applies — the test PATCHes Krieger to {WIS: 50, WIS-proficient, prof_bonus: 6}, runs the cast, then restores Krieger's original ability block + saves + prof.
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — `_SHEET_PATCH_KEYS` set gains `"abilities"`, `"saving_throws"`, `"proficiency_bonus"`. Same restore-in-finally discipline as the other v2.99.x test-bench fields. (2) `tests/harness/test_polymorph_wis_save.py` — replace the v2.99.177 invariant-only test with the deterministic-pass test (Krieger PATCHed to WIS 50 + proficient + +6 prof → guaranteed save mod ≥ 26 → min total ≥ 27 > DC 14).
+
+### Added
+- `"abilities"`, `"saving_throws"`, `"proficiency_bonus"` whitelisted on `/sheet-fields` PATCH.
+- `test_save_pass_skips_concentration_anchor` rewritten as deterministic (replaces v2.99.177's invariant-style version).
+
+### Notes
+- **PATCH bump** — whitelist extension + test rewrite. No schema change. The whitelist extension is additive (existing PATCHes are unaffected).
+- **Production impact.** PCs already control these fields via the sheet edit panel (full POST), and GMs can set them through the same panel. The PATCH path was the gap. Allowing PATCH access doesn't broaden the attack surface — same authorization gates as before (owner or GM only).
+- **Pattern consistency.** Same allowlist-discipline comment as other v2.99.x test-bench fields (`subclass`, `fighting_style`, `level`, `resources`, `attacks`, `feats`, `spell_slots`). The whitelist now covers every field commonly needed by harness fixtures.
+- **Closes the v2.99.177 filed item.** The test now verifies a deterministic save-pass outcome, completing the v2.99.175 Polymorph WIS save mechanical chain.
+- **Total harness count: 1096** (unchanged from v2.99.175 — same 3 tests, deterministic).
+
+---
+
 ## [2.99.177] - 2026-06-03 — "Trust the Invariant" — Replace flaky save-pass test with the gate invariant
 
 **Schema version:** 66

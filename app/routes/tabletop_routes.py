@@ -43968,6 +43968,18 @@ _SHEET_PATCH_KEYS = {
     # route. Tests should restore the slots in a finally block or
     # via a long rest.
     "spell_slots",
+    # v2.99.178 — abilities + saving_throws. Allowlisted for harness
+    # tests that need to manipulate raw ability scores or save
+    # proficiencies without rebuilding the full sheet. Closes the
+    # v2.99.177 filed item — the v2.99.175 Polymorph WIS save test
+    # couldn't rig a guaranteed save pass because these fields were
+    # silently dropped. Restore-in-finally discipline applies; sheet
+    # machinery reads abilities + saving_throws across many features.
+    "abilities",
+    "saving_throws",
+    # v2.99.178 — proficiency_bonus. Same rationale — needed alongside
+    # WIS proficiency edits for save mod calculation.
+    "proficiency_bonus",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the

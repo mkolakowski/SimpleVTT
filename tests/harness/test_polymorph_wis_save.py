@@ -148,45 +148,63 @@ async def test_willing_target_no_save(
     assert data["ready_to_transform"] is True
 
 
-async def test_concentration_field_reflects_save_outcome(
+async def test_save_pass_skips_concentration_anchor(
     gm_client, thalindra_with_l4_slot, roster,
 ):
-    """When the save FAILS, concentration is True + ready_to_transform
-    is True (anchor was installed). This deterministic check covers
-    the gate without needing to rig a guaranteed-pass scenario
-    (the sheet-fields PATCH whitelist excludes `abilities` +
-    `saving_throws` so we can't manipulate Krieger's WIS to force
-    a pass — filed: extend the PATCH whitelist OR add a test-mode
-    /dice/seed endpoint integration to fix the roll).
+    """Rig a guaranteed save pass by PATCHing Krieger's WIS to 50
+    (mod +20) + WIS-proficient + prof bonus 6 (= +26 total).
+    Min total = 1 + 26 = 27 > DC 14. The v2.99.178 _SHEET_PATCH_KEYS
+    extension lets us actually mutate these fields. Verify the
+    concentration anchor is NOT installed.
     """
     thalindra = thalindra_with_l4_slot
     krieger = roster["Krieger Stonefist"]
-    th_tok = f"tok_pws_fail_th_{thalindra['id']}"
-    kr_tok = f"tok_pws_fail_kri_{krieger['id']}"
-    await _seed_battle(gm_client, [
-        _mkc(th_tok, thalindra["id"], name=thalindra["name"]),
-        _mkc(kr_tok, krieger["id"], name=krieger["name"]),
-    ])
-    resp = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/cast_polymorph",
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
         json={
-            "character_id": thalindra["id"],
-            "class_slug": "wizard",
-            "slot_level": 4,
-            "target_combatant_id": kr_tok,
-            "unwilling": True,
-            "override": True,
+            "abilities": {"WIS": 50},
+            "saving_throws": {"WIS": True},
+            "proficiency_bonus": 6,
         },
     )
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert data["save_rolled"] is True
-    # Krieger's stock WIS 10 (mod 0) — save mod is at most +3 (prof
-    # bonus if proficient, which Barbarian isn't). Save will almost
-    # always FAIL vs DC 14. concentration + ready_to_transform
-    # reflect this.
-    # We assert the INVARIANT: ready_to_transform == not save_passed
-    # AND concentration == not save_passed. Whatever the dice did,
-    # the gate's logic is consistent.
-    assert data["ready_to_transform"] == (not data["save_passed"])
-    assert data["concentration"] == (not data["save_passed"])
+    try:
+        th_tok = f"tok_pws_pass_th_{thalindra['id']}"
+        kr_tok = f"tok_pws_pass_kri_{krieger['id']}"
+        await _seed_battle(gm_client, [
+            _mkc(th_tok, thalindra["id"], name=thalindra["name"]),
+            _mkc(kr_tok, krieger["id"], name=krieger["name"]),
+        ])
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_polymorph",
+            json={
+                "character_id": thalindra["id"],
+                "class_slug": "wizard",
+                "slot_level": 4,
+                "target_combatant_id": kr_tok,
+                "unwilling": True,
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["save_rolled"] is True
+        assert data["save_passed"] is True, (
+            f"Save with WIS 50 + prof + +6 prof bonus should pass; got "
+            f"total={data.get('save_total')} vs dc={data.get('save_dc')}"
+        )
+        assert data["concentration"] is False
+        assert data["ready_to_transform"] is False
+        th_keys = await _get_buff_keys(gm_client, thalindra["id"])
+        assert "concentration-polymorph" not in th_keys
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
+            json={
+                "abilities": {
+                    "STR": 18, "DEX": 14, "CON": 16,
+                    "INT": 8, "WIS": 10, "CHA": 8,
+                },
+                "saving_throws": {"STR": True, "CON": True},
+                "proficiency_bonus": 3,
+            },
+        )
