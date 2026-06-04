@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.167] - 2026-06-03 — "Twin Bound" — Twinned Spell carries a second-target ID; consume broadcasts it
+
+**Schema version:** 65
+**Commit summary:** **Extend `/use_metamagic_twinned_spell` to accept an optional `target_combatant_id_2` body field; store it on the pending buff; have `/cast_spell`'s consume hook surface it via a dedicated audit broadcast.** Closes the second half of the v2.99.160 filed item (the "name the second target" half) — auto-install on the second target inside the same /cast_spell call is still filed. v2.99.167 gives the GM a clear "Twinned to [name]" instruction in the chat log without needing to interpret raw IDs. The endpoint validates the second target via `_lookup_combatant`; if it doesn't resolve, the buff stores `None` (no error — the endpoint stays flexible for casters who arm Twinned before deciding on the second target).
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — `/use_metamagic_twinned_spell` accepts an optional `target_combatant_id_2` body. Looks up the combatant + name via `_lookup_combatant`. Embeds both on the pending buff's `effects.target_combatant_id_2` + `effects.target_combatant_name_2`. (2) New `_caster_twinned_pending_buff(campaign_id, caster_char_id)` helper returns the full buff dict (or None). `_caster_has_twinned_pending` now delegates to it. (3) `/cast_spell` Twinned consume hook — reads the second target fields from the buff, drops the pending, then emits a `feature_used` broadcast with `source: "metamagic-twinned-spell-second-target"` + the target id + name. (4) `tests/harness/test_metamagic_twinned_second_target.py` — 3 regression tests.
+
+### Added
+- `target_combatant_id_2` optional body field on `/use_metamagic_twinned_spell`.
+- `_caster_twinned_pending_buff(campaign_id, caster_char_id)` helper that returns the buff dict.
+- `effects.target_combatant_id_2` + `effects.target_combatant_name_2` on the pending buff.
+- `feature_used(source="metamagic-twinned-spell-second-target")` broadcast in `/cast_spell` consume.
+- `tests/harness/test_metamagic_twinned_second_target.py` — 3 tests: backward-compat (no second target → effects field is None); declaring with second target → buff carries id + name; /cast_spell consume emits the "Twinned to {name}" broadcast.
+
+### Changed
+- `_caster_has_twinned_pending` is now a thin delegate over `_caster_twinned_pending_buff`. Both return symmetric truthiness.
+
+### Notes
+- **PATCH bump** — endpoint extension + helper + integration hook + 3 tests. No schema change. Backward-compatible with existing tests.
+- **What's still filed.** Auto-install of the same buff/effect on the second target inside the same `/cast_spell` call. Would need: (a) a way to pass `_internal_second_target: True` to bypass slot decrement on the second invocation, OR (b) refactor `/cast_spell`'s install paths to be re-entrant with a different target. Neither is trivial — v2.99.167's metadata + audit broadcast is a meaningful step that lets the GM run the second cast manually without ambiguity.
+- **The "name the second target" half** of v2.99.160's filed item closes here. The "auto-install on second target" half stays filed.
+- **Total harness count: 1075** (was 1072 in v2.99.163-166).
+
+---
+
 ## [2.99.166] - 2026-06-03 — "Update the Snare" — Update v2.99.161 test to v2.99.163 semantics
 
 **Schema version:** 65

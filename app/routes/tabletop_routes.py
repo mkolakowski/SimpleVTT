@@ -14587,11 +14587,38 @@ async def cast_spell(
     # to the second target — the player follows up with a second
     # /cast_spell call. The buff drop here ensures the chip strip
     # reflects the consumed state regardless of cast outcome.
-    if _caster_has_twinned_pending(campaign_id, int(char.id)):
+    # v2.99.167 — when the pending buff carries
+    # `effects.target_combatant_id_2`, emit a "Twinned to {name}"
+    # audit so the GM has a clear instruction to follow with the
+    # second cast. The auto-install on the second target inside
+    # the same /cast_spell call is still filed.
+    _twinned_buff = _caster_twinned_pending_buff(campaign_id, int(char.id))
+    if _twinned_buff is not None:
+        _twin_effects = _twinned_buff.get("effects") or {}
+        _twin_target_2 = (_twin_effects.get("target_combatant_id_2") or "")
+        _twin_target_name_2 = (_twin_effects.get("target_combatant_name_2") or "")
         await _remove_buff(
             campaign_id, int(char.id),
             "metamagic-twinned-pending",
         )
+        if _twin_target_2:
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(char.id),
+                    "character_name": char.name,
+                    "feature_name": "✨ Twinned Spell → second target",
+                    "feature_desc": (
+                        f"{char.name}'s Twinned Spell names "
+                        f"{_twin_target_name_2 or _twin_target_2} as the "
+                        f"second target. Follow up with another "
+                        f"/cast_spell at that target (no additional slot)."
+                    ),
+                    "source": "metamagic-twinned-spell-second-target",
+                    "target_combatant_id_2": _twin_target_2,
+                    "target_combatant_name_2": _twin_target_name_2 or None,
+                },
+            })
 
     # v2.99.163 — Extended Spell metamagic. Pre-v2.99.163 the
     # pending buff was dropped here (early /cast_spell consume).
@@ -27238,6 +27265,15 @@ async def use_metamagic_twinned_spell(
         spell_level = int(body.get("spell_level") or 0)
     except (TypeError, ValueError):
         spell_level = 0
+    # v2.99.167 — optional second target ID. When present, the
+    # consume broadcast names it; the GM can manually cast the
+    # same spell at it after the first cast resolves. Full auto-
+    # route (install the same buff on the second target without
+    # consuming another slot) is filed — needs cast-state
+    # plumbing that /cast_spell doesn't expose today.
+    target_combatant_id_2 = (
+        body.get("target_combatant_id_2") or ""
+    ).strip()
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     if spell_level < 0 or spell_level > 5:
@@ -27321,9 +27357,20 @@ async def use_metamagic_twinned_spell(
     # the next /cast_spell call surfaces the armed-Twinned state
     # on the caster's chip strip and the /cast_spell consume hook
     # drops it one-shot per RAW. Mirror of v2.99.159 Distant
-    # Spell's pending-buff pattern. Auto-routing to the second
-    # target (duplicating the cast with the same damage roll +
-    # save DC) is filed.
+    # Spell's pending-buff pattern.
+    # v2.99.167 — optionally embed the second target's combatant
+    # ID on the buff. The /cast_spell consume reads it and names
+    # the second target in its audit broadcast, giving the GM a
+    # clear "Twinned to [target 2]" log entry. Full auto-route
+    # (install the same buff on the second target inside the
+    # same /cast_spell call) is filed.
+    target2_combatant = (
+        _lookup_combatant(campaign_id, target_combatant_id_2)
+        if target_combatant_id_2 else None
+    )
+    target2_name = (
+        target2_combatant.get("name") if target2_combatant else ""
+    )
     twinned_buff = {
         "key": "metamagic-twinned-pending",
         "name": "Metamagic: Twinned Spell (pending)",
@@ -27338,6 +27385,8 @@ async def use_metamagic_twinned_spell(
             "twin_targets": True,
             "spell_level": spell_level,
             "sp_paid": sp_cost,
+            "target_combatant_id_2": target_combatant_id_2 or None,
+            "target_combatant_name_2": target2_name or None,
         },
         "cast_id": tw_cast_id,
     }
@@ -27373,6 +27422,32 @@ async def use_metamagic_twinned_spell(
     }
 
 
+def _caster_twinned_pending_buff(
+    campaign_id: int, caster_char_id: "int | None",
+) -> "dict | None":
+    """v2.99.167 — return the full `metamagic-twinned-pending` buff
+    dict (or None). Used by /cast_spell's consume hook to read
+    the optional `effects.target_combatant_id_2` +
+    `effects.target_combatant_name_2` fields when surfacing the
+    audit broadcast.
+    """
+    if not caster_char_id:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != caster_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "metamagic-twinned-pending":
+                return b
+        return None
+    return None
+
+
 def _caster_has_twinned_pending(
     campaign_id: int, caster_char_id: "int | None",
 ) -> bool:
@@ -27381,21 +27456,7 @@ def _caster_has_twinned_pending(
     `_caster_has_distant_pending`. Used by /cast_spell to consume
     the buff at end of cast (one-shot per RAW).
     """
-    if not caster_char_id:
-        return False
-    state = hub.get_battle(campaign_id)
-    if not state:
-        return False
-    for c in state.get("combatants") or []:
-        if c.get("char_id") != caster_char_id:
-            continue
-        for b in (c.get("buffs") or []):
-            if not isinstance(b, dict):
-                continue
-            if (b.get("key") or "").strip().lower() == "metamagic-twinned-pending":
-                return True
-        return False
-    return False
+    return _caster_twinned_pending_buff(campaign_id, caster_char_id) is not None
 
 
 # ----------- API: Metamagic Distant Spell (Sorcerer Lv 3+) ----------
