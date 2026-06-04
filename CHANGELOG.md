@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.217] - 2026-06-04 — "Spell Mastery" — Spell Mastery (Wizard Lv 18) picker
+
+**Schema version:** 66
+**Commit summary:** **Phase F.5 start of the v2.99.193 phased completion plan — Spell Mastery.** RAW PHB p.115: "At 18th level, you have achieved such mastery over certain spells that you can cast them at will. Choose a 1st-level wizard spell and a 2nd-level wizard spell that are in your spellbook." v2.99.217 ships `/select_spell_mastery` — picker endpoint that validates Wizard Lv 18+ + both slugs are on the caster's spells list at the right levels + persists `spell_mastery = {l1, l2}` on the sheet. The actual free-cast wiring at `/cast_spell` is filed (one-line follow-up mirroring v2.99.88 Mystic Arcanum's `free_cast: True` body field).
+**Description:** One helper + 1 endpoint + 1 patch key. (1) `_pc_has_spell_mastery(sheet)` — Wizard Lv 18+ gate. (2) `/select_spell_mastery` — validates class + level + both slugs (must be on spells list at level 1 and 2 respectively), persists `spell_mastery = {l1, l2}`, broadcasts feature_used. (3) `spell_mastery` added to `_SHEET_PATCH_KEYS` for test scaffolding. Thalindra Moonwhisper (Wizard Lv 7 default) is the demo fixture; tests PATCH her Lv 7 → 18 + use her existing Magic Missile (L1) + Misty Step (L2) picks. One new harness test file with 3 tests: happy path, level gate, spell-not-on-list gate.
+
+### Added
+- `_pc_has_spell_mastery(sheet)` helper gate.
+- `/api/campaign/{cid}/select_spell_mastery` endpoint.
+- `spell_mastery` field in `_SHEET_PATCH_KEYS` for test scaffolding.
+- `tests/harness/test_select_spell_mastery.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 1 patch key + 3 regression tests. No schema change.
+- **Free-cast hook filed.** The mechanical effect (cast Magic Missile / Misty Step at base level without consuming a slot) is a one-line follow-up at `/cast_spell`: gate on `_pc_has_spell_mastery(sheet)` + `spell_slug == sheet.spell_mastery.l1` (with slot_level == 1) or `== sheet.spell_mastery.l2` (with slot_level == 2), then skip the slot decrement. Same shape as v2.99.88 Mystic Arcanum free-cast.
+- **Phase F.5 start ✅ 1/2.** Spell Mastery (v2.99.217) ships. Still ⚪: Signature Spells (Lv 20 — pick 2 L3 spells, cast once each per short rest without slot).
+- **33 ships this session.** Total session phases ✅ complete: A (3/3), F.1 (5/5), F.2 (4/4), F.4 (2/2), D (3/3). Partial: B (2/3), C (1/3), F.3 (3/5), F.5 (1/2).
+- **Total harness count: 1188** (was 1185 in v2.99.216).
+
+---
+
 ## [2.99.216] - 2026-06-04 — "The Hunter's Mark" — Foe Slayer (Ranger Lv 20)
 
 **Schema version:** 66

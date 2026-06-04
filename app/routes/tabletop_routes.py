@@ -25206,6 +25206,28 @@ def _target_has_elusive(
     return False
 
 
+def _pc_has_spell_mastery(sheet: "dict | None") -> bool:
+    """v2.99.217 — RAW Spell Mastery (Wizard Lv 18+, PHB p.115):
+    "At 18th level, you have achieved such mastery over certain
+    spells that you can cast them at will. Choose a 1st-level
+    wizard spell and a 2nd-level wizard spell that are in your
+    spellbook. You can cast those spells at their lowest level
+    without expending a spell slot when you have them prepared.
+    If you want to cast either spell at a higher level, you
+    must expend a spell slot as normal."
+
+    Returns True for Wizard Lv 18+. Consumed by
+    `/select_spell_mastery` (gate the picker) and by the future
+    `/cast_spell` free-cast hook (gate the slot skip when the
+    cast matches the mastered spell + slot_level == base level).
+
+    Phase F.5 start of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _wizard_level_from_sheet(sheet) >= 18
+
+
 def _pc_has_foe_slayer(sheet: "dict | None") -> bool:
     """v2.99.216 — RAW Foe Slayer (Ranger Lv 20, PHB p.92):
     "At 20th level, you become an unparalleled hunter of your
@@ -27428,6 +27450,162 @@ def _attack_is_magical(attacker_sheet: dict, attack_name: str) -> bool:
         if attack_slug in ("unarmed strike", "unarmed-strike", "unarmed"):
             return True
     return False
+
+
+@router.post("/api/campaign/{campaign_id}/select_spell_mastery")
+async def select_spell_mastery(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.217 — Phase F.5 start of the v2.99.193 phased
+    completion plan. Spell Mastery (Wizard Lv 18+, PHB p.115):
+    "Choose a 1st-level wizard spell and a 2nd-level wizard
+    spell that are in your spellbook. You can cast those spells
+    at their lowest level without expending a spell slot when
+    you have them prepared."
+
+    Body: ``{character_id, l1_spell_slug, l2_spell_slug}``.
+
+    Validates Wizard class + level >= 18 + both slugs are on
+    the caster's spells list (RAW: must be in spellbook = on the
+    sheet's spells list per v1 schema). Persists
+    `spell_mastery = {l1, l2}` on the sheet. Broadcasts
+    feature_used.
+
+    The actual free-cast wiring at `/cast_spell` is filed —
+    would mirror the v2.99.88 Mystic Arcanum free-cast pattern
+    (gate on `_pc_has_spell_mastery` + spell slug matches +
+    slot_level == base level, then skip the slot decrement).
+    v1 ships the picker + persistence; the cast hook is a
+    one-line follow-up.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    l1_slug = (
+        str(body.get("l1_spell_slug") or "")
+    ).strip().lower()[:50]
+    l2_slug = (
+        str(body.get("l2_spell_slug") or "")
+    ).strip().lower()[:50]
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not l1_slug or not l2_slug:
+        raise HTTPException(
+            400, "l1_spell_slug and l2_spell_slug are both required",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "wizard",
+                "got": cls or "",
+            })
+    wizard_lv = _wizard_level_from_sheet(sheet)
+    if wizard_lv < 18:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 18, "got": wizard_lv,
+        })
+
+    # Validate both slugs are on the caster's spells list AND at
+    # the right levels.
+    spells = list(sheet.get("spells") or [])
+    l1_match = None
+    l2_match = None
+    for s in spells:
+        if not isinstance(s, dict):
+            continue
+        slug = (s.get("_slug") or "").strip().lower()
+        if slug == l1_slug and int(s.get("level") or 0) == 1:
+            l1_match = s
+        if slug == l2_slug and int(s.get("level") or 0) == 2:
+            l2_match = s
+    if l1_match is None:
+        return JSONResponse(status_code=409, content={
+            "error": "l1_spell_not_on_list",
+            "slug": l1_slug,
+            "expected_level": 1,
+        })
+    if l2_match is None:
+        return JSONResponse(status_code=409, content={
+            "error": "l2_spell_not_on_list",
+            "slug": l2_slug,
+            "expected_level": 2,
+        })
+
+    # Persist.
+    sheet["spell_mastery"] = {
+        "l1": l1_slug,
+        "l2": l2_slug,
+    }
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    l1_name = l1_match.get("name") or l1_slug.title()
+    l2_name = l2_match.get("name") or l2_slug.title()
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"📚 Spell Mastery — {l1_name} (L1) + "
+                f"{l2_name} (L2)"
+            ),
+            "feature_desc": (
+                f"{char.name} mastered {l1_name} (L1) and "
+                f"{l2_name} (L2) — can cast each at base level "
+                f"without a slot. Higher levels still consume "
+                f"slots."
+            ),
+            "source": "spell-mastery",
+            "l1_spell_slug": l1_slug,
+            "l2_spell_slug": l2_slug,
+            "l1_spell_name": l1_name,
+            "l2_spell_name": l2_name,
+        },
+    })
+
+    return {
+        "ok": True,
+        "l1_spell_slug": l1_slug,
+        "l2_spell_slug": l2_slug,
+        "l1_spell_name": l1_name,
+        "l2_spell_name": l2_name,
+    }
 
 
 @router.post("/api/campaign/{campaign_id}/use_arcane_recovery")
@@ -47153,6 +47331,10 @@ _SHEET_PATCH_KEYS = {
     # to track the Warlock's bound familiar (form + name). Test
     # teardown resets to {} after the test runs.
     "pact_chain_familiar",
+    # v2.99.217 — spell_mastery. Read by /select_spell_mastery to
+    # persist the Wizard Lv 18+ pick of {l1, l2} spell slugs. Test
+    # teardown resets to {} after the test runs.
+    "spell_mastery",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the
