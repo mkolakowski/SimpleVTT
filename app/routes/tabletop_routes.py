@@ -13593,6 +13593,20 @@ async def roll_dice(
             _char, expr, result,
         )
 
+    # v2.99.197 — Reliable Talent (Rogue Lv 11+). Phase B.2 of the
+    # v2.99.193 phased completion plan. RAW PHB p.96: when a
+    # proficient ability check's kept d20 is < 10, treat it as a
+    # 10. Fires AFTER Halfling Lucky (the natural-1 reroll happens
+    # first; if the reroll still lands < 10, Reliable Talent
+    # floors it). Pip Quickfingers (Halfling Rogue) is the demo
+    # fixture; the v2.99.197 test bumps her Lv 7 → 11 via PATCH.
+    _rt_old_d20: "int | None" = None
+    _rt_new_d20: "int | None" = None
+    if _char and _pc_has_reliable_talent(_char.sheet, stat_key_raw):
+        result, _rt_old_d20, _rt_new_d20 = _apply_reliable_talent_floor(
+            result, expr,
+        )
+
     rec = DiceRoll(
         campaign_id=campaign_id,
         user_id=user.id,
@@ -13601,9 +13615,16 @@ async def roll_dice(
         total=result.total,
         visibility=visibility,
         note=(
-            note + f" | 🍀 Lucky reroll d20 1 → {_hl_new_d20}"
-            if _hl_old_d20 == 1 and _hl_new_d20 is not None
-            else note
+            (
+                note + f" | 🍀 Lucky reroll d20 1 → {_hl_new_d20}"
+                if _hl_old_d20 == 1 and _hl_new_d20 is not None
+                else note
+            )
+            + (
+                f" | 🎯 Reliable Talent floored {_rt_old_d20} → 10"
+                if _rt_old_d20 is not None
+                else ""
+            )
         )[:200],
     )
     db.add(rec)
@@ -13694,6 +13715,13 @@ async def roll_dice(
     if _hl_old_d20 == 1 and _hl_new_d20 is not None and _char is not None:
         await _broadcast_halfling_lucky_check(
             campaign_id, _char, _hl_old_d20, _hl_new_d20,
+        )
+    # v2.99.197 — Reliable Talent companion broadcast. Fires only
+    # when the floor applied (kept d20 was < 10 + Rogue Lv 11+ +
+    # proficient skill).
+    if _rt_old_d20 is not None and _char is not None:
+        await _broadcast_reliable_talent(
+            campaign_id, _char, _rt_old_d20, stat_key_raw,
         )
     # v2.99.28 — Rage STR-check advantage broadcast. Fires after the
     # roll lands so the chat card can show the trigger alongside the
@@ -24927,6 +24955,149 @@ async def _broadcast_race_save_advantage(
 # trigger or stay as a separate auto-fire mechanism. Keeping the
 # race trait separate is RAW-correct: Halfling Lucky has no charge,
 # can't run out, and triggers automatically.
+
+def _pc_has_reliable_talent(
+    sheet: "dict | None", stat_key: str,
+) -> bool:
+    """v2.99.197 — RAW Reliable Talent (Rogue Lv 11, PHB p.96):
+    "Whenever you make an ability check that lets you add your
+    proficiency bonus, you can treat a d20 roll of 9 or lower as a
+    10."
+
+    Returns True when:
+      - PC's Rogue class level >= 11 (read via
+        `_rogue_level_from_sheet`).
+      - The `stat_key` resolves to a skill on the sheet's `skills`
+        dict AND that skill is `proficient: True` (covers both
+        proficient and expertise — expertise implies proficient).
+
+    Gate is restrictive on purpose. Bare ability checks (str_check,
+    wis_check) don't add proficiency by default, so they don't
+    trigger Reliable Talent. Saves and attacks are routed through
+    other paths and shouldn't trigger here either.
+
+    Skill name lookup is case-insensitive; the sheet stores names
+    as title-case ("Stealth"), the client sends title-case via
+    `stat_key`, but the helper folds-case anyway for robustness.
+    """
+    if not sheet:
+        return False
+    if _rogue_level_from_sheet(sheet) < 11:
+        return False
+    stat_key_norm = (stat_key or "").strip()
+    if not stat_key_norm:
+        return False
+    skills = sheet.get("skills") or {}
+    if not isinstance(skills, dict):
+        return False
+    # Case-insensitive lookup.
+    stat_key_lc = stat_key_norm.lower()
+    for name, entry in skills.items():
+        if not isinstance(entry, dict):
+            continue
+        if (str(name) or "").strip().lower() != stat_key_lc:
+            continue
+        return bool(entry.get("proficient") or entry.get("expertise"))
+    return False
+
+
+def _apply_reliable_talent_floor(
+    result: "object", expr: str,
+) -> "tuple[object, int | None, int | None]":
+    """v2.99.197 — Floor the kept d20 of a roll at 10 (Reliable
+    Talent). Returns `(new_result, old_d20, new_d20)` — old/new are
+    None when the floor didn't apply (d20 already >= 10 or
+    breakdown didn't parse).
+
+    Mutates the breakdown string to swap the kept-d20 value (e.g.
+    `1d20[6]=6 + 3 = 9` → `1d20[10]=10 + 3 = 13`) and adjusts the
+    total by `(10 - old_d20)`. Construction-time intercepts (Rage
+    advantage on STR checks) are honored because they shape the
+    d20 expression BEFORE the roll, and this helper operates on
+    the kept value AFTER all expansion.
+
+    Returns the original result unchanged when the breakdown's kept
+    d20 is already >= 10 or can't be parsed.
+    """
+    old_d20 = _extract_kept_d20_from_breakdown(
+        getattr(result, "breakdown", "") or "",
+    )
+    if old_d20 is None or old_d20 >= 10:
+        return result, None, None
+    # Adjust the total.
+    delta = 10 - old_d20
+    try:
+        new_total = int(getattr(result, "total", 0) or 0) + delta
+    except (TypeError, ValueError):
+        return result, None, None
+    # Swap the breakdown's kept-d20 value. Replace ONLY the first
+    # match — for advantage / disadvantage there may be a kl1/kh1
+    # selection AND a per-die display; the kept-value match comes
+    # first via the `\d*d20[^d=+ ]*=` regex.
+    breakdown = getattr(result, "breakdown", "") or ""
+    new_breakdown = _HALFLING_KEPT_D20_RE.sub(
+        lambda m: m.group(0).replace(f"={old_d20}", "=10", 1),
+        breakdown,
+        count=1,
+    )
+    # Also update any trailing "= TOTAL" if present. The breakdown
+    # convention is "1d20[6]=6 + 3 = 9"; the trailing "= 9" is the
+    # running sum — rewrite it to "= NEW_TOTAL". Done via a simple
+    # split-by-last-" = " + re-attach.
+    if " = " in new_breakdown:
+        parts = new_breakdown.rsplit(" = ", 1)
+        try:
+            int(parts[1])
+            new_breakdown = f"{parts[0]} = {new_total}"
+        except (TypeError, ValueError):
+            pass
+    # Construct a lightweight result clone. dice_mod's RollResult
+    # is a dataclass-ish object — set attributes directly on a
+    # shallow copy for compatibility with the existing call sites.
+    try:
+        import copy
+        new_result = copy.copy(result)
+        new_result.total = new_total
+        new_result.breakdown = new_breakdown
+    except Exception:
+        return result, None, None
+    return new_result, old_d20, 10
+
+
+async def _broadcast_reliable_talent(
+    campaign_id: int,
+    char: "Character | None",
+    old_d20: int,
+    stat_key: str,
+) -> None:
+    """v2.99.197 — Companion broadcast for the Reliable Talent
+    floor. Emits a `feature_used` event with
+    `source: "reliable-talent"` so the chat-card surfaces the
+    trigger ("Pip used 🎯 Reliable Talent — floored d20 6 → 10 on
+    Stealth.").
+    """
+    if not char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                f"🎯 Reliable Talent — d20 {old_d20} → 10"
+            ),
+            "feature_desc": (
+                f"{char.name} treated the d20 roll of {old_d20} as a "
+                f"10 for "
+                f"{stat_key or 'a proficient ability check'} "
+                f"(Rogue Lv 11+ class feature)."
+            ),
+            "source": "reliable-talent",
+            "stat_key": stat_key or "",
+        },
+    })
+
 
 def _pc_has_halfling_lucky(sheet: "dict | None") -> bool:
     """Detect Halfling race trait Lucky on a PC sheet. Reads

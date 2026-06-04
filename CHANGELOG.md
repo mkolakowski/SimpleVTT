@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.197] - 2026-06-04 — "Floor of Ten" — Reliable Talent (Rogue Lv 11) floors proficient skill check d20s at 10
+
+**Schema version:** 66
+**Commit summary:** **Phase B.2 of the v2.99.193 phased completion plan — RAW Reliable Talent on the `/roll` surface.** RAW PHB p.96: "Whenever you make an ability check that lets you add your proficiency bonus, you can treat a d20 roll of 9 or lower as a 10." v2.99.197 adds a server-side intercept that fires when (a) the rolling PC is Rogue Lv 11+ AND (b) the `stat_key` body field resolves to a proficient skill on the sheet's `skills` dict. The kept d20 is floored to 10 (total + breakdown both adjusted), and a `feature_used(source=reliable-talent)` broadcast surfaces the trigger.
+**Description:** Three helper functions + 1 intercept site. (1) `_pc_has_reliable_talent(sheet, stat_key)` returns True when Rogue Lv 11+ AND the stat_key resolves to a proficient or expertise skill on the sheet (case-insensitive lookup). (2) `_apply_reliable_talent_floor(result, expr)` mutates the result's breakdown string + total when the kept d20 is below 10 (uses the same `_HALFLING_KEPT_D20_RE` regex as v2.99.13 Halfling Lucky). (3) `_broadcast_reliable_talent(campaign_id, char, old_d20, stat_key)` emits the chat-card feature_used. Wired into `/roll` AFTER the Halfling Lucky intercept so the natural-1 reroll happens first; if the reroll still lands < 10, Reliable Talent floors it. The DiceRoll's note gains a "🎯 Reliable Talent floored N → 10" trail. Pip Quickfingers is the demo fixture; tests PATCH her Lv 7 → 11.
+
+### Added
+- `_pc_has_reliable_talent(sheet, stat_key)` helper gate.
+- `_apply_reliable_talent_floor(result, expr)` breakdown-mutation helper.
+- `_broadcast_reliable_talent(campaign_id, char, old_d20, stat_key)` companion broadcast.
+- `/roll` post-result Reliable Talent intercept (composes with the v2.99.22 Halfling Lucky intercept — Halfling Lucky's natural-1 reroll fires first; Reliable Talent floors the result if still < 10).
+- `tests/harness/test_reliable_talent.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 3 helpers + 1 intercept + 3 regression tests. No schema change, no new endpoints.
+- **The v1 gate is restrictive on purpose.** Bare ability checks (str_check, wis_check) don't add proficiency by default, so they don't trigger Reliable Talent. Skills are matched case-insensitively against the sheet's `skills` dict. Saves and attacks go through other paths and don't intercept here either.
+- **Capstone-test pattern stays.** The test PATCH'es Pip Lv 7 → 11 via the v2.99.39 capstone-test convention; restores in finally. No demo Lv 11+ Rogue PC yet — Pip is the canonical Rogue fixture at Lv 7 (Evasion era).
+- **Phase B.2 ✅.** Phase B.1 (Portent banked d20s for Divination Wizard) and Phase B.3 (Stroke of Luck for Rogue Lv 20) still ⚪ — both can adopt the same `_HALFLING_KEPT_D20_RE` + breakdown-mutation pattern.
+- **Total harness count: 1128** (was 1125 in v2.99.196).
+
+---
+
 ## [2.99.196] - 2026-06-04 — "Ancestry Inferred" — Dragonborn ancestry → damage resistance helper
 
 **Schema version:** 66
