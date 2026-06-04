@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.184] - 2026-06-04 — "The Helper at Eleven" — Twinned helper now adopted across every shipped cast endpoint
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.183 follow-up — `_consume_twinned_for_second_target` is now wired into the final 3 cast endpoints: `/cast_flesh_to_stone`, `/cast_hold_monster`, `/cast_sleep`.** The Twinned auto-route helper has hit full adoption across all 11 cast endpoints that ship today. Each endpoint calls the helper after the main install + surfaces `twinned_target_combatant_id_2` on the response. /cast_hold_monster + /cast_sleep also append the second target to their install list.
+**Description:** Four edits. (1) `/cast_flesh_to_stone` — helper called after concentration anchor install. Response field added. Per-target stage-flag routing is filed (FtS has staged Restrained → Petrified progression). (2) `/cast_hold_monster` — helper called early; second target appended to install list. Response field added. (3) `/cast_sleep` — helper called early; second target appended to install list. RAW Sleep targets a sphere, not a single creature — Twinned isn't RAW-valid. The helper is wired for consistency with the family pattern; GM is responsible for declining. (4) `tests/harness/test_twinned_spell_suite_3.py` — 3 regression tests.
+
+### Added
+- `_consume_twinned_for_second_target` integration in `/cast_flesh_to_stone`, `/cast_hold_monster`, `/cast_sleep`.
+- `twinned_target_combatant_id_2` field on all 3 endpoints' responses.
+- `tests/harness/test_twinned_spell_suite_3.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 3 endpoint extensions + 3 tests. No schema change. The helper itself is unchanged.
+- **Twinned auto-route coverage now spans 11 of 11 shipped cast endpoints.** The full list:
+  - `/cast_polymorph` (v2.99.174)
+  - `/cast_slow`, `/cast_hold_person`, `/cast_compulsion` (v2.99.181)
+  - `/cast_hunters_mark`, `/cast_hex`, `/cast_bestow_curse`, `/cast_bane` (v2.99.183)
+  - `/cast_flesh_to_stone`, `/cast_hold_monster`, `/cast_sleep` (v2.99.184)
+- **Per-target install on second target is still filed for 7 of the 11.** /cast_hold_person + /cast_slow + /cast_hold_monster + /cast_sleep DO install on both targets (target_combatant_ids append). The remaining 7 surface the second target on the response only; full per-target install is filed per endpoint's effect-dict shape.
+- **The helper adoption interface is one line.** `_twin_target_2 = await _consume_twinned_for_second_target(campaign_id, int(char.id))` + `"twinned_target_combatant_id_2": _twin_target_2 or None` in the response. Future `/cast_<spell>` endpoints should adopt it from the start.
+- **Total harness count: 1108** (was 1105 in v2.99.183).
+
+---
+
 ## [2.99.183] - 2026-06-04 — "Twinned Goes Wide" — Wire helper into /cast_hunters_mark, /cast_hex, /cast_bestow_curse, /cast_bane
 
 **Schema version:** 66

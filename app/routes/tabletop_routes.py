@@ -33179,6 +33179,16 @@ async def cast_sleep(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.99.184 — Twinned Spell auto-route. RAW: Sleep targets an
+    # HP-pool sphere, not a single creature — Twinned doesn't
+    # apply RAW. Wired for consistency with the helper-pattern;
+    # GM is responsible for declining Twinned on AoE spells.
+    _twin_target_2_sleep = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
+    if _twin_target_2_sleep and _twin_target_2_sleep not in target_combatant_ids:
+        target_combatant_ids = list(target_combatant_ids) + [_twin_target_2_sleep]
+
     # Roll the HP pool: 5d8 + 2d8 per slot level above 1st.
     extra_dice = max(0, slot_level - 1) * 2
     pool_dice = 5 + extra_dice
@@ -33345,6 +33355,8 @@ async def cast_sleep(
         "affected": affected,
         "unaffected": unaffected,
         "duration_rounds": sleep_duration_rounds,
+        # v2.99.184 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_sleep or None,
     }
 
 
@@ -35688,6 +35700,15 @@ async def cast_flesh_to_stone(
         duration_rounds=10, icon="🗿",
     )
 
+    # v2.99.184 — Twinned Spell auto-route. Surfaces the second
+    # target on the response. Per-target install on the second
+    # target is filed (Flesh to Stone has staged Restrained →
+    # Petrified progression; routing v1's stage flag to both
+    # targets is non-trivial).
+    _twin_target_2_fts = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
+
     # Target speed + DC.
     _raw_speed = target.get("speed_walk")
     try:
@@ -35781,6 +35802,8 @@ async def cast_flesh_to_stone(
         "installed": installed,
         "duration_rounds": 10,
         "concentration": True,
+        # v2.99.184 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_fts or None,
     }
 
 
@@ -36077,6 +36100,15 @@ async def cast_hold_monster(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.99.184 — Twinned Spell auto-route. Hold Monster takes
+    # target_combatant_ids (plural); append the second target to
+    # the install list so the paralyzed buff lands on both.
+    _twin_target_2_hm2 = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
+    if _twin_target_2_hm2 and _twin_target_2_hm2 not in target_combatant_ids:
+        target_combatant_ids = list(target_combatant_ids) + [_twin_target_2_hm2]
+
     # v2.99.109 — caster-side concentration anchor for paired cleanup.
     await _install_caster_concentration_anchor(
         campaign_id, char, "hold-monster", "Hold Monster",
@@ -36161,6 +36193,8 @@ async def cast_hold_monster(
         "duration_rounds": 10,
         "concentration": True,
         "max_targets": max_targets,
+        # v2.99.184 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_hm2 or None,
     }
 
 
