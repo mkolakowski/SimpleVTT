@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.190] - 2026-06-04 — "Mark Named in the Log" — Attack damage breakdown labels rider with "(vs NAME)"
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.188 UI follow-up — the attack chat-card breakdown now reads "Hunter's Mark (vs Pip Quickfingers) 1d6=4" instead of "Hunter's Mark 1d6=4".** v2.99.188 stamped the rider uplift dict with `vs_combatant_id`. The actual chat-card render path is the broadcast's `damage_breakdown` string (server-baked; `tabletop.js` doesn't consume `auto_uplifts` directly today), so the user-visible "(vs NAME)" lives in the server-side suffix builder at line ~39348 — not a frontend JS edit. Hunter's Mark or Hex riders on a Twinned chain now show *which* mark fired on this swing.
+**Description:** One edit in `tabletop_routes.py::attack` (the auto-uplift breakdown-suffix builder). For each `auto_uplifts` entry, if the dict carries `vs_combatant_id` and the campaign's hub battle has a combatant matching that id, the label becomes `"{lbl} (vs {vs_name})"` before the breakdown string is appended. Helper used: `_lookup_combatant_name(campaign_id, vs_cid)`. Falls back to the bare label when the combatant isn't in init or `vs_combatant_id` is empty (preserves the pre-v2.99.190 string for non-rider uplifts like Rage / Colossus Slayer). One new harness test file with two regression tests covering (a) marked-target rider shows "(vs NAME)", (b) no-rider control has no "(vs ...)" suffix.
+
+### Added
+- Rider-target naming in the attack `damage_breakdown` suffix when an `auto_uplifts` entry carries `vs_combatant_id`.
+- `tests/harness/test_attack_uplift_vs_label.py` — 2 tests.
+
+### Notes
+- **PATCH bump** — 1 server-side suffix-builder extension + 2 regression tests. No schema change.
+- **Why not a JS edit.** The `auto_uplifts` array rides on the attack broadcast but `tabletop.js` doesn't consume it directly. The chat-card breakdown comes from `damage_breakdown` (server-baked). Enriching the suffix at server-side is the minimal-blast-radius path to the same user-visible result, with no client-side JS work.
+- **What this looks like in practice.** Pre-v2.99.190 a Twinned Hunter's Mark chain showed `"1d8+4=12 + Hunter's Mark 1d6=4"` whether the swing hit the primary or the second target — the audience couldn't tell *which* mark fired. Post-v2.99.190 it reads `"1d8+4=12 + Hunter's Mark (vs Pip Quickfingers) 1d6=4"` on a swing vs the primary, and `"... + Hunter's Mark (vs Cursed Cultist) 1d6=4"` on a swing vs the Twinned second target.
+- **Total harness count: 1118** (was 1116 in v2.99.189).
+
+---
+
 ## [2.99.189] - 2026-06-04 — "The Twinned Curse" — /cast_hex Twinned mirrors v2.99.187/.188 per-target install + broadcast
 
 **Schema version:** 66

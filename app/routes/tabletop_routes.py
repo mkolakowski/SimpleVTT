@@ -39345,11 +39345,18 @@ async def use_attack(
             damage_total = auto_uplift_total
         # Append a one-line summary to the breakdown so chat-card
         # readers see "1d12+4=10 + Rage +2 + Hunter's Mark 1d6=4" inline.
+        # v2.99.190 — when the uplift dict carries `vs_combatant_id`
+        # (Hunter's Mark / Hex riders post-v2.99.187/.189), suffix
+        # the label with "(vs NAME)" so a marked Twinned chain can
+        # show which mark fired on this swing.
         suffix_parts = []
         for u in auto_uplifts:
             lbl = u.get("label") or u.get("source") or "Bonus"
             bd = u.get("breakdown") or ""
-            suffix_parts.append(f"{lbl} {bd}")
+            vs_cid = u.get("vs_combatant_id") or ""
+            vs_name = _lookup_combatant_name(campaign_id, vs_cid) if vs_cid else ""
+            lbl_with_vs = f"{lbl} (vs {vs_name})" if vs_name else lbl
+            suffix_parts.append(f"{lbl_with_vs} {bd}")
         if suffix_parts:
             damage_breakdown = (damage_breakdown + "  +  " + "  +  ".join(suffix_parts)).strip()
 
