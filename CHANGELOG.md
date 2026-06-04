@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.198] - 2026-06-04 — "The Twenty Strike" — `/use_stroke_of_luck` endpoint (Rogue Lv 20)
+
+**Schema version:** 66
+**Commit summary:** **Phase B.3 of the v2.99.193 phased completion plan — RAW Stroke of Luck (Rogue Lv 20).** RAW PHB p.97: "If your attack misses a target within range, you can turn the miss into a hit. Alternatively, if you fail an ability check, you can treat the d20 roll as a 20." Once per short or long rest. v1 ships as an announce-style endpoint mirroring v2.16.2's curated `_FEATURE_ECONOMY['stroke-of-luck']` pattern: the counter exists, the use-endpoint decrements + broadcasts so the GM applies the mechanical effect manually. Retroactive DiceRoll mutation (mode="check" → set d20=20 in the breakdown) and attack-record mutation (mode="attack" → flip miss to hit) are filed for v3 — both need additional plumbing (DiceRoll PATCH endpoint, attack-record undo/replay).
+**Description:** One new endpoint at `/api/campaign/{cid}/use_stroke_of_luck`. Body: `{character_id, mode: "attack" | "check"}` (mode defaults to "check"). Validates Rogue class + level ≥ 20 + `stroke-of-luck` resource available, atomically decrements the counter, broadcasts `feature_used(source="stroke-of-luck", mode=<mode>)` + `resource_update(key="stroke-of-luck")`. Mode shapes the chat-card text ("🍀 Stroke of Luck — miss → hit" vs "🍀 Stroke of Luck — failed check → 20"). One new harness test file with 4 tests covering: happy path mode="check", happy path mode="attack", level-too-low gate (Pip Lv 7 default), out-of-uses gate (resource current=0).
+
+### Added
+- `/api/campaign/{cid}/use_stroke_of_luck` endpoint — announce-style spend.
+- `tests/harness/test_use_stroke_of_luck.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 4 regression tests. No schema change.
+- **v1 simplification.** The endpoint is announce-only. RAW's actual effect (miss → hit, failed check → 20) is applied by the GM after the broadcast. Mode "check" retroactively mutating a DiceRoll's d20 + the `roll` broadcast is filed for v3; mode "attack" flipping a logged attack from miss to hit needs the attack-undo/replay stack, which doesn't exist today.
+- **Capstone-test pattern.** No demo Lv 20 Rogue PC yet — Pip Quickfingers (Lv 7) is PATCH'd to Lv 20 + the `stroke-of-luck` resource is seeded as a row in the resources list. Restored to Lv 7 + empty resources in teardown.
+- **Phase B.3 ✅.** Phase B.1 (Portent banked d20s) still ⚪ — needs the `swap_d20_result` reaction kind in the Reactions framework + a sheet panel for Thalindra's banked dice. Highest leverage Wizard mechanic remaining.
+- **Total harness count: 1132** (was 1128 in v2.99.197).
+
+---
+
 ## [2.99.197] - 2026-06-04 — "Floor of Ten" — Reliable Talent (Rogue Lv 11) floors proficient skill check d20s at 10
 
 **Schema version:** 66

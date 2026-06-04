@@ -32439,6 +32439,156 @@ async def use_wholeness_of_body(
     }
 
 
+# ----------- API: Stroke of Luck (Rogue Lv 20) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_stroke_of_luck")
+async def use_stroke_of_luck(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.198 — Spend the Stroke of Luck use. Rogue Lv 20, free
+    (instantaneous), 1/short or long rest. RAW (PHB p.97):
+    "If your attack misses a target within range, you can turn the
+    miss into a hit. Alternatively, if you fail an ability check,
+    you can treat the d20 roll as a 20." Once per short/long rest.
+
+    Phase B.3 of the v2.99.193 phased completion plan. v1 ships as
+    an announce-style endpoint mirroring v2.16.2's Stroke of Luck
+    pattern — the counter exists; the use endpoint surfaces an
+    explicit "GM, the Rogue just used SoL on this swing/check"
+    chat-card so the GM applies the mechanical effect (miss → hit,
+    failed check → 20). Retroactive DiceRoll mutation for mode=check
+    + attack-record mutation for mode=attack are filed for v3.
+
+    Body: ``{character_id, mode: "attack" | "check"}``.
+
+    Validates Rogue class, level >= 20, `stroke-of-luck` resource
+    available (>= 1 remaining). Atomically decrements the counter,
+    broadcasts feature_used + resource_update, returns 200 with the
+    new resource state.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    mode = (str(body.get("mode") or "check")).strip().lower()
+    if mode not in ("attack", "check"):
+        mode = "check"
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Rogue character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Gate: Rogue class + level >= 20.
+    cls = (sheet.get("class") or "").lower()
+    if cls != "rogue":
+        # Multi-class — accept if any classes[] entry is Rogue.
+        has_rogue = any(
+            (entry.get("class") or "").strip().lower() == "rogue"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_rogue:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "rogue",
+                "got": cls or "",
+            })
+    rogue_lv = _rogue_level_from_sheet(sheet)
+    if rogue_lv < 20:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 20, "got": rogue_lv,
+        })
+
+    # Resource lookup + spend.
+    resources = list(sheet.get("resources") or [])
+    sol_row = None
+    sol_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "stroke-of-luck":
+            sol_row = dict(r); sol_idx = i; break
+    if sol_row is None:
+        return JSONResponse(status_code=404, content={
+            "error": "resource_missing",
+            "label": "Stroke of Luck",
+        })
+    sol_cur = int(sol_row.get("current") or 0)
+    sol_max = int(sol_row.get("max") or 0)
+    if sol_cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Stroke of Luck",
+        })
+
+    # Decrement.
+    sol_row["current"] = sol_cur - 1
+    resources[sol_idx] = sol_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    mode_label = "miss → hit" if mode == "attack" else "failed check → 20"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"🍀 Stroke of Luck — {mode_label}",
+            "feature_desc": (
+                f"{char.name} spent Stroke of Luck (Rogue Lv 20). "
+                f"GM applies the {mode_label} on the most recent "
+                f"{'attack' if mode == 'attack' else 'ability check'}. "
+                f"1/short rest."
+            ),
+            "source": "stroke-of-luck",
+            "mode": mode,
+            "remaining": sol_cur - 1,
+            "max": sol_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "stroke-of-luck",
+            "current": sol_cur - 1,
+            "max": sol_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "mode": mode,
+        "remaining": sol_cur - 1,
+        "max": sol_max,
+    }
+
+
 # ----------- API: Stillness of Mind (Monk Lv 7) -----------
 
 # RAW: condition keys this feature is allowed to remove. PHB p.79:
