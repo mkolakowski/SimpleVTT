@@ -1033,6 +1033,22 @@ def _paladin_sheet(name: str) -> dict:
                 "desc": "Action (Lv 20+ Devotion): emanate sunlight in 30 ft for 1 minute. Enemies start turn in light → 10 radiant. Advantage on saves vs fiend/undead spells. Use /use_holy_nimbus to spend the charge.",
                 "manual": False,
             },
+            # v2.99.157 — Cleansing Touch (Paladin Lv 14+). RAW:
+            # "you can use your action to end one spell on yourself
+            # or on one willing creature that you touch. You can
+            # use this feature a number of times equal to your
+            # Charisma modifier (a minimum of once)." Caelan's CHA
+            # mod is +3, so 3/3. Shown at 3/3 regardless of level;
+            # /use_cleansing_touch enforces the Lv 14+ gate.
+            {
+                "key": "cleansing-touch-uses",
+                "name": "Cleansing Touch",
+                "current": 3, "max": 3, "reset": "long",
+                "source": "paladin Lv 14",
+                "class_slug": "paladin",
+                "desc": "Action (Lv 14+): end one spell on yourself or a willing creature you touch. CHA mod uses per long rest (min 1). Use /use_cleansing_touch to spend a charge + name the buff to end.",
+                "manual": False,
+            },
         ],
         # v2.53.0: Aura of Protection (Paladin Lv 6+). Passive aura —
         # allies within 10 ft of Caelan add his CHA mod (+3 with CHA 16)

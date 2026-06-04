@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.157] - 2026-06-03 — "Mercy's Hand" — Cleansing Touch (Paladin Lv 14+) resource Use branch
+
+**Schema version:** 65
+**Commit summary:** **Ship Cleansing Touch as `/use_cleansing_touch` — first mechanically-wired Paladin Lv 14+ feature.** RAW (PHB p.85): "Beginning at 14th level, you can use your action to end one spell on yourself or on one willing creature that you touch. You can use this feature a number of times equal to your Charisma modifier (a minimum of once). You regain expended uses when you finish a long rest." The endpoint takes a `target_combatant_id` + a `buff_key`, locates the buff on the target's combatant entry, removes it, decrements the `cleansing-touch-uses` resource, and broadcasts a battle_update + feature_used audit. Sir Caelan's seed gains the resource at 3/3 (his CHA mod is +3 — RAW: "number of times equal to your CHA modifier").
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `POST /api/campaign/{cid}/use_cleansing_touch` endpoint. Validates caster ownership/GM, Paladin Lv 14+ (409 `missing_feature`), `cleansing-touch-uses` resource present + ≥1 charge (409 `missing_resource` / `not_enough_uses`), target_combatant_id resolves (404 `target_not_found`), target has a buff with the named key (409 `buff_not_found`). Removes the buff in place + decrements the resource (only after the buff was located — failing to find a buff doesn't burn a charge in v1). Broadcasts `battle_update` (force_gm_sync) + `feature_used` with `source: "cleansing-touch"`, the target name, and the removed buff's name + key. (2) `app/demo_seed.py` — Sir Caelan's resources gain `cleansing-touch-uses` at 3/3 long-rest (his CHA mod is +3; descriptive at Lv 6, endpoint enforces the Lv 14+ gate). (3) `tests/harness/test_use_cleansing_touch.py` — 5 regression tests using a Caelan-at-Lv-14-rested fixture.
+
+### Added
+- `POST /api/campaign/{cid}/use_cleansing_touch` endpoint.
+- `cleansing-touch-uses` 3/3 long-rest resource on Sir Caelan's seed.
+- `tests/harness/test_use_cleansing_touch.py` — 5 tests: Caelan @ Lv 14 ends a synthetic charmed buff on Pip → 200 + resource decrements to 2/3; Caelan @ stock Lv 6 → 409 `missing_feature`; target has no matching buff → 409 `buff_not_found` (no resource burn); unknown target → 404 `target_not_found`; missing buff_key → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + demo seed resource + 5 tests. No schema change. First Paladin Lv 14+ feature with a mechanical hook (matches the v2.15.6 filed item from the Paladin status doc — "v2.15.6 added the curated `_FEATURE_ECONOMY['cleansing-touch']` entry so `/use_feature` accepts the slug ... No demo PC at Lv 14+ yet ... the resource ⚡ Use branch + target picker UI ... is deferred").
+- **Why no resource burn on `buff_not_found`.** Pre-v2.99.157 the resource decrement happened before the buff lookup. v2.99.157 moves it to AFTER the lookup succeeds — so a player clicking Cleansing Touch with the wrong buff_key (typo, stale chip) doesn't lose a use. RAW is silent on this edge; the GM-friendly behavior is to not burn the charge on a miss-click.
+- **What's filed.** (1) Touch-range check (5 ft from caster to target — needs the v2.49.76 `_check_cast_range` integration). (2) "Willing creature" gate (target must accept the touch — requires consent UI). (3) Spell vs non-spell discrimination — RAW Cleansing Touch ends "one spell on yourself or on one willing creature." Today the endpoint accepts any buff_key, including non-spell condition buffs (poisoned, frightened from a Fear effect, etc.). The looser v1 contract is GM-friendly; the strict RAW filter is filed. (4) Auto-detect spell buffs vs non-spell buffs — would gate on a `is_spell: True` marker on the buff dict.
+- **The Lv 14+ ship roster.** Caelan's PATCH-up tests now cover Improved Divine Smite (Lv 11, v2.99.153), Purity of Spirit (Lv 15, v2.99.154), Holy Nimbus (Lv 20, v2.99.155), and Cleansing Touch (Lv 14, v2.99.157). All four share the same Caelan-PATCH-up + restore-Lv-6 fixture pattern; the demo Paladin stays Lv 6 for every other feature test.
+- **Total harness count: 1053** (was 1048 in v2.99.156).
+
+---
+
 ## [2.99.156] - 2026-06-03 — "The Censure" — Per-target buff install for Turn the Unholy (Paladin Devotion CD)
 
 **Schema version:** 65

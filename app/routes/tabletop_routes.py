@@ -11247,6 +11247,176 @@ async def use_turn_the_unholy(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_cleansing_touch")
+async def use_cleansing_touch(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.157 — Cleansing Touch (Paladin Lv 14+).
+
+    RAW (PHB p.85): "Beginning at 14th level, you can use your
+    action to end one spell on yourself or on one willing creature
+    that you touch. You can use this feature a number of times
+    equal to your Charisma modifier (a minimum of once). You
+    regain expended uses when you finish a long rest."
+
+    First Paladin Lv 14+ feature with a mechanical hook. Removes
+    a named buff from the target's buff list, decrements the
+    `cleansing-touch-uses` resource, broadcasts audit + battle_update.
+
+    Body: ``{character_id, target_combatant_id, buff_key}``.
+
+    Validation:
+      - Caster is Paladin Lv 14+ (409 missing_feature)
+      - `cleansing-touch-uses` resource >= 1 (409 not_enough_uses)
+      - target_combatant_id resolves (404 target_not_found)
+      - target has a buff with the named key (409 buff_not_found)
+      - 403 when not the GM and not the caster's owner
+
+    v1 simplification: no range/touch check (RAW: touch range —
+    GM-adjudicated). No "willing creature" check (the GM decides).
+    Only ends ONE buff per use per RAW. Doesn't distinguish spell
+    effects from non-spell condition buffs (e.g. Lay on Hands
+    cure poison/disease — RAW that's a different action).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+    buff_key = (body.get("buff_key") or "").strip().lower()
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+    if not buff_key:
+        raise HTTPException(400, "buff_key is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if _paladin_level_from_sheet(sheet) < 14:
+        return JSONResponse(status_code=409, content={
+            "error": "missing_feature",
+            "feature": "cleansing-touch",
+            "required": "Paladin Lv 14+",
+        })
+
+    # Check + decrement the cleansing-touch-uses resource.
+    resources = list(sheet.get("resources") or [])
+    ct_idx = next(
+        (i for i, r in enumerate(resources)
+         if (r.get("key") or "").lower() == "cleansing-touch-uses"),
+        -1,
+    )
+    if ct_idx < 0:
+        return JSONResponse(status_code=409, content={
+            "error": "missing_resource",
+            "resource_key": "cleansing-touch-uses",
+        })
+    ct_row = dict(resources[ct_idx])
+    ct_cur = int(ct_row.get("current") or 0)
+    if ct_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_uses",
+            "resource_key": "cleansing-touch-uses",
+            "have": ct_cur,
+        })
+
+    # Locate target combatant + the buff to end.
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return JSONResponse(status_code=409, content={
+            "error": "no_active_battle",
+        })
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant_id:
+            target = c
+            break
+    if target is None:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_found",
+            "target_combatant_id": target_combatant_id,
+        })
+
+    buffs = list(target.get("buffs") or [])
+    matched = next(
+        (i for i, b in enumerate(buffs)
+         if isinstance(b, dict)
+         and (b.get("key") or "").lower() == buff_key),
+        -1,
+    )
+    if matched < 0:
+        return JSONResponse(status_code=409, content={
+            "error": "buff_not_found",
+            "target_combatant_id": target_combatant_id,
+            "buff_key": buff_key,
+        })
+
+    removed_buff = buffs.pop(matched)
+    target["buffs"] = buffs
+
+    # Commit the resource decrement (only AFTER the buff was
+    # successfully located — RAW the use is consumed on declaration,
+    # but failing to find a buff to end shouldn't burn a charge in
+    # this v1 implementation).
+    ct_row["current"] = ct_cur - 1
+    resources[ct_idx] = ct_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update",
+        "data": state,
+        "force_gm_sync": True,
+    })
+
+    target_name = target.get("name") or "Target"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "✨ Cleansing Touch",
+            "feature_desc": (
+                f"{char.name} touches {target_name} and ends the "
+                f"{removed_buff.get('name') or buff_key} effect."
+            ),
+            "source": "cleansing-touch",
+            "target_combatant_id": target_combatant_id,
+            "target_name": target_name,
+            "buff_key_removed": buff_key,
+            "buff_name_removed": removed_buff.get("name") or buff_key,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "target_combatant_id": target_combatant_id,
+        "target_name": target_name,
+        "buff_key_removed": buff_key,
+        "uses_remaining": ct_cur - 1,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,
