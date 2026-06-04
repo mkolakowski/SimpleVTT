@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.164] - 2026-06-03 — "Slow on the Spell List" — Fix v2.99.163 test: PATCH Slow onto Zara's spell list
+
+**Schema version:** 65
+**Commit summary:** **Fix the v2.99.163 Extended Spell duration-doubling tests by PATCHing Slow onto Zara's spell list before the cast.** The v2.99.163 tests assumed Zara's seed included Slow, but it doesn't — only Pip (Wizard) has Slow in the demo. `/cast_slow` returned 409 `spell_not_known`, failing the test. Fix: prepend a `sheet-fields` PATCH that adds Slow to Zara's spells list before the cast attempt. The Extended duration-doubling hook itself (v2.99.163) is correct — just the fixture was wrong.
+**Description:** Single edit to `tests/harness/test_metamagic_extended_doubles_duration.py`: both `test_extended_doubles_concentration_anchor_via_cast_slow` and `test_extended_doubles_target_buff_via_cast_slow` now PATCH Slow onto Zara's spell list before casting. The cast endpoint accepts the spell and the v2.99.163 install-time doubling hook fires correctly.
+
+### Fixed
+- v2.99.163 Extended Spell harness tests now run end-to-end (Zara's seed doesn't include Slow; the test PATCHes it in).
+
+### Notes
+- **PATCH bump** — test-only fix. No production code change, no schema change. The v2.99.163 `_install_buff` Extended hook is correct as shipped.
+- **No coverage count change** — same 3 tests, same assertions; just the setup is fixed.
+- **Total harness count: 1072** (unchanged from v2.99.163).
+
+---
+
 ## [2.99.163] - 2026-06-03 — "Twice as Long" — Extended Spell actually doubles the installed buff's duration
 
 **Schema version:** 65

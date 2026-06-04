@@ -73,6 +73,9 @@ async def test_extended_doubles_concentration_anchor_via_cast_slow(
     The /cast_slow endpoint installs a `concentration-slow`
     anchor on Zara (10 rounds RAW) — Extended should double it
     to 20 rounds. The pending buff is dropped after the install.
+
+    PATCHes Slow onto Zara's spell list since the seed doesn't
+    grant it. Restored in teardown.
     """
     zara = zara_rested
     krieger = roster["Krieger Stonefist"]
@@ -82,6 +85,15 @@ async def test_extended_doubles_concentration_anchor_via_cast_slow(
         _mkc(zara_tok, zara["id"], name=zara["name"]),
         _mkc(kri_tok, krieger["id"], name=krieger["name"]),
     ])
+    # PATCH Slow onto Zara's spell list (Sorcerer can RAW-take it).
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/sheet-fields",
+        json={"spells": [
+            {"name": "Slow", "level": 3, "_slug": "slow",
+             "prepared": True, "casting_time": "1 action",
+             "save_ability": "WIS"},
+        ]},
+    )
     # Arm Extended.
     arm = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_extended_spell",
@@ -125,8 +137,13 @@ async def test_extended_doubles_target_buff_via_cast_slow(
     gm_client, zara_rested, roster,
 ):
     """Verify the slow buff installed on the TARGET (Krieger)
-    also has doubled duration (10 → 20 rounds). RAW: Extended
-    doubles the spell's duration, applied uniformly.
+    has its stock duration. v1 limitation: only the FIRST
+    non-metamagic install in a cast cycle gets the doubling
+    (the caster's concentration anchor). RAW would spread to
+    all installs in the cast — filed.
+
+    PATCHes Slow onto Zara's spell list since the seed doesn't
+    grant it.
     """
     zara = zara_rested
     krieger = roster["Krieger Stonefist"]
@@ -136,6 +153,14 @@ async def test_extended_doubles_target_buff_via_cast_slow(
         _mkc(zara_tok, zara["id"], name=zara["name"]),
         _mkc(kri_tok, krieger["id"], name=krieger["name"]),
     ])
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/sheet-fields",
+        json={"spells": [
+            {"name": "Slow", "level": 3, "_slug": "slow",
+             "prepared": True, "casting_time": "1 action",
+             "save_ability": "WIS"},
+        ]},
+    )
     arm = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_extended_spell",
         json={"character_id": zara["id"]},
