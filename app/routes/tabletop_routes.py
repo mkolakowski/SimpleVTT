@@ -30263,6 +30263,223 @@ async def use_action_surge(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_indomitable_reroll")
+async def use_indomitable_reroll(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.199 — Phase C.1 of the v2.99.193 phased completion
+    plan. RAW Fighter Indomitable (PHB p.72): "When you make a
+    saving throw and fail, you can spend one use of Indomitable to
+    reroll the new roll, and you must use the new roll." This
+    endpoint is the post-fail mirror of the v2.56.0 pre-roll
+    advantage simplification (`/use_indomitable`). The v2.56.0
+    endpoint still ships for the convenient "I'll prep for the
+    next save" path; v2.99.199 closes the RAW-correct
+    post-fail reroll path.
+
+    Body: ``{character_id, roll_id}``.
+
+    Validates Rogue (Fighter) class, level >= 9, indomitable
+    resource available, AND the `roll_id` resolves to a recent
+    DiceRoll belonging to this fighter. Rerolls the kept d20
+    server-side via `dice_mod.roll`, mutates the DiceRoll's
+    `breakdown` + `total` to reflect the new d20, broadcasts an
+    updated `roll` event with the new values, decrements the
+    counter, and emits `feature_used(source=indomitable-reroll)`.
+
+    v1 simplification: condition undo (if the failed save
+    installed a charmed/frightened/paralyzed buff and the reroll
+    passes, the buff should be removed) is left to the F8 Phase B
+    undo framework via /undo_attack_damage or manual GM cleanup.
+    Filed for a follow-up — same docstring pattern as the v2.56.0
+    plan note.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    roll_id = int(body.get("roll_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if roll_id <= 0:
+        raise HTTPException(400, "roll_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "fighter",
+            "got": cls or "",
+        })
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    if fighter_lv < 9:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 9, "got": fighter_lv,
+        })
+
+    # Resource lookup + spend.
+    resources = list(sheet.get("resources") or [])
+    ind_idx = -1
+    ind_row = None
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "indomitable":
+            ind_row = dict(r); ind_idx = i; break
+    if ind_row is None:
+        return JSONResponse(status_code=404, content={
+            "error": "resource_missing", "label": "Indomitable",
+        })
+    ind_cur = int(ind_row.get("current") or 0)
+    ind_max = int(ind_row.get("max") or 0)
+    if ind_cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses", "label": "Indomitable",
+        })
+
+    # Look up the DiceRoll record + verify it belongs to the user.
+    rec = db.query(DiceRoll).filter(
+        DiceRoll.id == roll_id,
+        DiceRoll.campaign_id == campaign_id,
+    ).first()
+    if not rec:
+        return JSONResponse(status_code=404, content={
+            "error": "roll_not_found",
+        })
+    if rec.user_id != user.id and not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "Not your roll")
+
+    old_d20 = _extract_kept_d20_from_breakdown(rec.breakdown or "")
+    old_total = int(rec.total or 0)
+    if old_d20 is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_d20",
+            "msg": "Roll has no d20 component to reroll.",
+        })
+
+    # Reroll the kept d20. The original expression may be `1d20+5`,
+    # `2d20kh1+5` (advantage), or `2d20kl1+5` (disadvantage). For RAW
+    # Indomitable, the reroll is a fresh roll of the SAME expression
+    # — advantage / disadvantage modifiers carry over to the reroll.
+    try:
+        new_result = dice_mod.roll(rec.expression)
+    except dice_mod.DiceParseError:
+        return JSONResponse(status_code=409, content={
+            "error": "reroll_failed",
+            "msg": f"Could not reroll {rec.expression!r}.",
+        })
+    new_total = int(new_result.total or 0)
+    new_breakdown = new_result.breakdown or ""
+    new_d20 = _extract_kept_d20_from_breakdown(new_breakdown)
+
+    # Persist the updated DiceRoll.
+    rec.breakdown = new_breakdown
+    rec.total = new_total
+    rec.note = (
+        (rec.note or "")
+        + f" | 🛡️ Indomitable reroll d20 {old_d20} → {new_d20 if new_d20 is not None else '?'}"
+    )[:200]
+
+    # Decrement counter.
+    ind_row["current"] = ind_cur - 1
+    resources[ind_idx] = ind_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+    db.refresh(rec)
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "id": rec.id,
+            "user_id": user.id,
+            "user_name": user.display_name,
+            "char_name": char.name,
+            "user_color": caster_color,
+            "expression": rec.expression,
+            "breakdown": rec.breakdown,
+            "total": rec.total,
+            "visibility": rec.visibility.value,
+            "note": rec.note,
+            "character_id": char.id,
+            "indomitable_reroll": True,
+            "old_total": old_total,
+            "old_d20": old_d20,
+            "new_d20": new_d20,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🛡️ Indomitable reroll — d20 {old_d20} → "
+                f"{new_d20 if new_d20 is not None else '?'}"
+            ),
+            "feature_desc": (
+                f"{char.name} rerolled a failed save (Fighter Lv 9+ "
+                f"Indomitable). New total: {new_total} (was "
+                f"{old_total}). RAW: you must use the new roll."
+            ),
+            "source": "indomitable-reroll",
+            "roll_id": rec.id,
+            "old_d20": old_d20,
+            "new_d20": new_d20,
+            "old_total": old_total,
+            "new_total": new_total,
+            "remaining": ind_cur - 1,
+            "max": ind_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "indomitable",
+            "current": ind_cur - 1,
+            "max": ind_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "roll_id": rec.id,
+        "old_d20": old_d20,
+        "new_d20": new_d20,
+        "old_total": old_total,
+        "new_total": new_total,
+        "remaining": ind_cur - 1,
+        "max": ind_max,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_indomitable")
 async def use_indomitable(
     campaign_id: int,

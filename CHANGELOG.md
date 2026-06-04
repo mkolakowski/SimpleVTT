@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.199] - 2026-06-04 — "The Fighter's Persistence" — `/use_indomitable_reroll` endpoint (RAW post-fail reroll)
+
+**Schema version:** 66
+**Commit summary:** **Phase C.1 of the v2.99.193 phased completion plan — RAW Fighter Indomitable.** v2.56.0 shipped Indomitable as a pre-roll advantage-on-next-save simplification (arms the buff, swaps next save's d20 → 2d20kh1, consumes buff). RAW (PHB p.72) is post-fail reroll: "When you make a saving throw and fail, you can spend one use of Indomitable to reroll the new roll, and you must use the new roll." v2.99.199 adds `/use_indomitable_reroll` as a sibling endpoint — the v2.56.0 `/use_indomitable` stays for the "prep advantage" workflow; v2.99.199 closes the RAW path. The endpoint takes a `roll_id`, looks up the persisted DiceRoll, re-rolls the expression server-side, mutates the record (breakdown + total + note), broadcasts an updated `roll` event with the new values, decrements the counter, and emits `feature_used(source=indomitable-reroll)`.
+**Description:** One new endpoint at `/api/campaign/{cid}/use_indomitable_reroll`. Body: `{character_id, roll_id}`. Validates Fighter class + level >= 9 + `indomitable` resource available + roll_id resolves to a DiceRoll owned by the user (GM bypass). Reroll uses `dice_mod.roll` on the original expression (so advantage / disadvantage carry over). The breakdown's kept d20 is extracted via `_extract_kept_d20_from_breakdown` for the broadcast labels. DiceRoll record is mutated atomically: new breakdown + total + appended "🛡️ Indomitable reroll d20 N → M" note. Three broadcasts fire: `roll` (with `indomitable_reroll: True` flag + old/new d20 + old/new total), `feature_used(source=indomitable-reroll)`, `resource_update(key=indomitable)`. One new harness test file with 4 tests covering happy path, level gate, missing roll_id, out-of-uses.
+
+### Added
+- `/api/campaign/{cid}/use_indomitable_reroll` endpoint.
+- Updated `roll` broadcast shape: `indomitable_reroll: True` flag + `old_total` / `old_d20` / `new_d20` fields when the endpoint mutates a roll.
+- `tests/harness/test_use_indomitable_reroll.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 4 regression tests. No schema change.
+- **v1 simplification.** Condition undo (when the original failed save installed a Charmed / Frightened / Paralyzed buff and the reroll passes, the buff should be removed) is left to the F8 Phase B undo framework via `/undo_attack_damage` or manual GM cleanup. Same docstring pattern as the v2.56.0 plan note.
+- **Both endpoints coexist.** Players pick: `/use_indomitable` to arm advantage on the next save (v2.56.0 simplification), or `/use_indomitable_reroll` to RAW-reroll a failed save post-result (v2.99.199). The resource counter is shared.
+- **Capstone-test pattern.** Garrik PATCH'd Lv 7 → 9; indomitable resource seeded for the test. Restored in teardown.
+- **Phase C.1 ✅.** F8 Phase C of the v2.99.193 phased plan is now closed at the RAW-reroll level; the condition-undo follow-up is filed.
+- **Total harness count: 1136** (was 1132 in v2.99.198).
+
+---
+
 ## [2.99.198] - 2026-06-04 — "The Twenty Strike" — `/use_stroke_of_luck` endpoint (Rogue Lv 20)
 
 **Schema version:** 66
