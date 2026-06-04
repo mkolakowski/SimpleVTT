@@ -11063,6 +11063,190 @@ async def use_holy_nimbus(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_turn_the_unholy")
+async def use_turn_the_unholy(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.156 — Turn the Unholy (Paladin Oath of Devotion Lv 3+
+    Channel Divinity option).
+
+    RAW (PHB p.86): "As an action, you present your holy symbol
+    and speak a prayer of censure, using your Channel Divinity.
+    Each fiend or undead within 30 feet of you must make a
+    Wisdom saving throw. On a failed save, the creature is
+    turned for 1 minute or until it takes damage."
+
+    Per-target mechanical layer for the v2.14.3 audit-only
+    Channel Divinity option. Body takes `target_combatant_ids`
+    of targets that already failed their WIS save (GM-adjudicated
+    per the existing v2.14.3 /use_feature pattern). The endpoint
+    decrements the channel-divinity resource, installs a `turned`
+    buff on each named target, and broadcasts per-target
+    feature_used events.
+
+    Body: ``{character_id, target_combatant_ids: [str]}``.
+
+    Validation:
+      - Caster is Paladin Devotion (any level — Channel Divinity
+        is unlocked at Lv 3 and the resource gate enforces uses;
+        the subclass slug gate keeps non-Devotion paladins out)
+      - channel-divinity resource >= 1 (409 not_enough_uses)
+      - target_combatant_ids non-empty (400)
+      - 403 when not the GM and not the caster's owner
+
+    v1 simplification: GM is responsible for filtering targets to
+    fiends + undead and resolving the WIS saves. The endpoint
+    trusts the supplied list (no creature-type filter, no
+    auto-save). Auto-creature-type filtering + per-target save
+    resolution are filed.
+
+    The Turned buff carries:
+      - duration_rounds: 10 (1 minute)
+      - effects.must_move_away_from_caster: True
+      - effects.cant_take_reactions: True
+      - effects.break_on_damage: True
+      - source_char_id pointing to the caster (so the buff cascade
+        can identify which paladin censured the target)
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_ids = body.get("target_combatant_ids") or []
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
+        raise HTTPException(400, "target_combatant_ids must be a non-empty list")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if _paladin_level_from_sheet(sheet) < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "missing_feature",
+            "feature": "turn-the-unholy",
+            "required": "Paladin Lv 3+ Oath of Devotion",
+        })
+    subclass_raw = (sheet.get("subclass") or "").strip().lower()
+    subclass_slug = subclass_raw.replace("oath of ", "").strip()
+    if subclass_slug != "devotion":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass",
+            "expected": "devotion",
+            "got": subclass_slug or "",
+        })
+
+    # Check + decrement the channel-divinity resource.
+    resources = list(sheet.get("resources") or [])
+    cd_idx = next(
+        (i for i, r in enumerate(resources)
+         if (r.get("key") or "").lower() == "channel-divinity"),
+        -1,
+    )
+    if cd_idx < 0:
+        return JSONResponse(status_code=409, content={
+            "error": "missing_resource",
+            "resource_key": "channel-divinity",
+        })
+    cd_row = dict(resources[cd_idx])
+    cd_cur = int(cd_row.get("current") or 0)
+    if cd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_uses",
+            "resource_key": "channel-divinity",
+            "have": cd_cur,
+        })
+    cd_row["current"] = cd_cur - 1
+    resources[cd_idx] = cd_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install the Turned buff on each target.
+    affected: list[dict] = []
+    unaffected: list[dict] = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        c = _lookup_combatant(campaign_id, tid)
+        if not c:
+            unaffected.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        turned_buff = {
+            "key": "turned",
+            "name": "Turned",
+            "icon": "🙏",
+            "duration_rounds": 10,
+            "duration_max": 10,
+            "concentration": False,
+            "source": "turn-the-unholy",
+            "source_char_id": int(char.id),
+            "source_char_name": char.name,
+            "effects": {
+                "must_move_away_from_caster": True,
+                "cant_take_reactions": True,
+                "break_on_damage": True,
+            },
+            "raw_effects": [
+                "Must use all movement to flee the caster",
+                "Can't willingly move within 30 ft of caster",
+                "Can't take reactions",
+                "Action: Dash only (or Dodge if blocked)",
+                "Ends on damage taken",
+            ],
+        }
+        installed = await _install_buff_on_combatant_id(
+            campaign_id, tid, turned_buff,
+        )
+        affected.append({
+            "combatant_id": tid,
+            "name": c.get("name") or "",
+            "installed": installed,
+        })
+
+    target_names = ", ".join(a["name"] for a in affected) or "no targets"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🙏 Turn the Unholy",
+            "feature_desc": (
+                f"{char.name} channels divinity to turn the unholy. "
+                f"Affected: {target_names}. Fiends/undead must flee "
+                f"for 1 minute or until they take damage."
+            ),
+            "source": "turn-the-unholy",
+            "affected_combatant_ids": [a["combatant_id"] for a in affected],
+            "duration_rounds": 10,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "affected": affected,
+        "unaffected": unaffected,
+        "duration_rounds": 10,
+        "uses_remaining": cd_cur - 1,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,

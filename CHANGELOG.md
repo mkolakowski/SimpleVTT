@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.156] - 2026-06-03 — "The Censure" — Per-target buff install for Turn the Unholy (Paladin Devotion CD)
+
+**Schema version:** 65
+**Commit summary:** **Ship `/use_turn_the_unholy` as the per-target mechanical layer on top of the v2.14.3 audit-only Turn the Unholy Channel Divinity option.** RAW (PHB p.86): "As an action, you present your holy symbol and speak a prayer of censure ... Each fiend or undead within 30 feet of you must make a Wisdom saving throw. On a failed save, the creature is turned for 1 minute or until it takes damage." The v2.14.3 path (`/use_feature option_key="turn-the-unholy"`) handles audit-only announces; the new endpoint takes the GM-adjudicated failed-target list and installs a `turned` buff on each, decrementing the `channel-divinity` resource in the same call. v1 simplification: GM resolves the WIS saves outside the endpoint and supplies the failed-target list. Auto-creature-type filtering + per-target save resolution are filed.
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — new `POST /api/campaign/{cid}/use_turn_the_unholy` endpoint. Validates caster ownership/GM, Paladin Lv 3+ + subclass slug "devotion" (409 `missing_feature` / `wrong_subclass`), `channel-divinity` resource exists + ≥1 charge (409 `missing_resource` / `not_enough_uses`), `target_combatant_ids` non-empty (400). For each target, looks up the combatant via `_lookup_combatant` and installs an inline `turned` buff (key=turned, icon=🙏, duration_rounds=10, effects.must_move_away_from_caster=True, effects.cant_take_reactions=True, effects.break_on_damage=True, raw_effects describing the RAW behavior). Decrements the channel-divinity charge. Returns `{ok, affected: [...], unaffected: [...], duration_rounds, uses_remaining}`. Broadcasts `feature_used` with `source: "turn-the-unholy"`, `affected_combatant_ids: [...]`. (2) `tests/harness/test_use_turn_the_unholy.py` — 4 regression tests using a Caelan-rested fixture (uses Sir Caelan's stock Lv 6 + Krieger as the GM-adjudicated "fiend" target).
+
+### Added
+- `POST /api/campaign/{cid}/use_turn_the_unholy` endpoint.
+- Inline `turned` buff shape (key, effects, raw_effects). First Turned-condition install in SimpleVTT.
+- `tests/harness/test_use_turn_the_unholy.py` — 4 tests: Caelan + 1 target → 200 + buff installs + CD decrements + WS audit; empty target list → 400; second use without rest → 409 `not_enough_uses`; missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + 4 tests. No schema change. No new helper functions (Lv 3 + Devotion + CD-resource gate is inline).
+- **What's filed.** (1) Per-target WIS save resolution — endpoint would scan each target's sheet/template for WIS save mod, roll d20, compare to DC (8 + caster prof + CHA mod). Needs target-save-mod lookup that doesn't exist yet for NPCs. (2) Auto-creature-type filter — endpoint would reject non-fiend/non-undead targets reading the target's `type` field. Trivial once target-type metadata is accessible (it is for NPC templates; PCs would need an explicit field). (3) Auto-break-on-damage — the `effects.break_on_damage: True` flag is informational today; a future hook in the damage pipeline would scan the target's buffs for `break_on_damage: True` and remove them when HP changes. (4) Move-away-from-caster movement enforcement — requires the v2.49.76 movement engine to read the buff effects and constrain pathing.
+- **Why Krieger works as the test target.** RAW Turn the Unholy only affects fiends + undead. Krieger is a Half-Orc Barbarian (humanoid). The endpoint doesn't enforce the creature-type filter today (filed), so Krieger accepts the buff for test coverage. In real play the GM picks only fiend/undead targets.
+- **Mechanical Channel Divinity options shipped.** Both Oath of Devotion CD options now have a per-target mechanical layer: Sacred Weapon (v2.97.34, attack-roll +CHA hook), Turn the Unholy (v2.99.156, Turned buff install). The audit-only v2.14.3 path for both still exists for the announce flow.
+- **Total harness count: 1048** (was 1044 in v2.99.155).
+
+---
+
 ## [2.99.155] - 2026-06-03 — "Crown of Sunlight" — Holy Nimbus (Paladin Devotion Lv 20 capstone) endpoint
 
 **Schema version:** 65
