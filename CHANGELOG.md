@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.163] - 2026-06-03 — "Twice as Long" — Extended Spell actually doubles the installed buff's duration
+
+**Schema version:** 65
+**Commit summary:** **Close the v2.99.161 filed item — Extended Spell now actually doubles the installed buff's duration_rounds + duration_max (capped at 14400 = 24h) at install time.** Pre-v2.99.163 the Extended pending buff was scaffolding only — `/cast_spell` consumed it at start of cast but no buff's duration was actually mutated. v2.99.163 moves the consume from `/cast_spell` into `_install_buff`, where the hook reads the buff's `source_char_id`, consults `_caster_has_extended_pending`, doubles the duration, and drops the pending as one-shot. The hook skips metamagic-marker buffs (key starts with `"metamagic-"`) so the Extended pending doesn't extend itself.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — `_install_buff` gains an Extended Spell hook at the top of the install path: when `buff.source_char_id` is set AND `buff.key` doesn't start with `"metamagic-"` AND `duration_rounds > 0` AND `_caster_has_extended_pending(campaign_id, source_char_id)` returns True, double duration_rounds + duration_max (capped at 14400), then drop the pending via `_remove_buff` (one-shot). Defensive try/except around the pending drop so a failed cleanup doesn't block the install. (2) `/cast_spell` — early Extended consume from v2.99.161 is removed; the comment explains that the consume now happens as a side effect of the first non-metamagic duration-buff install in the cast cycle. (3) `tests/harness/test_metamagic_extended_doubles_duration.py` — 3 regression tests.
+
+### Added
+- Extended Spell duration-doubling hook in `_install_buff` — doubles `duration_rounds` + `duration_max` (capped at 14400 = 24h) for non-metamagic buffs whose source caster has the Extended pending.
+- `tests/harness/test_metamagic_extended_doubles_duration.py` — 3 tests: cast Slow with Extended armed → Zara's `concentration-slow` anchor doubled from 10 → 20 rounds; multi-target install in same cast — only first benefits per v1 (RAW spread is filed); Extended pending stays armed when the cast installs no duration buff (e.g., Mage Hand cantrip).
+
+### Changed
+- `/cast_spell` no longer drops the Extended pending at start of cast. Consumption is now coupled to the actual duration-doubling event, preserving the pending for casts that don't install duration buffs.
+- `_install_buff`'s behavior is now Extended-aware. Buffs installed via `_install_buff_on_combatant_id` (which calls `_install_buff` internally) get the same treatment automatically.
+
+### Notes
+- **PATCH bump** — single hook + integration + 3 tests. No schema change.
+- **v1 limitation: only the first non-metamagic install in a cast cycle gets doubled.** For multi-target spells (Hold Person on 3 targets, Slow on up to 6 targets), the FIRST install drops the pending — so subsequent targets in the same cast use the original duration. RAW: Extended should spread across all targets of the cast. v1 ships the single-install version; filed: a cast-id-scoped pending counter that lets the same cast's installs all benefit before the pending drops at end-of-cast.
+- **Why the pending stays armed when no duration buff is installed.** Mage Hand, Fireball, Magic Missile — instant-effect spells don't install duration buffs. With the v2.99.163 hook, the pending stays armed and can be applied to the next cast that DOES install a duration buff. RAW: the SP is spent on the cast that consumed it (one-shot per declaration), so the pending should drop even if no duration buff was installed. v1 ships the GM-friendly version; filed: strict RAW one-shot semantics.
+- **Closes a v2.99.161 filed item.** First v2.99.x cast-side metamagic ship that actually mutates the spell's effect instead of just surfacing a marker for downstream wiring. The same hook pattern can be reused for Heightened-style "buff modify at install" effects if/when those features ship.
+- **Total harness count: 1072** (was 1069 in v2.99.162).
+
+---
+
 ## [2.99.162] - 2026-06-03 — "Without a Word" — Subtle Spell metamagic + closes the Sorcerer metamagic suite
 
 **Schema version:** 65

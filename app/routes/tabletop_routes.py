@@ -577,6 +577,37 @@ async def _install_buff(
         buffs = []
         target["buffs"] = buffs
     key = str(buff["key"])
+    # v2.99.163 — Extended Spell metamagic duration-doubling hook.
+    # Closes the v2.99.161 filed item. When the buff has a non-
+    # metamagic source caster who carries `metamagic-extended-
+    # pending`, double duration_rounds + duration_max (capped at
+    # 14400 = 24h at 6s/round). The pending buff is dropped as
+    # part of the same call (one-shot per RAW). Skip when the
+    # buff IS the metamagic-extended-pending buff itself or any
+    # other metamagic marker — those shouldn't extend themselves.
+    _ext_src = buff.get("source_char_id")
+    _ext_dur = int(buff.get("duration_rounds") or 0)
+    if (
+        _ext_src
+        and _ext_dur > 0
+        and not key.startswith("metamagic-")
+        and _caster_has_extended_pending(campaign_id, int(_ext_src))
+    ):
+        # Cap at 14400 rounds = 24 hours per RAW.
+        _ext_new_dur = min(14400, _ext_dur * 2)
+        buff["duration_rounds"] = _ext_new_dur
+        _ext_dmax = int(buff.get("duration_max") or _ext_dur)
+        buff["duration_max"] = min(14400, _ext_dmax * 2)
+        # Drop the pending buff on the source caster — one-shot.
+        # Defensive try/except: a failed pending-drop shouldn't
+        # block the install.
+        try:
+            await _remove_buff(
+                campaign_id, int(_ext_src),
+                "metamagic-extended-pending",
+            )
+        except Exception:
+            pass
     is_concentration = bool(buff.get("concentration"))
     # v2.49.51: if the incoming buff incapacitates the target (and
     # it's not self-cast — rare edge case), snapshot the target's
@@ -14536,17 +14567,15 @@ async def cast_spell(
             "metamagic-twinned-pending",
         )
 
-    # v2.99.161 — Extended Spell metamagic. Same consume pattern
-    # as Twinned: drop the pending buff one-shot when /cast_spell
-    # starts. The actual duration-doubling on the installed buff
-    # is filed (would need a hook in `_install_buff` that consults
-    # the source_char_id's pending buff before stamping
-    # duration_rounds + duration_max).
-    if _caster_has_extended_pending(campaign_id, int(char.id)):
-        await _remove_buff(
-            campaign_id, int(char.id),
-            "metamagic-extended-pending",
-        )
+    # v2.99.163 — Extended Spell metamagic. Pre-v2.99.163 the
+    # pending buff was dropped here (early /cast_spell consume).
+    # v2.99.163 moves the consume into `_install_buff` so the
+    # buff's duration can actually be doubled BEFORE it's added
+    # to the target's list. The pending is now dropped as a side
+    # effect of the FIRST non-metamagic duration-buff install in
+    # this cast cycle (or stays armed if the cast installs no
+    # buffs at all — RAW: Extended only matters when there's a
+    # duration to double).
 
     # v2.99.162 — Subtle Spell metamagic. Drop the pending buff
     # one-shot when /cast_spell starts. The Counterspell-immune
