@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.187] - 2026-06-04 — "The Second Mark" — Hunter's Mark Twinned installs per-target rider
+
+**Schema version:** 66
+**Commit summary:** **Close a v2.99.183 filed item — `/cast_hunters_mark` now folds the Twinned second target into the installed buff's rider, not just the response.** v2.99.183 wired the helper at cast layer but the buff's `effects.weapon_hit_bonus_target_combatant_id` was a single string, so the weapon-hit rider at line ~21498 only matched the primary target's combatant_id. v2.99.187 (a) makes the consumer accept list-or-string, (b) moves the Twinned helper call to BEFORE the buff construction, (c) folds the second target into a list-shape rider when Twinned is in play. Single-target installs keep their single-string shape (backward compat with /cast_hex's still-singular field + with any pre-v2.99.187 serialized buffs in sheets).
+**Description:** Three edits in `app/routes/tabletop_routes.py`. (1) Weapon-hit rider resolution at line ~21498 — replaced `tgt != target_combatant_id` with a list-aware match: `tgt_match = target_combatant_id in tgt if isinstance(tgt, list) else tgt == target_combatant_id`. (2) `/cast_hunters_mark` — moved `_consume_twinned_for_second_target` to just after the target resolution (before the buff dict is built); computed `_rider_targets`, `_all_target_ids`, `_desc_target_phrase` as list-or-string based on whether Twinned fired; built the buff with the list-shape rider + a new top-level `target_combatant_ids` list mirroring both. (3) Removed the late helper call (which was a no-op after the move). One new harness test file with two regression tests covering (a) Twinned → list-shape rider with both targets, (b) no-Twinned control → single-string rider preserved.
+
+### Added
+- List-shape support for `effects.weapon_hit_bonus_target_combatant_id` in the weapon-hit rider consumer.
+- `target_combatant_ids` top-level field on the Hunter's Mark buff (mirrors both targets when Twinned fires; singleton-list otherwise).
+- Twinned-folded buff install path in `/cast_hunters_mark` (rider list + descriptor adjusted to name both targets).
+- `tests/harness/test_hunters_mark_twinned_install.py` — 2 tests.
+
+### Changed
+- `/cast_hunters_mark` now calls `_consume_twinned_for_second_target` BEFORE the buff is built (was: after the install). Closes the install ordering that prevented per-target install in v2.99.183.
+
+### Notes
+- **PATCH bump** — 1 consumer extension + 1 endpoint shape change + 2 regression tests. No schema change.
+- **Hex still ships singular.** `/cast_hex`'s effect dict still carries `weapon_hit_bonus_target_combatant_id` as a single string. Hex's Twinned install can adopt the same shape change with the same edits when the GM workflow needs it; the consumer at line ~21498 already accepts list-or-string so the path is one edit away.
+- **Backward compat.** Pre-v2.99.187 Hunter's Mark buffs serialized to a sheet (via `_buffs_active` mirror) carry the single-string rider. The consumer's list-or-string branch handles both shapes; existing buffs keep firing on the primary target without any migration step.
+- **Why not change the field name to plural.** The singular `weapon_hit_bonus_target_combatant_id` already lives in dozens of serialized sheets + the install path. Renaming would force a migration + a search-replace across consumers. Accepting list-or-string is the minimal-blast-radius change.
+- **Filed for next iteration.** Per-target install for `/cast_hex` Twinned (same shape change, same one-line consumer change reused). The 7 other cast endpoints with Twinned support (bestow_curse, bane, slow, hold_person, hold_monster, compulsion, sleep) each have different effect-dict shapes; per-target install for each is its own filed item.
+- **Total harness count: 1112** (was 1110 in v2.99.186).
+
+---
+
 ## [2.99.186] - 2026-06-04 — "Quiet Hag" — NPC `/npc_cast_spell` mirrors PC Subtle Spell + Counterspell gate
 
 **Schema version:** 66

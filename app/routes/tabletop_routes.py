@@ -21496,7 +21496,17 @@ def _compute_attack_auto_uplifts(
                 continue
             dice = (effects.get("weapon_hit_bonus_dice") or "").strip()
             tgt = effects.get("weapon_hit_bonus_target_combatant_id")
-            if not dice or tgt != target_combatant_id:
+            # v2.99.187 — accept list-or-string. /cast_hunters_mark
+            # now installs a list shape when Twinned Spell folds in
+            # a second target, so the rider needs to match either
+            # entry. Single-string buffs from earlier installs (and
+            # /cast_hex's still-singular field) keep working via the
+            # equality branch.
+            if isinstance(tgt, list):
+                tgt_match = target_combatant_id in tgt
+            else:
+                tgt_match = (tgt == target_combatant_id)
+            if not dice or not tgt_match:
                 continue
             try:
                 r = dice_mod.roll(dice)
@@ -32597,6 +32607,16 @@ async def cast_hunters_mark(
     )
     display_target = resolved_name or "the target"
 
+    # v2.99.187 — Twinned Spell auto-route. Consume the pending buff
+    # EARLY so the second target can be folded into the install-time
+    # buff. Closes the v2.99.183 filed item — the rider buff's
+    # `effects.weapon_hit_bonus_target_combatant_id` now carries a
+    # list when twinned, so the v2.99.187 list-aware consumer matches
+    # either target on weapon-hit resolution.
+    _twin_target_2_hm = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
+
     # Duration scales with slot level: L1-L2 = 1 hour (600 rounds), L3-L4
     # = 8 hours (4800 rounds), L5+ = 24 hours (14400 rounds). For demo
     # purposes we cap displayed duration at 100 rounds so the chip text
@@ -32612,6 +32632,27 @@ async def cast_hunters_mark(
         duration_rounds = 100  # display cap; RAW 1 hour = 600 rounds
         duration_label = "1h"
 
+    # v2.99.187 — when Twinned folded in a second target, the rider
+    # effect carries a list of both combatant IDs so the consumer
+    # at line ~21498 matches either. The top-level
+    # `target_combatant_id` stays singular for backward compat with
+    # other consumers (broadcast cards, undo replay); a new
+    # `target_combatant_ids` list surfaces both for clients that
+    # want to highlight both marks.
+    _rider_targets = (
+        [target_combatant_id, _twin_target_2_hm]
+        if _twin_target_2_hm
+        else target_combatant_id
+    )
+    _all_target_ids = (
+        [target_combatant_id, _twin_target_2_hm]
+        if _twin_target_2_hm
+        else [target_combatant_id] if target_combatant_id else []
+    )
+    _desc_target_phrase = (
+        f"{display_target} + a second target"
+        if _twin_target_2_hm else display_target
+    )
     # Install the concentration buff. Replaces any existing
     # concentration buff on the caster (RAW).
     buff = {
@@ -32620,6 +32661,7 @@ async def cast_hunters_mark(
         "icon": "🎯",
         "source_caster_id": None,  # filled by client from broadcast
         "target_combatant_id": target_combatant_id,
+        "target_combatant_ids": _all_target_ids,
         "target_character_id": target_character_id,
         "target_name": resolved_name or target_name,
         "duration_rounds": duration_rounds,
@@ -32628,12 +32670,12 @@ async def cast_hunters_mark(
         "concentration": True,
         "effects": {
             "weapon_hit_bonus_dice": "1d6",
-            "weapon_hit_bonus_target_combatant_id": target_combatant_id,
+            "weapon_hit_bonus_target_combatant_id": _rider_targets,
             "advantage_on": ["perception_to_find_target", "survival_to_find_target"],
         },
         "desc": (
             f"Concentration ({duration_label}). +1d6 weapon damage on hits "
-            f"against {display_target}. Advantage on Perception / Survival "
+            f"against {_desc_target_phrase}. Advantage on Perception / Survival "
             f"checks to find it."
         ),
     }
@@ -32654,16 +32696,6 @@ async def cast_hunters_mark(
             "buffs_before": _hm_buffs_before,
             "buff_installed_key": "hunters-mark",
         })
-
-    # v2.99.183 — Twinned Spell auto-route. Surface the second
-    # target on the response. RAW Twinned applies to Hunter's Mark
-    # (single-target bonus action). Per-target buff install on
-    # the second target is filed (the Hunter's Mark buff
-    # references one target_combatant_id; a second mark would
-    # need a parallel buff key or a list-shape effect dict).
-    _twin_target_2_hm = await _consume_twinned_for_second_target(
-        campaign_id, int(char.id),
-    )
 
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")

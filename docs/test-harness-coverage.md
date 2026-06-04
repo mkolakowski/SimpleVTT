@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1110 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.186, 2026-06-04).
+**Total tests:** 1112 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.187, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1042,6 +1042,14 @@ v2.99.186 — `/npc_cast_spell` mirrors the PC Subtle gate. Closes a v2.99.173 f
 | Test | What it asserts |
 |------|-----------------|
 | `test_npc_cast_subtle_suppresses_counterspell_prompt` | Seed a synthetic NPC with `metamagic-subtle-pending` on its combatant + Thalindra (Counterspell on sheet) as a PC watcher. `/npc_cast_spell` → cast payload carries `was_subtle: True`, the 🤫 `metamagic-subtle-spell-consumed` `feature_used` fires, and no `reaction_prompt(spell_cast_near)` is emitted for the cast. |
+
+### `test_hunters_mark_twinned_install.py`
+v2.99.187 — `/cast_hunters_mark` folds the Twinned second target into the installed buff's rider field (`effects.weapon_hit_bonus_target_combatant_id`), not just the response. The weapon-hit rider consumer at line ~21498 accepts list-or-string.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_hunters_mark_twinned_installs_list_rider` | Rowan casts Hunter's Mark with Twinned armed + a second target seeded. Response carries `twinned_target_combatant_id_2`; Rowan's installed `hunters-mark` buff carries a list-shape `effects.weapon_hit_bonus_target_combatant_id` containing both targets + a top-level `target_combatant_ids` list mirroring both. |
+| `test_hunters_mark_no_twinned_keeps_single_rider` | Control: cast Hunter's Mark with no Twinned pending. The buff's `effects.weapon_hit_bonus_target_combatant_id` remains a single string (backward compat with pre-v2.99.187 serialized buffs + `/cast_hex`'s still-singular field). |
 
 ### `test_buff_sheet_mirror.py`
 Phase C.3 — buffs persist to `sheet["_buffs_active"]` for cross-page visibility.
