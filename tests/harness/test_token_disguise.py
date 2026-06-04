@@ -23,7 +23,7 @@ What's not in this commit (filed):
 
 Tests:
   - Mira (Druid Lv 5 Moon) Wild-Shapes into Wolf → token's label
-    becomes "Mira Greenheart → Wolf"; size still 1 (Wolf is Medium)
+    becomes "Mira Greenleaf → Wolf"; size still 1 (Wolf is Medium)
   - Disguise field on the Token is populated with the original
     label
   - /revert → original label restored + disguise cleared
@@ -56,7 +56,7 @@ async def mira_token_placed(gm_client, roster):
     """Place Mira's token on the active map. Mira is a Druid Lv 5
     (Moon Circle), demo fixture for /transform.
     """
-    mira = roster["Mira Greenheart"]
+    mira = roster["Mira Greenleaf"]
     await _place_token(gm_client, mira["id"], 350.0, 350.0)
     yield mira
 

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.169] - 2026-06-03 — "Mira's Real Name" — Fix v2.99.168 test: roster key is "Mira Greenleaf"
+
+**Schema version:** 66
+**Commit summary:** **Fix the v2.99.168 token-disguise harness tests by using the correct demo fixture name "Mira Greenleaf" instead of the typo "Mira Greenheart".** The test file was scaffolded from memory; Mira's actual seed name is "Mira Greenleaf". Single sed-replace across the test file.
+
+### Fixed
+- v2.99.168 token-disguise tests now resolve the Druid fixture correctly.
+
+### Notes
+- **PATCH bump** — test-only fix. No production code change, no schema change.
+- **Total harness count: 1077** (unchanged from v2.99.168).
+
+---
+
 ## [2.99.168] - 2026-06-03 — "The Borrowed Skin" — Token-disguise primitive closes the v2.15.9 filed item
 
 **Schema version:** 66
