@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.180] - 2026-06-03 — "The Beast Resists" — Polymorph WIS save now rolls for NPC targets too
+
+**Schema version:** 66
+**Commit summary:** **Close a v2.99.175 filed item — `/cast_polymorph` now rolls the WIS save for unwilling NPC targets via the v2.97.66 template-derivation chain.** v2.99.175 rolled the WIS save only for PC targets (looked up via `target_combatant.char_id`); NPC targets fell through with no save. v2.99.180 adds the NPC branch: when the target combatant carries `token_template_id` (not `char_id`), the endpoint resolves the template's WIS save mod via `_monster_template_to_sheet(tmpl, campaign_id)` + `_resolve_stat_modifier(sheet, "dnd5e", "wis_save")` — the same helpers used by `_maybe_npc_concentration_save` and `_fire_damage_triggered_saves`. Roll, broadcast, and gate behavior are identical to the PC path.
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` `/cast_polymorph` — the PC-only WIS save block is replaced with a unified branch that resolves `_save_mod` from either source. PC path unchanged; NPC path reads the template and projects via `_monster_template_to_sheet`. Rolls + broadcast + gating logic share a single code path after `_save_mod` is computed. (2) `tests/harness/test_polymorph_npc_wis_save.py` — 1 regression test using the Goblin template (skip-gracefully if no goblin template in demo).
+
+### Added
+- NPC target branch in `/cast_polymorph`'s WIS save logic.
+- Unified save-roll path that serves both PC and NPC targets after `_save_mod` is computed.
+- `tests/harness/test_polymorph_npc_wis_save.py` — 1 test: unwilling NPC target → save rolled, response carries all save fields including the NPC's name.
+
+### Notes
+- **PATCH bump** — endpoint refactor + 1 test. No schema change. Closes a v2.99.175 filed item.
+- **Same v2.97.66 plumbing** as the existing NPC save framework (`_fire_damage_triggered_saves`, `_maybe_npc_concentration_save`). The `_monster_template_to_sheet` projection produces an SRD-shaped sheet dict that `_resolve_stat_modifier` can read for any save type.
+- **Polymorph WIS save chain** — now covers both PC casters (v2.99.175) and NPC casters (v2.99.179) targeting either PC or NPC creatures (v2.99.175 + v2.99.180). All four caster/target combinations have RAW WIS-save behavior.
+- **Total harness count: 1098** (was 1097 in v2.99.179).
+
+---
+
 ## [2.99.179] - 2026-06-03 — "The Hag's Form" — NPC-cast Polymorph mirror for concentration coupling
 
 **Schema version:** 66

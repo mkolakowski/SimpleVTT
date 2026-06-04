@@ -33947,44 +33947,71 @@ async def cast_polymorph(
     _target_name = ""
     if unwilling and target_combatant_id:
         _target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
-        if _target_combatant and _target_combatant.get("char_id"):
-            _target_char = db.query(Character).filter(
-                Character.id == int(_target_combatant["char_id"]),
-            ).first()
-            if _target_char and _target_char.sheet:
-                _t_sheet = dict(_target_char.sheet or {})
-                _target_name = _target_char.name or _target_combatant.get("name") or ""
-                _wis = int((_t_sheet.get("abilities") or {}).get("WIS", 10))
-                _wis_mod = (_wis - 10) // 2
-                _t_prof = int(_t_sheet.get("proficiency_bonus") or 2)
-                _wis_proficient = bool(
-                    (_t_sheet.get("saving_throws") or {}).get("WIS")
-                )
-                _save_mod = _wis_mod + (_t_prof if _wis_proficient else 0)
-                import random as _random_polymorph
-                _d20 = _random_polymorph.randint(1, 20)
-                _save_total = _d20 + _save_mod
-                _save_rolled = True
-                _save_passed = _save_total >= _save_dc
-                await hub.broadcast(campaign_id, {
-                    "type": "roll",
-                    "data": {
-                        "expression": f"1d20+{_save_mod}",
-                        "total": _save_total,
-                        "breakdown": (
-                            f"WIS save: 1d20[{_d20}]+{_save_mod} = "
-                            f"{_save_total} vs DC {_save_dc} → "
-                            f"{'PASS' if _save_passed else 'FAIL'}"
-                        ),
-                        "note": (
-                            f"🧠 {_target_name}'s WIS save vs "
-                            f"{char.name}'s Polymorph"
-                        ),
-                        "user_name": char.name,
-                        "char_name": _target_name,
-                        "visibility": Visibility.PUBLIC.value,
-                    },
-                })
+        _save_mod = None
+        if _target_combatant:
+            if _target_combatant.get("char_id"):
+                # PC target — read from Character.sheet.
+                _target_char = db.query(Character).filter(
+                    Character.id == int(_target_combatant["char_id"]),
+                ).first()
+                if _target_char and _target_char.sheet:
+                    _t_sheet = dict(_target_char.sheet or {})
+                    _target_name = _target_char.name or _target_combatant.get("name") or ""
+                    _wis = int((_t_sheet.get("abilities") or {}).get("WIS", 10))
+                    _wis_mod = (_wis - 10) // 2
+                    _t_prof = int(_t_sheet.get("proficiency_bonus") or 2)
+                    _wis_proficient = bool(
+                        (_t_sheet.get("saving_throws") or {}).get("WIS")
+                    )
+                    _save_mod = _wis_mod + (_t_prof if _wis_proficient else 0)
+            elif _target_combatant.get("token_template_id"):
+                # v2.99.180 — NPC target. Read save mod from the
+                # template via `_monster_template_to_sheet` +
+                # `_resolve_stat_modifier`. Closes the v2.99.175
+                # filed item "NPC target WIS save".
+                _tmpl_id = _target_combatant.get("token_template_id")
+                try:
+                    _tmpl = db.query(TokenTemplate).filter(
+                        TokenTemplate.id == int(_tmpl_id),
+                    ).first()
+                    if _tmpl is not None:
+                        _npc_sheet = _monster_template_to_sheet(
+                            _tmpl, campaign_id,
+                        )
+                        _save_mod_raw, _ = _resolve_stat_modifier(
+                            _npc_sheet, "dnd5e", "wis_save",
+                        )
+                        _save_mod = int(_save_mod_raw)
+                        _target_name = (
+                            _target_combatant.get("name") or _tmpl.name or ""
+                        )
+                except Exception:
+                    _save_mod = None
+        if _save_mod is not None:
+            import random as _random_polymorph
+            _d20 = _random_polymorph.randint(1, 20)
+            _save_total = _d20 + _save_mod
+            _save_rolled = True
+            _save_passed = _save_total >= _save_dc
+            await hub.broadcast(campaign_id, {
+                "type": "roll",
+                "data": {
+                    "expression": f"1d20+{_save_mod}",
+                    "total": _save_total,
+                    "breakdown": (
+                        f"WIS save: 1d20[{_d20}]+{_save_mod} = "
+                        f"{_save_total} vs DC {_save_dc} → "
+                        f"{'PASS' if _save_passed else 'FAIL'}"
+                    ),
+                    "note": (
+                        f"🧠 {_target_name}'s WIS save vs "
+                        f"{char.name}'s Polymorph"
+                    ),
+                    "user_name": char.name,
+                    "char_name": _target_name,
+                    "visibility": Visibility.PUBLIC.value,
+                },
+            })
 
     # Caster concentration anchor (1 hour = 600 rounds). Skip if
     # the unwilling target passed their WIS save — RAW the spell
