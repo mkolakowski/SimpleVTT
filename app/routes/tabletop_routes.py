@@ -10910,6 +10910,159 @@ async def use_purity_of_spirit(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_holy_nimbus")
+async def use_holy_nimbus(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.155 — Holy Nimbus (Paladin Oath of Devotion Lv 20+
+    capstone).
+
+    RAW (PHB p.87): "At 20th level, as an action, you can emanate
+    an aura of sunlight. For 1 minute, bright light shines from
+    you in a 30-foot radius, and dim light shines 30 feet beyond
+    that. Whenever an enemy creature starts its turn in the bright
+    light, the creature takes 10 radiant damage. In addition, for
+    the duration, you have advantage on saving throws against
+    spells cast by fiends or undead. Once you use this feature,
+    you can't use it again until you finish a long rest."
+
+    v1 ships the resource decrement + caster-side buff install +
+    audit broadcast. The buff carries `effects` flags
+    (`damage_per_turn_radiant: 10`, `light_radius_ft: 30`,
+    `dim_radius_ft: 30`, `save_advantage_vs_fiend_undead_spells:
+    True`) for downstream engine hooks to read. Auto-damage on
+    enemies starting their turn within 30 ft, automatic
+    fiend/undead save-advantage, and the bright-light vision
+    layer are filed.
+
+    Body: ``{character_id}``.
+
+    Validation:
+      - Caster is Paladin Lv 20+ with subclass Oath of Devotion
+        (409 missing_feature if not)
+      - `holy-nimbus-uses` resource has current >= 1 (409
+        not_enough_uses)
+      - 403 when not the GM and not the caster's owner
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    paladin_lv = _paladin_level_from_sheet(sheet)
+    subclass_raw = (sheet.get("subclass") or "").strip().lower()
+    subclass_slug = subclass_raw.replace("oath of ", "").strip()
+    if paladin_lv < 20 or subclass_slug != "devotion":
+        return JSONResponse(status_code=409, content={
+            "error": "missing_feature",
+            "feature": "holy-nimbus",
+            "required": "Paladin Lv 20+ Oath of Devotion",
+        })
+
+    # Check + decrement the holy-nimbus-uses resource.
+    resources = list(sheet.get("resources") or [])
+    hn_idx = next(
+        (i for i, r in enumerate(resources)
+         if (r.get("key") or "").lower() == "holy-nimbus-uses"),
+        -1,
+    )
+    if hn_idx < 0:
+        return JSONResponse(status_code=409, content={
+            "error": "missing_resource",
+            "resource_key": "holy-nimbus-uses",
+        })
+    hn_row = dict(resources[hn_idx])
+    hn_cur = int(hn_row.get("current") or 0)
+    if hn_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_uses",
+            "resource_key": "holy-nimbus-uses",
+            "have": hn_cur,
+        })
+    hn_row["current"] = hn_cur - 1
+    resources[hn_idx] = hn_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install the Holy Nimbus caster-side buff (10 rounds = 1 min).
+    nimbus_buff = {
+        "key": "holy-nimbus",
+        "name": "Holy Nimbus",
+        "icon": "✨",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "holy-nimbus",
+        "source_char_id": int(char.id),
+        "source_char_name": char.name,
+        "effects": {
+            "damage_per_turn_radiant": 10,
+            "light_radius_ft": 30,
+            "dim_radius_ft": 30,
+            "save_advantage_vs_fiend_undead_spells": True,
+        },
+        "raw_effects": [
+            "Bright light 30 ft + dim light 30 ft beyond",
+            "Enemies starting turn in bright light take 10 radiant",
+            "Advantage on saves vs spells from fiends or undead",
+        ],
+    }
+    await _install_buff(campaign_id, int(char.id), nimbus_buff)
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "✨ Holy Nimbus",
+            "feature_desc": (
+                f"{char.name} emanates an aura of sunlight (30 ft "
+                f"bright + 30 ft dim) for 1 minute. Enemies starting "
+                f"their turn in bright light take 10 radiant; "
+                f"{char.name} has advantage on saves vs fiend/undead "
+                f"spells."
+            ),
+            "source": "holy-nimbus",
+            "duration_rounds": 10,
+            "light_radius_ft": 30,
+            "damage_per_turn_radiant": 10,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "duration_rounds": 10,
+        "light_radius_ft": 30,
+        "damage_per_turn_radiant": 10,
+        "uses_remaining": hn_cur - 1,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,

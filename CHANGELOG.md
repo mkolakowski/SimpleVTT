@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.155] - 2026-06-03 — "Crown of Sunlight" — Holy Nimbus (Paladin Devotion Lv 20 capstone) endpoint
+
+**Schema version:** 65
+**Commit summary:** **Ship Holy Nimbus as `/use_holy_nimbus` — the Paladin Oath of Devotion Lv 20 capstone.** RAW (PHB p.87): "As an action, you can emanate an aura of sunlight. For 1 minute, bright light shines from you in a 30-foot radius, and dim light shines 30 feet beyond that. Whenever an enemy creature starts its turn in the bright light, the creature takes 10 radiant damage. In addition, for the duration, you have advantage on saving throws against spells cast by fiends or undead. Once you use this feature, you can't use it again until you finish a long rest." First mechanically-wired Paladin Lv 20 capstone — the endpoint validates the Lv 20 + Devotion + resource gates, decrements the `holy-nimbus-uses` 1/long-rest resource, installs a caster-side `holy-nimbus` buff with the full `effects` payload for downstream engine hooks, and broadcasts the `feature_used` audit.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `POST /api/campaign/{cid}/use_holy_nimbus` endpoint. Validates caster ownership/GM, Paladin Lv 20+ + subclass slug "devotion" (409 `missing_feature`), `holy-nimbus-uses` resource exists + has ≥1 charge (409 `missing_resource` / `not_enough_uses`). Decrements the resource, installs a `holy-nimbus` buff on the caster (duration 10 rounds, `effects: {damage_per_turn_radiant: 10, light_radius_ft: 30, dim_radius_ft: 30, save_advantage_vs_fiend_undead_spells: True}`), broadcasts `feature_used` with `source: "holy-nimbus"`, `light_radius_ft: 30`, `damage_per_turn_radiant: 10`. (2) `app/demo_seed.py` — Sir Caelan's resources gain `holy-nimbus-uses` at 1/1 long-rest (shown at 1/1 regardless of his Lv 6; mirror of v2.99.45 Mystic Arcanum's "descriptive at 1/1, gated by endpoint" pattern). (3) `tests/harness/test_use_holy_nimbus.py` — 4 regression tests using a Caelan-at-Lv-20-rested fixture.
+
+### Added
+- `POST /api/campaign/{cid}/use_holy_nimbus` endpoint.
+- `holy-nimbus-uses` 1/long-rest resource on Sir Caelan's seed.
+- `holy-nimbus` buff factory (caster-side, 10-round duration, `effects` flags for the engine hooks).
+- `tests/harness/test_use_holy_nimbus.py` — 4 tests: Caelan @ Lv 20 Devotion + fresh resource → 200 + buff installs + resource decrements + WS audit; Caelan @ stock Lv 6 → 409 `missing_feature`; second use same long rest → 409 `not_enough_uses`; missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + demo seed resource + 4 tests. No schema change. No new helpers (uses the existing `_paladin_level_from_sheet` + subclass normalization pattern inline).
+- **What's filed.** (1) Auto-radiant damage on enemies starting their turn within 30 ft of the Holy Nimbus caster — needs an end-of-turn / start-of-turn hook in the round runner that reads the `damage_per_turn_radiant` effect. (2) Save-advantage gate when the caster rolls a save vs a spell cast by a fiend or undead — needs source-creature-type metadata threaded through the save roll-request creation (same filed problem as v2.99.154 Purity of Spirit's mechanical hook). (3) Bright-light vision-layer rendering — the 30 ft radius doesn't visually light up the map yet.
+- **First mechanically-wired Lv 20 Paladin feature.** Demo seed's Sir Caelan stays at Lv 6 for all other features; the test PATCHes him to Lv 20 + restores. Mirror of v2.99.153 / v2.99.154 pattern.
+- **Paladin Lv 20+ Devotion shipping cadence.** Three Lv 11+ Paladin features now wired: Improved Divine Smite (Lv 11, attack uplift), Purity of Spirit (Lv 15, audit + helper), Holy Nimbus (Lv 20, action + buff). The capstone is the most mechanically substantial of the three.
+- **Total harness count: 1044** (was 1040 in v2.99.154).
+
+---
+
 ## [2.99.154] - 2026-06-03 — "Always Warded" — Purity of Spirit (Paladin Oath of Devotion Lv 15+) audit endpoint
 
 **Schema version:** 65

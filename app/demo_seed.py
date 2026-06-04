@@ -1017,6 +1017,22 @@ def _paladin_sheet(name: str) -> dict:
                 "desc": "Channel a domain effect (Sacred Weapon, Turn the Unholy). One use per short rest.",
                 "manual": False,
             },
+            # v2.99.155 — Holy Nimbus (Paladin Devotion Lv 20
+            # capstone). Shown at 1/1 even at Lv 6 (descriptive);
+            # /use_holy_nimbus enforces the Lv 20+ gate before
+            # allowing the spend. Mirror of v2.99.45 Mystic
+            # Arcanum's "show the resource regardless of level"
+            # pattern.
+            {
+                "key": "holy-nimbus-uses",
+                "name": "Holy Nimbus",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "paladin Lv 20 / Oath of Devotion",
+                "class_slug": "paladin",
+                "subclass_slug": "devotion",
+                "desc": "Action (Lv 20+ Devotion): emanate sunlight in 30 ft for 1 minute. Enemies start turn in light → 10 radiant. Advantage on saves vs fiend/undead spells. Use /use_holy_nimbus to spend the charge.",
+                "manual": False,
+            },
         ],
         # v2.53.0: Aura of Protection (Paladin Lv 6+). Passive aura —
         # allies within 10 ft of Caelan add his CHA mod (+3 with CHA 16)
