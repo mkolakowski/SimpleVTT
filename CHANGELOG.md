@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.196] - 2026-06-04 — "Ancestry Inferred" — Dragonborn ancestry → damage resistance helper
+
+**Schema version:** 66
+**Commit summary:** **Phase A.3 of the v2.99.193 phased completion plan — generalize the v2.99.20 hand-typed `damage_resistances: ["lightning"]` seed into an ancestry-derived helper.** v2.99.20 ships Rowan (sic — Magnus Hexbinder; the Bronze Dragonborn Warlock) with the resistance hand-typed. v2.99.196 adds `_dragonborn_ancestry_resistance(sheet)` that derives the damage type from `sheet.dragonborn_ancestry` per the PHB p.34 Draconic Ancestry table (Bronze → lightning, Red → fire, Brass → fire, Black → acid, Blue → lightning, Copper → acid, Gold → fire, Green → poison, Silver → cold, White → cold). `_resistance_halve` gains a fallback after the explicit-list check: when the explicit list doesn't carry the damage type but the ancestry-derived type does, halve damage. Existing hand-typed PCs keep working; future Dragonborn PCs ship just the `dragonborn_ancestry` field and the resistance auto-derives.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — added `_DRAGONBORN_ANCESTRY_DAMAGE` table (10 ancestries) + `_dragonborn_ancestry_resistance(sheet)` helper. (2) `_resistance_halve` extended with a Dragonborn ancestry fallback after the explicit-list / "all" wildcard check. (3) `_SHEET_PATCH_KEYS` gains `dragonborn_ancestry` + `damage_resistances` for harness test scaffolding (PATCH the explicit list to `[]` + set ancestry, prove the ancestry fallback fires; restore in finally). One new harness test file with 3 tests covering (a) Bronze ancestry derives lightning halving, (b) Red ancestry derives fire halving, (c) non-Dragonborn PC with `dragonborn_ancestry` field doesn't derive resistance (the `_race_slug_from_sheet != "dragonborn"` gate short-circuits).
+
+### Added
+- `_DRAGONBORN_ANCESTRY_DAMAGE` table mapping the 10 PHB ancestries to damage types.
+- `_dragonborn_ancestry_resistance(sheet)` helper.
+- Dragonborn ancestry fallback in `_resistance_halve` (fires after the explicit-list check).
+- `dragonborn_ancestry` + `damage_resistances` in `_SHEET_PATCH_KEYS` for test scaffolding.
+- `tests/harness/test_dragonborn_ancestry_resistance.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 table + 1 `_resistance_halve` fallback + 2 patch-key extensions + 3 regression tests. No schema change.
+- **Phase A.3 ✅.** Future Dragonborn PC fixtures only need to ship `dragonborn_ancestry` — the resistance auto-derives. The existing Magnus Hexbinder seed (hand-typed `damage_resistances: ["lightning"]`) keeps working through the explicit-list branch.
+- **Phase A complete.** A.1 (Halfling Lucky surfaces) was already shipped through v2.99.21/.22/.13 plus v2.99.194's NPC-attack regression pin. A.2 (Stout Halfling subrace normalizer) shipped v2.99.195. A.3 (Dragonborn ancestry helper) ships v2.99.196. The phased plan's Phase A is now ✅. Next: Phase B or C per the plan's leverage-weighted ordering.
+- **Total harness count: 1125** (was 1122 in v2.99.195).
+
+---
+
 ## [2.99.195] - 2026-06-04 — "The Stout Hobbit" — Stout Halfling Stout Resilience via subrace normalizer
 
 **Schema version:** 66

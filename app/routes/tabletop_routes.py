@@ -26208,6 +26208,48 @@ def _target_has_dodging(
     return False
 
 
+# v2.99.196 — Dragonborn ancestry → damage type table. RAW PHB
+# p.34, "Draconic Ancestry" table. Each of the 10 chromatic /
+# metallic ancestries maps to a single damage type the PC's Damage
+# Resistance trait halves. Read by `_dragonborn_ancestry_resistance`
+# below. Demo Rowan Ashstride ships as Bronze → "lightning".
+_DRAGONBORN_ANCESTRY_DAMAGE: "dict[str, str]" = {
+    "black": "acid",
+    "blue": "lightning",
+    "brass": "fire",
+    "bronze": "lightning",
+    "copper": "acid",
+    "gold": "fire",
+    "green": "poison",
+    "red": "fire",
+    "silver": "cold",
+    "white": "cold",
+}
+
+
+def _dragonborn_ancestry_resistance(sheet: "dict | None") -> str:
+    """v2.99.196 — return the damage type a Dragonborn PC's Damage
+    Resistance trait halves, derived from `sheet.dragonborn_ancestry`
+    (e.g. "bronze" → "lightning"). Returns empty string when the
+    sheet isn't a Dragonborn, no ancestry is set, or the ancestry
+    isn't in the canonical PHB table.
+
+    Phase A.3 of the v2.99.193 phased completion plan. Generalizes
+    the v2.99.20 hand-typed `damage_resistances: ["lightning"]` seed
+    so future Dragonborn PCs only need to ship the `dragonborn_ancestry`
+    field; the resistance auto-derives via `_resistance_halve`'s
+    v2.99.196 fallback.
+    """
+    if not sheet:
+        return ""
+    if _race_slug_from_sheet(sheet) != "dragonborn":
+        return ""
+    ancestry = (sheet.get("dragonborn_ancestry") or "").strip().lower()
+    if not ancestry:
+        return ""
+    return _DRAGONBORN_ANCESTRY_DAMAGE.get(ancestry, "")
+
+
 def _resistance_halve(
     damage_amount: int, damage_type: str, target_sheet: dict,
 ) -> tuple[int, bool]:
@@ -26243,6 +26285,14 @@ def _resistance_halve(
         for r in sheet_resists:
             if (str(r) or "").strip().lower() == damage_type_l:
                 return damage_amount // 2, True
+    # v2.99.196 — Dragonborn ancestry fallback. When the sheet has
+    # `dragonborn_ancestry` set (e.g. "bronze") but the explicit
+    # damage_resistances list doesn't carry the derived type, halve
+    # damage of the ancestry's damage type. Lets future Dragonborn
+    # PCs ship just the ancestry field; the resistance auto-derives.
+    _dragonborn_dt = _dragonborn_ancestry_resistance(target_sheet)
+    if _dragonborn_dt and _dragonborn_dt == damage_type_l:
+        return damage_amount // 2, True
     for b in (target_sheet or {}).get("_buffs_active") or []:
         if not isinstance(b, dict):
             continue
@@ -44502,6 +44552,19 @@ _SHEET_PATCH_KEYS = {
     # read by `_race_slug_from_sheet` + `_subrace_slug_from_sheet`
     # at every save-roll construction site.
     "race",
+    # v2.99.196 — dragonborn_ancestry. Read by
+    # `_dragonborn_ancestry_resistance` to derive the damage type
+    # the PC's Damage Resistance trait halves. Allowlisted so
+    # harness tests can flip a Dragonborn PC's ancestry (Bronze →
+    # Red) to exercise the v2.99.196 _resistance_halve fallback.
+    # Same restore-in-finally discipline as `race`.
+    "dragonborn_ancestry",
+    # v2.99.196 — damage_resistances. Allowlisted alongside
+    # dragonborn_ancestry so a harness test can synthesize a clean
+    # Dragonborn (no hand-typed list) and prove the ancestry
+    # fallback fires. PATCH the list to `[]` for the test, then
+    # restore.
+    "damage_resistances",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the
