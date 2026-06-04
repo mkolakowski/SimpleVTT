@@ -585,6 +585,13 @@ async def _install_buff(
     # part of the same call (one-shot per RAW). Skip when the
     # buff IS the metamagic-extended-pending buff itself or any
     # other metamagic marker — those shouldn't extend themselves.
+    # v2.99.165 — drop the pending IN PLACE on the caster's
+    # combatant buffs list (instead of via async _remove_buff)
+    # so the surrounding _install_buff state mutation doesn't
+    # overwrite our drop. The async _remove_buff re-reads the
+    # hub state, mutates, set_battle — but _install_buff has
+    # already captured `buffs` as a local list and will write
+    # `target["buffs"] = new_list` later, restoring the pending.
     _ext_src = buff.get("source_char_id")
     _ext_dur = int(buff.get("duration_rounds") or 0)
     if (
@@ -598,16 +605,35 @@ async def _install_buff(
         buff["duration_rounds"] = _ext_new_dur
         _ext_dmax = int(buff.get("duration_max") or _ext_dur)
         buff["duration_max"] = min(14400, _ext_dmax * 2)
-        # Drop the pending buff on the source caster — one-shot.
-        # Defensive try/except: a failed pending-drop shouldn't
-        # block the install.
-        try:
-            await _remove_buff(
-                campaign_id, int(_ext_src),
-                "metamagic-extended-pending",
-            )
-        except Exception:
-            pass
+        # Drop the pending buff in-place on the caster's
+        # combatant. If the caster IS the target of this install
+        # (caster-side anchor case), mutate the local `buffs`
+        # list directly so it survives the new_list rebuild
+        # below. Otherwise walk the hub state to drop the pending
+        # from the caster's separate combatant entry.
+        if int(_ext_src) == int(character_id):
+            buffs[:] = [
+                _b for _b in buffs
+                if not (
+                    isinstance(_b, dict)
+                    and (_b.get("key") or "").strip().lower()
+                        == "metamagic-extended-pending"
+                )
+            ]
+        else:
+            for _caster_c in state.get("combatants") or []:
+                if _caster_c.get("char_id") != int(_ext_src):
+                    continue
+                _caster_buffs = _caster_c.get("buffs") or []
+                _caster_c["buffs"] = [
+                    _b for _b in _caster_buffs
+                    if not (
+                        isinstance(_b, dict)
+                        and (_b.get("key") or "").strip().lower()
+                            == "metamagic-extended-pending"
+                    )
+                ]
+                break
     is_concentration = bool(buff.get("concentration"))
     # v2.49.51: if the incoming buff incapacitates the target (and
     # it's not self-cast — rare edge case), snapshot the target's

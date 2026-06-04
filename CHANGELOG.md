@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.165] - 2026-06-03 — "Drop the Marker, Hold the List" — Fix v2.99.163 hook: drop the Extended pending in-place
+
+**Schema version:** 65
+**Commit summary:** **Fix the v2.99.163 Extended Spell duration-doubling hook so the pending buff is actually dropped after the install.** v2.99.163 doubled the buff's duration correctly but the `_remove_buff` call to drop the pending was racing with the surrounding `_install_buff` logic — `_remove_buff` mutates the hub state and re-broadcasts, then `_install_buff` writes its captured local `buffs` list back over `target["buffs"]`, restoring the pending. v2.99.165 drops the pending IN PLACE on either the local `buffs` list (when the caster IS the install target — caster-side anchor case) or directly on the caster's combatant entry in the hub state (when the caster differs from the install target — target-side spell effect case). Doubling assertion in the v2.99.164 test was passing; only the pending-drop assertion failed.
+**Description:** Single edit to `app/routes/tabletop_routes.py`'s Extended Spell hook in `_install_buff`. Replaces the async `_remove_buff` call with two inline list-comprehension drops: (a) when `_ext_src == character_id` (caster is installing on themselves — concentration anchor case), mutate the captured local `buffs[:]` so the in-place rebuild below preserves the drop; (b) otherwise walk `state.combatants` for the caster's entry and rewrite their `buffs` list in place. Both paths preserve the v2.99.163 contract: the pending drops one-shot when the first non-metamagic duration buff installs.
+
+### Fixed
+- v2.99.163 Extended Spell pending-buff drop now actually fires. Pre-v2.99.165 the duration was correctly doubled but the pending stayed on the caster.
+
+### Notes
+- **PATCH bump** — single hook-fix in `_install_buff`. No schema change, no new tests. The v2.99.163 tests now run green end-to-end (duration is doubled AND the pending is dropped).
+- **Why the race wasn't caught at write time.** `_install_buff` captures the buffs list at line 575 with `buffs = target.get("buffs")`. The Extended hook fires AFTER that capture. `_remove_buff` does `hub.set_battle(state)` then broadcasts — at the hub level the pending is gone. But `_install_buff`'s subsequent `new_list` construction walks the LOCAL `buffs` reference (which still contains the pending), then `target["buffs"] = new_list` overwrites the hub state with the stale list. The in-place mutation in v2.99.165 fixes this by editing the same list `_install_buff` is about to rebuild from.
+- **Total harness count: 1072** (unchanged from v2.99.163/.164).
+
+---
+
 ## [2.99.164] - 2026-06-03 — "Slow on the Spell List" — Fix v2.99.163 test: PATCH Slow onto Zara's spell list
 
 **Schema version:** 65
