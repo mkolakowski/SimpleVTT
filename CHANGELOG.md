@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.171] - 2026-06-03 — "Zero is a Number" — Backfill the falsy-zero fix across 11 /cast_<spell> endpoints
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.151 filed item by backfilling the falsy-zero parse fix to 11 other `/cast_<spell>` endpoints.** The pattern `int(slot_level_raw) if slot_level_raw else N` treated literal `0` as falsy and lifted it to the default. Pre-v2.99.171 a caller passing `slot_level: 0` got 409 `no_slot` / `wrong_class` instead of the contract's 400. v2.99.171 replaces `if slot_level_raw else` with `if slot_level_raw is not None else` across all 11 endpoints in a single `replace_all`. Bug surface is tiny (no observed production hit) — this is a discipline ship that aligns the contract with what the validation gates promise.
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — single `replace_all` substituting `if slot_level_raw else` with `if slot_level_raw is not None else`. Hits 11 endpoints: `/cast_hunters_mark`, `/cast_hex`, `/cast_sleep`, `/cast_slow`, `/cast_polymorph`, `/cast_compulsion`, `/cast_bestow_curse`, `/cast_hold_person`, `/cast_flesh_to_stone`, `/cast_hold_monster`, `/cast_web`. (2) `tests/harness/test_slot_level_zero_400.py` — single parameterized test that calls each backfilled endpoint with `slot_level: 0` and asserts 400. 11 parameterized cases.
+
+### Fixed
+- `/cast_hunters_mark` / `/cast_hex` / `/cast_sleep` / `/cast_slow` / `/cast_polymorph` / `/cast_compulsion` / `/cast_bestow_curse` / `/cast_hold_person` / `/cast_flesh_to_stone` / `/cast_hold_monster` / `/cast_web` — `slot_level: 0` now correctly returns 400 (was 409 with confusing payload).
+
+### Added
+- `tests/harness/test_slot_level_zero_400.py` — 11 parameterized regression tests (one per backfilled endpoint).
+
+### Notes
+- **PATCH bump** — 11-site pattern replace + 1 test file with 11 parameterized cases. No schema change, no new endpoints, no new helpers.
+- **Why the bug was never observed in production.** Callers (the v2.99.x harness, the v2.9.0 spell picker UI, the GM-side cast modals) all pass positive slot_level values from the spell's level field. The bug only surfaces with an explicit `slot_level: 0` — a synthetic call shape used by the v2.99.151 / .171 regression tests.
+- **Pattern reuse.** Future `/cast_<spell>` endpoints should write `if slot_level_raw is not None else N` from the start. The v2.99.151 / .171 fix-up establishes the convention.
+- **Closes the v2.99.151 filed item.** "The same falsy-zero pattern exists in 11 other `/cast_<spell>` endpoints shipped pre-v2.99.151... Fixing the other 11 sites is filed; the priority is low because the bug surface is 'passing 0 to a slot-level field that requires >= 1' which isn't a useful workflow." Filed-then-shipped: 20 commits later.
+- **Total harness count: 1088** (was 1077 in v2.99.168 — +11 from the new parameterized cases).
+
+---
+
 ## [2.99.170] - 2026-06-03 — "Surface the Skin" — Surface Token.disguise on the /tokens response
 
 **Schema version:** 66

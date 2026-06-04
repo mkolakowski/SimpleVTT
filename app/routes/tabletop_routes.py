@@ -32223,7 +32223,7 @@ async def cast_hunters_mark(
     target_character_id = int(target_character_id) if target_character_id else None
     target_name = (body.get("target_name") or "").strip() or None
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 1
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 1
     override = bool(body.get("override"))
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
@@ -32500,7 +32500,7 @@ async def cast_hex(
     target_character_id = int(target_character_id) if target_character_id else None
     target_name = (body.get("target_name") or "").strip() or None
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 1
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 1
     ability = (body.get("ability") or "STR").upper()
     override = bool(body.get("override"))
     if char_id <= 0:
@@ -32867,7 +32867,7 @@ async def cast_sleep(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 1
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 1
     target_combatant_ids = body.get("target_combatant_ids") or []
     override = bool(body.get("override"))
 
@@ -33350,7 +33350,7 @@ async def cast_slow(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 3
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 3
     target_combatant_ids = body.get("target_combatant_ids") or []
     override = bool(body.get("override"))
     # v2.99.137 — Mire the Mind (Warlock invocation, PHB p.111).
@@ -33622,7 +33622,7 @@ async def cast_polymorph(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 4
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 4
     override = bool(body.get("override"))
     via_invocation = (body.get("via_invocation") or "").strip().lower()
 
@@ -33851,7 +33851,7 @@ async def cast_compulsion(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 4
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 4
     override = bool(body.get("override"))
     via_invocation = (body.get("via_invocation") or "").strip().lower()
 
@@ -34066,7 +34066,7 @@ async def cast_bestow_curse(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 3
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 3
     override = bool(body.get("override"))
     via_invocation = (body.get("via_invocation") or "").strip().lower()
 
@@ -34971,7 +34971,7 @@ async def cast_hold_person(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 2
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 2
     target_combatant_ids = body.get("target_combatant_ids") or []
     override = bool(body.get("override"))
 
@@ -35195,7 +35195,7 @@ async def cast_flesh_to_stone(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 6
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 6
     target_combatant_id = (body.get("target_combatant_id") or "").strip()
     stage = (body.get("stage") or "restrained").strip().lower()
     override = bool(body.get("override"))
@@ -35591,7 +35591,7 @@ async def cast_hold_monster(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 5
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 5
     target_combatant_ids = body.get("target_combatant_ids") or []
     override = bool(body.get("override"))
 
@@ -35816,7 +35816,7 @@ async def cast_web(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 2
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 2
     target_combatant_ids = body.get("target_combatant_ids") or []
     override = bool(body.get("override"))
 
