@@ -25072,6 +25072,23 @@ async def _broadcast_race_save_advantage(
 # race trait separate is RAW-correct: Halfling Lucky has no charge,
 # can't run out, and triggers automatically.
 
+def _pc_has_slippery_mind(sheet: "dict | None") -> bool:
+    """v2.99.206 — RAW Slippery Mind (Rogue Lv 15+, PHB p.96):
+    "By 15th level, you have acquired greater mental strength.
+    You gain proficiency in Wisdom saving throws."
+
+    Returns True for Rogue Lv 15+. Consumed by WIS-save mod
+    calculations (e.g. cast_polymorph's unwilling-target WIS
+    save) — the PC's WIS save gains proficiency even when
+    `sheet.saving_throws.WIS` is False.
+
+    Phase F.4 start of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _rogue_level_from_sheet(sheet) >= 15
+
+
 def _pc_has_reliable_talent(
     sheet: "dict | None", stat_key: str,
 ) -> bool:
@@ -35387,9 +35404,17 @@ async def cast_polymorph(
                     _wis = int((_t_sheet.get("abilities") or {}).get("WIS", 10))
                     _wis_mod = (_wis - 10) // 2
                     _t_prof = int(_t_sheet.get("proficiency_bonus") or 2)
+                    # v2.99.206 — Slippery Mind (Rogue Lv 15+) grants
+                    # WIS save proficiency. RAW: "By 15th level, you
+                    # gain proficiency in Wisdom saving throws."
+                    # OR'd with the sheet-stored saving_throws.WIS
+                    # so existing prof-WIS classes (Wizard, Cleric,
+                    # Druid, Sorcerer, Warlock, Monk) keep firing
+                    # via the explicit path; Slippery Mind adds the
+                    # class-feature gate.
                     _wis_proficient = bool(
                         (_t_sheet.get("saving_throws") or {}).get("WIS")
-                    )
+                    ) or _pc_has_slippery_mind(_t_sheet)
                     _save_mod = _wis_mod + (_t_prof if _wis_proficient else 0)
             elif _target_combatant.get("token_template_id"):
                 # v2.99.180 — NPC target. Read save mod from the

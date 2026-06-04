@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.206] - 2026-06-04 — "The Slippery Mind" — Slippery Mind (Rogue Lv 15)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.4 start of the v2.99.193 phased completion plan — Slippery Mind.** RAW PHB p.96: "By 15th level, you have acquired greater mental strength. You gain proficiency in Wisdom saving throws." v2.99.206 adds the helper `_pc_has_slippery_mind(sheet)` returning True for Rogue Lv 15+, and wires it into the `cast_polymorph` unwilling-target WIS save mod calculation. A Rogue Lv 15+ saving against Polymorph (or any future WIS-save consumer adopting the same gate) gains proficiency bonus on the d20 + WIS mod, even when `sheet.saving_throws.WIS` is False.
+**Description:** One helper + 1 wire-in. (1) `_pc_has_slippery_mind(sheet)` — Rogue Lv 15+ gate. (2) `cast_polymorph`'s unwilling-target WIS save mod calc OR's the existing `saving_throws.WIS` check with `_pc_has_slippery_mind`. Pip Quickfingers (Rogue Thief, default seed `saving_throws = {"DEX": True, "INT": True}`) is the demo fixture; tests PATCH her Lv 7 → 15 + cast Polymorph from Thalindra to capture the boosted save_total. One new harness test file with 2 tests: happy path (Lv 15 with unwilling Polymorph → save_total reflects added proficiency), comparison (Lv 7 vs Lv 15 → Lv 15 save_total is strictly higher).
+
+### Added
+- `_pc_has_slippery_mind(sheet)` helper gate.
+- Slippery Mind wire into `cast_polymorph`'s unwilling-target WIS save mod (OR'd with `saving_throws.WIS`).
+- `tests/harness/test_slippery_mind.py` — 2 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint-side OR + 2 regression tests. No schema change.
+- **Other save consumers can adopt the gate.** Today `cast_polymorph` is the only call site explicitly reading `saving_throws.WIS` for proficiency. Other save-roll construction sites (Danger Sense / Aura of Protection / etc.) compose advantage / bonus rather than proficiency-presence; they wouldn't change behavior. When future WIS-save endpoints land (Dominate Person, Charm Monster, etc.), they should adopt the same OR pattern.
+- **Capstone-test pattern.** Pip PATCH'd Lv 7 → 15 (well above the default Lv 7 Evasion seed); restored in teardown.
+- **Phase F.4 start ✅ 1/2.** Phase F.4 covers Rogue Lv 15-18 (Slippery Mind + Elusive). Slippery Mind ships v2.99.206; Elusive still ⚪.
+- **Total harness count: 1157** (was 1155 in v2.99.205).
+
+---
+
 ## [2.99.205] - 2026-06-04 — "Power of the Wilds" — Primal Champion (Barbarian Lv 20) — Phase F.1 ✅ COMPLETE
 
 **Schema version:** 66
