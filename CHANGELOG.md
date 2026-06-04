@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.194] - 2026-06-04 — "Lucky Doesn't Save You" — Halfling Lucky NPC-attack regression pin
+
+**Schema version:** 66
+**Commit summary:** **Phase A.1 audit follow-up — pin the Halfling Lucky / NPC-attack semantics in regression.** v2.99.21 wired Halfling Lucky into `/attack` (PC attacker), v2.99.22 into `/roll` (ability/skill/initiative), v2.99.13 into `/roll_request/respond` (saves). Each surface fires only when the Halfling is the **roller** — RAW PHB p.28: "When you roll a 1 on the d20…". When a Halfling PC is the TARGET of an NPC attack via `/npc_attack`, the NPC rolled the d20 — not the Halfling — so Halfling Lucky doesn't trigger. v2.99.194 adds a regression test that fires 30 NPC attacks at Pip Quickfingers (the demo Halfling Rogue) via `/npc_attack` and asserts no `feature_used(source=halfling-lucky)` broadcast surfaces for Pip. Pins the audit conclusion in code; no production change needed.
+**Description:** One new harness test file (`tests/harness/test_halfling_lucky_npc_attack_regression.py`) with one test. Seeds Pip + a synthetic Bandit combatant; fires 30 attacks via `/npc_attack` with sequential dice seeds (at least some will land natural 1 by distribution); inspects buffered `feature_used` broadcasts; asserts no entry matches `source=halfling-lucky` + `character_id=Pip`. Uses the v2.99.13 TEST_MODE dice-seeding endpoint for determinism in the loop.
+
+### Added
+- `tests/harness/test_halfling_lucky_npc_attack_regression.py` — 1 test.
+
+### Notes
+- **PATCH bump** — audit-only test addition. No production code change.
+- **Audit conclusion** — Halfling Lucky (the racial trait) and Lucky (the feat) are both **roller-side** mechanics. The current Halfling Lucky hooks (`/attack`, `/roll`, `/roll_request/respond`) correctly cover every roller surface for PCs.
+- **The hypothetical NPC-side gap** (Halfling Bandit NPC rolling a natural 1 → no reroll) requires the NPC stat-block templates to carry a `traits` array consumable by an `/npc_attack` reroll hook. Filed for a future commit; today's NPC templates don't surface racial traits, so this is a forward-looking framework piece rather than a current bug.
+- **Phase A.1 ✅** for PC coverage; the per-feature plan entry can be amended to "PC surfaces complete; NPC-trait engine filed."
+- **Total harness count: 1120** (was 1119 in v2.99.193).
+
+---
+
 ## [2.99.193] - 2026-06-04 — "The Roadmap" — Add v2.99.10→.192 audit + phased completion plan to class-content-status
 
 **Schema version:** 66
