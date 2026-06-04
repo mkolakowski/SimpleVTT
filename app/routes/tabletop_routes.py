@@ -5691,6 +5691,63 @@ def _extract_aoe_area(spell: dict) -> dict | None:
     return None
 
 
+async def _break_buffs_on_damage(
+    campaign_id: int, combatant_id: str, damage_applied: int,
+) -> list[dict]:
+    """v2.99.158 — scan a combatant's buffs for any with
+    ``effects.break_on_damage: True`` and remove them when nonzero
+    damage was applied. Returns the list of removed buff dicts
+    (each augmented with ``_dropped_from_combatant_id``) so the
+    caller can audit / log.
+
+    Closes the v2.99.156 filed item — RAW Turn the Unholy ends
+    "for 1 minute or until it takes damage." Extensible: any
+    future buff that opts into the break-on-damage contract by
+    setting ``effects.break_on_damage: True`` gets the same
+    treatment (Sleep's "damage wakes target", Heat Metal's
+    "concentration breaks on damage", etc. could share the hook).
+
+    Broadcasts a single ``battle_update`` covering all removals
+    (or none if nothing matched). No-ops on healing (damage_applied
+    <= 0) since RAW the break is on "taking damage."
+    """
+    if damage_applied <= 0:
+        return []
+    if not combatant_id:
+        return []
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return []
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            target = c
+            break
+    if target is None:
+        return []
+    buffs = target.get("buffs") or []
+    kept: list = []
+    removed: list[dict] = []
+    for b in buffs:
+        if isinstance(b, dict):
+            effects = b.get("effects") or {}
+            if bool(effects.get("break_on_damage")):
+                rec = dict(b)
+                rec["_dropped_from_combatant_id"] = combatant_id
+                removed.append(rec)
+                continue
+        kept.append(b)
+    if removed:
+        target["buffs"] = kept
+        hub.set_battle(campaign_id, state)
+        await hub.broadcast(campaign_id, {
+            "type": "battle_update",
+            "data": state,
+            "force_gm_sync": True,
+        })
+    return removed
+
+
 async def _apply_damage_to_combatant(
     db: Session,
     campaign_id: int,
@@ -5906,6 +5963,14 @@ async def _apply_damage_to_combatant(
                 "applied": applied,
                 "was_resistance": resistance_applied,
             })
+        # v2.99.158 — break-on-damage hook. RAW Turn the Unholy
+        # ends "for 1 minute or until it takes damage" (and other
+        # buffs may opt into the same contract). Scan + drop any
+        # buff on this combatant with `effects.break_on_damage:
+        # True` after the HP change commits.
+        await _break_buffs_on_damage(
+            campaign_id, combatant.get("id") or "", applied,
+        )
         # v2.71.0 Phase 3c — Hellish Rebuke + Absorb Elements prompt.
         # Emit damage_taken when the PC takes nonzero damage AND
         # didn't already get a UD-ack prompt above. The
@@ -6050,6 +6115,13 @@ async def _apply_damage_to_combatant(
             "applied": applied,
             "was_resistance": resistance_applied,
         })
+    # v2.99.158 — break-on-damage hook (NPC mirror). Same contract
+    # as the PC branch: drop any buff with `effects.break_on_damage:
+    # True` after the HP change. Closes the v2.99.156 filed item
+    # for the Turned condition on NPCs.
+    await _break_buffs_on_damage(
+        campaign_id, target.get("id") or "", applied,
+    )
     return {
         "applied": applied,
         "hp_before": hp_cur,

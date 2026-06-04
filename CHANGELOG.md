@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.158] - 2026-06-03 — "Pain Breaks the Spell" — Break-on-damage hook closes the v2.99.156 filed item
+
+**Schema version:** 65
+**Commit summary:** **Ship the break-on-damage hook in `_apply_damage_to_combatant` so buffs with `effects.break_on_damage: True` get dropped after the target takes damage.** Closes the v2.99.156 filed item — RAW Turn the Unholy ends "for 1 minute or until it takes damage." Wired into both PC and NPC paths via a new shared helper `_break_buffs_on_damage`. Extensible: any future buff that opts into the contract by setting `effects.break_on_damage: True` gets the same treatment (Sleep's "damage wakes target", Heat Metal's "concentration breaks on damage", etc. could share the hook). First v2.99.x ship that closes a "filed for follow-up" item from an earlier v2.99 commit.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `_break_buffs_on_damage(campaign_id, combatant_id, damage_applied)` helper above `_apply_damage_to_combatant`. Scans the target's buff list for any dict with `effects.break_on_damage: True`, removes them in place, broadcasts a `battle_update` with `force_gm_sync: True` if any were removed. No-ops on healing (damage_applied <= 0) and missing combatant. Returns the removed-buff list for caller audit. (2) `_apply_damage_to_combatant` PC branch — calls the helper after the `_log_damage_entry` block (PC damage commits + concentration save + char_hp_update broadcast all fire first; the break-on-damage cleanup runs after so the damage event is fully resolved before the buff is dropped). (3) `_apply_damage_to_combatant` NPC branch — mirror call after the NPC's `_log_damage_entry`. (4) `tests/harness/test_break_on_damage.py` — 3 regression tests.
+
+### Added
+- `_break_buffs_on_damage(campaign_id, combatant_id, damage_applied)` helper.
+- Break-on-damage hook in both PC and NPC branches of `_apply_damage_to_combatant`.
+- `tests/harness/test_break_on_damage.py` — 3 tests: synthetic Turned buff with `effects.break_on_damage: True` → dropped on hit; persistent buff without the flag → stays (regression guard against over-broadening); end-to-end via `/use_turn_the_unholy` → Turned buff dropped on next hit.
+
+### Notes
+- **PATCH bump** — single helper + two integration hooks + 3 tests. No schema change. Closes a v2.99.156 filed item.
+- **Why a separate helper instead of inline.** Both PC and NPC damage paths need the same logic. Extracting it avoids duplicate code and keeps the contract documented in one place. Future opt-ins just set the `effects.break_on_damage: True` flag on the buff dict and don't need to touch the damage application code.
+- **Why broadcast `battle_update` instead of `buff_update`.** The helper mutates the hub state directly (no DB call). `battle_update` is the existing channel for "the canonical battle state changed" — same broadcast type used by `_drop_paired_concentration_buffs`. Clients re-render the buff chip strip from the new state.
+- **What other buffs could opt in.** RAW Sleep's "damage wakes target" is already handled by `_wake_sleeping_on_damage` (a separate dedicated path); could be refactored to share this hook by stamping `effects.break_on_damage: True` on the sleep buff. Heat Metal RAW: "concentration breaks on damage" — that's a separate concentration save, not a buff-on-target. Filed: a future audit pass to consolidate any other "X ends on damage" effects.
+- **No-op on healing.** RAW the buff break is on "taking damage." A heal (damage_applied <= 0) doesn't break the Turned condition. The helper's `if damage_applied <= 0: return []` guard enforces this.
+- **Total harness count: 1056** (was 1053 in v2.99.157).
+
+---
+
 ## [2.99.157] - 2026-06-03 — "Mercy's Hand" — Cleansing Touch (Paladin Lv 14+) resource Use branch
 
 **Schema version:** 65
