@@ -23265,6 +23265,65 @@ def _pc_hex_warrior_bonus(sheet: dict, attack: dict) -> int:
     return delta
 
 
+def _sorcerer_level_from_sheet(sheet: dict) -> int:
+    """v2.99.222 — Read the sorcerer level out of a sheet
+    (single-class or multiclass). Mirror of `_warlock_level_from_sheet`.
+    Used by `_pc_has_draconic_wings` / `_pc_has_draconic_presence`
+    + future Sorcerer Lv 14-20 gates.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "sorcerer":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "sorcerer":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _pc_has_draconic_bloodline(sheet: "dict | None") -> bool:
+    """v2.99.222 — Returns True when the sheet is a Sorcerer with
+    Draconic Bloodline subclass. Gates Draconic Wings (Lv 14) and
+    Draconic Presence (Lv 18).
+    """
+    if not sheet:
+        return False
+    if _sorcerer_level_from_sheet(sheet) < 1:
+        return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    return "draconic" in subclass
+
+
+def _pc_has_draconic_wings(sheet: "dict | None") -> bool:
+    """v2.99.222 — RAW Draconic Wings (Sorcerer Draconic
+    Bloodline Lv 14+, PHB p.103): "You gain the ability to
+    sprout a pair of dragon wings from your back, gaining a
+    flying speed equal to your current speed."
+    """
+    return (
+        _pc_has_draconic_bloodline(sheet)
+        and _sorcerer_level_from_sheet(sheet) >= 14
+    )
+
+
+def _pc_has_draconic_presence(sheet: "dict | None") -> bool:
+    """v2.99.222 — RAW Draconic Presence (Sorcerer Draconic
+    Bloodline Lv 18+, PHB p.103): "You can channel the dread
+    presence of your dragon ancestor."
+    """
+    return (
+        _pc_has_draconic_bloodline(sheet)
+        and _sorcerer_level_from_sheet(sheet) >= 18
+    )
+
+
 def _warlock_level_from_sheet(sheet: dict) -> int:
     """v2.99.97 — read the Warlock level out of a sheet (single-class
     or multi-class). Mirrors `_cleric_level_from_sheet`. Used by the
@@ -30376,6 +30435,316 @@ async def _broadcast_elemental_affinity_bonus(
             "source": "elemental-affinity-bonus",
         },
     })
+
+
+@router.post("/api/campaign/{campaign_id}/use_draconic_wings")
+async def use_draconic_wings(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.222 — Phase E.5 of the v2.99.193 phased completion
+    plan. Draconic Wings (Sorcerer Draconic Bloodline Lv 14+,
+    PHB p.103): "You gain the ability to sprout a pair of
+    dragon wings from your back, gaining a flying speed equal
+    to your current speed. You can create these wings as a
+    bonus action on your turn. They last until you dismiss
+    them as a bonus action on your turn."
+
+    Body: ``{character_id, override?}``.
+
+    Validates Sorcerer + Draconic Bloodline subclass + level
+    >= 14 + Phase 4 bonus slot gate. Installs a
+    `dragon-wings-active` buff with `effects.fly_speed_ft`
+    equal to the caster's sheet.speed. The buff persists until
+    `/end_buff` (the player dismisses with a bonus action) or
+    until the duration expires (10 minutes ≈ 100 rounds is
+    used as a generous v1 cap; RAW is "until you dismiss").
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer",
+            "got": cls or "",
+        })
+    if not _pc_has_draconic_bloodline(sheet):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass",
+            "expected": "draconic bloodline",
+            "got": (sheet.get("subclass") or "").strip().lower(),
+        })
+    sorcerer_lv = _sorcerer_level_from_sheet(sheet)
+    if sorcerer_lv < 14:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 14, "got": sorcerer_lv,
+        })
+
+    # Phase 4 over-budget gate (bonus slot).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "draconic-wings",
+            "label": "Draconic Wings",
+            "strict": strict,
+        })
+
+    speed = int(sheet.get("speed") or 30)
+    wings_buff = {
+        "key": "dragon-wings-active",
+        "name": "Dragon Wings — Flying",
+        "icon": "🐉",
+        "duration_rounds": 100,
+        "duration_max": 100,
+        "concentration": False,
+        "source": "draconic-wings",
+        "source_char_id": char.id,
+        "effects": {
+            "fly_speed_ft": speed,
+        },
+        "desc": (
+            f"Flying speed {speed} ft. Lasts until dismissed "
+            f"(bonus action). Sorcerer Draconic Bloodline "
+            f"Lv 14+ class feature."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, wings_buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🐉 Draconic Wings — fly {speed} ft"
+            ),
+            "feature_desc": (
+                f"{char.name} sprouted draconic wings. Flying "
+                f"speed {speed} ft. Dismiss with a bonus action "
+                f"(/end_buff dragon-wings-active)."
+            ),
+            "source": "draconic-wings",
+            "fly_speed_ft": speed,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "fly_speed_ft": speed,
+        "buff_installed": True,
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_draconic_presence")
+async def use_draconic_presence(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.222 — Phase E.5 cont'd. Draconic Presence (Sorcerer
+    Draconic Bloodline Lv 18+, PHB p.103): "As an action, you
+    can spend 5 sorcery points to draw on this power and exude
+    an aura of awe or fear (your choice) to a distance of 60
+    feet. For 1 minute or until you lose your concentration,
+    each hostile creature that starts its turn in this aura
+    must succeed on a Charisma saving throw or be charmed (if
+    you chose awe) or frightened (if you chose fear) until the
+    aura ends."
+
+    Body: ``{character_id, mode: "awe" | "fear", override?}``.
+
+    Validates Sorcerer Draconic Bloodline Lv 18+ + sorcery
+    points >= 5 + Phase 4 action slot gate. Decrements 5 SP,
+    marks the action chip, broadcasts feature_used. v1 ships
+    as announce-only — the per-turn CHA save resolution + the
+    24-hour immunity-on-success tracking are filed (would
+    require per-target save tracking + a campaign-wide
+    immunity ledger).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    mode = (str(body.get("mode") or "awe")).strip().lower()
+    override = bool(body.get("override"))
+    if mode not in ("awe", "fear"):
+        mode = "awe"
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer",
+            "got": cls or "",
+        })
+    if not _pc_has_draconic_bloodline(sheet):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass",
+            "expected": "draconic bloodline",
+            "got": (sheet.get("subclass") or "").strip().lower(),
+        })
+    sorcerer_lv = _sorcerer_level_from_sheet(sheet)
+    if sorcerer_lv < 18:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 18, "got": sorcerer_lv,
+        })
+
+    # Sorcery points must be >= 5.
+    resources = list(sheet.get("resources") or [])
+    sp_idx = -1
+    sp_row = None
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        return JSONResponse(status_code=404, content={
+            "error": "resource_missing", "label": "Sorcery Points",
+        })
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < 5:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_sp", "required": 5, "got": sp_cur,
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "draconic-presence",
+            "label": "Draconic Presence",
+            "strict": strict,
+        })
+
+    # Decrement SP.
+    sp_row["current"] = sp_cur - 5
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    condition = "charmed" if mode == "awe" else "frightened"
+    icon = "✨" if mode == "awe" else "😱"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"{icon} Draconic Presence — {mode} aura "
+                f"(60 ft / 1 min)"
+            ),
+            "feature_desc": (
+                f"{char.name} exuded an aura of {mode}. Hostile "
+                f"creatures starting their turn within 60 ft must "
+                f"succeed on a CHA save or be {condition} until "
+                f"the aura ends. 5 SP spent. 1 minute or until "
+                f"concentration ends. GM resolves saves per "
+                f"target."
+            ),
+            "source": "draconic-presence",
+            "mode": mode,
+            "condition": condition,
+            "sp_spent": 5,
+            "remaining_sp": sp_cur - 5,
+            "max_sp": sp_max,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "sorcery-points",
+            "current": sp_cur - 5,
+            "max": sp_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "mode": mode,
+        "condition": condition,
+        "sp_spent": 5,
+        "remaining_sp": sp_cur - 5,
+        "max_sp": sp_max,
+    }
 
 
 @router.post("/api/campaign/{campaign_id}/use_elemental_affinity")

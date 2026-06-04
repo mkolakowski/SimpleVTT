@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.222] - 2026-06-04 — "Wings of the Dragon" — Draconic Wings + Draconic Presence (Sorcerer Draconic Bloodline)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.5 of the v2.99.193 phased completion plan — Draconic Wings + Draconic Presence.** Two Sorcerer Draconic Bloodline capstones in one ship. RAW PHB p.103. (1) **Draconic Wings (Lv 14)**: bonus action sprouts wings, flying speed = current speed; lasts until dismissed. v2.99.222 installs a `dragon-wings-active` buff with `effects.fly_speed_ft = sheet.speed` (dismiss via `/end_buff`). (2) **Draconic Presence (Lv 18)**: action + 5 SP, 60 ft aura of awe (charmed) or fear (frightened); 1 minute or until concentration. v2.99.222 ships announce-style — decrements 5 SP + broadcasts; per-target CHA save resolution + 24-hour immunity tracking are filed.
+**Description:** Five helpers + 2 endpoints. (1) `_sorcerer_level_from_sheet(sheet)` — multiclass-aware level helper. (2) `_pc_has_draconic_bloodline(sheet)` — Sorcerer with subclass containing "draconic". (3) `_pc_has_draconic_wings(sheet)` — Sorcerer Draconic Bloodline Lv 14+. (4) `_pc_has_draconic_presence(sheet)` — Sorcerer Draconic Bloodline Lv 18+. (5) `/use_draconic_wings` — validates Sorcerer + Draconic Bloodline + Lv 14+ + Phase 4 bonus slot, installs `dragon-wings-active` buff with fly_speed from sheet.speed, marks bonus chip, broadcasts. (6) `/use_draconic_presence` — validates Sorcerer + Draconic Bloodline + Lv 18+ + 5 SP + Phase 4 action slot, decrements 5 SP, marks action chip, broadcasts (mode shapes condition: awe→charmed, fear→frightened). Zara Emberfire (Tiefling Sorcerer Draconic Bloodline Lv 5 default) is the demo fixture; tests PATCH her Lv 5 → 14 / 18 + ensure sorcery-points >= 5 for Presence. One new harness test file with 6 tests covering: Wings happy + level gate; Presence awe + fear modes + level gate + not-enough-SP gate.
+
+### Added
+- `_sorcerer_level_from_sheet(sheet)` multiclass-aware level helper.
+- `_pc_has_draconic_bloodline(sheet)` subclass gate.
+- `_pc_has_draconic_wings(sheet)` + `_pc_has_draconic_presence(sheet)` Lv-gated helpers.
+- `/api/campaign/{cid}/use_draconic_wings` endpoint.
+- `/api/campaign/{cid}/use_draconic_presence` endpoint.
+- `tests/harness/test_draconic_wings_and_presence.py` — 6 tests.
+
+### Notes
+- **PATCH bump** — 5 helpers + 2 endpoints + 6 regression tests. No schema change.
+- **Dismiss path is `/end_buff`.** RAW Draconic Wings "lasts until you dismiss them as a bonus action on your turn." The existing `/end_buff` flow drops the buff (just doesn't mark the bonus chip on dismiss — the player can manually mark it). A future commit could route dismiss through a `/use_draconic_wings/dismiss` endpoint that marks the bonus chip + drops the buff.
+- **Draconic Presence is announce-only.** The per-turn CHA save resolution against each hostile creature within 60 ft + 24-hour immunity tracking on save-pass require per-target save state + a campaign-wide immunity ledger. Filed for follow-up; v1 surface is the chat-card announce.
+- **Phase E.5 ✅.** Phase E progress: 1/8 (E.5 first ship). Still ⚪: E.1 Battle Master maneuvers, E.2 Eldritch Knight, E.3 Hunter, E.4 Thief, E.6 Wild Magic, E.7 Evocation, E.8 Berserker.
+- **38 ships this session.** Phases ✅ complete: A, B, C.1, D, F.1, F.2, F.3, F.4, F.5 (9 full phases including C.1's single-item phase). Partial: E (1/8).
+- **Total harness count: 1205** (was 1199 in v2.99.221).
+
+---
+
 ## [2.99.221] - 2026-06-04 — "Primeval Awareness" — Primeval Awareness (Ranger Lv 3) — Phase F.3 ✅ COMPLETE
 
 **Schema version:** 66
