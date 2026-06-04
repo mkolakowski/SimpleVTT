@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.168] - 2026-06-03 — "The Borrowed Skin" — Token-disguise primitive closes the v2.15.9 filed item
+
+**Schema version:** 66
+**Commit summary:** **Ship the Token-disguise primitive — a per-token `Token.disguise` JSON column + `_apply_token_disguise` / `_revert_token_disguise` helpers wired into `/transform` and `/revert`.** Closes the v2.15.9 filed item documented in `docs/plans/class-content-status.md` under Druid Wild Shape. When a Druid Wild-Shapes (or a Sorcerer Polymorphs), the helper snapshots the original token's `label` + `size` into `disguise.original` and rewrites the live token fields to reflect the new form. `/revert` restores the originals + clears the disguise. **Schema v66** — first schema migration since v65 (v2.99.52 Token.team). Same DDL pattern: nullable JSON column, ALTER TABLE migration in `_apply_inline_migrations`, no default for existing rows (None = native form).
+**Description:** Five edits. (1) `app/models.py` — add `disguise: Mapped[Optional[dict]]` JSON column on Token (nullable, default None). Docstring documents the JSON shape: `{source, original: {label, size}, form_name, applied_at}`. (2) `app/database.py` — Schema v66 migration block in `_apply_inline_migrations`: ALTER TABLE tokens ADD COLUMN disguise JSON (no default — nullable). (3) `app/version.py` — `SCHEMA_VERSION = 66`. (4) `app/routes/tabletop_routes.py` — new `_BEAST_SIZE_TO_INT` size lookup; new `_apply_token_disguise(db, char_id, source, form_name, form_size)` helper that snapshots originals + rewrites live fields; new `_revert_token_disguise(db, char_id)` helper that restores originals + clears the disguise. Wired into `/transform` (after sheet commit; broadcasts `token_update` per disguised token) and `/revert` (after sheet commit; broadcasts `token_update` per reverted token). `from datetime import datetime` added to the imports for the `applied_at` timestamp. (5) `tests/harness/test_token_disguise.py` — 2 regression tests using Mira (Druid Lv 5 Moon) + Wolf as the Open5e fixture.
+
+### Added
+- `Token.disguise` JSON column (Schema v66 migration).
+- `_BEAST_SIZE_TO_INT` size string → int mapping.
+- `_apply_token_disguise(db, char_id, source, form_name, form_size)` helper.
+- `_revert_token_disguise(db, char_id)` helper.
+- `/transform` and `/revert` integration with `token_update` broadcasts.
+- `tests/harness/test_token_disguise.py` — 2 tests: Mira → Wolf token's label gains "→ Wolf" suffix + disguise JSON populated; revert restores original label + clears disguise. Tests `pytest.skip` gracefully when Open5e is unavailable in the test environment.
+
+### Schema
+- Schema v66: ALTER TABLE tokens ADD COLUMN disguise JSON.
+
+### Notes
+- **MINOR or PATCH?** This is a schema-bumping change so RAW interpretation says MINOR. But the new column is nullable + ignored when None, AND `/transform` / `/revert` continue to work for existing campaigns without re-seeding. So functionally additive, backward-compatible. v2.99.x is in pre-2.0.0-rebump cadence anyway — staying PATCH. The next genuine MINOR will need a fun-name approval per the CLAUDE.md rule.
+- **What's filed.** (1) `image_url` swap — would need a curated beast-portrait map (or Open5e creature images) so the token visually updates not just by label/size. (2) Per-form description for the GM tooltip. (3) Multi-token handling for summons that share `character_id` — today every token bound to the transforming character gets the same disguise; for true multi-token PCs (Animate Dead, Spiritual Weapon, etc.) the GM would need to disambiguate. (4) Concentration coupling — if the Polymorph caster loses concentration, the target should auto-revert. The helper exists; the cascade isn't wired yet.
+- **The "Token.disguise" primitive design** documented in v2.15.9 generalizes to Polymorph / Disguise Self / Alter Self / True Polymorph by passing the appropriate `source` enum. v2.99.168 ships Wild Shape + Polymorph (both already routed through `/transform`); future ships can add `/use_disguise_self` etc. without re-designing the storage.
+- **First schema bump since v2.99.52** (v65 → v66, 116 commits later). Demonstrates the pre-2.0.0 cadence of adding small additive columns when they unlock a meaningful mechanical feature.
+- **Total harness count: 1077** (was 1075 in v2.99.167).
+
+---
+
 ## [2.99.167] - 2026-06-03 — "Twin Bound" — Twinned Spell carries a second-target ID; consume broadcasts it
 
 **Schema version:** 65

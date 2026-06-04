@@ -10,7 +10,7 @@ import os
 import re as _re
 import time as _time
 import uuid
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -37577,6 +37577,109 @@ def _fetch_open5e_creature(slug: str) -> dict:
     raise HTTPException(404, f"Creature '{slug}' not found in Open5e")
 
 
+_BEAST_SIZE_TO_INT = {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "large": 2,
+    "huge": 3,
+    "gargantuan": 4,
+}
+
+
+def _apply_token_disguise(
+    db: Session,
+    char_id: int,
+    *,
+    source: str,
+    form_name: str,
+    form_size: str,
+) -> int:
+    """v2.99.168 — Token-disguise primitive. For each Token row
+    bound to this character_id, snapshot the original (label, size)
+    into the `disguise.original` sub-dict and replace with the
+    form's values. Returns the count of tokens updated.
+
+    Idempotent on already-disguised tokens — if `disguise` is
+    non-empty, the original isn't re-snapshotted (preserves the
+    pre-shape values across consecutive transforms).
+
+    Closes the docs/plans/class-content-status.md filed item
+    "token-disguise primitive (v2.15.9)". Generalizes to Polymorph
+    / Disguise Self / Alter Self / True Polymorph by passing the
+    appropriate `source` enum value.
+
+    `form_size` accepts the Open5e size string ("Small" / "Medium"
+    / "Large" / etc.); mapped via `_BEAST_SIZE_TO_INT` to the
+    integer Token.size field (1 for Tiny-Medium, 2 for Large, 3
+    for Huge, 4 for Gargantuan).
+    """
+    new_size = _BEAST_SIZE_TO_INT.get(
+        (form_size or "").strip().lower(), 1,
+    )
+    count = 0
+    for tok in db.query(Token).filter(Token.character_id == char_id).all():
+        if tok.disguise:
+            # Already disguised — skip the snapshot but update the
+            # current label/size to the new form (chained
+            # transforms reuse the original snapshot).
+            tok.label = f"{tok.disguise.get('original', {}).get('label', tok.label)} → {form_name}"
+            tok.size = new_size
+            tok.disguise = {
+                "source": source,
+                "form_name": form_name,
+                "original": tok.disguise.get("original") or {
+                    "label": tok.label, "size": new_size,
+                },
+                "applied_at": datetime.utcnow().isoformat(),
+            }
+        else:
+            original_label = tok.label or ""
+            original_size = int(tok.size or 1)
+            tok.label = f"{original_label} → {form_name}"
+            tok.size = new_size
+            tok.disguise = {
+                "source": source,
+                "form_name": form_name,
+                "original": {
+                    "label": original_label,
+                    "size": original_size,
+                },
+                "applied_at": datetime.utcnow().isoformat(),
+            }
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(tok, "disguise")
+        count += 1
+    return count
+
+
+def _revert_token_disguise(db: Session, char_id: int) -> int:
+    """v2.99.168 — Restore original label + size for each Token
+    bound to char_id where `disguise` is set. Clears the disguise
+    field. Returns the count of tokens reverted.
+
+    No-op for tokens already in their native form (disguise=None
+    or empty dict).
+    """
+    count = 0
+    for tok in db.query(Token).filter(Token.character_id == char_id).all():
+        if not tok.disguise:
+            continue
+        original = tok.disguise.get("original") or {}
+        if "label" in original:
+            tok.label = original["label"]
+        if "size" in original:
+            try:
+                tok.size = int(original["size"])
+            except (TypeError, ValueError):
+                pass
+        tok.disguise = None
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(tok, "disguise")
+        count += 1
+    return count
+
+
 @router.post("/api/campaign/{campaign_id}/character/{char_id}/transform")
 async def transform_character(
     campaign_id: int,
@@ -37801,6 +37904,36 @@ async def transform_character(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.99.168 — Token-disguise primitive. Re-label + resize the
+    # PC's token(s) to reflect the new form. Reuses the v2.99.168
+    # `_apply_token_disguise` helper that snapshots the original
+    # label + size into `disguise.original` and rewrites the live
+    # fields. The same helper serves Polymorph in /transform with
+    # source="polymorph"; future Disguise Self / Alter Self ships
+    # pass their own source enum.
+    _disguised_count = _apply_token_disguise(
+        db, int(char.id),
+        source=source,
+        form_name=creature_name,
+        form_size=str(monster.get("size") or "").strip(),
+    )
+    if _disguised_count > 0:
+        db.commit()
+        # Broadcast token_update for each disguised token so map
+        # clients refresh without a full page reload.
+        for _tok in db.query(Token).filter(
+            Token.character_id == int(char.id),
+        ).all():
+            await hub.broadcast(campaign_id, {
+                "type": "token_update",
+                "data": {
+                    "id": _tok.id,
+                    "label": _tok.label,
+                    "size": _tok.size,
+                    "disguise": _tok.disguise,
+                },
+            })
+
     await hub.broadcast(campaign_id, {
         "type": "transform_update",
         "data": {
@@ -37946,6 +38079,26 @@ async def revert_character(
     char.sheet = sheet
     flag_modified(char, "sheet")
     db.commit()
+
+    # v2.99.168 — Revert the Token-disguise primitive. Restores
+    # the original label + size to each of this character's tokens
+    # (no-op for tokens already in native form). Broadcasts a
+    # token_update for each reverted token.
+    _reverted_count = _revert_token_disguise(db, int(char.id))
+    if _reverted_count > 0:
+        db.commit()
+        for _tok in db.query(Token).filter(
+            Token.character_id == int(char.id),
+        ).all():
+            await hub.broadcast(campaign_id, {
+                "type": "token_update",
+                "data": {
+                    "id": _tok.id,
+                    "label": _tok.label,
+                    "size": _tok.size,
+                    "disguise": _tok.disguise,
+                },
+            })
 
     await hub.broadcast(campaign_id, {
         "type": "transform_update",

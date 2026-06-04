@@ -390,6 +390,22 @@ class Token(Base):
     team: Mapped[str] = mapped_column(
         String(16), default="neutral", server_default="neutral",
     )
+    # v2.99.168 — token-disguise primitive. When a Druid Wild-Shapes
+    # or a Sorcerer Polymorphs, the original token's label / size /
+    # (future) image_url are snapshotted into `disguise.original`
+    # and replaced with the new form's values. /revert restores
+    # the originals and clears the disguise. Storage is per-token
+    # (not per-sheet) so a Polymorph targeting an enemy NPC can
+    # stash the disguise on the enemy's token without needing the
+    # enemy to have a Character row. JSON shape:
+    #   { "source": "wild-shape" | "polymorph",
+    #     "original": {"label": "...", "size": N},
+    #     "form_name": "Wolf",
+    #     "applied_at": ISO8601 string }
+    # None / null when the token is in its native form.
+    disguise: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True, default=None,
+    )
 
     map: Mapped[Map] = relationship(back_populates="tokens")
     character: Mapped[Optional[Character]] = relationship(back_populates="tokens")

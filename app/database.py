@@ -645,6 +645,21 @@ def _apply_inline_migrations() -> None:
                 "VARCHAR(16) NOT NULL DEFAULT 'neutral'"
             ))
 
+    # ---- Schema v66 (2.99.168): Token.disguise ----
+    # Token-disguise primitive for Wild Shape / Polymorph (and
+    # future Disguise Self / Alter Self / True Polymorph). When a
+    # form is applied, the original token's label + size are
+    # snapshotted into the `disguise.original` sub-dict; the live
+    # token fields are replaced with the new form's values. /revert
+    # restores the originals and clears the disguise. JSON nullable
+    # so existing rows default to no-disguise without a DDL trip.
+    tok_cols_v66 = _column_names("tokens")
+    with engine.begin() as conn:
+        if tok_cols_v66 and "disguise" not in tok_cols_v66:
+            conn.execute(text(
+                "ALTER TABLE tokens ADD COLUMN disguise JSON"
+            ))
+
     # ---- Schema v63 (2.86.0): encounter backgrounds ----
     # Two new columns enable the encounter-background feature: a
     # fullscreen fixed-position image/video layer BEHIND the battle
