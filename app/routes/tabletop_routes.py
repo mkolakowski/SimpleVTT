@@ -25206,6 +25206,30 @@ def _target_has_elusive(
     return False
 
 
+def _pc_has_signature_spells(sheet: "dict | None") -> bool:
+    """v2.99.218 — RAW Signature Spells (Wizard Lv 20, PHB
+    p.115): "When you reach 20th level, you gain mastery over
+    two powerful spells and can cast them with little effort.
+    Choose two 3rd-level wizard spells in your spellbook as
+    your signature spells. You always have these spells
+    prepared, they don't count against the number of spells you
+    have prepared, and you can cast each of them once at 3rd
+    level without expending a spell slot. When you do so, you
+    can't do so again until you finish a short or long rest."
+
+    Returns True for Wizard Lv 20+. Consumed by
+    `/select_signature_spells` (gate the picker) + future
+    `/cast_spell` free-cast hook (gate the slot skip when the
+    cast matches a signature spell + the per-spell use flag is
+    unset, then flag it used until rest).
+
+    Phase F.5 final of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _wizard_level_from_sheet(sheet) >= 20
+
+
 def _pc_has_spell_mastery(sheet: "dict | None") -> bool:
     """v2.99.217 — RAW Spell Mastery (Wizard Lv 18+, PHB p.115):
     "At 18th level, you have achieved such mastery over certain
@@ -27450,6 +27474,158 @@ def _attack_is_magical(attacker_sheet: dict, attack_name: str) -> bool:
         if attack_slug in ("unarmed strike", "unarmed-strike", "unarmed"):
             return True
     return False
+
+
+@router.post("/api/campaign/{campaign_id}/select_signature_spells")
+async def select_signature_spells(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.218 — Phase F.5 final of the v2.99.193 phased
+    completion plan — Phase F.5 ✅ COMPLETE (2/2). Signature
+    Spells (Wizard Lv 20, PHB p.115): "Choose two 3rd-level
+    wizard spells in your spellbook as your signature spells.
+    You always have these spells prepared, they don't count
+    against the number of spells you have prepared, and you can
+    cast each of them once at 3rd level without expending a
+    spell slot. When you do so, you can't do so again until you
+    finish a short or long rest."
+
+    Body: ``{character_id, spell_1_slug, spell_2_slug}``.
+
+    Validates Wizard Lv 20+ + both slugs are on the caster's
+    spells list at level 3. Persists `signature_spells =
+    {spell_1, spell_2, spell_1_used: False, spell_2_used:
+    False}`. The use flags reset on short or long rest (filed
+    `/rest` hook); the free-cast wiring at `/cast_spell` is
+    filed (one-line follow-up).
+
+    Mirrors v2.99.217 Spell Mastery's picker shape exactly.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    spell_1_slug = (
+        str(body.get("spell_1_slug") or "")
+    ).strip().lower()[:50]
+    spell_2_slug = (
+        str(body.get("spell_2_slug") or "")
+    ).strip().lower()[:50]
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not spell_1_slug or not spell_2_slug:
+        raise HTTPException(
+            400, "spell_1_slug and spell_2_slug are both required",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "wizard",
+                "got": cls or "",
+            })
+    wizard_lv = _wizard_level_from_sheet(sheet)
+    if wizard_lv < 20:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 20, "got": wizard_lv,
+        })
+
+    # Both slugs must be on the spells list at level 3.
+    spells = list(sheet.get("spells") or [])
+    s1_match = None
+    s2_match = None
+    for s in spells:
+        if not isinstance(s, dict):
+            continue
+        slug = (s.get("_slug") or "").strip().lower()
+        if slug == spell_1_slug and int(s.get("level") or 0) == 3:
+            s1_match = s
+        if slug == spell_2_slug and int(s.get("level") or 0) == 3:
+            s2_match = s
+    if s1_match is None:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_1_not_on_list",
+            "slug": spell_1_slug,
+            "expected_level": 3,
+        })
+    if s2_match is None:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_2_not_on_list",
+            "slug": spell_2_slug,
+            "expected_level": 3,
+        })
+
+    sheet["signature_spells"] = {
+        "spell_1": spell_1_slug,
+        "spell_2": spell_2_slug,
+        "spell_1_used": False,
+        "spell_2_used": False,
+    }
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    s1_name = s1_match.get("name") or spell_1_slug.title()
+    s2_name = s2_match.get("name") or spell_2_slug.title()
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"📜 Signature Spells — {s1_name} + {s2_name}"
+            ),
+            "feature_desc": (
+                f"{char.name}'s signature spells are {s1_name} "
+                f"and {s2_name}. Cast each once at L3 per "
+                f"short rest without a slot."
+            ),
+            "source": "signature-spells",
+            "spell_1_slug": spell_1_slug,
+            "spell_2_slug": spell_2_slug,
+            "spell_1_name": s1_name,
+            "spell_2_name": s2_name,
+        },
+    })
+
+    return {
+        "ok": True,
+        "spell_1_slug": spell_1_slug,
+        "spell_2_slug": spell_2_slug,
+        "spell_1_name": s1_name,
+        "spell_2_name": s2_name,
+    }
 
 
 @router.post("/api/campaign/{campaign_id}/select_spell_mastery")
@@ -47335,6 +47511,11 @@ _SHEET_PATCH_KEYS = {
     # persist the Wizard Lv 18+ pick of {l1, l2} spell slugs. Test
     # teardown resets to {} after the test runs.
     "spell_mastery",
+    # v2.99.218 — signature_spells. Read by /select_signature_spells
+    # to persist the Wizard Lv 20+ pick of {spell_1, spell_2} L3
+    # spell slugs + per-spell use flags. Test teardown resets to
+    # {} after the test runs.
+    "signature_spells",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the

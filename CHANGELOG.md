@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.218] - 2026-06-04 — "Signature Spells" — Signature Spells (Wizard Lv 20) — Phase F.5 ✅ COMPLETE
+
+**Schema version:** 66
+**Commit summary:** **Phase F.5 final of the v2.99.193 phased completion plan — Signature Spells. Phase F.5 ✅ COMPLETE (2/2: Spell Mastery + Signature Spells).** RAW PHB p.115: "Choose two 3rd-level wizard spells in your spellbook as your signature spells. You always have these spells prepared, they don't count against the number of spells you have prepared, and you can cast each of them once at 3rd level without expending a spell slot. When you do so, you can't do so again until you finish a short or long rest." v2.99.218 ships `/select_signature_spells` — picker endpoint that validates Wizard Lv 20+ + both slugs on the spells list at level 3 + persists `signature_spells = {spell_1, spell_2, spell_1_used, spell_2_used}`. The use flags reset on short/long rest (filed `/rest` hook); the free-cast wiring at `/cast_spell` is filed.
+**Description:** One helper + 1 endpoint + 1 patch key. (1) `_pc_has_signature_spells(sheet)` — Wizard Lv 20+ gate. (2) `/select_signature_spells` — validates class + level + both slugs (must be on spells list at level 3 each), persists `signature_spells = {spell_1, spell_2, spell_1_used: False, spell_2_used: False}`. (3) `signature_spells` added to `_SHEET_PATCH_KEYS` for test scaffolding. Mirrors v2.99.217 Spell Mastery's picker shape exactly. Thalindra PATCH'd Lv 7 → 20 + uses her existing Fireball + Counterspell L3 spells. One new harness test file with 3 tests.
+
+### Added
+- `_pc_has_signature_spells(sheet)` helper gate.
+- `/api/campaign/{cid}/select_signature_spells` endpoint.
+- `signature_spells` field in `_SHEET_PATCH_KEYS` for test scaffolding.
+- `tests/harness/test_select_signature_spells.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 1 patch key + 3 regression tests. No schema change.
+- **Free-cast hook + per-rest use tracking are filed.** The mechanical effect (cast Fireball / Counterspell once each per short rest without consuming a slot) needs (a) a `/cast_spell` hook that gates on `_pc_has_signature_spells(sheet)` + the slug matches + the per-spell `_used` flag is False, then skips the slot decrement and flips the flag to True; (b) a `/rest` hook that resets both `_used` flags on short or long rest. Same shape as v2.99.88 Mystic Arcanum free-cast + v2.99.46 Eldritch Master refresh combined.
+- **Phase F.5 ✅ COMPLETE (2/2).** Spell Mastery (v2.99.217) + Signature Spells (v2.99.218). Both Wizard Lv 18-20 capstones ship.
+- **34 ships this session. Phases ✅ complete: A, F.1, F.2, F.4, D, F.5.** Six full phases. Partial: B (2/3), C (1/3), F.3 (3/5). Still ⚪: E.x subclass batch, H.x cleanup, G.x system frameworks.
+- **Total harness count: 1191** (was 1188 in v2.99.217).
+
+---
+
 ## [2.99.217] - 2026-06-04 — "Spell Mastery" — Spell Mastery (Wizard Lv 18) picker
 
 **Schema version:** 66
