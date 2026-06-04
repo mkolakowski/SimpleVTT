@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.214] - 2026-06-04 — "The Hidden Hunter" — Hide in Plain Sight (Ranger Lv 10)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.3 start of the v2.99.193 phased completion plan — Hide in Plain Sight.** RAW PHB p.92: "Starting at 10th level, you can spend 1 minute creating camouflage for yourself... You gain a +10 bonus to Dexterity (Stealth) checks as long as you remain there without moving or taking actions." v2.99.214 ships the full chain: helper + endpoint + /roll Stealth consumer. The endpoint installs a `hide-in-plain-sight-active` buff with `stealth_bonus: 10`. The /roll consumer reads the sheet's `_buffs_active` mirror; when a Stealth check fires (stat_key="Stealth") AND the buff is present, +10 is added to the total + the buff is removed (one-shot consume).
+**Description:** Three additions. (1) `_ranger_level_from_sheet(sheet)` — multiclass-aware Ranger level helper (mirror of `_rogue_level_from_sheet`). (2) `_pc_has_hide_in_plain_sight(sheet)` — Ranger Lv 10+ gate. (3) `/use_hide_in_plain_sight` endpoint — validates Ranger Lv 10+ + Phase 4 action slot gate, installs the buff via `_install_buff` + `_mirror_buffs_to_sheet`, broadcasts feature_used. (4) /roll Stealth consumer — when stat_key is "Stealth" AND the sheet has the buff, adds +10 to the result's total + appends " + 10 (Hide in Plain Sight)" to the breakdown + calls `_remove_buff` to clear the buff. v1 ignores the "must remain there without moving" gate (would require movement tracking + auto-remove); filed. Rowan Quickbow PATCH'd Lv 7 → 10 for tests. One new harness test file with 3 tests: install (buff fires + broadcast), consume (Stealth roll gets +10 + buff removed), level gate (Lv 7 → 409).
+
+### Added
+- `_ranger_level_from_sheet(sheet)` helper.
+- `_pc_has_hide_in_plain_sight(sheet)` gate.
+- `/api/campaign/{cid}/use_hide_in_plain_sight` endpoint.
+- /roll Stealth consumer that adds +10 + removes the `hide-in-plain-sight-active` buff.
+- `tests/harness/test_use_hide_in_plain_sight.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 2 helpers + 1 endpoint + 1 /roll consumer + 3 regression tests. No schema change.
+- **Composes with the existing buff engine.** The buff dict carries `effects.stealth_bonus: 10` + `consume_on_stealth_roll: True`. The /roll consumer reads the mirror; the buff is consumed via `_remove_buff` (which fires `_drop_paired_concentration_buffs` if needed — not applicable here since the buff has `concentration: False`).
+- **v1 simplification.** RAW "while you remain there without moving" requires movement tracking + auto-remove when the PC moves or takes an action without rolling Stealth first. v1 just consumes on the next Stealth roll; filed.
+- **Phase F.3 start ✅ 1/5.** Hide in Plain Sight ships. Still ⚪: Vanish (Lv 14 — bonus action Hide + can't be tracked by nonmagical means), Feral Senses (Lv 18 — no disadvantage on attacks vs invisible/unseen targets you can hear), Foe Slayer (Lv 20 — +WIS to attack OR damage on Favored Enemy once per turn), and several mid-level ranger features the plan describes as "pure descriptive" today.
+- **Total harness count: 1180** (was 1177 in v2.99.213).
+
+---
+
 ## [2.99.213] - 2026-06-04 — "The Pact Familiar" — Pact of the Chain (Warlock Lv 3) — Phase D ✅ COMPLETE
 
 **Schema version:** 66

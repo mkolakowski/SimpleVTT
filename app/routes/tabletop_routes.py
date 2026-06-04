@@ -13640,6 +13640,52 @@ async def roll_dice(
             result, expr,
         )
 
+    # v2.99.214 — Hide in Plain Sight (Ranger Lv 10+) Stealth
+    # consumer. When the PC has an active
+    # `hide-in-plain-sight-active` buff (installed by
+    # /use_hide_in_plain_sight) AND the roll is a Stealth check,
+    # add +10 to the total + remove the buff. Mirrors the v2.99.197
+    # Reliable Talent post-result intercept pattern.
+    _hips_consumed = False
+    if (
+        _char
+        and stat_key_lc == "stealth"
+        and isinstance(_char.sheet, dict)
+    ):
+        for _b in (_char.sheet.get("_buffs_active") or []):
+            if not isinstance(_b, dict):
+                continue
+            if (
+                (_b.get("key") or "").strip().lower()
+                != "hide-in-plain-sight-active"
+            ):
+                continue
+            _effects = _b.get("effects") or {}
+            if not isinstance(_effects, dict):
+                continue
+            _bonus = int(_effects.get("stealth_bonus") or 0)
+            if _bonus <= 0:
+                continue
+            try:
+                import copy
+                result = copy.copy(result)
+                result.total = int(result.total or 0) + _bonus
+                result.breakdown = (
+                    f"{result.breakdown} + {_bonus} "
+                    f"(Hide in Plain Sight)"
+                )
+            except Exception:
+                pass
+            _hips_consumed = True
+            try:
+                await _remove_buff(
+                    campaign_id, int(_char.id),
+                    "hide-in-plain-sight-active",
+                )
+            except Exception:
+                pass
+            break
+
     # v2.99.204 — Indomitable Might (Barbarian Lv 18+). Phase F.1
     # cont'd of the v2.99.193 phased completion plan. RAW PHB
     # p.49: when a STR check's total is less than the PC's STR
@@ -22709,6 +22755,29 @@ async def _resolve_repeated_save_for_buff(
     }
 
 
+def _ranger_level_from_sheet(sheet: dict) -> int:
+    """v2.99.214 — Read the ranger level out of a sheet
+    (single-class or multiclass). Mirror of
+    `_rogue_level_from_sheet`. Used by `_pc_has_hide_in_plain_sight`
+    + future Ranger Lv 10-20 gates.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "ranger":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "ranger":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
 def _rogue_level_from_sheet(sheet: dict) -> int:
     """Read the rogue level out of a sheet (single-class or multiclass).
     Used by ``_target_uses_uncanny_dodge`` to gate the Rogue Lv 5+
@@ -25135,6 +25204,27 @@ def _target_has_elusive(
                 return False
             return _pc_has_elusive(ch.sheet)
     return False
+
+
+def _pc_has_hide_in_plain_sight(sheet: "dict | None") -> bool:
+    """v2.99.214 — RAW Hide in Plain Sight (Ranger Lv 10+, PHB
+    p.92): "Starting at 10th level, you can spend 1 minute
+    creating camouflage for yourself. Once you are camouflaged
+    in this way, you can try to hide by pressing yourself up
+    against a solid surface that is at least as tall and wide as
+    you are. You gain a +10 bonus to Dexterity (Stealth) checks
+    as long as you remain there without moving or taking actions."
+
+    Returns True for Ranger Lv 10+. Consumed by
+    `/use_hide_in_plain_sight` (gate the endpoint) and by the
+    /roll Stealth hook (add +10 when the
+    `hide-in-plain-sight-active` buff is present).
+
+    Phase F.3 start of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _ranger_level_from_sheet(sheet) >= 10
 
 
 def _pc_has_diamond_soul(sheet: "dict | None") -> bool:
@@ -34498,6 +34588,153 @@ async def _resolve_target_combatant(
         if target_name and c.get("name") == target_name:
             return c.get("id"), c.get("name")
     return None, target_name
+
+
+@router.post("/api/campaign/{campaign_id}/use_hide_in_plain_sight")
+async def use_hide_in_plain_sight(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.214 — Phase F.3 start of the v2.99.193 phased
+    completion plan. Hide in Plain Sight (Ranger Lv 10+, PHB
+    p.92). RAW: "You can spend 1 minute creating camouflage for
+    yourself... You gain a +10 bonus to Dexterity (Stealth)
+    checks as long as you remain there without moving or taking
+    actions. Once you move or take an action or a reaction, you
+    must camouflage yourself again to gain this benefit."
+
+    Body: ``{character_id, override?}``.
+
+    Validates Ranger class + level >= 10. Installs a
+    `hide-in-plain-sight-active` buff with `effects.stealth_bonus:
+    10`. The /roll Stealth hook consumes the buff on the next
+    Stealth check (removes the buff + adds +10 to total).
+
+    v1 ignores the "must remain there without moving" gate (would
+    require movement tracking + auto-remove). The buff is
+    consumed on the next Stealth roll, which is RAW-equivalent
+    for the per-check case but doesn't auto-clean when the PC
+    moves or takes an action without a Stealth check first.
+    Filed.
+
+    No resource cost (RAW: just 1 minute of setup). The action
+    slot IS marked per RAW "spend 1 minute creating camouflage"
+    being a 1-minute downtime action; the Phase 4 gate applies.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        has_ranger = any(
+            (entry.get("class") or "").strip().lower() == "ranger"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_ranger:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "ranger",
+                "got": cls or "",
+            })
+    ranger_lv = _ranger_level_from_sheet(sheet)
+    if ranger_lv < 10:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 10, "got": ranger_lv,
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "hide-in-plain-sight",
+            "label": "Hide in Plain Sight",
+            "strict": strict,
+        })
+
+    # Install the buff. duration_rounds=10 (1 minute) gives the
+    # buff a reasonable lifetime; in practice it's consumed on the
+    # next Stealth roll regardless.
+    hips_buff = {
+        "key": "hide-in-plain-sight-active",
+        "name": "Hide in Plain Sight — Camouflaged",
+        "icon": "🌿",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "hide-in-plain-sight",
+        "source_char_id": char.id,
+        "effects": {
+            "stealth_bonus": 10,
+            "consume_on_stealth_roll": True,
+        },
+        "desc": (
+            "Camouflaged: +10 on the next Stealth check. RAW: lost "
+            "when you move or take an action; v1 consumes on the "
+            "next Stealth roll."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, hips_buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🌿 Hide in Plain Sight — Camouflaged",
+            "feature_desc": (
+                f"{char.name} created camouflage with naturally "
+                f"occurring materials. +10 on the next Stealth "
+                f"check (Ranger Lv 10+ class feature)."
+            ),
+            "source": "hide-in-plain-sight",
+            "stealth_bonus": 10,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "stealth_bonus": 10,
+        "buff_installed": True,
+        "over_budget": was_used,
+    }
 
 
 @router.post("/api/campaign/{campaign_id}/cast_hunters_mark")
