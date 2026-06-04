@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.161] - 2026-06-03 — "The Long Watch" — Extended Spell metamagic gets the pending-buff scaffolding
+
+**Schema version:** 65
+**Commit summary:** **Layer pending-buff wiring on top of the v2.99.37 announce-only `/use_metamagic_extended_spell`.** Pre-v2.99.161 Extended Spell was announce-only — the SP decremented and a feature_used broadcast fired, but the duration extension was GM-adjudicated at cast time. v2.99.161 installs a `metamagic-extended-pending` buff on the caster (effects carry the doubling multiplier + the 24-hour cap = 14400 rounds) and wires `/cast_spell` to drop the buff one-shot at the start of the cast cycle. Mirror of v2.99.159 Distant + v2.99.160 Twinned. **The actual duration doubling on the installed buff at cast time is still filed** — would need a hook in `_install_buff` that consults the source_char_id's pending buff before stamping duration_rounds + duration_max.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — `/use_metamagic_extended_spell` now installs a `metamagic-extended-pending` buff after the SP decrement. Buff carries `effects.extend_duration: True` + `effects.duration_multiplier: 2` + `effects.duration_cap_rounds: 14400` (24h at 6s/round) + `cast_id` for undo. (2) New helper `_caster_has_extended_pending(campaign_id, caster_char_id)` — mirror of `_caster_has_distant_pending` + `_caster_has_twinned_pending`. (3) `/cast_spell` — drops the buff via `_remove_buff` at the start of the cast cycle (one-shot per RAW), regardless of cast outcome. (4) `tests/harness/test_metamagic_extended_install.py` — 3 regression tests.
+
+### Added
+- `metamagic-extended-pending` buff install in `/use_metamagic_extended_spell`.
+- `_caster_has_extended_pending(campaign_id, caster_char_id)` helper.
+- `/cast_spell` Extended consume hook.
+- `tests/harness/test_metamagic_extended_install.py` — 3 tests: declaring installs the pending buff; the pending buff is consumed when /cast_spell fires; backward-compatibility (sp_cost, sp_remaining, cast_id) shape preserved.
+
+### Changed
+- `/use_metamagic_extended_spell`'s feature_used description updated from announce-only language to "Extended Spell armed. Next /cast_spell will drop the pending buff. RAW requires the spell's base duration ≥ 1 minute; auto-route to mutate the installed buff's duration_rounds (capped at 24h) is filed."
+
+### Notes
+- **PATCH bump** — endpoint extension + helper + integration hook + 3 tests. No schema change. Backward-compatible with existing announce-only tests.
+- **What's filed.** (1) Actual duration-doubling on the installed buff at cast time. Would need: `_install_buff` consults `_caster_has_extended_pending(campaign_id, buff.source_char_id)` when source_char_id is set, and if True, doubles `duration_rounds` + `duration_max` (capped at 14400 from the pending buff's `effects.duration_cap_rounds`). The pending buff is dropped after the first install — one-shot per RAW. (2) The RAW gate "duration of 1 minute or longer" — today the endpoint accepts any cast regardless of duration. A future RAW gate would reject Extended on instant-effect spells (Fireball, Magic Missile, etc.) which have no duration to extend.
+- **Metamagic mechanical-wiring status (updated).** Seven metamagics now have at least pending-buff scaffolding: Empowered (re-roll damage, v1 wire), Heightened (disadvantage save, v1 wire), Careful (auto-pass protected allies, v1 wire), Distant (range doubling, v2.99.159), Twinned (pending-buff only, auto-route filed, v2.99.160), Extended (pending-buff only, duration-doubling filed, v2.99.161). Only Subtle remains pure announce-only (RAW Subtle has no positive mechanical effect — Counterspell becomes inapplicable but Counterspell isn't fully wired today).
+- **Total harness count: 1065** (was 1062 in v2.99.160).
+
+---
+
 ## [2.99.160] - 2026-06-03 — "The Echo" — Twinned Spell metamagic gets the pending-buff scaffolding
 
 **Schema version:** 65

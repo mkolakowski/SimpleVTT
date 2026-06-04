@@ -14536,6 +14536,18 @@ async def cast_spell(
             "metamagic-twinned-pending",
         )
 
+    # v2.99.161 — Extended Spell metamagic. Same consume pattern
+    # as Twinned: drop the pending buff one-shot when /cast_spell
+    # starts. The actual duration-doubling on the installed buff
+    # is filed (would need a hook in `_install_buff` that consults
+    # the source_char_id's pending buff before stamping
+    # duration_rounds + duration_max).
+    if _caster_has_extended_pending(campaign_id, int(char.id)):
+        await _remove_buff(
+            campaign_id, int(char.id),
+            "metamagic-extended-pending",
+        )
+
     # v2.99.88 — Mystic Arcanum free-cast routing. When the caller
     # passes ``free_cast: true``, the spell is cast via the Warlock's
     # Mystic Arcanum charge (PHB p.108) instead of consuming a Pact
@@ -27843,16 +27855,45 @@ async def use_metamagic_extended_spell(
             "current": new_sp, "max": sp_max,
         },
     })
+
+    # v2.99.161 — install the `metamagic-extended-pending` buff so
+    # the next /cast_spell call surfaces the armed-Extended state
+    # on the caster's chip strip and the consume hook drops it
+    # one-shot per RAW. Mirror of v2.99.159 Distant Spell + v2.99.160
+    # Twinned Spell pending-buff pattern. The actual duration-
+    # doubling at buff install time (capped at 24h = 14400 rounds)
+    # is filed; requires `_install_buff` to consult the pending
+    # buff via the source_char_id lookup.
+    extended_buff = {
+        "key": "metamagic-extended-pending",
+        "name": "Metamagic: Extended Spell (pending)",
+        "icon": "✨",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "metamagic-extended-spell",
+        "source_char_id": int(char.id),
+        "source_char_name": char.name,
+        "effects": {
+            "extend_duration": True,
+            "duration_multiplier": 2,
+            "duration_cap_rounds": 14400,  # 24 hours at 6s/round
+        },
+        "cast_id": et_cast_id,
+    }
+    await _install_buff(campaign_id, int(char.id), extended_buff)
+
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": char.id, "character_name": char.name,
             "feature_name": "✨ Metamagic — Extended Spell (1 SP, 2× duration)",
             "feature_desc": (
-                "Extended Spell declared. Next cast: double the "
-                "spell's duration (max 24h). Announce-only — GM "
-                "applies the extended duration at cast time. RAW "
-                "requires the spell's base duration ≥ 1 minute."
+                "Extended Spell armed. Next /cast_spell will drop "
+                "the pending buff. RAW requires the spell's base "
+                "duration ≥ 1 minute; auto-route to mutate the "
+                "installed buff's duration_rounds (capped at 24h) "
+                "is filed."
             ),
             "source": "metamagic-extended-spell",
             "cast_id": et_cast_id,
@@ -27867,6 +27908,32 @@ async def use_metamagic_extended_spell(
         "sp_max": sp_max,
         "cast_id": et_cast_id,
     }
+
+
+def _caster_has_extended_pending(
+    campaign_id: int, caster_char_id: "int | None",
+) -> bool:
+    """v2.99.161 — return True when the caster's combatant carries
+    a `metamagic-extended-pending` buff. Mirror of v2.99.159's
+    `_caster_has_distant_pending` + v2.99.160's
+    `_caster_has_twinned_pending`. Used by /cast_spell to consume
+    the buff one-shot at end of cast.
+    """
+    if not caster_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != caster_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "metamagic-extended-pending":
+                return True
+        return False
+    return False
 
 
 # ----------- API: Metamagic Careful Spell (Sorcerer Lv 3+) ----------
