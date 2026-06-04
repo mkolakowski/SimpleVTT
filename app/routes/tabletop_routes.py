@@ -42100,6 +42100,34 @@ async def update_battle(
         )
         if _prev_had_conc and not _new_has_conc:
             _npc_concentration_dropped.append(_cid)
+    # v2.99.191 — PC mirror of the v2.99.185 NPC cascade detection.
+    # When a PC's concentration buff is removed via /battle PUT
+    # (e.g. GM strikes it from the init tracker's mini-sheet), fire
+    # `_drop_paired_concentration_buffs` for that caster's char_id
+    # so paired conditions (Hold Person Paralyzed, Hex on the
+    # caster's buff list, Polymorph markers on PC targets, etc.)
+    # cascade-drop. PC `/end_buff` already routes through
+    # `_remove_buff` which fires the cascade — this closes the
+    # `/battle PUT` parallel.
+    _pc_concentration_dropped: list[int] = []
+    for _new_c in (state.get("combatants") or []):
+        _cid_pc = _new_c.get("id")
+        _char_id_pc = _new_c.get("char_id")
+        if not _cid_pc or not _char_id_pc:
+            continue  # NPC or anonymous; PC mirror only
+        _prev_c_pc = _prev_combatants_by_id.get(_cid_pc)
+        if not _prev_c_pc:
+            continue
+        _prev_had_conc_pc = any(
+            isinstance(b, dict) and bool(b.get("concentration"))
+            for b in (_prev_c_pc.get("buffs") or [])
+        )
+        _new_has_conc_pc = any(
+            isinstance(b, dict) and bool(b.get("concentration"))
+            for b in (_new_c.get("buffs") or [])
+        )
+        if _prev_had_conc_pc and not _new_has_conc_pc:
+            _pc_concentration_dropped.append(int(_char_id_pc))
     # v2.99.44 — Bard Lv 20 Superior Inspiration. RAW (PHB p.54): "At
     # 20th level, when you roll initiative and have no uses of
     # Bardic Inspiration left, you regain one use." Fires when the
@@ -42129,6 +42157,18 @@ async def update_battle(
         except Exception:
             # Don't let one cascade failure block the others or
             # the surrounding PUT response.
+            pass
+    # v2.99.191 — Fire the PC concentration-drop cascade for each
+    # PC that lost concentration via this PUT. Mirrors the v2.99.185
+    # NPC dispatch above. Removes paired conditions sourced from
+    # the PC caster (Hold Person Paralyzed on targets, etc.) and
+    # broadcasts a battle_update covering the removals.
+    for _dropped_pc_char_id in _pc_concentration_dropped:
+        try:
+            await _drop_paired_concentration_buffs(
+                campaign_id, _dropped_pc_char_id,
+            )
+        except Exception:
             pass
 
     if _battle_just_started:

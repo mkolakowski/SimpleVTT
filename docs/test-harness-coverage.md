@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1118 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.190, 2026-06-04).
+**Total tests:** 1119 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.191, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1043,6 +1043,13 @@ v2.99.185 — `/battle PUT` auto-fires `_drop_paired_concentration_buffs_npc` wh
 | Test | What it asserts |
 |------|-----------------|
 | `test_battle_put_drops_npc_concentration_buffs` | Seed NPC with `concentration-polymorph` buff + Krieger with a `polymorph-active` marker sourced from the NPC. `/battle PUT` with the NPC's concentration buff removed → the NPC-mirror cascade fires + the v2.99.172 revert hook drops Krieger's polymorph-active marker. |
+
+### `test_battle_put_pc_concentration_cascade.py`
+v2.99.191 — PC mirror of v2.99.185. `/battle PUT` auto-fires `_drop_paired_concentration_buffs` when a PC's concentration buff is removed via the canonical battle-edit path. Closes the `/battle PUT` parallel for PC casters (PC `/end_buff` was already covered by `_remove_buff`'s cascade hook).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_battle_put_drops_pc_paired_buffs` | Seed Magnus with `concentration-hold-person` + Krieger with paired Paralyzed (`source_char_id=Magnus`, `_dependent_on_caster_concentration=True`). `/battle PUT` with Magnus's concentration removed → PC cascade fires → Krieger's Paralyzed is dropped from his sheet mirror. |
 
 ### `test_npc_cast_subtle_immune.py`
 v2.99.186 — `/npc_cast_spell` mirrors the PC Subtle gate. Closes a v2.99.173 filed item; an NPC carrying `metamagic-subtle-pending` on its combatant suppresses the Counterspell prompt the same way a PC caster does.

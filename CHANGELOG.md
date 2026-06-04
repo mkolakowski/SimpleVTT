@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.191] - 2026-06-04 — "The PC Cascade" — /battle PUT PC concentration cascade mirrors v2.99.185
+
+**Schema version:** 66
+**Commit summary:** **Mirror v2.99.185 for PC casters — `/battle PUT` now auto-fires `_drop_paired_concentration_buffs` when a PC's concentration buff is removed via the canonical battle-edit path.** v2.99.185 closed the NPC path; v2.99.191 closes the PC path. When the GM strikes a PC's concentration buff from the init tracker's mini-sheet (which PUTs `/battle`), the cascade now fires server-side, dropping paired conditions on targets (Hold Person Paralyzed, Hex caster-side buffs, Polymorph markers, etc.) without the GM having to manually × out each chip. PC `/end_buff` already routes through `_remove_buff` which fires the cascade — this closes the `/battle PUT` parallel.
+**Description:** Two edits in `app/routes/tabletop_routes.py::update_battle`. (1) **Pre-PUT diff loop.** After the v2.99.185 NPC loop, mirror it for PCs: build `_pc_concentration_dropped: list[int]` by iterating new combatants, skipping anonymous + NPC (no `char_id`), and checking prev-vs-new concentration-buff presence per `char_id`. (2) **Post-PUT cascade dispatch.** After the NPC cascade dispatch, for each PC `char_id` in `_pc_concentration_dropped`, `await _drop_paired_concentration_buffs(campaign_id, char_id)`. One new harness test seeds Magnus (Warlock) with `concentration-hold-person` + Krieger with paired Paralyzed (`source_char_id=Magnus`, `_dependent_on_caster_concentration=True`); PUT removes Magnus's concentration; verifies Krieger's Paralyzed is gone.
+
+### Added
+- PC concentration-drop diff loop in `update_battle` (parallel to v2.99.185 NPC loop).
+- PC concentration-drop cascade dispatch in `update_battle` (parallel to v2.99.185 NPC dispatch).
+- `tests/harness/test_battle_put_pc_concentration_cascade.py` — 1 test.
+
+### Notes
+- **PATCH bump** — pre/post-PUT diff + dispatch loop + 1 harness test. No schema change.
+- **The cascade was already implemented (v2.38.0 Phase T.3e).** v2.99.191 is wiring only — connect the existing primitive to the canonical PUT entry point. The cascade itself handles the side effects (cleanup + battle_update broadcast + Polymorph revert hook from v2.99.172).
+- **PC `/end_buff` was already covered.** PC `/end_buff` (the canonical "I voluntarily end my concentration spell" entry) routes through `_remove_buff` which already fires `_drop_paired_concentration_buffs`. v2.99.191 only adds the `/battle PUT` parallel — used when the GM edits the buff list directly from the init tracker's mini-sheet, bypassing `/end_buff`.
+- **The full Polymorph mechanical chain is now end-to-end via every entry point.** /cast_polymorph (PC + NPC) → /transform (sheet swap + token disguise) → concentration-drop entry points (PC `/end_buff` ✓, PC `/battle PUT` ✓ v2.99.191, NPC concentration save fail ✓, NPC `/battle PUT` ✓ v2.99.185, NPC `/use_attack_concentration_save` ✓) → cascade fires → revert hook restores sheet + token.
+- **Total harness count: 1119** (was 1118 in v2.99.190).
+
+---
+
 ## [2.99.190] - 2026-06-04 — "Mark Named in the Log" — Attack damage breakdown labels rider with "(vs NAME)"
 
 **Schema version:** 66
