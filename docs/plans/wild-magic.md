@@ -3,8 +3,8 @@
 Phase E.6 of the [v2.99.193 class-content completion plan](class-content-status.md).
 Path: Sorcerous Origin: Wild Magic (PHB p.103).
 
-> **Status (v2.99.227):** 🟠 Phase 1 (Tides of Chaos announce) shipped.
-> Phases 2–5 deferred.
+> **Status (v2.99.228):** 🟠 Phases 1-2 shipped (Tides of Chaos + Wild
+> Magic Surge auto-roll). Phases 3–5 deferred.
 
 ## Why a plan doc
 
@@ -57,18 +57,21 @@ broadcast); counter empty → 409 out_of_uses; long-rest refill
 needs PATCH to "Wild Magic"); wrong-class gate (Krieger
 Barbarian).
 
-### Phase 2 — Wild Magic Surge auto-roll (⚪ deferred)
+### Phase 2 — Wild Magic Surge auto-roll (✅ v2.99.228)
 
-**Hook site:** `/cast_spell`, post-cast, when caller is Wild
-Magic Sorcerer + cast `spell_level >= 1`. Roll a hidden d20 server-
-side; on a 1, broadcast `wild_magic_surge` + index into the surge
-table. The table itself (50 entries) lives in
-`app/data/local/dnd5e/wild_magic_surge.json` (new asset).
+**Hook site:** `/cast_spell`, post-cast (after `spell_cast`
+broadcast). When caller is Wild Magic Sorcerer + `cslug ==
+"sorcerer"` + `spell_level >= 1`, server rolls d20; on natural 1,
+rolls d100, maps to a table entry via `surge_entry_for_d100()`,
+broadcasts `wild_magic_surge` with `(slug, name, desc, d100,
+tides_refilled)`, and refills `sheet.tides_of_chaos_uses = 1`.
+The 50-entry RAW table ships inline in `app/wild_magic_surge.py`
+(JSON-asset refactor deferred).
 
-**Tides interaction:** RAW lets the DM trigger the d20 roll before
-the player regains Tides of Chaos. v1 ships the surge as
-auto-rolled on every Lv 1+ sorcerer cast (lower friction); the
-"GM decides" flexibility is filed.
+**Tides interaction:** auto-refilled — RAW says the DM can trigger
+the d20 roll *before* the player regains Tides of Chaos, and if
+so they "also regain the use of this feature." Auto-rolled flavor
+of the design picks the player up regardless.
 
 **Composability:** the surge broadcast carries the table-entry
 slug + RAW text only — none of the 50 entries auto-execute. The
@@ -76,9 +79,10 @@ GM resolves the effect manually (rolls follow-up dice, installs
 buffs, etc.). Future deep-wire commits could resolve specific
 high-impact entries (e.g., Fireball at self).
 
-**Test:** smoke that asserts a wild magic Lv 1 sorcerer casting a
-seeded `1` rolls a surge broadcast; non-Wild-Magic-Sorcerer cast
-doesn't.
+**TEST_MODE escape hatch.** `/cast_spell` accepts `_force_surge_d20:
+int` body param when `TEST_MODE` env is truthy, bypassing the
+random d20 roll for deterministic harness tests. Silently ignored
+in production.
 
 ### Phase 3 — Bend Luck reaction (⚪ deferred)
 

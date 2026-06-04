@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1231 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.227, 2026-06-04).
+**Total tests:** 1236 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.228, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,17 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_wild_magic_surge.py`
+v2.99.228 — Wild Magic Sorcerer (PHB p.103) Wild Magic Surge auto-roll (Phase 2 of [docs/plans/wild-magic.md](../plans/wild-magic.md)). Zara Emberfire is the demo fixture; tests PATCH her subclass to "Wild Magic". Uses the TEST_MODE-only `_force_surge_d20` body param on /cast_spell for deterministic outcomes.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_wild_magic_surge_fires_on_d20_one` | Wild Magic Zara casts Magic Missile (Lv 1) with `_force_surge_d20: 1` → `wild_magic_surge` broadcast with table entry (slug, name, desc, d100, tides_refilled). |
+| `test_wild_magic_surge_refills_tides_of_chaos` | After surge fires with `tides_of_chaos_uses` at 0 pre-cast, a follow-up `/use_tides_of_chaos` succeeds (RAW refill on DM-triggered surge). |
+| `test_wild_magic_no_surge_on_d20_high` | `_force_surge_d20: 20` → no surge broadcast (only natural 1 triggers). |
+| `test_wild_magic_cantrip_no_surge` | Cantrip cast with `_force_surge_d20: 1` → no surge (RAW gates on Lv 1+ spell). |
+| `test_wild_magic_non_subclass_no_surge` | Default Draconic Bloodline Zara with `_force_surge_d20: 1` → no surge (subclass gate). |
 
 ### `test_wild_magic_tides.py`
 v2.99.227 — Wild Magic Sorcerer (PHB p.103) Tides of Chaos (Phase 1 of [docs/plans/wild-magic.md](../plans/wild-magic.md)). Zara Emberfire is the demo fixture; tests PATCH her subclass to "Wild Magic" + counter to 1.

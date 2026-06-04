@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.228] - 2026-06-04 — "When the d20 Comes Up One" — Wild Magic Sorcerer Surge auto-roll (Phase 2)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.6 Phase 2 of the v2.99.193 phased completion plan — Wild Magic Surge auto-roll.** Ships the post-cast d20 hook in `/cast_spell` + the 50-entry Wild Magic Surge table (RAW PHB p.104). On every Lv 1+ sorcerer-class cast by a Wild Magic Sorcerer, the server rolls d20; on natural 1, it rolls d100, maps to a table entry, broadcasts `wild_magic_surge`, and refills `sheet.tides_of_chaos_uses` to 1 (RAW: DM-triggered surge before regaining Tides also recovers Tides).
+**Description:** One data module + one /cast_spell hook + one wiki status update + one TEST_MODE escape hatch + plan-doc status bump. (1) `app/wild_magic_surge.py` — `WILD_MAGIC_SURGE_TABLE` (50 RAW PHB entries each with slug + name + desc) + `surge_entry_for_d100(n)` helper that maps a d100 roll (1-100) to a table row. (2) `/cast_spell` post-cast hook: after `spell_cast` broadcast, when `_pc_has_wild_magic(sheet, 1)` and `cslug == "sorcerer"` and `spell_level >= 1`, rolls d20; on 1, rolls d100, persists `sheet.tides_of_chaos_uses = 1`, broadcasts `wild_magic_surge` event (character_id, character_name, spell_name, spell_level, slug, name, desc, d100, tides_refilled). (3) TEST_MODE-only `_force_surge_d20` body param on `/cast_spell` reads `os.environ["TEST_MODE"]` truthy at request time so the harness can deterministically trigger the surge without seed-discovery dance. (4) Plan-doc status updated (Phase 2 ✅). One new harness test file with 5 tests.
+
+### Added
+- `app/wild_magic_surge.py` — 50-entry RAW PHB p.104 surge table + `surge_entry_for_d100()` helper.
+- `/cast_spell` post-cast Wild Magic Surge hook.
+- TEST_MODE-only `_force_surge_d20` override on `/cast_spell` for deterministic surge tests.
+- `tests/harness/test_wild_magic_surge.py` — 5 tests.
+
+### Changed
+- `docs/plans/wild-magic.md` Phase 2 marked ✅ shipped; Phase 3-5 remain ⚪.
+
+### Notes
+- **PATCH bump** — 1 data module + 1 hook + 1 test escape hatch + 5 regression tests. No schema change.
+- **Auto-rolled per the plan.** Per [docs/plans/wild-magic.md](docs/plans/wild-magic.md), v1 ships the d20 trigger as auto-rolled on every Lv 1+ sorcerer-class cast — the "GM decides when to ask" flexibility is filed. The surge broadcast names the table entry and refills Tides; the GM resolves the mechanical effect (none of the 50 entries auto-execute).
+- **Tides of Chaos refill is automatic.** When the surge fires, the hook re-fetches the caster's sheet from the DB, sets `tides_of_chaos_uses = 1`, and persists. The broadcast carries `tides_refilled: true` so the client can refresh the sheet view. This handles the RAW "DM can have you roll on the table... You then regain the use of this feature" clause.
+- **TEST_MODE escape hatch.** RAW determinism via dice seed is fragile in the test path (any intermediate `dice_mod.roll` between seeding and the surge d20 invalidates the seed). The `_force_surge_d20` body param is gated on `TEST_MODE` truthy at request time, so production behavior is unaffected — the param is silently ignored in production. Mirrors the pattern used by the v2.49.12 `/api/test/dice/seed` test-only endpoint.
+- **Phase 3-5 remain.** Bend Luck reaction (Lv 6), Controlled Chaos roll-twice (Lv 14), and Spell Bombardment damage reroll (Lv 18) are each independent follow-up commits per the plan.
+- **Pre-existing flake noted, not introduced by this commit.** `test_cast_spell_aoe.py::test_aoe_cast_without_targets_lands_pending_then_place_aoe_resolves` fails in isolation both with and without these changes — `cube` vs `sphere` shape detection regression unrelated to Wild Magic. Filed for separate diagnosis.
+- **Phase E ✅ 5.5/8.** E.3 + E.4 + E.5 + E.7 + E.8 done. E.6 advanced from Phase 1/5 to Phase 2/5. E.1 Battle Master + E.2 Eldritch Knight still ⚪.
+- **44 ships this session.**
+- **Total harness count: 1236** (was 1231 in v2.99.227).
+
+---
+
 ## [2.99.227] - 2026-06-04 — "Tides on the Wild Shore" — Wild Magic Sorcerer Tides of Chaos (Phase 1) + plan doc
 
 **Schema version:** 66

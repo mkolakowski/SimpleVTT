@@ -17041,6 +17041,80 @@ async def cast_spell(
             },
         })
 
+    # v2.99.228 — Phase E.6 Phase 2 of the v2.99.193 phased
+    # completion plan. Wild Magic Surge (Wild Magic Sorcerer Lv 1+,
+    # PHB p.103): "When you cast a sorcerer spell of 1st level or
+    # higher, the DM can have you roll a d20 immediately after. If
+    # you roll a 1, roll on the Wild Magic Surge table to create a
+    # random magical effect."
+    #
+    # v1 ships auto-rolled per the docs/plans/wild-magic.md Phase 2
+    # design — every Lv 1+ sorcerer-class cast by a Wild Magic
+    # Sorcerer triggers the d20 server-side. On a natural 1: roll
+    # d100, map to a table entry, broadcast `wild_magic_surge`, +
+    # refill `sheet.tides_of_chaos_uses` to 1 (RAW: "you also
+    # recover the use of Tides of Chaos" when the DM triggers the
+    # roll before regaining it).
+    #
+    # GM "decides when to ask" flexibility is filed.
+    if (
+        spell_level >= 1
+        and cslug == "sorcerer"
+        and _pc_has_wild_magic(sheet, 1)
+    ):
+        # TEST_MODE-only override so the harness can deterministically
+        # trigger the surge without seed-discovery dance. Read at
+        # request time so prod is unaffected.
+        _test_mode = (
+            os.environ.get("TEST_MODE", "").strip().lower()
+            in ("1", "true", "yes", "on")
+        )
+        _forced_d20 = None
+        if _test_mode:
+            _f = body.get("_force_surge_d20")
+            if isinstance(_f, int) and 1 <= _f <= 20:
+                _forced_d20 = _f
+        try:
+            _surge_d20 = (
+                _forced_d20 if _forced_d20 is not None
+                else dice_mod.roll("1d20").total
+            )
+        except Exception:
+            _surge_d20 = 0
+        if _surge_d20 == 1:
+            try:
+                _surge_d100 = dice_mod.roll("1d100").total
+            except Exception:
+                _surge_d100 = 1
+            from ..wild_magic_surge import surge_entry_for_d100
+            _surge_entry = surge_entry_for_d100(_surge_d100)
+            # Refill Tides of Chaos (RAW). Re-fetch the sheet from
+            # the live char to avoid stomping any concurrent edits.
+            _refresh = db.query(Character).filter(
+                Character.id == char.id,
+            ).first()
+            if _refresh:
+                _wm_sheet = dict(_refresh.sheet or {})
+                _wm_sheet["tides_of_chaos_uses"] = 1
+                from sqlalchemy.orm.attributes import flag_modified as _wm_flag
+                _refresh.sheet = _wm_sheet
+                _wm_flag(_refresh, "sheet")
+                db.commit()
+            await hub.broadcast(campaign_id, {
+                "type": "wild_magic_surge",
+                "data": {
+                    "character_id": char.id,
+                    "character_name": char.name,
+                    "spell_name": spell.get("name") or spell_slug,
+                    "spell_level": spell_level,
+                    "slug": _surge_entry["slug"],
+                    "name": _surge_entry["name"],
+                    "desc": _surge_entry["desc"],
+                    "d100": _surge_entry["d100"],
+                    "tides_refilled": True,
+                },
+            })
+
     # v2.97.31 — no-save buff install (Bless first). When the spell
     # has a ``_SPELL_BUFF_MAP`` entry, install the buff on each
     # resolved target and stamp a ``buff_install`` log entry under
