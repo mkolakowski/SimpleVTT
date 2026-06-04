@@ -14495,9 +14495,19 @@ async def cast_spell(
         _user_is_gm_for_range = _user_is_gm(user, campaign, db)
         _strict_for_range = bool(campaign.strict_action_economy)
         _override_range = bool(body.get("override_range"))
+        # v2.99.159 — Distant Spell metamagic. If the caster has the
+        # `metamagic-distant-pending` buff, double the range (or
+        # extend touch to 30 ft) before the gate. The pending buff
+        # is dropped after the cast so it's one-shot per RAW.
+        _distant_armed = _caster_has_distant_pending(
+            campaign_id, int(char.id),
+        )
+        _eff_range = spell.get("range") or ""
+        if _distant_armed:
+            _eff_range = _apply_distant_spell_to_range(_eff_range)
         _range_err = _check_cast_range(
             db, campaign, char,
-            spell.get("range") or "",
+            _eff_range,
             spell.get("name") or "",
             target_combatant_id_in, target_character_id_in, target_name_in,
             override_range=_override_range,
@@ -14506,6 +14516,13 @@ async def cast_spell(
         )
         if _range_err:
             return JSONResponse(status_code=409, content=_range_err)
+        # Consume the Distant Spell pending buff now that the range
+        # gate passed (or was skipped). One-shot per RAW.
+        if _distant_armed:
+            await _remove_buff(
+                campaign_id, int(char.id),
+                "metamagic-distant-pending",
+            )
 
     # v2.99.88 — Mystic Arcanum free-cast routing. When the caller
     # passes ``free_cast: true``, the spell is cast via the Warlock's
@@ -27321,15 +27338,38 @@ async def use_metamagic_distant_spell(
             "current": new_sp, "max": sp_max,
         },
     })
+
+    # v2.99.159 — install the `metamagic-distant-pending` buff so
+    # the next /cast_spell call doubles the effective range
+    # (mirror of v2.99.35 Heightened's pending-buff pattern). One-
+    # shot: dropped after consumption in /cast_spell.
+    distant_buff = {
+        "key": "metamagic-distant-pending",
+        "name": "Metamagic: Distant Spell (pending)",
+        "icon": "✨",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "metamagic-distant-spell",
+        "source_char_id": int(char.id),
+        "source_char_name": char.name,
+        "effects": {
+            "range_multiplier": 2,
+            "touch_to_ft": 30,
+        },
+        "cast_id": dt_cast_id,
+    }
+    await _install_buff(campaign_id, int(char.id), distant_buff)
+
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": char.id, "character_name": char.name,
             "feature_name": "✨ Metamagic — Distant Spell (1 SP, 2× range)",
             "feature_desc": (
-                "Distant Spell declared. Next cast: double the spell's "
-                "range (or make a touch spell 30 ft). Announce-only — "
-                "GM applies the extended range at cast time."
+                "Distant Spell armed. Next /cast_spell will double "
+                "the spell's range (or extend touch to 30 ft). The "
+                "pending buff drops on consumption."
             ),
             "source": "metamagic-distant-spell",
             "cast_id": dt_cast_id,
@@ -27344,6 +27384,74 @@ async def use_metamagic_distant_spell(
         "sp_max": sp_max,
         "cast_id": dt_cast_id,
     }
+
+
+def _caster_has_distant_pending(
+    campaign_id: int, caster_char_id: "int | None",
+) -> bool:
+    """v2.99.159 — return True when the caster's combatant carries
+    a `metamagic-distant-pending` buff. Mirror of v2.99.35's
+    `_caster_has_heightened_pending`. Called by /cast_spell BEFORE
+    the range-enforcement gate to apply the v2.99.159 Distant
+    Spell range modification.
+    """
+    if not caster_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != caster_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "metamagic-distant-pending":
+                return True
+        return False
+    return False
+
+
+def _apply_distant_spell_to_range(range_str: str) -> str:
+    """v2.99.159 — modify a spell's range string for Distant Spell.
+    RAW (PHB p.102):
+      - Range >= 5 ft → double the range
+      - Range "Touch" / "5 ft" treated as touch → 30 ft
+      - Range "Self" / "Self (...)" / "Special" → unchanged
+      - Range with a slash (thrown weapons "30/120 ft") → double
+        the first numeric value only
+
+    Returns the modified range_str. Used by /cast_spell before
+    `_check_cast_range` to expand the gate.
+    """
+    if not range_str:
+        return range_str
+    raw = range_str.strip()
+    rl = raw.lower()
+    # Touch → 30 ft.
+    if rl == "touch":
+        return "30 ft"
+    # Self / Special / Sight / Unlimited — no range to extend.
+    if rl.startswith("self") or rl in {"special", "sight", "unlimited"}:
+        return range_str
+    # Numeric parse: extract the leading integer (ft).
+    import re as _re_dist
+    m = _re_dist.match(r"^\s*(\d+)\s*(/\s*\d+)?\s*ft\b", raw, _re_dist.IGNORECASE)
+    if not m:
+        return range_str
+    try:
+        primary = int(m.group(1))
+    except (TypeError, ValueError):
+        return range_str
+    doubled = primary * 2
+    # Re-build: preserve any "/N" secondary segment after the
+    # primary doubling (thrown weapons keep their long range
+    # unchanged — RAW Distant Spell is for spells, but the helper
+    # is conservative).
+    if m.group(2):
+        secondary = m.group(2).strip().lstrip("/").strip()
+        return f"{doubled}/{secondary} ft"
+    return f"{doubled} ft"
 
 
 # ----------- API: Metamagic Heightened Spell (Sorcerer Lv 3+) ----------

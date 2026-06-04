@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.159] - 2026-06-03 — "Reach Across the Map" — Distant Spell metamagic gets actual range-doubling mechanics
+
+**Schema version:** 65
+**Commit summary:** **Layer mechanical wiring on top of the v2.99.34 announce-only `/use_metamagic_distant_spell` so the next `/cast_spell` actually doubles the spell's range gate.** Pre-v2.99.159 Distant Spell was announce-only — the SP was decremented and a feature_used broadcast fired, but the range extension was GM-adjudicated at cast time. v2.99.159 installs a `metamagic-distant-pending` buff on the caster, hooks into `/cast_spell` to consume it BEFORE the v2.49.76 `_check_cast_range` gate (doubling the effective range via the new `_apply_distant_spell_to_range` helper), and drops the buff one-shot after the gate. Same pending-buff pattern as v2.99.35 Heightened Spell — the existing announce-only test surface is preserved, and the mechanical layer is additive.
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — `/use_metamagic_distant_spell` now installs a `metamagic-distant-pending` buff after the SP decrement. Buff carries `effects.range_multiplier: 2` + `effects.touch_to_ft: 30` + `cast_id` for undo. (2) New helper `_caster_has_distant_pending(campaign_id, caster_char_id)` — mirror of `_caster_has_heightened_pending`. Returns True if the buff is on the caster's combatant. (3) New helper `_apply_distant_spell_to_range(range_str)` — modifies a spell's range string: "Touch" → "30 ft", "N ft" → "(N*2) ft", "Self" / "Special" / "Sight" / "Unlimited" → unchanged. Handles slashed ranges ("30/120 ft") by doubling the primary value. (4) `/cast_spell` — before the existing `_check_cast_range` call, consults `_caster_has_distant_pending`. If armed, computes the effective range via the helper, passes that into the gate. After the gate passes (range OK), drops the buff via `_remove_buff` (one-shot per RAW). (5) `tests/harness/test_metamagic_distant_install.py` — 3 regression tests covering the install + endpoint return-shape preservation.
+
+### Added
+- `metamagic-distant-pending` buff install in `/use_metamagic_distant_spell`.
+- `_caster_has_distant_pending(campaign_id, caster_char_id)` helper.
+- `_apply_distant_spell_to_range(range_str)` helper.
+- `/cast_spell` Distant Spell hook: consult helper → modify range → consume buff after gate.
+- `tests/harness/test_metamagic_distant_install.py` — 3 tests: declaring installs the pending buff on Zara's combatant; cast cycle exercises the consume path; endpoint return shape (sp_cost, sp_remaining, cast_id) preserved end-to-end.
+
+### Changed
+- `/use_metamagic_distant_spell`'s feature_used description updated from "Announce-only — GM applies the extended range at cast time" to "Distant Spell armed. Next /cast_spell will double the spell's range (or extend touch to 30 ft). The pending buff drops on consumption."
+
+### Notes
+- **PATCH bump** — endpoint extension + two helpers + integration hook + 3 tests. No schema change. Backward-compatible with the v2.99.34 announce-only tests (the SP decrement + broadcast still fire identically).
+- **Why the buff approach.** The v2.99.35 Heightened Spell pattern is the established way to thread a one-shot metamagic effect from declaration to consumption. Mirror for Distant ensures consistency: future metamagic ships (Quickened with mechanical wiring, Subtle's per-cast hook, etc.) can follow the same pending-buff convention.
+- **What's filed.** (1) End-to-end range expansion test with a positioned target token outside the native range but inside the doubled range — requires a map fixture + Zara as a non-GM caller (GM bypasses range checks). (2) Wire the Distant pending consume into `/cast_<spell>` family endpoints (cast_slow, cast_polymorph, etc.) — today only `/cast_spell` reads the buff; per-spell endpoints would need to check the buff before their own range gates if they had one (most don't enforce range at the cast layer today). (3) The "doubles touch to 30 ft" path needs an `/cast_spell` test where the spell's authored range is "Touch" — Zara's cantrip list would need a Touch spell to exercise.
+- **Metamagic mechanical-wiring status.** Five metamagics now have mechanical wiring beyond the announce-only baseline: Empowered (re-roll damage dice), Heightened (disadvantage on save), Careful (auto-pass protected allies), Twinned (announce-only still — duplicating the spell at the cast layer is filed), Distant (range doubling, v2.99.159). Extended and Subtle remain announce-only.
+- **Total harness count: 1059** (was 1056 in v2.99.158).
+
+---
+
 ## [2.99.158] - 2026-06-03 — "Pain Breaks the Spell" — Break-on-damage hook closes the v2.99.156 filed item
 
 **Schema version:** 65
