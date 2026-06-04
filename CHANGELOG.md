@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.176] - 2026-06-03 — "Make It Impossible" — Bump test WIS to 50 for guaranteed save pass
+
+**Schema version:** 66
+**Commit summary:** **Fix the v2.99.175 `test_save_pass_skips_concentration_anchor` test flakiness.** The original test PATCHed Krieger's WIS to 30 (mod +10) hoping for a guaranteed save pass. With Krieger's stock prof_bonus +3 + the DC 14 target, the math is min(1+13, 14) — d20=1 yields a fail. Bumping WIS to 50 (mod +20) makes the math min(1+20, 14) — always passes regardless of dice. Single test edit.
+
+### Fixed
+- v2.99.175 test_save_pass_skips_concentration_anchor — now deterministic instead of dice-flake-dependent.
+
+### Notes
+- **PATCH bump** — test-only fix. No production code change.
+- **Total harness count: 1096** (unchanged from v2.99.175).
+
+---
+
 ## [2.99.175] - 2026-06-03 — "The Wisdom to Resist" — Polymorph WIS save for unwilling targets
 
 **Schema version:** 66

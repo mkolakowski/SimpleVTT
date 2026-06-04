@@ -151,18 +151,19 @@ async def test_willing_target_no_save(
 async def test_save_pass_skips_concentration_anchor(
     gm_client, thalindra_with_l4_slot, roster,
 ):
-    """Rig a save pass by PATCHing Krieger's WIS to 30 (impossibly
-    high) and his WIS save to proficient. Save total will exceed
-    any DC. Verify the concentration anchor is NOT installed.
+    """Rig a guaranteed save pass by PATCHing Krieger's WIS to 50
+    (impossibly high — save mod ≈ +20, min total 21 > DC). Verify
+    the concentration anchor is NOT installed.
     """
     thalindra = thalindra_with_l4_slot
     krieger = roster["Krieger Stonefist"]
-    # Read Krieger's current sheet via roster (proxy — we PATCH
-    # what we need to rig the save).
+    # WIS 50 + prof True → save mod >= 20. Min d20=1 → total=21.
+    # DC max for an L5 wizard is 14 (8 + 3 prof + 3 INT mod). Total
+    # always passes regardless of dice.
     await gm_client.patch(
         f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-fields",
         json={
-            "abilities": {"WIS": 30},
+            "abilities": {"WIS": 50},
             "saving_throws": {"WIS": True},
         },
     )
