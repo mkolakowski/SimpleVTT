@@ -33112,6 +33112,182 @@ async def use_flurry_of_blows(
 
 # ----------- API: Wholeness of Body (Monk Way of the Open Hand Lv 6) -----------
 
+@router.post("/api/campaign/{campaign_id}/use_empty_body")
+async def use_empty_body(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.209 — Phase F.2 cont'd of the v2.99.193 phased
+    completion plan. Empty Body (Monk Lv 18+, PHB p.79). RAW:
+    "You can use your action to spend 4 ki points to become
+    invisible for 1 minute. During that time, you also have
+    resistance to all damage but force damage."
+
+    Body: ``{character_id, override?}``.
+
+    Validates Monk class + level >= 18 + ki >= 4 + action slot.
+    Decrements ki by 4, installs an `empty-body-active` buff
+    with 10-round duration (1 minute), `effects.invisible: True`,
+    and `effects.resistance_to: [acid, bludgeoning, cold, fire,
+    lightning, necrotic, piercing, poison, psychic, radiant,
+    slashing, thunder]` (all 12 RAW damage types except force).
+    Marks the action slot + broadcasts feature_used +
+    resource_update + buff_update.
+
+    The astral projection variant (8 ki) is filed for a future
+    follow-up — the astral plumbing is substantially larger
+    (cross-plane state, separate sheet for the projection, etc.)
+    and out of v1 scope.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "monk", "got": cls or "",
+        })
+    monk_lv = _monk_level_from_sheet(sheet)
+    if monk_lv < 18:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 18, "got": monk_lv,
+        })
+
+    # Ki resource: must have >= 4.
+    resources = list(sheet.get("resources") or [])
+    ki_idx = -1
+    ki_row = None
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "ki-points":
+            ki_row = dict(r); ki_idx = i; break
+    if ki_row is None:
+        return JSONResponse(status_code=404, content={
+            "error": "resource_missing", "label": "Ki Points",
+        })
+    ki_cur = int(ki_row.get("current") or 0)
+    ki_max = int(ki_row.get("max") or 0)
+    if ki_cur < 4:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_ki", "required": 4, "got": ki_cur,
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget", "slot": "action",
+            "char_name": char.name, "source": "empty-body",
+            "label": "Empty Body", "strict": strict,
+        })
+
+    # Decrement ki.
+    ki_row["current"] = ki_cur - 4
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install the buff. Resistance covers all 12 RAW damage types
+    # except force (RAW: "resistance to all damage but force").
+    empty_body_buff = {
+        "key": "empty-body-active",
+        "name": "Empty Body — Invisible",
+        "icon": "👻",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "empty-body",
+        "source_char_id": char.id,
+        "effects": {
+            "invisible": True,
+            "resistance_to": [
+                "acid", "bludgeoning", "cold", "fire", "lightning",
+                "necrotic", "piercing", "poison", "psychic", "radiant",
+                "slashing", "thunder",
+            ],
+        },
+        "desc": (
+            "Invisible for 1 minute. Resistance to all damage "
+            "except force damage. 4 ki / 1 action."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, empty_body_buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "👻 Empty Body — Invisible + Resistance",
+            "feature_desc": (
+                f"{char.name} spent 4 ki to become invisible for 1 "
+                f"minute + gain resistance to all damage except "
+                f"force damage. (Monk Lv 18+ class feature.)"
+            ),
+            "source": "empty-body",
+            "ki_spent": 4,
+            "remaining": ki_cur - 4,
+            "max": ki_max,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "ki-points",
+            "current": ki_cur - 4,
+            "max": ki_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "ki_spent": 4,
+        "remaining": ki_cur - 4,
+        "max": ki_max,
+        "buff_installed": True,
+        "over_budget": was_used,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_wholeness_of_body")
 async def use_wholeness_of_body(
     campaign_id: int,

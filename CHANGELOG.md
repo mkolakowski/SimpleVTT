@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.209] - 2026-06-04 — "Vanish Into Ki" — `/use_empty_body` endpoint (Monk Lv 18)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.2 cont'd of the v2.99.193 phased completion plan — Empty Body.** RAW PHB p.79: "Beginning at 18th level, you can use your action to spend 4 ki points to become invisible for 1 minute. During that time, you also have resistance to all damage but force damage. Additionally, you can spend 8 ki points to cast the astral projection spell, without needing material components." v2.99.209 ships the 4-ki invisible variant. The 8-ki astral projection variant is filed for a future follow-up (cross-plane plumbing is out of v1 scope).
+**Description:** One new endpoint at `/api/campaign/{cid}/use_empty_body`. Body: `{character_id, override?}`. Validates Monk class + level >= 18 + `ki-points` resource >= 4 + Phase 4 action slot gate. Atomically decrements ki by 4, installs an `empty-body-active` buff with `duration_rounds: 10` (1 minute), `effects.invisible: True`, and `effects.resistance_to: [acid, bludgeoning, cold, fire, lightning, necrotic, piercing, poison, psychic, radiant, slashing, thunder]` (all 12 RAW damage types except force). Marks the action slot + broadcasts feature_used + resource_update. Kael Brightleaf is the demo fixture; tests PATCH her Lv 7 → 18 + seed ki-points 5/15. One new harness test file with 3 tests: happy path (ki 5 → 1 + buff installed), level gate (Lv 7 → 409), ki gate (Lv 18 + ki 3 → 409).
+
+### Added
+- `/api/campaign/{cid}/use_empty_body` endpoint.
+- `empty-body-active` buff installation with invisible + 12-type resistance.
+- `tests/harness/test_use_empty_body.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 3 regression tests. No schema change.
+- **Why 12 damage types instead of "all" wildcard.** RAW: "resistance to all damage but force damage." The existing `_resistance_halve` engine supports `resistance_to: ["all"]` wildcard but no "all except X" pattern. v1 enumerates the 12 RAW damage types (PHB) so force damage still applies normally. Future work could extend the engine with a `resistance_to_all_except: ["force"]` field.
+- **Astral projection variant filed.** The 8-ki variant casts Astral Projection RAW. Astral plumbing (cross-plane state, separate sheet, party-of-N projection) is substantially larger than the v1 endpoint scope; filed as a follow-up.
+- **Phase F.2 ✅ 2/4.** Diamond Soul (v2.99.208) + Empty Body (v2.99.209) shipped. Still ⚪: Perfect Self (Lv 20 — regain 4 ki on initiative when at 0), Diamond Soul reroll-on-fail (1 ki cost, sibling of Indomitable Reroll).
+- **Total harness count: 1163** (was 1160 in v2.99.208).
+
+---
+
 ## [2.99.208] - 2026-06-04 — "Diamond Soul" — Diamond Soul (Monk Lv 14)
 
 **Schema version:** 66
