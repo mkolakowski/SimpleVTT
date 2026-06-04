@@ -25384,6 +25384,35 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_wild_magic(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.227 — RAW Wild Magic (Sorcerer subclass, PHB p.103):
+    Wild Magic Surge + Tides of Chaos (Lv 1), Bend Luck (Lv 6),
+    Controlled Chaos (Lv 14), Spell Bombardment (Lv 18).
+
+    Returns True when the PC is a Sorcerer with subclass slug
+    containing "wild magic" + meets `min_level`. Gates each
+    Wild Magic-specific endpoint.
+
+    Phase E.6 of the v2.99.193 phased completion plan. Phase 1
+    (Tides of Chaos) ships in v2.99.227; Phases 2–5 deferred —
+    see docs/plans/wild-magic.md.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        has_sorc = any(
+            (entry.get("class") or "").strip().lower() == "sorcerer"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_sorc:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "wild magic" not in subclass:
+        return False
+    return _sorcerer_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_berserker_path(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.226 — RAW Path of the Berserker features (Barbarian,
     PHB p.49): Frenzy (Lv 3), Mindless Rage (Lv 6 — already wired
@@ -36582,6 +36611,135 @@ async def use_intimidating_presence(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_tides_of_chaos")
+async def use_tides_of_chaos(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.227 — Phase E.6 Phase 1 of the v2.99.193 phased
+    completion plan. Tides of Chaos (Wild Magic Sorcerer Lv 1+,
+    PHB p.103): "Starting at 1st level, you can manipulate the
+    forces of chance and chaos to gain advantage on one attack
+    roll, ability check, or saving throw. Once you do so, you
+    must finish a long rest before you can use this feature
+    again. Any time before you regain the use of this feature,
+    the DM can have you roll on the Wild Magic Surge table
+    immediately after you cast a sorcerer spell of 1st level or
+    higher. You then regain the use of this feature."
+
+    Body: ``{character_id}``.
+
+    Validates Wild Magic Sorcerer Lv 1+ + `sheet.tides_of_chaos_uses
+    >= 1`. Decrements the counter + installs a `tides-of-chaos-active`
+    buff with `effects.next_roll_advantage: True` +
+    `consume_on_d20_roll: True` (same shape as the v2.99.214 Hide in
+    Plain Sight buff that the `/roll` consumer picks up). Broadcasts.
+
+    See docs/plans/wild-magic.md for the Phase 2+ roadmap (Wild
+    Magic Surge auto-roll, Bend Luck reaction, Controlled Chaos,
+    Spell Bombardment).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_wild_magic(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "wild magic sorcerer lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _sorcerer_level_from_sheet(sheet),
+        })
+
+    uses = int(sheet.get("tides_of_chaos_uses") or 0)
+    if uses <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Tides of Chaos",
+        })
+
+    sheet["tides_of_chaos_uses"] = uses - 1
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    tides_buff = {
+        "key": "tides-of-chaos-active",
+        "name": "Tides of Chaos — advantage on next roll",
+        "icon": "🎲",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "tides-of-chaos",
+        "source_char_id": char.id,
+        "effects": {
+            "next_roll_advantage": True,
+            "consume_on_d20_roll": True,
+        },
+        "desc": (
+            "Tides of Chaos: advantage on the next attack roll, "
+            "ability check, or saving throw. Consumed on the "
+            "next d20 roll."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, tides_buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🎲 Tides of Chaos — advantage on next roll",
+            "feature_desc": (
+                f"{char.name} bends the tides of chaos for "
+                f"advantage on the next attack, check, or save. "
+                f"Refills on a long rest. (Wild Magic Sorcerer "
+                f"Lv 1+ class feature.)"
+            ),
+            "source": "tides-of-chaos",
+            "uses_remaining": uses - 1,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "tides-of-chaos",
+        "uses_remaining": uses - 1,
+        "buff_installed": True,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/select_hunters_prey")
 async def select_hunters_prey(
     campaign_id: int,
@@ -42370,6 +42528,12 @@ async def rest_character(
                 _random_portent.randint(1, 20)
                 for _ in range(_portent_count)
             ]
+        # v2.99.227 — Tides of Chaos (Wild Magic Sorcerer Lv 1+)
+        # long-rest refill. RAW: "you must finish a long rest
+        # before you can use this feature again." Counter goes to
+        # 1 regardless of pre-rest value (RAW caps at 1 use).
+        if _pc_has_wild_magic(sheet, 1):
+            sheet["tides_of_chaos_uses"] = 1
         char.sheet = sheet
         # Long rest restores HP to max and clears any dying/stable state.
         # Route through the death-save state machine so the broadcast +
@@ -49386,6 +49550,11 @@ _SHEET_PATCH_KEYS = {
     # "School of Divination" without a full sheet rebuild.
     "portent_dice",
     "subclass",
+    # v2.99.227 — tides_of_chaos_uses (int 0..1). Read by
+    # /use_tides_of_chaos + the /rest long-rest refill hook.
+    # Allowlisted so the test can flip Zara's counter without a
+    # full sheet rebuild.
+    "tides_of_chaos_uses",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the
@@ -49403,6 +49572,12 @@ _CLASS_SCOPED_KEYS = {
     # would be silently undone by the next /rest call (which calls
     # normalize and recomputes top-level level from classes[].level).
     "level",
+    # v2.99.227 — subclass. Same /rest-undoes-the-PATCH dynamic as
+    # `level`: normalize_dnd5e_sheet mirrors classes[0].subclass over
+    # the top-level subclass field. With class scoping, the PATCH
+    # writes to both classes[] and top-level, so /rest's normalize
+    # leaves it alone.
+    "subclass",
 }
 
 

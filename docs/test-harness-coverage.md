@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1225 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.226, 2026-06-04).
+**Total tests:** 1231 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.227, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,17 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_wild_magic_tides.py`
+v2.99.227 — Wild Magic Sorcerer (PHB p.103) Tides of Chaos (Phase 1 of [docs/plans/wild-magic.md](../plans/wild-magic.md)). Zara Emberfire is the demo fixture; tests PATCH her subclass to "Wild Magic" + counter to 1.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_tides_of_chaos_happy_path` | Wild Magic Zara counter 1 → 200, `uses_remaining == 0`, buff installed, broadcast. |
+| `test_use_tides_of_chaos_out_of_uses` | Second invocation on the same turn → 409 `out_of_uses`. |
+| `test_use_tides_of_chaos_wrong_class` | Krieger (Barbarian) → 409 `wrong_subclass_or_level`. |
+| `test_use_tides_of_chaos_wrong_subclass` | Zara default (Draconic Bloodline) → 409 `wrong_subclass_or_level`. |
+| `test_tides_of_chaos_long_rest_refill` | Consume → /rest long → second use succeeds (counter refilled to 1). Exercises the v2.99.227 `subclass` class-scope fix that keeps the PATCH'd subclass through normalize_dnd5e_sheet. |
 
 ### `test_berserker_path.py`
 v2.99.226 — Path of the Berserker (PHB p.49) Frenzy (Lv 3) + Intimidating Presence (Lv 10). Krieger Stonefist is the demo fixture; IP test PATCHes him Lv 7 → 10.

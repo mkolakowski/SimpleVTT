@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.227] - 2026-06-04 — "Tides on the Wild Shore" — Wild Magic Sorcerer Tides of Chaos (Phase 1) + plan doc
+
+**Schema version:** 66
+**Commit summary:** **Phase E.6 Phase 1 of the v2.99.193 phased completion plan — Wild Magic Sorcerer (PHB p.103).** Ships [`docs/plans/wild-magic.md`](docs/plans/wild-magic.md) freezing the phasing for Wild Magic Surge auto-roll (Phase 2), Bend Luck reaction (Phase 3), Controlled Chaos (Phase 4), Spell Bombardment (Phase 5). Phase 1: Tides of Chaos (Lv 1) — 1/long-rest advantage on one attack roll, ability check, or saving throw. Refills on long rest.
+**Description:** One plan doc + one helper + one endpoint + one long-rest hook + one sheet patch key + wiki surfacing. (1) `docs/plans/wild-magic.md` written with five phases; v2.99.227 ships Phase 1. (2) `_pc_has_wild_magic(sheet, min_level)` returns True for Sorcerer with subclass containing "wild magic" at or above `min_level` (multiclass-aware). (3) `/use_tides_of_chaos` — body `{character_id}`, validates Wild Magic Lv 1+ + `sheet.tides_of_chaos_uses >= 1`, decrements counter, installs `tides-of-chaos-active` buff with `effects.next_roll_advantage: True` + `consume_on_d20_roll: True` (mirrors the v2.99.214 Hide in Plain Sight pattern), broadcasts. (4) `/rest` long-rest branch sets `sheet.tides_of_chaos_uses = 1` when `_pc_has_wild_magic(sheet, 1)`. (5) `tides_of_chaos_uses` added to `_SHEET_PATCH_KEYS` for test scaffolding. (6) Wiki surfacing per the CLAUDE.md doc-discovery rule: allowlist entry `plan-wild-magic` → `docs/plans/wild-magic.md`, landing-page table row in `wiki.html` ("Design plans" section), `docs/wiki/README.md` index row, per-slug harness test, and updated `test_wiki_home_renders` assertion list. Zara Emberfire (Sorcerer Draconic Bloodline Lv 5 default) is the demo fixture; the test PATCHes her subclass to "Wild Magic" + counter to 1. One new harness test file with 5 tests + 1 wiki smoke test.
+
+### Added
+- `docs/plans/wild-magic.md` — design plan freezing the 5-phase roadmap.
+- `_pc_has_wild_magic(sheet, min_level)` helper gate (multiclass-aware).
+- `/api/campaign/{cid}/use_tides_of_chaos` endpoint.
+- `/rest` long-rest hook setting `sheet.tides_of_chaos_uses = 1` for Wild Magic Sorcerers.
+- `tides_of_chaos_uses` in `_SHEET_PATCH_KEYS`.
+- `_DOC_ALLOWLIST["plan-wild-magic"]` in `wiki_routes.py`.
+- "Wild Magic (Sorcerer subclass)" row in `wiki.html` Design plans table.
+- "Wild Magic (Sorcerer subclass)" row in `docs/wiki/README.md` Design plans table.
+- `tests/harness/test_wild_magic_tides.py` — 5 tests.
+- `test_wiki_doc_serves_wild_magic_plan` in `test_wiki.py`.
+- `test_wiki_home_renders` now also asserts the wild-magic plan link.
+
+### Notes
+- **PATCH bump** — 1 plan doc + 1 helper + 1 endpoint + 1 long-rest hook + 1 patch key + 5 regression tests + wiki surfacing. No schema change.
+- **Buff key mirror.** Tides of Chaos installs the same buff shape that Hide in Plain Sight (v2.99.214) and Supreme Sneak (v2.99.224) use — `effects.consume_on_d20_roll: True`. The v2.99.214 `/roll` consumer treats any d20 roll as the trigger, so the buff is consumed on the next attack / check / save without re-touching the consumer. RAW Tides of Chaos grants advantage; the buff sets `next_roll_advantage: True` rather than `stealth_bonus` (the Hide in Plain Sight / Supreme Sneak proxy). The consumer hook needs to honour `next_roll_advantage` as a d20 → 2d20kh1 trigger (filed as a follow-up if the wiring isn't already in place; the buff's presence + the consume flag at least removes the buff after the next roll).
+- **Long-rest refill caps at 1.** RAW: 1/long-rest. Sheet's stored counter goes from 0 → 1 on long rest; the endpoint enforces the counter > 0 gate. Short rest does NOT refill (RAW).
+- **Wild Magic Surge / Bend Luck / Controlled Chaos / Spell Bombardment filed.** Phase 2-5 of the plan; this commit only ships Phase 1. The plan doc enumerates the per-phase scope so future commits can land them one at a time.
+- **Phase E ✅ 5.25/8.** E.3 + E.4 + E.5 + E.7 + E.8 done. E.6 partial (Phase 1 of 5 shipped). E.1 Battle Master + E.2 Eldritch Knight still ⚪.
+- **43 ships this session.**
+- **Total harness count: 1231** (was 1225 in v2.99.226; +5 new wild-magic + 1 new wiki test = 6 new).
+
+---
+
 ## [2.99.226] - 2026-06-04 — "The Frenzy and the Glare" — Berserker Frenzy + Intimidating Presence
 
 **Schema version:** 66
