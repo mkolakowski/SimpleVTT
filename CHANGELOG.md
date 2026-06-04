@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.173] - 2026-06-03 — "Counter the Counter" — Subtle Spell suppresses Counterspell prompt emission
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.162 filed item — Subtle Spell now actually makes Counterspell inapplicable.** Pre-v2.99.173 the v2.99.162 Subtle Spell consume broadcast included a `counterspell_immune: True` flag but no code read it. The existing v2.70.0 Phase 3b Counterspell reaction-prompt walker (`_emit_counterspell_prompts`) still emitted a `reaction_prompt(spell_cast_near)` for Subtle casts, surfacing the cast-counterspell option to nearby PCs with Counterspell on their sheets. v2.99.173 adds a `was_subtle: bool` kwarg to the walker that short-circuits emission. `/cast_spell` passes the same `_was_subtle` flag it uses for the post-cast "subtle consumed" broadcast — wires the Subtle armor end-to-end. **RAW (PHB p.228):** Counterspell requires "you see a creature within 60 feet of you casting a spell" — the V/S components ARE the visible part. No V/S → no visible cast → no Counterspell trigger.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — `_emit_counterspell_prompts` gains `was_subtle: bool = False` keyword arg. When True, the function returns 0 immediately (no prompts emitted). (2) `/cast_spell` Counterspell trigger walker call site updated to pass `was_subtle=bool(_was_subtle)` (the variable set by the v2.99.162 Subtle consume hook). (3) `tests/harness/test_counterspell_subtle_immune.py` — 2 regression tests: arm Subtle + cast → no reaction_prompt(spell_cast_near) emitted; cast WITHOUT Subtle → endpoint returns 2xx/4xx (no 500 from the prompt walker).
+
+### Added
+- `was_subtle: bool = False` kwarg on `_emit_counterspell_prompts`.
+- Subtle gate at the top of the prompt walker (short-circuits emission).
+- `/cast_spell` Counterspell walker now passes `was_subtle` from the v2.99.162 Subtle consume hook.
+- `tests/harness/test_counterspell_subtle_immune.py` — 2 tests.
+
+### Notes
+- **PATCH bump** — single-arg extension + integration + 2 tests. No schema change, no new endpoints.
+- **Why no /use_counterspell endpoint.** Counterspell was already shipped (v2.70.0 Phase 3b) as a reaction-prompt option handled by `_handle_reaction_choice`. The v2.99.173 fix is upstream of that handler — the prompt no longer surfaces for a Subtle cast, so the option never reaches the player. No need for a new endpoint.
+- **What's filed.** (1) `/npc_cast_spell` Subtle support — NPC casters don't currently consume the metamagic-subtle-pending buff (they don't have Sorcery Points), so this gate fires for PCs only. The NPC mirror would need parallel `was_subtle` plumbing. (2) Counterspell-on-Counterspell — when a Counterspell is itself countered, the chain currently breaks at the prompt layer. The chain is a v3 ship per the v2.70.0 plan.
+- **First v2.99.x ship that closes a v2.99.162 filed item** — Subtle Spell's mechanical effect (counterspell-immune) now has a downstream consumer.
+- **Total harness count: 1091** (was 1089 in v2.99.172).
+
+---
+
 ## [2.99.172] - 2026-06-03 — "The Form Snaps Back" — Polymorph concentration coupling reverts the token disguise
 
 **Schema version:** 66

@@ -4845,8 +4845,23 @@ async def _emit_counterspell_prompts(
     caster_char_id: int | None,
     caster_combatant_id: str | None,
     spell_name: str, spell_level: int, spell_slug: str,
+    *,
+    was_subtle: bool = False,
 ) -> int:
-    """Returns the count of prompts emitted (mostly for tests + logs)."""
+    """Returns the count of prompts emitted (mostly for tests + logs).
+
+    v2.99.173 — `was_subtle` (defaults to False) is set by callers
+    when the cast was made under the v2.99.162 Subtle Spell
+    metamagic. Subtle Spell casts have no verbal or somatic
+    components — RAW Counterspell requires "you see a creature
+    within 60 feet of you casting a spell," which the V/S
+    components are the visible part of. With no V/S, there's no
+    cast to see and no Counterspell trigger. When `was_subtle` is
+    True, the function short-circuits and emits no prompts at all,
+    closing the v2.99.162 filed item.
+    """
+    if was_subtle:
+        return 0
     if spell_level <= 0:
         return 0
     slug_norm = (spell_slug or "").strip().lower()
@@ -17031,6 +17046,9 @@ async def cast_spell(
     # slot available. Cantrips + the caster themselves + Counterspell
     # itself are skipped inside the helper.
     try:
+        # v2.99.173 — propagate the Subtle Spell consumed flag so the
+        # Counterspell prompt walker can short-circuit. RAW Subtle:
+        # no V/S → no visible cast → Counterspell inapplicable.
         await _emit_counterspell_prompts(
             db, campaign,
             caster_char_id=int(char.id),
@@ -17038,6 +17056,7 @@ async def cast_spell(
             spell_name=payload.get("spell_name") or (spell.get("name") or ""),
             spell_level=int(spell_level),
             spell_slug=str(spell_slug or ""),
+            was_subtle=bool(_was_subtle),
         )
     except Exception:
         pass
