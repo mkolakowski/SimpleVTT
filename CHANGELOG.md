@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.160] - 2026-06-03 — "The Echo" — Twinned Spell metamagic gets the pending-buff scaffolding
+
+**Schema version:** 65
+**Commit summary:** **Layer pending-buff wiring on top of the v2.99.33 announce-only `/use_metamagic_twinned_spell`.** Pre-v2.99.160 Twinned Spell was announce-only — the SP decremented and a feature_used broadcast fired, but the second-target cast was GM-adjudicated manually. v2.99.160 installs a `metamagic-twinned-pending` buff on the caster and wires `/cast_spell` to consume it one-shot at the start of the cast cycle. Mirror of v2.99.159 Distant Spell's pattern. **Auto-routing to the second target with the same damage roll + save DC is still filed** — the player follows up with a second `/cast_spell` call manually. This commit only adds the scaffolding so the chip strip reflects the armed state + the consume contract is in place for the eventual auto-route work.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — `/use_metamagic_twinned_spell` now installs a `metamagic-twinned-pending` buff after the SP decrement. Buff carries `effects.twin_targets: True` + `effects.spell_level` + `effects.sp_paid` + `cast_id` for undo. (2) New helper `_caster_has_twinned_pending(campaign_id, caster_char_id)` — mirror of `_caster_has_distant_pending`. (3) `/cast_spell` — drops the buff via `_remove_buff` at the start of the cast cycle (one-shot per RAW), regardless of cast outcome. (4) `tests/harness/test_metamagic_twinned_install.py` — 3 regression tests.
+
+### Added
+- `metamagic-twinned-pending` buff install in `/use_metamagic_twinned_spell`.
+- `_caster_has_twinned_pending(campaign_id, caster_char_id)` helper.
+- `/cast_spell` Twinned consume hook.
+- `tests/harness/test_metamagic_twinned_install.py` — 3 tests: declaring installs the pending buff (L2 → 2 SP cost verified); the pending buff is consumed when /cast_spell fires; backward-compatibility (sp_cost, sp_remaining, sp_max, spell_level, cast_id) shape preserved.
+
+### Changed
+- `/use_metamagic_twinned_spell`'s feature_used description updated from "announce-only — no auto-route in v1" to "armed for {spell_label}. The next /cast_spell will drop the pending buff after the cast; the player follows up with a second /cast_spell at the second target (auto-route filed)."
+
+### Notes
+- **PATCH bump** — endpoint extension + helper + integration hook + 3 tests. No schema change. Backward-compatible with existing announce-only tests.
+- **What's filed.** (1) Auto-routing to the second target. v1 still requires the player to manually trigger a second /cast_spell call at the second target. The auto-route would: (a) accept `target_combatant_id_2` on the Twinned endpoint, (b) store it on the pending buff, (c) on consume in /cast_spell, copy the cast's damage roll + save DC + target effects to the second target. Non-trivial; needs careful design around damage-application semantics for double-targets. (2) RAW validation that the spell "targets only one creature" — today the endpoint accepts any spell level and trusts the GM. A future RAW gate would reject Twinned on AoE spells (Fireball, Cone of Cold, etc.).
+- **Metamagic mechanical-wiring status (updated).** Six metamagics now have mechanical wiring beyond announce-only baseline: Empowered (re-roll damage), Heightened (disadvantage save), Careful (auto-pass protected allies), Distant (range doubling, v2.99.159), Twinned (pending-buff scaffolding, v2.99.160 — auto-route filed). Extended and Subtle remain pure announce-only.
+- **The Twinned pattern is the third pending-buff metamagic** after Heightened (v2.99.35) and Distant (v2.99.159). Establishing the convention — `metamagic-{name}-pending` buff, `_caster_has_{name}_pending` helper, `/cast_spell` consume on cycle start.
+- **Total harness count: 1062** (was 1059 in v2.99.159).
+
+---
+
 ## [2.99.159] - 2026-06-03 — "Reach Across the Map" — Distant Spell metamagic gets actual range-doubling mechanics
 
 **Schema version:** 65

@@ -14524,6 +14524,18 @@ async def cast_spell(
                 "metamagic-distant-pending",
             )
 
+    # v2.99.160 — Twinned Spell metamagic. The pending buff is
+    # installed by /use_metamagic_twinned_spell; consume it once
+    # /cast_spell starts (one-shot per RAW). v1 doesn't auto-route
+    # to the second target — the player follows up with a second
+    # /cast_spell call. The buff drop here ensures the chip strip
+    # reflects the consumed state regardless of cast outcome.
+    if _caster_has_twinned_pending(campaign_id, int(char.id)):
+        await _remove_buff(
+            campaign_id, int(char.id),
+            "metamagic-twinned-pending",
+        )
+
     # v2.99.88 — Mystic Arcanum free-cast routing. When the caller
     # passes ``free_cast: true``, the spell is cast via the Warlock's
     # Mystic Arcanum charge (PHB p.108) instead of consuming a Pact
@@ -27205,6 +27217,33 @@ async def use_metamagic_twinned_spell(
             "current": new_sp, "max": sp_max,
         },
     })
+
+    # v2.99.160 — install the `metamagic-twinned-pending` buff so
+    # the next /cast_spell call surfaces the armed-Twinned state
+    # on the caster's chip strip and the /cast_spell consume hook
+    # drops it one-shot per RAW. Mirror of v2.99.159 Distant
+    # Spell's pending-buff pattern. Auto-routing to the second
+    # target (duplicating the cast with the same damage roll +
+    # save DC) is filed.
+    twinned_buff = {
+        "key": "metamagic-twinned-pending",
+        "name": "Metamagic: Twinned Spell (pending)",
+        "icon": "✨",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "metamagic-twinned-spell",
+        "source_char_id": int(char.id),
+        "source_char_name": char.name,
+        "effects": {
+            "twin_targets": True,
+            "spell_level": spell_level,
+            "sp_paid": sp_cost,
+        },
+        "cast_id": tw_cast_id,
+    }
+    await _install_buff(campaign_id, int(char.id), twinned_buff)
+
     spell_label = f"L{spell_level}" if spell_level > 0 else "cantrip"
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
@@ -27214,10 +27253,10 @@ async def use_metamagic_twinned_spell(
                 f"✨ Metamagic — Twinned Spell ({sp_cost} SP, {spell_label})"
             ),
             "feature_desc": (
-                f"Twinned Spell declared for {spell_label}. Cast the spell "
-                f"at a single target as usual, then cast it again at a "
-                f"second creature in range (announce-only — no auto-route "
-                f"in v1)."
+                f"Twinned Spell armed for {spell_label}. The next "
+                f"/cast_spell will drop the pending buff after the cast; "
+                f"the player follows up with a second /cast_spell at the "
+                f"second target (auto-route filed)."
             ),
             "source": "metamagic-twinned-spell",
             "cast_id": tw_cast_id,
@@ -27233,6 +27272,31 @@ async def use_metamagic_twinned_spell(
         "spell_level": spell_level,
         "cast_id": tw_cast_id,
     }
+
+
+def _caster_has_twinned_pending(
+    campaign_id: int, caster_char_id: "int | None",
+) -> bool:
+    """v2.99.160 — return True when the caster's combatant carries
+    a `metamagic-twinned-pending` buff. Mirror of v2.99.159's
+    `_caster_has_distant_pending`. Used by /cast_spell to consume
+    the buff at end of cast (one-shot per RAW).
+    """
+    if not caster_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != caster_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "metamagic-twinned-pending":
+                return True
+        return False
+    return False
 
 
 # ----------- API: Metamagic Distant Spell (Sorcerer Lv 3+) ----------
