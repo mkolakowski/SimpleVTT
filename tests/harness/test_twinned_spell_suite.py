@@ -182,30 +182,75 @@ async def test_cast_hold_person_consumes_twinned(
 async def test_cast_compulsion_consumes_twinned(
     gm_client, zara_rested_with_l4, roster,
 ):
-    """Same pattern for /cast_compulsion — Twinned armed +
-    consumed."""
-    zara = zara_rested_with_l4
+    """Twinned-from-Zara, Compulsion-cast-by-Thalindra. /cast_compulsion
+    only accepts bard / wizard / warlock — RAW Sorcerers don't get
+    Compulsion. So we arm Twinned on Thalindra (Wizard) instead.
+    Demonstrates the helper fires regardless of which caster armed
+    Twinned (the helper reads pending from the casting char_id).
+    """
+    thalindra = roster["Thalindra Moonwhisper"]
     krieger = roster["Krieger Stonefist"]
-    zara_tok = f"tok_twsuite_comp_zara_{zara['id']}"
-    kri_tok = f"tok_twsuite_comp_kri_{krieger['id']}"
-    await _seed_battle(gm_client, [
-        _mkc(zara_tok, zara["id"], name=zara["name"]),
-        _mkc(kri_tok, krieger["id"], name=krieger["name"]),
-    ])
-    arm = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_twinned_spell",
+    # PATCH Thalindra with L4 slot + Compulsion.
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-fields",
         json={
-            "character_id": zara["id"],
-            "spell_level": 4,
-            "target_combatant_id_2": kri_tok,
+            "spell_slots": {"wizard": {
+                "1": {"total": 4, "used": 0},
+                "2": {"total": 3, "used": 0},
+                "3": {"total": 3, "used": 0},
+                "4": {"total": 1, "used": 0},
+            }},
+            "spells": [
+                {"name": "Compulsion", "level": 4, "_slug": "compulsion",
+                 "prepared": True, "casting_time": "1 action"},
+            ],
         },
     )
-    assert arm.status_code == 200, arm.text
+    th_tok = f"tok_twsuite_comp_th_{thalindra['id']}"
+    kri_tok = f"tok_twsuite_comp_kri_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        _mkc(th_tok, thalindra["id"], name=thalindra["name"]),
+        _mkc(kri_tok, krieger["id"], name=krieger["name"]),
+    ])
+    # Thalindra isn't a Sorcerer so use_metamagic_twinned_spell will
+    # 409 wrong_class. Instead, install the pending buff directly
+    # via the battle PUT (synthesizes the v2.99.160 install).
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": th_tok, "char_id": thalindra["id"],
+             "name": thalindra["name"], "initiative": 10,
+             "hp_current": 30, "hp_max": 30,
+             "buffs": [{
+                 "key": "metamagic-twinned-pending",
+                 "name": "Metamagic: Twinned Spell (pending)",
+                 "icon": "✨",
+                 "duration_rounds": 10,
+                 "duration_max": 10,
+                 "concentration": False,
+                 "source": "metamagic-twinned-spell",
+                 "source_char_id": thalindra["id"],
+                 "effects": {
+                     "twin_targets": True,
+                     "spell_level": 4,
+                     "sp_paid": 4,
+                     "target_combatant_id_2": kri_tok,
+                 },
+             }],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": kri_tok, "char_id": krieger["id"],
+             "name": krieger["name"], "initiative": 8,
+             "hp_current": 75, "hp_max": 75, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
     cast = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_compulsion",
         json={
-            "character_id": zara["id"],
-            "class_slug": "sorcerer",
+            "character_id": thalindra["id"],
+            "class_slug": "wizard",
             "slot_level": 4,
             "override": True,
         },
@@ -213,5 +258,5 @@ async def test_cast_compulsion_consumes_twinned(
     assert cast.status_code == 200, cast.text
     data = cast.json()
     assert data["twinned_target_combatant_id_2"] == kri_tok
-    post_keys = await _get_buff_keys(gm_client, zara["id"])
+    post_keys = await _get_buff_keys(gm_client, thalindra["id"])
     assert "metamagic-twinned-pending" not in post_keys

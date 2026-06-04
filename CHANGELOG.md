@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.182] - 2026-06-04 — "Wizard's Compulsion" — Fix v2.99.181 Compulsion test: use Thalindra (Wizard), not Zara
+
+**Schema version:** 66
+**Commit summary:** **Fix the v2.99.181 `test_cast_compulsion_consumes_twinned` test.** RAW Compulsion is only on Bard + Wizard spell lists; Sorcerer doesn't get it. `/cast_compulsion` 400s on `class_slug="sorcerer"`. The test now uses Thalindra (Wizard) as the caster. Since Thalindra isn't a Sorcerer she can't go through `/use_metamagic_twinned_spell` (wrong_class) — the test synthesizes the pending buff directly via /battle PUT (the helper reads pending from the casting char_id regardless of how it got installed). Demonstrates the helper is caster-class-agnostic.
+
+### Fixed
+- v2.99.181 test_cast_compulsion_consumes_twinned now uses the right caster class.
+
+### Notes
+- **PATCH bump** — test-only fix. No production code change.
+- **Total harness count: 1101** (unchanged from v2.99.181).
+
+---
+
 ## [2.99.181] - 2026-06-04 — "The Twin Spreads" — Wire _consume_twinned helper into /cast_slow, /cast_hold_person, /cast_compulsion
 
 **Schema version:** 66
