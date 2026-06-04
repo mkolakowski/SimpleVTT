@@ -32588,6 +32588,16 @@ async def cast_hunters_mark(
             "buff_installed_key": "hunters-mark",
         })
 
+    # v2.99.183 — Twinned Spell auto-route. Surface the second
+    # target on the response. RAW Twinned applies to Hunter's Mark
+    # (single-target bonus action). Per-target buff install on
+    # the second target is filed (the Hunter's Mark buff
+    # references one target_combatant_id; a second mark would
+    # need a parallel buff key or a list-shape effect dict).
+    _twin_target_2_hm = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
+
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
@@ -32646,6 +32656,8 @@ async def cast_hunters_mark(
         "target_name": resolved_name or target_name,
         "duration_rounds": duration_rounds,
         "duration_label": duration_label,
+        # v2.99.183 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_hm or None,
     }
 
 
@@ -32873,6 +32885,15 @@ async def cast_hex(
             "buff_installed_key": "hex",
         })
 
+    # v2.99.183 — Twinned Spell auto-route. Surface the second
+    # target on the response. RAW Twinned applies to Hex (single
+    # creature). Per-target buff install on the second target is
+    # filed (mirror of /cast_hunters_mark — Hex buff carries a
+    # single target_combatant_id in effects).
+    _twin_target_2_hex = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
+
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
@@ -32934,6 +32955,8 @@ async def cast_hex(
         "ability": ability,
         "duration_rounds": duration_rounds,
         "duration_label": duration_label,
+        # v2.99.183 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_hex or None,
     }
 
 
@@ -34511,6 +34534,12 @@ async def cast_bestow_curse(
         campaign_id, char, "bestow-curse", "Bestow Curse",
         duration_rounds=10, icon="🕷️",
     )
+    # v2.99.183 — Twinned Spell auto-route. Surfaces the second
+    # target on the response. Per-target buff install on the
+    # second target is filed alongside the v1 WIS save resolution.
+    _twin_target_2_bc = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
     await _mark_battle_economy(campaign_id, char.id, "action")
 
     invocation_tag = (
@@ -34577,6 +34606,8 @@ async def cast_bestow_curse(
         "duration_rounds": 10,
         "range_ft": 5,
         "concentration": True,
+        # v2.99.183 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_bc or None,
     }
 
 
@@ -34731,6 +34762,13 @@ async def cast_bane(
         campaign_id, char, "bane", "Bane",
         duration_rounds=10, icon="🎯",
     )
+    # v2.99.183 — Twinned Spell auto-route. Bane is multi-target
+    # (up to 3) RAW; per-target install with the v1 -1d4 penalty
+    # buff is filed. v1 surfaces the second target on the
+    # response.
+    _twin_target_2_bn = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
     await _mark_battle_economy(campaign_id, char.id, "action")
 
     invocation_tag = (
@@ -34799,6 +34837,8 @@ async def cast_bane(
         "range_ft": 30,
         "max_targets": 3,
         "concentration": True,
+        # v2.99.183 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_bn or None,
     }
 
 

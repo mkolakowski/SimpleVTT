@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.183] - 2026-06-04 — "Twinned Goes Wide" — Wire helper into /cast_hunters_mark, /cast_hex, /cast_bestow_curse, /cast_bane
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.181 follow-up — `_consume_twinned_for_second_target` is now adopted across all 4 remaining single-target cast endpoints.** v2.99.174 + v2.99.181 wired the helper into /cast_polymorph + /cast_slow + /cast_hold_person + /cast_compulsion (5 endpoints total). v2.99.183 extends to /cast_hunters_mark, /cast_hex, /cast_bestow_curse, /cast_bane. The Twinned auto-route now covers the full set of single-target / multi-target cast endpoints that ship today.
+**Description:** Five edits. (1) `/cast_hunters_mark` — helper called after the buff install. Response field added. (2) `/cast_hex` — same pattern. (3) `/cast_bestow_curse` — helper called after the concentration anchor install. Response field added. (4) `/cast_bane` — same pattern. (5) `tests/harness/test_twinned_spell_suite_2.py` — 4 regression tests, one per endpoint. Each test synthesizes the pending buff via /battle PUT (the helper reads pending from caster's char_id regardless of how it got installed) and verifies the response carries `twinned_target_combatant_id_2`.
+
+### Added
+- `_consume_twinned_for_second_target` integration in `/cast_hunters_mark`, `/cast_hex`, `/cast_bestow_curse`, `/cast_bane`.
+- `twinned_target_combatant_id_2` field on all 4 endpoints' responses.
+- `tests/harness/test_twinned_spell_suite_2.py` — 4 tests (one per endpoint).
+
+### Notes
+- **PATCH bump** — 4 endpoint extensions + 4 tests. No schema change.
+- **Per-target install on second target is still filed for all 4.** /cast_hunters_mark + /cast_hex carry single-target effect dicts on the caster's buff (not on the target); a parallel "second mark" needs a list-shape effect dict. /cast_bestow_curse needs the v1 WIS save resolution + per-target curse-effect picker. /cast_bane needs the -1d4 penalty buff on each saver.
+- **Helper coverage complete for shipped cast endpoints.** Twinned auto-route now surfaces the second target across: /cast_polymorph (v2.99.174), /cast_slow, /cast_hold_person, /cast_compulsion (v2.99.181), /cast_hunters_mark, /cast_hex, /cast_bestow_curse, /cast_bane (v2.99.183) — 8 cast endpoints. The remaining single-target candidates (/cast_hold_monster, /cast_flesh_to_stone, /cast_sleep) can adopt the helper independently with the same one-call hook.
+- **Pattern stabilized.** The 1-line `_consume_twinned_for_second_target` call + the 1-line response field = the Twinned adoption interface for any /cast_<spell> endpoint. Future cast endpoints should adopt it from the start.
+- **Total harness count: 1105** (was 1101 in v2.99.181).
+
+---
+
 ## [2.99.182] - 2026-06-04 — "Wizard's Compulsion" — Fix v2.99.181 Compulsion test: use Thalindra (Wizard), not Zara
 
 **Schema version:** 66
