@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.189] - 2026-06-04 — "The Twinned Curse" — /cast_hex Twinned mirrors v2.99.187/.188 per-target install + broadcast
+
+**Schema version:** 66
+**Commit summary:** **Apply the v2.99.187/.188 Hunter's Mark pattern to `/cast_hex`.** Closes the v2.99.187 Hex follow-up. Same shape change: (a) move `_consume_twinned_for_second_target` BEFORE the buff construction, (b) install the Hex buff with a list-shape `effects.weapon_hit_bonus_target_combatant_id` when Twinned fires + a new top-level `target_combatant_ids`, (c) extend the install `feature_used` broadcast to name both targets + surface `target_names` / `twinned_target_combatant_id_2` / `twinned_target_name`. The weapon-hit rider consumer at line ~21498 already accepts list-or-string (v2.99.187), so no shared-code changes were needed.
+**Description:** Three edits in `app/routes/tabletop_routes.py::cast_hex`. (1) Moved Twinned helper to just after target resolution; computed `_rider_targets_hex`, `_all_target_ids_hex`, `_second_target_name_hex`, `_display_targets_hex` as list-or-string based on whether Twinned fired. (2) Built Hex buff with list-shape rider + new `target_combatant_ids` top-level field + `_display_targets_hex` in the desc. (3) Install broadcast updated: `feature_name` + `feature_desc` name both targets; new `target_names` / `twinned_target_combatant_id_2` / `twinned_target_name` payload fields. One new harness test file with two regression tests covering (a) Twinned → list-shape rider + dual-name broadcast, (b) no-Twinned control → single-string rider + single-name broadcast.
+
+### Added
+- List-shape rider + `target_combatant_ids` on the Hex buff (mirrors v2.99.187 Hunter's Mark).
+- `target_names`, `twinned_target_combatant_id_2`, `twinned_target_name` fields on the Hex install `feature_used` broadcast (mirrors v2.99.188 Hunter's Mark).
+- `tests/harness/test_hex_twinned_install.py` — 2 tests.
+
+### Changed
+- `/cast_hex` install broadcast's `feature_name` + `feature_desc` now name both targets when Twinned folds in a second target. Helper call moved to before the buff is built (was: after the install).
+
+### Notes
+- **PATCH bump** — single-endpoint shape change + 2 regression tests. No schema change. The shared weapon-hit rider consumer (line ~21498) and `_lookup_combatant_name` helper were already in place from v2.99.187/.188.
+- **Pattern stabilized for any `weapon_hit_bonus_*` effect.** Future spells with the same rider shape (none ship today; Holy Weapon at L5 would be a candidate) can adopt the same three-step pattern: move helper up, fold list-shape rider, extend broadcast.
+- **Still filed for other Twinned-capable endpoints.** `/cast_bestow_curse`, `/cast_bane`, `/cast_slow`, `/cast_hold_person`, `/cast_hold_monster`, `/cast_compulsion`, `/cast_sleep` each have different effect-dict shapes (or no rider at all) — their per-target install path is filed per endpoint's effect-dict needs.
+- **Total harness count: 1116** (was 1114 in v2.99.188).
+
+---
+
 ## [2.99.188] - 2026-06-04 — "Both Marks in the Log" — Hunter's Mark Twinned chat card names both targets
 
 **Schema version:** 66

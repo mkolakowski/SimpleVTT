@@ -32960,6 +32960,16 @@ async def cast_hex(
     )
     display_target = resolved_name or "the target"
 
+    # v2.99.189 — Twinned Spell auto-route. Consume the pending buff
+    # EARLY so the second target can be folded into the install-time
+    # buff. Mirrors the v2.99.187 Hunter's Mark pattern. The shared
+    # weapon-hit rider consumer already accepts list-or-string (the
+    # v2.99.187 edit), so this just needs the install + broadcast
+    # changes.
+    _twin_target_2_hex = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
+
     # Duration scales with slot level.
     if slot_level >= 5:
         duration_rounds = 100
@@ -32971,12 +32981,32 @@ async def cast_hex(
         duration_rounds = 100
         duration_label = "1h"
 
+    # v2.99.189 — list-shape rider + descriptor when Twinned fired.
+    _rider_targets_hex = (
+        [target_combatant_id, _twin_target_2_hex]
+        if _twin_target_2_hex
+        else target_combatant_id
+    )
+    _all_target_ids_hex = (
+        [target_combatant_id, _twin_target_2_hex]
+        if _twin_target_2_hex
+        else [target_combatant_id] if target_combatant_id else []
+    )
+    _second_target_name_hex = (
+        _lookup_combatant_name(campaign_id, _twin_target_2_hex)
+        if _twin_target_2_hex else ""
+    )
+    _display_targets_hex = (
+        f"{display_target} + {_second_target_name_hex or 'a second target'}"
+        if _twin_target_2_hex else display_target
+    )
     buff = {
         "key": "hex",
         "name": "Hex",
         "icon": "🕷️",
         "source_caster_id": None,
         "target_combatant_id": target_combatant_id,
+        "target_combatant_ids": _all_target_ids_hex,
         "target_character_id": target_character_id,
         "target_name": resolved_name or target_name,
         "duration_rounds": duration_rounds,
@@ -32986,12 +33016,12 @@ async def cast_hex(
         "effects": {
             "weapon_hit_bonus_dice": "1d6",
             "weapon_hit_bonus_damage_type": "necrotic",
-            "weapon_hit_bonus_target_combatant_id": target_combatant_id,
+            "weapon_hit_bonus_target_combatant_id": _rider_targets_hex,
             "disadvantage_on_ability_check": ability,
         },
         "desc": (
             f"Concentration ({duration_label}). +1d6 necrotic on weapon/spell "
-            f"hits against {display_target}. Disadvantage on {ability} checks."
+            f"hits against {_display_targets_hex}. Disadvantage on {ability} checks."
         ),
     }
     # v2.97.32 — snapshot before install, log buff_install if it took.
@@ -33009,15 +33039,6 @@ async def cast_hex(
             "buff_installed_key": "hex",
         })
 
-    # v2.99.183 — Twinned Spell auto-route. Surface the second
-    # target on the response. RAW Twinned applies to Hex (single
-    # creature). Per-target buff install on the second target is
-    # filed (mirror of /cast_hunters_mark — Hex buff carries a
-    # single target_combatant_id in effects).
-    _twin_target_2_hex = await _consume_twinned_for_second_target(
-        campaign_id, int(char.id),
-    )
-
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
@@ -33034,22 +33055,32 @@ async def cast_hex(
     )
     caster_color = char.color or player_color
 
+    # v2.99.189 — name both targets in the chat card when Twinned
+    # folded in a second target. Mirrors the v2.99.188 Hunter's
+    # Mark broadcast extension.
+    _target_names_list_hex = [display_target] + (
+        [_second_target_name_hex or "a second target"]
+        if _twin_target_2_hex else []
+    )
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": char.id,
             "character_name": char.name,
             "user_color": caster_color,
-            "feature_name": f"🕷️ Hex ({ability}) → {display_target}",
+            "feature_name": f"🕷️ Hex ({ability}) → {_display_targets_hex}",
             "feature_desc": (
                 f"Bonus action. Concentration ({duration_label}). +1d6 necrotic "
-                f"on hits against {display_target}. Disadvantage on {ability} "
+                f"on hits against {_display_targets_hex}. Disadvantage on {ability} "
                 f"checks. L{slot_level} slot."
             ),
             "source": "hex",
             "cast_id": hex_cast_id,
             "target_character_id": target_character_id,
             "target_name": resolved_name or target_name,
+            "target_names": _target_names_list_hex,
+            "twinned_target_combatant_id_2": _twin_target_2_hex or None,
+            "twinned_target_name": _second_target_name_hex or None,
             "ability": ability,
             "over_budget": was_used,
             "over_budget_slot": "bonus" if was_used else "",
