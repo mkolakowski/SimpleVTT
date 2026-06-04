@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.192] - 2026-06-04 — "Goblin in the Mirror" — Reactivate v2.99.180 NPC Polymorph WIS test
+
+**Schema version:** 66
+**Commit summary:** **Un-skip the v2.99.180 NPC-target WIS save regression test by fixing the wrong template-list endpoint URL.** v2.99.180 production code (the NPC-template-side WIS save mod read via `_monster_template_to_sheet` + `_resolve_stat_modifier`) shipped + works against the live container — but the harness test's `_find_token_template_id` helper called `/api/campaign/{cid}/token-templates` (which 404s; the real endpoint is `/templates`), then silently `pytest.skip`'d. The NPC-target WIS save path was production-shipped without live regression coverage. v2.99.192 corrects the URL + the response-shape parsing (the endpoint returns a bare list, not `{"templates": [...]}`) so the test now exercises the v2.99.180 NPC branch end-to-end against the Goblin Captain seeded in the demo.
+**Description:** Two edits in `tests/harness/test_polymorph_npc_wis_save.py::_find_token_template_id`. (1) URL changed from `/api/campaign/{cid}/token-templates` to `/api/campaign/{cid}/templates`. (2) Response parsing now handles both bare-list and `{"templates": [...]}` shapes (only the bare list is used today; the dict branch is defensive in case the contract changes). No production code change. The Goblin Captain template seeded in `demo_seed.py` provides the WIS template fixture; the test does substring match on "goblin" which finds it.
+
+### Fixed
+- `test_unwilling_npc_target_save_rolled` no longer skips due to a wrong template-list URL. v2.99.180 NPC-side WIS save path is now in the regression net.
+
+### Notes
+- **PATCH bump** — test-only fix. No production code change.
+- **The skip pattern was dangerous.** A `pytest.skip` based on a "no goblin template" condition that was actually a 404 silently green'd the suite — exactly the kind of false-positive the harness is supposed to prevent. Worth a check on other tests with similar conditional-skip patterns.
+- **Total harness count: 1119** (unchanged; v2.99.180 test was already counted but was a SKIP — now it's a PASS, but the test-count line tracks file lines not pass/skip).
+
+---
+
 ## [2.99.191] - 2026-06-04 — "The PC Cascade" — /battle PUT PC concentration cascade mirrors v2.99.185
 
 **Schema version:** 66

@@ -72,14 +72,21 @@ async def thalindra_with_l4_slot(gm_client, roster):
 async def _find_token_template_id(gm_client, name_hint="goblin"):
     """Look up the first token template matching name_hint
     (case-insensitive substring). Returns the template id or
-    None.
+    None. v2.99.192 — endpoint is `/templates` (bare list
+    response), not `/token-templates` (the pre-fix call 404'd
+    so the test silently skipped).
     """
     r = await gm_client.get(
-        f"/api/campaign/{CAMPAIGN_ID}/token-templates",
+        f"/api/campaign/{CAMPAIGN_ID}/templates",
     )
     if r.status_code != 200:
         return None
-    for t in r.json().get("templates") or []:
+    payload = r.json()
+    # Endpoint returns a bare list of {id, name, ...} dicts.
+    items = payload if isinstance(payload, list) else (
+        payload.get("templates") or []
+    )
+    for t in items:
         if name_hint.lower() in (t.get("name") or "").lower():
             return t.get("id")
     return None
