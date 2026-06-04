@@ -41881,6 +41881,39 @@ async def update_battle(
     _prev_battle = hub.get_battle(campaign_id) or {}
     _prev_turn = _prev_battle.get("turn_index") if _prev_battle else None
     _new_turn = state.get("turn_index")
+
+    # v2.99.185 — NPC concentration-drop auto-cascade. Closes a
+    # v2.99.179 filed item. Walk the prev/new combatants for any
+    # NPC (no char_id) whose concentration buff was present pre-PUT
+    # but is absent post-PUT. For each, fire
+    # `_drop_paired_concentration_buffs_npc` to clean up paired
+    # target-side buffs (Polymorph reverts, condition buffs sourced
+    # from this NPC, etc.). Mirror of the v2.99.172 PC cascade
+    # which fires on PC's manual /end_buff. NPCs don't have a
+    # /end_buff; the /battle PUT is the canonical "edit NPC's
+    # buff list" entry point.
+    _npc_concentration_dropped: list[str] = []
+    _prev_combatants_by_id = {
+        c.get("id"): c for c in (_prev_battle.get("combatants") or [])
+        if c.get("id")
+    }
+    for _new_c in (state.get("combatants") or []):
+        _cid = _new_c.get("id")
+        if not _cid or _new_c.get("char_id"):
+            continue  # PC or anonymous; skip
+        _prev_c = _prev_combatants_by_id.get(_cid)
+        if not _prev_c:
+            continue
+        _prev_had_conc = any(
+            isinstance(b, dict) and bool(b.get("concentration"))
+            for b in (_prev_c.get("buffs") or [])
+        )
+        _new_has_conc = any(
+            isinstance(b, dict) and bool(b.get("concentration"))
+            for b in (_new_c.get("buffs") or [])
+        )
+        if _prev_had_conc and not _new_has_conc:
+            _npc_concentration_dropped.append(_cid)
     # v2.99.44 — Bard Lv 20 Superior Inspiration. RAW (PHB p.54): "At
     # 20th level, when you roll initiative and have no uses of
     # Bardic Inspiration left, you regain one use." Fires when the
@@ -41895,6 +41928,23 @@ async def update_battle(
     )
     hub.set_battle(campaign_id, state)
     await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+
+    # v2.99.185 — Fire the NPC concentration-drop cascade for each
+    # NPC that lost concentration via this PUT. Calling AFTER
+    # set_battle so the cascade reads the post-PUT state. Each
+    # call removes paired buffs sourced from this NPC (e.g.
+    # Polymorph reverts via the v2.99.179 hook in the same
+    # helper).
+    for _dropped_npc_cid in _npc_concentration_dropped:
+        try:
+            await _drop_paired_concentration_buffs_npc(
+                campaign_id, _dropped_npc_cid,
+            )
+        except Exception:
+            # Don't let one cascade failure block the others or
+            # the surrounding PUT response.
+            pass
+
     if _battle_just_started:
         for _c in (state.get("combatants") or []):
             _bard_cid = _c.get("char_id")

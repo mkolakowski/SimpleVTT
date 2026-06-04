@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.185] - 2026-06-04 — "The PUT Watches" — /battle PUT auto-triggers NPC concentration cleanup cascade
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.179 filed item — `/battle PUT` now detects NPC concentration buff drops and auto-fires `_drop_paired_concentration_buffs_npc`.** v2.99.179 wired the NPC mirror cascade + polymorph-active revert hook, but the only way to fire it was manually or via NPC concentration save failure. The canonical "GM edits an NPC's buff list" entry — `/battle PUT` — didn't trigger the cascade. v2.99.185 closes that path: pre-PUT, the handler snapshots NPC concentration-buff presence; post-PUT (after `hub.set_battle` + broadcast), it diffs and fires the cascade for every NPC whose concentration buff went from present → absent. Completes the full Polymorph mechanical chain for NPC casters end-to-end via the routine UI path.
+**Description:** Two edits in `app/routes/tabletop_routes.py::update_battle`. (1) **Pre-PUT diff snapshot.** Build `_prev_combatants_by_id`; iterate new state's combatants; skip PCs (have `char_id`) and anonymous (no `id`); for each NPC, compare prev's concentration-buff presence vs new's. If `prev_had_conc and not new_has_conc`, push the combatant_id onto `_npc_concentration_dropped`. (2) **Post-PUT cascade dispatch.** After `hub.set_battle + broadcast`, for each detected drop call `await _drop_paired_concentration_buffs_npc(campaign_id, _dropped_npc_cid)`. The cascade walks the campaign's roster for buffs sourced from that combatant_id and removes them — which fires the v2.99.172 revert hook for any polymorph-active markers, restoring the target's sheet + token disguise. One new harness test seeds an NPC + a PC target with a polymorph-active marker sourced from the NPC, PUTs the battle with the NPC's concentration buff removed, then verifies the PC's marker is dropped.
+
+### Added
+- `update_battle` now snapshots NPC concentration-buff presence pre-PUT and fires `_drop_paired_concentration_buffs_npc` post-PUT for each NPC whose concentration buff was dropped.
+- `tests/harness/test_battle_put_npc_concentration_cascade.py` — 1 test.
+
+### Notes
+- **PATCH bump** — one production-code change (`update_battle` diff + dispatch) + 1 harness test. No schema change.
+- **The cascade was already implemented in v2.99.179.** v2.99.185 is wiring only — connect the existing primitive to the canonical entry point. The cascade itself (PC and NPC variants) + the polymorph-active revert hook (v2.99.172) handle the actual side-effects.
+- **The Polymorph mechanical chain for NPC casters is now end-to-end via the routine UI path.** GM removes the NPC's concentration anchor via the init-tracker (which PUTs `/battle`) → v2.99.185 detects → v2.99.179 NPC cascade fires → v2.99.172 revert hook restores the target's sheet + token disguise.
+- **Filed for next iteration:** PC-side concentration drops via `/battle PUT` follow the same routine entry, but the PC mirror cascade `_drop_paired_concentration_buffs` is already invoked via `/api/.../buffs` mutations + the concentration-save endpoints. A `/battle PUT` PC mirror is filed if the routing diverges further.
+- **Total harness count: 1109** (was 1108 in v2.99.184).
+
+---
+
 ## [2.99.184] - 2026-06-04 — "The Helper at Eleven" — Twinned helper now adopted across every shipped cast endpoint
 
 **Schema version:** 66

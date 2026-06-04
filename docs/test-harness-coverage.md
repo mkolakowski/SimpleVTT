@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1108 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.184, 2026-06-04).
+**Total tests:** 1109 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.185, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1028,6 +1028,13 @@ Phase T.3e — concentration drop cascades to paired condition buffs.
 | `test_end_concentration_drops_caster_buff` | `/end_buff` on the caster's concentration removes it; paired NPC buff drop happens server-side via the cleanup helper. |
 | `test_concentration_break_emits_gm_only_log` | v2.39.0: failed CON save on damage emits a `roll`-type event with `visibility: "gm_only"` narrating "💔 NAME lost concentration on SPELL — dropped: …". |
 | `test_non_concentration_buff_removal_unaffected` | Removing Rage on Krieger (non-concentration) still works post-T.3e change. |
+
+### `test_battle_put_npc_concentration_cascade.py`
+v2.99.185 — `/battle PUT` auto-fires `_drop_paired_concentration_buffs_npc` when an NPC's concentration buff is removed via the canonical battle-edit path. Closes the v2.99.179 filed item; completes the Polymorph mechanical chain for NPC casters via the routine UI path.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_battle_put_drops_npc_concentration_buffs` | Seed NPC with `concentration-polymorph` buff + Krieger with a `polymorph-active` marker sourced from the NPC. `/battle PUT` with the NPC's concentration buff removed → the NPC-mirror cascade fires + the v2.99.172 revert hook drops Krieger's polymorph-active marker. |
 
 ### `test_buff_sheet_mirror.py`
 Phase C.3 — buffs persist to `sheet["_buffs_active"]` for cross-page visibility.
