@@ -43,6 +43,7 @@ async def test_wiki_home_renders():
     # v2.49.119: Warlock Pact Boon plan listed too.
     assert "/wiki/doc/plan-warlock-pact-boon" in resp.text
     assert "/wiki/doc/plan-wild-magic" in resp.text
+    assert "/wiki/doc/plan-eldritch-knight" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.49.168: targeting system visual guide listed.
@@ -306,6 +307,19 @@ async def test_wiki_doc_serves_unified_mini_sheet_plan():
     assert "unified mini-sheet" in resp.text.lower()
     # The plan has three ASCII mockups + a comparison matrix.
     assert "mockup" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_eldritch_knight_plan():
+    """v2.99.232: GET /wiki/doc/plan-eldritch-knight — 200 +
+    body contains the plan's H1 + the nav menu. Resolves through
+    the _DOC_ALLOWLIST to ``docs/plans/eldritch-knight.md``."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-eldritch-knight")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "eldritch knight" in resp.text.lower()
+    assert "weapon bond" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

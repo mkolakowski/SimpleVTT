@@ -45,6 +45,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Sorcery Points + Metamagic](../plans/sorcery-points-and-metamagic.md) | Markdown (design) | Contributors | 🟠 Phase 0 shipped (v2.49.120); 1-5 unstarted |
 | [Warlock Pact Boon](../plans/warlock-pact-boon.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
 | [Wild Magic (Sorcerer subclass)](../plans/wild-magic.md) | Markdown (design) | Contributors | ✅ All 5 phases shipped (v2.99.227–231) |
+| [Eldritch Knight (Fighter subclass)](../plans/eldritch-knight.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped (v2.99.232); 2-4 deferred |
 | [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
 | [Unified mini-sheet](../plans/unified-mini-sheet.md) | Markdown (design) | Contributors | ⚪ proposed · 3 mockups · Phase 1–3 unstarted |
 | [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |

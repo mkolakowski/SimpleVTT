@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.232] - 2026-06-04 — "The Bonded Blade" — Eldritch Knight Fighter Weapon Bond (Phase 1) + plan doc
+
+**Schema version:** 66
+**Commit summary:** **Phase E.2 Phase 1 of the v2.99.193 phased completion plan — Eldritch Knight Weapon Bond.** Ships [`docs/plans/eldritch-knight.md`](docs/plans/eldritch-knight.md) freezing the 4-phase roadmap for the Fighter subclass. Phase 1: Weapon Bond (Lv 3) ritual that bonds up to 2 weapons. RAW PHB p.74.
+**Description:** One plan doc + one helper + one endpoint + one sheet patch key + wiki surfacing. (1) `docs/plans/eldritch-knight.md` written with 4 phases; v2.99.232 ships Phase 1 (Weapon Bond). Phases 2-4 (War Magic, Eldritch Strike, Arcane Charge + Improved War Magic) deferred. (2) `_pc_has_eldritch_knight(sheet, min_level)` returns True for Fighter with subclass containing "eldritch knight" at or above `min_level` (multiclass-aware via `_fighter_level_from_sheet`). (3) `/use_weapon_bond` — body `{character_id, weapon_index, override?}`. Validates Eldritch Knight Lv 3+ + weapon_index in inventory range + inventory item type == "weapon". Appends weapon slug (or normalized name) to `sheet.bonded_weapons` (list[str], max 2). Returns 200 with `already_bonded: true` if the slug is already in the list (idempotent re-bond). Returns 409 `cap_reached` if already at 2 bonded weapons. Broadcasts `feature_used` (source `weapon-bond`) with `(weapon_name, weapon_slug, bonded_weapons, already_bonded)`. (4) `bonded_weapons` added to `_SHEET_PATCH_KEYS` for test scaffolding. (5) Wiki surfacing per the CLAUDE.md doc-discovery rule: allowlist entry `plan-eldritch-knight` → `docs/plans/eldritch-knight.md`, landing-page table row in `wiki.html` ("Design plans"), `docs/wiki/README.md` index row, per-slug harness test, and updated `test_wiki_home_renders` assertion list. Garrik Ironside (Fighter Champion Lv 9 default) is the demo fixture; tests PATCH his subclass to "Eldritch Knight". One new harness test file with 6 tests + 1 wiki smoke test.
+
+### Added
+- `docs/plans/eldritch-knight.md` — design plan freezing the 4-phase roadmap.
+- `_pc_has_eldritch_knight(sheet, min_level)` helper gate (multiclass-aware).
+- `/api/campaign/{cid}/use_weapon_bond` endpoint.
+- `bonded_weapons` in `_SHEET_PATCH_KEYS`.
+- `_DOC_ALLOWLIST["plan-eldritch-knight"]` in `wiki_routes.py`.
+- "Eldritch Knight (Fighter subclass)" row in `wiki.html` Design plans table.
+- "Eldritch Knight (Fighter subclass)" row in `docs/wiki/README.md` Design plans table.
+- `tests/harness/test_weapon_bond.py` — 6 tests.
+- `test_wiki_doc_serves_eldritch_knight_plan` in `test_wiki.py`.
+- `test_wiki_home_renders` now also asserts the eldritch-knight plan link.
+
+### Notes
+- **PATCH bump** — 1 plan doc + 1 helper + 1 endpoint + 1 patch key + 6 regression tests + wiki surfacing. No schema change.
+- **`weapon_index: 0` bug avoided.** First pass used `int(body.get("weapon_index") or -1)`, which collapses the legitimate `0` to `-1` and returns 400. Switched to explicit `is None` check + `int(...)` conversion in a `try/except`. Filed in code as a comment — the common Python `value or default` pitfall.
+- **Idempotent re-bond.** Calling `/use_weapon_bond` with a weapon already in `bonded_weapons` returns 200 + `already_bonded: true` (no list mutation, no cap consumption). Avoids surprising the player when they re-click a Bond button.
+- **"Can't be disarmed" + bonus-action summon filed.** v1 ships the persistence + announce. The disarm-resistance half needs a disarm action (not in SimpleVTT today); the bonus-action summon needs an "is weapon equipped?" check on attack. Both filed for follow-up commits.
+- **Phases 2-4 remain.** War Magic (Lv 7) → /attack `as_war_magic_bonus` path; Eldritch Strike (Lv 10) → save-disadvantage buff hook; Arcane Charge (Lv 15) + Improved War Magic (Lv 18) → /use_action_surge teleport + Lv 1+ spell variant. Each is a follow-up commit.
+- **Phase E ✅ 6.25/8.** E.3 + E.4 + E.5 + E.6 + E.7 + E.8 done. E.2 advanced from 0/4 → 1/4. E.1 Battle Master still ⚪.
+- **48 ships this session.**
+- **Total harness count: 1256** (was 1249 in v2.99.231; +6 new weapon-bond + 1 new wiki test = 7 new).
+
+---
+
 ## [2.99.231] - 2026-06-04 — "The Detonating Die" — Wild Magic Sorcerer Spell Bombardment (Phase 5, E.6 complete)
 
 **Schema version:** 66

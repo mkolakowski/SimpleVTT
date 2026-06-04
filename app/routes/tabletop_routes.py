@@ -25469,6 +25469,36 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_eldritch_knight(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.232 — RAW Eldritch Knight features (Fighter, PHB
+    p.74): Spellcasting + Weapon Bond (Lv 3), War Magic (Lv 7),
+    Eldritch Strike (Lv 10), Arcane Charge (Lv 15), Improved
+    War Magic (Lv 18).
+
+    Returns True when the PC is a Fighter with subclass slug
+    containing "eldritch knight" + meets `min_level` (multiclass-
+    aware). Gates each Eldritch-Knight-specific endpoint.
+
+    Phase E.2 of the v2.99.193 phased completion plan. Phase 1
+    (Weapon Bond) ships in v2.99.232; Phases 2-4 deferred — see
+    docs/plans/eldritch-knight.md.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        has_fighter = any(
+            (entry.get("class") or "").strip().lower() == "fighter"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_fighter:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "eldritch knight" not in subclass:
+        return False
+    return _fighter_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_wild_magic(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.227 — RAW Wild Magic (Sorcerer subclass, PHB p.103):
     Wild Magic Surge + Tides of Chaos (Lv 1), Bend Luck (Lv 6),
@@ -37153,6 +37183,175 @@ async def use_spell_bombardment(
         "feature": "spell-bombardment",
         "die_size": die_size,
         "extra_damage": extra,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_weapon_bond")
+async def use_weapon_bond(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.232 — Phase E.2 Phase 1 of the v2.99.193 phased
+    completion plan. Weapon Bond (Eldritch Knight Lv 3+, PHB
+    p.74): "At 3rd level, you learn a ritual that creates a
+    magical bond between yourself and one weapon... While the
+    weapon is bonded to you, you can't be disarmed of that
+    weapon unless you are incapacitated. If it is on the same
+    plane of existence, you can summon that weapon as a bonus
+    action on your turn, causing it to teleport instantly to
+    your hand. You can have up to two bonded weapons, but can
+    summon only one at a time with your bonus action."
+
+    Body: ``{character_id, weapon_index, override?}``.
+
+    Validates Eldritch Knight Lv 3+. Reads the weapon's slug or
+    name from ``sheet.inventory[weapon_index]``, appends to
+    ``sheet.bonded_weapons`` (list[str], max 2), persists,
+    broadcasts. 409 ``cap_reached`` if already at 2 bonded
+    weapons.
+
+    v1 ships the bond persistence + announce. The "can't be
+    disarmed" half is filed (no disarm action in SimpleVTT
+    today); the bonus-action summon is filed (would need an
+    "is the weapon equipped?" check on attack).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    weapon_index_raw = body.get("weapon_index")
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if weapon_index_raw is None:
+        raise HTTPException(400, "weapon_index is required")
+    try:
+        weapon_index = int(weapon_index_raw)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "weapon_index must be an integer")
+    if weapon_index < 0:
+        raise HTTPException(400, "weapon_index must be >= 0")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_knight(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "eldritch knight fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    inventory = list(sheet.get("inventory") or [])
+    if weapon_index >= len(inventory):
+        raise HTTPException(
+            400,
+            f"weapon_index {weapon_index} out of range "
+            f"(inventory has {len(inventory)} items)",
+        )
+    item = inventory[weapon_index] or {}
+    if (item.get("type") or "").lower() != "weapon":
+        raise HTTPException(
+            400,
+            f"inventory[{weapon_index}] is not a weapon",
+        )
+    weapon_name = (item.get("name") or "").strip() or f"item-{weapon_index}"
+    weapon_slug = (item.get("_slug") or weapon_name.lower().replace(" ", "-"))
+
+    bonded = list(sheet.get("bonded_weapons") or [])
+    if weapon_slug in bonded:
+        # Idempotent re-bond — return current list.
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "character_name": char.name,
+                "feature_name": f"🔗 Weapon Bond — {weapon_name} (already bonded)",
+                "feature_desc": (
+                    f"{char.name}'s bond with {weapon_name} is "
+                    f"already active. No change."
+                ),
+                "source": "weapon-bond",
+                "weapon_slug": weapon_slug,
+                "weapon_name": weapon_name,
+                "bonded_weapons": bonded,
+                "already_bonded": True,
+            },
+        })
+        return {
+            "ok": True,
+            "feature": "weapon-bond",
+            "weapon_slug": weapon_slug,
+            "bonded_weapons": bonded,
+            "already_bonded": True,
+        }
+    if len(bonded) >= 2:
+        return JSONResponse(status_code=409, content={
+            "error": "cap_reached",
+            "label": "Weapon Bond",
+            "max": 2,
+            "current": len(bonded),
+        })
+
+    bonded.append(weapon_slug)
+    sheet["bonded_weapons"] = bonded
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🔗 Weapon Bond — {weapon_name}"
+            ),
+            "feature_desc": (
+                f"{char.name} completes the hour-long ritual to "
+                f"bond {weapon_name}. The weapon can be summoned "
+                f"as a bonus action while on the same plane and "
+                f"can't be disarmed unless incapacitated. "
+                f"(Eldritch Knight Lv 3+ class feature.)"
+            ),
+            "source": "weapon-bond",
+            "weapon_slug": weapon_slug,
+            "weapon_name": weapon_name,
+            "bonded_weapons": bonded,
+            "already_bonded": False,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "weapon-bond",
+        "weapon_slug": weapon_slug,
+        "bonded_weapons": bonded,
+        "already_bonded": False,
     }
 
 
@@ -49971,6 +50170,11 @@ _SHEET_PATCH_KEYS = {
     # Allowlisted so the test can flip Zara's counter without a
     # full sheet rebuild.
     "tides_of_chaos_uses",
+    # v2.99.232 — bonded_weapons (list[str] of weapon slugs).
+    # Read by /use_weapon_bond (Eldritch Knight Lv 3+). Capped
+    # at 2 per RAW. Allowlisted so the test can reset the bond
+    # list to [] between cases.
+    "bonded_weapons",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1249 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.231, 2026-06-04).
+**Total tests:** 1256 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.232, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,18 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_weapon_bond.py`
+v2.99.232 — Eldritch Knight Fighter (PHB p.74) Weapon Bond (Phase 1 of [docs/plans/eldritch-knight.md](../plans/eldritch-knight.md)). Garrik Ironside is the demo fixture; tests PATCH his subclass to "Eldritch Knight".
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_weapon_bond_happy` | Bond Greatsword (index 0) → `bonded_weapons == ["greatsword"]` + broadcast (source `weapon-bond`). |
+| `test_use_weapon_bond_second_weapon` | Greatsword then Glaive → `bonded_weapons` length 2. |
+| `test_use_weapon_bond_cap_reached` | Two already bonded → third attempt → 409 `cap_reached` (RAW max 2). |
+| `test_use_weapon_bond_wrong_subclass` | Default Garrik (Champion) → 409 `wrong_subclass_or_level`. |
+| `test_use_weapon_bond_level_gate` | Eldritch Knight at Lv 2 (not 3+) → 409. |
+| `test_use_weapon_bond_non_weapon` | `weapon_index` pointing at Chain mail (armor) → 400. |
 
 ### `test_wild_magic_spell_bombardment.py`
 v2.99.231 — Wild Magic Sorcerer (PHB p.103) Spell Bombardment (Phase 5 of [docs/plans/wild-magic.md](../plans/wild-magic.md), final phase). Once-per-turn flag tracked via `combatant.economy.spell_bombardment_used` (mirror of Colossus Slayer's v2.60.0 flag).
