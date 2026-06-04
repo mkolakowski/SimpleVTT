@@ -25137,6 +25137,27 @@ def _target_has_elusive(
     return False
 
 
+def _pc_has_diamond_soul(sheet: "dict | None") -> bool:
+    """v2.99.208 — RAW Diamond Soul (Monk Lv 14+, PHB p.79):
+    "Beginning at 14th level, your mastery of ki grants you
+    proficiency in all saving throws."
+
+    Returns True for Monk Lv 14+. Consumed by save mod
+    calculations (e.g. cast_polymorph's unwilling-target WIS
+    save) — the PC's save gains proficiency on ANY ability,
+    not just the natively-proficient ones (Monk's natively
+    proficient saves are STR + DEX).
+
+    Phase F.2 start of the v2.99.193 phased completion plan.
+    The "spend 1 ki to reroll a failed save" half of Diamond
+    Soul is filed for a follow-up endpoint (mirror of v2.99.199
+    /use_indomitable_reroll).
+    """
+    if not sheet:
+        return False
+    return _monk_level_from_sheet(sheet) >= 14
+
+
 def _pc_has_slippery_mind(sheet: "dict | None") -> bool:
     """v2.99.206 — RAW Slippery Mind (Rogue Lv 15+, PHB p.96):
     "By 15th level, you have acquired greater mental strength.
@@ -35477,9 +35498,13 @@ async def cast_polymorph(
                     # Druid, Sorcerer, Warlock, Monk) keep firing
                     # via the explicit path; Slippery Mind adds the
                     # class-feature gate.
+                    # v2.99.208 — Diamond Soul (Monk Lv 14+) grants
+                    # proficiency in ALL saves. OR'd alongside
+                    # Slippery Mind so a multi-classed Monk/Rogue
+                    # gets both gates.
                     _wis_proficient = bool(
                         (_t_sheet.get("saving_throws") or {}).get("WIS")
-                    ) or _pc_has_slippery_mind(_t_sheet)
+                    ) or _pc_has_slippery_mind(_t_sheet) or _pc_has_diamond_soul(_t_sheet)
                     _save_mod = _wis_mod + (_t_prof if _wis_proficient else 0)
             elif _target_combatant.get("token_template_id"):
                 # v2.99.180 — NPC target. Read save mod from the

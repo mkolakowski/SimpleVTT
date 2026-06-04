@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.208] - 2026-06-04 — "Diamond Soul" — Diamond Soul (Monk Lv 14)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.2 start of the v2.99.193 phased completion plan — Diamond Soul.** RAW PHB p.79: "Beginning at 14th level, your mastery of ki grants you proficiency in all saving throws. Additionally, whenever you make a saving throw and fail, you can spend 1 ki point to reroll it and take the second result." v1 ships part 1: helper `_pc_has_diamond_soul(sheet)` for Monk Lv 14+, OR'd into the `cast_polymorph` unwilling-target WIS save mod alongside v2.99.206 Slippery Mind. Part 2 (ki-spend reroll) is filed for a follow-up endpoint that mirrors v2.99.199 `/use_indomitable_reroll`.
+**Description:** One helper + 1 OR extension. (1) `_pc_has_diamond_soul(sheet)` — Monk Lv 14+ gate. (2) `cast_polymorph`'s WIS save mod calc now OR's the existing `saving_throws.WIS` check with BOTH `_pc_has_slippery_mind` (Rogue Lv 15+) AND `_pc_has_diamond_soul`. Kael Brightleaf (Way of the Open Hand Monk Lv 7 default) is the demo fixture; the test PATCHes Lv 7 → 14 + captures the boosted save_total. One new harness test comparing baseline (Lv 7, no Diamond Soul) vs the Lv 14 case.
+
+### Added
+- `_pc_has_diamond_soul(sheet)` helper gate.
+- Diamond Soul OR into `cast_polymorph`'s WIS save mod (alongside Slippery Mind).
+- `tests/harness/test_diamond_soul.py` — 1 test.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 OR extension + 1 regression test. No schema change.
+- **Composes with Slippery Mind.** A multi-classed Monk/Rogue with Monk Lv 14+ OR Rogue Lv 15+ gets WIS save proficiency via either gate. Both helpers OR into the same `_wis_proficient` boolean.
+- **Filed for follow-up.** Diamond Soul part 2 (spend 1 ki to reroll a failed save) is a sibling endpoint to v2.99.199 `/use_indomitable_reroll` — would take a `roll_id` + decrement Kael's `ki-points` resource by 1 + reroll the d20. Same shape; filed.
+- **Other save consumers can adopt the gate.** `cast_polymorph` is the explicit `saving_throws.WIS` consumer today. Future save-roll calculation sites (Dominate Person, Charm Monster, etc.) should adopt the OR pattern with Slippery Mind + Diamond Soul.
+- **Phase F.2 start ✅ 1/4.** Diamond Soul ships. Still ⚪: Empty Body (Lv 18 — ki-spend invisibility + half-damage), Perfect Self (Lv 20 — ki regen to 4 on init).
+- **Total harness count: 1160** (was 1159 in v2.99.207).
+
+---
+
 ## [2.99.207] - 2026-06-04 — "Untouchable" — Elusive (Rogue Lv 18) — Phase F.4 ✅ COMPLETE
 
 **Schema version:** 66
