@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1112 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.187, 2026-06-04).
+**Total tests:** 1114 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.188, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1050,6 +1050,14 @@ v2.99.187 — `/cast_hunters_mark` folds the Twinned second target into the inst
 |------|-----------------|
 | `test_hunters_mark_twinned_installs_list_rider` | Rowan casts Hunter's Mark with Twinned armed + a second target seeded. Response carries `twinned_target_combatant_id_2`; Rowan's installed `hunters-mark` buff carries a list-shape `effects.weapon_hit_bonus_target_combatant_id` containing both targets + a top-level `target_combatant_ids` list mirroring both. |
 | `test_hunters_mark_no_twinned_keeps_single_rider` | Control: cast Hunter's Mark with no Twinned pending. The buff's `effects.weapon_hit_bonus_target_combatant_id` remains a single string (backward compat with pre-v2.99.187 serialized buffs + `/cast_hex`'s still-singular field). |
+
+### `test_hunters_mark_twinned_broadcast.py`
+v2.99.188 — `/cast_hunters_mark` install broadcast names both targets when Twinned fires + stamps the weapon-hit rider with `vs_combatant_id` for downstream attack-chat-card labeling.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_twinned_install_broadcast_names_both_targets` | Rowan casts Hunter's Mark with Twinned armed. The `feature_used` install broadcast's `feature_name` + `feature_desc` mention both targets, and the new metadata fields fire: `target_names` is a 2-element list, `twinned_target_combatant_id_2` matches the second target ID, `twinned_target_name` resolves to the second target's display name. |
+| `test_no_twinned_broadcast_keeps_single_target` | Control: cast without Twinned pending. The install broadcast keeps the single-target shape — `target_names` is a singleton, `twinned_target_combatant_id_2` + `twinned_target_name` are falsy. |
 
 ### `test_buff_sheet_mirror.py`
 Phase C.3 — buffs persist to `sheet["_buffs_active"]` for cross-page visibility.

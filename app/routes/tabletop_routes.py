@@ -21519,6 +21519,12 @@ def _compute_attack_auto_uplifts(
                     "breakdown": r.breakdown,
                     "damage_type": rider_type,
                     "source": b.get("key") or "buff",
+                    # v2.99.188 — stamp which target the rider fired
+                    # against so chat-card / UI can render "Hunter's
+                    # Mark (vs NAME)" without re-resolving combatant
+                    # ids. Mirrors the v2.99.187 list-shape rider
+                    # which can match either of two Twinned targets.
+                    "vs_combatant_id": target_combatant_id,
                 })
             except dice_mod.DiceParseError:
                 pass
@@ -32713,21 +32719,40 @@ async def cast_hunters_mark(
     )
     caster_color = char.color or player_color
 
+    # v2.99.188 — name both targets in the chat card when Twinned
+    # folded in a second target. v2.99.187 installed the per-target
+    # rider but the broadcast still surfaced only the primary,
+    # which hid the second mark from the chat log.
+    _second_target_name = (
+        _lookup_combatant_name(campaign_id, _twin_target_2_hm)
+        if _twin_target_2_hm else ""
+    )
+    _display_targets = (
+        f"{display_target} + {_second_target_name or 'a second target'}"
+        if _twin_target_2_hm else display_target
+    )
+    _target_names_list = [display_target] + (
+        [_second_target_name or "a second target"]
+        if _twin_target_2_hm else []
+    )
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": char.id,
             "character_name": char.name,
             "user_color": caster_color,
-            "feature_name": f"🎯 Hunter's Mark → {display_target}",
+            "feature_name": f"🎯 Hunter's Mark → {_display_targets}",
             "feature_desc": (
                 f"Bonus action. Concentration ({duration_label}). +1d6 weapon "
-                f"damage on hits against {display_target}. L{slot_level} slot."
+                f"damage on hits against {_display_targets}. L{slot_level} slot."
             ),
             "source": "hunters-mark",
             "cast_id": hm_cast_id,
             "target_character_id": target_character_id,
             "target_name": resolved_name or target_name,
+            "target_names": _target_names_list,
+            "twinned_target_combatant_id_2": _twin_target_2_hm or None,
+            "twinned_target_name": _second_target_name or None,
             "over_budget": was_used,
             "over_budget_slot": "bonus" if was_used else "",
         },

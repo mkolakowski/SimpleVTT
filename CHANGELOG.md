@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.188] - 2026-06-04 — "Both Marks in the Log" — Hunter's Mark Twinned chat card names both targets
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.187 UI follow-up — `/cast_hunters_mark` install broadcast now names both Twinned targets and stamps the weapon-hit rider with a `vs_combatant_id` for downstream UI.** v2.99.187 installed the per-target rider (list-shape `effects.weapon_hit_bonus_target_combatant_id`) but the install `feature_used` broadcast still surfaced only the primary in `feature_name` + `feature_desc`. Chat readers couldn't see that a second mark was active. v2.99.188 (a) resolves the second target's display name via `_lookup_combatant_name`, (b) renders "🎯 Hunter's Mark → PRIMARY + SECOND" in `feature_name` + matching descriptor in `feature_desc`, (c) adds new metadata fields (`target_names`, `twinned_target_name`, `twinned_target_combatant_id_2`) so chat-card clients can render structured data without text-parsing, (d) stamps each weapon-hit rider uplift with `vs_combatant_id` so future "Hunter's Mark (vs NAME)" rendering on attack chat cards is one client edit away.
+**Description:** Two edits. (1) `/cast_hunters_mark` install broadcast — resolve `_second_target_name` via `_lookup_combatant_name(campaign_id, _twin_target_2_hm)`; build `_display_targets` as "PRIMARY + SECOND" when Twinned fired; build `_target_names_list` mirroring both; add `target_names`, `twinned_target_combatant_id_2`, `twinned_target_name` to the `feature_used` payload. (2) Weapon-hit rider uplift dict at line ~21505 — added `vs_combatant_id: target_combatant_id` so an attack chat card can label which mark fired (filed for UI follow-up). One new harness test file with two regression tests covering (a) Twinned case names both + stamps the new fields, (b) no-Twinned control keeps single-target shape.
+
+### Added
+- `target_names` list field on the `/cast_hunters_mark` install broadcast.
+- `twinned_target_combatant_id_2` + `twinned_target_name` fields on the `/cast_hunters_mark` install broadcast.
+- `vs_combatant_id` on the weapon-hit rider uplift dict (for downstream attack-chat-card labeling).
+- `tests/harness/test_hunters_mark_twinned_broadcast.py` — 2 tests.
+
+### Changed
+- `/cast_hunters_mark` install broadcast's `feature_name` + `feature_desc` now name both targets when Twinned folds in a second target.
+
+### Notes
+- **PATCH bump** — 1 broadcast extension + 1 uplift-dict field + 2 regression tests. No schema change.
+- **vs_combatant_id is forward-looking.** No JS consumer reads it yet — surfacing it now means future UI work to label "Hunter's Mark (vs NAME)" on the attack chat card is a one-file frontend edit. Mirrors the convention from v2.49.230 (extra fields on the rider uplift are forward-compat).
+- **Hex still doesn't get this.** `/cast_hex`'s install broadcast follows the same single-target shape but its rider is still singular (v2.99.187 only adopted the list shape for Hunter's Mark). When `/cast_hex` adopts the per-target install pattern, the same broadcast extension applies.
+- **Total harness count: 1114** (was 1112 in v2.99.187).
+
+---
+
 ## [2.99.187] - 2026-06-04 — "The Second Mark" — Hunter's Mark Twinned installs per-target rider
 
 **Schema version:** 66
