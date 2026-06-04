@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.166] - 2026-06-03 — "Update the Snare" — Update v2.99.161 test to v2.99.163 semantics
+
+**Schema version:** 65
+**Commit summary:** **Update the v2.99.161 `test_extended_pending_consumed_by_cast_spell` test to the v2.99.163 semantics.** v2.99.161 asserted that the Extended pending was dropped by /cast_spell at start of cast (the early consume hook). v2.99.163 moved the consume into `_install_buff` so the pending stays armed until a duration buff is actually installed. v2.99.166 renames the test to `test_extended_pending_persists_when_no_duration_install` and flips the assertion — for a cantrip cast (Mage Hand, no duration buff), the pending now correctly stays armed.
+**Description:** Single edit to `tests/harness/test_metamagic_extended_install.py`: rename + flip the assertion. The test now asserts the post-v2.99.163 contract (pending persists when no duration buff is installed); the v2.99.163-onward test file `test_metamagic_extended_doubles_duration.py` carries the doubling + drop assertions for the new mechanical path.
+
+### Fixed
+- v2.99.161 test_extended_pending_consumed_by_cast_spell now aligned with v2.99.163's new semantics.
+
+### Notes
+- **PATCH bump** — test-only update. No production code change.
+- **Total harness count: 1072** (unchanged from v2.99.163).
+
+---
+
 ## [2.99.165] - 2026-06-03 — "Drop the Marker, Hold the List" — Fix v2.99.163 hook: drop the Extended pending in-place
 
 **Schema version:** 65

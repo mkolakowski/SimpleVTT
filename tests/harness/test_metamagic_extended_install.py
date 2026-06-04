@@ -90,11 +90,17 @@ async def test_extended_spell_installs_pending_buff(
     assert "metamagic-extended-pending" in keys
 
 
-async def test_extended_pending_consumed_by_cast_spell(
+async def test_extended_pending_persists_when_no_duration_install(
     gm_client, zara_rested,
 ):
-    """After declaring Extended Spell, the next /cast_spell call
-    consumes the pending buff.
+    """Post-v2.99.163: the Extended pending is no longer dropped
+    by /cast_spell early. It's now consumed as a side effect of
+    the first non-metamagic duration-buff install in the cast.
+    Mage Hand (cantrip, no duration buff) → pending stays armed.
+
+    Pre-v2.99.163 this test asserted the opposite (early consume
+    in /cast_spell). v2.99.163 moved the consume hook into
+    _install_buff and renamed this regression guard accordingly.
     """
     zara = zara_rested
     zara_tok = f"tok_ext_consume_{zara['id']}"
@@ -118,7 +124,9 @@ async def test_extended_pending_consumed_by_cast_spell(
     )
     assert cast.status_code in (200, 400, 409), cast.text
     post = await _get_buff_keys(gm_client, zara["id"])
-    assert "metamagic-extended-pending" not in post
+    # Post-v2.99.163: pending stays since no duration buff was
+    # installed by the cantrip cast.
+    assert "metamagic-extended-pending" in post
 
 
 async def test_extended_endpoint_shape_preserved(
