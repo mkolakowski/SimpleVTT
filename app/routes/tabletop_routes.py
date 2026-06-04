@@ -43821,6 +43821,80 @@ async def update_battle(
                     "remaining": 1, "max": _bi_max,
                 },
             })
+        # v2.99.210 — Phase F.2 final: Perfect Self (Monk Lv 20).
+        # RAW PHB p.79: "At 20th level, when you roll for
+        # initiative and have no ki points remaining, you regain
+        # 4 ki points." Direct mirror of the Superior Inspiration
+        # hook above. Same init-transition trigger; refunds 4 ki
+        # for Monk Lv 20+ PCs whose ki is at 0.
+        for _c_ps in (state.get("combatants") or []):
+            _monk_cid = _c_ps.get("char_id")
+            if not _monk_cid:
+                continue
+            _monk = db.query(Character).filter(
+                Character.id == int(_monk_cid),
+                Character.campaign_id == campaign_id,
+            ).first()
+            if not _monk or not _monk.sheet:
+                continue
+            _monk_sheet = dict(_monk.sheet)
+            if (_monk_sheet.get("class") or "").strip().lower() != "monk":
+                continue
+            try:
+                _monk_level_ps = int(_monk_sheet.get("level") or 0)
+            except (TypeError, ValueError):
+                _monk_level_ps = 0
+            if _monk_level_ps < 20:
+                continue
+            _monk_resources = list(_monk_sheet.get("resources") or [])
+            _ki_row_ps = None
+            _ki_idx_ps = -1
+            for _i, _r in enumerate(_monk_resources):
+                if not isinstance(_r, dict):
+                    continue
+                if (_r.get("key") or "").strip().lower() == "ki-points":
+                    _ki_row_ps = dict(_r); _ki_idx_ps = _i; break
+            if _ki_row_ps is None:
+                continue
+            _ki_cur_ps = int(_ki_row_ps.get("current") or 0)
+            _ki_max_ps = int(_ki_row_ps.get("max") or 0)
+            if _ki_cur_ps > 0 or _ki_max_ps <= 0:
+                continue
+            _new_ki = min(4, _ki_max_ps)
+            _ki_row_ps["current"] = _new_ki
+            _monk_resources[_ki_idx_ps] = _ki_row_ps
+            _monk_sheet["resources"] = _monk_resources
+            _monk.sheet = _monk_sheet
+            from sqlalchemy.orm.attributes import flag_modified as _fm_ps
+            _fm_ps(_monk, "sheet")
+            db.commit()
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": _monk.id,
+                    "key": "ki-points",
+                    "current": _new_ki, "max": _ki_max_ps,
+                },
+            })
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": _monk.id,
+                    "character_name": _monk.name,
+                    "user_color": _monk.color,
+                    "feature_name": (
+                        "☯️ Perfect Self (+4 Ki Points)"
+                    ),
+                    "feature_desc": (
+                        f"{_monk.name} rolls initiative with no ki "
+                        f"left — Perfect Self restores 4 ki "
+                        f"(Monk Lv 20+ class feature)."
+                    ),
+                    "source": "perfect-self",
+                    "granted": _new_ki,
+                    "remaining": _new_ki, "max": _ki_max_ps,
+                },
+            })
     if (
         bool(state.get("active"))
         and _prev_turn is not None

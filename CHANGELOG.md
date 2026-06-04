@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.210] - 2026-06-04 — "Perfect Self" — Perfect Self (Monk Lv 20) on init
+
+**Schema version:** 66
+**Commit summary:** **Phase F.2 cont'd of the v2.99.193 phased completion plan — Perfect Self.** RAW PHB p.79: "At 20th level, when you roll for initiative and have no ki points remaining, you regain 4 ki points." Direct mirror of v2.99.44 Superior Inspiration — same `/battle` PUT inactive → active transition hook, same walk-PC-roster pattern. v2.99.210 adds a Monk Lv 20+ branch alongside the Bard Lv 20+ branch: walk combatants, look up Character, check class+level, find `ki-points` resource, and if current=0 refund min(4, max) ki + broadcast feature_used + resource_update. Kael Brightleaf is the demo fixture; tests PATCH her Lv 7 → 20.
+**Description:** One hook extension in `/battle PUT`'s `_battle_just_started` block. Mirrors the v2.99.44 Bardic Inspiration pattern: iterate `state.combatants`, fetch Character, validate class=monk + level>=20, look up the `ki-points` resource, gate on `current == 0` AND `max > 0`, refund 4 ki (capped at max), broadcast resource_update + feature_used(source="perfect-self"). One new harness test file with 3 tests: happy path (Kael Lv 20 + ki=0 → refunds 4), ki>0 control (no refund), Lv 7 control (no refund).
+
+### Added
+- Perfect Self refund branch in `/battle PUT`'s inactive→active hook (mirror of v2.99.44 Superior Inspiration).
+- `tests/harness/test_perfect_self.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 hook extension + 3 regression tests. No schema change.
+- **Phase F.2 ✅ 3/4.** Diamond Soul (v2.99.208) + Empty Body (v2.99.209) + Perfect Self (v2.99.210). Only Diamond Soul's ki-spend reroll part (RAW PHB p.79's "Additionally, whenever you make a saving throw and fail, you can spend 1 ki point to reroll it") still ⚪. The reroll endpoint mirrors v2.99.199 /use_indomitable_reroll exactly — same shape, different resource gate.
+- **Same trigger as Superior Inspiration.** Both fire on the inactive→active battle transition (the canonical "rolled initiative" RAW phrasing). When the same combatant carries both a Bard Lv 20 AND a Monk Lv 20 character (homebrew multi-PC ownership), both branches fire — they iterate over different Character rows independently.
+- **Total harness count: 1166** (was 1163 in v2.99.209).
+
+---
+
 ## [2.99.209] - 2026-06-04 — "Vanish Into Ki" — `/use_empty_body` endpoint (Monk Lv 18)
 
 **Schema version:** 66
