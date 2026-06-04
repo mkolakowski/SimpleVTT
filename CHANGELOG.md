@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.219] - 2026-06-04 — "Glimpses of the Future" — Portent (Divination Wizard Lv 2) — Phase B ✅ COMPLETE
+
+**Schema version:** 66
+**Commit summary:** **Phase B.1 of the v2.99.193 phased completion plan — Portent. Phase B ✅ COMPLETE (3/3: Reliable Talent + Stroke of Luck + Portent).** RAW PHB p.116: "When you finish a long rest, roll two d20s and record the numbers rolled. You can replace any attack roll, saving throw, or ability check made by you or a creature that you can see with one of these foretelling rolls." v2.99.219 ships the full chain: helper + long-rest hook + use endpoint. The long-rest hook fills `sheet.portent_dice = [d20, d20]` (3 dice at Lv 14+ Greater Portent). The use endpoint replaces a target DiceRoll's d20 with a banked value + removes the used die. v1 simplification: post-roll replacement (RAW: "must choose before the roll"); once-per-turn not enforced.
+**Description:** Two helpers + 1 long-rest hook + 1 endpoint + 2 patch keys. (1) `_pc_has_portent(sheet)` — Divination Wizard Lv 2+ gate (checks class==wizard + level>=2 + subclass contains "divination"). (2) `_portent_dice_count(sheet)` — 2 at Lv 2-13, 3 at Lv 14+ (Greater Portent). (3) /rest long-rest hook calls `_portent_dice_count`; if > 0, fills `sheet.portent_dice` with N random d20 values. (4) `/use_portent` endpoint accepts `{character_id, die_index, roll_id}`; validates Portent gate + die index exists + roll_id resolves to a DiceRoll; uses `_HALFLING_KEPT_D20_RE` to swap the d20 in the breakdown + recompute total; appends note; broadcasts updated `roll` + `feature_used`. (5) `portent_dice` + `subclass` added to `_SHEET_PATCH_KEYS` for test scaffolding. Thalindra PATCH'd subclass → "School of Divination" + portent_dice → [3, 17] for deterministic tests. One new harness test file with 3 tests.
+
+### Added
+- `_pc_has_portent(sheet)` helper gate.
+- `_portent_dice_count(sheet)` helper (2 / 3 dice based on level).
+- /rest long-rest hook to refill `sheet.portent_dice`.
+- `/api/campaign/{cid}/use_portent` endpoint.
+- `portent_dice` + `subclass` fields in `_SHEET_PATCH_KEYS` for test scaffolding.
+- `tests/harness/test_use_portent.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 2 helpers + 1 rest hook + 1 endpoint + 2 patch keys + 3 regression tests. No schema change.
+- **v1 simplifications.** (a) Post-roll replacement instead of RAW pre-roll declaration. (b) Once-per-turn not enforced (RAW: "you can replace a roll in this way only once per turn"). (c) Line-of-sight gate not enforced (RAW: "a creature that you can see"); the GM / player handle it.
+- **Mirrors v2.99.199 Indomitable Reroll's DiceRoll-mutation pattern.** Both endpoints take a `roll_id`, mutate the persisted record's breakdown + total, broadcast an updated roll event. The mutation here is a direct d20-value swap (not a fresh re-roll).
+- **Phase B ✅ COMPLETE (3/3).** Reliable Talent (v2.99.197) + Stroke of Luck (v2.99.198) + Portent (v2.99.219). All Phase B attack-roll/check intercepts ship.
+- **35 ships this session. Phases ✅ complete: A, B, F.1, F.2, F.4, D, F.5. Seven full phases.** Partial: C (1/3), F.3 (3/5). Still ⚪: E.x subclass batch, H.x cleanup, G.x system frameworks.
+- **Total harness count: 1194** (was 1191 in v2.99.218).
+
+---
+
 ## [2.99.218] - 2026-06-04 — "Signature Spells" — Signature Spells (Wizard Lv 20) — Phase F.5 ✅ COMPLETE
 
 **Schema version:** 66

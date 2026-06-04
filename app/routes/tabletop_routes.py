@@ -25206,6 +25206,39 @@ def _target_has_elusive(
     return False
 
 
+def _pc_has_portent(sheet: "dict | None") -> bool:
+    """v2.99.219 — RAW Portent (Divination Wizard Lv 2+, PHB
+    p.116): "When you finish a long rest, roll two d20s and
+    record the numbers rolled. You can replace any attack roll,
+    saving throw, or ability check made by you or a creature
+    that you can see with one of these foretelling rolls."
+
+    Returns True for Wizard Lv 2+ with subclass slug containing
+    "divination". Consumed by /rest's long-rest hook (refill the
+    bank) + `/use_portent` (consume a banked die).
+
+    Phase B.1 of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    if _wizard_level_from_sheet(sheet) < 2:
+        return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    return "divination" in subclass
+
+
+def _portent_dice_count(sheet: "dict | None") -> int:
+    """v2.99.219 — Returns the number of Portent dice this PC
+    rolls on a long rest. RAW Lv 2-13: 2 dice. RAW Lv 14+
+    (Greater Portent): 3 dice. Returns 0 for non-Divination
+    Wizards.
+    """
+    if not _pc_has_portent(sheet):
+        return 0
+    wizard_lv = _wizard_level_from_sheet(sheet)
+    return 3 if wizard_lv >= 14 else 2
+
+
 def _pc_has_signature_spells(sheet: "dict | None") -> bool:
     """v2.99.218 — RAW Signature Spells (Wizard Lv 20, PHB
     p.115): "When you reach 20th level, you gain mastery over
@@ -27474,6 +27507,193 @@ def _attack_is_magical(attacker_sheet: dict, attack_name: str) -> bool:
         if attack_slug in ("unarmed strike", "unarmed-strike", "unarmed"):
             return True
     return False
+
+
+@router.post("/api/campaign/{campaign_id}/use_portent")
+async def use_portent(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.219 — Phase B.1 of the v2.99.193 phased completion
+    plan. Portent (Divination Wizard Lv 2+, PHB p.116): "You
+    can replace any attack roll, saving throw, or ability check
+    made by you or a creature that you can see with one of
+    these foretelling rolls."
+
+    Body: ``{character_id, die_index, roll_id}``.
+
+    Validates Divination Wizard Lv 2+ + sheet has at least
+    `die_index + 1` banked portent dice + the roll_id resolves
+    to a DiceRoll. Replaces the kept d20 in the DiceRoll's
+    breakdown with the banked die value + recomputes the total
+    + broadcasts a roll update + feature_used. Removes the used
+    die from `sheet.portent_dice`.
+
+    RAW: "you must choose to do so before the roll." v1 ships
+    a post-roll replacement (player picks the banked die after
+    seeing the original d20 result). Closes the v2.99.193
+    Phase B leverage-weighted item.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    die_index = int(body.get("die_index") or 0)
+    roll_id = int(body.get("roll_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if roll_id <= 0:
+        raise HTTPException(400, "roll_id is required")
+    if die_index < 0:
+        die_index = 0
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_portent(sheet):
+        return JSONResponse(status_code=409, content={
+            "error": "no_portent",
+            "msg": (
+                "Portent requires Divination Wizard Lv 2+."
+            ),
+        })
+
+    banked = list(sheet.get("portent_dice") or [])
+    if die_index >= len(banked):
+        return JSONResponse(status_code=409, content={
+            "error": "no_die_at_index",
+            "have": len(banked),
+            "asked": die_index,
+        })
+    banked_value = int(banked[die_index])
+
+    rec = db.query(DiceRoll).filter(
+        DiceRoll.id == roll_id,
+        DiceRoll.campaign_id == campaign_id,
+    ).first()
+    if not rec:
+        return JSONResponse(status_code=404, content={
+            "error": "roll_not_found",
+        })
+    # RAW: can replace rolls made by you OR a creature you can
+    # see. v1 doesn't validate the line-of-sight gate; the GM /
+    # player handle it.
+    old_d20 = _extract_kept_d20_from_breakdown(rec.breakdown or "")
+    old_total = int(rec.total or 0)
+    if old_d20 is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_d20",
+            "msg": "Roll has no d20 component to replace.",
+        })
+
+    # Swap the d20 value: old_d20 → banked_value. The total
+    # changes by (banked_value - old_d20).
+    delta = banked_value - old_d20
+    new_total = old_total + delta
+    breakdown = rec.breakdown or ""
+    new_breakdown = _HALFLING_KEPT_D20_RE.sub(
+        lambda m: m.group(0).replace(f"={old_d20}", f"={banked_value}", 1),
+        breakdown,
+        count=1,
+    )
+    # Update trailing " = N" sum if present.
+    if " = " in new_breakdown:
+        parts = new_breakdown.rsplit(" = ", 1)
+        try:
+            int(parts[1])
+            new_breakdown = f"{parts[0]} = {new_total}"
+        except (TypeError, ValueError):
+            pass
+
+    rec.breakdown = new_breakdown
+    rec.total = new_total
+    rec.note = (
+        (rec.note or "")
+        + f" | 🔮 Portent — d20 {old_d20} → {banked_value}"
+    )[:200]
+
+    # Remove the banked die from the sheet.
+    banked.pop(die_index)
+    sheet["portent_dice"] = banked
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+    db.refresh(rec)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "id": rec.id,
+            "user_id": rec.user_id,
+            "char_name": char.name,
+            "user_color": caster_color,
+            "expression": rec.expression,
+            "breakdown": rec.breakdown,
+            "total": rec.total,
+            "visibility": rec.visibility.value,
+            "note": rec.note,
+            "character_id": char.id,
+            "portent_replaced": True,
+            "old_total": old_total,
+            "old_d20": old_d20,
+            "new_d20": banked_value,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🔮 Portent — d20 {old_d20} → {banked_value}"
+            ),
+            "feature_desc": (
+                f"{char.name} replaced a d20 of {old_d20} with a "
+                f"foretelling roll of {banked_value} (Divination "
+                f"Wizard class feature). New total: {new_total} "
+                f"(was {old_total})."
+            ),
+            "source": "portent",
+            "roll_id": rec.id,
+            "old_d20": old_d20,
+            "new_d20": banked_value,
+            "old_total": old_total,
+            "new_total": new_total,
+            "remaining_dice": list(banked),
+        },
+    })
+
+    return {
+        "ok": True,
+        "roll_id": rec.id,
+        "old_d20": old_d20,
+        "new_d20": banked_value,
+        "old_total": old_total,
+        "new_total": new_total,
+        "remaining_dice": list(banked),
+    }
 
 
 @router.post("/api/campaign/{campaign_id}/select_signature_spells")
@@ -40544,6 +40764,19 @@ async def rest_character(
         sheet["spell_slots"] = new_slots
         sheet["hp"] = hp
         sheet["hit_dice"] = hd
+        # v2.99.219 — Portent (Divination Wizard Lv 2+) long-rest
+        # refill. RAW PHB p.116: "When you finish a long rest, roll
+        # two d20s and record the numbers rolled." 3 dice at Lv 14+
+        # (Greater Portent). Pre-rolls the values + persists on
+        # sheet.portent_dice; the consumer endpoint /use_portent
+        # reads + decrements the list.
+        _portent_count = _portent_dice_count(sheet)
+        if _portent_count > 0:
+            import random as _random_portent
+            sheet["portent_dice"] = [
+                _random_portent.randint(1, 20)
+                for _ in range(_portent_count)
+            ]
         char.sheet = sheet
         # Long rest restores HP to max and clears any dying/stable state.
         # Route through the death-save state machine so the broadcast +
@@ -47516,6 +47749,12 @@ _SHEET_PATCH_KEYS = {
     # spell slugs + per-spell use flags. Test teardown resets to
     # {} after the test runs.
     "signature_spells",
+    # v2.99.219 — portent_dice (list[int]) + subclass (str). Read
+    # by /use_portent + the /rest long-rest hook. Subclass is
+    # allowlisted so the test can flip Thalindra's subclass to
+    # "School of Divination" without a full sheet rebuild.
+    "portent_dice",
+    "subclass",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the
