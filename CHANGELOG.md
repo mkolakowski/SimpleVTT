@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.221] - 2026-06-04 — "Primeval Awareness" — Primeval Awareness (Ranger Lv 3) — Phase F.3 ✅ COMPLETE
+
+**Schema version:** 66
+**Commit summary:** **Phase F.3 final of the v2.99.193 phased completion plan — Primeval Awareness. Phase F.3 ✅ COMPLETE (5/5: Hide in Plain Sight + Vanish + Foe Slayer + Feral Senses + Primeval Awareness).** RAW PHB p.92: "Beginning at 3rd level, you can use your action and expend one ranger spell slot to focus your awareness on the region around you. For 1 minute per level of the spell slot you expend, you can sense whether the following types of creatures are present within 1 mile of you (or within up to 6 miles if you are in your favored terrain): aberrations, celestials, dragons, elementals, fey, fiends, and undead." v2.99.221 ships `/use_primeval_awareness` — validates Ranger Lv 3+ + Ranger slot at >= 1 + Phase 4 action slot gate, decrements the slot + marks the action chip, broadcasts feature_used naming the 7 creature types + duration_min (= slot_level).
+**Description:** One helper + 1 endpoint. (1) `_pc_has_primeval_awareness(sheet)` — Ranger Lv 3+ gate. (2) `/use_primeval_awareness` — body `{character_id, slot_level, override?}`. Validates class + level + Ranger slot availability + Phase 4 action gate. Atomically decrements the slot. Broadcasts feature_used naming the 7 creature types (aberrations / celestials / dragons / elementals / fey / fiends / undead) + duration in minutes (= slot_level). GM resolves whether any are present (no mechanical buff installed; chat-card surface only). Rowan Quickbow (Ranger Lv 7 default) is the demo fixture — already at Lv 3+. One new harness test file with 3 tests covering L1 happy path, L2 longer duration, no-slot 409.
+
+### Added
+- `_pc_has_primeval_awareness(sheet)` helper gate.
+- `/api/campaign/{cid}/use_primeval_awareness` endpoint.
+- `tests/harness/test_use_primeval_awareness.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 3 regression tests. No schema change.
+- **v1 simplification.** Announce-only — GM resolves whether any of the 7 creature types are present within 1 mile (6 miles in favored terrain). No `creature_type` taxonomy exists on demo NPC templates today, and "within 1 mile" is out of grid scope. The chat-card surface is the contract.
+- **Phase F.3 ✅ COMPLETE (5/5).** Hide in Plain Sight (v2.99.214) + Vanish (v2.99.215) + Foe Slayer (v2.99.216) + Feral Senses (v2.99.220) + Primeval Awareness (v2.99.221). All five PHB Ranger Lv 3-20 mid/capstone features ship.
+- **37 ships this session. Phases ✅ complete: A, B, F.1, F.2, F.3, F.4, D, F.5. Eight full phases.** Still ⚪: E.x subclass batch (8 sub-items), H.x cleanup, G.x system frameworks. Partial: C.1 ✅ (single-item phase; ✅).
+- **Total harness count: 1199** (was 1196 in v2.99.220).
+
+---
+
 ## [2.99.220] - 2026-06-04 — "Preternatural Senses" — Feral Senses (Ranger Lv 18)
 
 **Schema version:** 66

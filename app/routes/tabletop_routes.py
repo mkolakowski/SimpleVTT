@@ -25304,6 +25304,26 @@ def _pc_has_foe_slayer(sheet: "dict | None") -> bool:
     return _ranger_level_from_sheet(sheet) >= 20
 
 
+def _pc_has_primeval_awareness(sheet: "dict | None") -> bool:
+    """v2.99.221 — RAW Primeval Awareness (Ranger Lv 3+, PHB
+    p.92): "Beginning at 3rd level, you can use your action and
+    expend one ranger spell slot to focus your awareness on the
+    region around you. For 1 minute per level of the spell slot
+    you expend, you can sense whether the following types of
+    creatures are present within 1 mile of you (or within up to
+    6 miles if you are in your favored terrain): aberrations,
+    celestials, dragons, elementals, fey, fiends, and undead."
+
+    Returns True for Ranger Lv 3+. Consumed by
+    `/use_primeval_awareness` (the announce endpoint).
+
+    Phase F.3 final of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _ranger_level_from_sheet(sheet) >= 3
+
+
 def _pc_has_feral_senses(sheet: "dict | None") -> bool:
     """v2.99.220 — RAW Feral Senses (Ranger Lv 18+, PHB p.92):
     "At 18th level, you gain preternatural senses that help you
@@ -35447,6 +35467,175 @@ async def use_vanish(
     return {
         "ok": True,
         "feature": "vanish",
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_primeval_awareness")
+async def use_primeval_awareness(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.221 — Phase F.3 final of the v2.99.193 phased
+    completion plan. Primeval Awareness (Ranger Lv 3+, PHB
+    p.92): spend a Ranger spell slot to sense the 7 creature
+    types within 1 mile (6 miles in favored terrain) for 1
+    minute per slot level.
+
+    Body: ``{character_id, slot_level, override?}``.
+
+    Validates Ranger Lv 3+ + Ranger slot at `slot_level` >= 1
+    available + Phase 4 action slot gate. Atomically decrements
+    the slot + marks the action slot + broadcasts feature_used
+    naming the 7 creature types + duration. v1 ships as
+    announce-only — the GM resolves whether any of the 7
+    creature types are within 1 mile (the result is GM
+    knowledge; the chat card is the surface).
+
+    No mechanical buff is installed; the duration just rides on
+    the chat card description.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    slot_level_raw = body.get("slot_level")
+    try:
+        slot_level = int(slot_level_raw) if slot_level_raw is not None else 1
+    except (TypeError, ValueError):
+        slot_level = 1
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 1:
+        slot_level = 1
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        has_ranger = any(
+            (entry.get("class") or "").strip().lower() == "ranger"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_ranger:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "ranger",
+                "got": cls or "",
+            })
+    ranger_lv = _ranger_level_from_sheet(sheet)
+    if ranger_lv < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": ranger_lv,
+        })
+
+    # Ranger slot lookup.
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get("ranger") or {})
+    slot_key = str(slot_level)
+    slot = dict(per_class.get(slot_key) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": "ranger",
+            "spell_name": "Primeval Awareness",
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "primeval-awareness",
+            "label": "Primeval Awareness",
+            "strict": strict,
+        })
+
+    # Decrement slot.
+    slot["used"] = used + 1
+    per_class[slot_key] = slot
+    all_slots["ranger"] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    duration_min = slot_level
+    creature_types = [
+        "aberrations", "celestials", "dragons", "elementals",
+        "fey", "fiends", "undead",
+    ]
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌳 Primeval Awareness ({duration_min} min)"
+            ),
+            "feature_desc": (
+                f"{char.name} senses {', '.join(creature_types)} "
+                f"within 1 mile (6 miles in favored terrain) for "
+                f"{duration_min} minute(s). GM resolves whether "
+                f"any are present."
+            ),
+            "source": "primeval-awareness",
+            "slot_level": slot_level,
+            "duration_min": duration_min,
+            "creature_types": creature_types,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": "ranger",
+            "level": slot_level,
+            "used": used + 1,
+            "total": total,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "duration_min": duration_min,
+        "creature_types": creature_types,
         "over_budget": was_used,
     }
 
