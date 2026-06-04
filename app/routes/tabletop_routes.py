@@ -10815,6 +10815,101 @@ async def use_visions_of_distant_realms(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_purity_of_spirit")
+async def use_purity_of_spirit(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.154 — Purity of Spirit (Paladin Oath of Devotion,
+    Lv 15+).
+
+    RAW (PHB p.87): "Beginning at 15th level, you are always under
+    the effects of a protection from evil and good spell."
+
+    Protection from Evil and Good (PHB p.270) grants the target:
+      - Disadvantage on attacks AGAINST them from aberrations,
+        celestials, elementals, fey, fiends, and undead.
+      - Immunity to charmed, frightened, and possessed by such
+        creatures.
+      - Advantage on saves to end an active charm/frighten/possess
+        from such a creature.
+
+    v1 ships the audit broadcast + level/subclass gate only. The
+    full mechanical hooks (attack-roll disadvantage from listed
+    creature types, condition-install gate) need creature-type
+    metadata on the attacker/source — filed for follow-up. The
+    audit lets the GM/table see the passive is active.
+
+    Body: ``{character_id}``.
+
+    Validation:
+      - Caster is Paladin Lv 15+ with subclass Oath of Devotion
+        (409 missing_feature if not)
+      - 403 when not the GM and not the caster's owner
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_purity_of_spirit(sheet):
+        return JSONResponse(status_code=409, content={
+            "error": "missing_feature",
+            "feature": "purity-of-spirit",
+            "required": "Paladin Lv 15+ Oath of Devotion",
+        })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "✨ Purity of Spirit",
+            "feature_desc": (
+                f"{char.name} is always under Protection from Evil "
+                f"and Good. Aberrations, celestials, elementals, "
+                f"fey, fiends, and undead have disadvantage on "
+                f"attacks against {char.name}; {char.name} can't "
+                f"be charmed/frightened/possessed by them."
+            ),
+            "source": "purity-of-spirit",
+            "protected_against": [
+                "aberration", "celestial", "elemental",
+                "fey", "fiend", "undead",
+            ],
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "protected_against": [
+            "aberration", "celestial", "elemental",
+            "fey", "fiend", "undead",
+        ],
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,
@@ -24376,6 +24471,34 @@ async def _broadcast_countercharm(
             "source": "countercharm",
         },
     })
+
+
+def _pc_has_purity_of_spirit(sheet: dict) -> bool:
+    """v2.99.154 — Purity of Spirit (Paladin Oath of Devotion,
+    Lv 15+, PHB p.87): "Beginning at 15th level, you are always
+    under the effects of a protection from evil and good spell."
+
+    Returns True when all three gates pass:
+      1. Sheet's class (or any multiclass entry) is paladin
+      2. Paladin level ≥ 15
+      3. Subclass slug = "devotion" (normalized: strips "Oath of "
+         prefix + lowercases)
+
+    Used by the audit endpoint `/use_purity_of_spirit` for now;
+    a future engine hook can read this helper and gate condition
+    installs on charmed / frightened / possession FROM aberrations
+    / celestials / elementals / fey / fiends / undead (RAW). The
+    engine hook is filed since it needs creature-type metadata on
+    the source.
+    """
+    if not sheet:
+        return False
+    paladin_lv = _paladin_level_from_sheet(sheet)
+    if paladin_lv < 15:
+        return False
+    subclass_raw = (sheet.get("subclass") or "").strip().lower()
+    subclass_slug = subclass_raw.replace("oath of ", "").strip()
+    return subclass_slug == "devotion"
 
 
 def _ally_has_aura_of_devotion(

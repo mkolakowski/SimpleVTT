@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.154] - 2026-06-03 — "Always Warded" — Purity of Spirit (Paladin Oath of Devotion Lv 15+) audit endpoint
+
+**Schema version:** 65
+**Commit summary:** **Ship Purity of Spirit as `/use_purity_of_spirit` — audit endpoint + helper for the Paladin Lv 15+ Oath of Devotion feature.** RAW (PHB p.87): "Beginning at 15th level, you are always under the effects of a protection from evil and good spell." Wraps the v2.55.0 Aura of Devotion pattern: new `_pc_has_purity_of_spirit(sheet)` helper gates on Paladin Lv 15+ + subclass slug "devotion", then the audit endpoint broadcasts a `feature_used` event listing the six protected-against creature types (aberration / celestial / elemental / fey / fiend / undead). v1 ships the audit + gate only; the mechanical engine hooks for attack-roll disadvantage from those types and condition-install gates on charmed/frightened/possessed are filed (they need source-creature-type metadata that isn't surfaced today).
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — new `_pc_has_purity_of_spirit(sheet)` helper next to `_ally_has_aura_of_devotion` (gates on `_paladin_level_from_sheet >= 15` + subclass slug "devotion" using the same normalization as AoD). New `POST /api/campaign/{cid}/use_purity_of_spirit` audit endpoint validates the gate (409 `missing_feature` with `feature: "purity-of-spirit"` and a required-description string) and broadcasts `feature_used` with `source: "purity-of-spirit"`, `protected_against: ["aberration", "celestial", "elemental", "fey", "fiend", "undead"]`. (2) `tests/harness/test_use_purity_of_spirit.py` — 3 regression tests using a Caelan-at-Lv-15 fixture (PATCH up + restore Lv 6 in teardown).
+
+### Added
+- `_pc_has_purity_of_spirit(sheet)` helper.
+- `POST /api/campaign/{cid}/use_purity_of_spirit` audit endpoint.
+- `feature_used` broadcast with `source: "purity-of-spirit"` + `protected_against` array of 6 creature types.
+- `tests/harness/test_use_purity_of_spirit.py` — 3 tests: Caelan @ Lv 15 Devotion → 200 + audit with 6-creature list; Caelan @ stock Lv 6 → 409 `missing_feature`; missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single helper + audit endpoint + 3 tests. No schema change. No demo seed bump (Sir Caelan stays Lv 6 — the test PATCHes him to Lv 15 temporarily, mirror of v2.99.153 Improved Divine Smite's pattern).
+- **Why no engine hook yet.** RAW Protection from Evil and Good only triggers against attacks/conditions FROM aberrations/celestials/elementals/fey/fiends/undead. SimpleVTT's NPC stat blocks carry creature-type metadata in the seed but it's not threaded through the attack-roll / condition-install pipelines today. Filed: add `attacker_creature_type` to the `_check_attacker_*` helper signatures, then gate the disadvantage roll on the type membership.
+- **Second Paladin Lv 15+ feature wired** alongside v2.99.153 Improved Divine Smite (Lv 11+). Same Caelan-PATCH fixture pattern for both. The Lv 15+ ship roster is now: Purity of Spirit (audit). Aura of Protection range expansion Lv 18+ (v2.53.0 already gated for the radius bump). Aura of Devotion range expansion Lv 18+ (v2.55.0 likewise).
+- **Total harness count: 1040** (was 1037 in v2.99.153).
+
+---
+
 ## [2.99.153] - 2026-06-03 — "Righteous Strikes" — Improved Divine Smite (Paladin Lv 11+) auto-adds 1d8 radiant on every melee weapon hit
 
 **Schema version:** 65
