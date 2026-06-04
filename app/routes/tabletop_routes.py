@@ -25826,6 +25826,33 @@ def _pc_has_rage_active_from_sheet(sheet: "dict | None") -> bool:
     return False
 
 
+def _pc_has_persistent_rage(sheet: "dict | None") -> bool:
+    """v2.99.203 — RAW Persistent Rage (Barbarian Lv 15+, PHB
+    p.49): "Beginning at 15th level, your rage is so fierce that
+    it ends early only if you fall unconscious or if you choose
+    to end it."
+
+    Returns True when the PC is Barbarian Lv 15+. The mechanical
+    effect — skipping the RAW "rage ends if you don't attack a
+    hostile creature OR don't take damage on your turn" early-end
+    conditions — is forward-looking today: those early-end
+    conditions aren't enforced in v1 (rage just ticks down
+    `duration_rounds` per round). When the early-end checks land
+    in a future commit, they'll consult this helper to skip the
+    early-end branch for Lv 15+ Barbarians. Until then, the
+    helper documents the feature + supports a descriptive sheet
+    row.
+
+    Falls unconscious / voluntary end still terminate rage today
+    (both go through the existing `_remove_buff` path).
+
+    Phase F.1 cont'd of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _barbarian_level_from_sheet(sheet) >= 15
+
+
 def _pc_has_relentless_rage_available(sheet: "dict | None") -> bool:
     """v2.99.202 — Returns True when the PC is a Barbarian Lv 11+
     AND currently has an active rage buff mirrored on the sheet.

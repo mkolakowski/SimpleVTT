@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.203] - 2026-06-04 — "The Eternal Fury" — Persistent Rage (Barbarian Lv 15)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.1 cont'd of the v2.99.193 phased completion plan — Persistent Rage.** RAW PHB p.49: "Beginning at 15th level, your rage is so fierce that it ends early only if you fall unconscious or if you choose to end it." v1 ships the gate helper `_pc_has_persistent_rage(sheet)` (Barbarian Lv 15+) — the RAW early-end conditions (no attack on turn, no damage taken) aren't enforced in v1 (rage just ticks down `duration_rounds` per round), so the helper is forward-looking: when a future commit lands the early-end checks, they'll consult this helper to skip the early-end branch for Lv 15+ Barbarians. Voluntary `/end_buff` and unconsciousness-driven rage termination still work normally.
+**Description:** One helper + 1 test file. `_pc_has_persistent_rage(sheet)` mirrors the `_pc_has_relentless_rage_available` pattern: read `_barbarian_level_from_sheet(sheet) >= 15`. Two regression tests bump Krieger Lv 7 → 15 via PATCH and confirm `/use_rage` still works + voluntary `/end_buff` still works (the two RAW paths Persistent Rage allows for termination).
+
+### Added
+- `_pc_has_persistent_rage(sheet)` helper gate.
+- `tests/harness/test_persistent_rage.py` — 2 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 2 regression tests. No schema change, no broadcast surface.
+- **v1 ships forward-looking.** Persistent Rage's mechanical effect (skipping RAW early-end conditions) is a no-op in v1 because the codebase doesn't enforce those conditions. The helper documents the feature + supports the future early-end-skip branch.
+- **Filed for next iteration.** When `_pc_has_persistent_rage` consumers ship (most likely an `/end_turn` or `/tick` endpoint hook that walks the early-end rules), they'll gate on this helper. Until then, rage just ticks down `duration_rounds` per round.
+- **Phase F.1 ✅ 3/5.** Brutal Critical (v2.99.201) + Relentless Rage (v2.99.202) + Persistent Rage (v2.99.203) shipped. Still ⚪: Indomitable Might (Lv 18 — minimum STR check result = STR score), Primal Champion (Lv 20 — STR + CON caps raise to 24).
+- **Total harness count: 1150** (was 1148 in v2.99.202).
+
+---
+
 ## [2.99.202] - 2026-06-04 — "The Barbarian Won't Fall" — Relentless Rage (Barbarian Lv 11)
 
 **Schema version:** 66
