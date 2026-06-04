@@ -14548,6 +14548,38 @@ async def cast_spell(
             "metamagic-extended-pending",
         )
 
+    # v2.99.162 — Subtle Spell metamagic. Drop the pending buff
+    # one-shot when /cast_spell starts. The Counterspell-immune
+    # flag is captured here for the broadcast (so a future
+    # Counterspell endpoint can refuse to interrupt this cast).
+    # RAW: "you can spend 1 sorcery point to cast it without any
+    # somatic or verbal components" — Counterspell needs the V/S
+    # to identify the cast.
+    _was_subtle = _caster_has_subtle_pending(campaign_id, int(char.id))
+    if _was_subtle:
+        await _remove_buff(
+            campaign_id, int(char.id),
+            "metamagic-subtle-pending",
+        )
+        # Broadcast a marker so the chat log surfaces "🤫 cast
+        # silently — Counterspell can't react." Future Counterspell
+        # ship would inspect this broadcast / the cast metadata
+        # and refuse to interrupt.
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": int(char.id),
+                "character_name": char.name,
+                "feature_name": "🤫 Subtle Spell consumed",
+                "feature_desc": (
+                    "Cast without verbal or somatic components — "
+                    "Counterspell cannot react."
+                ),
+                "source": "metamagic-subtle-spell-consumed",
+                "counterspell_immune": True,
+            },
+        })
+
     # v2.99.88 — Mystic Arcanum free-cast routing. When the caller
     # passes ``free_cast: true``, the spell is cast via the Warlock's
     # Mystic Arcanum charge (PHB p.108) instead of consuming a Pact
@@ -27908,6 +27940,180 @@ async def use_metamagic_extended_spell(
         "sp_max": sp_max,
         "cast_id": et_cast_id,
     }
+
+
+@router.post("/api/campaign/{campaign_id}/use_metamagic_subtle_spell")
+async def use_metamagic_subtle_spell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.162 — Subtle Spell metamagic (Sorcerer Lv 3+).
+
+    RAW (PHB p.102): "When you Cast a Spell, you can spend 1
+    sorcery point to cast it without any somatic or verbal
+    components." Counterspell (PHB p.228) requires "you see a
+    creature within 60 feet of you casting a spell" — RAW the
+    seeing component is V/S. Without V/S, Counterspell becomes
+    inapplicable. Useful for: casting while grappled, gagged,
+    or while keeping the cast hidden.
+
+    Mirror of v2.99.159 Distant + v2.99.160 Twinned + v2.99.161
+    Extended pending-buff pattern. The endpoint decrements 1 SP +
+    installs a `metamagic-subtle-pending` buff carrying
+    `effects.no_verbal: True` + `effects.no_somatic: True` +
+    `effects.counterspell_immune: True`. /cast_spell drops the
+    buff one-shot at start of cast. The Counterspell-immune
+    flag is informational today (Counterspell isn't fully wired
+    in SimpleVTT); a future Counterspell ship would check the
+    cast's broadcast for `subtle: True` and refuse to interrupt.
+
+    Body: ``{character_id}``.
+
+    Validates Sorcerer Lv 3+ and at least 1 SP.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": level,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_points", "required": 1, "have": sp_cur,
+        })
+
+    new_sp = sp_cur - 1
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    st_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(st_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "sorcery-points",
+        "amount": 1,
+        "source_label": "Metamagic — Subtle Spell",
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+
+    # Install the pending buff (mirror of v2.99.159/.160/.161).
+    subtle_buff = {
+        "key": "metamagic-subtle-pending",
+        "name": "Metamagic: Subtle Spell (pending)",
+        "icon": "✨",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "metamagic-subtle-spell",
+        "source_char_id": int(char.id),
+        "source_char_name": char.name,
+        "effects": {
+            "no_verbal": True,
+            "no_somatic": True,
+            "counterspell_immune": True,
+        },
+        "cast_id": st_cast_id,
+    }
+    await _install_buff(campaign_id, int(char.id), subtle_buff)
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": "✨ Metamagic — Subtle Spell (1 SP, no V/S)",
+            "feature_desc": (
+                "Subtle Spell armed. Next /cast_spell drops the "
+                "pending buff. RAW: cast without verbal or somatic "
+                "components — Counterspell can't see what isn't "
+                "spoken or gestured."
+            ),
+            "source": "metamagic-subtle-spell",
+            "cast_id": st_cast_id,
+            "remaining": new_sp, "max": sp_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "sp_cost": 1,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "cast_id": st_cast_id,
+    }
+
+
+def _caster_has_subtle_pending(
+    campaign_id: int, caster_char_id: "int | None",
+) -> bool:
+    """v2.99.162 — return True when the caster's combatant carries
+    a `metamagic-subtle-pending` buff. Mirror of the other
+    `_caster_has_<metamagic>_pending` helpers. Used by /cast_spell
+    to consume the buff one-shot at start of cast + flag the cast
+    as subtle on the broadcast.
+    """
+    if not caster_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != caster_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "metamagic-subtle-pending":
+                return True
+        return False
+    return False
 
 
 def _caster_has_extended_pending(

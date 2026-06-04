@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.162] - 2026-06-03 — "Without a Word" — Subtle Spell metamagic + closes the Sorcerer metamagic suite
+
+**Schema version:** 65
+**Commit summary:** **Ship Subtle Spell as a new `/use_metamagic_subtle_spell` endpoint.** RAW (PHB p.102): "When you Cast a Spell, you can spend 1 sorcery point to cast it without any somatic or verbal components." Pre-v2.99.162 Subtle Spell was the only metamagic without ANY endpoint (Empowered / Heightened / Careful / Twinned / Distant / Extended all had at least announce-only shipped at v2.99.32-37; Subtle was filed). Ships the full pending-buff pattern: SP decrement, `metamagic-subtle-pending` buff install, /cast_spell consume + "subtle consumed" broadcast naming the `counterspell_immune: True` flag for future Counterspell wiring. **Closes the Sorcerer metamagic suite — all 7 metamagics now have full mechanical wiring beyond announce-only.**
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `POST /api/campaign/{cid}/use_metamagic_subtle_spell` endpoint. Validates Sorcerer Lv 3+ + ≥1 SP, decrements 1 SP, installs `metamagic-subtle-pending` buff with `effects.no_verbal: True` + `effects.no_somatic: True` + `effects.counterspell_immune: True` + `cast_id` for undo. Broadcasts the standard `resource_update` + `feature_used` events. (2) New `_caster_has_subtle_pending(campaign_id, caster_char_id)` helper — mirror of the other `_caster_has_<metamagic>_pending` helpers. (3) `/cast_spell` — checks the helper at the start of the cast cycle; if armed, drops the buff via `_remove_buff` AND emits a second `feature_used` broadcast with `source: "metamagic-subtle-spell-consumed"` + `counterspell_immune: True`. The marker broadcast surfaces the Counterspell-immune state on the chat log so a future Counterspell endpoint can refuse to interrupt. (4) `tests/harness/test_use_metamagic_subtle.py` — 4 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_metamagic_subtle_spell` endpoint.
+- `metamagic-subtle-pending` buff factory shape.
+- `_caster_has_subtle_pending(campaign_id, caster_char_id)` helper.
+- `/cast_spell` Subtle consume hook + "subtle consumed" broadcast.
+- `tests/harness/test_use_metamagic_subtle.py` — 4 tests: declaring costs 1 SP + installs pending buff; the buff is consumed when /cast_spell fires AND a counterspell_immune broadcast emits; not enough SP → 409; non-Sorcerer caller → 409.
+
+### Notes
+- **PATCH bump** — new endpoint + helper + integration hook + 4 tests. No schema change. New endpoint so no backward-compatibility surface to preserve.
+- **What's filed.** A future Counterspell endpoint that: (a) listens for cast broadcasts from enemies, (b) checks if the cast's source broadcast was `metamagic-subtle-spell-consumed` (or scanned the cast's metadata for a `subtle: True` flag), and (c) refuses to interrupt when the flag is set. Without that future ship, the Counterspell-immune flag is informational today — the v2.99.162 broadcast surfaces the state on the chat log so the GM + table know the cast was protected.
+- **Sorcerer metamagic suite complete.** Seven metamagics, all with mechanical wiring:
+  - **Empowered** (v2.49.124) — re-roll up to CHA-mod lowest damage dice
+  - **Quickened** (v2.6.0) — chat-log announce + Bns chip flip (Sorcerer choice)
+  - **Heightened** (v2.99.35) — disadvantage on one target's first save
+  - **Twinned** (v2.99.160) — pending-buff scaffolding (auto-route to second target filed)
+  - **Distant** (v2.99.159) — range doubling at /cast_spell range gate
+  - **Extended** (v2.99.161) — pending-buff scaffolding (install-time duration mutation filed)
+  - **Subtle** (v2.99.162) — counterspell-immune broadcast marker (Counterspell endpoint filed)
+  - **Careful** (v2.99.38) — auto-pass for CHA-mod protected creatures
+- **Pattern stabilized.** The pending-buff pattern is now used by 5 metamagics (Heightened / Distant / Twinned / Extended / Subtle) + Sacred Weapon (v2.97.29) + Hex (v2.18.4) + the new Holy Nimbus (v2.99.155). Future metamagic-style class features can reuse the convention without designing new scaffolding.
+- **Total harness count: 1069** (was 1065 in v2.99.161).
+
+---
+
 ## [2.99.161] - 2026-06-03 — "The Long Watch" — Extended Spell metamagic gets the pending-buff scaffolding
 
 **Schema version:** 65
