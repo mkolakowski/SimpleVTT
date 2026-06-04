@@ -20639,7 +20639,30 @@ def _compute_attack_auto_uplifts(
                 "source": "lifedrinker",
             })
 
-    # 6. v2.99.23 — Half-Orc Savage Attacks. RAW (PHB p.41): "When
+    # 6. v2.99.153 — Improved Divine Smite (Paladin Lv 11+, PHB
+    #    p.85): "your melee weapon strikes carry divine power
+    #    with them. Whenever you hit a creature with a melee
+    #    weapon, the creature takes an extra 1d8 radiant damage."
+    #    Auto-fires on EVERY melee-weapon hit (no resource cost,
+    #    no rate limit). Mirror of Lifedrinker's uplift pattern
+    #    but with a die-roll instead of a flat bonus.
+    if attack:
+        ids_die = _pc_improved_divine_smite_die(attacker_sheet, attack)
+        if ids_die:
+            try:
+                r = dice_mod.roll(ids_die)
+                uplifts.append({
+                    "label": "Improved Divine Smite",
+                    "expression": ids_die,
+                    "total": r.total,
+                    "breakdown": r.breakdown,
+                    "damage_type": "radiant",
+                    "source": "improved-divine-smite",
+                })
+            except dice_mod.DiceParseError:
+                pass
+
+    # 7. v2.99.23 — Half-Orc Savage Attacks. RAW (PHB p.41): "When
     #    you score a critical hit with a melee weapon attack, you
     #    can roll one of the weapon's damage dice one additional
     #    time and add it to the extra damage of the critical hit."
@@ -22061,6 +22084,75 @@ def _attack_is_pact_weapon(attack: dict) -> bool:
     if not attack:
         return False
     return bool(attack.get("pact_weapon"))
+
+
+def _attack_is_melee_weapon(attack: dict) -> bool:
+    """v2.99.153 — heuristic check: is this attack a melee weapon
+    attack? Used by Improved Divine Smite (Paladin Lv 11+) to gate
+    the +1d8 radiant uplift per RAW (PHB p.85): "your weapon
+    attacks deal extra radiant damage on a hit ... if the strike
+    counts as a melee weapon attack."
+
+    Heuristic: damage_type is one of the physical-melee set
+    (bludgeoning / piercing / slashing) AND range is a short melee
+    range ("5 ft", "5/15 ft" for thrown, "10 ft" for reach). Pure
+    ranged-only attacks (Longbow at "150/600 ft", Eldritch Blast
+    at "120 ft") return False.
+
+    Thrown weapons (Javelin at "30/120 ft") are accepted when
+    actually swung — but here we can't distinguish a thrown
+    weapon's melee swing from its ranged throw. v1 accepts
+    thrown-weapon attacks as melee-weapon attacks; the GM can
+    adjudicate. Filed: a body field that says "this attack roll
+    was thrown not stabbed" so the gate fires correctly.
+    """
+    if not attack:
+        return False
+    dt = (attack.get("damage_type") or "").strip().lower()
+    if dt not in {"bludgeoning", "piercing", "slashing"}:
+        return False
+    rng = (attack.get("range") or "").strip().lower()
+    # Pure ranged weapons report ranges starting with > 10 ft
+    # (Longbow "150/600 ft", Heavy Crossbow "100/400 ft"). Pull
+    # the first numeric value before the slash or " ft".
+    import re as _re_melee
+    m = _re_melee.match(r"^\s*(\d+)", rng)
+    if not m:
+        # No parseable range string — trust the damage type.
+        return True
+    try:
+        first_range = int(m.group(1))
+    except (TypeError, ValueError):
+        return True
+    # Anything with first range ≤ 30 ft is either a melee weapon
+    # (5/10 ft reach) or a thrown weapon (30 ft normal range);
+    # accept both. Pure-ranged weapons fall outside this band
+    # (Longbow's first value is 150).
+    return first_range <= 30
+
+
+def _pc_improved_divine_smite_die(sheet: dict, attack: dict) -> str:
+    """v2.99.153 — Improved Divine Smite (Paladin Lv 11+, PHB
+    p.85): "By 11th level, you are so suffused with righteous
+    might that all your melee weapon strikes carry divine power
+    with them. Whenever you hit a creature with a melee weapon,
+    the creature takes an extra 1d8 radiant damage."
+
+    Returns the "1d8" die expression when both gates pass:
+      1. attack is a melee weapon attack (per
+         `_attack_is_melee_weapon`)
+      2. attacker has Paladin level ≥ 11
+
+    Returns empty string on any gate miss. The caller (the uplift
+    framework in `_compute_attack_auto_uplifts`) rolls the die
+    and appends the uplift with `damage_type: "radiant"` +
+    `source: "improved-divine-smite"`.
+    """
+    if not _attack_is_melee_weapon(attack):
+        return ""
+    if _paladin_level_from_sheet(sheet) < 11:
+        return ""
+    return "1d8"
 
 
 def _pc_lifedrinker_bonus(sheet: dict, attack: dict) -> int:

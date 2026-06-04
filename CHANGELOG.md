@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.153] - 2026-06-03 — "Righteous Strikes" — Improved Divine Smite (Paladin Lv 11+) auto-adds 1d8 radiant on every melee weapon hit
+
+**Schema version:** 65
+**Commit summary:** **Ship Improved Divine Smite as a Paladin Lv 11+ auto-uplift in `_compute_attack_auto_uplifts`.** RAW (PHB p.85): "By 11th level, you are so suffused with righteous might that all your melee weapon strikes carry divine power with them. Whenever you hit a creature with a melee weapon, the creature takes an extra 1d8 radiant damage." Wired as a separate radiant uplift (mirror of v2.99.97 Lifedrinker's pattern but rolling 1d8 instead of a flat CHA bonus). Two gates: (a) attack is a melee weapon attack (new `_attack_is_melee_weapon` heuristic — physical-melee damage type + range first-value ≤ 30 ft, so thrown weapons count, pure-ranged like Longbow don't), (b) Paladin level ≥ 11. First mechanically-wired Paladin Lv 11+ feature.
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — new `_attack_is_melee_weapon(attack)` heuristic (damage_type in {bludgeoning, piercing, slashing} AND parses the range's first value to ≤ 30 ft, so thrown 30/120 ft weapons count as melee swings); new `_pc_improved_divine_smite_die(sheet, attack)` returns "1d8" when both gates pass else empty string; new uplift block #6 in `_compute_attack_auto_uplifts` that rolls the die and appends with `damage_type: "radiant"`, `source: "improved-divine-smite"`. (2) `tests/harness/test_improved_divine_smite.py` — 2 regression tests using a Caelan-at-Lv-11 fixture (PATCH up, restore Lv 6 in teardown).
+
+### Added
+- `_attack_is_melee_weapon(attack)` heuristic helper.
+- `_pc_improved_divine_smite_die(sheet, attack)` helper.
+- Uplift block #6 in `_compute_attack_auto_uplifts` for Improved Divine Smite.
+- `tests/harness/test_improved_divine_smite.py` — 2 tests: Caelan @ Lv 11 + melee hit → uplift fires (damage_type radiant, total in [1, 8]); Caelan @ stock Lv 6 → no uplift fires (level gate).
+
+### Changed
+- The Savage Attacks block in `_compute_attack_auto_uplifts` is now numbered "7" (was "6") since Improved Divine Smite slots in before it.
+
+### Notes
+- **PATCH bump** — two helpers + uplift block + 2 tests. No schema change.
+- **Why no demo seed bump for Sir Caelan.** The demo's Paladin (Sir Caelan) is Lv 6 (Aura of Protection prereq). Bumping him to Lv 11 would invalidate every other Lv 6-specific test (Channel Divinity uses 1/short rest at Lv 6, would change to 2 at Lv 6 → 3 at Lv 18, spell slots would expand, etc.). The helper exists for the day a Lv 11+ paladin is added to the seed; the test PATCHes Caelan up + restores down to validate the wiring without affecting other tests.
+- **Why the `_attack_is_melee_weapon` heuristic.** SimpleVTT's attack dicts don't carry an explicit `is_melee: True` flag — they have `damage_type` + `range` strings. The damage_type narrows to bludgeoning/piercing/slashing; the range parse to first-value-≤-30-ft accepts melee (5/10 ft reach) and thrown weapons (30/120 ft for Javelin). Pure ranged weapons (Longbow 150/600 ft) don't pass. False positives are thrown-weapon ranged throws — RAW that's actually a ranged-weapon attack, but distinguishing it from a melee swing requires a body field per attack. Filed.
+- **Total harness count: 1037** (was 1035 in v2.99.152).
+
+---
+
 ## [2.99.152] - 2026-06-03 — "The Twentieth Whisper" — Visions of Distant Realms closes Magnus's invocation roster at 20/20
 
 **Schema version:** 65
