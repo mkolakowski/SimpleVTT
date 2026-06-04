@@ -17082,12 +17082,21 @@ async def cast_spell(
         except Exception:
             _surge_d20 = 0
         if _surge_d20 == 1:
-            try:
-                _surge_d100 = dice_mod.roll("1d100").total
-            except Exception:
-                _surge_d100 = 1
             from ..wild_magic_surge import surge_entry_for_d100
-            _surge_entry = surge_entry_for_d100(_surge_d100)
+            # v2.99.230 — Phase E.6 Phase 4 Controlled Chaos (Wild
+            # Magic Sorcerer Lv 14+): roll the surge table twice
+            # so the player can pick either. Below Lv 14 rolls
+            # once.
+            _controlled_chaos = _pc_has_wild_magic(sheet, 14)
+            _roll_count = 2 if _controlled_chaos else 1
+            _entries: list[dict] = []
+            for _ in range(_roll_count):
+                try:
+                    _d100 = dice_mod.roll("1d100").total
+                except Exception:
+                    _d100 = 1
+                _entries.append(surge_entry_for_d100(_d100))
+            _surge_entry = _entries[0]
             # Refill Tides of Chaos (RAW). Re-fetch the sheet from
             # the live char to avoid stomping any concurrent edits.
             _refresh = db.query(Character).filter(
@@ -17112,6 +17121,8 @@ async def cast_spell(
                     "desc": _surge_entry["desc"],
                     "d100": _surge_entry["d100"],
                     "tides_refilled": True,
+                    "controlled_chaos": _controlled_chaos,
+                    "alternatives": _entries,
                 },
             })
 

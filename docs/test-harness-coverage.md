@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1242 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.229, 2026-06-04).
+**Total tests:** 1244 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.230, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,14 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_wild_magic_controlled_chaos.py`
+v2.99.230 — Wild Magic Sorcerer (PHB p.103) Controlled Chaos (Phase 4 of [docs/plans/wild-magic.md](../plans/wild-magic.md)). Lv 14+ Wild Magic Sorcerers roll the surge table twice and pick. Uses TEST_MODE `_force_surge_d20: 1` on `/cast_spell` for determinism.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_controlled_chaos_rolls_twice_at_lv14` | Lv 14 Wild Magic Zara casts Magic Missile with forced d20=1 → `wild_magic_surge` broadcast carries `controlled_chaos: true` + `alternatives` length 2 (each with slug/name/d100). |
+| `test_controlled_chaos_single_entry_at_lv5` | Lv 5 Wild Magic Zara → broadcast `controlled_chaos: false` + `alternatives` length 1 (regression for the v2.99.230 backward-compat shape). |
 
 ### `test_wild_magic_bend_luck.py`
 v2.99.229 — Wild Magic Sorcerer (PHB p.103) Bend Luck reaction (Phase 3 of [docs/plans/wild-magic.md](../plans/wild-magic.md)). Zara Emberfire is the demo fixture; tests PATCH her subclass to "Wild Magic" + level to 6.

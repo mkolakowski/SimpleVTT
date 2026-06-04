@@ -3,8 +3,8 @@
 Phase E.6 of the [v2.99.193 class-content completion plan](class-content-status.md).
 Path: Sorcerous Origin: Wild Magic (PHB p.103).
 
-> **Status (v2.99.229):** 🟠 Phases 1-3 shipped (Tides of Chaos +
-> Wild Magic Surge auto-roll + Bend Luck reaction). Phases 4-5
+> **Status (v2.99.230):** 🟠 Phases 1-4 shipped (Tides + Surge +
+> Bend Luck + Controlled Chaos). Phase 5 (Spell Bombardment, Lv 18)
 > deferred.
 
 ## Why a plan doc
@@ -101,11 +101,19 @@ SimpleVTT doesn't yet pause-then-resume third-party rolls. The
 broadcast carries the 1d4 + signed value so the GM bumps the
 displayed roll manually.
 
-### Phase 4 — Controlled Chaos roll-twice (⚪ deferred)
+### Phase 4 — Controlled Chaos roll-twice (✅ v2.99.230)
 
-Lv 14. After Phase 2 ships, extend the surge broadcast to roll
-2 table entries when `_wizard_level_from_sheet >= 14` and the
-caster is Wild Magic Sorcerer. UI lets the player pick one.
+Lv 14. The Phase 2 surge hook now branches on
+`_pc_has_wild_magic(sheet, 14)`: rolls the d100 surge table
+twice and broadcasts both via `alternatives: [entry1, entry2]`
++ `controlled_chaos: true`. Below Lv 14 the broadcast still
+carries `alternatives: [single_entry]` + `controlled_chaos:
+false` so the client can render the pick UI uniformly.
+
+The primary `(slug, name, desc, d100)` top-level fields stay
+populated with `alternatives[0]` for backward-compat with any
+pre-v2.99.230 client. Future UI commit will render the picker
+when `controlled_chaos: true`.
 
 ### Phase 5 — Spell Bombardment damage reroll (⚪ deferred)
 

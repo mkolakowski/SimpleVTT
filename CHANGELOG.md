@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.230] - 2026-06-04 — "The Two-Sided Surge" — Wild Magic Sorcerer Controlled Chaos (Phase 4)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.6 Phase 4 of the v2.99.193 phased completion plan — Controlled Chaos.** RAW PHB p.103 (Wild Magic Sorcerer Lv 14+): "Whenever you roll on the Wild Magic Surge table, you can roll twice and use either number." The v2.99.228 surge hook now branches on `_pc_has_wild_magic(sheet, 14)` and rolls two d100 entries; the broadcast carries `alternatives: [...]` + `controlled_chaos: true|false` so the client can render a pick-one UI uniformly.
+**Description:** One hook update. (1) `/cast_spell` surge block (added v2.99.228) now reads `_pc_has_wild_magic(sheet, 14)` and rolls the d100 table N times (2 for Lv 14+, 1 otherwise). Broadcasts `wild_magic_surge` with new fields `controlled_chaos: bool` + `alternatives: list[entry]`. Backward-compat: the top-level `(slug, name, desc, d100)` fields still mirror `alternatives[0]` so any pre-v2.99.230 client reading those keys keeps working. Zara Emberfire is the demo fixture; tests PATCH her subclass to "Wild Magic" + level to 14. One new harness test file with 2 tests.
+
+### Added
+- `tests/harness/test_wild_magic_controlled_chaos.py` — 2 tests (Lv 14 alternatives x2; Lv 5 alternatives x1 regression).
+
+### Changed
+- `/cast_spell` Wild Magic Surge hook now rolls 2 entries at Lv 14+ and packs both into `alternatives` (single-entry list below Lv 14).
+- `docs/plans/wild-magic.md` Phase 4 marked ✅ shipped; Phase 5 remains ⚪.
+
+### Notes
+- **PATCH bump** — 1 hook update + 2 regression tests. No schema change.
+- **Backward-compat broadcast shape.** Pre-v2.99.230 clients read `slug` / `name` / `desc` / `d100` at the top level. v2.99.230 keeps those populated with `alternatives[0]` so the client doesn't have to fork on broadcast shape — it can read the legacy fields as the "primary" entry and ignore `alternatives` until the picker UI ships. New clients read `alternatives` for both Lv 5 (1 entry) and Lv 14+ (2 entries) and render uniformly.
+- **No new helper.** `_pc_has_wild_magic(sheet, 14)` already exists from v2.99.227 with the correct multiclass-aware shape — the hook just calls it with the new min_level.
+- **Phase 5 remains.** Spell Bombardment (Lv 18) needs a post-damage hook + once-per-turn flag (battle-economy slot like Foe Slayer).
+- **Phase E ✅ 5.8/8.** E.3 + E.4 + E.5 + E.7 + E.8 done. E.6 advanced from Phase 3/5 to Phase 4/5. E.1 Battle Master + E.2 Eldritch Knight still ⚪.
+- **46 ships this session.**
+- **Total harness count: 1244** (was 1242 in v2.99.229).
+
+---
+
 ## [2.99.229] - 2026-06-04 — "Bend the Roll" — Wild Magic Sorcerer Bend Luck reaction (Phase 3)
 
 **Schema version:** 66
