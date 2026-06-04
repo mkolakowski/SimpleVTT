@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.213] - 2026-06-04 — "The Pact Familiar" — Pact of the Chain (Warlock Lv 3) — Phase D ✅ COMPLETE
+
+**Schema version:** 66
+**Commit summary:** **Phase D.3 final of the v2.99.193 phased completion plan — Pact of the Chain. Phase D ✅ COMPLETE (3/3: Tome + Blade + Chain).** RAW PHB p.108: "You learn the find familiar spell and can cast it as a ritual. The spell doesn't count against your number of spells known. When you cast the spell, you can choose one of the normal forms for your familiar or one of the following special forms: imp, pseudodragon, quasit, or sprite." v2.99.213 ships `/select_pact_chain_familiar` — persists the chosen familiar form + name on `sheet.pact_chain_familiar` + appends `find-familiar` to the spells list with `_via: "pact-of-the-chain"`. Actual token placement is GM-driven via `/place_token` — the GM picks an icon + map location at play time.
+**Description:** One new endpoint at `/api/campaign/{cid}/select_pact_chain_familiar`. Body: `{character_id, familiar_form, familiar_name?}`. Validates Warlock class + level >= 3 + `pact_boon == "chain"`. Persists `pact_chain_familiar = {form, name}` on the sheet. Appends `find-familiar` to spells list (with `_via` marker) if not already present. Broadcasts `feature_used(source="pact-of-the-chain")` naming the familiar. `pact_chain_familiar` added to `_SHEET_PATCH_KEYS` for test scaffolding. Magnus Hexbinder PATCH'd `pact_boon → "chain"` for tests. One new harness test file with 4 tests: happy path imp + name, pseudodragon re-select (idempotent), wrong-pact-boon gate, missing-form 400.
+
+### Added
+- `/api/campaign/{cid}/select_pact_chain_familiar` endpoint.
+- `pact_chain_familiar` field in `_SHEET_PATCH_KEYS` for test scaffolding.
+- `tests/harness/test_select_pact_chain_familiar.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 1 patch key + 4 regression tests. No schema change.
+- **Phase D ✅ COMPLETE (3/3).** Tome (v2.99.200) + Blade (v2.99.212) + Chain (v2.99.213). All three Warlock Pact Boons shipped in this session.
+- **Token placement is GM-driven.** RAW Pact of the Chain summons the familiar via the Find Familiar spell. The familiar token's icon, map position, and stat block are GM-managed (the token catalog covers imp/quasit/pseudodragon/sprite via the existing /templates system). v2.99.213 persists the BOUND form so the GM knows what to spawn; the spawn itself is /place_token.
+- **29 ships this session.** Phases ✅ complete this session: A (3/3), F.1 (5/5), F.2 (4/4), F.4 (2/2), D (3/3). Five full phases. Partial: B.2+B.3 (B.1 Portent still ⚪), C.1 (the rest of C is filed). Still ⚪: F.3 Ranger, F.5 Wizard, E.x subclass batch, H.x cleanup, G.x system frameworks.
+- **Total harness count: 1177** (was 1173 in v2.99.212).
+
+---
+
 ## [2.99.212] - 2026-06-04 — "The Pact Blade" — Pact of the Blade (Warlock Lv 3) summoning endpoint
 
 **Schema version:** 66

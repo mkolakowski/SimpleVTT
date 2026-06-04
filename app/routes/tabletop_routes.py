@@ -29986,6 +29986,162 @@ async def use_mystic_arcanum(
 # `resource_update`.
 
 
+@router.post("/api/campaign/{campaign_id}/select_pact_chain_familiar")
+async def select_pact_chain_familiar(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.213 — Phase D.3 of the v2.99.193 phased completion
+    plan — Phase D ✅ COMPLETE (3/3). Pact of the Chain (Warlock
+    Lv 3, PHB p.108): "You learn the find familiar spell and can
+    cast it as a ritual. The spell doesn't count against your
+    number of spells known. When you cast the spell, you can
+    choose one of the normal forms for your familiar or one of
+    the following special forms: imp, pseudodragon, quasit, or
+    sprite."
+
+    Body: ``{character_id, familiar_form,
+    familiar_name?}``.
+
+    Validates Warlock + Lv 3+ + `pact_boon == "chain"`.
+    Persists the chosen familiar form + name on the sheet's
+    `pact_chain_familiar` field as `{form, name}`. Appends
+    `find-familiar` to the spells list with `_via:
+    "pact-of-the-chain"` (mirrors v2.99.200 Pact of the Tome's
+    `_via` marker; the spell is admitted to the cast list
+    without consuming a "spell known" slot per RAW).
+
+    The actual token placement is GM-driven via `/place_token`
+    (the GM picks an icon + map location). v1 ships the choice
+    persistence + announce broadcast; the token placement is
+    sufficiently flexible that hard-coding it isn't useful.
+
+    Forms: "imp" / "pseudodragon" / "quasit" / "sprite" (the 4
+    special forms) OR any other string for "one of the normal
+    forms" (RAW PHB p.244 lists ~15 normal familiar forms; v1
+    accepts any string + lets the GM resolve).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    familiar_form = (
+        str(body.get("familiar_form") or "")
+    ).strip().lower()[:30]
+    familiar_name = (str(body.get("familiar_name") or "")).strip()[:80]
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not familiar_form:
+        raise HTTPException(400, "familiar_form is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "warlock":
+        has_warlock = any(
+            (entry.get("class") or "").strip().lower() == "warlock"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "warlock",
+                "got": cls or "",
+            })
+    warlock_lv = _warlock_level_from_sheet(sheet)
+    if warlock_lv < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": warlock_lv,
+        })
+    pact_boon = (sheet.get("pact_boon") or "").strip().lower()
+    if pact_boon != "chain":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_pact_boon",
+            "expected": "chain",
+            "got": pact_boon or "",
+        })
+
+    # Persist familiar choice.
+    sheet["pact_chain_familiar"] = {
+        "form": familiar_form,
+        "name": familiar_name or familiar_form.title(),
+    }
+    # Append find-familiar to spells if not already on the list.
+    spells = list(sheet.get("spells") or [])
+    has_find_familiar = any(
+        isinstance(s, dict)
+        and (s.get("_slug") or "").strip().lower() == "find-familiar"
+        for s in spells
+    )
+    if not has_find_familiar:
+        spells.append({
+            "name": "Find Familiar",
+            "level": 1,
+            "prepared": True,
+            "_slug": "find-familiar",
+            "_via": "pact-of-the-chain",
+            "casting_time": "1 hour (ritual)",
+            "desc": "Pact of the Chain: ritual cast; no slot consumed.",
+        })
+    sheet["spells"] = spells
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🦋 Pact of the Chain — "
+                f"{familiar_name or familiar_form.title()} "
+                f"({familiar_form})"
+            ),
+            "feature_desc": (
+                f"{char.name} bound "
+                f"{familiar_name or familiar_form.title()} as a "
+                f"{familiar_form} familiar (Pact of the Chain). "
+                f"Find Familiar added as a ritual; GM places the "
+                f"token via /place_token."
+            ),
+            "source": "pact-of-the-chain",
+            "familiar_form": familiar_form,
+            "familiar_name": familiar_name or familiar_form.title(),
+        },
+    })
+
+    return {
+        "ok": True,
+        "familiar_form": familiar_form,
+        "familiar_name": familiar_name or familiar_form.title(),
+        "find_familiar_added": not has_find_familiar,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/summon_pact_blade")
 async def summon_pact_blade(
     campaign_id: int,
@@ -46490,6 +46646,10 @@ _SHEET_PATCH_KEYS = {
     # a full sheet rebuild. Restore in finally. Values: "tome" /
     # "blade" / "chain" / "" (no boon picked).
     "pact_boon",
+    # v2.99.213 — pact_chain_familiar. Read by /select_pact_chain_familiar
+    # to track the Warlock's bound familiar (form + name). Test
+    # teardown resets to {} after the test runs.
+    "pact_chain_familiar",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the
