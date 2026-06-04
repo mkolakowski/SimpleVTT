@@ -219,7 +219,13 @@ async def test_fey_ancestry_skips_non_fey_race(
 # in v2.99.12 = index 14 on Thalindra's spell list (post-v2.97.72
 # Confusion + Banishment).
 
-POISON_SPRAY_THAL_INDEX = 14  # appended last in v2.99.12
+POISON_SPRAY_THAL_INDEX = 18  # v2.99.195 — re-counted after v2.99.105
+# Web + v2.99.108 Hold Monster + v2.99.130 Flesh to Stone were
+# inserted earlier in Thalindra's spell list, pushing Poison Spray
+# from 14 → 18. The v2.99.12 Dwarven Resilience test (and the
+# v2.99.195 Stout Halfling test) had been silently failing because
+# spell_index 14 lands on Sleep (no save_ability), which makes the
+# auto_save_ability assertion read "" instead of "CON".
 
 
 @pytest_asyncio.fixture

@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.195] - 2026-06-04 — "The Stout Hobbit" — Stout Halfling Stout Resilience via subrace normalizer
+
+**Schema version:** 66
+**Commit summary:** **Phase A.2 of the v2.99.193 phased completion plan — adds a subrace-aware lookup so subrace-only race rules (Stout Halfling's Stout Resilience, etc.) can fire without folding into the parent race slug.** v2.99.11+ wired race-keyed save advantage via `_race_slug_from_sheet` + `_RACE_SAVE_ADVANTAGES`, folding subraces into their parent ("Lightfoot Halfling" / "Stout Halfling" → `"halfling"`). v2.99.14 noted that Stout Resilience couldn't ship via the parent slug because it would over-apply to Lightfoot. v2.99.195 closes that gap with a new `_subrace_slug_from_sheet` normalizer returning slugs like `"halfling-stout"` / `"halfling-lightfoot"` / `"dwarf-hill"` / `"elf-high"` / `"gnome-rock"`. `_race_grants_save_advantage` consults both the parent race slug AND the subrace slug; both rules fire when applicable (Stout Halfling gets BOTH Halfling Brave AND Stout Resilience). The poison-DAMAGE resistance half is sheet-level (`damage_resistances: ["poison"]` on the PC's sheet, read by the existing `_resistance_halve`). Also surfaces a silent harness-test regression: the v2.99.12 Dwarven Resilience test (and the new v2.99.195 Stout test) had `POISON_SPRAY_THAL_INDEX = 14` but v2.99.105 Web + v2.99.108 Hold Monster + v2.99.130 Flesh to Stone were inserted earlier in Thalindra's spell list, pushing Poison Spray to index 18; the Dwarven test had been silently failing since v2.99.105.
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — added `_subrace_slug_from_sheet(sheet)` returning a `<race>-<subrace>` slug for the recognized PHB subraces (Halfling Lightfoot/Stout, Dwarf Hill/Mountain, Elf High/Wood/Dark, Gnome Rock/Forest). (2) `_RACE_SAVE_ADVANTAGES` gained a `"halfling-stout"` entry (`stout-resilience` trait, condition_keys=["poisoned"], damage_types=["poison"]). (3) `_race_grants_save_advantage` now appends subrace rules to the parent race rules list before iterating; both fire when applicable. (4) Added `"race"` to `_SHEET_PATCH_KEYS` for harness scaffolding (PATCH Pip's race Lightfoot → Stout for the test, restore in finally). One new harness test file with 2 tests covering (a) Stout Halfling Stout Resilience fires on a poison save, (b) bare Halfling (no subrace) keeps the single-d20 shape. Also fixed the `POISON_SPRAY_THAL_INDEX` constant in the v2.99.12 Dwarven test (14 → 18) which had been silently failing.
+
+### Added
+- `_subrace_slug_from_sheet(sheet)` normalizer in `app/routes/tabletop_routes.py`.
+- `"halfling-stout"` rule entry in `_RACE_SAVE_ADVANTAGES`.
+- `"race"` field in `_SHEET_PATCH_KEYS` for test scaffolding.
+- `tests/harness/test_stout_halfling_resilience.py` — 2 tests.
+
+### Changed
+- `_race_grants_save_advantage` now consults both parent race + subrace rules (was: parent only).
+
+### Fixed
+- v2.99.12 Dwarven Resilience test's `POISON_SPRAY_THAL_INDEX` (14 → 18) had been silently failing since v2.99.105 when Web was inserted into Thalindra's spell list ahead of Poison Spray.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 rule + 1 patch key + 2 regression tests + 1 silent-skip fix. No schema change.
+- **Closes the v2.99.14 filed item.** v2.99.14's Halfling Brave entry's "future Stout Halfling — Stout Resilience" filed note is now closed.
+- **Phase A.2 ✅.** The `_subrace_slug_from_sheet` normalizer is the dependency for any future subrace-only rule (Wood Elf's Mask of the Wild, High Elf's Cantrip pick, etc.).
+- **Phase A.3 still ⚪** — Dragonborn ancestry → damage resistance helper. Rowan ships with hand-typed `["lightning"]`; a generalized ancestry-to-damage-type map would replace the hand-typed seeding.
+- **Demo PC.** No demo Stout Halfling PC exists yet; the test PATCH'es Pip's race for the duration of the test. A future demo PC could ship as the canonical Stout fixture.
+- **Total harness count: 1122** (was 1120 in v2.99.194).
+
+---
+
 ## [2.99.194] - 2026-06-04 — "Lucky Doesn't Save You" — Halfling Lucky NPC-attack regression pin
 
 **Schema version:** 66

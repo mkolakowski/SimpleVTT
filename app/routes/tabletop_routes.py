@@ -24633,13 +24633,6 @@ _RACE_SAVE_ADVANTAGES: "dict[str, list[dict]]" = {
     # Ancestry but on the "frightened" condition. Lightfoot and Stout
     # Halfling both have Brave; the slug normalizer folds both into
     # "halfling". Pip (Halfling Rogue) is the demo fixture.
-    #
-    # Future Halfling rule additions:
-    #   - Stout Halfling — Stout Resilience (advantage on poison
-    #     saves + resistance). Same shape as Dwarven Resilience but
-    #     SUBRACE-only. Folding into the "halfling" slug would over-
-    #     apply to Lightfoot. Filed for a future subrace-aware
-    #     normalizer extension (read sheet.subrace if present).
     "halfling": [
         {
             "trait_slug": "halfling-brave",
@@ -24647,6 +24640,29 @@ _RACE_SAVE_ADVANTAGES: "dict[str, list[dict]]" = {
             "save_abilities": [],
             "condition_keys": ["frightened"],
             "damage_types": None,
+            "is_spell_save": None,
+        },
+    ],
+    # v2.99.195 — Stout Halfling Stout Resilience. RAW (PHB p.28):
+    # "You have advantage on saving throws against poison, and you
+    # have resistance against poison damage." Same shape as Dwarven
+    # Resilience but SUBRACE-only. Resolved via the v2.99.195
+    # `_subrace_slug_from_sheet` extension; rule keyed on
+    # `"halfling-stout"`. The parent `"halfling"` rule still fires
+    # Halfling Brave for both subraces — both subrace-keyed and
+    # race-keyed rules fire when applicable. Lightfoot Halfling
+    # subrace doesn't carry Stout Resilience (would over-apply).
+    # The poison-DAMAGE resistance half is sheet-level: a Stout
+    # Halfling PC seeds `damage_resistances: ["poison"]` on the
+    # sheet (same shape as Tavik's Hill Dwarf v2.99.19); no engine
+    # change needed.
+    "halfling-stout": [
+        {
+            "trait_slug": "stout-resilience",
+            "trait_name": "Stout Resilience",
+            "save_abilities": [],
+            "condition_keys": ["poisoned"],
+            "damage_types": ["poison"],
             "is_spell_save": None,
         },
     ],
@@ -24716,6 +24732,55 @@ def _race_slug_from_sheet(sheet: dict) -> str:
     return raw
 
 
+def _subrace_slug_from_sheet(sheet: "dict | None") -> str:
+    """v2.99.195 — return a `<race>-<subrace>` slug when the sheet's
+    race string carries a subrace prefix, else empty string. Used by
+    `_race_grants_save_advantage` to also consult subrace-keyed rules
+    in `_RACE_SAVE_ADVANTAGES` (e.g. "halfling-stout" for Stout
+    Halfling Stout Resilience). The parent race slug
+    (`_race_slug_from_sheet`) is still consulted first; both rules
+    fire when applicable.
+
+    Returns:
+      "halfling-stout" / "halfling-lightfoot" / "dwarf-hill" /
+      "dwarf-mountain" / "elf-high" / "elf-wood" / "elf-dark" /
+      "gnome-rock" / "gnome-forest" / "" (no subrace recognized).
+
+    The slug is constructed parent-first so consumers can match it
+    against `_RACE_SAVE_ADVANTAGES` keys directly. Empty string when
+    the race field carries no subrace prefix (e.g. just "Halfling"
+    or empty), so callers can skip the second lookup safely.
+    """
+    if not sheet:
+        return ""
+    raw = (sheet.get("race") or "").strip().lower()
+    if not raw:
+        return ""
+    # Halfling subraces.
+    if "stout halfling" in raw or "stout-halfling" in raw:
+        return "halfling-stout"
+    if "lightfoot halfling" in raw or "lightfoot-halfling" in raw:
+        return "halfling-lightfoot"
+    # Dwarf subraces.
+    if "hill dwarf" in raw or "hill-dwarf" in raw:
+        return "dwarf-hill"
+    if "mountain dwarf" in raw or "mountain-dwarf" in raw:
+        return "dwarf-mountain"
+    # Elf subraces.
+    if "high elf" in raw or "high-elf" in raw:
+        return "elf-high"
+    if "wood elf" in raw or "wood-elf" in raw:
+        return "elf-wood"
+    if "dark elf" in raw or "dark-elf" in raw or "drow" in raw:
+        return "elf-dark"
+    # Gnome subraces.
+    if "rock gnome" in raw or "rock-gnome" in raw:
+        return "gnome-rock"
+    if "forest gnome" in raw or "forest-gnome" in raw:
+        return "gnome-forest"
+    return ""
+
+
 def _race_grants_save_advantage(
     saving_char_sheet: "dict | None",
     *,
@@ -24766,7 +24831,13 @@ def _race_grants_save_advantage(
     race_slug = _race_slug_from_sheet(sheet)
     if not race_slug:
         return False, "", ""
-    rules = _RACE_SAVE_ADVANTAGES.get(race_slug) or []
+    rules = list(_RACE_SAVE_ADVANTAGES.get(race_slug) or [])
+    # v2.99.195 — also consult subrace-keyed rules (e.g.
+    # "halfling-stout" Stout Resilience). The subrace rules are
+    # additive — both parent race + subrace fire when applicable.
+    subrace_slug = _subrace_slug_from_sheet(sheet)
+    if subrace_slug:
+        rules = rules + list(_RACE_SAVE_ADVANTAGES.get(subrace_slug) or [])
     if not rules:
         return False, "", ""
     ability = (save_ability or "").strip().upper()
@@ -44423,6 +44494,14 @@ _SHEET_PATCH_KEYS = {
     # v2.99.178 — proficiency_bonus. Same rationale — needed alongside
     # WIS proficiency edits for save mod calculation.
     "proficiency_bonus",
+    # v2.99.195 — race. Allowlisted for harness tests that need to
+    # flip a fixture PC's subrace (Lightfoot Halfling → Stout
+    # Halfling) to exercise subrace-keyed race rules in
+    # `_RACE_SAVE_ADVANTAGES` ("halfling-stout" Stout Resilience,
+    # etc.). Restore-in-finally discipline applies — race string is
+    # read by `_race_slug_from_sheet` + `_subrace_slug_from_sheet`
+    # at every save-roll construction site.
+    "race",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the
