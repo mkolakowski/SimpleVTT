@@ -25304,6 +25304,27 @@ def _pc_has_foe_slayer(sheet: "dict | None") -> bool:
     return _ranger_level_from_sheet(sheet) >= 20
 
 
+def _pc_has_feral_senses(sheet: "dict | None") -> bool:
+    """v2.99.220 — RAW Feral Senses (Ranger Lv 18+, PHB p.92):
+    "At 18th level, you gain preternatural senses that help you
+    fight creatures you can't see. When you attack a creature
+    you can't see, your inability to see it doesn't impose
+    disadvantage on your attack rolls against it."
+
+    Returns True for Ranger Lv 18+. Consumed by /attack to
+    suppress disadvantage when the body param
+    `attacker_cant_see_target: True` is set (the client opts in
+    when the target is invisible / hidden). RAW's "aware of
+    invisible creatures within 30 ft" half is filed — would
+    require fog-of-war / hidden-token state.
+
+    Phase F.3 cont'd of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _ranger_level_from_sheet(sheet) >= 18
+
+
 def _pc_has_vanish(sheet: "dict | None") -> bool:
     """v2.99.215 — RAW Vanish (Ranger Lv 14+, PHB p.92):
     "Starting at 14th level, you can use the Hide action as a
@@ -41991,6 +42012,15 @@ async def use_attack(
     # bare attack roll that loses the OA context. Pure UX hint —
     # no server-side gating changes.
     is_oa = bool(body.get("is_opportunity_attack"))
+    # v2.99.220 — Phase F.3 cont'd: attacker can't see target hint.
+    # RAW disadvantage source: attacking a creature you can't see
+    # (PHB p.194 — Unseen Attackers and Targets). Feral Senses
+    # (Ranger Lv 18+) suppresses this disadvantage. The client
+    # opts in via this body field when the target is invisible
+    # / heavily obscured / behind cover that blocks LOS.
+    attacker_cant_see_target = bool(
+        body.get("attacker_cant_see_target")
+    )
 
     # v2.20.0 Phase B: optional target_combatant_id for buff-driven
     # uplifts that need to know the target (Hunter's Mark / Hex match,
@@ -42377,10 +42407,22 @@ async def use_attack(
             )
         # v2.97.48 — fold target_pfeag_blocks_type into the
         # disadvantage source set alongside target_dodging.
-        has_dis = target_dodging or target_pfeag_blocks_type
+        # v2.99.220 — Feral Senses (Ranger Lv 18+) suppresses the
+        # "attacker can't see target" disadvantage. When the body
+        # field is set AND the attacker doesn't have Feral Senses,
+        # add it as a disadvantage source.
+        _attacker_cant_see = (
+            attacker_cant_see_target
+            and not _pc_has_feral_senses(char.sheet or {})
+        )
+        has_dis = (
+            target_dodging or target_pfeag_blocks_type
+            or _attacker_cant_see
+        )
         dis_label = (
             "dodging" if target_dodging else
-            "pfeag" if target_pfeag_blocks_type else ""
+            "pfeag" if target_pfeag_blocks_type else
+            "cant_see" if _attacker_cant_see else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -42438,10 +42480,22 @@ async def use_attack(
             )
         # v2.97.48 — fold target_pfeag_blocks_type into the
         # disadvantage source set alongside target_dodging.
-        has_dis = target_dodging or target_pfeag_blocks_type
+        # v2.99.220 — Feral Senses (Ranger Lv 18+) suppresses the
+        # "attacker can't see target" disadvantage. When the body
+        # field is set AND the attacker doesn't have Feral Senses,
+        # add it as a disadvantage source.
+        _attacker_cant_see = (
+            attacker_cant_see_target
+            and not _pc_has_feral_senses(char.sheet or {})
+        )
+        has_dis = (
+            target_dodging or target_pfeag_blocks_type
+            or _attacker_cant_see
+        )
         dis_label = (
             "dodging" if target_dodging else
-            "pfeag" if target_pfeag_blocks_type else ""
+            "pfeag" if target_pfeag_blocks_type else
+            "cant_see" if _attacker_cant_see else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"

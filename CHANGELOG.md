@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.220] - 2026-06-04 — "Preternatural Senses" — Feral Senses (Ranger Lv 18)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.3 cont'd of the v2.99.193 phased completion plan — Feral Senses.** RAW PHB p.92: "When you attack a creature you can't see, your inability to see it doesn't impose disadvantage on your attack rolls against it." v2.99.220 adds the helper `_pc_has_feral_senses(sheet)` (Ranger Lv 18+) and wires it into `/attack`'s disadvantage resolution. `/attack` now accepts `attacker_cant_see_target: True` as a new body field — when the attacker can't see the target, the d20 rolls with disadvantage unless the attacker has Feral Senses (then the disadvantage is suppressed).
+**Description:** One helper + 1 body field + 1 disadvantage source. (1) `_pc_has_feral_senses(sheet)` — Ranger Lv 18+ gate. (2) `attacker_cant_see_target: bool` parsed from body. (3) In both `/attack` advantage-resolution sites, a new "cant_see" disadvantage source fires when `attacker_cant_see_target AND not _pc_has_feral_senses(char.sheet)`. Rowan Quickbow PATCH'd Lv 7 → 18 for tests; 2 tests cover suppression (Lv 18 with the field → no disadvantage) + applies-below-Lv-18 (Lv 7 with the field → disadvantage fires).
+
+### Added
+- `_pc_has_feral_senses(sheet)` helper gate.
+- `attacker_cant_see_target` body field on `/attack`.
+- "cant_see" disadvantage source in `/attack`'s advantage-resolution at both call sites.
+- `tests/harness/test_feral_senses.py` — 2 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 body field + 1 disadvantage source + 2 regression tests. No schema change.
+- **v1 simplification.** The RAW "aware of the location of any invisible creature within 30 feet" half is filed — would require fog-of-war / hidden-token state SimpleVTT doesn't model today.
+- **Client must opt in.** The `attacker_cant_see_target` field is False by default; no client today sends it. When a client picks up invisible-target / heavy-cover-target detection (e.g. F2 fog-of-war framework consumers), it would set this field on the relevant attack calls.
+- **Phase F.3 cont'd ✅ 4/5.** Hide in Plain Sight (v2.99.214) + Vanish (v2.99.215) + Foe Slayer (v2.99.216) + Feral Senses (v2.99.220) shipped. Still ⚪: Primeval Awareness (Lv 3 — pure-descriptive without creature-type taxonomy).
+- **36 ships this session.** Phases ✅ complete: A, B, F.1, F.2, F.4, D, F.5. Partial: C (1/3), F.3 (4/5).
+- **Total harness count: 1196** (was 1194 in v2.99.219).
+
+---
+
 ## [2.99.219] - 2026-06-04 — "Glimpses of the Future" — Portent (Divination Wizard Lv 2) — Phase B ✅ COMPLETE
 
 **Schema version:** 66
