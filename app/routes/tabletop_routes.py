@@ -29986,6 +29986,185 @@ async def use_mystic_arcanum(
 # `resource_update`.
 
 
+@router.post("/api/campaign/{campaign_id}/summon_pact_blade")
+async def summon_pact_blade(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.212 — Phase D.2 of the v2.99.193 phased completion
+    plan. Pact of the Blade (Warlock Lv 3, PHB p.108): "You can
+    use your action to create a pact weapon in your empty hand.
+    You can choose the form that this melee weapon takes each
+    time you create it. You are proficient with it while you
+    wield it. This weapon counts as magical for the purpose of
+    overcoming resistance and immunity to nonmagical attacks and
+    damage."
+
+    Body: ``{character_id, weapon_name?, damage?, damage_type?,
+    clear_first?}``.
+
+    Appends a synthetic weapon to the caster's `sheet.attacks`
+    list with `_via: "pact-of-the-blade"` accounting marker +
+    `magical: True` (consumed by `_attack_is_magical` for
+    resistance gates). The weapon name + damage are caller-
+    chosen; v1 doesn't restrict to RAW melee weapons (the
+    catalog is broad and the client picker is the gate).
+
+    Validates Warlock class + level >= 3 + `pact_boon == "blade"`
+    on the sheet. The action chip is marked unless `override` is
+    set; the Phase 4 over-budget gate applies.
+
+    The `clear_first: True` body flag truncates existing
+    Pact-Blade-tagged attacks before the new one is appended.
+    Used by harness teardown + client UX scenarios like "I want
+    to change the form to a different weapon" (RAW: each summon
+    is a fresh choice).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    weapon_name = (
+        str(body.get("weapon_name") or "Pact Blade")
+    ).strip()[:80]
+    damage = (str(body.get("damage") or "1d8")).strip()[:30]
+    damage_type = (
+        str(body.get("damage_type") or "slashing")
+    ).strip().lower()[:20]
+    clear_first = bool(body.get("clear_first") or False)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "warlock":
+        has_warlock = any(
+            (entry.get("class") or "").strip().lower() == "warlock"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "warlock",
+                "got": cls or "",
+            })
+    warlock_lv = _warlock_level_from_sheet(sheet)
+    if warlock_lv < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": warlock_lv,
+        })
+    pact_boon = (sheet.get("pact_boon") or "").strip().lower()
+    if pact_boon != "blade":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_pact_boon",
+            "expected": "blade",
+            "got": pact_boon or "",
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "pact-of-the-blade",
+            "label": "Pact of the Blade",
+            "strict": strict,
+        })
+
+    attacks = list(sheet.get("attacks") or [])
+    # v2.99.212 — clear_first: strip existing Pact-Blade-tagged
+    # attacks before the new one is appended. Lets the test
+    # fixture (or RAW "I'm summoning a different weapon" UX)
+    # reset to a single fresh pact blade.
+    if clear_first:
+        attacks = [
+            a for a in attacks
+            if not (
+                isinstance(a, dict)
+                and (a.get("_via") or "").strip().lower()
+                == "pact-of-the-blade"
+            )
+        ]
+
+    new_weapon = {
+        "name": weapon_name,
+        "damage": damage,
+        "damage_type": damage_type,
+        "magical": True,
+        "_via": "pact-of-the-blade",
+        "range": "5 ft",
+    }
+    attacks.append(new_weapon)
+    sheet["attacks"] = attacks
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Mark the action slot.
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⚔️ Pact of the Blade — summoned {weapon_name}"
+            ),
+            "feature_desc": (
+                f"{char.name} summoned {weapon_name} ({damage} "
+                f"{damage_type}) as the Pact Blade. Counts as "
+                f"magical for resistance/immunity. 1 action."
+            ),
+            "source": "pact-of-the-blade",
+            "weapon_name": weapon_name,
+            "damage": damage,
+            "damage_type": damage_type,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "weapon_name": weapon_name,
+        "damage": damage,
+        "damage_type": damage_type,
+        "magical": True,
+        "over_budget": was_used,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/select_pact_tome_cantrip")
 async def select_pact_tome_cantrip(
     campaign_id: int,

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.212] - 2026-06-04 — "The Pact Blade" — Pact of the Blade (Warlock Lv 3) summoning endpoint
+
+**Schema version:** 66
+**Commit summary:** **Phase D.2 of the v2.99.193 phased completion plan — Pact of the Blade.** RAW PHB p.108: "You can use your action to create a pact weapon in your empty hand. You can choose the form that this melee weapon takes each time you create it. You are proficient with it while you wield it. This weapon counts as magical for the purpose of overcoming resistance and immunity to nonmagical attacks and damage." v2.99.212 ships `/summon_pact_blade` — appends a synthetic weapon to the caster's `sheet.attacks` list with `_via: "pact-of-the-blade"` accounting marker + `magical: True` (consumed by `_attack_is_magical` for resistance/immunity gates). Body shape mirrors v2.99.200 Pact of the Tome (`clear_first` option for teardown / form-swap UX).
+**Description:** One new endpoint at `/api/campaign/{cid}/summon_pact_blade`. Body: `{character_id, weapon_name?, damage?, damage_type?, clear_first?, override?}`. Validates Warlock class + level >= 3 + `pact_boon == "blade"` + Phase 4 action slot gate. Appends a synthetic attack dict with `magical: True` + `_via: "pact-of-the-blade"`. The `clear_first: True` flag truncates existing Pact-Blade-tagged attacks (used by test teardown + form-swap UX). Magnus Hexbinder PATCH'd `pact_boon → "blade"` for tests. One new harness test file with 4 tests: happy path (summon Longsword, attack appended with magical=True), clear_first replaces, wrong-class gate (Cleric → 409), wrong-pact-boon gate (no boon → 409).
+
+### Added
+- `/api/campaign/{cid}/summon_pact_blade` endpoint.
+- `tests/harness/test_summon_pact_blade.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 4 regression tests. No schema change.
+- **Magical attack flag composes with existing engine.** The pact-blade attack carries `magical: True` at the attack dict level. The `_attack_is_magical` helper reads this directly, so resistance/immunity gates for "nonmagical attacks" fire correctly without further wiring.
+- **No demo seed Pact-Blade Warlock yet.** Magnus carries the Tome boon by seed (per v2.99.200 + the existing inventory item); pact_boon needs to flip to "blade" for the test. A future seed bump could add a second Pact-Blade demo PC.
+- **Phase D.2 ✅. Phase D progress: 2/3.** D.1 Pact of the Tome (v2.99.200) + D.2 Pact of the Blade (v2.99.212) shipped. D.3 Pact of the Chain (familiar summon via `/place_token` extension) still ⚪.
+- **Total harness count: 1173** (was 1169 in v2.99.211).
+
+---
+
 ## [2.99.211] - 2026-06-04 — "Diamond Reroll" — Diamond Soul ki-spend reroll — Phase F.2 ✅ COMPLETE
 
 **Schema version:** 66
