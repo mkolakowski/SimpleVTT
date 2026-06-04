@@ -33789,6 +33789,18 @@ async def cast_polymorph(
     slot_level = int(slot_level_raw) if slot_level_raw is not None else 4
     override = bool(body.get("override"))
     via_invocation = (body.get("via_invocation") or "").strip().lower()
+    # v2.99.175 — Polymorph WIS save for unwilling targets. RAW
+    # PHB p.266: "An unwilling creature must make a Wisdom saving
+    # throw to resist the effect. If it succeeds, it isn't
+    # affected by this spell." When unwilling=True + a PC target
+    # is supplied, the endpoint rolls the target's WIS save vs
+    # the caster's spell save DC. On success, the cast still
+    # consumes the slot (RAW: the spell was cast even if it
+    # didn't take effect) but skips the concentration anchor
+    # install — the caster isn't concentrating on a polymorph
+    # that didn't land.
+    unwilling = bool(body.get("unwilling") or False)
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
 
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
@@ -33901,11 +33913,67 @@ async def cast_polymorph(
     flag_modified(char, "sheet")
     db.commit()
 
-    # Caster concentration anchor (1 hour = 600 rounds).
-    await _install_caster_concentration_anchor(
-        campaign_id, char, "polymorph", "Polymorph",
-        duration_rounds=600, icon="🐺",
-    )
+    # v2.99.175 — Polymorph WIS save for unwilling targets. Rolled
+    # server-side when `unwilling=True` + target_combatant_id
+    # resolves to a PC. Save mod = WIS ability mod + proficiency
+    # bonus (if proficient in WIS saves). DC = caster's spell save
+    # DC. On success: skip the concentration anchor install + return
+    # `saved: True`. The slot is still consumed per RAW (the spell
+    # was cast — it just didn't take effect).
+    _save_rolled = False
+    _save_passed = False
+    _save_total = 0
+    _save_dc = _compute_spell_save_dc_from_sheet(sheet)
+    _target_name = ""
+    if unwilling and target_combatant_id:
+        _target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if _target_combatant and _target_combatant.get("char_id"):
+            _target_char = db.query(Character).filter(
+                Character.id == int(_target_combatant["char_id"]),
+            ).first()
+            if _target_char and _target_char.sheet:
+                _t_sheet = dict(_target_char.sheet or {})
+                _target_name = _target_char.name or _target_combatant.get("name") or ""
+                _wis = int((_t_sheet.get("abilities") or {}).get("WIS", 10))
+                _wis_mod = (_wis - 10) // 2
+                _t_prof = int(_t_sheet.get("proficiency_bonus") or 2)
+                _wis_proficient = bool(
+                    (_t_sheet.get("saving_throws") or {}).get("WIS")
+                )
+                _save_mod = _wis_mod + (_t_prof if _wis_proficient else 0)
+                import random as _random_polymorph
+                _d20 = _random_polymorph.randint(1, 20)
+                _save_total = _d20 + _save_mod
+                _save_rolled = True
+                _save_passed = _save_total >= _save_dc
+                await hub.broadcast(campaign_id, {
+                    "type": "roll",
+                    "data": {
+                        "expression": f"1d20+{_save_mod}",
+                        "total": _save_total,
+                        "breakdown": (
+                            f"WIS save: 1d20[{_d20}]+{_save_mod} = "
+                            f"{_save_total} vs DC {_save_dc} → "
+                            f"{'PASS' if _save_passed else 'FAIL'}"
+                        ),
+                        "note": (
+                            f"🧠 {_target_name}'s WIS save vs "
+                            f"{char.name}'s Polymorph"
+                        ),
+                        "user_name": char.name,
+                        "char_name": _target_name,
+                        "visibility": Visibility.PUBLIC.value,
+                    },
+                })
+
+    # Caster concentration anchor (1 hour = 600 rounds). Skip if
+    # the unwilling target passed their WIS save — RAW the spell
+    # doesn't take effect, so there's nothing to concentrate on.
+    if not (_save_rolled and _save_passed):
+        await _install_caster_concentration_anchor(
+            campaign_id, char, "polymorph", "Polymorph",
+            duration_rounds=600, icon="🐺",
+        )
     # v2.99.174 — Twinned Spell auto-route. When the caster has a
     # `metamagic-twinned-pending` buff carrying a second target,
     # surface the second target in the audit + the response. The
@@ -33988,10 +34056,16 @@ async def cast_polymorph(
         "class_slug": class_slug,
         "via_invocation": via_invocation or None,
         "duration_rounds": 600,
-        "concentration": True,
-        "ready_to_transform": True,
+        "concentration": not (_save_rolled and _save_passed),
+        "ready_to_transform": not (_save_rolled and _save_passed),
         # v2.99.174 — Twinned auto-route response field.
         "twinned_target_combatant_id_2": _twin_target_2 or None,
+        # v2.99.175 — WIS save fields for unwilling targets.
+        "save_rolled": _save_rolled,
+        "save_passed": _save_passed,
+        "save_total": _save_total,
+        "save_dc": _save_dc,
+        "save_target_name": _target_name or None,
     }
 
 

@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.175] - 2026-06-03 — "The Wisdom to Resist" — Polymorph WIS save for unwilling targets
+
+**Schema version:** 66
+**Commit summary:** **Wire the RAW Polymorph WIS save for unwilling targets into `/cast_polymorph`.** RAW (PHB p.266): "An unwilling creature must make a Wisdom saving throw to resist the effect. If it succeeds, it isn't affected by this spell." Pre-v2.99.175 the endpoint accepted any target without a save resolution. v2.99.175 adds `unwilling: bool` to the body; when True + `target_combatant_id` resolves to a PC, the endpoint rolls the target's WIS save (mod = WIS ability mod + proficiency bonus if proficient) vs the caster's spell save DC. On PASS: the response carries `save_passed: True`, `concentration: False`, `ready_to_transform: False` — the concentration anchor is NOT installed. On FAIL: response carries `save_passed: False`, `concentration: True` — anchor installs as normal. The slot is consumed in both cases per RAW (the spell was cast — it just may not have taken effect).
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — `/cast_polymorph` body accepts `unwilling: bool` + `target_combatant_id: str`. After slot decrement / before concentration anchor install, the endpoint rolls the WIS save when `unwilling=True` + target resolves to a PC. Save mod computed from target's `sheet.abilities.WIS` + `sheet.proficiency_bonus` + `sheet.saving_throws.WIS` proficient flag. DC from `_compute_spell_save_dc_from_sheet(sheet)`. Roll broadcast as `type=roll` with breakdown showing PASS/FAIL. Anchor install gated on `not (_save_rolled and _save_passed)`. Response includes `save_rolled`, `save_passed`, `save_total`, `save_dc`, `save_target_name`. (2) `tests/harness/test_polymorph_wis_save.py` — 3 regression tests.
+
+### Added
+- `unwilling: bool` and `target_combatant_id: str` body fields on `/cast_polymorph`.
+- WIS save rolled server-side for unwilling PC targets.
+- `roll` broadcast with the save's d20+mod breakdown.
+- `save_rolled`, `save_passed`, `save_total`, `save_dc`, `save_target_name` fields on the response.
+- Concentration anchor + `ready_to_transform` gated on save outcome.
+- `tests/harness/test_polymorph_wis_save.py` — 3 tests: unwilling PC → save rolled with all fields present; willing (default) → no save rolled; rigged save PASS (WIS 30 + prof) → concentration anchor NOT installed.
+
+### Notes
+- **PATCH bump** — WIS save logic + 3 tests. No schema change.
+- **Why the slot is still consumed on save PASS.** RAW: "if it succeeds, it isn't affected by this spell" — the spell was cast (slot consumed, action used), it just had no effect on the saver. The endpoint preserves this distinction: slot decrements, no concentration anchor needed, no transformation.
+- **What's filed.** (1) NPC target WIS save — today the endpoint only rolls the save for PC targets (looked up via `target_combatant.char_id`). NPC targets fall through (no save, anchor installs). The NPC save would need template lookup for WIS + saves — same plumbing as the v2.97.66 NPC save framework. (2) Per-RAW willing-creature gate — RAW: "an unwilling creature must make..." implies the cast can be auto-willing for allies. v1 trusts the caller's `unwilling` flag (default False = willing). A future RAW gate could read the target's team / relationship.
+- **The Polymorph mechanical chain is now complete:**
+  - Cast: slot + concentration anchor + (v2.99.175) save resolution
+  - Transform: (v2.99.168) sheet swap + token disguise
+  - Auto-revert: (v2.99.172) concentration drop cascades to sheet + token
+  - Twinned routing: (v2.99.174) surfaces second target on the cast response
+- **Total harness count: 1096** (was 1093 in v2.99.174).
+
+---
+
 ## [2.99.174] - 2026-06-03 — "The Spell Forks" — Twinned Spell auto-route surfaces the second target on /cast_polymorph
 
 **Schema version:** 66
