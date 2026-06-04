@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.186] - 2026-06-04 — "Quiet Hag" — NPC `/npc_cast_spell` mirrors PC Subtle Spell + Counterspell gate
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.173 filed item — NPC casters with `metamagic-subtle-pending` on their combatant now suppress the Counterspell prompt the same way PCs do.** v2.99.173 wired the PC side at `/cast_spell` (auto-detect + consume + flag the walker), but `/npc_cast_spell` had no parallel plumbing. v2.99.186 adds two helpers (`_npc_has_subtle_pending` + `_consume_npc_subtle_pending`) and wires `/npc_cast_spell` to (a) detect Subtle-pending on the NPC's combatant by id, (b) drop the buff one-shot via the combatant-buffs list mutation, (c) broadcast the 🤫 marker, (d) stamp `was_subtle: True` on the cast payload, and (e) pass `was_subtle=True` to `_emit_counterspell_prompts` so the walker short-circuits. PCs don't naturally see NPC Subtle (NPCs have no Sorcery Points), but a GM can seed the pending buff in a prepared encounter (e.g. a hag who knows Subtle Spell as a class feature).
+**Description:** Three edits. (1) `_npc_has_subtle_pending(campaign_id, combatant_id)` — mirror of `_caster_has_subtle_pending` keyed on combatant id instead of char_id. (2) `_consume_npc_subtle_pending(campaign_id, combatant_id)` — walks the combatant's buffs list, removes the pending entry in-place, calls `hub.set_battle` + broadcasts a `battle_update`. PC path uses `_remove_buff(char_id, key)` which doesn't apply to NPCs. (3) `/npc_cast_spell` — before broadcasting `spell_cast`, compute `_npc_was_subtle`; if True, consume + broadcast the 🤫 feature_used; stamp `payload["was_subtle"]`; pass the flag to `_emit_counterspell_prompts`. One new harness test seeds a synthetic NPC with the pending buff + a PC watcher with Counterspell on sheet, casts via /npc_cast_spell, verifies (a) `was_subtle: True` on the cast broadcast, (b) the 🤫 marker fired, (c) no Counterspell prompt was emitted.
+
+### Added
+- `_npc_has_subtle_pending(campaign_id, combatant_id)` helper.
+- `_consume_npc_subtle_pending(campaign_id, combatant_id)` one-shot remover with broadcast.
+- `/npc_cast_spell` — detects + consumes Subtle pending, broadcasts 🤫, stamps `was_subtle` on payload, passes flag to Counterspell walker.
+- `tests/harness/test_npc_cast_subtle_immune.py` — 1 test.
+
+### Notes
+- **PATCH bump** — endpoint extension + 2 helpers + 1 harness test. No schema change.
+- **Closes the v2.99.173 NPC mirror filed item.** The remaining v2.99.173 follow-up is Counterspell-on-Counterspell, which is a v3 ship per the v2.70.0 plan.
+- **Why the combatant-buffs in-place remover.** `_remove_buff(campaign_id, char_id, key)` keys on char_id and walks the Character.sheet's `_buffs_active` mirror; NPCs have no Character row and live in `hub.get_battle(...)["combatants"]`'s `buffs` list. Mirrors the in-place mutation pattern that `_drop_paired_concentration_buffs_npc` uses for NPC buff cleanup.
+- **Symmetry with PC path.** PC `/cast_spell` flow: `_was_subtle = _caster_has_subtle_pending(...)`; if True → `_remove_buff(char_id, key)` + broadcast 🤫 + pass to walker. NPC `/npc_cast_spell` flow: identical shape, swapping the helpers for combatant-id-keyed variants. The walker (`_emit_counterspell_prompts`) is shared.
+- **Total harness count: 1110** (was 1109 in v2.99.185).
+
+---
+
 ## [2.99.185] - 2026-06-04 — "The PUT Watches" — /battle PUT auto-triggers NPC concentration cleanup cascade
 
 **Schema version:** 66

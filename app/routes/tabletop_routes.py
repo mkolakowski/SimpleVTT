@@ -28420,6 +28420,73 @@ def _caster_has_subtle_pending(
     return False
 
 
+def _npc_has_subtle_pending(
+    campaign_id: int, combatant_id: "str | None",
+) -> bool:
+    """v2.99.186 — NPC mirror of `_caster_has_subtle_pending`. Looks
+    up the combatant by `id` instead of `char_id` (NPCs have no
+    char_id) and returns True when the combatant carries a
+    `metamagic-subtle-pending` buff. Closes the v2.99.173 filed
+    item — NPC casters can now suppress Counterspell prompts the
+    same way PCs do.
+    """
+    if not combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "metamagic-subtle-pending":
+                return True
+        return False
+    return False
+
+
+async def _consume_npc_subtle_pending(
+    campaign_id: int, combatant_id: str,
+) -> None:
+    """v2.99.186 — drop the `metamagic-subtle-pending` buff from an
+    NPC combatant's buff list one-shot. Mirrors the PC path at
+    /cast_spell (line ~14792) which uses `_remove_buff` on the
+    char_id; NPCs need a combatant-id-keyed remover instead.
+    Broadcasts a battle_update so init-tracker clients refresh.
+    """
+    if not combatant_id:
+        return
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    dirty = False
+    for c in state.get("combatants") or []:
+        if c.get("id") != combatant_id:
+            continue
+        buffs = c.get("buffs") or []
+        kept = [
+            b for b in buffs
+            if not (
+                isinstance(b, dict)
+                and (b.get("key") or "").strip().lower()
+                == "metamagic-subtle-pending"
+            )
+        ]
+        if len(kept) != len(buffs):
+            c["buffs"] = kept
+            dirty = True
+        break
+    if dirty:
+        hub.set_battle(campaign_id, state)
+        await hub.broadcast(campaign_id, {
+            "type": "battle_update",
+            "data": state,
+            "force_gm_sync": True,
+        })
+
+
 def _caster_has_extended_pending(
     campaign_id: int, caster_char_id: "int | None",
 ) -> bool:
@@ -40957,6 +41024,29 @@ async def use_npc_cast_spell(
         "is_crit": is_crit,
         "target_hp_after": target_hp_after,
     }
+    # v2.99.186 — NPC Subtle Spell consume + immune flag. Mirror of
+    # the PC /cast_spell path at line ~14791. When the NPC caster
+    # carries a `metamagic-subtle-pending` buff, drop it one-shot,
+    # broadcast the 🤫 marker, and flag the upcoming Counterspell
+    # walker as subtle so it short-circuits prompt emission.
+    _npc_was_subtle = _npc_has_subtle_pending(campaign_id, combatant_id)
+    if _npc_was_subtle:
+        await _consume_npc_subtle_pending(campaign_id, combatant_id)
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "combatant_id": combatant_id,
+                "character_name": caster_name,
+                "feature_name": "🤫 Subtle Spell consumed",
+                "feature_desc": (
+                    "Cast without verbal or somatic components — "
+                    "Counterspell cannot react."
+                ),
+                "source": "metamagic-subtle-spell-consumed",
+                "counterspell_immune": True,
+            },
+        })
+    payload["was_subtle"] = bool(_npc_was_subtle)
     await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
     # v2.70.0 Phase 3b — Counterspell prompt for nearby PC watchers.
     # Mirror of the /cast_spell hook. NPC caster identity is the
@@ -40969,6 +41059,7 @@ async def use_npc_cast_spell(
             spell_name=spell_name,
             spell_level=int(spell_level),
             spell_slug="",
+            was_subtle=bool(_npc_was_subtle),
         )
     except Exception:
         pass

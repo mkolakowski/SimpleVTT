@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1109 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.185, 2026-06-04).
+**Total tests:** 1110 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.186, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1035,6 +1035,13 @@ v2.99.185 — `/battle PUT` auto-fires `_drop_paired_concentration_buffs_npc` wh
 | Test | What it asserts |
 |------|-----------------|
 | `test_battle_put_drops_npc_concentration_buffs` | Seed NPC with `concentration-polymorph` buff + Krieger with a `polymorph-active` marker sourced from the NPC. `/battle PUT` with the NPC's concentration buff removed → the NPC-mirror cascade fires + the v2.99.172 revert hook drops Krieger's polymorph-active marker. |
+
+### `test_npc_cast_subtle_immune.py`
+v2.99.186 — `/npc_cast_spell` mirrors the PC Subtle gate. Closes a v2.99.173 filed item; an NPC carrying `metamagic-subtle-pending` on its combatant suppresses the Counterspell prompt the same way a PC caster does.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_npc_cast_subtle_suppresses_counterspell_prompt` | Seed a synthetic NPC with `metamagic-subtle-pending` on its combatant + Thalindra (Counterspell on sheet) as a PC watcher. `/npc_cast_spell` → cast payload carries `was_subtle: True`, the 🤫 `metamagic-subtle-spell-consumed` `feature_used` fires, and no `reaction_prompt(spell_cast_near)` is emitted for the cast. |
 
 ### `test_buff_sheet_mirror.py`
 Phase C.3 — buffs persist to `sheet["_buffs_active"]` for cross-page visibility.
