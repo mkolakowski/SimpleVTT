@@ -25384,6 +25384,34 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_evocation_school(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.225 — RAW School of Evocation features (Wizard,
+    PHB p.117): Evocation Savant + Sculpt Spells (Lv 2),
+    Potent Cantrip (Lv 6), Empowered Evocation (Lv 10),
+    Overchannel (Lv 14).
+
+    Returns True when the PC is a Wizard with subclass slug
+    containing "evocation" + meets `min_level`. Gates each
+    Evocation-specific endpoint.
+
+    Phase E.7 of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "evocation" not in subclass:
+        return False
+    return _wizard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_hunters_prey_pick(sheet: "dict | None") -> str:
     """v2.99.223 — RAW Hunter's Prey (Hunter Ranger Lv 3+, PHB
     p.93): pick ONE of Colossus Slayer / Giant Killer / Horde
@@ -36103,6 +36131,195 @@ async def use_supreme_sneak(
 
     return {"ok": True, "feature": "supreme-sneak",
             "stealth_bonus": 5, "buff_installed": True}
+
+
+@router.post("/api/campaign/{campaign_id}/use_sculpt_spells")
+async def use_sculpt_spells(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.225 — Phase E.7 of the v2.99.193 phased completion
+    plan. Sculpt Spells (Evocation Wizard Lv 2+, PHB p.117):
+    "Beginning at 2nd level, you can create pockets of relative
+    safety within the effects of your evocation spells. When you
+    cast an evocation spell that affects other creatures that you
+    can see, you can choose a number of them equal to 1 + the
+    spell's level. The chosen creatures automatically succeed on
+    their saving throws against the spell, and they take no damage
+    if they would normally take half damage on a successful save."
+
+    Body: ``{character_id, spell_level}``. spell_level ∈ 1..9
+    (cantrips don't qualify — they don't have a "spell level" for
+    sculpt counting, and Sculpt Spells RAW gates on cast-spell-
+    of-Nth-level).
+
+    Validates Evocation Wizard Lv 2+. Computes protected count =
+    1 + spell_level. v1 ships as announce-only — the endpoint
+    broadcasts the number of allies the wizard can shelter, and
+    the GM threads the exclusion list through the AoE damage step
+    manually. (Future: extend /place_aoe with a
+    `sculpt_exclude_token_ids` param.)
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    spell_level = int(body.get("spell_level") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not (1 <= spell_level <= 9):
+        raise HTTPException(400, "spell_level must be 1..9")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_evocation_school(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "evocation wizard lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    protected = 1 + spell_level
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"💠 Sculpt Spells — shelter {protected} creature"
+                f"{'s' if protected != 1 else ''}"
+            ),
+            "feature_desc": (
+                f"{char.name} uses Sculpt Spells on a level "
+                f"{spell_level} evocation: up to {protected} "
+                f"chosen creature{'s' if protected != 1 else ''} "
+                f"auto-succeed their save and take no damage. "
+                f"(GM excludes them from the AoE damage step.)"
+            ),
+            "source": "sculpt-spells",
+            "spell_level": spell_level,
+            "protected_count": protected,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "sculpt-spells",
+        "spell_level": spell_level,
+        "protected_count": protected,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_empowered_evocation")
+async def use_empowered_evocation(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.225 — Phase E.7 of the v2.99.193 phased completion
+    plan. Empowered Evocation (Evocation Wizard Lv 10+, PHB
+    p.117): "Beginning at 10th level, you can add your
+    Intelligence modifier to one damage roll of any wizard
+    evocation spell you cast."
+
+    Body: ``{character_id}``.
+
+    Validates Evocation Wizard Lv 10+. Computes INT mod +
+    broadcasts. v1 ships announce-only — the player/GM applies
+    the +INT to the chosen damage roll manually. (Once-per-turn
+    tracking is filed; would require a battle-economy flag like
+    Foe Slayer / Colossus Slayer.)
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_evocation_school(sheet, 10):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "evocation wizard lv 10+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    int_score = int((sheet.get("abilities") or {}).get("INT") or 10)
+    int_mod = (int_score - 10) // 2
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"💥 Empowered Evocation — +{int_mod} damage"
+            ),
+            "feature_desc": (
+                f"{char.name} adds INT mod ({int_mod:+}) to one "
+                f"damage roll of a wizard evocation spell this "
+                f"cast. (Evocation Wizard Lv 10+ class feature.)"
+            ),
+            "source": "empowered-evocation",
+            "int_mod": int_mod,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "empowered-evocation",
+        "int_mod": int_mod,
+    }
 
 
 @router.post("/api/campaign/{campaign_id}/select_hunters_prey")

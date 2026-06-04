@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.225] - 2026-06-04 — "The Sculpted Storm" — Evocation Wizard Sculpt Spells + Empowered Evocation
+
+**Schema version:** 66
+**Commit summary:** **Phase E.7 of the v2.99.193 phased completion plan — Evocation Wizard features.** RAW PHB p.117: (1) Sculpt Spells (Lv 2) — on evocation cast, shelter 1 + spell level chosen creatures from save-half damage. (2) Empowered Evocation (Lv 10) — add INT mod to one damage roll of a wizard evocation spell. v2.99.225 ships announce endpoints for both. Potent Cantrip (Lv 6) + Overchannel (Lv 14) filed for follow-up commits.
+**Description:** One helper + two endpoints. (1) `_pc_has_evocation_school(sheet, min_level)` returns True for Wizard subclass containing "evocation" at or above `min_level` (multiclass-aware). (2) `/use_sculpt_spells` — body `{character_id, spell_level}`, validates Evocation Wizard Lv 2+ + spell_level 1..9, computes `protected_count = 1 + spell_level`, broadcasts. (3) `/use_empowered_evocation` — body `{character_id}`, validates Evocation Wizard Lv 10+, computes INT mod, broadcasts. Both ship as announce-only — the GM/player applies the exclusion (Sculpt) or +INT (Empowered) at the AoE/damage step manually. Thalindra Moonwhisper (Wizard School of Evocation Lv 7 default) is the demo fixture; the Empowered Evocation test PATCHes her Lv 7 → 10. One new harness test file with 5 tests.
+
+### Added
+- `_pc_has_evocation_school(sheet, min_level)` helper gate (multiclass-aware).
+- `/api/campaign/{cid}/use_sculpt_spells` endpoint.
+- `/api/campaign/{cid}/use_empowered_evocation` endpoint.
+- `tests/harness/test_evocation_school.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 2 endpoints + 5 regression tests. No schema change.
+- **v1 ships announce-only.** Sculpt Spells RAW asks the wizard to point at specific allies and exclude them from the spell's damage step. v1 broadcasts the shelter count; the GM threads the exclusion through `/place_aoe` manually. Future commit would extend `/place_aoe` with a `sculpt_exclude_token_ids` param + an automatic guard that gates the param on `_pc_has_evocation_school(caster_sheet, 2)`.
+- **Empowered Evocation once-per-turn untracked.** RAW: "one damage roll" implies once per cast / once per turn. v1 broadcasts each invocation without a per-turn flag; future commit would add a battle-economy slot like Foe Slayer / Colossus Slayer.
+- **Potent Cantrip (Lv 6) + Overchannel (Lv 14) filed.** Potent Cantrip = half damage on save for evocation cantrips (needs `/save` hook); Overchannel = max damage on Lv 1-5 spells with escalating necrotic cost (needs `/cast_spell` hook + per-long-rest counter). Both ship as follow-up commits.
+- **Phase E ✅ 4/8.** E.5 (v2.99.222 Draconic) + E.3 (v2.99.223 Hunter's Prey) + E.4 (v2.99.224 Thief) + E.7 (v2.99.225 Evocation). Still ⚪: E.1 Battle Master, E.2 Eldritch Knight, E.6 Wild Magic, E.8 Berserker.
+- **41 ships this session.**
+- **Total harness count: 1220** (was 1215 in v2.99.224).
+
+---
+
 ## [2.99.224] - 2026-06-04 — "Fast Hands of the Thief" — Thief Rogue Fast Hands + Supreme Sneak
 
 **Schema version:** 66
