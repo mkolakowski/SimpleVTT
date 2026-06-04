@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.207] - 2026-06-04 — "Untouchable" — Elusive (Rogue Lv 18) — Phase F.4 ✅ COMPLETE
+
+**Schema version:** 66
+**Commit summary:** **Phase F.4 final of the v2.99.193 phased completion plan — Elusive. Phase F.4 ✅ COMPLETE (2/2: Slippery Mind + Elusive).** RAW PHB p.96: "Beginning at 18th level, you are so evasive that attackers rarely gain the upper hand against you. No attack roll has advantage against you while you aren't incapacitated." v2.99.207 adds the helper `_pc_has_elusive(sheet)` (Rogue Lv 18+) + the combatant-aware lookup `_target_has_elusive(campaign_id, target_combatant_id)`. Wired into `/attack`'s advantage resolution at both call sites — when `has_adv` is True but the target has Elusive, the advantage is suppressed and `roll_state_applied` is set to `"elusive_suppressed"`. The cancel logic with disadvantage stays clean: a Reckless Attack vs a Lv 18 Rogue with Dodging would cancel to a straight roll today; v2.99.207 makes the rage-attack-vs-Lv 18-Rogue case suppress without needing a disadvantage source.
+**Description:** Two helpers + 1 wire-in (both `/attack` call sites). (1) `_pc_has_elusive(sheet)` — Rogue Lv 18+ gate. (2) `_target_has_elusive(campaign_id, target_combatant_id)` — looks up the target combatant via the active battle, resolves to a Character via a fresh `SessionLocal()` session, gates on the helper. (3) `/attack` advantage resolution at both call sites — after `has_adv` is computed, if `_target_has_elusive` returns True, set `has_adv = False` + label `"elusive_suppressed"`. v1 simplification skips the "while you aren't incapacitated" gate — the incapacitated condition isn't consistently mirrored to the sheet today (filed; means an incapacitated Lv 18+ Rogue still suppresses advantage, a known too-generous v1). Pip Quickfingers is the demo fixture; tests PATCH her Lv 7 → 18. One new harness test file with 2 tests: Krieger raging (Reckless Attack advantage source) attacks Pip Lv 18 → `elusive_suppressed`; Krieger raging attacks Pip Lv 7 → standard `advantage_rage`.
+
+### Added
+- `_pc_has_elusive(sheet)` helper gate.
+- `_target_has_elusive(campaign_id, target_combatant_id)` combatant-aware lookup.
+- Elusive suppression at `/attack`'s 2 advantage-resolution sites.
+- `tests/harness/test_elusive.py` — 2 tests.
+
+### Notes
+- **PATCH bump** — 2 helpers + 2 intercept sites + 2 regression tests. No schema change.
+- **`_target_has_elusive` opens its own DB session.** The `/attack` advantage-resolution block is sync (no async db fetch wrapping); `_target_has_elusive` uses `SessionLocal()` directly. Acceptable for v1 — the lookup is light (one Character row by id). If performance regresses on hot paths, fold into the existing `_attacker_cb` lookup pattern that already happens.
+- **Composes with the cancel logic.** RAW intent: if the attacker has both an advantage source (rage / Reckless Attack) AND a disadvantage source (Dodging / PFE&G), they cancel. Adding Elusive suppresses the advantage entirely (so the disadvantage applies). If the cancel logic ran first, the result would still be straight (canceled); my Elusive-first ordering gives the same end-result but cleaner `roll_state_applied` label.
+- **Phase F.4 ✅ COMPLETE (2/2).** Slippery Mind (v2.99.206) + Elusive (v2.99.207). Both Rogue Lv 15-18 capstones shipped this session.
+- **Total harness count: 1159** (was 1157 in v2.99.206).
+
+---
+
 ## [2.99.206] - 2026-06-04 — "The Slippery Mind" — Slippery Mind (Rogue Lv 15)
 
 **Schema version:** 66

@@ -25072,6 +25072,71 @@ async def _broadcast_race_save_advantage(
 # race trait separate is RAW-correct: Halfling Lucky has no charge,
 # can't run out, and triggers automatically.
 
+def _pc_has_elusive(sheet: "dict | None") -> bool:
+    """v2.99.207 — RAW Elusive (Rogue Lv 18+, PHB p.96):
+    "Beginning at 18th level, you are so evasive that attackers
+    rarely gain the upper hand against you. No attack roll has
+    advantage against you while you aren't incapacitated."
+
+    Returns True for Rogue Lv 18+. Consumed by /attack's
+    advantage-resolution to suppress incoming advantage when the
+    target is a Lv 18+ Rogue.
+
+    v1 simplification: doesn't check the "while you aren't
+    incapacitated" gate. The incapacitated condition isn't
+    consistently mirrored to the sheet today; when it ships,
+    extend this helper. RAW behavior under v1: even an
+    incapacitated Lv 18+ Rogue suppresses incoming advantage —
+    a known too-generous v1.
+
+    Phase F.4 final of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _rogue_level_from_sheet(sheet) >= 18
+
+
+def _target_has_elusive(
+    campaign_id: int, target_combatant_id: "str | None",
+) -> bool:
+    """v2.99.207 — Look up the target combatant via the active
+    battle, resolve to a Character row, and return True if the
+    PC has Elusive (Rogue Lv 18+). Returns False for NPC targets
+    or when the battle / combatant lookup fails.
+    """
+    if not target_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        char_id = c.get("char_id")
+        if not char_id:
+            return False
+        # Sheet is mirrored on the combatant via the v2.97.30+
+        # path, but for level reads we need the persisted sheet.
+        # The /attack endpoint already has access to db via its
+        # closure; helper consumes campaign_id only. Read the
+        # sheet via a lightweight Character lookup.
+        try:
+            from sqlalchemy.orm import Session as _S  # noqa: F401
+        except ImportError:
+            return False
+        # Use a fresh DB session — this helper is sync and may be
+        # called from contexts that don't have one open.
+        from .. import database as _db_mod
+        with _db_mod.SessionLocal() as session:
+            ch = session.query(Character).filter(
+                Character.id == int(char_id),
+            ).first()
+            if not ch or not ch.sheet:
+                return False
+            return _pc_has_elusive(ch.sheet)
+    return False
+
+
 def _pc_has_slippery_mind(sheet: "dict | None") -> bool:
     """v2.99.206 — RAW Slippery Mind (Rogue Lv 15+, PHB p.96):
     "By 15th level, you have acquired greater mental strength.
@@ -40465,6 +40530,20 @@ async def use_attack(
             "rage" if rage_advantage else
             "reckless" if target_grants_advantage else ""
         )
+        # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
+        # attack roll has advantage against you while you aren't
+        # incapacitated." Suppresses ALL incoming advantage when
+        # the target is a Lv 18+ Rogue. v1 simplification skips
+        # the "incapacitated" gate (filed).
+        _target_elusive = _target_has_elusive(
+            campaign_id, target_combatant_id,
+        )
+        if has_adv and _target_elusive:
+            has_adv = False
+            adv_label = ""
+            attack_roll_state_applied = (
+                attack_roll_state_applied or "elusive_suppressed"
+            )
         # v2.97.48 — fold target_pfeag_blocks_type into the
         # disadvantage source set alongside target_dodging.
         has_dis = target_dodging or target_pfeag_blocks_type
@@ -40512,6 +40591,20 @@ async def use_attack(
             "rage" if rage_advantage else
             "reckless" if target_grants_advantage else ""
         )
+        # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
+        # attack roll has advantage against you while you aren't
+        # incapacitated." Suppresses ALL incoming advantage when
+        # the target is a Lv 18+ Rogue. v1 simplification skips
+        # the "incapacitated" gate (filed).
+        _target_elusive = _target_has_elusive(
+            campaign_id, target_combatant_id,
+        )
+        if has_adv and _target_elusive:
+            has_adv = False
+            adv_label = ""
+            attack_roll_state_applied = (
+                attack_roll_state_applied or "elusive_suppressed"
+            )
         # v2.97.48 — fold target_pfeag_blocks_type into the
         # disadvantage source set alongside target_dodging.
         has_dis = target_dodging or target_pfeag_blocks_type
