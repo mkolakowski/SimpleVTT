@@ -10732,6 +10732,89 @@ async def use_whispers_of_the_grave(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_visions_of_distant_realms")
+async def use_visions_of_distant_realms(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.152 — Visions of Distant Realms (Warlock Lv 15+
+    invocation).
+
+    RAW (PHB p.111): "Prerequisite: 15th level. You can cast Arcane
+    Eye at will, without expending a spell slot."
+
+    v1 ships the audit broadcast + invocation gate only — there's
+    no Arcane Eye sensor token / map exploration overlay in
+    SimpleVTT today. The endpoint broadcasts the cast so the chat
+    log records when the warlock declares they're projecting a
+    scrying eye.
+
+    Body: ``{character_id}``.
+
+    Validation:
+      - Caller has `eldritch-invocation-visions-of-distant-realms`
+        on feats (409 missing_invocation if not)
+      - 403 when not the GM and not the caster's owner
+
+    **20th and final SRD Eldritch Invocation** for Magnus's
+    roster — closes the v2.99.95-onward invocation series.
+    """
+    body = await request.json()
+    char_id_raw = body.get("character_id")
+    try:
+        char_id = int(char_id_raw) if char_id_raw else 0
+    except (TypeError, ValueError):
+        char_id = 0
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_invocation(sheet, "visions-of-distant-realms"):
+        return JSONResponse(status_code=409, content={
+            "error": "missing_invocation",
+            "invocation": "visions-of-distant-realms",
+        })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "👁️ Arcane Eye (Visions of Distant Realms)",
+            "feature_desc": (
+                f"{char.name} projects an invisible Arcane Eye. "
+                f"Can move it up to 30 ft per turn and see through "
+                f"its perspective for up to 1 hour (concentration)."
+            ),
+            "source": "visions-of-distant-realms",
+            "duration_rounds": 600,  # 1 hour at 6s/round
+            "move_per_turn_ft": 30,
+        },
+    })
+
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "character_name": char.name,
+        "duration_rounds": 600,
+        "move_per_turn_ft": 30,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_devils_sight")
 async def use_devils_sight(
     campaign_id: int,

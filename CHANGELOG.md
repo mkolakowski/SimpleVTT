@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.152] - 2026-06-03 — "The Twentieth Whisper" — Visions of Distant Realms closes Magnus's invocation roster at 20/20
+
+**Schema version:** 65
+**Commit summary:** **Ship Visions of Distant Realms as a dedicated `/use_visions_of_distant_realms` endpoint that broadcasts a `feature_used` audit when the Warlock declares they're projecting an Arcane Eye.** RAW (PHB p.111): "Prerequisite: 15th level. You can cast Arcane Eye at will, without expending a spell slot." Mirror of v2.99.138/.141/.145/.146/.147 audit pattern. Magnus's seed gains the invocation on his feats list (demo grants at Lv 5 despite RAW Lv 15 prereq, for endpoint coverage). **20th and final SRD Eldritch Invocation** — closes Magnus's roster at **20/20**. The v2.99.95-onward Eldritch Invocation series is now complete: every SRD invocation has a mechanical wire (audit endpoint, registry-routed spell cast, attack hook, damage uplift, or sheet-stamped passive).
+**Description:** Three edits. (1) New `POST /api/campaign/{cid}/use_visions_of_distant_realms` endpoint. Validates `character_id`, caster ownership/GM, and the invocation via `_pc_has_eldritch_invocation(sheet, "visions-of-distant-realms")` (409 `missing_invocation`). On success, broadcasts `feature_used` with `source: "visions-of-distant-realms"`, `duration_rounds: 600` (1 hour at 6s/round), `move_per_turn_ft: 30`. (2) `app/demo_seed.py` — Magnus's feats list gains `eldritch-invocation-visions-of-distant-realms`. (3) `tests/harness/test_use_visions_of_distant_realms.py` — 3 regression tests.
+
+### Added
+- `POST /api/campaign/{cid}/use_visions_of_distant_realms` endpoint.
+- `eldritch-invocation-visions-of-distant-realms` on Magnus's feats list.
+- `feature_used` broadcast with `source: "visions-of-distant-realms"`, `duration_rounds: 600`, `move_per_turn_ft: 30`.
+- `tests/harness/test_use_visions_of_distant_realms.py` — 3 tests: happy path (Magnus → 200 + WS audit with the duration + move budget), missing invocation gate (Krieger → 409), missing character_id → 400.
+
+### Notes
+- **PATCH bump** — single endpoint + demo seed edit + 3 tests. No schema change.
+- **Magnus's invocation roster at 20/20.** Complete list:
+  - Audit-only (8): Mask of Many Faces, Devil's Sight, Eldritch Sight, Ascendant Step, Beast Speech, Eyes of the Rune Keeper, Whispers of the Grave, Visions of Distant Realms.
+  - Attack hooks (4): Agonizing Blast (+CHA damage), Hex Warrior (CHA-for-STR), Lance of Lethargy (-10 ft speed on hit), Repelling Blast (push 10 ft), Lifedrinker (Lv 12 damage uplift).
+  - Range modifier (1): Eldritch Spear (120 → 300 ft).
+  - Registry-routed casts (5): Mire the Mind → Slow, Sculptor of Flesh → Polymorph, Bewitching Whispers → Compulsion, Sign of Ill Omen → Bestow Curse, Thief of Five Fates → Bane.
+  - Passive sheet feature (1): Beguiling Influence (Deception + Persuasion proficiency stamped at seed).
+- **What's filed.** Per-invocation visualization layers — Arcane Eye sensor token, magic-aura overlay, vertical-position altitude rendering, animal/corpse dialog modals, writing-decoding handout layer. The endpoint surfaces stamp the audit; the UI layers are separate ships.
+- **The v2.99.x series.** 57 commits from v2.99.95 (initial Lance of Lethargy buff factory) through v2.99.152 (this commit) shipped mechanical wires for ~80% of Magnus's invocation-related content. The harness suite grew from ~826 tests to **1035**, an addition of ~210 tests over the series.
+- **Total harness count: 1035** (was 1032 in v2.99.151).
+
+---
+
 ## [2.99.151] - 2026-06-03 — "Zero Counts Too" — Fix the slot_level falsy-zero parse bug in /cast_bane
 
 **Schema version:** 65

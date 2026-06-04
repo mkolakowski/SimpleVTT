@@ -1693,6 +1693,13 @@ def _warlock_sheet(name: str) -> dict:
             # grants at Lv 5 for endpoint coverage.
             {"slug": "eldritch-invocation-whispers-of-the-grave", "name": "Eldritch Invocation: Whispers of the Grave",
              "desc": "At will: cast Speak with Dead without expending a spell slot — routed via /use_whispers_of_the_grave per v2.99.147. RAW prereq Lv 9 Warlock."},
+            # v2.99.152 — Visions of Distant Realms: cast Arcane
+            # Eye at will. RAW prereq Lv 15 Warlock; demo seed
+            # grants at Lv 5 for endpoint coverage. **20th and
+            # final SRD Eldritch Invocation** — closes Magnus's
+            # roster at 20/20.
+            {"slug": "eldritch-invocation-visions-of-distant-realms", "name": "Eldritch Invocation: Visions of Distant Realms",
+             "desc": "At will: cast Arcane Eye without expending a spell slot — routed via /use_visions_of_distant_realms per v2.99.152. RAW prereq Lv 15 Warlock."},
             {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
              "desc": "You can cast Disguise Self at will, without expending a spell slot."},
         ],
