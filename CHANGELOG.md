@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.211] - 2026-06-04 — "Diamond Reroll" — Diamond Soul ki-spend reroll — Phase F.2 ✅ COMPLETE
+
+**Schema version:** 66
+**Commit summary:** **Phase F.2 final of the v2.99.193 phased completion plan — Diamond Soul ki-spend reroll. Phase F.2 ✅ COMPLETE (4/4: Diamond Soul + Empty Body + Perfect Self + Diamond Soul ki reroll).** RAW PHB p.79 second half: "Additionally, whenever you make a saving throw and fail, you can spend 1 ki point to reroll it and take the second result." v2.99.211 adds `/use_diamond_soul_reroll` — direct mirror of v2.99.199 `/use_indomitable_reroll`. Validates Monk Lv 14+ + ki >= 1 + roll_id resolves to a DiceRoll. Rerolls the d20, mutates the persisted DiceRoll, broadcasts `roll` with `diamond_soul_reroll: True` + `feature_used(source="diamond-soul-reroll")` + `resource_update(key="ki-points")`.
+**Description:** One new endpoint at `/api/campaign/{cid}/use_diamond_soul_reroll`. Body: `{character_id, roll_id}`. Same shape as Indomitable Reroll: validates class + level + ki + roll_id, rerolls expression via `dice_mod.roll`, updates the breakdown + total + note ("💎 Diamond Soul reroll d20 N → M"), decrements ki by 1, broadcasts 3 messages (roll update, feature_used, resource_update). Kael Brightleaf PATCH'd Lv 7 → 14 + ki seeded for tests. One new harness test file with 3 tests: happy path (roll a save + reroll + verify mutation), level gate (Lv 7 → 409), ki gate (ki=0 → 409).
+
+### Added
+- `/api/campaign/{cid}/use_diamond_soul_reroll` endpoint.
+- `roll` broadcast with `diamond_soul_reroll: True` + `old_total` / `old_d20` / `new_d20` fields.
+- `tests/harness/test_use_diamond_soul_reroll.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 3 regression tests. No schema change.
+- **Composes with Indomitable Reroll.** A multi-classed Monk Lv 14+ / Fighter Lv 9+ has both rerolls available. The Monk's ki-spend can compose with the Fighter's per-rest counter — though RAW each is "spend a resource to reroll", so in practice the player picks one. Both endpoints surface the same underlying DiceRoll-mutation shape.
+- **Phase F.2 ✅ COMPLETE (4/4).** Diamond Soul (passive save proficiency v2.99.208) + Empty Body (4-ki invisible v2.99.209) + Perfect Self (Lv 20 init refund v2.99.210) + Diamond Soul ki-spend reroll (v2.99.211). All Monk Lv 14-20 capstones shipped.
+- **27 ships this session. Phases ✅ complete: A, B (2/3), C.1, D.1, F.1 (5/5), F.2 (4/4), F.4 (2/2). Still ⚪: B.1 Portent, D.2/D.3 Pact of the Blade/Chain, E.x subclass content batch, F.3 Ranger Lv 10-20, F.5 Wizard Lv 18-20, H.x cleanup, G.x system frameworks.**
+- **Total harness count: 1169** (was 1166 in v2.99.210).
+
+---
+
 ## [2.99.210] - 2026-06-04 — "Perfect Self" — Perfect Self (Monk Lv 20) on init
 
 **Schema version:** 66

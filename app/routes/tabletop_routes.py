@@ -33112,6 +33112,211 @@ async def use_flurry_of_blows(
 
 # ----------- API: Wholeness of Body (Monk Way of the Open Hand Lv 6) -----------
 
+@router.post("/api/campaign/{campaign_id}/use_diamond_soul_reroll")
+async def use_diamond_soul_reroll(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.211 — Phase F.2 final of the v2.99.193 phased
+    completion plan. Diamond Soul ki-spend reroll (Monk Lv 14+,
+    PHB p.79): "Additionally, whenever you make a saving throw
+    and fail, you can spend 1 ki point to reroll it and take the
+    second result."
+
+    Direct mirror of v2.99.199 /use_indomitable_reroll — same
+    body shape, same DiceRoll mutation pattern. Differs:
+      - Validates Monk class + level >= 14.
+      - Consumes 1 ki (instead of Indomitable's resource).
+      - Broadcast source = "diamond-soul-reroll".
+
+    RAW "you must take the second result" is enforced server-side
+    by replacing the breakdown + total atomically; no opt-out.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    roll_id = int(body.get("roll_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if roll_id <= 0:
+        raise HTTPException(400, "roll_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "monk",
+            "got": cls or "",
+        })
+    monk_lv = _monk_level_from_sheet(sheet)
+    if monk_lv < 14:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 14, "got": monk_lv,
+        })
+
+    # Ki resource: must have >= 1.
+    resources = list(sheet.get("resources") or [])
+    ki_idx = -1
+    ki_row = None
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "ki-points":
+            ki_row = dict(r); ki_idx = i; break
+    if ki_row is None:
+        return JSONResponse(status_code=404, content={
+            "error": "resource_missing", "label": "Ki Points",
+        })
+    ki_cur = int(ki_row.get("current") or 0)
+    ki_max = int(ki_row.get("max") or 0)
+    if ki_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_ki", "required": 1, "got": ki_cur,
+        })
+
+    # Look up the DiceRoll record + verify it belongs to the user.
+    rec = db.query(DiceRoll).filter(
+        DiceRoll.id == roll_id,
+        DiceRoll.campaign_id == campaign_id,
+    ).first()
+    if not rec:
+        return JSONResponse(status_code=404, content={
+            "error": "roll_not_found",
+        })
+    if rec.user_id != user.id and not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "Not your roll")
+
+    old_d20 = _extract_kept_d20_from_breakdown(rec.breakdown or "")
+    old_total = int(rec.total or 0)
+    if old_d20 is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_d20",
+            "msg": "Roll has no d20 component to reroll.",
+        })
+
+    # Reroll the same expression.
+    try:
+        new_result = dice_mod.roll(rec.expression)
+    except dice_mod.DiceParseError:
+        return JSONResponse(status_code=409, content={
+            "error": "reroll_failed",
+            "msg": f"Could not reroll {rec.expression!r}.",
+        })
+    new_total = int(new_result.total or 0)
+    new_breakdown = new_result.breakdown or ""
+    new_d20 = _extract_kept_d20_from_breakdown(new_breakdown)
+
+    # Persist the updated DiceRoll.
+    rec.breakdown = new_breakdown
+    rec.total = new_total
+    rec.note = (
+        (rec.note or "")
+        + f" | 💎 Diamond Soul reroll d20 {old_d20} → "
+        + (str(new_d20) if new_d20 is not None else "?")
+    )[:200]
+
+    # Decrement ki.
+    ki_row["current"] = ki_cur - 1
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+    db.refresh(rec)
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "id": rec.id,
+            "user_id": user.id,
+            "user_name": user.display_name,
+            "char_name": char.name,
+            "user_color": caster_color,
+            "expression": rec.expression,
+            "breakdown": rec.breakdown,
+            "total": rec.total,
+            "visibility": rec.visibility.value,
+            "note": rec.note,
+            "character_id": char.id,
+            "diamond_soul_reroll": True,
+            "old_total": old_total,
+            "old_d20": old_d20,
+            "new_d20": new_d20,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"💎 Diamond Soul reroll — d20 {old_d20} → "
+                f"{new_d20 if new_d20 is not None else '?'}"
+            ),
+            "feature_desc": (
+                f"{char.name} spent 1 ki to reroll a failed save "
+                f"(Monk Lv 14+ Diamond Soul). New total: {new_total} "
+                f"(was {old_total}). RAW: you must take the second "
+                f"result."
+            ),
+            "source": "diamond-soul-reroll",
+            "roll_id": rec.id,
+            "old_d20": old_d20,
+            "new_d20": new_d20,
+            "old_total": old_total,
+            "new_total": new_total,
+            "ki_spent": 1,
+            "remaining": ki_cur - 1,
+            "max": ki_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "ki-points",
+            "current": ki_cur - 1,
+            "max": ki_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "roll_id": rec.id,
+        "old_d20": old_d20,
+        "new_d20": new_d20,
+        "old_total": old_total,
+        "new_total": new_total,
+        "ki_spent": 1,
+        "remaining": ki_cur - 1,
+        "max": ki_max,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_empty_body")
 async def use_empty_body(
     campaign_id: int,
