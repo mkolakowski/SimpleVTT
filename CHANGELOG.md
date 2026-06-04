@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.229] - 2026-06-04 — "Bend the Roll" — Wild Magic Sorcerer Bend Luck reaction (Phase 3)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.6 Phase 3 of the v2.99.193 phased completion plan — Bend Luck reaction.** RAW PHB p.103: Wild Magic Sorcerer Lv 6+ uses their reaction + 2 SP to roll 1d4 + apply as bonus or penalty to another creature's attack roll, ability check, or saving throw "after the creature rolls but before any effects of the roll occur."
+**Description:** One endpoint. (1) `/use_bend_luck` — body `{character_id, mode, target_name?, override?}` where `mode ∈ {bonus, penalty}`. Validates Wild Magic Sorcerer Lv 6+ + `sorcery-points` resource >= 2 + Phase 4 reaction-chip gate. Decrements 2 SP via direct sheet mutation, rolls 1d4 server-side via `dice_mod.roll`, marks reaction chip, broadcasts `resource_update` (sorcery-points → new value) + `feature_used` with `(mode, d4, signed, target_name, sp_remaining)`. v1 ships announce-only — the bonus/penalty is announced for the GM to apply to the target's just-rolled d20 manually since SimpleVTT doesn't yet pause-then-resume third-party rolls. Zara Emberfire (Sorcerer Draconic Bloodline Lv 5 default) is the demo fixture; tests PATCH her subclass to "Wild Magic" + level to 6. One new harness test file with 6 tests.
+
+### Added
+- `/api/campaign/{cid}/use_bend_luck` endpoint.
+- `tests/harness/test_wild_magic_bend_luck.py` — 6 tests.
+
+### Changed
+- `docs/plans/wild-magic.md` Phase 3 marked ✅ shipped; Phase 4-5 remain ⚪.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 6 regression tests. No schema change.
+- **Reuses existing helpers.** No new `_pc_has_*` helper — `_pc_has_wild_magic(sheet, 6)` already exists from v2.99.227 with the correct multiclass-aware shape; Bend Luck just passes `min_level=6`. Sorcery-points resource lookup mirrors the v2.49.120 Font of Magic pattern.
+- **Announce-only constraint.** RAW "after the creature rolls but before any effects of the roll occur" is the awkward bit. v1 broadcasts the 1d4 + signed value so the GM bumps the displayed roll manually. A future deep-wire commit could pause an in-flight RollRequest while the Wild Magic Sorcerer's player decides whether to react.
+- **Phases 4-5 remain.** Controlled Chaos roll-twice (Lv 14) extends the Phase 2 surge broadcast; Spell Bombardment damage reroll (Lv 18) needs a post-damage hook + once-per-turn flag.
+- **Phase E ✅ 5.75/8.** E.3 + E.4 + E.5 + E.7 + E.8 done. E.6 advanced from Phase 2/5 to Phase 3/5. E.1 Battle Master + E.2 Eldritch Knight still ⚪.
+- **45 ships this session.**
+- **Total harness count: 1242** (was 1236 in v2.99.228).
+
+---
+
 ## [2.99.228] - 2026-06-04 — "When the d20 Comes Up One" — Wild Magic Sorcerer Surge auto-roll (Phase 2)
 
 **Schema version:** 66

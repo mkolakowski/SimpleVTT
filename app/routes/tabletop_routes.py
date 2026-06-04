@@ -36814,6 +36814,182 @@ async def use_tides_of_chaos(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_bend_luck")
+async def use_bend_luck(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.229 — Phase E.6 Phase 3 of the v2.99.193 phased
+    completion plan. Bend Luck (Wild Magic Sorcerer Lv 6+, PHB
+    p.103): "Starting at 6th level, you have the ability to
+    twist fate using your wild magic. When another creature you
+    can see makes an attack roll, an ability check, or a saving
+    throw, you can use your reaction and spend 2 sorcery points
+    to roll 1d4 and apply the number rolled as a bonus or penalty
+    to the creature's roll. You can do so after the creature
+    rolls but before any effects of the roll occur."
+
+    Body: ``{character_id, mode, target_name?, override?}``.
+    mode ∈ {bonus, penalty}.
+
+    Validates Wild Magic Sorcerer Lv 6+ + sorcery_points >= 2 +
+    Phase 4 reaction chip. Decrements 2 SP, rolls 1d4, marks
+    reaction chip, broadcasts.
+
+    v1 ships announce-only — the bonus/penalty is announced for
+    the GM to apply to the target's just-rolled d20 manually
+    (SimpleVTT doesn't yet pause-then-resume third-party rolls).
+    See docs/plans/wild-magic.md Phase 3.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    mode = (str(body.get("mode") or "")).strip().lower()
+    target_name = (str(body.get("target_name") or "")).strip()[:80]
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if mode not in ("bonus", "penalty"):
+        raise HTTPException(400, "mode must be 'bonus' or 'penalty'")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_wild_magic(sheet, 6):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "wild magic sorcerer lv 6+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _sorcerer_level_from_sheet(sheet),
+        })
+
+    # Sorcery Points resource (need >= 2).
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r)
+            sp_idx = i
+            break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < 2:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Sorcery Points",
+            "required": 2,
+            "current": sp_cur,
+        })
+
+    # Phase 4 reaction-chip gate.
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "bend-luck",
+            "label": "Bend Luck",
+            "strict": strict,
+        })
+
+    # Decrement 2 SP + roll 1d4.
+    new_sp = sp_cur - 2
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    try:
+        d4 = dice_mod.roll("1d4").total
+    except Exception:
+        d4 = 1
+    signed = d4 if mode == "bonus" else -d4
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "sorcery-points",
+            "current": new_sp,
+            "max": sp_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_phrase = f" → {target_name}" if target_name else ""
+    sign_label = "bonus" if mode == "bonus" else "penalty"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🎲 Bend Luck — 1d4 {sign_label} {signed:+}{target_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} bends luck: rolls 1d4 and applies "
+                f"{signed:+} as a {sign_label} to the target's "
+                f"just-rolled attack / check / save"
+                f"{target_phrase}. Costs 2 sorcery points "
+                f"(reaction). (Wild Magic Sorcerer Lv 6+ class "
+                f"feature.)"
+            ),
+            "source": "bend-luck",
+            "mode": mode,
+            "d4": d4,
+            "signed": signed,
+            "target_name": target_name,
+            "sp_remaining": new_sp,
+            "over_budget": was_used,
+            "over_budget_slot": "reaction" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "bend-luck",
+        "mode": mode,
+        "d4": d4,
+        "signed": signed,
+        "sp_remaining": new_sp,
+        "over_budget": was_used,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/select_hunters_prey")
 async def select_hunters_prey(
     campaign_id: int,

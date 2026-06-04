@@ -3,8 +3,9 @@
 Phase E.6 of the [v2.99.193 class-content completion plan](class-content-status.md).
 Path: Sorcerous Origin: Wild Magic (PHB p.103).
 
-> **Status (v2.99.228):** 🟠 Phases 1-2 shipped (Tides of Chaos + Wild
-> Magic Surge auto-roll). Phases 3–5 deferred.
+> **Status (v2.99.229):** 🟠 Phases 1-3 shipped (Tides of Chaos +
+> Wild Magic Surge auto-roll + Bend Luck reaction). Phases 4-5
+> deferred.
 
 ## Why a plan doc
 
@@ -84,19 +85,21 @@ int` body param when `TEST_MODE` env is truthy, bypassing the
 random d20 roll for deterministic harness tests. Silently ignored
 in production.
 
-### Phase 3 — Bend Luck reaction (⚪ deferred)
+### Phase 3 — Bend Luck reaction (✅ v2.99.229)
 
-**Endpoint:** `/use_bend_luck` — body `{character_id, target_combatant_id, mode}`
-where mode ∈ {bonus, penalty}. Costs 2 SP (decrement
-`sheet.sorcery_points` counter), marks reaction chip, broadcasts
-the 1d4 roll. The bonus/penalty is announced for the GM to apply
-to the target's just-rolled d20.
+**Endpoint:** `/use_bend_luck` — body `{character_id, mode,
+target_name?, override?}` where mode ∈ {bonus, penalty}.
+Validates Wild Magic Sorcerer Lv 6+, sorcery-points >= 2, and
+Phase 4 reaction chip; decrements 2 SP, rolls 1d4 server-side,
+marks reaction chip, broadcasts `feature_used` (source
+`bend-luck`) with `(mode, d4, signed, target_name,
+sp_remaining)`.
 
 **Constraint:** RAW "after the creature rolls but before any
 effects of the roll occur" — v1 ships announce-only since
 SimpleVTT doesn't yet pause-then-resume third-party rolls. The
-broadcast carries the 1d4 so the GM bumps the displayed roll
-manually.
+broadcast carries the 1d4 + signed value so the GM bumps the
+displayed roll manually.
 
 ### Phase 4 — Controlled Chaos roll-twice (⚪ deferred)
 
