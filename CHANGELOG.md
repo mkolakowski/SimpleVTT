@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.202] - 2026-06-04 — "The Barbarian Won't Fall" — Relentless Rage (Barbarian Lv 11)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.1 cont'd of the v2.99.193 phased completion plan — Relentless Rage.** RAW PHB p.49: "Starting at 11th level, your rage can keep you fighting despite grievous wounds. If you drop to 0 hit points while you're raging and don't die outright, you can make a DC 10 Constitution saving throw. If you succeed, you drop to 1 hit point instead. Each time you use this feature after the first, the DC increases by 5. When you finish a short or long rest, the DC resets to 10." Hook lives in `_apply_hp_change` after the v2.99.17 Half-Orc Relentless Endurance branch — a Half-Orc Barbarian Lv 11+ would use RE first (auto-clamp, no roll) and RR only as fallback when RE is spent.
+**Description:** Three helpers + 1 hook + 1 broadcast + 1 rest reset. (1) `_pc_has_rage_active_from_sheet(sheet)` — sheet-only rage check via `sheet["_buffs_active"]` (the v2.97.30+ Phase C.3 mirror), no hub access required from `_apply_hp_change`. (2) `_pc_has_relentless_rage_available(sheet)` — Barbarian Lv 11+ + active rage gate. (3) `_relentless_rage_current_dc(sheet)` + `_increment_relentless_rage_dc(sheet)` — read/write `sheet.relentless_rage_dc` (defaults to 10; +5 per use). (4) `_maybe_relentless_rage_save(sheet)` — rolls 1d20+CON_mod, returns `(passed, dc_used, save_total, con_mod)`, increments DC unconditionally per RAW. (5) Hook in `_apply_hp_change`'s "becoming dying" branch: after the Relentless Endurance check, if RR is available, roll the save; on success clamp `new_current=1` + `new_status="alive"`; on fail proceed to dying. Returns `relentless_rage_fired` / `_passed` / `_dc` / `_save_total` flags. (6) `/use_attack` (the main damage call site) broadcasts `feature_used(source="relentless-rage")` carrying the save result + next-use DC. (7) `/rest` resets `sheet.relentless_rage_dc` to 10 on short OR long rest. One new harness test file with 3 tests: happy path (broadcast + HP=1 on save pass), level gate (Lv 7 → no broadcast), no-rage gate (no broadcast).
+
+### Added
+- `_pc_has_rage_active_from_sheet(sheet)` sheet-only rage check.
+- `_pc_has_relentless_rage_available(sheet)` Lv 11+ + active rage gate.
+- `_relentless_rage_current_dc(sheet)` / `_increment_relentless_rage_dc(sheet)` DC accessors.
+- `_maybe_relentless_rage_save(sheet)` roll + DC increment.
+- Hook in `_apply_hp_change` for the dying transition (fires CON save when RR is available).
+- `feature_used(source="relentless-rage")` broadcast at the /attack damage site carrying `passed` / `dc` / `save_total` / `next_dc`.
+- `relentless_rage_dc` field reset in `/rest` for short + long.
+- `tests/harness/test_relentless_rage.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 5 helpers + 1 hook + 1 broadcast + 1 rest reset + 3 regression tests. No schema change.
+- **Composes after Relentless Endurance.** Krieger Stonefist (Half-Orc Berserker Lv 11+) would use RE first (auto-clamp) and only fall back to RR when RE is spent. The hook ordering in `_apply_hp_change` enforces this.
+- **DC escalation pinned in test pattern.** The DC increments on every attempt (pass or fail) per RAW. Test fixture clears `relentless_rage_dc` back to 10 in teardown so cross-test state doesn't leak.
+- **Phase F.1 ✅ partial (2/5).** Brutal Critical (v2.99.201) + Relentless Rage (v2.99.202) shipped. Still ⚪: Persistent Rage (Lv 15 — rage doesn't end while you're conscious + still in combat / hit something), Indomitable Might (Lv 18 — minimum STR check result = STR score), Primal Champion (Lv 20 — STR + CON caps raise to 24).
+- **Total harness count: 1148** (was 1145 in v2.99.201).
+
+---
+
 ## [2.99.201] - 2026-06-04 — "The Greataxe Bites Twice" — Brutal Critical (Barbarian Lv 9 / 13 / 17)
 
 **Schema version:** 66

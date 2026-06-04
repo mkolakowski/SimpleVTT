@@ -6142,6 +6142,39 @@ async def _apply_damage_to_combatant(
                     "max": 1,
                 },
             })
+        # v2.99.202 — Phase F.1 cont'd: Relentless Rage broadcast.
+        # `_apply_hp_change` rolled the CON save + (on success)
+        # clamped HP to 1. Surface the trigger to the chat card so
+        # the table sees the Barbarian's heroic recovery + the
+        # current DC (which escalates each use).
+        if result.get("relentless_rage_fired"):
+            _rr_passed = bool(result.get("relentless_rage_passed"))
+            _rr_dc = int(result.get("relentless_rage_dc") or 0)
+            _rr_total = int(result.get("relentless_rage_save_total") or 0)
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": char.id,
+                    "character_name": char.name,
+                    "user_color": char.color,
+                    "feature_name": (
+                        f"🪓 Relentless Rage — CON save "
+                        f"{_rr_total} vs DC {_rr_dc} → "
+                        f"{'PASS — held at 1 HP' if _rr_passed else 'FAIL — dying'}"
+                    ),
+                    "feature_desc": (
+                        f"{char.name} rolled a CON save of {_rr_total} "
+                        f"against DC {_rr_dc} to stay conscious while "
+                        f"raging at 0 HP. Next attempt this rest uses "
+                        f"DC {_rr_dc + 5}. (Reset on short/long rest.)"
+                    ),
+                    "source": "relentless-rage",
+                    "passed": _rr_passed,
+                    "dc": _rr_dc,
+                    "save_total": _rr_total,
+                    "next_dc": _rr_dc + 5,
+                },
+            })
         # v2.49.61: RAW Sleep — taking damage wakes the sleeper.
         await _wake_sleeping_on_damage(campaign_id, char.id, None, applied, db=db)
         # v2.97.65 — damage-triggered repeated saves (Fear, Hideous
@@ -25771,6 +25804,84 @@ def _ally_has_aura_of_devotion(
     return False, None
 
 
+def _pc_has_rage_active_from_sheet(sheet: "dict | None") -> bool:
+    """v2.99.202 — Sheet-only rage check (no hub access required).
+    Reads `sheet["_buffs_active"]` (the v2.97.30+ Phase C.3 mirror
+    of the active battle's combatant buffs) for a `rage` entry.
+    Used by `_apply_hp_change`'s Relentless Rage hook, which
+    receives only the Character row.
+
+    Outside an active battle the rage buff is on the combatant but
+    NOT mirrored; rage outside combat doesn't fire Relentless Rage
+    naturally either (no damage being applied at 0 HP). v1
+    acceptable simplification.
+    """
+    if not sheet:
+        return False
+    for b in (sheet.get("_buffs_active") or []):
+        if not isinstance(b, dict):
+            continue
+        if (b.get("key") or "").strip().lower() == "rage":
+            return True
+    return False
+
+
+def _pc_has_relentless_rage_available(sheet: "dict | None") -> bool:
+    """v2.99.202 — Returns True when the PC is a Barbarian Lv 11+
+    AND currently has an active rage buff mirrored on the sheet.
+    Used by the `_apply_hp_change` Relentless Rage hook.
+    """
+    if not sheet:
+        return False
+    if _barbarian_level_from_sheet(sheet) < 11:
+        return False
+    return _pc_has_rage_active_from_sheet(sheet)
+
+
+def _relentless_rage_current_dc(sheet: "dict | None") -> int:
+    """v2.99.202 — Returns the current Relentless Rage CON save DC.
+    RAW PHB p.49: starts at 10; +5 per use this rest. Resets on
+    short or long rest. Stored on the sheet as
+    `relentless_rage_dc` (defaults to 10 when absent).
+    """
+    if not sheet:
+        return 10
+    raw = sheet.get("relentless_rage_dc")
+    try:
+        dc = int(raw) if raw is not None else 10
+    except (TypeError, ValueError):
+        dc = 10
+    return max(10, dc)
+
+
+def _increment_relentless_rage_dc(sheet: dict) -> int:
+    """v2.99.202 — In-place increment of the per-rest Relentless
+    Rage DC (+5). Returns the new DC.
+    """
+    new_dc = _relentless_rage_current_dc(sheet) + 5
+    sheet["relentless_rage_dc"] = new_dc
+    return new_dc
+
+
+def _maybe_relentless_rage_save(sheet: dict) -> "tuple[bool, int, int, int]":
+    """v2.99.202 — Roll the Relentless Rage CON save. Returns
+    `(passed, dc_used, save_total, con_mod)`. Mutates the sheet's
+    `relentless_rage_dc` field +5 unconditionally (RAW: "each time
+    you use this feature" — any attempt counts).
+    """
+    dc = _relentless_rage_current_dc(sheet)
+    con = int((sheet.get("abilities") or {}).get("CON") or 10)
+    con_mod = (con - 10) // 2
+    try:
+        r = dice_mod.roll(f"1d20+{con_mod}" if con_mod >= 0 else f"1d20{con_mod}")
+        total = int(r.total or 0)
+    except dice_mod.DiceParseError:
+        total = 0
+    passed = total >= dc
+    _increment_relentless_rage_dc(sheet)
+    return passed, dc, total, con_mod
+
+
 def _pc_has_rage_active_buff(
     campaign_id: int, saving_char_id: int | None,
 ) -> bool:
@@ -37802,6 +37913,11 @@ def _apply_hp_change(
     became_dead = False
     relentless_endurance_fired = False
     relentless_endurance_damage = 0
+    # v2.99.202 — Phase F.1 cont'd: Relentless Rage trigger flags.
+    relentless_rage_fired = False
+    relentless_rage_passed = False
+    relentless_rage_dc = 0
+    relentless_rage_save_total = 0
 
     new_current = max(0, int(new_current))
 
@@ -37843,6 +37959,32 @@ def _apply_hp_change(
                     relentless_endurance_damage = damage_amount
                     # Stay alive; don't tick death-save state.
                     new_status = "alive"
+                # v2.99.202 — Phase F.1 cont'd: Relentless Rage
+                # (Barbarian Lv 11+). RAW PHB p.49: when raging
+                # and reduced to 0 HP but not killed outright,
+                # CON save vs DC 10 (escalates +5 per use, resets
+                # on short/long rest). On success: clamp HP to 1.
+                # Composes after Relentless Endurance — a Half-Orc
+                # Barbarian Lv 11+ would use RE first (no-roll), and
+                # RR only as a fallback if RE is spent. Sheet
+                # mutated in-place by `_maybe_relentless_rage_save`
+                # (DC bumps +5 each fire).
+                elif _pc_has_relentless_rage_available(sheet):
+                    passed, dc_used, total, _con_mod = (
+                        _maybe_relentless_rage_save(sheet)
+                    )
+                    relentless_rage_fired = True
+                    relentless_rage_passed = passed
+                    relentless_rage_dc = dc_used
+                    relentless_rage_save_total = total
+                    if passed:
+                        new_current = 1
+                        new_status = "alive"
+                    else:
+                        new_status = "dying"
+                        became_dying = True
+                        successes = 0
+                        failures = 0
                 else:
                     new_status = "dying"
                     became_dying = True
@@ -37908,6 +38050,11 @@ def _apply_hp_change(
         # broadcast the feature_used event when fired.
         "relentless_endurance_fired": relentless_endurance_fired,
         "relentless_endurance_damage": relentless_endurance_damage,
+        # v2.99.202 — Relentless Rage trigger flags.
+        "relentless_rage_fired": relentless_rage_fired,
+        "relentless_rage_passed": relentless_rage_passed,
+        "relentless_rage_dc": relentless_rage_dc,
+        "relentless_rage_save_total": relentless_rage_save_total,
     }
 
 
@@ -38462,6 +38609,12 @@ async def rest_character(
         else:
             new_resources.append(r)
     sheet["resources"] = new_resources
+
+    # v2.99.202 — Reset Relentless Rage DC on short OR long rest.
+    # RAW PHB p.49: "When you finish a short or long rest, the DC
+    # resets to 10." Clears the per-rest escalation.
+    if "relentless_rage_dc" in sheet:
+        sheet["relentless_rage_dc"] = 10
 
     if rest_type == "long":
         long_rest_new_cur = hp_max if hp_max > 0 else hp_cur
