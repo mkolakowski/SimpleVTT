@@ -29532,6 +29532,217 @@ async def use_mystic_arcanum(
 # `resource_update`.
 
 
+@router.post("/api/campaign/{campaign_id}/select_pact_tome_cantrip")
+async def select_pact_tome_cantrip(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.200 — Phase D.1 of the v2.99.193 phased completion
+    plan. Pact of the Tome (Warlock Lv 3, PHB p.108): "Your
+    patron gives you a grimoire called a Book of Shadows. When
+    you gain this feature, choose three cantrips from any class's
+    spell list. While the book is on your person, you can cast
+    those cantrips at will. They don't count against your number
+    of cantrips known."
+
+    Body: ``{character_id, cantrip_slug, cantrip_name?,
+    source_class_slug?}``.
+
+    Appends a cantrip entry to the caster's `sheet.spells` list
+    with `level: 0`, `prepared: True`, `_slug: <cantrip_slug>`,
+    and `_via: "pact-of-the-tome"`. The `_via` marker is the
+    accounting field — distinguishes Tome cantrips from natively
+    known Warlock cantrips so the cap (3 picks) can be enforced.
+
+    Validates Warlock class + level >= 3 + `pact_boon == "tome"`
+    on the sheet + cap of 3 existing tome cantrips. Cantrip
+    contents (slug + display name) are otherwise unrestricted —
+    RAW lets the player pick from any class's spell list. v1
+    doesn't enforce that the slug is actually a cantrip (level=0)
+    in the SRD catalog; the client's picker is the gate. The
+    server's job is the cap + the marker.
+
+    Cantrips that ride this list cast through the existing
+    `/cast_spell` path without consuming a Pact Magic slot
+    (cantrips never consume slots by RAW), so no further endpoint
+    changes are needed — the gate is "is this on the spells
+    list?".
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    cantrip_slug = (str(body.get("cantrip_slug") or "")).strip().lower()
+    cantrip_name = (str(body.get("cantrip_name") or "")).strip()[:100]
+    source_class_slug = (
+        str(body.get("source_class_slug") or "")
+    ).strip().lower()[:30]
+    # v2.99.200 — `clear_first` truncates existing tome cantrips
+    # before the new pick is appended. Intended for harness
+    # teardown ("reset the Tome boon list to empty") and for
+    # client UX scenarios like "rebuild my picks". When clear_first
+    # is True AND cantrip_slug is empty, the endpoint reduces to a
+    # pure clear operation.
+    clear_first = bool(body.get("clear_first") or False)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not cantrip_slug and not clear_first:
+        raise HTTPException(400, "cantrip_slug is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Gates: Warlock + Lv 3+ + pact_boon == "tome".
+    cls = (sheet.get("class") or "").lower()
+    if cls != "warlock":
+        # Multi-class accept.
+        has_warlock = any(
+            (entry.get("class") or "").strip().lower() == "warlock"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "warlock",
+                "got": cls or "",
+            })
+    warlock_lv = _warlock_level_from_sheet(sheet)
+    if warlock_lv < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": warlock_lv,
+        })
+    pact_boon = (sheet.get("pact_boon") or "").strip().lower()
+    if pact_boon != "tome":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_pact_boon",
+            "expected": "tome",
+            "got": pact_boon or "",
+        })
+
+    spells = list(sheet.get("spells") or [])
+    # v2.99.200 — clear-first: strip existing tome cantrips
+    # before the cap / dup checks. Lets the test fixture reset
+    # state to "0 tome cantrips" without a sheet rebuild.
+    if clear_first:
+        spells = [
+            s for s in spells
+            if not (
+                isinstance(s, dict)
+                and (s.get("_via") or "").strip().lower()
+                == "pact-of-the-tome"
+            )
+        ]
+    # Cap: 3 existing tome cantrips. Slug uniqueness gate too —
+    # picking the same cantrip twice is a no-op 409.
+    tome_existing = [
+        s for s in spells
+        if isinstance(s, dict)
+        and (s.get("_via") or "").strip().lower() == "pact-of-the-tome"
+    ]
+    # Pure-clear path: no cantrip_slug + clear_first → persist the
+    # cleared list and return success without appending.
+    if not cantrip_slug and clear_first:
+        sheet["spells"] = spells
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
+        return {
+            "ok": True,
+            "cleared": True,
+            "picked": 0,
+            "max": 3,
+        }
+    if any(
+        (s.get("_slug") or "").strip().lower() == cantrip_slug
+        for s in tome_existing
+    ):
+        return JSONResponse(status_code=409, content={
+            "error": "already_picked",
+            "slug": cantrip_slug,
+        })
+    if len(tome_existing) >= 3:
+        return JSONResponse(status_code=409, content={
+            "error": "cap_exceeded",
+            "picked": len(tome_existing),
+            "max": 3,
+        })
+
+    # Append the cantrip.
+    spells.append({
+        "name": cantrip_name or cantrip_slug.replace("-", " ").title(),
+        "level": 0,
+        "prepared": True,
+        "_slug": cantrip_slug,
+        "_via": "pact-of-the-tome",
+        "_source_class_slug": source_class_slug or None,
+        "casting_time": "1 action",
+    })
+    sheet["spells"] = spells
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"📖 Pact of the Tome — added "
+                f"{cantrip_name or cantrip_slug}"
+            ),
+            "feature_desc": (
+                f"{char.name} added "
+                f"{cantrip_name or cantrip_slug} (cantrip from "
+                f"{source_class_slug or 'any class'}) to the Book of "
+                f"Shadows. RAW: can be cast at-will, doesn't count "
+                f"against Warlock cantrips known. "
+                f"{len(tome_existing) + 1} of 3 Tome cantrips picked."
+            ),
+            "source": "pact-of-the-tome",
+            "cantrip_slug": cantrip_slug,
+            "cantrip_name": cantrip_name,
+            "source_class_slug": source_class_slug,
+            "picked": len(tome_existing) + 1,
+            "max": 3,
+        },
+    })
+
+    return {
+        "ok": True,
+        "cantrip_slug": cantrip_slug,
+        "cantrip_name": cantrip_name,
+        "source_class_slug": source_class_slug,
+        "picked": len(tome_existing) + 1,
+        "max": 3,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_eldritch_master")
 async def use_eldritch_master(
     campaign_id: int,
@@ -45103,6 +45314,12 @@ _SHEET_PATCH_KEYS = {
     # fallback fires. PATCH the list to `[]` for the test, then
     # restore.
     "damage_resistances",
+    # v2.99.200 — pact_boon. Read by /select_pact_tome_cantrip to
+    # gate Warlock Pact of the Tome cantrip picks. Allowlisted so
+    # the test can flip Magnus's pact_boon from "" → "tome" without
+    # a full sheet rebuild. Restore in finally. Values: "tome" /
+    # "blade" / "chain" / "" (no boon picked).
+    "pact_boon",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the

@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.200] - 2026-06-04 — "The Book of Shadows" — Pact of the Tome (Warlock Lv 3) cantrip-picker endpoint
+
+**Schema version:** 66
+**Commit summary:** **Phase D.1 of the v2.99.193 phased completion plan — Pact of the Tome (Warlock Lv 3).** RAW PHB p.108: "Your patron gives you a grimoire called a Book of Shadows. When you gain this feature, choose three cantrips from any class's spell list. While the book is on your person, you can cast those cantrips at will. They don't count against your number of cantrips known." v2.99.200 ships `/select_pact_tome_cantrip` — appends a chosen cantrip to the caster's `sheet.spells` list with `_via: "pact-of-the-tome"` as the accounting marker. Cantrips never consume Pact Magic slots by RAW, so no further `/cast_spell` integration is needed — the existing "spell on list" gate admits the Tome cantrip just like a natively known cantrip.
+**Description:** One new endpoint at `/api/campaign/{cid}/select_pact_tome_cantrip`. Body: `{character_id, cantrip_slug, cantrip_name?, source_class_slug?, clear_first?}`. Validates Warlock class + level >= 3 + `pact_boon == "tome"` on the sheet + cap of 3 existing Tome cantrips + slug uniqueness (already_picked gate). The `clear_first: True` body flag truncates existing Tome cantrips before the cap / dup checks; bundled with an empty `cantrip_slug` it reduces to a pure clear (used by harness teardown). Also adds `pact_boon` to `_SHEET_PATCH_KEYS` so tests can flip Magnus's pact boon. One new harness test file with 5 tests: happy path, cap (4th pick fails), duplicate, wrong-class gate, wrong-pact-boon gate.
+
+### Added
+- `/api/campaign/{cid}/select_pact_tome_cantrip` endpoint.
+- `clear_first: True` body flag — resets the Tome cantrip list to empty (test teardown / client UX).
+- `pact_boon` field in `_SHEET_PATCH_KEYS` for harness scaffolding.
+- `tests/harness/test_select_pact_tome_cantrip.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 1 patch key extension + 5 regression tests. No schema change.
+- **Cantrip casting integration is free.** Tome cantrips ride on the existing `sheet.spells` list, so `/cast_spell` admits them via the standard "spell on list" check. Cantrips don't consume Pact Magic slots by RAW (or any slots), so the existing slot-aware paths don't need extension.
+- **No demo Tome cantrips seeded today.** Magnus's seed includes "Pact tome (Fiend's grimoire)" as an inventory item but no `pact_boon` field yet. A future seed bump could set `pact_boon: "tome"` + seed 3 starter cantrips; until then, GMs use this endpoint to grant the cantrips per RAW.
+- **Phase D.1 ✅.** Phase D.2 (Pact of the Blade — `/summon_pact_weapon` + magical-attack flag) and Phase D.3 (Pact of the Chain — familiar summon via `/place_token` extension) still ⚪.
+- **Total harness count: 1141** (was 1136 in v2.99.199).
+
+---
+
 ## [2.99.199] - 2026-06-04 — "The Fighter's Persistence" — `/use_indomitable_reroll` endpoint (RAW post-fail reroll)
 
 **Schema version:** 66
