@@ -21725,6 +21725,54 @@ def _compute_attack_auto_uplifts(
                 except dice_mod.DiceParseError:
                     pass
 
+    # v2.99.201 — Brutal Critical (Barbarian Lv 9 / 13 / 17). RAW
+    # (PHB p.49): "Beginning at 9th level, you can roll one
+    # additional weapon damage die when determining the extra
+    # damage for a critical hit with a melee attack. This
+    # increases to two additional dice at 13th level and three
+    # additional dice at 17th level." Phase F.1 of the v2.99.193
+    # phased completion plan. Same gates as Savage Attacks
+    # (is_crit + weapon_damage_expr + is_physical) + Barbarian
+    # Lv 9+. Composes with Savage Attacks (Half-Orc Barbarian
+    # gets BOTH on a crit — Savage Attacks once + Brutal Critical
+    # N times). Each extra die is the same die as the weapon's
+    # first damage die.
+    if is_crit and weapon_damage_expr and is_physical:
+        barb_lv = _barbarian_level_from_sheet(attacker_sheet)
+        if barb_lv >= 9:
+            if barb_lv >= 17:
+                bc_extra = 3
+            elif barb_lv >= 13:
+                bc_extra = 2
+            else:
+                bc_extra = 1
+            first_die = _extract_first_die(weapon_damage_expr)
+            if first_die:
+                # Multiply count: "1d12" * 3 → "3d12".
+                import re as _re_bc
+                m = _re_bc.match(r"(\d+)d(\d+)", first_die)
+                if m:
+                    bc_count = int(m.group(1)) * bc_extra
+                    bc_face = int(m.group(2))
+                    bc_expr = f"{bc_count}d{bc_face}"
+                    try:
+                        r = dice_mod.roll(bc_expr)
+                        uplifts.append({
+                            "label": (
+                                f"Brutal Critical (+{bc_extra} "
+                                f"die{'s' if bc_extra != 1 else ''})"
+                            ),
+                            "expression": bc_expr,
+                            "total": r.total,
+                            "breakdown": r.breakdown,
+                            "damage_type": (
+                                attack_damage_type or "slashing"
+                            ),
+                            "source": "brutal-critical",
+                        })
+                    except dice_mod.DiceParseError:
+                        pass
+
     return uplifts
 
 

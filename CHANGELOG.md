@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.201] - 2026-06-04 — "The Greataxe Bites Twice" — Brutal Critical (Barbarian Lv 9 / 13 / 17)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.1 of the v2.99.193 phased completion plan — Brutal Critical.** RAW PHB p.49: "Beginning at 9th level, you can roll one additional weapon damage die when determining the extra damage for a critical hit with a melee attack. This increases to two additional dice at 13th level and three additional dice at 17th level." v2.99.201 wires the uplift into `_compute_attack_auto_uplifts` alongside Savage Attacks (v2.99.23) — same is_crit + is_physical-melee gates, gated additionally on Barbarian Lv 9+. Composes with Savage Attacks: a Half-Orc Barbarian crit fires BOTH (Savage Attacks once + Brutal Critical N times).
+**Description:** One edit in `_compute_attack_auto_uplifts`. After the Savage Attacks block, a new Brutal Critical block reads `_barbarian_level_from_sheet`, derives the extra-dice count (1 at Lv 9-12, 2 at Lv 13-16, 3 at Lv 17+), extracts the weapon's first die via `_extract_first_die`, multiplies the count (e.g., "1d12" × 3 → "3d12"), rolls the multiplied expression, and appends an uplift entry with `source="brutal-critical"` + label "Brutal Critical (+N dies)". One new harness test file with 4 tests covering Lv 9 (+1 die), Lv 13 (+2 dies), level gate (Lv 7 → no uplift), non-crit gate (no uplift on regular hit).
+
+### Added
+- Brutal Critical uplift in `_compute_attack_auto_uplifts` — fires on Barbarian Lv 9+ crit + physical-melee weapon attacks.
+- `tests/harness/test_brutal_critical.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 uplift extension + 4 regression tests. No schema change.
+- **Composes with Savage Attacks.** Krieger Stonefist (Half-Orc Berserker) at Lv 9 + crit → both fire. Savage Attacks rolls 1 extra die; Brutal Critical rolls 1 more — the chat-card breakdown labels both.
+- **Capstone-test pattern.** Krieger is bumped Lv 7 → 9 / 13 in tests via the v2.99.39 PATCH convention.
+- **Phase F.1 ✅ partial.** Brutal Critical is the first Barbarian Lv 9-20 capstone shipped this phase. Still ⚪: Relentless Rage (Lv 11), Persistent Rage (Lv 15), Indomitable Might (Lv 18), Primal Champion (Lv 20).
+- **Total harness count: 1145** (was 1141 in v2.99.200).
+
+---
+
 ## [2.99.200] - 2026-06-04 — "The Book of Shadows" — Pact of the Tome (Warlock Lv 3) cantrip-picker endpoint
 
 **Schema version:** 66
