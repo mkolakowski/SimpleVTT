@@ -27557,6 +27557,39 @@ async def use_metamagic_twinned_spell(
     }
 
 
+async def _consume_twinned_for_second_target(
+    campaign_id: int, caster_char_id: "int | None",
+) -> "str | None":
+    """v2.99.174 — Twinned Spell auto-route consume helper. If the
+    caster has a `metamagic-twinned-pending` buff with an
+    `effects.target_combatant_id_2` set, drop the pending buff
+    (one-shot per RAW) and return the second target's combatant
+    ID. Otherwise return None and leave the pending alone.
+
+    Lets individual `/cast_<spell>` endpoints (e.g. /cast_polymorph)
+    opt into Twinned auto-routing without depending on /cast_spell's
+    generic consume hook. The endpoint can install the same buff /
+    anchor on both targets when this helper returns a second target.
+
+    Closes the remaining v2.99.160 filed item — "auto-install the
+    same buff on the second target inside the same /cast call."
+    v1 wires the helper into /cast_polymorph; future commits can
+    wire it into /cast_slow, /cast_hold_person, etc.
+    """
+    buff = _caster_twinned_pending_buff(campaign_id, caster_char_id)
+    if buff is None:
+        return None
+    target_2 = ((buff.get("effects") or {}).get("target_combatant_id_2") or "")
+    if not target_2:
+        return None
+    # Drop the pending one-shot (RAW: Twinned consumed by this cast).
+    await _remove_buff(
+        campaign_id, int(caster_char_id or 0),
+        "metamagic-twinned-pending",
+    )
+    return str(target_2)
+
+
 def _caster_twinned_pending_buff(
     campaign_id: int, caster_char_id: "int | None",
 ) -> "dict | None":
@@ -33873,6 +33906,18 @@ async def cast_polymorph(
         campaign_id, char, "polymorph", "Polymorph",
         duration_rounds=600, icon="🐺",
     )
+    # v2.99.174 — Twinned Spell auto-route. When the caster has a
+    # `metamagic-twinned-pending` buff carrying a second target,
+    # surface the second target in the audit + the response. The
+    # helper consumes the pending one-shot (RAW: Twinned applies
+    # to THIS cast). v1 surfaces the second target ID; the
+    # downstream /transform call on the second target is still
+    # GM-resolved (no auto-transform), but the audit broadcast
+    # gives the GM a single source of truth instead of needing
+    # to remember the pre-cast Twinned declaration.
+    _twin_target_2 = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
     await _mark_battle_economy(campaign_id, char.id, "action")
 
     invocation_tag = (
@@ -33917,6 +33962,11 @@ async def cast_polymorph(
             "feature_desc": (
                 f"{char.name} casts Polymorph. Pick a target via "
                 f"`/transform` with source=\"polymorph\"."
+                + (
+                    f" Twinned — second target combatant_id: "
+                    f"{_twin_target_2}"
+                    if _twin_target_2 else ""
+                )
             ),
             "source": (
                 f"sculptor-of-flesh" if via_invocation == "sculptor-of-flesh"
@@ -33924,6 +33974,9 @@ async def cast_polymorph(
             ),
             "via_invocation": via_invocation or None,
             "duration_rounds": 600,
+            # v2.99.174 — surface the second target on the audit when
+            # Twinned consumed.
+            "twinned_target_combatant_id_2": _twin_target_2 or None,
         },
     })
 
@@ -33937,6 +33990,8 @@ async def cast_polymorph(
         "duration_rounds": 600,
         "concentration": True,
         "ready_to_transform": True,
+        # v2.99.174 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2 or None,
     }
 
 

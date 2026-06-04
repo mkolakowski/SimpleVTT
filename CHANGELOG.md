@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.174] - 2026-06-03 — "The Spell Forks" — Twinned Spell auto-route surfaces the second target on /cast_polymorph
+
+**Schema version:** 66
+**Commit summary:** **Close the remaining v2.99.160 filed item — Twinned Spell now auto-routes the second target through `/cast_polymorph`, surfacing it on both the audit broadcast and the response.** v2.99.167 stashed `target_combatant_id_2` on the pending buff but only emitted a marker broadcast; v2.99.174 adds a reusable helper `_consume_twinned_for_second_target` that any `/cast_<spell>` endpoint can call to extract the second target + drop the pending one-shot. `/cast_polymorph` is the first consumer — wires the helper at end of cast, surfaces the second target via `twinned_target_combatant_id_2` on both the feature_used broadcast and the JSON response.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` — new `_consume_twinned_for_second_target(campaign_id, caster_char_id) -> str | None` async helper. Reads the pending buff, extracts `effects.target_combatant_id_2`, drops the pending via `_remove_buff` (one-shot), returns the second target id (or None). (2) `/cast_polymorph` end-of-cast hook — calls the helper after the concentration anchor install. Surfaces the second target on the `feature_used` broadcast description (appends "Twinned — second target combatant_id: {id}") + adds `twinned_target_combatant_id_2` to the broadcast data and the response. (3) `tests/harness/test_twinned_polymorph_routing.py` — 2 regression tests: arm Twinned with Krieger as second target → /cast_polymorph response carries the second-target id + Twinned pending consumed; without Twinned armed → response field is None.
+
+### Added
+- `_consume_twinned_for_second_target(campaign_id, caster_char_id) -> str | None` async helper.
+- `/cast_polymorph` Twinned auto-route hook + `twinned_target_combatant_id_2` field on response + feature_used broadcast.
+- `tests/harness/test_twinned_polymorph_routing.py` — 2 tests.
+
+### Notes
+- **PATCH bump** — helper + integration in /cast_polymorph + 2 tests. No schema change.
+- **v1 simplification: GM still calls /transform on the second target manually.** The endpoint surfaces the second target identity; the actual transform of the second target (sheet swap + token disguise) is GM-resolved via a second /transform call with `source="polymorph"` + `caster_char_id={caster}`. v1 ships the routing scaffold; the auto-transform on second target is a follow-up (would need a way to pass the SAME beast slug into the second transform without re-asking the player).
+- **Future consumers.** The same helper can be wired into `/cast_slow`, `/cast_hold_person`, `/cast_hold_monster`, `/cast_compulsion`, `/cast_bestow_curse`, `/cast_bane`, `/cast_hex`, `/cast_hunters_mark` — any single-target spell that's a valid Twinned candidate. Each endpoint adds a single call to the helper + appends the second target id to the affected-list or feature_used data.
+- **What's filed.** (1) Auto-install the same spell effect on the second target — the spell-effect plumbing varies per endpoint; the helper is the prep work. (2) RAW Twinned validation — "spell that targets only one creature and doesn't have a range of self." Today the endpoint accepts any spell + level; a future RAW gate would reject Twinned on AoE / self-only spells.
+- **Closes the remaining v2.99.160 filed item.** Twinned Spell now has: (a) scaffolding (v2.99.160), (b) second-target metadata stash (v2.99.167), (c) auto-route via /cast_polymorph (v2.99.174). The full multi-spell auto-route across all single-target spells is filed but each endpoint can adopt the helper independently.
+- **Total harness count: 1093** (was 1091 in v2.99.173).
+
+---
+
 ## [2.99.173] - 2026-06-03 — "Counter the Counter" — Subtle Spell suppresses Counterspell prompt emission
 
 **Schema version:** 66
