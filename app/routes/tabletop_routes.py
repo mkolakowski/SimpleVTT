@@ -11859,6 +11859,10 @@ def list_tokens(
             # ("hidden from Alice / Bob"). Non-GM viewers never see
             # this field since the entire token is filtered above.
             "hidden_from_user_ids": list(t.hidden_from_user_ids or []) if is_gm else [],
+            # v2.99.170 — surface the v2.99.168 token-disguise field
+            # so map clients can render a disguise indicator + the
+            # token-disguise harness tests can verify the metadata.
+            "disguise": t.disguise,
         })
     return {"tokens": out, "map_id": map_row.id,
             "grid_size_px": map_row.grid_size_px,

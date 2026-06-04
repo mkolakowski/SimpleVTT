@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.170] - 2026-06-03 — "Surface the Skin" — Surface Token.disguise on the /tokens response
+
+**Schema version:** 66
+**Commit summary:** **Surface the v2.99.168 `Token.disguise` field on the `/api/campaign/{cid}/tokens` GET response.** v2.99.168 added the disguise column + the apply/revert hooks but the existing `/tokens` endpoint built its response dict from a manual field list — `disguise` wasn't on it. v2.99.169's harness tests asserted on the disguise field surfaced via /tokens, which returned None (column wasn't read), so the second assertion failed. v2.99.170 adds `"disguise": t.disguise` to the response dict. Map clients can now render a disguise indicator (filed UI ship) and the token-disguise harness tests verify the metadata end-to-end.
+
+### Fixed
+- v2.99.168 token-disguise harness tests can now verify the disguise JSON shape.
+
+### Notes
+- **PATCH bump** — single response-field add. No schema change.
+- **Total harness count: 1077** (unchanged from v2.99.168).
+
+---
+
 ## [2.99.169] - 2026-06-03 — "Mira's Real Name" — Fix v2.99.168 test: roster key is "Mira Greenleaf"
 
 **Schema version:** 66
