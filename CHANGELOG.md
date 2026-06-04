@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.205] - 2026-06-04 — "Power of the Wilds" — Primal Champion (Barbarian Lv 20) — Phase F.1 ✅ COMPLETE
+
+**Schema version:** 66
+**Commit summary:** **Phase F.1 final of the v2.99.193 phased completion plan — Primal Champion. Phase F.1 is now ✅ COMPLETE (5/5: Brutal Critical + Relentless Rage + Persistent Rage + Indomitable Might + Primal Champion).** RAW PHB p.49: "At 20th level, you embody the power of the wilds. Your Strength and Constitution scores increase by 4. Your maximum for those scores is now 24." v2.99.205 adds the helper `_primal_champion_stat_bonus(sheet, ability)` returning +4 for STR/CON when the PC is Barbarian Lv 20+, 0 otherwise. The bonus is consumed by `_apply_indomitable_might_floor` so the Indomitable Might floor reflects the boosted STR (base + 4) at Lv 20. Cap-to-24 is sheet-managed (no validation enforcement today; the +4 surfaces as an effective bonus when consumers ask via the helper).
+**Description:** Two helpers + 1 wire-in. (1) `_pc_has_primal_champion(sheet)` — Barbarian Lv 20+ gate. (2) `_primal_champion_stat_bonus(sheet, ability)` — returns 4 when PC has Primal Champion AND ability is STR/CON; 0 otherwise. (3) `_apply_indomitable_might_floor` extended to add the PC bonus to the STR floor: `str_score += _primal_champion_stat_bonus(sheet, "STR")`. Krieger ships with STR 18 (Half-Orc +2 racial); at Lv 20 the effective STR for the IM floor is 22. One new harness test file with 2 tests: happy (Lv 20 → floor at 22), control (Lv 18 → floor at 18).
+
+### Added
+- `_pc_has_primal_champion(sheet)` helper gate.
+- `_primal_champion_stat_bonus(sheet, ability)` STR/CON +4 helper.
+- Primal Champion wire into `_apply_indomitable_might_floor` (Lv 20 floor = base STR + 4).
+- `tests/harness/test_primal_champion.py` — 2 tests.
+
+### Notes
+- **PATCH bump** — 2 helpers + 1 IM extension + 2 regression tests. No schema change, no broadcast surface.
+- **Composes with Indomitable Might.** At Lv 20 the IM floor extends from STR to STR + 4. The PC's actual STR/CON on the sheet doesn't need to be edited; the helper applies the bonus on-demand.
+- **CON bonus is forward-looking.** The CON +4 bonus matters for CON saves (Relentless Rage save mod, concentration saves, etc.) — a future commit can wire `_primal_champion_stat_bonus(sheet, "CON")` into those save mod calculations. v1 only wires the STR-side via Indomitable Might.
+- **Phase F.1 ✅ COMPLETE (5/5).** Brutal Critical (v2.99.201) + Relentless Rage (v2.99.202) + Persistent Rage (v2.99.203) + Indomitable Might (v2.99.204) + Primal Champion (v2.99.205). All 5 Barbarian Lv 9-20 capstones shipped.
+- **Total harness count: 1155** (was 1153 in v2.99.204).
+
+---
+
 ## [2.99.204] - 2026-06-04 — "Strength of the Mountain" — Indomitable Might (Barbarian Lv 18)
 
 **Schema version:** 66

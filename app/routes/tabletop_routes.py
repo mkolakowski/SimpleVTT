@@ -25861,6 +25861,42 @@ def _pc_has_rage_active_from_sheet(sheet: "dict | None") -> bool:
     return False
 
 
+def _pc_has_primal_champion(sheet: "dict | None") -> bool:
+    """v2.99.205 — RAW Primal Champion (Barbarian Lv 20, PHB
+    p.49): "At 20th level, you embody the power of the wilds.
+    Your Strength and Constitution scores increase by 4. Your
+    maximum for those scores is now 24."
+
+    Returns True for Barbarian Lv 20+. The +4 STR/CON bonus is
+    derived via `_primal_champion_stat_bonus`. Cap-to-24 is
+    sheet-managed today (the sheet edit panel accepts arbitrary
+    values; the +4 just shows up as an effective bonus when
+    consumers ask for it).
+
+    Phase F.1 final of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _barbarian_level_from_sheet(sheet) >= 20
+
+
+def _primal_champion_stat_bonus(
+    sheet: "dict | None", ability: str,
+) -> int:
+    """v2.99.205 — Return the Primal Champion stat bonus (+4 for
+    STR / CON when PC is Barbarian Lv 20+; 0 otherwise). Consumed
+    by `_apply_indomitable_might_floor` so the floor reflects the
+    +4 bonus even when the sheet's `abilities.STR` shows the base
+    value.
+    """
+    if not _pc_has_primal_champion(sheet):
+        return 0
+    ab = (ability or "").strip().upper()
+    if ab in ("STR", "CON"):
+        return 4
+    return 0
+
+
 def _pc_has_indomitable_might(sheet: "dict | None") -> bool:
     """v2.99.204 — RAW Indomitable Might (Barbarian Lv 18+, PHB
     p.49): "Beginning at 18th level, if your total for a Strength
@@ -25891,6 +25927,10 @@ def _apply_indomitable_might_floor(
     and adjusts the total to the STR score when below.
     """
     str_score = int((sheet.get("abilities") or {}).get("STR") or 0)
+    # v2.99.205 — Primal Champion (Barbarian Lv 20+) adds +4 to
+    # STR. The Indomitable Might floor reflects the effective STR
+    # so a Lv 20 Barbarian's floor is base_str + 4.
+    str_score += _primal_champion_stat_bonus(sheet, "STR")
     if str_score <= 0:
         return result, None, None
     try:
