@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.216] - 2026-06-04 — "The Hunter's Mark" — Foe Slayer (Ranger Lv 20)
+
+**Schema version:** 66
+**Commit summary:** **Phase F.3 cont'd of the v2.99.193 phased completion plan — Foe Slayer.** RAW PHB p.92: "Once on each of your turns, you can add your Wisdom modifier to the attack roll or the damage roll of an attack you make against one of your favored enemies. You can choose to use this feature before or after the roll, but before any effects of the roll are applied." v2.99.216 ships announce-style — `/use_foe_slayer` validates Ranger Lv 20+, computes the PC's WIS mod, broadcasts feature_used with the mode (attack/damage) + bonus + optional target. The GM applies the +N manually.
+**Description:** One helper + 1 endpoint. (1) `_pc_has_foe_slayer(sheet)` — Ranger Lv 20+ gate. (2) `/use_foe_slayer` — body `{character_id, mode: "attack" | "damage", target?}`. Validates class + level, computes wis_mod, broadcasts. Mode shapes the chat-card text. Per-turn tracking is filed (would require a battle-economy flag like Colossus Slayer / Divine Strike). Future commit could extend `/attack` with a `foe_slayer_mode` body param that adds the WIS mod automatically + gates on the once-per-turn flag. Rowan Quickbow PATCH'd Lv 7 → 20 for tests. One new harness test file with 3 tests.
+
+### Added
+- `_pc_has_foe_slayer(sheet)` helper gate.
+- `/api/campaign/{cid}/use_foe_slayer` endpoint.
+- `tests/harness/test_use_foe_slayer.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 3 regression tests. No schema change.
+- **Phase F.3 ✅ 3/5.** Hide in Plain Sight (v2.99.214) + Vanish (v2.99.215) + Foe Slayer (v2.99.216) shipped. Still ⚪: Feral Senses (Lv 18 — no disadvantage vs unseen/invisible you hear; needs hidden-token state) + pure-descriptive mid-level features (Primeval Awareness Lv 3).
+- **32 ships this session.** Phases ✅ complete: A (3/3), F.1 (5/5), F.2 (4/4), F.4 (2/2), D (3/3). Partial: B (B.2+B.3 ✅, B.1 ⚪), C (C.1 ✅, C.2+C.3 ⚪), F.3 (3/5 ✅, 2 ⚪). Still ⚪: E.x subclass batch, F.5 Wizard, H.x cleanup, G.x system frameworks.
+- **Total harness count: 1185** (was 1182 in v2.99.215).
+
+---
+
 ## [2.99.215] - 2026-06-04 — "The Vanishing Ranger" — Vanish (Ranger Lv 14)
 
 **Schema version:** 66

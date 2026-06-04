@@ -25206,6 +25206,25 @@ def _target_has_elusive(
     return False
 
 
+def _pc_has_foe_slayer(sheet: "dict | None") -> bool:
+    """v2.99.216 — RAW Foe Slayer (Ranger Lv 20, PHB p.92):
+    "At 20th level, you become an unparalleled hunter of your
+    enemies. Once on each of your turns, you can add your
+    Wisdom modifier to the attack roll or the damage roll of an
+    attack you make against one of your favored enemies. You
+    can choose to use this feature before or after the roll,
+    but before any effects of the roll are applied."
+
+    Returns True for Ranger Lv 20+. Consumed by
+    `/use_foe_slayer` (the announce endpoint).
+
+    Phase F.3 cont'd of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    return _ranger_level_from_sheet(sheet) >= 20
+
+
 def _pc_has_vanish(sheet: "dict | None") -> bool:
     """v2.99.215 — RAW Vanish (Ranger Lv 14+, PHB p.92):
     "Starting at 14th level, you can use the Hide action as a
@@ -34607,6 +34626,118 @@ async def _resolve_target_combatant(
         if target_name and c.get("name") == target_name:
             return c.get("id"), c.get("name")
     return None, target_name
+
+
+@router.post("/api/campaign/{campaign_id}/use_foe_slayer")
+async def use_foe_slayer(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.216 — Phase F.3 cont'd of the v2.99.193 phased
+    completion plan. Foe Slayer (Ranger Lv 20, PHB p.92): "Once
+    on each of your turns, you can add your Wisdom modifier to
+    the attack roll or the damage roll of an attack you make
+    against one of your favored enemies."
+
+    Body: ``{character_id, mode: "attack" | "damage", target?}``.
+
+    Validates Ranger Lv 20+. v1 ships announce-style — the
+    endpoint computes the PC's WIS mod, broadcasts a
+    feature_used with the mode + bonus value, and lets the GM
+    apply the +N to the attack or damage manually. Per-turn
+    tracking is filed (would require a battle-economy flag like
+    Colossus Slayer / Divine Strike).
+
+    Future commit would extend /attack with a `foe_slayer_mode`
+    body param that adds the WIS mod to attack OR damage
+    automatically + gates on the once-per-turn flag.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    mode = (str(body.get("mode") or "attack")).strip().lower()
+    target = (str(body.get("target") or "")).strip()[:80]
+    if mode not in ("attack", "damage"):
+        mode = "attack"
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        has_ranger = any(
+            (entry.get("class") or "").strip().lower() == "ranger"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_ranger:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class", "expected": "ranger",
+                "got": cls or "",
+            })
+    ranger_lv = _ranger_level_from_sheet(sheet)
+    if ranger_lv < 20:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 20, "got": ranger_lv,
+        })
+
+    # Compute the PC's WIS mod.
+    wis = int((sheet.get("abilities") or {}).get("WIS") or 10)
+    wis_mod = (wis - 10) // 2
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    mode_label = "attack roll" if mode == "attack" else "damage roll"
+    target_phrase = f" vs {target}" if target else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🏹 Foe Slayer — +{wis_mod} to {mode_label}{target_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} adds WIS mod ({wis_mod:+}) to the "
+                f"{mode_label}{target_phrase} (Ranger Lv 20+ "
+                f"class feature). Once per turn vs a Favored "
+                f"Enemy."
+            ),
+            "source": "foe-slayer",
+            "mode": mode,
+            "wis_mod": wis_mod,
+            "target": target,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "foe-slayer",
+        "mode": mode,
+        "wis_mod": wis_mod,
+    }
 
 
 @router.post("/api/campaign/{campaign_id}/use_vanish")
