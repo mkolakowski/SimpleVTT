@@ -25363,6 +25363,27 @@ def _pc_has_foe_slayer(sheet: "dict | None") -> bool:
     return _ranger_level_from_sheet(sheet) >= 20
 
 
+def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.224 — RAW Thief features (Rogue Lv 3+, PHB p.97):
+    Fast Hands (Lv 3), Second-Story Work (Lv 3), Supreme Sneak
+    (Lv 9), Use Magic Device (Lv 13), Thief's Reflexes (Lv 17).
+
+    Returns True when the PC is a Thief subclass Rogue + meets
+    `min_level`. Gates each Thief-specific endpoint.
+
+    Phase E.4 of the v2.99.193 phased completion plan.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "rogue":
+        return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "thief" not in subclass:
+        return False
+    return _rogue_level_from_sheet(sheet) >= min_level
+
+
 def _pc_hunters_prey_pick(sheet: "dict | None") -> str:
     """v2.99.223 — RAW Hunter's Prey (Hunter Ranger Lv 3+, PHB
     p.93): pick ONE of Colossus Slayer / Giant Killer / Horde
@@ -35869,6 +35890,219 @@ async def use_vanish(
 _HUNTERS_PREY_OPTIONS = {
     "colossus-slayer", "giant-killer", "horde-breaker",
 }
+
+
+_FAST_HANDS_MODES = {
+    "sleight-of-hand", "thieves-tools", "use-object",
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_fast_hands")
+async def use_fast_hands(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.224 — Phase E.4 of the v2.99.193 phased completion
+    plan. Fast Hands (Thief Rogue Lv 3+, PHB p.97): "You can
+    use the bonus action granted by your Cunning Action to
+    make a Dexterity (Sleight of Hand) check, use your thieves'
+    tools to disarm a trap or open a lock, or take the Use an
+    Object action."
+
+    Body: ``{character_id, mode, override?}``.
+    mode ∈ {sleight-of-hand, thieves-tools, use-object}.
+
+    Validates Thief Rogue Lv 3+ + Phase 4 bonus slot gate.
+    Marks the bonus chip + broadcasts. The actual Dex (Sleight
+    of Hand) / thieves' tools check or object interaction is
+    rolled / resolved normally.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    mode = (str(body.get("mode") or "")).strip().lower()
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if mode not in _FAST_HANDS_MODES:
+        raise HTTPException(
+            400,
+            f"mode must be one of {sorted(_FAST_HANDS_MODES)}",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Rogue character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_thief_features(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "thief rogue lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _rogue_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "fast-hands",
+            "label": "Fast Hands",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    mode_pretty = mode.replace("-", " ").title()
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"🤏 Fast Hands — {mode_pretty}",
+            "feature_desc": (
+                f"{char.name} used Fast Hands as a bonus action: "
+                f"{mode_pretty}. Roll the check / resolve the "
+                f"interaction normally."
+            ),
+            "source": "fast-hands",
+            "mode": mode,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {"ok": True, "feature": "fast-hands", "mode": mode,
+            "over_budget": was_used}
+
+
+@router.post("/api/campaign/{campaign_id}/use_supreme_sneak")
+async def use_supreme_sneak(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.224 — Supreme Sneak (Thief Rogue Lv 9+, PHB p.97):
+    "You have advantage on a Dexterity (Stealth) check if you
+    move no more than half your speed on the same turn."
+
+    Body: ``{character_id}``.
+
+    Validates Thief Rogue Lv 9+. Installs a one-shot
+    `supreme-sneak-active` buff with `effects.stealth_bonus: 5`
+    (proxy for advantage, consumed on the next Stealth roll by
+    the v2.99.214 /roll Stealth hook). No action chip — RAW
+    doesn't cost an action; the player just opts in to half-
+    speed movement before a Stealth check.
+
+    Player is responsible for the half-speed movement constraint
+    (filed: movement tracking integration).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Rogue character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_thief_features(sheet, 9):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "thief rogue lv 9+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _rogue_level_from_sheet(sheet),
+        })
+
+    sneak_buff = {
+        "key": "supreme-sneak-active",
+        "name": "Supreme Sneak — Stealth advantage",
+        "icon": "🐾",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "supreme-sneak",
+        "source_char_id": char.id,
+        "effects": {
+            "stealth_bonus": 5,
+            "consume_on_stealth_roll": True,
+        },
+        "desc": (
+            "Supreme Sneak: +5 (advantage proxy) on the next "
+            "Stealth check, consumed on the next Stealth roll. "
+            "Player must move no more than half speed RAW."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, sneak_buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🐾 Supreme Sneak — +5 Stealth (advantage)",
+            "feature_desc": (
+                f"{char.name} used Supreme Sneak. Next Stealth "
+                f"roll gets +5 (advantage proxy). RAW: must move "
+                f"no more than half speed this turn."
+            ),
+            "source": "supreme-sneak",
+            "stealth_bonus": 5,
+        },
+    })
+
+    return {"ok": True, "feature": "supreme-sneak",
+            "stealth_bonus": 5, "buff_installed": True}
 
 
 @router.post("/api/campaign/{campaign_id}/select_hunters_prey")

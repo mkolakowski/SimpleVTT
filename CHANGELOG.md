@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.224] - 2026-06-04 — "Fast Hands of the Thief" — Thief Rogue Fast Hands + Supreme Sneak
+
+**Schema version:** 66
+**Commit summary:** **Phase E.4 of the v2.99.193 phased completion plan — Thief Rogue features.** RAW PHB p.97: (1) Fast Hands (Lv 3) — Cunning Action bonus can be used for Sleight of Hand check / thieves' tools / Use an Object. (2) Supreme Sneak (Lv 9) — advantage on Stealth check when moving no more than half speed. v2.99.224 ships announce/buff endpoints for both. Thief's Reflexes (Lv 17 — extra turn at -10 init) filed; init tracker doesn't support multi-entries per combatant in v1.
+**Description:** One helper + two endpoints + one option set. (1) `_pc_has_thief_features(sheet, min_level)` returns True for Thief Rogue at or above `min_level`. (2) `_FAST_HANDS_MODES` valid set `{sleight-of-hand, thieves-tools, use-object}`. (3) `/use_fast_hands` — body `{character_id, mode, override?}`, validates Thief Rogue Lv 3+ + mode + Phase 4 bonus slot gate, marks bonus chip, broadcasts. (4) `/use_supreme_sneak` — body `{character_id}`, validates Thief Rogue Lv 9+, installs `supreme-sneak-active` buff with `effects.stealth_bonus: 5` + `consume_on_stealth_roll: True` (consumed by the v2.99.214 `/roll` Stealth hook), broadcasts. Pip Quickfingers (Thief Rogue Lv 7 default) is the demo fixture; tests PATCH her Lv 7 → 9 for Supreme Sneak. One new harness test file with 5 tests.
+
+### Added
+- `_pc_has_thief_features(sheet, min_level)` helper gate.
+- `_FAST_HANDS_MODES` set with the 3 valid Fast Hands modes.
+- `/api/campaign/{cid}/use_fast_hands` endpoint.
+- `/api/campaign/{cid}/use_supreme_sneak` endpoint.
+- `tests/harness/test_thief_features.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 2 endpoints + 1 option set + 5 regression tests. No schema change.
+- **Supreme Sneak composes with v2.99.214 Hide in Plain Sight.** Both install a buff with `effects.stealth_bonus` consumed by the same `/roll` Stealth hook. The hook reads the buff once per roll; if both are installed, only one fires (whichever the consumer hook encounters first). A multi-classed Rogue/Ranger Lv 9+ / 10+ would benefit from the cheaper Supreme Sneak install in most cases.
+- **v1 simplification.** RAW Supreme Sneak grants advantage (2d20kh1); v1 represents it as +5 (rough proxy). The v2.99.214 consumer reads `stealth_bonus`, so the same hook handles both representations. Future commit could install a true advantage-bumping buff.
+- **Player tracks the half-speed constraint.** RAW Supreme Sneak requires "you move no more than half your speed on the same turn." v1 doesn't enforce — the player + GM resolve. Filed for movement tracking integration.
+- **Thief's Reflexes filed.** Lv 17 extra turn at -10 init is too complex for v1 (init tracker doesn't support multi-entries per combatant). When init tracker grows multi-entry support, ship as a `/battle PUT` hook that auto-inserts the second entry at init - 10.
+- **Phase E ✅ 3/8.** E.5 (v2.99.222 Draconic Wings + Presence) + E.3 (v2.99.223 Hunter's Prey) + E.4 (v2.99.224 Thief). Still ⚪: E.1 Battle Master, E.2 Eldritch Knight, E.6 Wild Magic, E.7 Evocation, E.8 Berserker.
+- **40 ships this session.**
+- **Total harness count: 1215** (was 1210 in v2.99.223).
+
+---
+
 ## [2.99.223] - 2026-06-04 — "The Hunter's Prey" — Hunter's Prey picker + Giant Killer + Horde Breaker
 
 **Schema version:** 66
