@@ -32837,7 +32837,10 @@ async def cast_bane(
     char_id = int(body.get("character_id") or 0)
     class_slug = (body.get("class_slug") or "").strip().lower()
     slot_level_raw = body.get("slot_level")
-    slot_level = int(slot_level_raw) if slot_level_raw else 1
+    # v2.99.150 — explicit None check so a literal 0 surfaces the
+    # below "slot_level < 1" → 400 gate (falsy-int trap fix
+    # mirroring v2.99.102 / .103 / .140 patches elsewhere).
+    slot_level = int(slot_level_raw) if slot_level_raw is not None else 1
     override = bool(body.get("override"))
     via_invocation = (body.get("via_invocation") or "").strip().lower()
 

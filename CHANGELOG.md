@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.151] - 2026-06-03 — "Zero Counts Too" — Fix the slot_level falsy-zero parse bug in /cast_bane
+
+**Schema version:** 65
+**Commit summary:** **Fix `/cast_bane`'s `slot_level` parsing so a literal `0` in the request body reaches the `slot_level < 1` validation gate instead of silently defaulting to `1`.** Pre-v2.99.151 the line `slot_level = int(slot_level_raw) if slot_level_raw else 1` treated `0` as falsy and lifted it to `1`, then the `< 1` check passed and the endpoint proceeded to a `no_slot` 409 (because Magnus has no L1 slot, only L3 Pact Magic). The v2.99.150 harness test `test_cast_bane_l0_slot_400` exposed it. Mirror of the v2.99.102 / v2.99.103 falsy-int fixes filed in `/cast_slow` for the same pattern. Same shape of fix: replace `if slot_level_raw` with `if slot_level_raw is not None` so the literal-zero case surfaces the contract's 400.
+**Description:** Two edits. (1) `app/routes/tabletop_routes.py` — fix line ~32840 to use explicit `is not None` check. (2) Re-run the existing `test_cast_bane_l0_slot_400` test (no test code changes — the test was correct, the bug was in the endpoint).
+
+### Fixed
+- `/cast_bane` slot_level=0 now correctly returns 400 with the "slot_level must be >= 1" message instead of lifting to 1 and falling through to a 409 no_slot.
+
+### Notes
+- **PATCH bump** — single-line fix. No new endpoint, no schema change, no new tests. The bug was caught by the existing v2.99.150 harness test (the test was already correct).
+- **The same falsy-zero pattern exists in 11 other `/cast_<spell>` endpoints** shipped pre-v2.99.151. It only manifests when a caller passes `slot_level: 0` explicitly, which is rare — the existing tests pass because they use positive slot levels. Fixing the other 11 sites is filed; the priority is low because the bug surface is "passing 0 to a slot-level field that requires >= 1" which isn't a useful workflow.
+- **Total harness count: 1032** (unchanged from v2.99.150 — the bug was caught by the existing test).
+
+---
+
 ## [2.99.150] - 2026-06-03 — "Hand on Five Threads" — Thief of Five Fates (Warlock invocation) wires Bane through the v2.99.140 router
 
 **Schema version:** 65
