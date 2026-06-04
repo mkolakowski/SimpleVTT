@@ -1772,6 +1772,26 @@ async def _drop_paired_concentration_buffs_npc(
             "data": state,
             "force_gm_sync": True,
         })
+    # v2.99.179 — NPC mirror of the v2.99.172 Polymorph revert
+    # cascade. When the NPC's dropped buffs include a polymorph-
+    # active marker, look up the target's char_id and revert via
+    # `_revert_polymorph_internal`. Closes the v2.99.172 filed
+    # item "NPC-cast Polymorph mirror".
+    for rec in removed:
+        if (rec.get("key") or "").strip().lower() != "polymorph-active":
+            continue
+        tid = rec.get("_dropped_from_combatant_id") or ""
+        if not tid:
+            continue
+        target_char_id = None
+        for c in (state.get("combatants") or []):
+            if c.get("id") == tid:
+                target_char_id = c.get("char_id")
+                break
+        if target_char_id:
+            await _revert_polymorph_internal(
+                campaign_id, int(target_char_id),
+            )
     return removed
 
 
@@ -37996,13 +38016,19 @@ async def transform_character(
     # combatant entry. The marker carries `source_char_id: caster`
     # + `concentration: True` so the v2.38.0 paired-cleanup cascade
     # (`_drop_paired_concentration_buffs`) auto-reverts the target
-    # when the caster's concentration drops. v1 simplification:
-    # caster_char_id must match a PC Character row in this campaign;
-    # NPC-cast Polymorph would need a different (filed) integration.
+    # when the caster's concentration drops.
+    # v2.99.179 — also accept `caster_combatant_id` for NPC casters.
+    # When set, the marker's `source_combatant_id` field is filled
+    # (and `source_char_id` is omitted) so the NPC mirror cascade
+    # (`_drop_paired_concentration_buffs_npc`) fires for NPC
+    # concentration drops. Closes the v2.99.172 filed item.
     try:
         caster_char_id = int(body.get("caster_char_id") or 0)
     except (TypeError, ValueError):
         caster_char_id = 0
+    caster_combatant_id = (
+        body.get("caster_combatant_id") or ""
+    ).strip()
     if not slug:
         raise HTTPException(400, "slug is required")
     if source not in ("wild-shape", "polymorph"):
@@ -38213,17 +38239,18 @@ async def transform_character(
 
     # v2.99.172 — Polymorph concentration coupling. Install a
     # `polymorph-active` marker buff on the target's combatant when
-    # source=="polymorph" + caster_char_id is provided + caster
-    # differs from target. The marker carries source_char_id=caster
+    # source=="polymorph" + (caster_char_id OR caster_combatant_id)
+    # is provided + caster differs from target. The marker carries
+    # source_char_id (PC caster) OR source_combatant_id (NPC caster)
     # + concentration=True so the v2.38.0 paired-cleanup cascade
-    # auto-reverts the target's transform when the caster's
-    # concentration anchor drops. PCs only in v1 (NPC-cast Polymorph
-    # is filed).
-    if (
-        source == "polymorph"
-        and caster_char_id > 0
-        and caster_char_id != int(char.id)
-    ):
+    # (PC) or v2.97.80 NPC mirror auto-reverts the target's
+    # transform when the caster's concentration anchor drops.
+    # v2.99.179 — NPC-cast path: when caster_combatant_id is set
+    # (and caster_char_id is 0), the marker uses source_combatant_id
+    # for the NPC mirror.
+    _is_pc_cast = caster_char_id > 0 and caster_char_id != int(char.id)
+    _is_npc_cast = bool(caster_combatant_id) and not _is_pc_cast
+    if source == "polymorph" and (_is_pc_cast or _is_npc_cast):
         _poly_marker = {
             "key": "polymorph-active",
             "name": f"Polymorphed ({creature_name})",
@@ -38232,13 +38259,16 @@ async def transform_character(
             "duration_max": 600,
             "concentration": True,
             "source": "polymorph-spell",
-            "source_char_id": int(caster_char_id),
             "effects": {
                 "polymorph_active": True,
                 "form_name": creature_name,
                 "form_slug": slug,
             },
         }
+        if _is_pc_cast:
+            _poly_marker["source_char_id"] = int(caster_char_id)
+        else:
+            _poly_marker["source_combatant_id"] = str(caster_combatant_id)
         await _install_buff(campaign_id, int(char.id), _poly_marker)
 
     await hub.broadcast(campaign_id, {

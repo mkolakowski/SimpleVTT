@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.179] - 2026-06-03 — "The Hag's Form" — NPC-cast Polymorph mirror for concentration coupling
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.172 filed item — NPC-cast Polymorph now wires the same auto-revert cascade as PCs.** v2.99.172 added the PC cascade via `_drop_paired_concentration_buffs`; v2.99.179 mirrors the polymorph-active revert hook into `_drop_paired_concentration_buffs_npc`. `/transform` accepts a new optional `caster_combatant_id` body field; when set (and `caster_char_id` is 0), the polymorph-active marker carries `source_combatant_id` instead of `source_char_id`, routing through the NPC mirror cascade. Same `_revert_polymorph_internal` helper from v2.99.172 reverts the target PC's sheet + token disguise.
+**Description:** Three edits. (1) `app/routes/tabletop_routes.py` `_drop_paired_concentration_buffs_npc` — gains a polymorph-active scan at the end (mirror of v2.99.172's PC cascade hook). For each polymorph-active marker removed, looks up the target combatant's `char_id` and calls `_revert_polymorph_internal(campaign_id, target_char_id)`. (2) `/transform` — accepts `caster_combatant_id` body field. Marker buff install routes to `source_char_id` (PC cast) OR `source_combatant_id` (NPC cast) based on which field the caller provided. PC and NPC are mutually exclusive in v1; future commits could allow both for hybrid scenarios. (3) `tests/harness/test_polymorph_npc_concentration_revert.py` — 1 regression test that synthetic-seeds an NPC caster combatant + transforms Krieger + verifies the polymorph-active marker carries `source_combatant_id` (proves the NPC-cast path is wired correctly). The full e2e of /battle PUT triggering the helper is filed.
+
+### Added
+- `caster_combatant_id` optional body field on `/transform`.
+- NPC mirror of the polymorph-revert hook in `_drop_paired_concentration_buffs_npc`.
+- Marker buff routing: `source_char_id` for PC casts, `source_combatant_id` for NPC casts.
+- `tests/harness/test_polymorph_npc_concentration_revert.py` — 1 test verifying the marker shape on NPC-cast transforms.
+
+### Notes
+- **PATCH bump** — NPC mirror hook + endpoint extension + 1 test. No schema change. Closes the v2.99.172 filed item "NPC-cast Polymorph mirror".
+- **What's filed.** (1) `/battle` PUT triggering `_drop_paired_concentration_buffs_npc` automatically when a concentration buff is removed via the PUT path. Today the helper fires only via explicit /end_buff or NPC concentration save failure. (2) Hybrid PC+NPC casts (rare but possible — e.g., a witch coven where one PC is dominated and casting). (3) Cascade audit broadcast — today the revert fires silently per target; a future broadcast could list all NPC-cast targets that were reverted.
+- **NPC Polymorph design symmetry.** PC casters use `source_char_id` (long-lived Character row); NPC casters use `source_combatant_id` (battle-scoped identifier). Same field convention as v2.97.80's NPC paired-cleanup mirror.
+- **Total harness count: 1097** (was 1096 in v2.99.178 — +1 from the new NPC mirror test).
+
+---
+
 ## [2.99.178] - 2026-06-03 — "The Open Stat Block" — Extend _SHEET_PATCH_KEYS to abilities + saving_throws
 
 **Schema version:** 66
