@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.172] - 2026-06-03 — "The Form Snaps Back" — Polymorph concentration coupling reverts the token disguise
+
+**Schema version:** 66
+**Commit summary:** **Close the v2.99.168 filed item "Polymorph concentration coupling" — when the Polymorph caster loses concentration, the target's token disguise and sheet active_form auto-revert via the existing v2.38.0 paired-cleanup cascade.** `/transform` gains an optional `caster_char_id` body field. When set on a Polymorph cast where caster != target, the endpoint installs a `polymorph-active` marker buff on the target's combatant entry (source_char_id=caster, concentration=True). The v2.38.0 paired-cleanup helper (`_drop_paired_concentration_buffs`) drops the marker when the caster's concentration ends; the new v2.99.172 post-cleanup hook calls `_revert_polymorph_internal` to restore the target's sheet + clear the token disguise + broadcast `transform_update` and `token_update`.
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — `_drop_paired_concentration_buffs` gains a polymorph-active scan + revert call at the end. (2) New `_revert_polymorph_internal(campaign_id, target_char_id)` helper that opens its own DB session via `SessionLocal`, restores the target's sheet (`active_form` → `prior_form`), reverts the token disguise via `_revert_token_disguise`, broadcasts `transform_update` + per-token `token_update`. Defensive try/except so a downstream broadcast issue doesn't break the cascade. (3) `/transform` endpoint accepts optional `caster_char_id` body field. When set on Polymorph + caster != target, installs `polymorph-active` marker buff on target's combatant entry (source_char_id=caster, concentration=True, effects: form_name + form_slug). (4) `tests/harness/test_polymorph_concentration_revert.py` — 1 e2e regression test (Thalindra casts Polymorph → /transform Krieger → end Thalindra's anchor → verify Krieger's token + buff state).
+
+### Added
+- `caster_char_id` optional body field on `/transform`.
+- `polymorph-active` marker buff installed on the target's combatant for Polymorph casts where caster_char_id is set + caster != target.
+- `_revert_polymorph_internal(campaign_id, target_char_id)` helper.
+- Polymorph revert hook in `_drop_paired_concentration_buffs` post-cleanup.
+- `tests/harness/test_polymorph_concentration_revert.py` — 1 test (end-to-end: cast → transform → drop anchor → verify revert).
+
+### Changed
+- `_drop_paired_concentration_buffs` now also reverts polymorph transforms on cascade. Backward-compatible — the new scan only fires when the cleanup removed a `polymorph-active` marker, which is only installed by /transform's new (optional) caster_char_id path.
+
+### Notes
+- **PATCH bump** — endpoint extension + helper + integration + 1 e2e test. No schema change.
+- **What's filed.** (1) NPC-cast Polymorph — the marker buff's source_char_id field assumes a PC caster. NPC casters would need the `source_combatant_id` mirror used by `_drop_paired_concentration_buffs_npc`. (2) Wild Shape doesn't need concentration coupling — RAW Wild Shape isn't a concentration effect; it expires on its own duration timer or when the Druid drops to 0 HP. The marker buff path only installs on `source == "polymorph"`. (3) Damage-triggered CON save → auto-revert: the v2.97.66 `_maybe_concentration_save` path on the caster drops the concentration anchor, which fires the same cascade — so this case is already covered.
+- **Closes a v2.99.168 filed item.** The token-disguise primitive + the concentration coupling now form a complete RAW Polymorph mechanical chain: caster casts, target transforms (sheet + token), concentration ends → target reverts (sheet + token). The remaining ships are UI: a beast-portrait `image_url` swap, a per-form description tooltip, and the Polymorph save (WIS save against the cast). All filed.
+- **Total harness count: 1089** (was 1088 in v2.99.171).
+
+---
+
 ## [2.99.171] - 2026-06-03 — "Zero is a Number" — Backfill the falsy-zero fix across 11 /cast_<spell> endpoints
 
 **Schema version:** 66

@@ -1606,7 +1606,119 @@ async def _drop_paired_concentration_buffs(
     # is keyed to the caster's concentration; once concentration
     # breaks, the marker should vanish from the map.
     await _clear_caster_concentration_aoes(campaign_id, caster_char_id)
+    # v2.99.172 — Polymorph token-disguise revert. Closes a
+    # v2.99.168 filed item. When the dropped buffs include a
+    # `polymorph-active` marker, the corresponding target's
+    # transform was tied to this caster's concentration. Revert
+    # the target's sheet + token disguise via
+    # `_revert_polymorph_internal`. Each target gets its own
+    # revert call (rare to have multiple polymorph targets, but
+    # safe for upcast Polymorph variants).
+    for rec in removed:
+        if (rec.get("key") or "").strip().lower() != "polymorph-active":
+            continue
+        tid = rec.get("_dropped_from_combatant_id") or ""
+        if not tid:
+            continue
+        target_char_id = None
+        for c in (state.get("combatants") or []):
+            if c.get("id") == tid:
+                target_char_id = c.get("char_id")
+                break
+        if target_char_id:
+            await _revert_polymorph_internal(
+                campaign_id, int(target_char_id),
+            )
     return removed
+
+
+async def _revert_polymorph_internal(
+    campaign_id: int, target_char_id: int,
+) -> bool:
+    """v2.99.172 — Internal Polymorph revert helper. Restores the
+    target's sheet (active_form → prior_form), clears the polymorph
+    metadata, and reverts the token disguise via
+    `_revert_token_disguise`. Broadcasts `transform_update` +
+    `token_update` per affected token.
+
+    Called from `_drop_paired_concentration_buffs` when a caster's
+    concentration drops and the cleanup removed a `polymorph-active`
+    marker buff from a target combatant. Closes the v2.99.168 filed
+    item "Polymorph concentration coupling".
+
+    Defensive: opens its own DB session via SessionLocal (since the
+    paired-cleanup helper isn't passed a Session). Failures are
+    logged-not-raised so a downstream broadcast issue doesn't
+    block the rest of the cascade.
+    """
+    try:
+        from app.database import SessionLocal as _PSessionLocal
+        with _PSessionLocal() as _p_db:
+            target = _p_db.query(Character).filter(
+                Character.id == int(target_char_id),
+            ).first()
+            if not target:
+                return False
+            sheet = dict(target.sheet or {})
+            prior = sheet.get("prior_form")
+            if not isinstance(prior, dict):
+                # No prior form snapshot — nothing to restore. Still
+                # clear active_form so the UI shows the character
+                # back to "normal" form (best-effort recovery).
+                sheet["active_form"] = None
+                from sqlalchemy.orm.attributes import flag_modified
+                target.sheet = sheet
+                flag_modified(target, "sheet")
+                _p_db.commit()
+            else:
+                for key in (
+                    "hp", "ac", "speed", "abilities", "skills",
+                    "saving_throws", "attacks", "race",
+                    "initiative_bonus", "proficiency_bonus",
+                    "damage_resistances", "damage_immunities",
+                    "damage_vulnerabilities", "condition_immunities",
+                ):
+                    if key in prior and prior[key] is not None:
+                        sheet[key] = prior[key]
+                sheet["active_form"] = None
+                sheet["prior_form"] = None
+                from sqlalchemy.orm.attributes import flag_modified
+                target.sheet = sheet
+                flag_modified(target, "sheet")
+                _p_db.commit()
+            # Revert the token disguise (no-op for tokens already in
+            # native form).
+            _reverted = _revert_token_disguise(_p_db, int(target_char_id))
+            if _reverted > 0:
+                _p_db.commit()
+                for _tok in _p_db.query(Token).filter(
+                    Token.character_id == int(target_char_id),
+                ).all():
+                    await hub.broadcast(campaign_id, {
+                        "type": "token_update",
+                        "data": {
+                            "id": _tok.id,
+                            "label": _tok.label,
+                            "size": _tok.size,
+                            "disguise": _tok.disguise,
+                        },
+                    })
+            # Broadcast the transform_update so live clients refresh.
+            await hub.broadcast(campaign_id, {
+                "type": "transform_update",
+                "data": {
+                    "character_id": int(target_char_id),
+                    "active_form": None,
+                    "hp": sheet.get("hp"),
+                    "ac": sheet.get("ac"),
+                    "speed": sheet.get("speed"),
+                    "source": "polymorph-concentration-drop",
+                },
+            })
+        return True
+    except Exception:
+        # Swallow — don't break the surrounding paired cleanup.
+        return False
 
 
 async def _drop_paired_concentration_buffs_npc(
@@ -37730,6 +37842,19 @@ async def transform_character(
     source = str(body.get("source") or "wild-shape").strip().lower()
     free_pick = bool(body.get("free_pick"))
     override = bool(body.get("override"))
+    # v2.99.172 — caster_char_id (optional). When set on a Polymorph
+    # cast where the caster differs from the target, /transform
+    # installs a `polymorph-active` marker buff on the target's
+    # combatant entry. The marker carries `source_char_id: caster`
+    # + `concentration: True` so the v2.38.0 paired-cleanup cascade
+    # (`_drop_paired_concentration_buffs`) auto-reverts the target
+    # when the caster's concentration drops. v1 simplification:
+    # caster_char_id must match a PC Character row in this campaign;
+    # NPC-cast Polymorph would need a different (filed) integration.
+    try:
+        caster_char_id = int(body.get("caster_char_id") or 0)
+    except (TypeError, ValueError):
+        caster_char_id = 0
     if not slug:
         raise HTTPException(400, "slug is required")
     if source not in ("wild-shape", "polymorph"):
@@ -37937,6 +38062,36 @@ async def transform_character(
                     "disguise": _tok.disguise,
                 },
             })
+
+    # v2.99.172 — Polymorph concentration coupling. Install a
+    # `polymorph-active` marker buff on the target's combatant when
+    # source=="polymorph" + caster_char_id is provided + caster
+    # differs from target. The marker carries source_char_id=caster
+    # + concentration=True so the v2.38.0 paired-cleanup cascade
+    # auto-reverts the target's transform when the caster's
+    # concentration anchor drops. PCs only in v1 (NPC-cast Polymorph
+    # is filed).
+    if (
+        source == "polymorph"
+        and caster_char_id > 0
+        and caster_char_id != int(char.id)
+    ):
+        _poly_marker = {
+            "key": "polymorph-active",
+            "name": f"Polymorphed ({creature_name})",
+            "icon": "🦌",
+            "duration_rounds": 600,  # 1 hour at 6s/round (RAW)
+            "duration_max": 600,
+            "concentration": True,
+            "source": "polymorph-spell",
+            "source_char_id": int(caster_char_id),
+            "effects": {
+                "polymorph_active": True,
+                "form_name": creature_name,
+                "form_slug": slug,
+            },
+        }
+        await _install_buff(campaign_id, int(char.id), _poly_marker)
 
     await hub.broadcast(campaign_id, {
         "type": "transform_update",
