@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.193] - 2026-06-04 — "The Roadmap" — Add v2.99.10→.192 audit + phased completion plan to class-content-status
+
+**Schema version:** 66
+**Commit summary:** **Add a new audit checkpoint + a phased completion plan to `docs/plans/class-content-status.md`.** The doc's most recent audit was v2.99.9 (2026-05-31); since then ~180 commits have shipped major class-feature work (Sorcerer Metamagic full coverage, Polymorph mechanical chain, Eldritch Invocation breadth, Hunter's Mark + Hex per-target Twinned, Paladin Lv 11-20, Bard Lv 20, Cleric Lv 10/20, Warlock Lv 11-20). v2.99.193 (a) summarizes the v2.99.10→.192 status flips in a new `Re-audit (v2.99.192)` blockquote, (b) adds a new `## Phased completion plan (v2.99.192 → v3.0.0)` section laying out 8 phases (A–H) to close PHB-only class/race/feat coverage ahead of any 3.x scope.
+**Description:** One edit in `docs/plans/class-content-status.md` — inserts a new audit blockquote + a phased plan section between the v2.99.9 audit conclusion and the existing "## Status legend" heading. The phases are leverage-weighted: Phase A (race-keyed (D) passive engine completion) + Phase C (F8 Phase C RAW Indomitable) + Phase B (attack-roll d20 intercepts) are sized at ~5 commits each; Phase D (Pact Boon), Phase E (subclass content batch, the biggest), Phase F (late-level class capstones), Phase H (3.0.0 cleanup); Phase G (system frameworks like Fall damage / Disease engine) is deferred. Total estimated ~45 commits to PHB completion + 3.0.0 cut. Sizing legend (S/M/L) defined inline. Each phase enumerates 3–8 specific deliverables with deps + estimated commit counts.
+
+### Added
+- `Re-audit (v2.99.192, 2026-06-04)` blockquote in `docs/plans/class-content-status.md` summarizing v2.99.10→.192 flips (Sorcerer Metamagic ✅ 7/7 PHB metamagics, Bard Lv 20 Superior Inspiration ✅, Cleric Lv 10/20 Divine Intervention ✅, Warlock Lv 11-20 ✅, Polymorph FULL CHAIN ✅, Hunter's Mark + Hex per-target Twinned ✅, 10+ Eldritch Invocations ✅, Paladin Lv 11-20 ✅).
+- New `## Phased completion plan (v2.99.192 → v3.0.0)` section with 8 phases (A–H) + a leverage-weighted ordering suggestion.
+
+### Notes
+- **PATCH bump** — doc-only edit. No production code change.
+- **Wiki surfacing** — `docs/plans/class-content-status.md` was already surfaced via `_DOC_ALLOWLIST` (slug `plan-class-content-status`), the wiki landing page, and `docs/wiki/README.md` (all per the CLAUDE.md wiki-surfacing rule). No surfacing edit needed.
+- **No harness coverage** — doc-only commits are exempt from the harness-discipline rule per CLAUDE.md.
+- **The 8 ships shipped this session ✅** — v2.99.185 → v2.99.193 includes: /battle PUT NPC concentration cascade, NPC Subtle mirror, Hunter's Mark per-target Twinned rider, Hunter's Mark broadcast naming, Hex per-target Twinned, attack chat-card "(vs NAME)" labeling, /battle PUT PC concentration cascade, v2.99.180 NPC WIS test reactivation, this plan refresh.
+- **Total harness count: 1119** (unchanged from v2.99.192).
+
+---
+
 ## [2.99.192] - 2026-06-04 — "Goblin in the Mirror" — Reactivate v2.99.180 NPC Polymorph WIS test
 
 **Schema version:** 66

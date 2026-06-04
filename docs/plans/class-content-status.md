@@ -258,6 +258,327 @@ save advantages), Sorcerer Metamagic + Font-of-Magic picker (still
 Invocations, Wizard Spell Mastery + Signature Spells, Cleric Divine
 Intervention. See updated "## Order of priority" below.
 
+> **Re-audit (v2.99.192, 2026-06-04):** walked v2.99.10 → v2.99.192
+> (~180 commits — the post-v2.99.9 window was dominated by **class
+> capstone fills + Sorcerer Metamagic full coverage + the Polymorph
+> mechanical chain + Eldritch Invocation breadth + Hunter's Mark / Hex
+> per-target Twinned shape changes**). High-confidence status flips:
+>
+> - **Sorcerer Metamagic ✅ — 7 of 7 PHB metamagics fully wired.**
+>   Empowered (v2.49.124), Twinned (v2.99.33/.167/.174/.181/.183/.184/
+>   .187/.189), Distant (v2.99.34/.159), Heightened (v2.99.35-.36/.41),
+>   Careful (v2.99.38/.42), Extended (v2.99.37/.161/.165), Subtle
+>   (v2.99.162/.173/.186). Quickened stays 🟡 (announce only). NPC
+>   parallel where applicable (NPC Subtle via /battle-PUT pending buff
+>   v2.99.186). **Sorcerer class fully ✅** — Sorcerous Restoration
+>   shipped v2.99.39 + all 7 metamagics + Font of Magic + Draconic
+>   Bloodline through Lv 6 ancestor uplift.
+> - **Bard Lv 20 Superior Inspiration ✅** (v2.99.44).
+> - **Cleric Lv 10/20 Divine Intervention ✅** (v2.99.47). All 12 canon
+>   CD Lv 2 domains + 2 Lv 6 options (Knowledge: Read Thoughts,
+>   Trickery: Cloak of Shadows v2.99.80) curated.
+> - **Warlock Lv 11–17 Mystic Arcanum ✅** (v2.99.45 + v2.99.86 4 tiers
+>   + v2.99.88 free-cast routing). **Warlock Lv 20 Eldritch Master ✅**
+>   (v2.99.46).
+> - **Eldritch Invocations — 10+ mechanically wired.** Agonizing Blast
+>   (v2.99.89), Repelling Blast (v2.99.90), Eldritch Sight (v2.99.151),
+>   Ascendant Step (v2.99.154), Sculptor of Flesh (v2.99.142 — Polymorph
+>   route), Beguiling Influence (v2.99.156), Eldritch Spear (v2.99.158),
+>   Beast Speech (v2.99.157), Eyes of the Rune Keeper (v2.99.155),
+>   Whispers of the Grave (v2.99.158), Visions of Distant Realms
+>   (v2.99.158-.160). **The Eldritch Invocation row is now 🟢 with
+>   broad coverage** — descriptive invocations (Devil's Sight, Mask of
+>   Many Faces, Hex Warrior, Lifedrinker, Lance of Lethargy) remain
+>   filed per-shape.
+> - **Paladin Lv 11–20 ✅ end-to-end.** Improved Divine Smite, Purity
+>   of Spirit, Holy Nimbus, Cleansing Touch all wired v2.99.166. Aura
+>   of Protection radius bump to Lv 18 still descriptive; multi-paladin
+>   stacking still filed.
+> - **Polymorph + Wild Shape token swap ✅ FULL CHAIN.** v2.99.168 added
+>   Schema v66 `Token.disguise` JSON column with `_apply_token_disguise`
+>   + `_revert_token_disguise` primitives. v2.99.169 wired into the
+>   /transform endpoint (Wild Shape + Polymorph share the chain).
+>   v2.99.171–.178 added Polymorph concentration coupling +
+>   `_revert_polymorph_internal` + WIS save vs unwilling PC + NPC
+>   targets (v2.99.175/.176/.177/.178/.180). v2.99.179 wired the NPC
+>   mirror cascade. v2.99.182 fixed test flake. v2.99.185 closed
+>   /battle PUT NPC concentration trigger. v2.99.191 closed /battle
+>   PUT PC parallel. v2.99.192 reactivated the v2.99.180 NPC WIS test
+>   (was silently skipping due to wrong template endpoint URL).
+>   **Closes the v2.15.9 Token-disguise primitive filed item.**
+> - **F8 Phase D continued** (v2.97.79 → v2.99.190 small undo additions).
+>   F8 Phase C (RAW Indomitable reroll) still ⚪.
+> - **`_SPELL_BUFF_MAP` catalog growth** — several spell entries via
+>   /cast_compulsion (v2.99.182), /cast_bestow_curse (v2.99.171),
+>   /cast_bane (v2.99.151+183), /cast_polymorph (v2.99.142+168+171),
+>   /cast_hold_monster (v2.99.184). The v2.97.x catalog is still the
+>   right home for new entries.
+> - **Hunter's Mark + Hex per-target rider shape change** v2.99.187-.190
+>   — `effects.weapon_hit_bonus_target_combatant_id` accepts list-or-
+>   string for Twinned-folded targets; install broadcast names both;
+>   weapon-hit chat card breakdown labels "(vs NAME)".
+>
+> **Harness growth**: 858 tests (v2.99.9) → **1119 tests** (v2.99.192).
+> ~260 new test files. CI runs the full suite per push.
+>
+> **Filed items closed in this window:** Token-disguise primitive
+> (v2.15.9 → v2.99.168), Polymorph concentration coupling (v2.99.142
+> → v2.99.172), NPC Subtle mirror (v2.99.173 → v2.99.186), /battle PUT
+> cascade (v2.99.179 → v2.99.185/.191), v2.99.180 test reactivation
+> (v2.99.192).
+
+**Re-audit conclusion (v2.99.192, 2026-06-04).** Sorcerer + Warlock
++ Paladin classes now have FULL Lv 1–20 ✅ coverage in PHB. The
+remaining headline ⚪ areas are: (B) attack-roll intercepts (Portent,
+Stroke of Luck, Reliable Talent), Warlock Pact Boon, Wizard Lv 18-20,
+Barbarian Lv 9-20 capstones, Battle Master maneuvers picker, F8 Phase
+C, and the broad set of subclass features that ship as descriptive +
+no-op. See the **Phased completion plan** below for the suggested
+ordering. The per-class tables + per-feature plans further down stay
+the source of truth for individual row status; phased plan is the
+operational roadmap.
+
+## Phased completion plan (v2.99.192 → v3.0.0)
+
+The plan below sequences the remaining ⚪ / 🟡 work to **close PHB-only
+class/race/feat coverage** ahead of any 3.x scope (Tasha's, XGTE,
+homebrew tier expansion). Each phase is sized for ~5–15 commits of
+focused class-feature work, batched so a single conversation can ship
+the whole phase. Phase ordering is **leverage-weighted**: earlier
+phases unlock more downstream rows than later ones.
+
+> **Sizing legend.** S = single commit (~1 endpoint or 1 helper + 1
+> test file), M = small batch (2–5 commits, ~250–750 LOC), L = large
+> batch (6+ commits, may need its own design plan in `docs/plans/`).
+
+### Phase A — Race-keyed (D) passive engine completion (M)
+
+Closes the (D) Phase 2 / 3 / 4 work that's still partial. The
+`_RACE_SAVE_ADVANTAGES` table + construction-time hook (v2.99.11+) +
+`_is_sleep_immune` (v2.99.15) + `_apply_hp_change` hook (v2.99.17)
++ `damage_resistances` (v2.99.18) all ship; the gaps are the
+attack-roll surface for Halfling Lucky (currently save-only),
+subrace differentiation (Stout vs Lightfoot Halfling), and Dragonborn
+ancestry damage resistance per-PC.
+
+- **A.1 — Halfling Lucky on attack rolls (S).** v2.99.21 wired the
+  attack surface; v2.99.22 wired ability/skill/initiative. Both ship.
+  *Closed during the v2.99.10–.192 window — verify no follow-up
+  needed (e.g., NPC-attack target side).*
+- **A.2 — Subrace-aware race slug normalizer (S).** `_race_slug_from_sheet`
+  returns the parent race (halfling); add `_subrace_slug_from_sheet`
+  returning subrace (lightfoot / stout). Wire Stout Halfling Stout
+  Resilience (`_RACE_SAVE_ADVANTAGES["halfling-stout"]` with
+  `damage_types=["poison"]` + `condition_keys=["poisoned"]`).
+- **A.3 — Dragonborn ancestry damage resistance per-PC (S).** Map
+  ancestry → damage type in the seed (Red → fire, Bronze → lightning,
+  Green → poison, etc.); seed each Dragonborn PC's
+  `damage_resistances` accordingly. Rowan Ashstride already ships
+  with `["lightning"]` (v2.99.20). Verify ancestry-to-type mapping
+  is shipped as a helper rather than hand-typed per PC.
+- **A.4 — Phase 4 Half-Orc Relentless Endurance (S).** Already
+  shipped v2.99.17. *Verify no follow-up.*
+
+### Phase B — Attack-roll d20 intercepts (M-L)
+
+Closes the (B) intercept gap for the three remaining attack-roll
+sites. The save-roll path already uses construction-time hooks
+(v2.52.0+); the attack-roll path requires either a two-phase commit
+on `/roll` or a Reactions-framework consumer of the existing
+`attack_targeted` event.
+
+- **B.1 — Portent (Divination Wizard Lv 2) — M.** Banked-values
+  panel on Thalindra's sheet (2 d20s rolled at long rest; 3 at Lv 14
+  Greater Portent). New reaction kind `swap_d20_result` registered
+  in `_eligible_reactions[attack_targeted, save_resolved,
+  save_started]` that the Wizard can fire from her own banked dice.
+  Thalindra Lv 5 → Lv 7 for the Lv 2 feature to actually be a
+  capstone test; Lv 14 capstone tests bump her to Lv 14 via the
+  v2.99.39 PATCH pattern.
+- **B.2 — Reliable Talent (Rogue Lv 11) — S.** Skill-check
+  construction hook: `_apply_reliable_talent_floor(rolled_total,
+  sheet)` returns `max(rolled, 10)` when the skill is proficient
+  and Rogue level ≥ 11. Pip bumped Lv 7 → Lv 11. Pure additive
+  on roll math; no new infrastructure.
+- **B.3 — Stroke of Luck (Rogue Lv 20) — S.** Reuse the
+  `attack_targeted` reaction surface from Lucky (v2.77.0). New
+  reaction kind: convert a miss → hit AND/OR convert a failed check
+  → 20. Counter exists; arming is per-short-rest. Bump Pip Lv 11 → 20.
+
+### Phase C — F8 Phase C: RAW Indomitable reroll (M)
+
+Replaces the v2.56.0 "advantage on next save" simplification with the
+RAW reroll-on-fail + the undo-and-reapply path for installed
+conditions. Per-cast snapshot stack from F8 Phase B reused; on a
+failed save that lands a condition, the buff is installed; on
+Indomitable trigger, the buff is removed via the v2.97.16-.79 undo
+framework and the save is rerolled with the new advantage modifier.
+
+- **C.1 — Reroll endpoint + buff-revert (M).** New endpoint
+  `/use_indomitable_reroll`. Reads the most recent failed save's
+  buff_install log entry; rerolls via `/roll_request`'s
+  `rerun_with_advantage`. Garrik Lv 9 → 17 capstone test for the 3
+  uses/long-rest scaling.
+
+### Phase D — Pact Boon (Warlock Lv 3) + Pact-specific features (L)
+
+Closes the Warlock Lv 3 class slot. Pact of the Tome (extra cantrips
+selectable via the spell-browser modal — easiest), Pact of the Blade
+(magic weapon summon flow), Pact of the Chain (familiar summon via
+`/place_token` extension). Each Pact unlocks 2–4 downstream
+Invocations.
+
+- **D.1 — Pact of the Tome (S).** Spell-browser modal gains a
+  "Book of Shadows" filter for Warlock Pact-Tome PCs (3 extra
+  cantrips from any class list). Magnus Hexbinder demo carries the
+  Tome boon already (per sheet); UI surfacing is the gap.
+- **D.2 — Pact of the Blade (M).** `/summon_pact_weapon` endpoint
+  creates a synthetic weapon entry on the sheet's attacks list
+  + sets `magical: True` (consumed by `_attack_is_magical`).
+- **D.3 — Pact of the Chain (M).** Spawn-familiar variant of
+  `/place_token` that creates an `imp`/`quasit`/`pseudodragon`/
+  `sprite` companion token tagged with the warlock as owner.
+
+### Phase E — Subclass content batch (L)
+
+The largest single batch. The subclass table has ~20 🟡 rows that need
+mechanical wiring. Group by shape:
+
+- **E.1 — Battle Master maneuvers picker (L; needs own plan).**
+  Reuses v2.9.0 picker primitive. 16 maneuvers each spending a
+  Superiority Die; each maneuver has its own side effect (Riposte
+  reaction-attack-after-miss; Trip Attack prone-on-hit; Disarm
+  save-vs-disarm; Goading Attack save-vs-disadvantage-on-other-targets;
+  Menacing Attack frightened-on-hit; Distracting Strike + Maneuvering
+  Attack ally-advantage; Parry damage-reduction; etc.). **Write
+  `docs/plans/battle-master-maneuvers.md`** before starting; this is
+  the highest-effort single subclass item.
+- **E.2 — Eldritch Knight (Lv 3 onward) (L; needs own plan).** Bound
+  weapon + War Magic + Eldritch Strike + Arcane Charge + 1/3 caster
+  spell-slot table. Needs a Fighter/Wizard multiclass-slot demo
+  fixture. **Write `docs/plans/eldritch-knight.md`** before starting.
+- **E.3 — Hunter (Hunter's Prey + Defensive Tactics + Multiattack +
+  Superior Hunter's Defense) (M).** 3 picker options for Hunter's
+  Prey (Colossus Slayer ✅ shipped, Giant Killer, Horde Breaker) +
+  3 for Defensive Tactics (Escape the Horde, Multiattack Defense,
+  Steel Will). Rowan Quickbow demo at Lv 7 → 11.
+- **E.4 — Thief (Fast Hands + Use Magic Device + Supreme Sneak +
+  Thief's Reflexes) (M).** Cunning Action extension (Fast Hands
+  picker), advantage-on-Stealth-at-half-speed (Supreme Sneak), and
+  the Lv 17 second turn at -10 init (Thief's Reflexes).
+- **E.5 — Draconic Bloodline Dragon Wings + Draconic Presence (M).**
+  Wings action + fly speed buff at Lv 14; Presence at Lv 18. Zara
+  Emberfire Lv 5 → 14 → 18 capstone tests.
+- **E.6 — Wild Magic Surge + Bend Luck + Controlled Chaos +
+  Bombardment (M).** d100 chaos table (existing roll infrastructure);
+  Bend Luck reaction kind (Reactions framework); Bombardment
+  on-max-die uplift. Needs a Wild Magic Sorcerer fixture.
+- **E.7 — School of Evocation Sculpt Spells + Potent Cantrip +
+  Empowered Evocation + Overchannel (M).** Sculpt is target-picker
+  exclusion on evocation AoEs; Potent Cantrip is half-on-save for
+  cantrips (mirror of Evasion's save-for-half flow); Empowered
+  Evocation is per-spell +INT damage uplift; Overchannel is
+  full-damage on Lv 5+ evocation with backlash damage.
+- **E.8 — Path of the Berserker Frenzy + Intimidating Presence +
+  Retaliation (M).** Frenzy = bonus-action melee attack during rage
+  + exhaustion at rage end (needs the F? exhaustion-tracking
+  framework — likely a new system). Intimidating Presence = CHA
+  picker target. Retaliation = reaction-on-damage.
+
+### Phase F — Remaining late-level class capstones (L)
+
+Mostly Lv 9+ features that need their respective demo PCs bumped to
+mid-tier. Each is small individually (~50–150 LOC) but the demo-PC
+fixture work + the harness scaffolding adds up.
+
+- **F.1 — Barbarian Lv 9-20 (M).** Brutal Critical (Lv 9/13/17 — extra
+  crit dice), Relentless Rage (Lv 11), Persistent Rage (Lv 15),
+  Indomitable Might (Lv 18), Primal Champion (Lv 20). Krieger Lv 7
+  → 9/11/15/18/20 capstone tests.
+- **F.2 — Monk Lv 14-20 (M).** Diamond Soul (all save proficiency),
+  Empty Body (Lv 18 ki-spend → invisible + half-damage), Perfect
+  Self (Lv 20 — ki regen to 4 on init). Kael Lv 7 → 14/18/20.
+- **F.3 — Ranger Lv 10-20 (M).** Hide in Plain Sight, Vanish, Feral
+  Senses, Foe Slayer. Rowan Lv 7 → 10/14/18/20.
+- **F.4 — Rogue Lv 15-18 (M).** Slippery Mind (Wis save prof gain),
+  Elusive (no attacker has advantage on you). Pip Lv 7 → 15/18.
+- **F.5 — Wizard Lv 18-20 (M).** Spell Mastery (Lv 18 — pick a L1 +
+  L2 spell to cast at-will without slot), Signature Spells (Lv 20 —
+  pick 2 L3 spells to cast once per short rest without slot).
+  Thalindra Lv 5 → 18/20.
+
+### Phase G — System frameworks for descriptive-only features (L)
+
+These would unlock multiple descriptive 🟡 race / class features that
+ship today as "no mechanic." Each framework is a substantial commit on
+its own; ship only when the descriptive-only pile becomes a UX
+problem.
+
+- **F4 Fall damage helper (M).** Adds `_apply_fall_damage(combatant,
+  fall_distance)` to `_apply_damage_to_combatant`. Wires Monk Slow
+  Fall (descriptive today) into a real reaction endpoint. Also
+  enables homebrew height-based maps.
+- **F5 Disease engine (L).** New `disease` buff shape + the
+  `Disease` condition track (CON save weekly or whatever). Wires
+  Cleric Divine Health, Monk Purity of Body, Paladin Divine Health
+  into real immunity gates. Probably needs a fresh design plan
+  before starting.
+- **F11 Difficult terrain (L).** New per-cell terrain field + a
+  movement-cost gate in `/move`. Wires Druid Land's Stride + Monk
+  Unarmored Movement Lv 9+ jumping ability into real mechanics.
+- **F12 Component-tracking (L).** Spell-cast handler reads
+  `_spell_requires_components(slug)` + the caster's component pouch
+  / focus. Mostly a content-tier change but the cast hook is
+  load-bearing. Not currently blocking — Subtle Spell metamagic
+  ships without this, and most components are tacit.
+
+### Phase H — Final cleanup + 3.0.0 cut (M)
+
+After Phases A–F land, sweep the per-class tables for stragglers:
+
+- **H.1 — Subclass shipping for the 11 non-Life Cleric domains.** Each
+  needs a single demo cleric fixture (or borrow Tavik's seed and PATCH
+  the domain via sheet-fields). Mostly the Lv 2 CD options are
+  already curated (v2.56.1–.2); the Lv 6 / Lv 8 / Lv 17 features are
+  the remaining gap.
+- **H.2 — Subclass shipping for non-Devotion Paladin oaths.** Same
+  pattern: Caelan PATCH or new demo PC per oath. ~6 oaths.
+- **H.3 — Last-mile Eldritch Invocation breadth.** Devil's Sight,
+  Mask of Many Faces, Hex Warrior, Lifedrinker, Lance of Lethargy
+  each ship individually (each is one filed item). Aim for parity
+  with the v2.99.151–.158 batch.
+- **H.4 — Doc audit + 3.0.0 cut.** Re-walk this entire doc; collapse
+  the per-feature plans of shipped features into one-line ✅ entries;
+  archive `class-content-status.md` as v2 alongside the 2.x changelog
+  archive rule; open `class-content-status_v3.md` as the post-3.0.0
+  living doc.
+
+### Phase ordering — leverage-weighted suggestion
+
+If the budget is N commits over the next K sessions, prioritize:
+
+1. **Phase A (~5 commits)** — closes the (D) passive engine
+   completions; each row is small and ships immediately.
+2. **Phase C (~3 commits)** — RAW Indomitable closes the F8 Phase C
+   ⚪ + replaces a known v1 simplification.
+3. **Phase B (~5 commits)** — Portent + Reliable Talent + Stroke of
+   Luck. Portent is the highest-leverage user-visible (Divination
+   Wizard becomes mechanically distinct).
+4. **Phase D (~5 commits)** — Pact Boon. Closes a high-visibility
+   ⚪ row on the Warlock; Pact of the Tome is the easy first ship.
+5. **Phase F (~10 commits)** — Late-level capstones. Each is small;
+   batch by class.
+6. **Phase E (~15 commits)** — Subclass content batch. The biggest;
+   defer until A–D + F are clean.
+7. **Phase H (~3 commits)** — 3.0.0 cleanup + cut.
+8. **Phase G (deferred)** — System frameworks. Only ship the
+   frameworks when their descriptive-feature pile becomes a UX
+   problem; today's "no mechanic" rows are stable.
+
+**Estimated total to PHB-only complete + 3.0.0 cut:** ~45 commits.
+At the current ship rate (~10–15 commits per session) that's 3–4
+focused sessions for PHB completion + 1 for the major-version cut.
+
 ## Status legend
 
 | Symbol | Meaning |
