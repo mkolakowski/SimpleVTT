@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.181] - 2026-06-04 — "The Twin Spreads" — Wire _consume_twinned helper into /cast_slow, /cast_hold_person, /cast_compulsion
+
+**Schema version:** 66
+**Commit summary:** **Adopt the v2.99.174 `_consume_twinned_for_second_target` helper across `/cast_slow`, `/cast_hold_person`, and `/cast_compulsion`.** Closes the v2.99.174 "wire into more endpoints" follow-up. Each endpoint calls the helper after the concentration anchor install, consumes the Twinned pending one-shot, surfaces the second target on the response. `/cast_slow` + `/cast_hold_person` go one step further — they append the second target to the target list so the buff actually installs on both targets (canonical Twinned RAW behavior for Hold Person; non-RAW but GM-convenient for Slow). `/cast_compulsion` ships at cast layer only (per-target install path is filed for the broader WIS-save resolution).
+**Description:** Four edits. (1) `/cast_slow` — helper called after concentration anchor install. If second target returned, appended to `target_combatant_ids` before the install loop. `twinned_target_combatant_id_2` added to response. (2) `/cast_compulsion` — helper called after concentration anchor install. `twinned_target_combatant_id_2` added to response. No target-list append (Compulsion's install path is GM-resolved). (3) `/cast_hold_person` — helper called after concentration anchor install. Second target appended to install list (canonical Twinned + Hold Person at base L2). `twinned_target_combatant_id_2` added to response. (4) `tests/harness/test_twinned_spell_suite.py` — 3 regression tests, one per endpoint. Each test arms Twinned + casts + verifies the response field + verifies the pending was consumed.
+
+### Added
+- `_consume_twinned_for_second_target` integration in `/cast_slow`, `/cast_compulsion`, `/cast_hold_person`.
+- `twinned_target_combatant_id_2` field on all three endpoints' responses.
+- Second-target append behavior on `/cast_slow` + `/cast_hold_person` (buff installs on both targets).
+- `tests/harness/test_twinned_spell_suite.py` — 3 tests (one per endpoint).
+
+### Notes
+- **PATCH bump** — 3 endpoint extensions + 3 tests. No schema change. The helper itself is unchanged.
+- **/cast_compulsion install behavior unchanged.** Compulsion's per-target install path (WIS save + compelled_direction buff) is filed; v2.99.181 ships the cast-layer Twinned hook only. When the install path lands, the second target will be in the buff.cast_id-scoped install loop.
+- **Why Slow isn't a RAW Twinned candidate but is wired anyway.** RAW Twinned: "spell that targets only one creature." Slow targets up to 6. The helper is wired for GM convenience — the GM can decline to declare Twinned on AoE spells. The endpoint trusts the GM's adjudication.
+- **Twinned auto-route coverage now includes:** /cast_polymorph (v2.99.174), /cast_slow, /cast_hold_person, /cast_compulsion (v2.99.181). The remaining single-target spells (/cast_bestow_curse, /cast_bane, /cast_hex, /cast_hunters_mark, /cast_hold_monster) can adopt the helper independently with the same one-call hook.
+- **Total harness count: 1101** (was 1098 in v2.99.180).
+
+---
+
 ## [2.99.180] - 2026-06-03 — "The Beast Resists" — Polymorph WIS save now rolls for NPC targets too
 
 **Schema version:** 66

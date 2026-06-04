@@ -33682,6 +33682,20 @@ async def cast_slow(
         duration_rounds=10, icon="🐢",
     )
 
+    # v2.99.181 — Twinned Spell auto-route. When the caster has the
+    # metamagic-twinned-pending buff with a second target, consume
+    # the pending (one-shot per RAW) and append the second target
+    # to the install list. Note: RAW Twinned applies only to
+    # single-target spells; Slow targets up to 6 creatures + grouped
+    # AoE, so this is technically not a RAW-valid combo. The helper
+    # is wired anyway for GM convenience (the GM can decline by not
+    # declaring Twinned). Mirror of v2.99.174 /cast_polymorph.
+    _twin_target_2_slow = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
+    if _twin_target_2_slow and _twin_target_2_slow not in target_combatant_ids:
+        target_combatant_ids = list(target_combatant_ids) + [_twin_target_2_slow]
+
     # Install slow buff on each target.
     affected: list[dict] = []
     unaffected: list[dict] = []
@@ -33761,6 +33775,8 @@ async def cast_slow(
         "unaffected": unaffected,
         "duration_rounds": 10,
         "concentration": True,
+        # v2.99.181 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_slow or None,
     }
 
 
@@ -34271,6 +34287,12 @@ async def cast_compulsion(
         campaign_id, char, "compulsion", "Compulsion",
         duration_rounds=10, icon="🎭",
     )
+    # v2.99.181 — Twinned Spell auto-route. Surfaces the second
+    # target on the response + feature_used broadcast. Same pattern
+    # as v2.99.174 /cast_polymorph + v2.99.181 /cast_slow.
+    _twin_target_2_comp = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
     await _mark_battle_economy(campaign_id, char.id, "action")
 
     invocation_tag = (
@@ -34336,6 +34358,8 @@ async def cast_compulsion(
         "duration_rounds": 10,
         "range_ft": 30,
         "concentration": True,
+        # v2.99.181 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_comp or None,
     }
 
 
@@ -35387,6 +35411,16 @@ async def cast_hold_person(
         duration_rounds=10, icon="🥶",
     )
 
+    # v2.99.181 — Twinned Spell auto-route. When the helper returns
+    # a second target, append it to the install list so the
+    # paralyzed buff lands on both targets. Single-target spells
+    # like Hold Person are the canonical Twinned use case per RAW.
+    _twin_target_2_hp = await _consume_twinned_for_second_target(
+        campaign_id, int(char.id),
+    )
+    if _twin_target_2_hp and _twin_target_2_hp not in target_combatant_ids:
+        target_combatant_ids = list(target_combatant_ids) + [_twin_target_2_hp]
+
     affected: list[dict] = []
     unaffected: list[dict] = []
     for tid in target_combatant_ids:
@@ -35465,6 +35499,8 @@ async def cast_hold_person(
         "duration_rounds": 10,  # 1 min
         "concentration": True,
         "max_targets": max_targets,
+        # v2.99.181 — Twinned auto-route response field.
+        "twinned_target_combatant_id_2": _twin_target_2_hp or None,
     }
 
 
