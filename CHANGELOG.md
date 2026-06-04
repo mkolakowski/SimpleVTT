@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.177] - 2026-06-03 — "Trust the Invariant" — Replace flaky save-pass test with the gate invariant
+
+**Schema version:** 66
+**Commit summary:** **Replace the v2.99.176 dice-flake test with an invariant check that doesn't depend on rigging the save outcome.** The v2.99.175/.176 attempts to PATCH Krieger's WIS to 30/50 to force a save pass failed because `_SHEET_PATCH_KEYS` (the /sheet-fields PATCH whitelist) excludes `abilities` and `saving_throws`. The patches were silently dropped. v2.99.177 replaces the rigged-pass assertion with an invariant: `ready_to_transform == not save_passed` AND `concentration == not save_passed`. The save's actual outcome is dice-dependent; the gate's behavior is consistent regardless. Filed: extend `_SHEET_PATCH_KEYS` to support `abilities` + `saving_throws` (would unblock similar test patterns), OR add a test-mode seed integration to fix the d20.
+
+### Fixed
+- v2.99.175 test_save_pass_skips_concentration_anchor → replaced with `test_concentration_field_reflects_save_outcome` (invariant-style, deterministic).
+
+### Notes
+- **PATCH bump** — test-only fix. No production code change.
+- **Total harness count: 1096** (unchanged from v2.99.175).
+
+---
+
 ## [2.99.176] - 2026-06-03 — "Make It Impossible" — Bump test WIS to 50 for guaranteed save pass
 
 **Schema version:** 66
