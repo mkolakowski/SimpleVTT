@@ -1654,6 +1654,12 @@ def _warlock_sheet(name: str) -> dict:
             # consumer of the v2.99.140 invocation-cast registry.
             {"slug": "eldritch-invocation-sign-of-ill-omen", "name": "Eldritch Invocation: Sign of Ill Omen",
              "desc": "1/long rest: cast Bestow Curse using a Warlock spell slot — routed via /cast_bestow_curse with class_slug=\"warlock\" + via_invocation=\"sign-of-ill-omen\" per v2.99.149. RAW prereq Lv 5 Warlock."},
+            # v2.99.150 — Thief of Five Fates: 1/long-rest cast
+            # Bane using a Warlock spell slot. No RAW level
+            # prereq. Fifth consumer of the v2.99.140 invocation-
+            # cast registry.
+            {"slug": "eldritch-invocation-thief-of-five-fates", "name": "Eldritch Invocation: Thief of Five Fates",
+             "desc": "1/long rest: cast Bane using a Warlock spell slot — routed via /cast_bane with class_slug=\"warlock\" + via_invocation=\"thief-of-five-fates\" per v2.99.150. RAW prereq Lv 2 Warlock."},
             # v2.99.143 — Beguiling Influence: passive proficiency in
             # Deception + Persuasion. Magnus's Charlatan background
             # already granted Deception, so the invocation's net add
@@ -1757,6 +1763,19 @@ def _warlock_sheet(name: str) -> dict:
                 "source": "warlock Lv 5 / Eldritch Invocation",
                 "class_slug": "warlock",
                 "desc": "1/long rest: cast Bestow Curse using a Warlock spell slot — routed via /cast_bestow_curse with class_slug=\"warlock\" + via_invocation=\"sign-of-ill-omen\" per v2.99.149.",
+                "manual": False,
+            },
+            # v2.99.150 — Thief of Five Fates 1/long-rest resource.
+            # /cast_bane with via_invocation="thief-of-five-fates"
+            # gates on this row being current >= 1 + decrements
+            # on cast.
+            {
+                "key": "thief-of-five-fates-uses",
+                "name": "Thief of Five Fates",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "warlock Lv 2 / Eldritch Invocation",
+                "class_slug": "warlock",
+                "desc": "1/long rest: cast Bane using a Warlock spell slot — routed via /cast_bane with class_slug=\"warlock\" + via_invocation=\"thief-of-five-fates\" per v2.99.150.",
                 "manual": False,
             },
             # v2.99.45 — Mystic Arcanum L6 (Warlock Lv 11+ capstone-ish

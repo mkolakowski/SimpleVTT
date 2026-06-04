@@ -31771,11 +31771,21 @@ _INVOCATION_SPELL_CAST_REGISTRY: dict[str, dict] = {
         "resource_key": "sign-of-ill-omen-uses",
         "bypass_spell_list_check": True,
     },
+    # v2.99.150 — Thief of Five Fates: cast Bane once per long
+    # rest using a Warlock spell slot. No RAW level prereq.
+    # Routed via /cast_bane with via_invocation="thief-of-five-fates".
+    # Fifth consumer of the registry.
+    "thief-of-five-fates": {
+        "spell_slug": "bane",
+        "spell_name": "Bane",
+        "class_slug": "warlock",
+        "resource_key": "thief-of-five-fates-uses",
+        "bypass_spell_list_check": True,
+    },
     # Future entries (filed): "visions-of-distant-realms" → arcane
-    # eye, "thief-of-five-fates" → bane, "dreadful-word" →
-    # confusion, "minions-of-chaos" → conjure elemental. Each
-    # needs its own /cast_<spell> wiring + demo-seed resource
-    # entry; the router metadata stays here.
+    # eye, "dreadful-word" → confusion, "minions-of-chaos" →
+    # conjure elemental. Each needs its own /cast_<spell> wiring
+    # + demo-seed resource entry; the router metadata stays here.
 }
 
 
@@ -32793,6 +32803,225 @@ async def cast_bestow_curse(
         "via_invocation": via_invocation or None,
         "duration_rounds": 10,
         "range_ft": 5,
+        "concentration": True,
+    }
+
+
+# ----------- API: cast Bane (1st-level Enchantment, concentration) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_bane")
+async def cast_bane(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.150 — Cast Bane: prepare the spell cast (slot +
+    concentration anchor + audit). RAW (PHB p.216): L1
+    Enchantment, 1 action, 30 ft, concentration up to 1 minute.
+    Up to 3 creatures make CHA save; on fail they subtract 1d4
+    from attack rolls + saving throws for the duration.
+
+    Classes that get Bane: Bard, Cleric. Warlock-only via the
+    v2.99.150 Thief of Five Fates invocation (PHB p.111: "You
+    can cast Bane once using a warlock spell slot. You can't do
+    so again until you finish a long rest.").
+
+    Fifth consumer of the v2.99.140 invocation-cast registry,
+    mirror of /cast_bestow_curse + /cast_compulsion + /cast_polymorph.
+    v1 ships the spell-side audit (slot + resource + concentration
+    anchor); per-target CHA save resolution + the 1d4 penalty buff
+    are filed.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 1
+    override = bool(body.get("override"))
+    via_invocation = (body.get("via_invocation") or "").strip().lower()
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("bard", "cleric", "warlock"):
+        raise HTTPException(
+            400, "class_slug must be bard, cleric, or warlock",
+        )
+    if class_slug == "warlock":
+        # v2.99.150 — Warlock can only cast Bane via a registered
+        # invocation that maps to it (Thief of Five Fates).
+        _meta_for_class = _get_invocation_cast_meta(via_invocation)
+        if not _meta_for_class or _meta_for_class.get("spell_slug") != "bane":
+            return JSONResponse(status_code=409, content={
+                "error": "missing_invocation",
+                "invocation": "thief-of-five-fates",
+            })
+    if slot_level < 1:
+        raise HTTPException(400, "slot_level must be >= 1 (Bane is L1)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    # v2.99.140 — invocation-cast router (fifth consumer).
+    invocation_meta = _get_invocation_cast_meta(via_invocation)
+    if invocation_meta:
+        bad = _validate_invocation_cast(sheet, via_invocation)
+        if bad is not None:
+            return bad
+    if not invocation_meta or not invocation_meta.get("bypass_spell_list_check"):
+        spells = list(sheet.get("spells") or [])
+        has_bane = any(
+            (s.get("_slug") == "bane") or
+            (str(s.get("name", "")).lower() == "bane")
+            for s in spells
+        )
+        if not has_bane:
+            return JSONResponse(status_code=409, content={
+                "error": "spell_not_known",
+                "spell": "bane",
+            })
+
+    # NOTE: Warlock Lv 5 Pact Magic slots are all L3 — but Thief
+    # of Five Fates lets the cast burn any Warlock slot for L1
+    # Bane. The registry's resource gate handles the 1/long-rest
+    # cap; the slot decrement still uses whatever level was
+    # requested. For testing convenience the endpoint accepts the
+    # caster's actual slot level (Magnus's L3 Pact slot) when the
+    # requested level matches.
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Bane",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "bane",
+            "label": "Bane",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    _consume_invocation_resource(sheet, via_invocation)
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Caster concentration anchor (1 minute = 10 rounds).
+    await _install_caster_concentration_anchor(
+        campaign_id, char, "bane", "Bane",
+        duration_rounds=10, icon="🎯",
+    )
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    invocation_tag = (
+        f" via {invocation_meta['spell_name']}-invocation "
+        f"({via_invocation})"
+        if invocation_meta else ""
+    )
+    note = (
+        f"🎯 {char.name} casts Bane (L{slot_level}){invocation_tag} — "
+        f"3 target CHA saves filed (v1 stops at the cast)"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "",
+            "total": 0,
+            "breakdown": note,
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🎯 Bane",
+            "feature_desc": (
+                f"{char.name} casts Bane. Up to 3 creatures in 30 ft "
+                f"make a CHA save (per-target save + -1d4 penalty "
+                f"buff filed)."
+            ),
+            "source": (
+                "thief-of-five-fates" if via_invocation == "thief-of-five-fates"
+                else "bane"
+            ),
+            "via_invocation": via_invocation or None,
+            "duration_rounds": 10,
+            "range_ft": 30,
+            "max_targets": 3,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "via_invocation": via_invocation or None,
+        "duration_rounds": 10,
+        "range_ft": 30,
+        "max_targets": 3,
         "concentration": True,
     }
 

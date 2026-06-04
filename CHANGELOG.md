@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.150] - 2026-06-03 — "Hand on Five Threads" — Thief of Five Fates (Warlock invocation) wires Bane through the v2.99.140 router
+
+**Schema version:** 65
+**Commit summary:** **Ship Thief of Five Fates as the fifth consumer of the v2.99.140 invocation-cast registry.** RAW (PHB p.111): "You can cast Bane once using a warlock spell slot. You can't do so again until you finish a long rest." Adds the `thief-of-five-fates` registry entry → Bane, a new `/cast_bane` endpoint (spell-side: slot + concentration anchor + invocation gate + audit), Magnus's seed gains the invocation + a 1/long-rest gating resource. Continues to scale the v2.99.140 abstraction — five different target spells (Slow L3, Polymorph L4, Compulsion L4, Bestow Curse L3, Bane L1) now route through the same registry without per-spell duplicate validation code.
+**Description:** Four edits. (1) `app/routes/tabletop_routes.py` — `thief-of-five-fates` entry added to `_INVOCATION_SPELL_CAST_REGISTRY` mapping to `bane`. (2) New `POST /cast_bane` endpoint mirrors `/cast_bestow_curse`'s shape: validates class (Bard / Cleric / Warlock), routes Warlock through the registry (must match `spell_slug == "bane"`), validates `slot_level >= 1` + action economy gate, calls `_validate_invocation_cast` early to short-circuit on the standard failure modes, decrements slot + resource via the same helpers, installs `concentration-bane` caster anchor (10 rounds = 1 minute). Broadcasts `roll` (chat log), `spell_slot_update`, and `feature_used` events with `max_targets: 3` + `range_ft: 30`. (3) `app/demo_seed.py` — Magnus's feats gain `eldritch-invocation-thief-of-five-fates`; his resources gain `thief-of-five-fates-uses` 1/long-rest. (4) `tests/harness/test_cast_bane.py` — 6 regression tests.
+
+### Added
+- `thief-of-five-fates` registry entry in `_INVOCATION_SPELL_CAST_REGISTRY` mapping to Bane (Warlock).
+- `POST /api/campaign/{cid}/cast_bane` endpoint (L1 Enchantment, concentration 1 minute, Bard/Cleric/Warlock-via-invocation).
+- `eldritch-invocation-thief-of-five-fates` on Magnus's feats list.
+- `thief-of-five-fates-uses` 1/long-rest resource on Magnus.
+- `tests/harness/test_cast_bane.py` — 6 tests: Thief of Five Fates happy path (slot + resource + concentration anchor, uses Magnus's natively-available L3 Pact slot since Bane upcasts); Warlock without via_invocation → 409 missing_invocation; Warlock with wrong via_invocation slug → 409 missing_invocation; second cast same long rest → 409 not_enough_uses; L0 slot → 400; missing character_id → 400.
+
+### Notes
+- **PATCH bump** — one new endpoint + registry entry + demo seed extension + 6 tests. No schema change. Same helpers as v2.99.137 + v2.99.142 + v2.99.148 + v2.99.149.
+- **Magnus's invocation roster.** 19 of the SRD's ~20 Eldritch Invocations now mechanically wired. The remaining ~1 (Visions of Distant Realms → Arcane Eye at will) can close out at v2.99.151.
+- **What's filed.** (1) Per-target CHA save resolution on up to 3 chosen targets within 30 ft. (2) The `-1d4` penalty buff on failed-save targets that subtracts the rolled d4 from their attack rolls AND saving throws for the duration. (3) The penalty's interaction with the v2.97.62 save-time hooks and the v2.99.89-pattern damage-roll hooks (parallel install).
+- **Router proof — fifth target spell.** Five invocations through one registry now: Slow (L3), Polymorph (L4), Compulsion (L4), Bestow Curse (L3), Bane (L1). The registry covers the level range L1-L4 — spell-side validation is invariant across slot tiers.
+- **Total harness count: 1032** (was 1026 in v2.99.149).
+
+---
+
 ## [2.99.149] - 2026-06-03 — "An Ill Star" — Sign of Ill Omen (Warlock invocation) wires Bestow Curse through the v2.99.140 router
 
 **Schema version:** 65
