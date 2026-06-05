@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1599 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.325, 2026-06-05).
+**Total tests:** 1604 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.326, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -965,6 +965,17 @@ v2.99.325 — Spirits College Bard (TCE p.30) Tales from Beyond Lv 3+ (F.1 Bard 
 | `test_use_tb_force_tale_2_duelist` | `force_tale=2` → roll 2, name contains "Duelist". |
 | `test_use_tb_wrong_subclass` | Default Lyra (Lore) → 409. |
 | `test_use_tb_level_gate` | Spirits at Lv 2 → 409. |
+
+### `test_mote_of_potential.py`
+v2.99.326 — Creation College Bard (TCE p.31) Mote of Potential Lv 3+ (F.1 Bard batch — CLOSES the batch 8/8). When a creature uses a BI die from you, the Mote attaches + triggers an effect by mode: check (re-roll BI die, add to check), attack (BI die in force damage to nearby creature), save (temp HP = BI roll + CHA mod). v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_mp_happy_lv6_check` | PATCH Lyra → Creation Lv 6 (CHA 17 mod 3) default check → `die_size == 8`, `die_expression == "1d8"`, `cha_mod == 3`, broadcast (source `mote-of-potential`). |
+| `test_use_mp_mode_attack` | mode="attack" passes through. |
+| `test_use_mp_mode_save` | mode="save" passes through. |
+| `test_use_mp_wrong_subclass` | Default Lyra (Lore) → 409. |
+| `test_use_mp_level_gate` | Creation at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

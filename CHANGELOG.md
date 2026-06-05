@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.326] - 2026-06-05 — "The Living Spark" — Creation College Bard Mote of Potential (Lv 3+, TCE) — 🎉 CLOSES F.1 Bard batch (8/8)
+
+**Schema version:** 66
+**Commit summary:** **F.1 Bard subclass batch — Creation College Bard Lv 3+ Mote of Potential (TCE). CLOSES the F.1 Bard batch (8/8 PHB+XGE+TCE subclasses).** RAW TCE p.31: when a creature uses a BI die from you, the Mote attaches + triggers an effect by mode: check (re-roll BI die, add to check), attack (BI die in force damage to nearby creature), save (temp HP = BI roll + CHA mod).
+**Description:** Adds `_pc_has_creation_bard` helper. One endpoint. `/use_mote_of_potential` — body `{character_id, mode?, target_combatant_id?, override?}`. mode "check" (default), "attack", or "save". Validates Creation Bard Lv 3+. No chip — passive rider on existing BI use. Broadcasts `feature_used` with `source: mote-of-potential` + die expression. v1 announce-only. One new harness test file with 5 tests.
+
+### Added
+- `/api/campaign/{cid}/use_mote_of_potential` endpoint.
+- `_pc_has_creation_bard` helper.
+- `tests/harness/test_mote_of_potential.py` — 5 tests.
+
+### Notes
+- **🎉 F.1 Bard subclass batch ✅ COMPLETE (8/8 PHB+XGE+TCE).** All Bard colleges shipped: Lore Cutting Words (pre-v2.99.320), Valor Combat Inspiration (v2.99.320), Glamour Mantle of Inspiration (v2.99.321), Whispers Psychic Blades (v2.99.322), Swords Blade Flourish (v2.99.323), Eloquence Silver Tongue (v2.99.324), Spirits Tales from Beyond (v2.99.325), Creation Mote of Potential (this).
+- **142 ships this session.**
+- **Total harness count: 1604** (was 1599 in v2.99.325; +5 new tests).
+
+---
+
 ## [2.99.325] - 2026-06-05 — "The Spirit's Voice" — Spirits College Bard Tales from Beyond (Lv 3+, TCE)
 
 **Schema version:** 66

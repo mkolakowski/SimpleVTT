@@ -25985,6 +25985,30 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_creation_bard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.326 — RAW Creation College Bard (Bard, TCE p.31):
+    Mote of Potential + Performance of Creation (Lv 3),
+    Animating Performance (Lv 6), Creative Crescendo (Lv 14).
+
+    Returns True when the PC is a Bard with subclass slug
+    containing "creation" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "bard":
+        has_bard = any(
+            (entry.get("class") or "").strip().lower() == "bard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_bard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "creation" not in subclass:
+        return False
+    return _bard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_spirits_bard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.325 — RAW Spirits College Bard (Bard, TCE p.30):
     Guiding Whispers + Spiritual Focus + Tales from Beyond
@@ -49344,6 +49368,138 @@ async def use_tales_from_beyond(
         "tale_roll": tale_roll,
         "tale_name": tale_name,
         "tale_description": tale_desc,
+        "bard_level": bard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_mote_of_potential")
+async def use_mote_of_potential(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.326 — Phase F.1 Bard subclass batch (Creation
+    College Bard Lv 3+, TCE) of the v2.99.193 phased completion
+    plan. CLOSES the F.1 Bard batch (8/8). Mote of Potential
+    (Creation College Bard Lv 3+, TCE p.31): "When a creature
+    uses a BI die from you, you have the mote attach + trigger
+    an effect depending on what the die was used for:
+    - Ability check: re-roll BI die and add result to check.
+    - Attack roll: BI die in force damage to creature within
+      5 ft of target.
+    - Saving throw: target gains temp HP = BI roll + CHA mod."
+
+    Body: ``{character_id, mode?, target_combatant_id?,
+    override?}``. mode "check" (default), "attack", or "save".
+    No chip — passive rider on existing BI use. v1
+    announce-only — actual Mote roll + effect application
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    mode = (body.get("mode") or "check").strip().lower()
+    if mode not in ("check", "attack", "save"):
+        mode = "check"
+    target_combatant_id = body.get("target_combatant_id") or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Bard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_creation_bard(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "creation bard lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _bard_level_from_sheet(sheet),
+        })
+
+    bard_lv = _bard_level_from_sheet(sheet)
+    abilities = sheet.get("abilities") or {}
+    try:
+        cha_mod = (int(abilities.get("CHA") or 10) - 10) // 2
+    except (TypeError, ValueError):
+        cha_mod = 0
+    # Die size — same table as Bardic Inspiration.
+    if bard_lv >= 15:
+        die_size = 12
+    elif bard_lv >= 10:
+        die_size = 10
+    elif bard_lv >= 5:
+        die_size = 8
+    else:
+        die_size = 6
+
+    mode_effect = {
+        "check": (
+            f"Mote bursts in sparks — roll an additional 1d{die_size} "
+            f"and add to the ability check."
+        ),
+        "attack": (
+            f"Mote releases as projectile — 1d{die_size} force damage "
+            f"to a creature within 5 ft of the target."
+        ),
+        "save": (
+            f"Mote becomes a comforting drumbeat — target gains "
+            f"1d{die_size} + {cha_mod} temp HP."
+        ),
+    }[mode]
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌟 Mote of Potential — {mode} mode ({mode_effect.split('—')[0].strip()})"
+            ),
+            "feature_desc": (
+                f"{char.name}'s BI use triggers a Mote of Potential "
+                f"on the recipient. {mode_effect} (Creation College "
+                f"Bard Lv 3+ TCE class feature; passive rider on BI.)"
+            ),
+            "source": "mote-of-potential",
+            "mode": mode,
+            "target_combatant_id": target_combatant_id,
+            "die_expression": f"1d{die_size}",
+            "die_size": die_size,
+            "cha_mod": cha_mod,
+            "bard_level": bard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "mote-of-potential",
+        "mode": mode,
+        "target_combatant_id": target_combatant_id,
+        "die_expression": f"1d{die_size}",
+        "die_size": die_size,
+        "cha_mod": cha_mod,
         "bard_level": bard_lv,
     }
 
