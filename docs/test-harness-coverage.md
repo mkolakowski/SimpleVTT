@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1277 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.237, 2026-06-04).
+**Total tests:** 1282 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.238, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,17 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_blessings_of_knowledge.py`
+v2.99.238 — Knowledge Domain Cleric (PHB p.59) Blessings of Knowledge one-time picker (Phase H.1 fifth domain). Picks 2 skills from {Arcana, History, Nature, Religion} + 2 languages.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_select_bok_happy` | Tavik picks Arcana + Religion + Celestial + Draconic → 200, persisted, broadcast (source `blessings-of-knowledge`). |
+| `test_select_bok_bad_skill` | Skill not in PHB list (Athletics) → 400. |
+| `test_select_bok_wrong_count` | 1 skill instead of 2 → 400. |
+| `test_select_bok_duplicate_skills` | Arcana + Arcana → 400. |
+| `test_select_bok_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 
 ### `test_blessing_of_the_trickster.py`
 v2.99.237 — Trickery Domain Cleric (PHB p.62) Blessing of the Trickster (Phase H.1 fourth domain). Touch-an-ally buff installer (no daily cap RAW). Brother Tavik Stonebrow is the fixture; tests PATCH his subclass to "Trickery Domain" and seed Tavik + Pip in a battle.

@@ -25469,6 +25469,35 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_knowledge_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.238 — RAW Knowledge Domain features (Cleric, PHB
+    p.59): Blessings of Knowledge (Lv 1), Channel Divinity:
+    Knowledge of the Ages (Lv 2 — curated), Channel Divinity:
+    Read Thoughts (Lv 6), Potent Spellcasting (Lv 8 — passive
+    cantrip damage uplift), Visions of the Past (Lv 17).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "knowledge" + meets `min_level` (multiclass-
+    aware). Gates the Knowledge Domain endpoints.
+
+    Phase H.1 fifth non-Life Cleric domain to ship.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "knowledge" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_trickery_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.237 — RAW Trickery Domain features (Cleric, PHB
     p.62): Blessing of the Trickster (Lv 1), Channel Divinity:
@@ -38318,6 +38347,133 @@ async def use_blessing_of_the_trickster(
     }
 
 
+_KNOWLEDGE_BLESSING_SKILLS = {"arcana", "history", "nature", "religion"}
+
+
+@router.post("/api/campaign/{campaign_id}/select_knowledge_blessings")
+async def select_knowledge_blessings(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.238 — Phase H.1 fifth non-Life Cleric domain of the
+    v2.99.193 phased completion plan. Blessings of Knowledge
+    (Knowledge Domain Cleric Lv 1+, PHB p.59): "At 1st level, you
+    learn two languages of your choice. You also become
+    proficient in your choice of two of the following skills:
+    Arcana, History, Nature, or Religion. Your proficiency bonus
+    is doubled for any ability check you make that uses either of
+    those skills."
+
+    Body: ``{character_id, skills, languages}`` where:
+      - skills: list of exactly 2 from
+        {arcana, history, nature, religion}
+      - languages: list of exactly 2 strings (free-form)
+
+    Validates Knowledge Cleric Lv 1+ + pick sizes + skill names.
+    Persists `sheet.knowledge_blessings = {skills, languages}`.
+    Broadcasts. v1 records the picks; the actual expertise
+    (doubled prof on the picked skills) wiring is filed for a
+    follow-up commit that touches the skills dict.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    skills_in = body.get("skills") or []
+    languages_in = body.get("languages") or []
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not isinstance(skills_in, list) or len(skills_in) != 2:
+        raise HTTPException(400, "skills must be a list of exactly 2 entries")
+    if not isinstance(languages_in, list) or len(languages_in) != 2:
+        raise HTTPException(400, "languages must be a list of exactly 2 entries")
+    skills_lower = [str(s).strip().lower() for s in skills_in]
+    if any(s not in _KNOWLEDGE_BLESSING_SKILLS for s in skills_lower):
+        raise HTTPException(
+            400,
+            f"skills must each be one of "
+            f"{sorted(_KNOWLEDGE_BLESSING_SKILLS)}",
+        )
+    if len(set(skills_lower)) != 2:
+        raise HTTPException(400, "skills must be two distinct entries")
+    languages_clean = [str(l).strip()[:40] for l in languages_in if str(l).strip()]
+    if len(languages_clean) != 2:
+        raise HTTPException(400, "languages must each be a non-empty string")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_knowledge_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "knowledge domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    sheet["knowledge_blessings"] = {
+        "skills": skills_lower,
+        "languages": languages_clean,
+    }
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    skills_pretty = " + ".join(s.title() for s in skills_lower)
+    langs_pretty = " + ".join(languages_clean)
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"📚 Blessings of Knowledge — {skills_pretty} "
+                f"(expertise) + {langs_pretty}"
+            ),
+            "feature_desc": (
+                f"{char.name} selects Blessings of Knowledge: "
+                f"doubled proficiency on {skills_pretty} + learns "
+                f"{langs_pretty}. (Knowledge Domain Cleric Lv 1+ "
+                f"class feature; one-time pick.)"
+            ),
+            "source": "blessings-of-knowledge",
+            "skills": skills_lower,
+            "languages": languages_clean,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "blessings-of-knowledge",
+        "skills": skills_lower,
+        "languages": languages_clean,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/select_hunters_prey")
 async def select_hunters_prey(
     campaign_id: int,
@@ -51133,6 +51289,11 @@ _SHEET_PATCH_KEYS = {
     # Allowlisted so the test can flip Zara's counter without a
     # full sheet rebuild.
     "tides_of_chaos_uses",
+    # v2.99.238 — knowledge_blessings (dict {skills, languages}).
+    # Read by /select_knowledge_blessings (Knowledge Domain Cleric
+    # Lv 1+). Allowlisted so the test can reset to {} between
+    # cases.
+    "knowledge_blessings",
     # v2.99.232 — bonded_weapons (list[str] of weapon slugs).
     # Read by /use_weapon_bond (Eldritch Knight Lv 3+). Capped
     # at 2 per RAW. Allowlisted so the test can reset the bond

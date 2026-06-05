@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.238] - 2026-06-04 — "The Scholar's Twin Talents" — Knowledge Domain Cleric Blessings of Knowledge (Phase H.1 fifth domain)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 fifth non-Life Cleric domain of the v2.99.193 phased completion plan.** RAW PHB p.59: Knowledge Cleric Lv 1+ picks 2 skills from {Arcana, History, Nature, Religion} (doubled prof / expertise) + 2 languages. One-time pick at character creation.
+**Description:** One helper + one endpoint + one valid set + one patch key. (1) `_pc_has_knowledge_domain(sheet, min_level)` — multiclass-aware. (2) `_KNOWLEDGE_BLESSING_SKILLS = {"arcana", "history", "nature", "religion"}` valid set. (3) `/select_knowledge_blessings` — body `{character_id, skills, languages}` where `skills` is exactly 2 distinct picks from the set and `languages` is exactly 2 free-form strings. Validates Knowledge Cleric Lv 1+. Persists `sheet.knowledge_blessings = {skills, languages}`. Broadcasts. (4) `knowledge_blessings` added to `_SHEET_PATCH_KEYS` for test scaffolding. v1 records the picks; the actual expertise (doubled prof on the picked skills) wiring is filed for a follow-up commit that touches the skills dict. One new harness test file with 5 tests.
+
+### Added
+- `_pc_has_knowledge_domain(sheet, min_level)` helper gate.
+- `_KNOWLEDGE_BLESSING_SKILLS = {"arcana", "history", "nature", "religion"}` valid set.
+- `/api/campaign/{cid}/select_knowledge_blessings` endpoint.
+- `knowledge_blessings` in `_SHEET_PATCH_KEYS`.
+- `tests/harness/test_blessings_of_knowledge.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 1 set + 1 patch key + 5 regression tests. No schema change.
+- **Picker shape, not consumable.** Unlike Warding Flare / Wrath of the Storm / War Priest (resource-decrementing reaction-style features), Blessings of Knowledge is a one-time character-creation pick. The endpoint persists to sheet rather than consuming a resource — semantically closer to v2.99.223 `/select_hunters_prey` than to v2.99.236 `/use_war_priest`.
+- **Expertise wiring filed.** The picked skills should also flip `sheet.skills.<skill>.expertise = True` so the v2.99.214 `/roll` ability-check resolver doubles prof. v1 just persists the choice; a follow-up commit can walk `sheet.skills` and stamp the expertise flag on each pick.
+- **Phase H.1 progress: 5 of 11 domains have first features shipped.** Remaining: Nature, Forge, Grave, Death, Order, Twilight, Peace. We're now nearly halfway through H.1.
+- **54 ships this session.**
+- **Total harness count: 1282** (was 1277 in v2.99.237).
+
+---
+
 ## [2.99.237] - 2026-06-04 — "The Trickster's Touch" — Trickery Domain Cleric Blessing of the Trickster (Phase H.1 fourth domain)
 
 **Schema version:** 66
