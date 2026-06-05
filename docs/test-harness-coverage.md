@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1450 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.286, 2026-06-05).
+**Total tests:** 1453 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.287, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -582,6 +582,15 @@ v2.99.286 — Glory Paladin (XGE p.38) Glorious Defense reactive AC bonus (H.2 d
 | `test_use_gd_happy_lv15` | Lv 15 Caelan (CHA 16) → `ac_bonus == 3`, broadcast (source `glorious-defense`). |
 | `test_use_gd_wrong_subclass` | Default Caelan (Devotion) → 409. |
 | `test_use_gd_level_gate` | Glory at Lv 14 → 409. |
+
+### `test_protective_spirit.py`
+v2.99.287 — Redemption Paladin (XGE p.39) Protective Spirit self-heal (H.2 deeper, Lv 15 — CLOSES the H.2 Lv 15 batch). End of turn, if at half HP or less and not incapacitated: regain 1d6 + half-paladin-level HP. v1 announce-only — actual HP application is GM-tracked.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ps_happy_lv15` | Lv 15 Caelan → `die_rolled` in [1,6], `half_paladin_level == 7`, `heal_amount` in [8,13], broadcast (source `protective-spirit`). |
+| `test_use_ps_wrong_subclass` | Default Caelan (Devotion) → 409. |
+| `test_use_ps_level_gate` | Redemption at Lv 14 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

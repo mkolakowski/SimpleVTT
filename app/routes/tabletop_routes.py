@@ -44230,6 +44230,110 @@ async def use_glorious_defense(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_protective_spirit")
+async def use_protective_spirit(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.287 — Phase H.2 deeper (Redemption Paladin Lv 15+)
+    of the v2.99.193 phased completion plan. CLOSES the H.2
+    Lv 15 batch (5/5 oaths). Protective Spirit (Redemption
+    Paladin Lv 15+, XGE p.39): "Starting at 15th level, a
+    holy presence mends your wounds in battle. You regain hit
+    points equal to 1d6 + half your paladin level if you end
+    your turn in combat with fewer than half your hit points
+    remaining and you aren't incapacitated."
+
+    Body: ``{character_id, override?}``. No chip cost — passive
+    end-of-turn trigger. Server rolls the heal die and
+    broadcasts the amount; v1 announce-only — the actual HP
+    application is GM-tracked (or a follow-up /heal call).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_redemption_oath(sheet, 15):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "redemption paladin lv 15+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+    half_lv = pal_lv // 2
+    try:
+        result = dice_mod.roll("1d6")
+        die_rolled = max(1, int(result.total))
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        die_rolled = 1
+        breakdown = ""
+    heal_amount = die_rolled + half_lv
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"✨ Protective Spirit — heal {heal_amount} HP"
+            ),
+            "feature_desc": (
+                f"{char.name} ends their turn at half HP or less — "
+                f"a holy presence mends their wounds for "
+                f"{heal_amount} HP (1d6 [{die_rolled}] + "
+                f"{half_lv} half-paladin-level). (Redemption "
+                f"Paladin Lv 15+ class feature; passive end-of-turn.)"
+            ),
+            "source": "protective-spirit",
+            "heal_amount": heal_amount,
+            "die_rolled": die_rolled,
+            "die_breakdown": breakdown,
+            "half_paladin_level": half_lv,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "protective-spirit",
+        "heal_amount": heal_amount,
+        "die_rolled": die_rolled,
+        "half_paladin_level": half_lv,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

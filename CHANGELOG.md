@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.287] - 2026-06-05 — "Holy Mending" — Redemption Paladin Protective Spirit (H.2 deeper, Lv 15 self-heal — CLOSES the H.2 Lv 15 batch)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Redemption Paladin Lv 15+ Protective Spirit. CLOSES the H.2 Lv 15 batch (5/5 oaths).** RAW XGE p.39: end of turn, if at half HP or less in combat and not incapacitated, regain 1d6 + half-paladin-level HP.
+**Description:** One endpoint. `/use_protective_spirit` — body `{character_id, override?}`. Validates Redemption Paladin Lv 15+. Rolls 1d6 server-side, computes `heal_amount = die + half-paladin-level`. Broadcasts `feature_used` with `source: protective-spirit`. No chip — passive end-of-turn trigger. v1 announce-only — the actual HP application is GM-tracked (or a follow-up `/heal` call). One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_protective_spirit` endpoint.
+- `tests/harness/test_protective_spirit.py` — 3 tests.
+
+### Notes
+- **🎉 H.2 Lv 15 batch ✅ COMPLETE.** All 5 non-Devotion oaths shipped in the H.2 first-pass now have their Lv 15 feature shipped:
+  1. **Ancients** Undying Sentinel (v2.99.283).
+  2. **Vengeance** Soul of Vengeance (v2.99.284).
+  3. **Conquest** Scornful Rebuke (v2.99.285).
+  4. **Glory** Glorious Defense (v2.99.286).
+  5. **Redemption** Protective Spirit (this).
+- **103 ships this session.**
+- **Total harness count: 1453** (was 1450 in v2.99.286; +3 new tests).
+
+---
+
 ## [2.99.286] - 2026-06-05 — "Sudden Retribution" — Glory Paladin Glorious Defense (H.2 deeper, Lv 15 reactive)
 
 **Schema version:** 66
