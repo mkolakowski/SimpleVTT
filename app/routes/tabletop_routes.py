@@ -25469,6 +25469,35 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_forge_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.240 — RAW Forge Domain features (Cleric, XGE p.18):
+    Blessing of the Forge (Lv 1), Channel Divinity: Artisan's
+    Blessing (Lv 2 — curated), Soul of the Forge (Lv 6 — passive
+    resistance), Divine Strike (Lv 8 — passive fire uplift),
+    Saint of Forge and Fire (Lv 17 — heavy armor + fire imm).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "forge" + meets `min_level` (multiclass-aware).
+    Gates the Forge Domain endpoints.
+
+    Phase H.1 seventh non-Life Cleric domain to ship.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "forge" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_nature_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.239 — RAW Nature Domain features (Cleric, PHB
     p.61): Acolyte of Nature (Lv 1), Channel Divinity: Charm
@@ -38614,6 +38643,156 @@ async def select_acolyte_of_nature(
     }
 
 
+_FORGE_BLESSING_KINDS = {"weapon", "armor"}
+
+
+@router.post("/api/campaign/{campaign_id}/use_blessing_of_the_forge")
+async def use_blessing_of_the_forge(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.240 — Phase H.1 seventh non-Life Cleric domain of
+    the v2.99.193 phased completion plan. Blessing of the Forge
+    (Forge Domain Cleric Lv 1+, XGE p.18): "At 1st level, at the
+    end of a long rest, you can touch one nonmagical object that
+    is a suit of armor or a simple or martial weapon. Until the
+    end of your next long rest or until you use this feature
+    again, the object becomes a magic item, granting a +1 bonus
+    to AC if it's armor or a +1 bonus to attack and damage rolls
+    if it's a weapon."
+
+    Body: ``{character_id, item_index}``.
+
+    Validates Forge Cleric Lv 1+ + item_index in inventory range
+    + item.type in {weapon, armor}. Persists
+    `sheet.blessed_object = {item_index, slug, name, kind}`.
+    Broadcasts. v1 records the blessing; appending the +1 to
+    weapon attack_bonus / damage or to armor ac_value is filed
+    for a follow-up commit (would touch the existing /attack
+    and AC-derivation paths).
+
+    "Until you use this feature again" is satisfied by single-
+    field semantics — re-calling overwrites the prior blessing.
+    "Until end of next long rest" is filed (would need a
+    long-rest cleanup hook).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    item_index_raw = body.get("item_index")
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if item_index_raw is None:
+        raise HTTPException(400, "item_index is required")
+    try:
+        item_index = int(item_index_raw)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "item_index must be an integer")
+    if item_index < 0:
+        raise HTTPException(400, "item_index must be >= 0")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_forge_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "forge domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    inventory = list(sheet.get("inventory") or [])
+    if item_index >= len(inventory):
+        raise HTTPException(
+            400,
+            f"item_index {item_index} out of range "
+            f"(inventory has {len(inventory)} items)",
+        )
+    item = inventory[item_index] or {}
+    kind = (item.get("type") or "").lower()
+    if kind not in _FORGE_BLESSING_KINDS:
+        raise HTTPException(
+            400,
+            f"inventory[{item_index}] is type '{kind}'; "
+            f"Blessing of the Forge accepts only "
+            f"{sorted(_FORGE_BLESSING_KINDS)}",
+        )
+    name = (item.get("name") or "").strip() or f"item-{item_index}"
+    slug = (item.get("_slug") or name.lower().replace(" ", "-"))
+
+    sheet["blessed_object"] = {
+        "item_index": item_index,
+        "slug": slug,
+        "name": name,
+        "kind": kind,
+    }
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    if kind == "weapon":
+        bonus_desc = "+1 attack + damage rolls"
+    else:
+        bonus_desc = "+1 AC"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🔨 Blessing of the Forge — {name} ({bonus_desc})"
+            ),
+            "feature_desc": (
+                f"{char.name} blesses {name} at the end of a long "
+                f"rest: it becomes a magic item granting {bonus_desc} "
+                f"until the next long rest or until this feature is "
+                f"used again. (Forge Domain Cleric Lv 1+ class "
+                f"feature.)"
+            ),
+            "source": "blessing-of-the-forge",
+            "item_index": item_index,
+            "slug": slug,
+            "name": name,
+            "kind": kind,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "blessing-of-the-forge",
+        "item_index": item_index,
+        "slug": slug,
+        "name": name,
+        "kind": kind,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/select_hunters_prey")
 async def select_hunters_prey(
     campaign_id: int,
@@ -51438,6 +51617,10 @@ _SHEET_PATCH_KEYS = {
     # Read by /select_acolyte_of_nature (Nature Domain Cleric
     # Lv 1+). Same shape rationale as knowledge_blessings.
     "acolyte_of_nature",
+    # v2.99.240 — blessed_object (dict {item_index, slug, name,
+    # kind}). Read by /use_blessing_of_the_forge (Forge Domain
+    # Cleric Lv 1+). Reset between cases via {}.
+    "blessed_object",
     # v2.99.232 — bonded_weapons (list[str] of weapon slugs).
     # Read by /use_weapon_bond (Eldritch Knight Lv 3+). Capped
     # at 2 per RAW. Allowlisted so the test can reset the bond

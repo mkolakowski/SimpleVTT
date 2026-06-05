@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1286 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.239, 2026-06-04).
+**Total tests:** 1291 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.240, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,17 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_blessing_of_the_forge.py`
+v2.99.240 — Forge Domain Cleric (XGE p.18) Blessing of the Forge (Phase H.1 seventh domain). Long-rest blessing picks 1 non-magical weapon or armor; persists `sheet.blessed_object`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_bof_weapon_happy` | Tavik blesses Warhammer (index 0) → `kind: "weapon"`, `slug: "warhammer"`, broadcast (source `blessing-of-the-forge`). |
+| `test_use_bof_armor_happy` | Tavik blesses Chain mail (index 2) → `kind: "armor"`. |
+| `test_use_bof_shield_rejected` | Shield (index 1, `type: "shield"`) → 400 (RAW only weapon or armor). |
+| `test_use_bof_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
+| `test_use_bof_missing_item_index` | No item_index body → 400. |
 
 ### `test_acolyte_of_nature.py`
 v2.99.239 — Nature Domain Cleric (PHB p.61) Acolyte of Nature one-time picker (Phase H.1 sixth domain). Picks 1 druid cantrip + 1 skill from {Animal Handling, Nature, Survival}.

@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.240] - 2026-06-04 — "The Anvil's Gift" — Forge Domain Cleric Blessing of the Forge (Phase H.1 seventh domain)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 seventh non-Life Cleric domain of the v2.99.193 phased completion plan.** RAW XGE p.18: Forge Cleric Lv 1+ at end of long rest, bless one non-magical weapon or armor; until next long rest or recast, it becomes a magic item granting +1 attack+damage (weapon) or +1 AC (armor).
+**Description:** One helper + one endpoint + one valid set + one patch key. (1) `_pc_has_forge_domain(sheet, min_level)` — multiclass-aware Cleric + "forge" subclass gate. (2) `_FORGE_BLESSING_KINDS = {"weapon", "armor"}` valid set. (3) `/use_blessing_of_the_forge` — body `{character_id, item_index}`. Validates Forge Cleric Lv 1+ + item_index in inventory range + item.type in valid set. Persists `sheet.blessed_object = {item_index, slug, name, kind}`. Broadcasts. (4) `blessed_object` in `_SHEET_PATCH_KEYS`. v1 records the blessing; the actual +1 to weapon attack/damage or armor AC is filed for a follow-up commit. "Use again ends prior" satisfied by single-field semantics. "Ends at next long rest" filed. Brother Tavik Stonebrow is the demo fixture (Warhammer at idx 0 + Chain mail at idx 2). One new harness test file with 5 tests.
+
+### Added
+- `_pc_has_forge_domain(sheet, min_level)` helper gate.
+- `_FORGE_BLESSING_KINDS = {"weapon", "armor"}` valid set.
+- `/api/campaign/{cid}/use_blessing_of_the_forge` endpoint.
+- `blessed_object` in `_SHEET_PATCH_KEYS`.
+- `tests/harness/test_blessing_of_the_forge.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 1 set + 1 patch key + 5 regression tests. No schema change.
+- **`item_index: 0` already handled.** v2.99.232 Weapon Bond ran into the `int(... or -1)` pitfall where `0` collapses to `-1`. Forge endpoint uses the same explicit `is None` + `try/except int()` pattern from the v2.99.232 fix.
+- **Shield rejected RAW.** XGE: "a suit of armor or a simple or martial weapon" — shields are their own type in SimpleVTT's inventory (Tavik's Shield has `type: "shield"`). v1 rejects them as 400 to match RAW.
+- **Phase H.1 progress: 7 of 11 domains have first features shipped.** Remaining: Grave, Death, Order, Twilight, Peace. (4 to go.)
+- **56 ships this session.**
+- **Total harness count: 1291** (was 1286 in v2.99.239).
+
+---
+
 ## [2.99.239] - 2026-06-04 — "The Wilderness Disciple" — Nature Domain Cleric Acolyte of Nature (Phase H.1 sixth domain)
 
 **Schema version:** 66
