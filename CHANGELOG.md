@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.272] - 2026-06-04 — "The Holy Symbol's Glare" — Ancients Paladin Turn the Faithless CD (H.2 Phase 2)
+
+**Schema version:** 66
+**Commit summary:** **H.2 Phase 2 of docs/plans/paladin-oaths.md.** Ancients Paladin Lv 3+ sibling CD to Nature's Wrath: action — fey/fiends within 30 ft make Wis save DC 8 + prof + CHA or be Turned for 1 minute (or until damaged).
+**Description:** One endpoint mirroring v2.99.247 Conquering Presence (multi-target AOE Wis save) but for Ancients oath. `/use_turn_the_faithless` — body `{character_id, target_combatant_ids: [...], override?}`. Validates Ancients Paladin Lv 3+ + `channel-divinity` resource current >= 1 + non-empty target list + each in active battle + Phase 4 action chip. Decrements CD counter, computes spell save DC, broadcasts. v1 announce-only — fey/fiend creature-type filter is GM-tracked. Caelan Lv 7 CHA 16 → DC 14. One new harness test file with 5 tests.
+
+### Added
+- `/api/campaign/{cid}/use_turn_the_faithless` endpoint.
+- `tests/harness/test_turn_the_faithless.py` — 5 tests.
+
+### Notes
+- **H.2 depth progress: 1 of 5 oaths has a Phase 2 sibling CD shipped** (Ancients). Remaining: Vengeance Abjure Enemy, Conquest Guided Strike, Redemption Emissary of Peace, Glory Peerless Athlete.
+- **88 ships this session.**
+- **Total harness count: 1404** (was 1399 in v2.99.271).
+
+---
+
 ## [2.99.271] - 2026-06-04 — "Two Domains, One Power" — Knowledge Domain Cleric Lv 8 Potent Spellcasting (H.1 depth, second domain)
 
 **Schema version:** 66

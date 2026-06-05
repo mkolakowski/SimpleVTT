@@ -42519,6 +42519,185 @@ async def use_voice_of_authority(
 _NATURES_WRATH_SAVE_ABILITIES = {"STR", "DEX"}
 
 
+@router.post("/api/campaign/{campaign_id}/use_turn_the_faithless")
+async def use_turn_the_faithless(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.272 — Phase H.2 Phase 2 of the v2.99.193 phased
+    completion plan. Turn the Faithless (Ancients Paladin Lv 3+,
+    PHB p.87): "As an action, you present your holy symbol and
+    each fey or fiend within 30 feet of you that can see or
+    hear you must make a Wisdom saving throw. If the creature
+    fails its saving throw, it is turned for 1 minute or until
+    it takes damage."
+
+    Body: ``{character_id, target_combatant_ids: [...], override?}``.
+
+    Validates Ancients Paladin Lv 3+ + CD resource >= 1 + non-
+    empty target list + each target in active battle + Phase 4
+    action chip. Decrements CD, computes DC = 8 + prof + CHA,
+    broadcasts the per-target save request. v1 ships announce-
+    only — GM rolls each Wis save + applies the Turned condition
+    on failures (and the fey/fiend creature-type filter is
+    GM-tracked).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_ids = body.get("target_combatant_ids") or []
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not isinstance(target_ids, list) or len(target_ids) < 1:
+        raise HTTPException(
+            400,
+            "target_combatant_ids must be a non-empty list",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_ancients_oath(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "ancients paladin lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    cd_row = None
+    cd_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "channel-divinity":
+            cd_row = dict(r)
+            cd_idx = i
+            break
+    if cd_row is None:
+        raise HTTPException(404, "No Channel Divinity resource on this sheet")
+    cd_cur = int(cd_row.get("current") or 0)
+    cd_max = int(cd_row.get("max") or 0)
+    if cd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Channel Divinity",
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    cb_by_id = {c.get("id"): c for c in (state.get("combatants") or [])}
+    target_names: list[str] = []
+    for tcid in target_ids:
+        tcid = str(tcid).strip()
+        cb = cb_by_id.get(tcid)
+        if cb is None:
+            return JSONResponse(status_code=404, content={
+                "error": "target_not_in_battle",
+                "target_combatant_id": tcid,
+            })
+        target_names.append(cb.get("name") or "")
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "turn-the-faithless",
+            "label": "Turn the Faithless",
+            "strict": strict,
+        })
+
+    cd_row["current"] = cd_cur - 1
+    resources[cd_idx] = cd_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    cha = int((sheet.get("abilities") or {}).get("CHA") or 10)
+    cha_mod = (cha - 10) // 2
+    save_dc = 8 + prof + cha_mod
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "channel-divinity",
+            "current": cd_cur - 1,
+            "max": cd_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    names_pretty = ", ".join(n for n in target_names if n) or "the targeted creatures"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌿 Turn the Faithless — {len(target_names)} fey/fiends "
+                f"Wis DC {save_dc} or Turned"
+            ),
+            "feature_desc": (
+                f"{char.name} presents the holy symbol: "
+                f"{names_pretty} (fey/fiends within 30 ft, GM-"
+                f"tracked creature type) make a Wisdom save "
+                f"DC {save_dc} or be Turned for 1 minute (or "
+                f"until they take damage). (Ancients Paladin "
+                f"Lv 3+ Channel Divinity.)"
+            ),
+            "source": "turn-the-faithless",
+            "target_combatant_ids": [str(t) for t in target_ids],
+            "target_names": target_names,
+            "save_dc": save_dc,
+            "uses_remaining": cd_cur - 1,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "turn-the-faithless",
+        "target_combatant_ids": [str(t) for t in target_ids],
+        "target_names": target_names,
+        "save_dc": save_dc,
+        "uses_remaining": cd_cur - 1,
+        "over_budget": was_used,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_natures_wrath")
 async def use_natures_wrath(
     campaign_id: int,

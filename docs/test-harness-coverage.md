@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1399 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.271, 2026-06-04).
+**Total tests:** 1404 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.272, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -498,6 +498,17 @@ v2.99.246 — Oath of Vengeance (Paladin subclass, PHB p.87) Vow of Enmity bonus
 | `test_use_voe_target_not_in_battle` | Unknown target_combatant_id → 404 `target_not_in_battle`. |
 | `test_use_voe_out_of_cd` | `channel-divinity.current = 0` → 409 `out_of_uses`. |
 | `test_use_voe_wrong_subclass` | Default Caelan (Devotion) → 409 `wrong_subclass_or_level`. |
+
+### `test_turn_the_faithless.py`
+v2.99.272 — Ancients Paladin (PHB p.87) Turn the Faithless CD (H.2 Phase 2). Sibling CD to Nature's Wrath (v2.99.245). 30-ft AOE Wis save vs fey/fiend or Turned 1 minute.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ttf_happy` | Ancients Caelan vs Imp + Sprite → `save_dc == 14`, `uses_remaining == 0`, broadcast (source `turn-the-faithless`). |
+| `test_use_ttf_empty_target_list` | Empty list → 400. |
+| `test_use_ttf_unknown_target` | One unknown target → 404. |
+| `test_use_ttf_out_of_cd` | CD 0 → 409 `out_of_uses`. |
+| `test_use_ttf_wrong_subclass` | Default Caelan (Devotion) → 409. |
 
 ### `test_natures_wrath.py`
 v2.99.245 — Oath of the Ancients (Paladin subclass, PHB p.86) Nature's Wrath Channel Divinity (Phase H.2 Phase 1 of [docs/plans/paladin-oaths.md](../plans/paladin-oaths.md)). Sir Caelan Lightbringer is the demo fixture; tests PATCH his subclass to "Oath of the Ancients" and seed Bandit in battle. Caelan Lv 8 CHA 16: DC = 8 + prof 3 + CHA +3 = 14.
