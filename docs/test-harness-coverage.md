@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1645 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.336, 2026-06-05).
+**Total tests:** 1649 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.337, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1077,6 +1077,16 @@ v2.99.336 — War Magic Wizard (XGE p.59) Arcane Deflection Lv 2+ (G.1 Wizard ba
 | `test_use_ad_save_mode` | `mode="save"` → `bonus == 4`. |
 | `test_use_ad_wrong_subclass` | Default Thalindra (Evocation) → 409. |
 | `test_use_ad_level_gate` | War Magic at Lv 1 → 409. |
+
+### `test_chronal_shift.py`
+v2.99.337 — Chronurgy Magic Wizard (EGtW p.184) Chronal Shift Lv 2+ (G.1 Wizard batch). Reaction: self or a seen creature within 30 ft making an attack roll, check, or save must reroll and use the new roll. Twice per long rest. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_cs_happy_lv7` | PATCH Thalindra → Chronurgy Lv 7 → `uses_remaining == 1`, `uses_max == 2`, `wizard_level == 7`, broadcast (source `chronal-shift`). |
+| `test_use_cs_two_uses_then_out` | 1st → 1; 2nd → 0; 3rd → 409 `no_uses_left`. |
+| `test_use_cs_wrong_subclass` | Default Thalindra (Evocation) → 409. |
+| `test_use_cs_level_gate` | Chronurgy at Lv 1 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.337] - 2026-06-05 — "The Second Throw" — Chronurgy Magic Wizard Chronal Shift (Lv 2+, EGtW)
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Chronurgy Magic Wizard Lv 2+ Chronal Shift (EGtW).** RAW EGtW p.184: reaction when self or a creature you can see within 30 ft makes an attack roll, ability check, or saving throw → force a reroll; new roll is used. Twice per long rest.
+**Description:** Adds `_pc_has_chronurgy_wizard` helper. One endpoint. `/use_chronal_shift` — body `{character_id, override?}`. Validates Chronurgy Wizard Lv 2+ + reaction chip. Auto-bootstraps `chronal-shift` resource (max=2, reset=long). Decrements; returns 409 `no_uses_left` when out. Broadcasts `feature_used` with `source: chronal-shift` + `uses_remaining`/`uses_max`. v1 announce-only — reroll application GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_chronal_shift` endpoint.
+- `_pc_has_chronurgy_wizard` helper.
+- `tests/harness/test_chronal_shift.py` — 4 tests.
+
+### Notes
+- **G.1 Wizard batch progress:** 8 PHB schools + 4 TCE/XGE/EGtW (Bladesinging, Order of Scribes, War Magic, Chronurgy). Remaining: Graviturgy (Wildemount).
+- **153 ships this session.**
+- **Total harness count: 1649** (was 1645 in v2.99.336; +4 new tests).
+
+---
+
 ## [2.99.336] - 2026-06-05 — "The Magic Wall" — War Magic Wizard Arcane Deflection (Lv 2+, XGE)
 
 **Schema version:** 66

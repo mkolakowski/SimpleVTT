@@ -25985,6 +25985,31 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_chronurgy_wizard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.337 — RAW Chronurgy Magic School Wizard (Wizard,
+    EGtW p.184): Chronal Shift + Temporal Awareness (Lv 2),
+    Momentary Stasis (Lv 6), Arcane Abeyance (Lv 10),
+    Convergent Future (Lv 14).
+
+    Returns True when the PC is a Wizard with subclass slug
+    containing "chronurgy" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "chronurgy" not in subclass:
+        return False
+    return _wizard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_war_magic_wizard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.336 — RAW War Magic School Wizard (Wizard, XGE
     p.59): Arcane Deflection + Tactical Wit (Lv 2), Power
@@ -50993,6 +51018,155 @@ async def use_arcane_deflection(
         "mode": mode,
         "bonus": bonus,
         "leveled_spell_lockout": True,
+        "wizard_level": wizard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_chronal_shift")
+async def use_chronal_shift(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.337 — Phase G.1 Wizard subclass batch (Chronurgy
+    Magic Wizard Lv 2+, EGtW) of the v2.99.193 phased completion
+    plan. Chronal Shift (Chronurgy Magic Wizard Lv 2+, EGtW p.184):
+    "Reaction. When you or a creature you can see within 30 ft
+    makes an attack roll, ability check, or saving throw, force
+    that creature to reroll. The creature must use the new roll.
+    Twice per long rest."
+
+    Body: ``{character_id, override?}``. Costs a reaction chip.
+    Auto-bootstraps a `chronal-shift` resource (max=2, reset=long).
+    v1 announce-only — actual reroll application GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_chronurgy_wizard(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "chronurgy wizard lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "chronal-shift",
+            "label": "Chronal Shift",
+            "strict": strict,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    cs_row = None
+    cs_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "chronal-shift":
+            cs_row = dict(r); cs_idx = i; break
+    if cs_row is None:
+        cs_row = {
+            "key": "chronal-shift",
+            "label": "Chronal Shift",
+            "current": 2, "max": 2, "reset": "long",
+        }
+        cs_idx = len(resources)
+        resources.append(cs_row)
+    cs_cur = int(cs_row.get("current") or 0)
+    cs_max = int(cs_row.get("max") or 2)
+    if cs_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Chronal Shift",
+            "current": cs_cur, "max": cs_max,
+        })
+
+    cs_row["current"] = cs_cur - 1
+    resources[cs_idx] = cs_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+
+    wizard_lv = _wizard_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "chronal-shift",
+            "current": cs_cur - 1, "max": cs_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⏳ Chronal Shift — force a reroll ({cs_cur - 1}/{cs_max} left)"
+            ),
+            "feature_desc": (
+                f"{char.name} bends a thread of time: a creature "
+                f"within 30 ft (or {char.name}) making an attack, "
+                f"check, or save must reroll and use the new roll. "
+                f"(Chronurgy Magic Wizard Lv 2+ EGtW class feature, "
+                f"2/long rest.)"
+            ),
+            "source": "chronal-shift",
+            "uses_remaining": cs_cur - 1,
+            "uses_max": cs_max,
+            "wizard_level": wizard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "chronal-shift",
+        "uses_remaining": cs_cur - 1,
+        "uses_max": cs_max,
         "wizard_level": wizard_lv,
     }
 
