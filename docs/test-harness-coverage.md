@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1395 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.269, 2026-06-04).
+**Total tests:** 1398 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.270, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -610,6 +610,15 @@ v2.99.235 — Tempest Domain Cleric (PHB p.62) Wrath of the Storm reaction (Phas
 | `test_use_wots_bad_damage_type` | `damage_type: "fire"` → 400. |
 | `test_use_wots_out_of_uses` | `wrath-of-the-storm.current = 0` → 409 `out_of_uses`. |
 | `test_use_wots_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
+
+### `test_potent_spellcasting.py`
+v2.99.270 — Light Domain Cleric Lv 8 (PHB p.60) Potent Spellcasting announce (H.1 depth — first Lv 6/8/17 feature for an already-shipped Cleric domain). Tavik Lv 8 WIS 16 → +3 mod.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ps_happy` | Light Tavik Lv 8 → `wis_mod == 3`, cantrip_name mirrored, broadcast (source `potent-spellcasting`). |
+| `test_use_ps_wrong_subclass` | Default Tavik (Life) → 409 `wrong_subclass_or_level`. |
+| `test_use_ps_level_gate` | Light Tavik at Lv 7 → 409. |
 
 ### `test_warding_flare.py`
 v2.99.234 — Light Domain Cleric (PHB p.60) Warding Flare reaction (Phase H.1 first ship). Brother Tavik Stonebrow is the demo fixture; tests PATCH his subclass to "Light Domain" + seed a `warding-flare` resource with 3 uses (WIS 16 → +3 mod).

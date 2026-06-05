@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.270] - 2026-06-04 — "The Light's Echo" — Light Domain Cleric Lv 8 Potent Spellcasting (H.1 depth first)
+
+**Schema version:** 66
+**Commit summary:** **H.1 depth ship — first Lv 6/8/17 deep feature for an already-shipped Cleric domain.** RAW PHB p.60: Light Domain Lv 8+ — add WIS mod to the damage of any cleric cantrip. With H.1's 11 domain Lv 1 features done, this opens the per-domain Lv 6/8/17 deepening agenda.
+**Description:** One endpoint. `/use_potent_spellcasting` — body `{character_id, cantrip_name?, override?}`. Validates Light Domain Cleric Lv 8+ (via existing `_pc_has_light_domain(sheet, 8)`). Computes WIS mod, broadcasts. v1 ships announce-only — the actual `/cast_spell` damage-roll hook that auto-adds the WIS mod to cleric cantrips is filed. Same RAW shape will apply to Knowledge Domain Lv 8 when that follow-up commit lands (will branch the helper). One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_potent_spellcasting` endpoint.
+- `tests/harness/test_potent_spellcasting.py` — 3 tests.
+
+### Notes
+- **86 ships this session.**
+- **Total harness count: 1398** (was 1395 in v2.99.269).
+
+---
+
 ## [2.99.269] - 2026-06-04 — "The Knight's Capstone" — Eldritch Knight Arcane Charge + Improved War Magic (Phase E.2 Phase 4 — E.2 COMPLETE)
 
 **Schema version:** 66

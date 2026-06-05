@@ -40746,6 +40746,102 @@ async def use_trip_attack(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_potent_spellcasting")
+async def use_potent_spellcasting(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.270 — Phase H.1 depth (Light Domain Lv 8) of the
+    v2.99.193 phased completion plan. Potent Spellcasting (Light
+    Domain Cleric Lv 8+, PHB p.60): "Starting at 8th level, you
+    add your Wisdom modifier to the damage you deal with any
+    cleric cantrip."
+
+    Body: ``{character_id, cantrip_name?, override?}``.
+
+    Validates Light Domain Cleric Lv 8+. Computes WIS mod +
+    broadcasts. v1 ships announce-only — the actual `/cast_spell`
+    damage-roll hook that auto-adds the WIS mod to cleric
+    cantrips is filed for a follow-up commit (would need a
+    spell-class tag + cantrip detection at damage site).
+
+    Same RAW shape applies to Knowledge Domain Lv 8 — when that
+    follow-up commit lands the helper will branch on subclass.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    cantrip_name = (str(body.get("cantrip_name") or "")).strip()[:80]
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_light_domain(sheet, 8):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "light domain cleric lv 8+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    wis = int((sheet.get("abilities") or {}).get("WIS") or 10)
+    wis_mod = (wis - 10) // 2
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    cantrip_phrase = f" → {cantrip_name}" if cantrip_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"📜 Potent Spellcasting — +{wis_mod} cantrip damage"
+                f"{cantrip_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} adds WIS mod ({wis_mod:+}) to the "
+                f"damage of a cleric cantrip{cantrip_phrase}. "
+                f"(Light Domain Cleric Lv 8+ class feature; "
+                f"passive — applies to every cleric cantrip cast.)"
+            ),
+            "source": "potent-spellcasting",
+            "wis_mod": wis_mod,
+            "cantrip_name": cantrip_name,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "potent-spellcasting",
+        "wis_mod": wis_mod,
+        "cantrip_name": cantrip_name,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_warding_flare")
 async def use_warding_flare(
     campaign_id: int,
