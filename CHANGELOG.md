@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.303] - 2026-06-05 — "The Wider Web" — Peace Domain Cleric Expansive Bond (H.1 deeper, Lv 17 — CLOSES H.1 Lv 17 batch)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Peace Domain Cleric Lv 17+ Expansive Bond. CLOSES the H.1 Lv 17 batch (11/11 RAW PHB+TCE domains shipped).** RAW TCE p.39: Emboldening Bond now works within 60 ft between bonded creatures (was 30); d4 bonus becomes d6.
+**Description:** One endpoint. `/use_expansive_bond` — body `{character_id, override?}`. Validates Peace Domain Cleric Lv 17+. No chip — passive upgrade to Emboldening Bond. Broadcasts `feature_used` with `source: expansive-bond` + `bond_radius_ft: 60` + `bonus_die: d6`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_expansive_bond` endpoint.
+- `tests/harness/test_expansive_bond.py` — 3 tests.
+
+### Notes
+- **🎉 H.1 Lv 17 batch ✅ COMPLETE (11/11 domains).** Light Corona of Light + Tempest Stormborn + Life Supreme Healing + War Avatar of Battle + Death Improved Reaper + Trickery Improved Duplicity + Forge Saint of Forge and Fire + Grave Keeper of Souls + Knowledge Visions of the Past + Nature Master of Nature + Peace Expansive Bond. (Arcana + Order are TCE-side Lv 17 capstones that can still ship as H.1 batch extensions.)
+- **119 ships this session.**
+- **Total harness count: 1510** (was 1507 in v2.99.302; +3 new tests).
+
+---
+
 ## [2.99.302] - 2026-06-05 — "The Whispered Command" — Nature Domain Cleric Master of Nature (H.1 deeper, Lv 17)
 
 **Schema version:** 66

@@ -46154,6 +46154,101 @@ async def use_master_of_nature(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_expansive_bond")
+async def use_expansive_bond(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.303 — Phase H.1 deeper (Peace Domain Cleric Lv 17+)
+    of the v2.99.193 phased completion plan. CLOSES the H.1
+    Lv 17 batch (11/11 RAW PHB+TCE domains shipped). Expansive
+    Bond (Peace Domain Cleric Lv 17+, TCE p.39): "Beginning at
+    17th level, the benefits of your Emboldening Bond feature
+    now work when the creatures are within 60 feet of one
+    another. In addition, when a creature uses the bond to
+    add a d4 to an attack roll, ability check, or saving
+    throw, they add a d6 instead."
+
+    Body: ``{character_id, override?}``. No chip cost —
+    passive upgrade to Emboldening Bond. v1 announce-only —
+    the new 60 ft range + d6 substitution is GM-tracked on
+    the existing Emboldening Bond aura.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_peace_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "peace domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🕊️ Expansive Bond — Emboldening Bond 60 ft + d6"
+            ),
+            "feature_desc": (
+                f"{char.name}'s Emboldening Bond now works within "
+                f"60 ft (was 30) between bonded creatures, and the "
+                f"d4 bonus to attack/check/save becomes a d6. "
+                f"(Peace Domain Cleric Lv 17+ class feature; "
+                f"passive upgrade.)"
+            ),
+            "source": "expansive-bond",
+            "bond_radius_ft": 60,
+            "bonus_die": "d6",
+            "previous_bonus_die": "d4",
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "expansive-bond",
+        "bond_radius_ft": 60,
+        "bonus_die": "d6",
+        "previous_bonus_die": "d4",
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
