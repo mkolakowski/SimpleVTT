@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.258] - 2026-06-04 — "The Wide Arc" — Battle Master Sweeping Attack (Phase E.1 maneuver 8 of 16, half of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 8 of 16) — halfway mark.** RAW PHB p.74: on melee hit, expend 1 die; if the attack roll would also hit a second creature within 5 ft of the original, that creature takes die damage of the same type as the original attack. First maneuver that splashes damage to a second target.
+**Description:** One endpoint. `/use_sweeping_attack` — body `{character_id, second_target_name?, override?}`. Broadcast carries `second_target_damage` + `second_target_name` (distinct from prior maneuvers' `extra_damage` / `attack_bonus`). v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_sweeping_attack` endpoint.
+- `tests/harness/test_sweeping_attack.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 8 of 16.** Halfway through E.1's per-maneuver batch. Remaining: Commander's Strike, Distracting Strike, Evasive Footwork, Feinting Attack, Maneuvering Attack, Parry, Rally, Riposte.
+- **74 ships this session.**
+- **Total harness count: 1360** (was 1357 in v2.99.257).
+
+---
+
 ## [2.99.257] - 2026-06-04 — "The Long Reach" — Battle Master Lunging Attack (Phase E.1 maneuver 7 of 16)
 
 **Schema version:** 66
