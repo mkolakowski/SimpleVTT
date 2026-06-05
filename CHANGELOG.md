@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.236] - 2026-06-04 — "The Warrior's Spare Swing" — War Domain Cleric War Priest (Phase H.1 third domain)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 third non-Life Cleric domain of the v2.99.193 phased completion plan.** RAW PHB p.63: War Cleric Lv 1+ "when you use the Attack action, you can make one weapon attack as a bonus action." Uses per long rest = WIS mod.
+**Description:** One helper + one endpoint. (1) `_pc_has_war_domain(sheet, min_level)` — multiclass-aware Cleric + "war" subclass gate. (2) `/use_war_priest` — body `{character_id, override?}`. Validates War Cleric Lv 1+ + `sheet.resources` has a `war-priest` entry with `current >= 1` + Phase 4 bonus chip. Decrements counter, marks chip, broadcasts. The bonus-action weapon attack itself is rolled via the normal `/attack` path. Brother Tavik Stonebrow is the demo fixture. One new harness test file with 3 tests.
+
+### Added
+- `_pc_has_war_domain(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_war_priest` endpoint.
+- `tests/harness/test_war_priest.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 3 regression tests. No schema change.
+- **Mirrors Warding Flare / Wrath of the Storm pattern.** Same WIS-mod-uses-per-long-rest pool, same per-use decrement + chip mark. The only delta from Wrath of the Storm is the chip (bonus, not reaction) and the lack of a damage roll (War Priest just grants the bonus attack to be rolled normally).
+- **Phase H.1 progress: 3 of 11 domains have first features shipped.** Remaining: Knowledge, Nature, Trickery, Forge, Grave, Death, Order, Twilight, Peace. Lv 6/8/17 features for shipped domains also remain.
+- **52 ships this session.**
+- **Total harness count: 1273** (was 1270 in v2.99.235).
+
+---
+
 ## [2.99.235] - 2026-06-04 — "The Thunderhead's Rebuke" — Tempest Domain Cleric Wrath of the Storm (Phase H.1 second domain)
 
 **Schema version:** 66

@@ -25469,6 +25469,35 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_war_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.236 — RAW War Domain features (Cleric, PHB p.63):
+    War Priest (Lv 1), Channel Divinity: Guided Strike (Lv 2 —
+    curated), Channel Divinity: War God's Blessing (Lv 6),
+    Divine Strike (Lv 8 — passive damage uplift), Avatar of
+    Battle (Lv 17 — physical resistance).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "war" + meets `min_level` (multiclass-aware).
+    Gates the War Domain endpoints.
+
+    Phase H.1 third non-Life Cleric domain to ship.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "war" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.235 — RAW Tempest Domain features (Cleric, PHB
     p.62): Wrath of the Storm (Lv 1), Channel Divinity:
@@ -37944,6 +37973,154 @@ async def use_wrath_of_the_storm(
         "damage_type": damage_type,
         "save_dc": save_dc,
         "uses_remaining": w_cur - 1,
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_war_priest")
+async def use_war_priest(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.236 — Phase H.1 third non-Life Cleric domain of the
+    v2.99.193 phased completion plan. War Priest (War Domain
+    Cleric Lv 1+, PHB p.63): "From 1st level, your god delivers
+    bolts of inspiration to you while you are engaged in battle.
+    When you use the Attack action, you can make one weapon
+    attack as a bonus action. You can use this feature a number
+    of times equal to your Wisdom modifier (a minimum of once).
+    You regain all expended uses when you finish a long rest."
+
+    Body: ``{character_id, override?}``.
+
+    Validates War Cleric Lv 1+ + ``sheet.resources`` has a
+    `war-priest` entry with `current >= 1` + Phase 4 bonus chip.
+    Decrements counter, marks bonus chip, broadcasts. The
+    bonus-action weapon attack itself is rolled via the normal
+    `/attack` path.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_war_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "war domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    wp_row = None
+    wp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "war-priest":
+            wp_row = dict(r)
+            wp_idx = i
+            break
+    if wp_row is None:
+        raise HTTPException(
+            404,
+            "No War Priest resource on this sheet",
+        )
+    wp_cur = int(wp_row.get("current") or 0)
+    wp_max = int(wp_row.get("max") or 0)
+    if wp_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "War Priest",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "war-priest",
+            "label": "War Priest",
+            "strict": strict,
+        })
+
+    wp_row["current"] = wp_cur - 1
+    resources[wp_idx] = wp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "war-priest",
+            "current": wp_cur - 1,
+            "max": wp_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🛡️ War Priest — bonus weapon attack"
+            ),
+            "feature_desc": (
+                f"{char.name} invokes War Priest: one bonus-action "
+                f"weapon attack after the Attack action. Roll the "
+                f"attack via the normal path. (War Domain Cleric "
+                f"Lv 1+ class feature; {wp_cur - 1}/{wp_max} uses "
+                f"remaining.)"
+            ),
+            "source": "war-priest",
+            "uses_remaining": wp_cur - 1,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "war-priest",
+        "uses_remaining": wp_cur - 1,
         "over_budget": was_used,
     }
 
