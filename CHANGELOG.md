@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.347] - 2026-06-05 — "The Well-Rested Sorcerer" — Rest-refill coverage for the three tracked Sorcerer features
+
+**Schema version:** 66
+**Commit summary:** **Add harness coverage for the `/rest` refill hooks of the three use-tracked G.2 Sorcerer features (Restore Balance, Favored by the Gods, Strength of the Grave).** Test-only — the refill hooks shipped in v2.99.344–346; this commit proves they work and locks in the short-vs-long-rest distinction.
+**Description:** Each refill test exhausts the feature's counter (sets it to 0, asserts the `out_of_uses` 409), takes the relevant rest via `/api/campaign/{cid}/character/{cid}/rest`, then re-invokes the feature to confirm the charge came back. The two long-rest-only features (Restore Balance, Strength of the Grave) also assert that a SHORT rest does **not** refill them, while Favored by the Gods asserts a SHORT rest **does** refill it — pinning the RAW recharge cadence for each.
+
+### Added
+- `tests/harness/test_restore_balance.py::test_rb_rest_refill_long_only` — short rest no-op, long rest refills to PB.
+- `tests/harness/test_favored_by_the_gods.py::test_fbg_short_rest_refill` — short rest refills the single charge.
+- `tests/harness/test_strength_of_the_grave.py::test_sg_rest_refill_long_only` — short rest no-op, long rest refills the charge.
+
+### Notes
+- Closes the one untested seam left by the v2.99.344–346 deepening pass: the `/rest` refill side of each counter.
+- **163 ships this session.**
+- **Total harness count: 1675** (was 1672 in v2.99.346; +3 new tests).
+
+---
+
 ## [2.99.346] - 2026-06-05 — "The Last Breath" — Strength of the Grave use now server-tracked (Shadow Magic, XGE)
 
 **Schema version:** 66

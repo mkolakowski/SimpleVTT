@@ -141,3 +141,38 @@ async def test_use_fbg_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_fbg_short_rest_refill(
+    gm_client, roster,
+):
+    """Exhausted Favored by the Gods refills on a SHORT rest (RAW
+    recharges on a short OR long rest)."""
+    zara = roster["Zara Emberfire"]
+    await _patch_sheet(
+        gm_client, zara["id"],
+        {"subclass": "Divine Soul", "favored_by_gods_uses": 0},
+        class_slug="sorcerer",
+    )
+    try:
+        url = f"/api/campaign/{CAMPAIGN_ID}/use_favored_by_the_gods"
+        rest_url = (
+            f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/rest"
+        )
+        # Exhausted → 409.
+        r0 = await gm_client.post(url, json={"character_id": zara["id"]})
+        assert r0.status_code == 409, r0.text
+        assert r0.json().get("error") == "out_of_uses"
+
+        # Short rest refills (distinct from the long-only features).
+        sr = await gm_client.post(rest_url, json={"type": "short"})
+        assert sr.status_code == 200, sr.text
+        r1 = await gm_client.post(url, json={"character_id": zara["id"]})
+        assert r1.status_code == 200, r1.text
+        assert r1.json()["uses_remaining"] == 0
+    finally:
+        await _patch_sheet(
+            gm_client, zara["id"],
+            {"subclass": "Draconic Bloodline"},
+            class_slug="sorcerer",
+        )

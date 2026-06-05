@@ -142,3 +142,47 @@ async def test_use_sg_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_sg_rest_refill_long_only(
+    gm_client, roster,
+):
+    """Exhausted Strength of the Grave: a SHORT rest does NOT refill
+    (long-rest-only feature), a LONG rest refills the charge."""
+    zara = roster["Zara Emberfire"]
+    await _patch_sheet(
+        gm_client, zara["id"],
+        {"subclass": "Shadow Magic", "strength_of_grave_uses": 0},
+        class_slug="sorcerer",
+    )
+    try:
+        url = f"/api/campaign/{CAMPAIGN_ID}/use_strength_of_the_grave"
+        rest_url = (
+            f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/rest"
+        )
+        # Exhausted → 409.
+        r0 = await gm_client.post(url, json={
+            "character_id": zara["id"], "damage": 8})
+        assert r0.status_code == 409, r0.text
+        assert r0.json().get("error") == "out_of_uses"
+
+        # Short rest must NOT refill a long-rest-only feature.
+        sr = await gm_client.post(rest_url, json={"type": "short"})
+        assert sr.status_code == 200, sr.text
+        r1 = await gm_client.post(url, json={
+            "character_id": zara["id"], "damage": 8})
+        assert r1.status_code == 409, r1.text
+
+        # Long rest refills the single charge.
+        lr = await gm_client.post(rest_url, json={"type": "long"})
+        assert lr.status_code == 200, lr.text
+        r2 = await gm_client.post(url, json={
+            "character_id": zara["id"], "damage": 8})
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["uses_remaining"] == 0
+    finally:
+        await _patch_sheet(
+            gm_client, zara["id"],
+            {"subclass": "Draconic Bloodline"},
+            class_slug="sorcerer",
+        )
