@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1559 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.316, 2026-06-05).
+**Total tests:** 1564 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.317, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -871,6 +871,17 @@ v2.99.316 — Stars Druid (TCE p.37) Star Map Lv 2+ (E.4 Druid batch). Star char
 | `test_use_sm_happy_lv5` | PATCH Mira → Stars Lv 5 (WIS 17 mod 3) → `free_guiding_bolt_uses == 3`, always_prepared includes Guidance + Guiding Bolt, broadcast (source `star-map`). |
 | `test_use_sm_wrong_subclass` | Default Mira (Moon) → 409. |
 | `test_use_sm_level_gate` | Stars at Lv 1 → 409. |
+
+### `test_halo_of_spores.py`
+v2.99.317 — Spores Druid (TCE p.36) Halo of Spores Lv 2+ (E.4 Druid batch). Reaction when creature moves into or starts turn within 10 ft → necrotic damage on failed CON save. Die scales 1d4/1d6/1d8/1d10 at Lv 2/6/10/14. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_hs_happy_lv5` | PATCH Mira → Spores Lv 5 (WIS 17 prof 3) → `damage_expression == "1d4"`, `save_dc == 14`, `save_ability == "CON"`, `aura_radius_ft == 10`, broadcast (source `halo-of-spores`). |
+| `test_use_hs_lv6` | Lv 6 → `damage_expression == "1d6"`. |
+| `test_use_hs_lv14` | Lv 14 → `damage_expression == "1d10"`. |
+| `test_use_hs_wrong_subclass` | Default Mira (Moon) → 409. |
+| `test_use_hs_level_gate` | Spores at Lv 1 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

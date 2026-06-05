@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.317] - 2026-06-05 — "The Necrotic Cloud" — Spores Druid Halo of Spores (Lv 2+, TCE)
+
+**Schema version:** 66
+**Commit summary:** **E.4 Druid subclass batch — Spores Druid Lv 2+ Halo of Spores (TCE).** Fourth Druid subclass shipped. RAW TCE p.36: reaction when creature moves into or starts turn within 10 ft → necrotic damage on failed CON save.
+**Description:** Adds `_pc_has_spores_druid` helper. One endpoint. `/use_halo_of_spores` — body `{character_id, target_combatant_id?, override?}`. Validates Spores Druid Lv 2+ + reaction chip. Damage die scales by druid level: 1d4 (Lv 2-5), 1d6 (Lv 6-9), 1d8 (Lv 10-13), 1d10 (Lv 14+). Computes save DC = 8 + prof + WIS_mod. Broadcasts. v1 announce-only. One new harness test file with 5 tests including die-scaling steps.
+
+### Added
+- `/api/campaign/{cid}/use_halo_of_spores` endpoint.
+- `_pc_has_spores_druid` helper.
+- `tests/harness/test_halo_of_spores.py` — 5 tests.
+
+### Notes
+- **E.4 Druid batch progress:** 4 of ~8 subclasses shipped (Land, Shepherd, Stars, Spores).
+- **133 ships this session.**
+- **Total harness count: 1564** (was 1559 in v2.99.316; +5 new tests).
+
+---
+
 ## [2.99.316] - 2026-06-05 — "The Astronomer's Eye" — Stars Druid Star Map (Lv 2+, TCE)
 
 **Schema version:** 66
