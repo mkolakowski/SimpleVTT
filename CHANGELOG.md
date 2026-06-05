@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.309] - 2026-06-05 — "The Sliding Shadow" — Scout Rogue Skirmisher (Lv 3+)
+
+**Schema version:** 66
+**Commit summary:** **E.3 Rogue subclass batch — Scout Rogue Lv 3+ Skirmisher.** RAW XGE p.46: reaction to move up to half walking speed when enemy ends turn within 5 ft; movement doesn't provoke OAs.
+**Description:** Adds `_pc_has_scout_subclass` helper. One endpoint. `/use_skirmisher` — body `{character_id, override?}`. Validates Scout Rogue Lv 3+ + reaction chip. Computes `bonus_move_ft = base_speed // 2`. Broadcasts `feature_used` with `source: skirmisher` + `no_oa: true`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_skirmisher` endpoint.
+- `_pc_has_scout_subclass` helper.
+- `tests/harness/test_skirmisher.py` — 3 tests.
+
+### Notes
+- **E.3 Rogue batch progress:** 5 of 8 subclasses shipped (Thief, Assassin, Swashbuckler, Mastermind, Scout).
+- **125 ships this session.**
+- **Total harness count: 1530** (was 1527 in v2.99.308; +3 new tests).
+
+---
+
 ## [2.99.308] - 2026-06-05 — "The Long Whisper" — Mastermind Rogue Master of Tactics (Lv 3+)
 
 **Schema version:** 66

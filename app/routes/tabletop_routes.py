@@ -25963,6 +25963,30 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_scout_subclass(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.309 — RAW Scout features (Rogue, XGE p.46):
+    Skirmisher + Survivalist (Lv 3), Superior Mobility (Lv 9),
+    Ambush Master (Lv 13), Sudden Strike (Lv 17).
+
+    Returns True when the PC is a Rogue with subclass slug
+    containing "scout" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "rogue":
+        has_rogue = any(
+            (entry.get("class") or "").strip().lower() == "rogue"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_rogue:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "scout" not in subclass:
+        return False
+    return _rogue_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_mastermind_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.308 — RAW Mastermind features (Rogue, XGE p.46):
     Master of Intrigue + Master of Tactics (Lv 3), Insightful
@@ -46839,6 +46863,116 @@ async def use_master_of_tactics(
         "feature": "master-of-tactics",
         "help_action_economy": "bonus",
         "help_target_range_ft": 30,
+        "rogue_level": rogue_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_skirmisher")
+async def use_skirmisher(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.309 — Phase E.3 Rogue subclass batch (Scout
+    Rogue Lv 3+) of the v2.99.193 phased completion plan.
+    Skirmisher (Scout Rogue Lv 3+, XGE p.46): "Starting at
+    3rd level, you are difficult to pin down during a fight.
+    You can move up to half your speed as a reaction when an
+    enemy ends its turn within 5 feet of you. This movement
+    doesn't provoke opportunity attacks."
+
+    Body: ``{character_id, override?}``. Costs a reaction chip.
+    Computes `bonus_move_ft = base_speed // 2`. v1 announce-only —
+    actual half-speed-no-OA move is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Rogue character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_scout_subclass(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "scout rogue lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _rogue_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "skirmisher",
+            "label": "Skirmisher",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+
+    rogue_lv = _rogue_level_from_sheet(sheet)
+    base_speed = int(sheet.get("speed_walk") or sheet.get("speed") or 30)
+    bonus_move_ft = base_speed // 2
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🏃 Skirmisher — reaction move {bonus_move_ft} ft, no OAs"
+            ),
+            "feature_desc": (
+                f"{char.name} moves up to {bonus_move_ft} ft (half "
+                f"walking speed) as a reaction, triggered by an enemy "
+                f"ending its turn within 5 ft. This movement doesn't "
+                f"provoke OAs. (Scout Rogue Lv 3+ class feature.)"
+            ),
+            "source": "skirmisher",
+            "bonus_move_ft": bonus_move_ft,
+            "base_speed": base_speed,
+            "no_oa": True,
+            "rogue_level": rogue_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "skirmisher",
+        "bonus_move_ft": bonus_move_ft,
+        "base_speed": base_speed,
+        "no_oa": True,
         "rogue_level": rogue_lv,
     }
 
