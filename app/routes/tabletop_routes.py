@@ -37911,6 +37911,168 @@ async def use_weapon_bond(
 _SUPERIORITY_DIE_SIZES = {"d8", "d10", "d12"}
 
 
+@router.post("/api/campaign/{campaign_id}/use_feinting_attack")
+async def use_feinting_attack(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.259 — Phase E.1 Phase 3 (maneuver 9 of 16) of the
+    v2.99.193 phased completion plan. Feinting Attack (Battle
+    Master Lv 3+, PHB p.74): "You can expend one superiority die
+    and use a bonus action on your turn to feint, choosing one
+    creature within 5 feet of you as your target. You have
+    advantage on your next attack roll against that creature
+    this turn. If that attack hits, add the superiority die to
+    the attack's damage roll."
+
+    Body: ``{character_id, target_name?, override?}``. First
+    maneuver to gate on a Phase 4 BONUS chip — prior 8 maneuvers
+    are part of the Attack action and don't consume a chip.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_name = (str(body.get("target_name") or "")).strip()[:80]
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_battle_master(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "battle master fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    sd_row = None
+    sd_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "superiority-dice":
+            sd_row = dict(r)
+            sd_idx = i
+            break
+    if sd_row is None:
+        raise HTTPException(404, "No Superiority Dice resource on this sheet")
+    sd_cur = int(sd_row.get("current") or 0)
+    sd_max = int(sd_row.get("max") or 0)
+    if sd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Superiority Dice",
+        })
+
+    # Phase 4 bonus chip gate (first per-maneuver chip-consuming endpoint).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "feinting-attack",
+            "label": "Feinting Attack",
+            "strict": strict,
+        })
+
+    die_size = (sheet.get("superiority_die_size") or "d8").strip().lower()
+    if die_size not in _SUPERIORITY_DIE_SIZES:
+        die_size = "d8"
+
+    new_sd = sd_cur - 1
+    sd_row["current"] = new_sd
+    resources[sd_idx] = sd_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    try:
+        damage = dice_mod.roll(f"1{die_size}").total
+    except Exception:
+        damage = 1
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "superiority-dice",
+            "current": new_sd,
+            "max": sd_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_phrase = f" vs {target_name}" if target_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🃏 Feinting Attack — advantage{target_phrase}; "
+                f"+{damage} damage on hit"
+            ),
+            "feature_desc": (
+                f"{char.name} feints (bonus action){target_phrase}: "
+                f"advantage on the next attack roll vs target this "
+                f"turn + {damage} damage on hit. (Battle Master "
+                f"Lv 3+ maneuver; {new_sd}/{sd_max} dice remaining.)"
+            ),
+            "source": "feinting-attack",
+            "target_name": target_name,
+            "extra_damage_on_hit": damage,
+            "next_attack_advantage": True,
+            "die_size": die_size,
+            "dice_remaining": new_sd,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "feinting-attack",
+        "target_name": target_name,
+        "extra_damage_on_hit": damage,
+        "next_attack_advantage": True,
+        "die_size": die_size,
+        "dice_remaining": new_sd,
+        "over_budget": was_used,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_sweeping_attack")
 async def use_sweeping_attack(
     campaign_id: int,

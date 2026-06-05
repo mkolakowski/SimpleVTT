@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.259] - 2026-06-04 — "The Quick Misdirection" — Battle Master Feinting Attack (Phase E.1 maneuver 9 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 9 of 16).** RAW PHB p.74: bonus action; pick target within 5 ft; advantage on next attack vs target this turn + die added to damage on hit.
+**Description:** One endpoint. `/use_feinting_attack` — body `{character_id, target_name?, override?}`. **First per-maneuver endpoint to gate on a Phase 4 BONUS chip** — prior 8 maneuvers (Trip, Disarming, Menacing, Pushing, Goading, Precision, Lunging, Sweeping) are part of the Attack action and don't consume a chip. Broadcast carries `next_attack_advantage: True` + `extra_damage_on_hit`. v1 announce-only; the advantage is applied by the player at /attack time manually. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_feinting_attack` endpoint.
+- `tests/harness/test_feinting_attack.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 9 of 16.** 7 remaining: Commander's Strike, Distracting Strike, Evasive Footwork, Maneuvering Attack, Parry, Rally, Riposte.
+- **75 ships this session.**
+- **Total harness count: 1363** (was 1360 in v2.99.258).
+
+---
+
 ## [2.99.258] - 2026-06-04 — "The Wide Arc" — Battle Master Sweeping Attack (Phase E.1 maneuver 8 of 16, half of 16)
 
 **Schema version:** 66
