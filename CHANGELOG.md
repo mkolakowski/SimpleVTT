@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.308] - 2026-06-05 — "The Long Whisper" — Mastermind Rogue Master of Tactics (Lv 3+)
+
+**Schema version:** 66
+**Commit summary:** **E.3 Rogue subclass batch — Mastermind Rogue Lv 3+ Master of Tactics.** RAW XGE p.46: bonus action Help; when helping an ally attack, target can be within 30 ft of you (not 5 ft) if it can see/hear you.
+**Description:** Adds `_pc_has_mastermind_subclass` helper. One endpoint. `/use_master_of_tactics` — body `{character_id, override?}`. Validates Mastermind Rogue Lv 3+ + bonus chip. Broadcasts `feature_used` with `source: master-of-tactics` + `help_action_economy: "bonus"` + `help_target_range_ft: 30`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_master_of_tactics` endpoint.
+- `_pc_has_mastermind_subclass` helper.
+- `tests/harness/test_master_of_tactics.py` — 3 tests.
+
+### Notes
+- **E.3 Rogue batch progress:** 4 of 8 subclasses shipped (Thief, Assassin, Swashbuckler, Mastermind).
+- **124 ships this session.**
+- **Total harness count: 1527** (was 1524 in v2.99.307; +3 new tests).
+
+---
+
 ## [2.99.307] - 2026-06-05 — "The Dancer's Step" — Swashbuckler Rogue Fancy Footwork (Lv 3+)
 
 **Schema version:** 66

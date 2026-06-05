@@ -25963,6 +25963,31 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_mastermind_subclass(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.308 — RAW Mastermind features (Rogue, XGE p.46):
+    Master of Intrigue + Master of Tactics (Lv 3), Insightful
+    Manipulator (Lv 9), Misdirection (Lv 13), Soul of Deceit
+    (Lv 17).
+
+    Returns True when the PC is a Rogue with subclass slug
+    containing "mastermind" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "rogue":
+        has_rogue = any(
+            (entry.get("class") or "").strip().lower() == "rogue"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_rogue:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "mastermind" not in subclass:
+        return False
+    return _rogue_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_swashbuckler_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.307 — RAW Swashbuckler features (Rogue, XGE p.47):
     Fancy Footwork + Rakish Audacity (Lv 3), Panache (Lv 9),
@@ -46706,6 +46731,114 @@ async def use_fancy_footwork(
         "feature": "fancy-footwork",
         "target_combatant_id": target_combatant_id,
         "oa_suppressed_until": "end_of_turn",
+        "rogue_level": rogue_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_master_of_tactics")
+async def use_master_of_tactics(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.308 — Phase E.3 Rogue subclass batch (Mastermind
+    Rogue Lv 3+) of the v2.99.193 phased completion plan.
+    Master of Tactics (Mastermind Rogue Lv 3+, XGE p.46):
+    "Starting at 3rd level, you can use the Help action as a
+    bonus action. Additionally, when you use the Help action
+    to aid an ally in attacking a creature, the target of
+    that attack can be within 30 feet of you, rather than 5
+    feet of you, if the target can see or hear you."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip.
+    v1 announce-only — the actual Help action advantage on
+    ally's next attack is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Rogue character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_mastermind_subclass(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "mastermind rogue lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _rogue_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "master-of-tactics",
+            "label": "Master of Tactics",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    rogue_lv = _rogue_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🎯 Master of Tactics — bonus Help, 30 ft range"
+            ),
+            "feature_desc": (
+                f"{char.name} uses the Help action as a bonus "
+                f"action. When helping an ally attack a creature, "
+                f"the target can be within 30 ft (not 5 ft) of "
+                f"{char.name}, provided the target can see or hear "
+                f"them. (Mastermind Rogue Lv 3+ class feature.)"
+            ),
+            "source": "master-of-tactics",
+            "help_action_economy": "bonus",
+            "help_target_range_ft": 30,
+            "rogue_level": rogue_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "master-of-tactics",
+        "help_action_economy": "bonus",
+        "help_target_range_ft": 30,
         "rogue_level": rogue_lv,
     }
 

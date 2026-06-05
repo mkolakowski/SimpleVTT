@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1524 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.307, 2026-06-05).
+**Total tests:** 1527 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.308, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -782,6 +782,15 @@ v2.99.307 — Swashbuckler Rogue (XGE p.47) Fancy Footwork Lv 3+ (E.3 Rogue batc
 | `test_use_ff_with_target` | Optional `target_combatant_id` passes through. |
 | `test_use_ff_wrong_subclass` | Default Pip (Thief) → 409. |
 | `test_use_ff_level_gate` | Swashbuckler at Lv 2 → 409. |
+
+### `test_master_of_tactics.py`
+v2.99.308 — Mastermind Rogue (XGE p.46) Master of Tactics Lv 3+ (E.3 Rogue batch). Bonus action Help; when helping an ally attack, target can be within 30 ft of you (not 5 ft) if it can see/hear you. Costs bonus chip. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_mt_happy_lv7` | PATCH Pip → Mastermind Lv 7 → `help_action_economy == "bonus"`, `help_target_range_ft == 30`, broadcast (source `master-of-tactics`). |
+| `test_use_mt_wrong_subclass` | Default Pip (Thief) → 409. |
+| `test_use_mt_level_gate` | Mastermind at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
