@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.254] - 2026-06-04 — "The Shoving Strike" — Battle Master Pushing Attack (Phase E.1 maneuver 4 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 4 of 16).** RAW PHB p.74: on hit vs Large-or-smaller, expend 1 superiority die; +die damage and target Str save DC 8 + prof + max(STR, DEX) or be pushed up to 15 ft away.
+**Description:** One endpoint mirroring Trip / Disarming / Menacing. `/use_pushing_attack` — body `{character_id, override?}`. Save ability is STR; broadcast carries `push_max_ft: 15`. Size-gate (Large-or-smaller) is GM-tracked. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_pushing_attack` endpoint.
+- `tests/harness/test_pushing_attack.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 4 of 16** (Trip + Disarming + Menacing + Pushing). 12 remaining.
+- **70 ships this session.**
+- **Total harness count: 1348** (was 1345 in v2.99.253).
+
+---
+
 ## [2.99.253] - 2026-06-04 — "The Dread Riposte" — Battle Master Menacing Attack (Phase E.1 maneuver 3 of 16)
 
 **Schema version:** 66
