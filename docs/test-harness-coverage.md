@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1387 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.267, 2026-06-04).
+**Total tests:** 1391 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.268, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -620,6 +620,16 @@ v2.99.234 — Light Domain Cleric (PHB p.60) Warding Flare reaction (Phase H.1 f
 | `test_use_warding_flare_out_of_uses` | `warding-flare.current = 0` → 409 `out_of_uses`. |
 | `test_use_warding_flare_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 | `test_use_warding_flare_no_resource` | Light Cleric without the `warding-flare` resource entry → 404. |
+
+### `test_eldritch_strike.py`
+v2.99.268 — Eldritch Knight Fighter (PHB p.74) Eldritch Strike buff install (Phase E.2 Phase 3). Lv 10+; on hit, target has disadvantage on next save vs an EK spell before end of next turn.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_es_happy` | Lv 10 EK Garrik marks Pip → `target_char_id == pip.id`, `buff_installed: True`, broadcast (source `eldritch-strike`). |
+| `test_use_es_wrong_subclass` | Default Garrik (Champion) → 409 `wrong_subclass_or_level`. |
+| `test_use_es_level_gate` | EK at Lv 9 → 409. |
+| `test_use_es_target_not_in_battle` | Unknown target → 404 `target_not_in_battle`. |
 
 ### `test_war_magic.py`
 v2.99.267 — Eldritch Knight Fighter (PHB p.74) War Magic announce (Phase E.2 Phase 2). Lv 7+; after casting a cantrip with action, make one weapon attack as a bonus action.

@@ -37739,6 +37739,151 @@ async def use_spell_bombardment(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_eldritch_strike")
+async def use_eldritch_strike(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.268 — Phase E.2 Phase 3 of the v2.99.193 phased
+    completion plan. Eldritch Strike (Eldritch Knight Lv 10+,
+    PHB p.74): "When you hit a creature with a weapon attack,
+    that creature has disadvantage on the next saving throw it
+    makes against a spell you cast before the end of your next
+    turn."
+
+    Body: ``{character_id, target_combatant_id, override?}``.
+
+    Validates Eldritch Knight Lv 10+ + target in active battle.
+    Installs `eldritch-strike-target` buff on the target with
+    `effects.save_disadvantage_against_caster_id: <ek_id>`
+    (10-round duration). v1 ships the buff install + announce;
+    the consumer (save-roll site reading the flag + dropping
+    the buff after one consume) is filed for follow-up.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_knight(sheet, 10):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "eldritch knight fighter lv 10+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    target_char_id = None
+    target_name = ""
+    for c in (state.get("combatants") or []):
+        if c.get("id") == target_combatant_id:
+            target_char_id = c.get("char_id")
+            target_name = c.get("name") or ""
+            break
+    if target_char_id is None:
+        # Allow NPC combatants (char_id is None) — install on the
+        # combatant key directly. Re-locate.
+        found = False
+        for c in (state.get("combatants") or []):
+            if c.get("id") == target_combatant_id:
+                found = True
+                break
+        if not found:
+            return JSONResponse(status_code=404, content={
+                "error": "target_not_in_battle",
+                "target_combatant_id": target_combatant_id,
+            })
+
+    es_buff = {
+        "key": "eldritch-strike-target",
+        "name": f"Eldritch Strike — disadvantage on save vs {char.name}'s spell",
+        "icon": "🗡️",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "eldritch-strike",
+        "source_char_id": char.id,
+        "effects": {
+            "save_disadvantage_against_caster_id": char.id,
+            "consume_on_first_save": True,
+        },
+        "desc": (
+            f"Disadvantage on the next saving throw vs a spell "
+            f"cast by {char.name} before end of {char.name}'s "
+            f"next turn."
+        ),
+    }
+    if target_char_id is not None:
+        await _install_buff(campaign_id, int(target_char_id), es_buff)
+        _mirror_buffs_to_sheet(
+            db, int(target_char_id),
+            _get_buffs(campaign_id, int(target_char_id)),
+        )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🗡️ Eldritch Strike — {target_name or 'target'} "
+                f"disadvantage on next save"
+            ),
+            "feature_desc": (
+                f"{char.name} marks {target_name or 'the target'} "
+                f"with Eldritch Strike: disadvantage on the next "
+                f"saving throw vs a spell {char.name} casts before "
+                f"end of next turn. (Eldritch Knight Lv 10+ class "
+                f"feature.)"
+            ),
+            "source": "eldritch-strike",
+            "target_combatant_id": target_combatant_id,
+            "target_char_id": target_char_id,
+            "target_name": target_name,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "eldritch-strike",
+        "target_combatant_id": target_combatant_id,
+        "target_char_id": target_char_id,
+        "target_name": target_name,
+        "buff_installed": target_char_id is not None,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_war_magic")
 async def use_war_magic(
     campaign_id: int,

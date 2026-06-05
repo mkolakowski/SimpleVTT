@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.268] - 2026-06-04 — "The Spell-Marked Foe" — Eldritch Knight Eldritch Strike (Phase E.2 Phase 3)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.2 Phase 3 of the v2.99.193 phased completion plan.** RAW PHB p.74: Eldritch Knight Lv 10+ — on hit, target has disadvantage on the next saving throw vs a spell you cast before the end of your next turn.
+**Description:** One endpoint. `/use_eldritch_strike` — body `{character_id, target_combatant_id, override?}`. Validates Eldritch Knight Lv 10+ + target in active battle. Installs `eldritch-strike-target` buff on the target with `effects.save_disadvantage_against_caster_id: <ek_id>` + `consume_on_first_save: True` (10-round duration). Broadcasts. v1 ships the buff install + announce; the consumer (save-roll site reading the flag + dropping the buff after one consume) is filed. Garrik Lv 9 PATCH'd to Lv 10 for the test. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_eldritch_strike` endpoint.
+- `tests/harness/test_eldritch_strike.py` — 4 tests.
+
+### Notes
+- **Phase E.2 progress: 3 of 4 phases.** Phase 1 (Weapon Bond v2.99.232) + Phase 2 (War Magic v2.99.267) + Phase 3 (Eldritch Strike, this). Remaining: Phase 4 Arcane Charge + Improved War Magic (Lv 15 + 18).
+- **84 ships this session.**
+- **Total harness count: 1391** (was 1387 in v2.99.267).
+
+---
+
 ## [2.99.267] - 2026-06-04 — "The Cantrip's Echo" — Eldritch Knight War Magic (Phase E.2 Phase 2)
 
 **Schema version:** 66
