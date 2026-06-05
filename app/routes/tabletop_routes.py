@@ -26792,6 +26792,32 @@ def _pc_has_fathomless_warlock(sheet: "dict | None", min_level: int) -> bool:
     return _warlock_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_genie_warlock(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.355 — RAW The Genie (Warlock patron, TCE p.71):
+    Genie's Vessel + Genie's Wrath (Lv 1), Elemental Gift (Lv 6),
+    Sanctuary Vessel (Lv 10), Limited Wish (Lv 14). Closes the
+    Warlock patron batch — Genie was the last untouched patron.
+
+    Returns True when the PC is a Warlock with subclass slug
+    containing "genie" (e.g. "The Genie") + meets `min_level`
+    (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "warlock":
+        has_warlock = any(
+            (entry.get("class") or "").strip().lower() == "warlock"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "genie" not in subclass:
+        return False
+    return _warlock_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -50201,6 +50227,127 @@ async def use_tentacle_of_the_deeps(
         "cold_damage": cold_damage,
         "damage_dice": f"{dice_count}d8",
         "speed_reduction_ft": 10,
+        "warlock_level": warlock_lv,
+    }
+
+
+_GENIE_KIND_DAMAGE = {
+    "dao": "bludgeoning",
+    "djinni": "thunder",
+    "efreeti": "fire",
+    "marid": "cold",
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_genies_wrath")
+async def use_genies_wrath(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.355 — Phase G Warlock patron subclass batch ship #7
+    (The Genie Lv 1+, TCE) of the v2.99.193 phased completion plan
+    — CLOSES the Warlock patron batch (Genie was the last
+    untouched patron). Genie's Wrath (The Genie Lv 1+, TCE p.71):
+    "Once during each of your turns when you hit with an attack
+    roll, you can deal extra damage to the target equal to your
+    proficiency bonus. The type of this damage is determined by
+    your patron's kind: bludgeoning (dao), thunder (djinni), fire
+    (efreeti), or cold (marid)."
+
+    Body: ``{character_id, genie_kind?}``. ``genie_kind`` is one of
+    dao / djinni / efreeti / marid (defaults to the sheet's
+    ``genie_kind``, else "djinni"). No action cost (a once-per-turn
+    rider on a hit). Computes the +PB bonus damage + its type
+    server-side. v1 announce-only — the once-per-turn limit + the
+    actual on-hit damage application stay GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_genie_warlock(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "the genie warlock lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _warlock_level_from_sheet(sheet),
+        })
+
+    genie_kind = (
+        body.get("genie_kind")
+        or sheet.get("genie_kind")
+        or "djinni"
+    )
+    genie_kind = str(genie_kind).strip().lower()
+    if genie_kind not in _GENIE_KIND_DAMAGE:
+        raise HTTPException(
+            400, "genie_kind must be dao, djinni, efreeti, or marid")
+    damage_type = _GENIE_KIND_DAMAGE[genie_kind]
+
+    warlock_lv = _warlock_level_from_sheet(sheet)
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, warlock_lv) - 1) // 4
+    bonus_damage = pb
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🧞 Genie's Wrath — +{bonus_damage} {damage_type} "
+                f"({genie_kind})"
+            ),
+            "feature_desc": (
+                f"{char.name} channels the vessel's element: once "
+                f"this turn on a hit, deal +{bonus_damage} "
+                f"{damage_type} damage (proficiency bonus; "
+                f"{genie_kind} genie kind). (The Genie Warlock "
+                f"Lv 1+ TCE class feature.)"
+            ),
+            "source": "genies-wrath",
+            "genie_kind": genie_kind,
+            "damage_type": damage_type,
+            "bonus_damage": bonus_damage,
+            "warlock_level": warlock_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "genies-wrath",
+        "genie_kind": genie_kind,
+        "damage_type": damage_type,
+        "bonus_damage": bonus_damage,
         "warlock_level": warlock_lv,
     }
 

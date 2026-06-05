@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.355] - 2026-06-05 — "The Vessel's Wrath" — The Genie Warlock Genie's Wrath (Lv 1+, TCE) — 🎉 Warlock patron batch CLOSE 7/7
+
+**Schema version:** 66
+**Commit summary:** **Warlock patron subclass batch ship #7 — The Genie Lv 1+ Genie's Wrath (TCE) — CLOSES the Warlock patron batch (all 7 patrons now have ≥1 first-feature ship).** Genie was the last untouched patron. RAW TCE p.71: once per turn on a hit, deal extra damage = your proficiency bonus, typed by genie kind — bludgeoning (dao), thunder (djinni), fire (efreeti), cold (marid).
+**Description:** Adds `_pc_has_genie_warlock` helper + a `_GENIE_KIND_DAMAGE` map. One endpoint. `/use_genies_wrath` — body `{character_id, genie_kind?}` (genie_kind one of dao/djinni/efreeti/marid; defaults to the sheet's `genie_kind`, else "djinni"). Validates The Genie Warlock Lv 1+. No action cost (a once-per-turn rider on a hit). Computes the +PB bonus damage + its type **server-side**. Broadcasts `feature_used` with `source: genies-wrath`, `genie_kind`, `damage_type`, `bonus_damage`. v1 announce-only — the once-per-turn limit + on-hit damage application stay GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_genies_wrath` endpoint.
+- `_pc_has_genie_warlock` helper + `_GENIE_KIND_DAMAGE` map.
+- `tests/harness/test_genies_wrath.py` — 4 tests.
+
+### Notes
+- **🎉 Warlock patron batch ✅ CLOSED — 7/7.** All seven Warlock Otherworldly Patrons now have a Lv 1 first-feature shipped: The Fiend (Dark One's Blessing), The Archfey (Fey Presence), The Hexblade (Hexblade's Curse), The Great Old One (Awakened Mind), The Celestial (Healing Light), The Fathomless (Tentacle of the Deeps), The Genie (Genie's Wrath — this ship).
+- **171 ships this session.**
+- **Total harness count: 1702** (was 1698 in v2.99.354; +4 new tests).
+
+---
+
 ## [2.99.354] - 2026-06-05 — "The Grasping Deep" — The Fathomless Warlock Tentacle of the Deeps (Lv 1+, TCE) — 🔮 Warlock patron batch
 
 **Schema version:** 66
