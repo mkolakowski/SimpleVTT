@@ -25985,6 +25985,32 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_eloquence_bard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.324 — RAW Eloquence College Bard (Bard, TCE p.28):
+    Silver Tongue + Unsettling Words (Lv 3), Unfailing
+    Inspiration (Lv 6), Universal Speech (Lv 6 too — actually
+    that's Lv 6 + Universal Speech), Infectious Inspiration
+    (Lv 14).
+
+    Returns True when the PC is a Bard with subclass slug
+    containing "eloquence" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "bard":
+        has_bard = any(
+            (entry.get("class") or "").strip().lower() == "bard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_bard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "eloquence" not in subclass:
+        return False
+    return _bard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_swords_bard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.323 — RAW Swords College Bard (Bard, XGE p.16):
     Bonus Proficiencies + Fighting Style + Blade Flourish (Lv 3),
@@ -49062,6 +49088,97 @@ async def use_blade_flourish(
         "target_combatant_id": target_combatant_id,
         "walking_speed_bonus_ft": walking_speed_bonus_ft,
         "consumed_bardic_inspiration": True,
+        "bard_level": bard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_silver_tongue")
+async def use_silver_tongue(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.324 — Phase F.1 Bard subclass batch (Eloquence
+    College Bard Lv 3+, TCE) of the v2.99.193 phased completion
+    plan. Silver Tongue (Eloquence College Bard Lv 3+, TCE
+    p.28): "When you make a Charisma (Persuasion) or Charisma
+    (Deception) check, you can treat a d20 roll of 9 or lower
+    as a 10."
+
+    Body: ``{character_id, override?}``. No chip — passive
+    permanent feature. v1 announce-only — the d20 minimum-10
+    substitution is GM-tracked on the Bard's Persuasion /
+    Deception checks.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Bard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eloquence_bard(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "eloquence bard lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _bard_level_from_sheet(sheet),
+        })
+
+    bard_lv = _bard_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "💬 Silver Tongue — Persuasion/Deception d20 ≥ 10"
+            ),
+            "feature_desc": (
+                f"{char.name}'s Cha (Persuasion) and Cha (Deception) "
+                f"checks treat a d20 roll of 9 or lower as a 10. "
+                f"(Eloquence College Bard Lv 3+ TCE class feature; "
+                f"passive permanent.)"
+            ),
+            "source": "silver-tongue",
+            "minimum_d20_value": 10,
+            "applies_to": ["persuasion", "deception"],
+            "ability": "CHA",
+            "bard_level": bard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "silver-tongue",
+        "minimum_d20_value": 10,
+        "applies_to": ["persuasion", "deception"],
+        "ability": "CHA",
         "bard_level": bard_lv,
     }
 

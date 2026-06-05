@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.324] - 2026-06-05 — "The Floor of Ten" — Eloquence College Bard Silver Tongue (Lv 3+, TCE)
+
+**Schema version:** 66
+**Commit summary:** **F.1 Bard subclass batch — Eloquence College Bard Lv 3+ Silver Tongue (TCE).** Sixth Bard subclass shipped. RAW TCE p.28: Cha (Persuasion) and Cha (Deception) checks treat a d20 roll of 9 or lower as a 10.
+**Description:** Adds `_pc_has_eloquence_bard` helper. One endpoint. `/use_silver_tongue` — body `{character_id, override?}`. Validates Eloquence Bard Lv 3+. No chip — passive permanent. Broadcasts `feature_used` with `source: silver-tongue` + `minimum_d20_value: 10` + `applies_to: ["persuasion", "deception"]`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_silver_tongue` endpoint.
+- `_pc_has_eloquence_bard` helper.
+- `tests/harness/test_silver_tongue.py` — 3 tests.
+
+### Notes
+- **F.1 Bard batch progress:** 6 of ~8 subclasses shipped (Lore, Valor, Glamour, Whispers, Swords, Eloquence). Remaining: Spirits (TCE), Creation (TCE).
+- **140 ships this session.**
+- **Total harness count: 1594** (was 1591 in v2.99.323; +3 new tests).
+
+---
+
 ## [2.99.323] - 2026-06-05 — "The Dancing Edge" — Swords College Bard Blade Flourish (Lv 3+, XGE)
 
 **Schema version:** 66
