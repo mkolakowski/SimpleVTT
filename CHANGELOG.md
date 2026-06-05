@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.277] - 2026-06-04 — "Four Hands, One Power" — Grave + Peace Cleric Potent Spellcasting (H.1 depth pivot)
+
+**Schema version:** 66
+**Commit summary:** **H.1 depth pivot — extends Potent Spellcasting to Grave + Peace domains.** User picker said "Tempest Domain Lv 8 Divine Strike (thunder)" but Tempest Divine Strike is ALREADY wired auto-applied at the `/attack` damage-uplift path (v2.60.0 + v2.99.94 deep-wire via `_DIVINE_STRIKE_BY_DOMAIN` at line 21817). Pivoting transparently to the analogous H.1 depth gap: Grave + Peace domains both have Potent Spellcasting at Lv 8 per RAW (XGE p.19 / TCE p.40) — extending the v2.99.270 endpoint mirrors the v2.99.271 Knowledge extension.
+**Description:** Single-line gate extension on the existing `/use_potent_spellcasting` endpoint to add Grave + Peace alongside Light + Knowledge. Two new test cases (`test_use_ps_grave_lv8` + `test_use_ps_peace_lv8`) cover the additions; existing tests untouched.
+
+### Changed
+- `/use_potent_spellcasting` validation gate extended from `Light | Knowledge` to `Light | Knowledge | Grave | Peace`. 409 error string updated.
+- `tests/harness/test_potent_spellcasting.py` — added Grave + Peace happy paths.
+
+### Notes
+- **Tempest pivot explained.** Tempest's Divine Strike (thunder, +1d8 / +2d8 at Lv 14) is already wired into the `/attack` damage-uplift pipeline at `app/routes/tabletop_routes.py:21817` via `_DIVINE_STRIKE_BY_DOMAIN`. Same goes for the other 6 Divine-Strike-bearing domains (Life ✅, Tempest ✅, Trickery ✅, War ✅, Death ✅, Nature ✅, Forge ✅, Twilight ✅). Light + Knowledge + Grave + Peace have Potent Spellcasting at Lv 8 instead — those 4 are now all covered by the v2.99.270 endpoint via the v2.99.271 + v2.99.277 gate extensions.
+- **Order Domain Divine Strike gap.** Order Domain Lv 8 RAW (XGE p.39) has Divine Strike (psychic), which is NOT in `_DIVINE_STRIKE_BY_DOMAIN`. Filed as a future v2.99.x ship: add `"order": "psychic"` to the map. Same shape as the existing entries — 1-line ship.
+- **H.1 depth Lv 8 coverage** after this commit: 8 of 11 domains have their Lv 8 feature wired (Light + Knowledge + Grave + Peace via Potent Spellcasting endpoint; Life + Tempest + Trickery + War + Death + Nature + Forge + Twilight via the auto-applied Divine Strike). **Only Order remains gap; Arcana, Twilight already done.** (Plus the 11th domain Order needs the 1-line Divine Strike map addition.)
+- **93 ships this session.**
+- **Total harness count: 1420** (was 1418 in v2.99.276; +2 new tests).
+
+---
+
 ## [2.99.276] - 2026-06-04 — "The Heroic Stride" — Glory Paladin Peerless Athlete CD (H.2 depth — closes Phase 2 batch)
 
 **Schema version:** 66

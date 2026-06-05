@@ -146,3 +146,53 @@ async def test_use_ps_knowledge_lv8(
             {"subclass": "Life Domain"},
             class_slug="cleric",
         )
+
+
+async def test_use_ps_grave_lv8(
+    gm_client, roster,
+):
+    """v2.99.277 — Grave Domain Tavik Lv 8 also works (XGE p.19)."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _patch_sheet(
+        gm_client, tavik["id"],
+        {"subclass": "Grave Domain"},
+        class_slug="cleric",
+    )
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_potent_spellcasting",
+            json={"character_id": tavik["id"]},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["wis_mod"] == 3
+    finally:
+        await _patch_sheet(
+            gm_client, tavik["id"],
+            {"subclass": "Life Domain"},
+            class_slug="cleric",
+        )
+
+
+async def test_use_ps_peace_lv8(
+    gm_client, roster,
+):
+    """v2.99.277 — Peace Domain Tavik Lv 8 also works (TCE p.40)."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _patch_sheet(
+        gm_client, tavik["id"],
+        {"subclass": "Peace Domain"},
+        class_slug="cleric",
+    )
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_potent_spellcasting",
+            json={"character_id": tavik["id"]},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["wis_mod"] == 3
+    finally:
+        await _patch_sheet(
+            gm_client, tavik["id"],
+            {"subclass": "Life Domain"},
+            class_slug="cleric",
+        )
