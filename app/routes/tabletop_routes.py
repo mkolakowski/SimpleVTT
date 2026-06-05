@@ -45080,6 +45080,122 @@ async def use_emissary_of_redemption(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_corona_of_light")
+async def use_corona_of_light(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.293 — Phase H.1 deeper (Light Domain Cleric Lv 17+)
+    of the v2.99.193 phased completion plan. Opens the H.1
+    Lv 17 batch. Corona of Light (Light Domain Cleric Lv 17+,
+    PHB p.61): "At 17th level, you can use your action to
+    activate an aura of sunlight that lasts for 1 minute or
+    until you dismiss it using another action. You emit
+    bright light in a 60-foot radius and dim light 30 feet
+    beyond that. Your enemies in the bright light have
+    disadvantage on saving throws against any spell that
+    deals fire or radiant damage."
+
+    Body: ``{character_id, override?}``. Costs an action chip.
+    No per-rest gate — at will per RAW. v1 announce-only —
+    bright light + dim light + disadvantage-on-fire/radiant-
+    save aura are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_light_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "light domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "corona-of-light",
+            "label": "Corona of Light",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "☀️ Corona of Light — 60 ft sunlight, 1 min"
+            ),
+            "feature_desc": (
+                f"{char.name} emits an aura of sunlight: bright "
+                f"light 60 ft + dim 30 ft beyond. Enemies in the "
+                f"bright light have disadvantage on saves vs "
+                f"{char.name}'s fire and radiant spells. Lasts 1 "
+                f"min or until dismissed with another action. "
+                f"(Light Domain Cleric Lv 17+ class feature.)"
+            ),
+            "source": "corona-of-light",
+            "duration_minutes": 1,
+            "bright_light_radius_ft": 60,
+            "dim_light_radius_ft": 90,
+            "save_disadvantage_types": ["fire", "radiant"],
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "corona-of-light",
+        "duration_minutes": 1,
+        "bright_light_radius_ft": 60,
+        "dim_light_radius_ft": 90,
+        "save_disadvantage_types": ["fire", "radiant"],
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

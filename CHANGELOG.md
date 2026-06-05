@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.293] - 2026-06-05 — "The Sunlit Stand" — Light Domain Cleric Corona of Light (H.1 deeper, Lv 17 opener)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Light Domain Cleric Lv 17+ Corona of Light. Opens the H.1 Lv 17 batch (1/11 domains).** RAW PHB p.61: action to activate 60 ft bright sunlight + 30 ft dim beyond for 1 min. Enemies in bright light have disadvantage on saves vs your fire and radiant spells.
+**Description:** One endpoint. `/use_corona_of_light` — body `{character_id, override?}`. Validates Light Domain Cleric Lv 17+ + action chip. Broadcasts `feature_used` with `source: corona-of-light`. v1 announce-only — bright light + dim light + disadvantage-on-fire/radiant-save aura are GM-tracked. No per-rest gate (RAW at will). One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_corona_of_light` endpoint.
+- `tests/harness/test_corona_of_light.py` — 3 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 1 of 11 domains shipped at Lv 17 (Light). Remaining: Life (Supreme Healing), Tempest (Stormborn), Trickery (Improved Duplicity), War (Avatar of Battle), Knowledge (Visions of the Past), Nature (Master of Nature), Death (Improved Reaper), Forge (Saint of Forge and Fire), Grave (Keeper of Souls), Twilight (already done v2.49.x? — check), Order (Order's Wrath / Order's Demand depending on RAW edition), Arcana (Arcane Mastery), Peace (Expansive Bond).
+- **109 ships this session.**
+- **Total harness count: 1476** (was 1473 in v2.99.292; +3 new tests).
+
+---
+
 ## [2.99.292] - 2026-06-05 — "Avatar of Peace" — Redemption Paladin Emissary of Redemption (H.2 deeper, Lv 20 — CLOSES the H.2 Lv 20 batch)
 
 **Schema version:** 66
