@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.321] - 2026-06-05 — "The Glamoured Stride" — Glamour College Bard Mantle of Inspiration (Lv 3+, XGE)
+
+**Schema version:** 66
+**Commit summary:** **F.1 Bard subclass batch — Glamour College Bard Lv 3+ Mantle of Inspiration (XGE).** Third Bard subclass shipped. RAW XGE p.16: bonus action + 1 BI use → up to CHA-mod (min 1) allies within 60 ft each gain 5+bard_lv temp HP + immediate reaction-move at full speed without provoking OAs.
+**Description:** Adds `_pc_has_glamour_bard` helper. One endpoint. `/use_mantle_of_inspiration` — body `{character_id, override?}`. Validates Glamour Bard Lv 3+ + bonus chip. Computes `max_targets = max(1, CHA_mod)` + `temp_hp_per_target = 5 + bard_lv`. Broadcasts. v1 announce-only — BI decrement via existing flow. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_mantle_of_inspiration` endpoint.
+- `_pc_has_glamour_bard` helper.
+- `tests/harness/test_mantle_of_inspiration.py` — 3 tests.
+
+### Notes
+- **F.1 Bard batch progress:** 3 of ~8 subclasses shipped (Lore, Valor, Glamour).
+- **137 ships this session.**
+- **Total harness count: 1581** (was 1578 in v2.99.320; +3 new tests).
+
+---
+
 ## [2.99.320] - 2026-06-05 — "The Marching Tune" — Valor College Bard Combat Inspiration (Lv 3+) — F.1 Bard subclass batch opener (pivot)
 
 **Schema version:** 66
