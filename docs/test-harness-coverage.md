@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1573 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.319, 2026-06-05).
+**Total tests:** 1578 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.320, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -903,6 +903,17 @@ v2.99.319 — Dreams Druid (XGE p.23) Balm of the Summer Court Lv 2+ (E.4 Druid 
 | `test_use_bsc_dice_clamp` | dice_spent 99 → clamped to half-druid-level 2. |
 | `test_use_bsc_wrong_subclass` | Default Mira (Moon) → 409. |
 | `test_use_bsc_level_gate` | Dreams at Lv 1 → 409. |
+
+### `test_combat_inspiration.py`
+v2.99.320 — Valor College Bard (PHB p.55) Combat Inspiration Lv 3+ (F.1 Bard subclass batch opener — pivoted after Lore Cutting Words was found already wired). A creature with a BI die from you can roll it and add to weapon damage OR (reaction) AC. Die scales d6/d8/d10/d12 at Lv 3/5/10/15. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ci_happy_lv6` | PATCH Lyra → Valor Lv 6 default damage → `die_size == 8`, `die_expression == "1d8"`, broadcast (source `combat-inspiration`). |
+| `test_use_ci_mode_ac` | Mode "ac" passes through. |
+| `test_use_ci_default_mode` | Missing mode → "damage". |
+| `test_use_ci_wrong_subclass` | Default Lyra (Lore) → 409. |
+| `test_use_ci_level_gate` | Valor at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

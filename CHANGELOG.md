@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.320] - 2026-06-05 — "The Marching Tune" — Valor College Bard Combat Inspiration (Lv 3+) — F.1 Bard subclass batch opener (pivot)
+
+**Schema version:** 66
+**Commit summary:** **F.1 Bard subclass batch opener — Valor College Bard Lv 3+ Combat Inspiration.** Pivoted to Valor after discovering Lore Cutting Words was already shipped in v2.99.17x. RAW PHB p.55: a creature with a BI die from you can roll the die and add it to a weapon damage roll OR (reaction) to AC vs an attack.
+**Description:** Adds `_pc_has_valor_bard` helper. One endpoint. `/use_combat_inspiration` — body `{character_id, mode?, override?}`. Mode "damage" (default) or "ac". Validates Valor Bard Lv 3+. No chip — endpoint declares intent. Computes die size from BI table (d6/d8/d10/d12 at Lv 3/5/10/15). Broadcasts. v1 announce-only. One new harness test file with 5 tests.
+
+### Added
+- `/api/campaign/{cid}/use_combat_inspiration` endpoint.
+- `_pc_has_valor_bard` helper.
+- `tests/harness/test_combat_inspiration.py` — 5 tests.
+
+### Notes
+- **F.1 Bard subclass batch opened — Valor is the *new* subclass ship; Lore Cutting Words was already covered in v2.99.17x.** 2 of ~8 Bard subclasses shipped (Lore, Valor).
+- **Audit lesson reaffirmed:** before shipping a Lore/Cleric/Druid Lv 3 feature, grep for the endpoint slug in `tabletop_routes.py` to catch duplicates. Same pattern as v2.99.306's Fast Hands pivot.
+- **136 ships this session.**
+- **Total harness count: 1578** (was 1573 in v2.99.319; +5 new tests).
+
+---
+
 ## [2.99.319] - 2026-06-05 — "Summer's Mercy" — Dreams Druid Balm of the Summer Court (Lv 2+, XGE)
 
 **Schema version:** 66
