@@ -37911,6 +37911,152 @@ async def use_weapon_bond(
 _SUPERIORITY_DIE_SIZES = {"d8", "d10", "d12"}
 
 
+@router.post("/api/campaign/{campaign_id}/use_maneuvering_attack")
+async def use_maneuvering_attack(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.265 — Phase E.1 Phase 3 (maneuver 15 of 16) of the
+    v2.99.193 phased completion plan. Maneuvering Attack (Battle
+    Master Lv 3+, PHB p.74): "When you hit a creature with a
+    weapon attack, you can expend one superiority die to
+    maneuver one of your comrades into a more advantageous
+    position. You add the superiority die to the attack's
+    damage roll, and you choose a friendly creature who can see
+    or hear you. That creature can use its reaction to move up
+    to half its speed without provoking opportunity attacks
+    from the target of your attack."
+
+    Body: ``{character_id, ally_name?, target_name?, override?}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    ally_name = (str(body.get("ally_name") or "")).strip()[:80]
+    target_name = (str(body.get("target_name") or "")).strip()[:80]
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_battle_master(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "battle master fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    sd_row = None
+    sd_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "superiority-dice":
+            sd_row = dict(r)
+            sd_idx = i
+            break
+    if sd_row is None:
+        raise HTTPException(404, "No Superiority Dice resource on this sheet")
+    sd_cur = int(sd_row.get("current") or 0)
+    sd_max = int(sd_row.get("max") or 0)
+    if sd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Superiority Dice",
+        })
+
+    die_size = (sheet.get("superiority_die_size") or "d8").strip().lower()
+    if die_size not in _SUPERIORITY_DIE_SIZES:
+        die_size = "d8"
+
+    new_sd = sd_cur - 1
+    sd_row["current"] = new_sd
+    resources[sd_idx] = sd_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    try:
+        extra = dice_mod.roll(f"1{die_size}").total
+    except Exception:
+        extra = 1
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "superiority-dice",
+            "current": new_sd,
+            "max": sd_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    ally_phrase = f" → {ally_name}" if ally_name else " → ally"
+    target_phrase = f" vs {target_name}" if target_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🏃 Maneuvering Attack — +{extra} damage; "
+                f"free half-speed{ally_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} expends a superiority die: +{extra} "
+                f"damage on the hit{target_phrase} + "
+                f"{ally_name or 'a chosen ally'} can use their "
+                f"reaction to move up to half speed without "
+                f"provoking OAs from the target. (Battle Master "
+                f"Lv 3+ maneuver; {new_sd}/{sd_max} dice remaining.)"
+            ),
+            "source": "maneuvering-attack",
+            "extra_damage": extra,
+            "ally_name": ally_name,
+            "target_name": target_name,
+            "die_size": die_size,
+            "dice_remaining": new_sd,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "maneuvering-attack",
+        "extra_damage": extra,
+        "ally_name": ally_name,
+        "target_name": target_name,
+        "die_size": die_size,
+        "dice_remaining": new_sd,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_distracting_strike")
 async def use_distracting_strike(
     campaign_id: int,

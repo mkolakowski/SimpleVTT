@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.265] - 2026-06-04 — "The Tactical Nudge" — Battle Master Maneuvering Attack (Phase E.1 maneuver 15 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 15 of 16).** RAW PHB p.74: on hit, +die damage; chosen ally can use reaction to move half speed without provoking OAs from the target.
+**Description:** One endpoint. `/use_maneuvering_attack` — body `{character_id, ally_name?, target_name?, override?}`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_maneuvering_attack` endpoint.
+- `tests/harness/test_maneuvering_attack.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 15 of 16.** One remaining: Commander's Strike — the next commit closes Phase E.1's per-maneuver batch.
+- **81 ships this session.**
+- **Total harness count: 1381** (was 1378 in v2.99.264).
+
+---
+
 ## [2.99.264] - 2026-06-04 — "The Telltale Flinch" — Battle Master Distracting Strike (Phase E.1 maneuver 14 of 16)
 
 **Schema version:** 66
