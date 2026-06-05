@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.292] - 2026-06-05 — "Avatar of Peace" — Redemption Paladin Emissary of Redemption (H.2 deeper, Lv 20 — CLOSES the H.2 Lv 20 batch)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Redemption Paladin Lv 20 capstone. CLOSES the H.2 Lv 20 batch (5/5 oaths). 🎉 H.2 batch — Phase 1 (first-feature) + Phase 2 (sibling CD) + Phase 3 (Lv 7 aura) + Phase 4 (Lv 15) + Phase 5 (Lv 20) — all 5 oaths now have all 5 phases.** RAW XGE p.39: passive permanent capstone — resistance to all damage from creatures + radiant counter equal to half damage taken on hit. Both negated against a creature you attack/spell/damage until your next long rest.
+**Description:** One endpoint. `/use_emissary_of_redemption` — body `{character_id, override?}`. Validates Redemption Paladin Lv 20. No chip — passive permanent feature; the endpoint serves as a "remind GM/clients" announce trigger. Broadcasts `feature_used` with `source: emissary-of-redemption`. v1 announce-only — the actual resistance + half-damage-radiant-back application is GM-tracked, with the "until you attack them" caveat needing per-target state. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_emissary_of_redemption` endpoint.
+- `tests/harness/test_emissary_of_redemption.py` — 3 tests.
+
+### Notes
+- **🎉 H.2 Lv 20 batch ✅ COMPLETE.** All 5 non-Devotion oaths shipped in the H.2 first-pass now have their Lv 20 capstone shipped:
+  1. **Ancients** Elder Champion (v2.99.288).
+  2. **Vengeance** Avenging Angel (v2.99.289).
+  3. **Conquest** Invincible Conqueror (v2.99.290).
+  4. **Glory** Living Legend (v2.99.291).
+  5. **Redemption** Emissary of Redemption (this).
+- **🎉 H.2 ENTIRE BATCH COMPLETE.** Phase 1 (Lv 3 CD) + Phase 2 (sibling CD) + Phase 3 (Lv 7) + Phase 4 (Lv 15) + Phase 5 (Lv 20) — 5/5 oaths at all 5 levels = **25/25 Paladin oath features wired** across Ancients, Vengeance, Conquest, Glory, Redemption.
+- **108 ships this session.**
+- **Total harness count: 1473** (was 1470 in v2.99.291; +3 new tests).
+
+---
+
 ## [2.99.291] - 2026-06-05 — "The Legend Speaks" — Glory Paladin Living Legend (H.2 deeper, Lv 20 capstone)
 
 **Schema version:** 66

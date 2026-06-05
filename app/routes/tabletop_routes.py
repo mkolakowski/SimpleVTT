@@ -44980,6 +44980,106 @@ async def use_living_legend(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_emissary_of_redemption")
+async def use_emissary_of_redemption(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.292 — Phase H.2 deeper (Redemption Paladin Lv 20)
+    of the v2.99.193 phased completion plan. CLOSES the H.2
+    Lv 20 batch (5/5 oaths). Emissary of Redemption
+    (Redemption Paladin Lv 20, XGE p.39): "At 20th level,
+    you become an avatar of peace. You have resistance to
+    all damage dealt by other creatures. Whenever a creature
+    hits you with an attack, it takes radiant damage equal
+    to half the damage you take from the attack. If you
+    attack a creature, cast a spell on it, or deal damage to
+    it by any means but this trait, neither benefit works
+    against that creature until you finish a long rest."
+
+    Body: ``{character_id, override?}``. No chip cost —
+    passive permanent feature; this endpoint serves as a
+    "remind GM/clients" announce trigger. v1 announce-only —
+    the actual resistance + half-damage-radiant-back
+    application is GM-tracked, with the "until you attack
+    them" caveat needing per-target tracking.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_redemption_oath(sheet, 20):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "redemption paladin lv 20",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🕊️ Emissary of Redemption — resistance + half radiant back"
+            ),
+            "feature_desc": (
+                f"{char.name} is an avatar of peace: resistance to "
+                f"all damage from other creatures, and any creature "
+                f"that hits {char.name} with an attack takes radiant "
+                f"damage equal to half the damage {char.name} took. "
+                f"Neither benefit works against a creature {char.name} "
+                f"attacks, casts a spell on, or deals damage to until "
+                f"the next long rest. (Redemption Paladin Lv 20 "
+                f"capstone; permanent passive.)"
+            ),
+            "source": "emissary-of-redemption",
+            "resistance_all_creature_damage": True,
+            "radiant_back_fraction": 0.5,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "emissary-of-redemption",
+        "resistance_all_creature_damage": True,
+        "radiant_back_fraction": 0.5,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
