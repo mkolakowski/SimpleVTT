@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.318] - 2026-06-05 — "The Burning Companion" — Wildfire Druid Summon Wildfire Spirit (Lv 2+, TCE)
+
+**Schema version:** 66
+**Commit summary:** **E.4 Druid subclass batch — Wildfire Druid Lv 2+ Summon Wildfire Spirit (TCE).** Fifth Druid subclass shipped. RAW TCE p.38: action + Wild Shape (default) or Lv 2+ spell slot to summon Wildfire Spirit companion for 1 hour.
+**Description:** Adds `_pc_has_wildfire_druid` helper. One endpoint. `/use_summon_wildfire_spirit` — body `{character_id, slot_level?, override?}`. Validates Wildfire Druid Lv 2+ + action chip. `slot_level` (≥2) toggles spell-slot variant; otherwise consumes Wild Shape use. Broadcasts. v1 announce-only — Wild Shape / slot consumption + spirit persistence GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_summon_wildfire_spirit` endpoint.
+- `_pc_has_wildfire_druid` helper.
+- `tests/harness/test_summon_wildfire_spirit.py` — 4 tests.
+
+### Notes
+- **E.4 Druid batch progress:** 5 of ~8 subclasses shipped (Land, Shepherd, Stars, Spores, Wildfire). Dreams, Moon (Combat Wild Shape mostly covered), and Twilight remain.
+- **134 ships this session.**
+- **Total harness count: 1568** (was 1564 in v2.99.317; +4 new tests).
+
+---
+
 ## [2.99.317] - 2026-06-05 — "The Necrotic Cloud" — Spores Druid Halo of Spores (Lv 2+, TCE)
 
 **Schema version:** 66

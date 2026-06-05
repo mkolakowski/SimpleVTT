@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1564 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.317, 2026-06-05).
+**Total tests:** 1568 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.318, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -882,6 +882,16 @@ v2.99.317 — Spores Druid (TCE p.36) Halo of Spores Lv 2+ (E.4 Druid batch). Re
 | `test_use_hs_lv14` | Lv 14 → `damage_expression == "1d10"`. |
 | `test_use_hs_wrong_subclass` | Default Mira (Moon) → 409. |
 | `test_use_hs_level_gate` | Spores at Lv 1 → 409. |
+
+### `test_summon_wildfire_spirit.py`
+v2.99.318 — Wildfire Druid (TCE p.38) Summon Wildfire Spirit Lv 2+ (E.4 Druid batch). Action + Wild Shape (default) or Lv 2+ spell slot to summon Wildfire Spirit for 1 hour. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ws_happy_lv5_default` | PATCH Mira → Wildfire Lv 5 default → `resource_used == "wild-shape"`, `duration_minutes == 60`, broadcast (source `summon-wildfire-spirit`). |
+| `test_use_ws_slot_variant` | slot_level 3 → `resource_used == "spell-slot"`, `slot_level == 3`. |
+| `test_use_ws_wrong_subclass` | Default Mira (Moon) → 409. |
+| `test_use_ws_level_gate` | Wildfire at Lv 1 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
