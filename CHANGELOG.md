@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.264] - 2026-06-04 — "The Telltale Flinch" — Battle Master Distracting Strike (Phase E.1 maneuver 14 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 14 of 16).** RAW PHB p.74: on hit, +die damage; the next attack roll vs the target by an attacker other than you has advantage if made before start of your next turn.
+**Description:** One endpoint. `/use_distracting_strike` — body `{character_id, target_name?, override?}`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_distracting_strike` endpoint.
+- `tests/harness/test_distracting_strike.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 14 of 16.** 2 remaining: Commander's Strike, Maneuvering Attack.
+- **80 ships this session.**
+- **Total harness count: 1378** (was 1375 in v2.99.263).
+
+---
+
 ## [2.99.263] - 2026-06-04 — "The Dancing Step" — Battle Master Evasive Footwork (Phase E.1 maneuver 13 of 16)
 
 **Schema version:** 66
