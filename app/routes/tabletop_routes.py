@@ -25469,6 +25469,34 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_redemption_oath(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.249 — RAW Oath of Redemption (Paladin, XGE p.38):
+    Channel Divinity options Emissary of Peace + Rebuke the
+    Violent (Lv 3), Aura of the Guardian (Lv 7), Protective
+    Spirit (Lv 15), Emissary of Redemption (Lv 20).
+
+    Returns True when the PC is a Paladin with subclass slug
+    containing "redemption" + meets `min_level` (multiclass-
+    aware). Gates the Redemption oath endpoints.
+
+    Phase H.2 fifth + FINAL non-Devotion Paladin oath.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "paladin":
+        has_paladin = any(
+            (entry.get("class") or "").strip().lower() == "paladin"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_paladin:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "redemption" not in subclass:
+        return False
+    return _paladin_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_glory_oath(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.248 — RAW Oath of Glory (Paladin, TCE p.55):
     Channel Divinity options Peerless Athlete + Inspiring Smite
@@ -40443,6 +40471,206 @@ async def use_inspiring_smite(
         "d8_roll": d8s,
         "paladin_level": pal_lv,
         "allocations": allocations,
+        "uses_remaining": cd_cur - 1,
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_rebuke_the_violent")
+async def use_rebuke_the_violent(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.249 — Phase H.2 fifth + FINAL non-Devotion Paladin
+    oath of the v2.99.193 phased completion plan. Rebuke the
+    Violent (Redemption Paladin Lv 3+, XGE p.39): "When an
+    attacker within 30 feet of you damages a creature other
+    than you with an attack, you can use your reaction to force
+    the attacker to make a Wisdom saving throw. On a failed
+    save, the attacker takes psychic damage equal to the damage
+    they just dealt to the target. On a successful save, they
+    take half as much damage."
+
+    Body: ``{character_id, attacker_combatant_id, damage_dealt,
+    override?}``.
+
+    Validates Redemption Paladin Lv 3+ + `sheet.resources` has
+    a `channel-divinity` entry with `current >= 1` + attacker
+    in active battle + Phase 4 reaction chip. Decrements CD
+    counter, marks chip, computes spell save DC, broadcasts
+    the save + damage announce. v1 ships announce-only — the
+    GM rolls the attacker's Wis save + applies the psychic
+    damage.
+
+    With this commit, Phase H.2 (5 non-Devotion Paladin oaths)
+    is substantially complete.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    attacker_combatant_id = (str(body.get("attacker_combatant_id") or "")).strip()
+    damage_dealt_raw = body.get("damage_dealt")
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not attacker_combatant_id:
+        raise HTTPException(400, "attacker_combatant_id is required")
+    if damage_dealt_raw is None:
+        raise HTTPException(400, "damage_dealt is required")
+    try:
+        damage_dealt = int(damage_dealt_raw)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "damage_dealt must be an integer")
+    if damage_dealt < 1:
+        raise HTTPException(400, "damage_dealt must be >= 1")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_redemption_oath(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "redemption paladin lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    cd_row = None
+    cd_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "channel-divinity":
+            cd_row = dict(r)
+            cd_idx = i
+            break
+    if cd_row is None:
+        raise HTTPException(
+            404,
+            "No Channel Divinity resource on this sheet",
+        )
+    cd_cur = int(cd_row.get("current") or 0)
+    cd_max = int(cd_row.get("max") or 0)
+    if cd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Channel Divinity",
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    attacker_name = ""
+    found = False
+    for c in (state.get("combatants") or []):
+        if c.get("id") == attacker_combatant_id:
+            attacker_name = c.get("name") or ""
+            found = True
+            break
+    if not found:
+        return JSONResponse(status_code=404, content={
+            "error": "attacker_not_in_battle",
+            "attacker_combatant_id": attacker_combatant_id,
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "rebuke-the-violent",
+            "label": "Rebuke the Violent",
+            "strict": strict,
+        })
+
+    cd_row["current"] = cd_cur - 1
+    resources[cd_idx] = cd_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    cha = int((sheet.get("abilities") or {}).get("CHA") or 10)
+    cha_mod = (cha - 10) // 2
+    save_dc = 8 + prof + cha_mod
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "channel-divinity",
+            "current": cd_cur - 1,
+            "max": cd_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    half = damage_dealt // 2
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"☮️ Rebuke the Violent — {attacker_name or 'attacker'} "
+                f"Wis DC {save_dc} or {damage_dealt} psychic"
+            ),
+            "feature_desc": (
+                f"{char.name} rebukes "
+                f"{attacker_name or 'the attacker'}: Wis save "
+                f"DC {save_dc} or take {damage_dealt} psychic "
+                f"damage ({half} on a success). (Redemption "
+                f"Paladin Lv 3+ Channel Divinity.)"
+            ),
+            "source": "rebuke-the-violent",
+            "attacker_combatant_id": attacker_combatant_id,
+            "attacker_name": attacker_name,
+            "damage_dealt": damage_dealt,
+            "psychic_damage_on_fail": damage_dealt,
+            "psychic_damage_on_success": half,
+            "save_dc": save_dc,
+            "uses_remaining": cd_cur - 1,
+            "over_budget": was_used,
+            "over_budget_slot": "reaction" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "rebuke-the-violent",
+        "attacker_combatant_id": attacker_combatant_id,
+        "attacker_name": attacker_name,
+        "damage_dealt": damage_dealt,
+        "psychic_damage_on_fail": damage_dealt,
+        "psychic_damage_on_success": half,
+        "save_dc": save_dc,
         "uses_remaining": cd_cur - 1,
         "over_budget": was_used,
     }

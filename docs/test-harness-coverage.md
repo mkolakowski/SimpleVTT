@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1326 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.248, 2026-06-04).
+**Total tests:** 1332 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.249, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,18 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_rebuke_the_violent.py`
+v2.99.249 — Oath of Redemption (Paladin subclass, XGE p.39) Rebuke the Violent reaction CD (Phase H.2 FIFTH + FINAL oath). Caelan PATCH'd to Redemption + CD 1/1 + Bandit attacker in battle. DC 14.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_rtv_happy` | Rebuke a Bandit who dealt 15 dmg → `save_dc == 14`, `psychic_damage_on_fail == 15`, `psychic_damage_on_success == 7`, broadcast (source `rebuke-the-violent`). |
+| `test_use_rtv_missing_damage` | No `damage_dealt` body → 400. |
+| `test_use_rtv_zero_damage` | `damage_dealt: 0` → 400 (must be >= 1). |
+| `test_use_rtv_attacker_not_in_battle` | Unknown attacker_combatant_id → 404. |
+| `test_use_rtv_out_of_cd` | `channel-divinity.current = 0` → 409 `out_of_uses`. |
+| `test_use_rtv_wrong_subclass` | Default Caelan (Devotion) → 409 `wrong_subclass_or_level`. |
 
 ### `test_inspiring_smite.py`
 v2.99.248 — Oath of Glory (Paladin subclass, TCE p.55) Inspiring Smite bonus-action CD (Phase H.2 fourth oath). Rolls 2d8 + paladin level temp HP, divides evenly (remainder to first targets).

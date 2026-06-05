@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.249] - 2026-06-04 — "Mercy's Edge" — Redemption Paladin Rebuke the Violent CD (Phase H.2 FIFTH + FINAL — H.2 substantially complete)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.2 fifth and FINAL non-Devotion Paladin oath of the v2.99.193 phased completion plan.** RAW XGE p.39: Redemption Paladin Lv 3+ reaction CD — when an attacker within 30 ft damages a creature other than you, attacker Wis save DC 8 + prof + CHA or take psychic damage = damage dealt (half on success). **With this commit, H.2 (5 non-Devotion Paladin oaths) is substantially complete: Ancients + Vengeance + Conquest + Glory + Redemption all shipped end-to-end in v2.99.245-249 (one oath per commit), each with a Lv 3 Channel Divinity primary feature.**
+**Description:** One helper + one endpoint. (1) `_pc_has_redemption_oath(sheet, min_level)` — multiclass-aware. (2) `/use_rebuke_the_violent` — body `{character_id, attacker_combatant_id, damage_dealt, override?}`. Validates Redemption Paladin Lv 3+ + `channel-divinity` resource current >= 1 + `damage_dealt >= 1` + attacker in active battle + Phase 4 reaction chip. Decrements CD counter, marks chip, computes spell save DC, computes half damage (`damage_dealt // 2`), broadcasts. v1 ships announce-only — GM rolls attacker's Wis save + applies the psychic damage. Caelan Lv 7 CHA 16 → DC 14. One new harness test file with 6 tests.
+
+### Added
+- `_pc_has_redemption_oath(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_rebuke_the_violent` endpoint.
+- `tests/harness/test_rebuke_the_violent.py` — 6 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 6 regression tests. No schema change.
+- **Phase H.2 ✅ substantially complete.** Five consecutive commits (v2.99.245-249), one non-Devotion oath per commit:
+  1. Ancients (v2.99.245) — Nature's Wrath save-vs-Restrained CD + plan doc.
+  2. Vengeance (v2.99.246) — Vow of Enmity bonus-action buff-installer CD.
+  3. Conquest (v2.99.247) — Conquering Presence multi-target Wis-save CD.
+  4. Glory (v2.99.248) — Inspiring Smite temp-HP-distributor CD.
+  5. Redemption (v2.99.249) — Rebuke the Violent reaction-vs-attacker CD.
+- **All 5 non-Devotion PHB+XGE+TCE oath rows now have their primary Lv 3 CD shipped.** The plan doc enumerates Phase 2 (Ancients Turn the Faithless), Phase 3 (auras), Phase 4-5 (capstones / Lv 20 transforms) for follow-up commits.
+- **Next step toward 3.0.0:** H.3 (last-mile Eldritch Invocation breadth: Devil's Sight, Mask of Many Faces, Hex Warrior, Lifedrinker, Lance of Lethargy). Each is a single filed invocation — likely 5 follow-up commits or 1 batched commit. Then H.4 (doc audit + archive + 3.0.0 cut) — but that bump REQUIRES user approval of the fun-name per the durable rule.
+- **65 ships this session.**
+- **Total harness count: 1332** (was 1326 in v2.99.248).
+
+---
+
 ## [2.99.248] - 2026-06-04 — "Glory's Sustenance" — Glory Paladin Inspiring Smite CD (Phase H.2 fourth oath)
 
 **Schema version:** 66
