@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.304] - 2026-06-05 — "The Borrowed Tome" — Arcana Domain Cleric Arcane Mastery (H.1 deeper, Lv 17 — H.1 Lv 17 batch extension)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Arcana Domain Cleric Lv 17+ Arcane Mastery. Extends the H.1 Lv 17 batch to 12/13 domains.** RAW SCAG p.125: add 4 spells (one each of Lv 6/7/8/9) from any class's spell list as domain spells — always prepared, count as cleric spells.
+**Description:** Adds `_pc_has_arcana_domain` helper. One endpoint. `/use_arcane_mastery` — body `{character_id, override?}`. Validates Arcana Domain Cleric Lv 17+. No chip — passive list addition. Broadcasts. v1 announce-only — actual cross-class spell selection GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_arcane_mastery` endpoint.
+- `_pc_has_arcana_domain` helper.
+- `tests/harness/test_arcane_mastery.py` — 3 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 12 of 13 PHB+TCE+SCAG domains shipped (Light, Tempest, Life, War, Death, Trickery, Forge, Grave, Knowledge, Nature, Peace, Arcana). Only Order remains.
+- **120 ships this session.**
+- **Total harness count: 1513** (was 1510 in v2.99.303; +3 new tests).
+
+---
+
 ## [2.99.303] - 2026-06-05 — "The Wider Web" — Peace Domain Cleric Expansive Bond (H.1 deeper, Lv 17 — CLOSES H.1 Lv 17 batch)
 
 **Schema version:** 66

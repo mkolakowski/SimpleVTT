@@ -25963,6 +25963,34 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_arcana_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.304 — RAW Arcana Domain features (Cleric, SCAG
+    p.125-126): Bonus cantrips + Arcane Initiate (Lv 1), CD
+    Arcane Abjuration (Lv 2 — curated), Spell Breaker (Lv 6),
+    Potent Spellcasting (Lv 8 — wired via /use_potent_spellcasting
+    gate may need extension), Arcane Mastery (Lv 17).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "arcana" + meets `min_level` (multiclass-aware).
+    Gates the Arcana Domain endpoints (Arcane Mastery in
+    v2.99.304).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "arcana" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_death_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.297 — RAW Death Domain features (Cleric, DMG
     p.96-97): Bonus Proficiency + Reaper (Lv 1), CD Touch of
@@ -46245,6 +46273,99 @@ async def use_expansive_bond(
         "bond_radius_ft": 60,
         "bonus_die": "d6",
         "previous_bonus_die": "d4",
+        "cleric_level": cleric_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_arcane_mastery")
+async def use_arcane_mastery(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.304 — Phase H.1 deeper (Arcana Domain Cleric Lv 17+)
+    of the v2.99.193 phased completion plan. Extends the H.1
+    Lv 17 batch (12/13 domains shipped). Arcane Mastery (Arcana
+    Domain Cleric Lv 17+, SCAG p.125): "At 17th level, you
+    choose four spells from any class's spell list, one each
+    of 6th, 7th, 8th, and 9th level. You add them to your
+    list of domain spells. Like your other domain spells, they
+    are always prepared and count as cleric spells for you."
+
+    Body: ``{character_id, override?}``. No chip cost —
+    passive list addition. v1 announce-only — actual
+    cross-class spell selection is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_arcana_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "arcana domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🔮 Arcane Mastery — 4 cross-class spells (Lv 6/7/8/9)"
+            ),
+            "feature_desc": (
+                f"{char.name} adds four spells (one each of 6th, "
+                f"7th, 8th, and 9th level) from any class's spell "
+                f"list to their domain spell list. Always prepared "
+                f"and count as cleric spells. (Arcana Domain "
+                f"Cleric Lv 17+ class feature; passive permanent.)"
+            ),
+            "source": "arcane-mastery",
+            "added_spell_levels": [6, 7, 8, 9],
+            "added_spell_count": 4,
+            "source_class": "any",
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "arcane-mastery",
+        "added_spell_levels": [6, 7, 8, 9],
+        "added_spell_count": 4,
+        "source_class": "any",
         "cleric_level": cleric_lv,
     }
 
