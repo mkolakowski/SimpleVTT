@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.300] - 2026-06-05 — "Soul-Catcher's Hand" — Grave Domain Cleric Keeper of Souls (H.1 deeper, Lv 17 passive) — 🎂 3-digit minor
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Grave Domain Cleric Lv 17+ Keeper of Souls.** RAW XGE p.19: when enemy within 60 ft dies, you or one creature within 60 ft heals HP = enemy's HD. 1/turn. Not while incapacitated.
+**Description:** One endpoint. `/use_keeper_of_souls` — body `{character_id, enemy_hit_dice, override?}`. Validates Grave Domain Cleric Lv 17+. Computes `heal_amount = max(1, enemy_hit_dice)`. No chip — passive trigger. Broadcasts. v1 announce-only — the actual HP application + 1/turn lockout is GM-tracked. One new harness test file with 4 tests including a default-enemy-HD-clamp case.
+
+### Added
+- `/api/campaign/{cid}/use_keeper_of_souls` endpoint.
+- `tests/harness/test_keeper_of_souls.py` — 4 tests.
+
+### Notes
+- **🎂 v2.99.300 — three-digit minor reached.** (Just numerology — the 3.0.0 cut is still gated on full per-class table coverage.)
+- **H.1 Lv 17 batch progress:** 8 of 11 domains shipped at Lv 17 (Light, Tempest, Life, War, Death, Trickery, Forge, Grave).
+- **116 ships this session.**
+- **Total harness count: 1498** (was 1494 in v2.99.299; +4 new tests).
+
+---
+
 ## [2.99.299] - 2026-06-05 — "The Forge-Blessed Saint" — Forge Domain Cleric Saint of Forge and Fire (H.1 deeper, Lv 17 passive)
 
 **Schema version:** 66

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1494 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.299, 2026-06-05).
+**Total tests:** 1498 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.300, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -704,6 +704,16 @@ v2.99.299 — Forge Domain Cleric (XGE p.18) Saint of Forge and Fire Lv 17 passi
 | `test_use_sff_happy_lv17` | Lv 17 Tavik → `fire_immunity == True`, `heavy_armor_bps_resistance == True`, BPS in `resistance_types`, broadcast (source `saint-of-forge-and-fire`). |
 | `test_use_sff_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_sff_level_gate` | Forge at Lv 16 → 409. |
+
+### `test_keeper_of_souls.py`
+v2.99.300 — Grave Domain Cleric (XGE p.19) Keeper of Souls Lv 17 (H.1 deeper). When enemy within 60 ft dies, you or one creature within 60 ft heals HP = enemy's HD. 1/turn. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ks_happy_lv17` | Lv 17 Tavik, enemy HD 5 → `heal_amount == 5`, `max_range_ft == 60`, broadcast (source `keeper-of-souls`). |
+| `test_use_ks_default_hd_clamp` | Missing `enemy_hit_dice` → `heal_amount == 1` (clamp). |
+| `test_use_ks_wrong_subclass` | Default Tavik (Life Domain) → 409. |
+| `test_use_ks_level_gate` | Grave at Lv 16 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

@@ -45803,6 +45803,103 @@ async def use_saint_of_forge_and_fire(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_keeper_of_souls")
+async def use_keeper_of_souls(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.300 — Phase H.1 deeper (Grave Domain Cleric Lv 17+)
+    of the v2.99.193 phased completion plan. Keeper of Souls
+    (Grave Domain Cleric Lv 17+, XGE p.19): "Starting at 17th
+    level, when an enemy you can see dies within 60 feet of
+    you, you or one creature of your choice within 60 ft
+    regains HP equal to the enemy's number of Hit Dice. Can't
+    be used while incapacitated. Once used, can't again until
+    the start of your next turn."
+
+    Body: ``{character_id, enemy_hit_dice, override?}``. No
+    chip cost — passive end-of-enemy-turn trigger. v1
+    announce-only — the actual HP application + 1/turn
+    lockout is GM-tracked. Body accepts `enemy_hit_dice` to
+    inform the announce (defaults to 1 if missing).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    enemy_hd = max(1, int(body.get("enemy_hit_dice") or 1))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_grave_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "grave domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    heal_amount = enemy_hd
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⚱️ Keeper of Souls — heal {heal_amount} HP from dying enemy"
+            ),
+            "feature_desc": (
+                f"{char.name} seizes a trace of vitality from a "
+                f"parting soul. An ally within 60 ft (or {char.name}) "
+                f"regains {heal_amount} HP (= enemy's hit dice). "
+                f"(Grave Domain Cleric Lv 17+ class feature; "
+                f"once per turn.)"
+            ),
+            "source": "keeper-of-souls",
+            "heal_amount": heal_amount,
+            "enemy_hit_dice": enemy_hd,
+            "max_range_ft": 60,
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "keeper-of-souls",
+        "heal_amount": heal_amount,
+        "enemy_hit_dice": enemy_hd,
+        "max_range_ft": 60,
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
