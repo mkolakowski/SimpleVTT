@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.307] - 2026-06-05 — "The Dancer's Step" — Swashbuckler Rogue Fancy Footwork (Lv 3+)
+
+**Schema version:** 66
+**Commit summary:** **E.3 Rogue subclass batch — Swashbuckler Rogue Lv 3+ Fancy Footwork.** RAW XGE p.47: when you make a melee attack against a creature on your turn, that creature can't make OAs against you for the rest of your turn.
+**Description:** Adds `_pc_has_swashbuckler_subclass` helper. One endpoint. `/use_fancy_footwork` — body `{character_id, target_combatant_id?, override?}`. Validates Swashbuckler Rogue Lv 3+. No chip — passive on melee attack. Broadcasts `feature_used` with `source: fancy-footwork` + `oa_suppressed_until: "end_of_turn"`. v1 announce-only — OA-suppression vs target is GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_fancy_footwork` endpoint.
+- `_pc_has_swashbuckler_subclass` helper.
+- `tests/harness/test_fancy_footwork.py` — 4 tests.
+
+### Notes
+- **E.3 Rogue batch progress:** 3 of 8 subclasses shipped (Thief, Assassin, Swashbuckler). Remaining: Arcane Trickster, Inquisitive, Mastermind, Scout, Soulknife (TCE), Phantom (TCE).
+- **123 ships this session.**
+- **Total harness count: 1524** (was 1520 in v2.99.306; +4 new tests).
+
+---
+
 ## [2.99.306] - 2026-06-05 — "The Killing Blow" — Assassin Rogue Assassinate (Lv 3+) — E.3 Rogue subclass batch opener (pivot)
 
 **Schema version:** 66

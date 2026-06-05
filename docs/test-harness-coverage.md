@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1520 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.306, 2026-06-05).
+**Total tests:** 1524 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.307, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -772,6 +772,16 @@ v2.99.306 — Assassin Rogue (PHB p.97) Assassinate Lv 3+ (E.3 Rogue subclass ba
 | `test_use_ass_happy_lv7` | PATCH Pip → Assassin Lv 7 → `advantage_vs_pre_turn == True`, `auto_crit_vs_surprised == True`, broadcast (source `assassinate`). |
 | `test_use_ass_wrong_subclass` | Default Pip (Thief) → 409. |
 | `test_use_ass_level_gate` | Assassin at Lv 2 → 409. |
+
+### `test_fancy_footwork.py`
+v2.99.307 — Swashbuckler Rogue (XGE p.47) Fancy Footwork Lv 3+ (E.3 Rogue batch). On a melee attack against a creature, that creature can't make OAs against you for the rest of your turn. No chip — passive on melee attack. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ff_happy_lv7` | PATCH Pip → Swashbuckler Lv 7 → `oa_suppressed_until == "end_of_turn"`, broadcast (source `fancy-footwork`). |
+| `test_use_ff_with_target` | Optional `target_combatant_id` passes through. |
+| `test_use_ff_wrong_subclass` | Default Pip (Thief) → 409. |
+| `test_use_ff_level_gate` | Swashbuckler at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
