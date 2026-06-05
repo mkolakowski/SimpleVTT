@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.352] - 2026-06-05 — "The Alien Whisper" — The Great Old One Warlock Awakened Mind (Lv 1+, PHB) — 🔮 Warlock patron batch
+
+**Schema version:** 66
+**Commit summary:** **Warlock patron subclass batch ship #4 — The Great Old One Lv 1+ Awakened Mind (PHB).** Fourth Warlock patron batch ship; opens The Great Old One. RAW PHB p.110: telepathically speak (one-way) to any creature you can see within 30 ft; no shared language needed (the creature must understand at least one language). At-will, no action cost.
+**Description:** Adds `_pc_has_great_old_one_warlock` helper. One endpoint. `/use_awakened_mind` — body `{character_id}`. Validates The Great Old One Warlock Lv 1+. At-will (no action / bonus / reaction chip). Broadcasts `feature_used` with `source: awakened-mind`, `range_ft: 30`. v1 announce-only — the target choice + one-way telepathy are GM-narrated. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_awakened_mind` endpoint.
+- `_pc_has_great_old_one_warlock` helper.
+- `tests/harness/test_awakened_mind.py` — 3 tests.
+
+### Notes
+- **Warlock patron batch progress:** 4 of ~7 patrons shipped (The Fiend, The Archfey, The Hexblade, The Great Old One). Remaining untouched: Celestial (Healing Light), Fathomless (Tentacle of the Deeps), Genie (Genie's Vessel).
+- **168 ships this session.**
+- **Total harness count: 1692** (was 1689 in v2.99.351; +3 new tests).
+
+---
+
 ## [2.99.351] - 2026-06-05 — "The Binding Hex" — The Hexblade Warlock Hexblade's Curse (Lv 1+, XGE) — 🔮 Warlock patron batch
 
 **Schema version:** 66
