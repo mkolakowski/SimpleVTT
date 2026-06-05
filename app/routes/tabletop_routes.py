@@ -25469,6 +25469,36 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_twilight_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.242 — RAW Twilight Domain features (Cleric, TCE
+    p.41): Eyes of Night + Vigilant Blessing (Lv 1), Channel
+    Divinity: Twilight Sanctuary (Lv 2 — curated), Steps of
+    Night (Lv 6 — bonus action fly speed), Divine Strike (Lv 8
+    — passive radiant uplift), Twilight Shroud (Lv 17 — sanctuary
+    grants half-cover).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "twilight" + meets `min_level` (multiclass-aware).
+    Gates the Twilight Domain endpoints.
+
+    Phase H.1 ninth non-Life Cleric domain to ship.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "twilight" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_grave_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.241 — RAW Grave Domain features (Cleric, XGE p.19):
     Circle of Mortality + Eyes of the Grave (Lv 1), Channel
@@ -38969,6 +38999,164 @@ async def use_eyes_of_the_grave(
         "ok": True,
         "feature": "eyes-of-the-grave",
         "uses_remaining": e_cur - 1,
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_vigilant_blessing")
+async def use_vigilant_blessing(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.242 — Phase H.1 ninth non-Life Cleric domain of the
+    v2.99.193 phased completion plan. Vigilant Blessing
+    (Twilight Domain Cleric Lv 1+, TCE p.41): "As an action,
+    you give one creature (including yourself) advantage on the
+    next initiative roll the creature makes. This benefit ends
+    immediately after the roll or if you use this feature again."
+
+    Body: ``{character_id, target_combatant_id, override?}``.
+
+    Validates Twilight Cleric Lv 1+ + target combatant exists in
+    active battle + Phase 4 action chip. Installs `vigilant-
+    blessing-active` buff on the target with
+    `effects.init_advantage: True` (and a stealth_bonus proxy
+    for the /roll consumer). Marks chip, broadcasts. No
+    resource cost.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_twilight_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "twilight domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    target_char_id = None
+    target_name = ""
+    for c in (state.get("combatants") or []):
+        if c.get("id") == target_combatant_id:
+            target_char_id = c.get("char_id")
+            target_name = c.get("name") or ""
+            break
+    if target_char_id is None:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_in_battle",
+            "target_combatant_id": target_combatant_id,
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "vigilant-blessing",
+            "label": "Vigilant Blessing",
+            "strict": strict,
+        })
+
+    vb_buff = {
+        "key": "vigilant-blessing-active",
+        "name": "Vigilant Blessing — advantage on next init",
+        "icon": "🌒",
+        "duration_rounds": 100,
+        "duration_max": 100,
+        "concentration": False,
+        "source": "vigilant-blessing",
+        "source_char_id": char.id,
+        "effects": {
+            "init_advantage": True,
+            "consume_on_initiative_roll": True,
+        },
+        "desc": (
+            "Advantage on next initiative roll. Consumed on roll "
+            "or replaced by next Vigilant Blessing."
+        ),
+    }
+    await _install_buff(campaign_id, int(target_char_id), vb_buff)
+    _mirror_buffs_to_sheet(
+        db, int(target_char_id),
+        _get_buffs(campaign_id, int(target_char_id)),
+    )
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    is_self = int(target_char_id) == int(char.id)
+    target_phrase = (
+        "themselves" if is_self
+        else (target_name or "an ally")
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌒 Vigilant Blessing — {target_name or 'self'}"
+            ),
+            "feature_desc": (
+                f"{char.name} grants {target_phrase} advantage on "
+                f"the next initiative roll. (Twilight Domain "
+                f"Cleric Lv 1+ class feature.)"
+            ),
+            "source": "vigilant-blessing",
+            "target_combatant_id": target_combatant_id,
+            "target_char_id": target_char_id,
+            "target_name": target_name,
+            "is_self": is_self,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "vigilant-blessing",
+        "target_combatant_id": target_combatant_id,
+        "target_char_id": target_char_id,
+        "is_self": is_self,
+        "buff_installed": True,
         "over_budget": was_used,
     }
 

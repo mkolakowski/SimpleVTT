@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.242] - 2026-06-04 — "The Dusk Sentry" — Twilight Domain Cleric Vigilant Blessing (Phase H.1 ninth domain)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 ninth non-Life Cleric domain of the v2.99.193 phased completion plan.** RAW TCE p.41: Twilight Cleric Lv 1+ action — give one creature (incl self) advantage on next initiative roll. No daily cap.
+**Description:** One helper + one endpoint. (1) `_pc_has_twilight_domain(sheet, min_level)` — multiclass-aware. (2) `/use_vigilant_blessing` — body `{character_id, target_combatant_id, override?}`. Validates Twilight Cleric Lv 1+ + target combatant exists in active battle + Phase 4 action chip. Installs `vigilant-blessing-active` buff with `effects.init_advantage: True` + `consume_on_initiative_roll: True`. Marks chip, broadcasts. Self-targeting is allowed (RAW: "you give one creature (including yourself) advantage"). Brother Tavik Stonebrow is the demo fixture. One new harness test file with 4 tests.
+
+### Added
+- `_pc_has_twilight_domain(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_vigilant_blessing` endpoint.
+- `tests/harness/test_vigilant_blessing.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 4 regression tests. No schema change.
+- **Self-targeting allowed (unlike Blessing of the Trickster).** RAW lets the Twilight Cleric target themselves — Trickery Cleric's Blessing of the Trickster RAW says "other than yourself" explicitly. v2.99.242 mirrors the difference.
+- **"Ends when init rolled" filed.** The `consume_on_initiative_roll: True` flag is set on the buff so the v2.99.214 /roll consumer can pick it up; but the initiative-roll site doesn't yet read the flag. v1 still installs + announces; future commit wires the consumer.
+- **Eyes of Night (Twilight Lv 1 other feature) filed.** 300 ft darkvision + share with WIS mod allies. v1 ships only Vigilant Blessing; Eyes of Night is a follow-up commit (would need a `darkvision_range` sheet field + share-on-action shape).
+- **Phase H.1 progress: 9 of 11 domains have first features shipped.** Remaining: Death, Order, Peace.
+- **58 ships this session.**
+- **Total harness count: 1298** (was 1294 in v2.99.241).
+
+---
+
 ## [2.99.241] - 2026-06-04 — "The Reaper's Sight" — Grave Domain Cleric Eyes of the Grave (Phase H.1 eighth domain)
 
 **Schema version:** 66

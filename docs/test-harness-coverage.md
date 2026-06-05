@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1294 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.241, 2026-06-04).
+**Total tests:** 1298 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.242, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,16 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_vigilant_blessing.py`
+v2.99.242 — Twilight Domain Cleric (TCE p.41) Vigilant Blessing action (Phase H.1 ninth domain). Touch-an-ally (or self) buff installer: advantage on next init roll. No daily cap.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_vb_target_ally` | Tavik blesses Pip → `target_char_id == pip.id`, `is_self == False`, `buff_installed: True`, broadcast (source `vigilant-blessing`). |
+| `test_use_vb_target_self` | Tavik targets himself → `is_self: True`, buff installed (RAW allows self). |
+| `test_use_vb_target_not_in_battle` | Unknown target_combatant_id → 404 `target_not_in_battle`. |
+| `test_use_vb_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 
 ### `test_eyes_of_the_grave.py`
 v2.99.241 — Grave Domain Cleric (XGE p.19) Eyes of the Grave (Phase H.1 eighth domain). Action to detect undead within 60 ft for 1 round. WIS mod uses per long rest.
