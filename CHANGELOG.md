@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.250] - 2026-06-04 — "Five Whispered Pacts" — Phase H.3 Eldritch Invocation breadth ship (5 invocations bundled)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.3 of the v2.99.193 phased completion plan** — last-mile Eldritch Invocation breadth on the road to 3.0.0. Ships a single `/use_invocation` endpoint backed by a 5-entry registry covering the filed PHB+XGE invocations: Devil's Sight (Lv 2+), Mask of Many Faces (Lv 2+), Hex Warrior (Lv 1+ Hexblade), Lifedrinker (Lv 12+ Pact of the Blade), Lance of Lethargy (Lv 2+, Eldritch Blast filed). v1 ships announce-only; each invocation's deep mechanical wiring is filed for follow-up commits. **With this commit, H.3 is substantially complete — the 5 filed invocations from the plan are surfaced.**
+**Description:** One constant + one endpoint. (1) `_H3_INVOCATION_REGISTRY: dict[str, dict]` with 5 entries; each carries `name`, `icon`, `desc`, `min_warlock_level`, and optional `prereq_pact` / `prereq_subclass` / `prereq_spell` flags. (2) `/use_invocation` — body `{character_id, invocation_slug, override?}`. Validates Warlock class (multiclass-aware) + invocation_slug in registry + warlock level >= `min_warlock_level` + (if `prereq_subclass`) subclass slug match + (if `prereq_pact`) `pact_boon` match. v1 ignores `prereq_spell` (filed). Broadcasts `feature_used` (source `eldritch-invocation`) with `(invocation_slug, invocation_name)`. Magnus Hexbinder (Warlock The Fiend Lv 5) is the demo fixture. One new harness test file with 6 tests.
+
+### Added
+- `_H3_INVOCATION_REGISTRY` constant with 5 invocations (Devil's Sight, Mask of Many Faces, Hex Warrior, Lifedrinker, Lance of Lethargy).
+- `/api/campaign/{cid}/use_invocation` endpoint.
+- `tests/harness/test_h3_invocations.py` — 6 tests.
+
+### Notes
+- **PATCH bump** — 1 constant + 1 endpoint + 6 regression tests. No schema change.
+- **Single endpoint vs per-invocation endpoints.** The H.1 + H.2 cadence shipped one endpoint per feature; H.3 batches the 5 invocations behind one endpoint with a registry because each invocation's v1 is purely an announce (no per-invocation resource decrement, no per-invocation chip mark, no per-invocation save DC). The registry shape leaves room for future per-invocation deep wires without expanding the API surface: future commits can intercept `/use_invocation` for specific slugs that need side effects.
+- **Prereq enforcement is RAW.** Each invocation has a documented PHB prereq; the endpoint enforces the level minimum + (where applicable) subclass + pact_boon. `prereq_spell` (Lance of Lethargy needs Eldritch Blast cantrip) is filed for v1 — the player can still claim it without proving they know the cantrip; the GM gates.
+- **Phase H status: H.1 ✅, H.2 ✅, H.3 ✅, H.4 ⚪.** Only the doc-audit step remains before the 3.0.0 cut. Per the durable rule, **the 3.0.0 bump itself REQUIRES user approval of the fun-name** before flipping `2.99.x → 3.0.0`.
+- **66 ships this session.**
+- **Total harness count: 1338** (was 1332 in v2.99.249).
+
+---
+
 ## [2.99.249] - 2026-06-04 — "Mercy's Edge" — Redemption Paladin Rebuke the Violent CD (Phase H.2 FIFTH + FINAL — H.2 substantially complete)
 
 **Schema version:** 66

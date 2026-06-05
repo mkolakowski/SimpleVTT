@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1332 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.249, 2026-06-04).
+**Total tests:** 1338 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.250, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,18 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_h3_invocations.py`
+v2.99.250 — Phase H.3 batched 5-invocation breadth ship. Single `/use_invocation` endpoint backed by a 5-entry registry: Devil's Sight, Mask of Many Faces, Hex Warrior, Lifedrinker, Lance of Lethargy. Magnus Hexbinder (Warlock The Fiend Lv 5) is the fixture.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_inv_devils_sight_happy` | Magnus Lv 5 → Devil's Sight (min Lv 2) succeeds; broadcast (source `eldritch-invocation`). |
+| `test_use_inv_bad_slug` | Unknown slug → 400. |
+| `test_use_inv_wrong_class` | Pip (Rogue) → 409 `wrong_class`. |
+| `test_use_inv_lifedrinker_no_pact` | Magnus PATCH'd to Lv 12 (level prereq satisfied) but no `pact_boon == "blade"` → 409 `pact_prereq_unmet`. |
+| `test_use_inv_lifedrinker_level_too_low` | Lifedrinker at Lv 5 (needs 12) → 409 `level_too_low`. |
+| `test_use_inv_hex_warrior_wrong_subclass` | Magnus default subclass "The Fiend" → 409 `subclass_prereq_unmet` (Hex Warrior needs Hexblade). |
 
 ### `test_rebuke_the_violent.py`
 v2.99.249 — Oath of Redemption (Paladin subclass, XGE p.39) Rebuke the Violent reaction CD (Phase H.2 FIFTH + FINAL oath). Caelan PATCH'd to Redemption + CD 1/1 + Bandit attacker in battle. DC 14.

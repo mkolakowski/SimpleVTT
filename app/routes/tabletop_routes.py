@@ -25469,6 +25469,60 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+_H3_INVOCATION_REGISTRY: dict[str, dict] = {
+    "devils-sight": {
+        "name": "Devil's Sight",
+        "icon": "👁️",
+        "min_warlock_level": 2,
+        "desc": (
+            "See normally in darkness, both magical and non-magical, "
+            "to a distance of 120 feet."
+        ),
+    },
+    "mask-of-many-faces": {
+        "name": "Mask of Many Faces",
+        "icon": "🎭",
+        "min_warlock_level": 2,
+        "desc": "Cast Disguise Self at will, without expending a spell slot.",
+    },
+    "hex-warrior": {
+        "name": "Hex Warrior",
+        "icon": "⚔️",
+        "min_warlock_level": 1,
+        "prereq_subclass": "hexblade",
+        "desc": (
+            "Choose one weapon you are holding when you finish a "
+            "long rest. Until you finish your next long rest, you "
+            "can use your Charisma modifier in place of Strength "
+            "or Dexterity for the attack and damage rolls of that "
+            "weapon."
+        ),
+    },
+    "lifedrinker": {
+        "name": "Lifedrinker",
+        "icon": "🩸",
+        "min_warlock_level": 12,
+        "prereq_pact": "blade",
+        "desc": (
+            "When you hit a creature with your pact weapon, the "
+            "creature takes extra necrotic damage equal to your "
+            "Charisma modifier (minimum 1)."
+        ),
+    },
+    "lance-of-lethargy": {
+        "name": "Lance of Lethargy",
+        "icon": "🐌",
+        "min_warlock_level": 2,
+        "prereq_spell": "eldritch-blast",
+        "desc": (
+            "Once on each of your turns when you hit a creature "
+            "with Eldritch Blast, you can reduce that creature's "
+            "speed by 10 feet until the end of your next turn."
+        ),
+    },
+}
+
+
 def _pc_has_redemption_oath(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.249 — RAW Oath of Redemption (Paladin, XGE p.38):
     Channel Divinity options Emissary of Peace + Rebuke the
@@ -40673,6 +40727,143 @@ async def use_rebuke_the_violent(
         "save_dc": save_dc,
         "uses_remaining": cd_cur - 1,
         "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_invocation")
+async def use_invocation(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.250 — Phase H.3 of the v2.99.193 phased completion
+    plan: batched 5-invocation breadth ship for the road to
+    3.0.0.
+
+    Body: ``{character_id, invocation_slug, override?}`` where
+    invocation_slug ∈ keys of `_H3_INVOCATION_REGISTRY`.
+
+    The registry holds 5 RAW PHB+XGE Eldritch Invocations:
+    Devil's Sight, Mask of Many Faces, Hex Warrior, Lifedrinker,
+    Lance of Lethargy. Each entry carries `name`, `desc`,
+    `min_warlock_level`, and optional prereqs (`prereq_pact`,
+    `prereq_subclass`, `prereq_spell`).
+
+    Validates Warlock class + invocation_slug in registry +
+    warlock level >= min_warlock_level + (if prereq_subclass)
+    subclass slug match + (if prereq_pact) pact_boon match.
+    Broadcasts feature_used announcing the invocation. v1 ships
+    announce-only — each invocation's mechanical wiring (Devil's
+    Sight darkness piercing on Perception, Mask of Many Faces
+    at-will Disguise Self cast, etc.) is filed as per-invocation
+    follow-up commits.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    invocation_slug = (str(body.get("invocation_slug") or "")).strip().lower()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not invocation_slug:
+        raise HTTPException(400, "invocation_slug is required")
+    entry = _H3_INVOCATION_REGISTRY.get(invocation_slug)
+    if entry is None:
+        raise HTTPException(
+            400,
+            f"invocation_slug must be one of "
+            f"{sorted(_H3_INVOCATION_REGISTRY.keys())}",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "warlock":
+        has_warlock = any(
+            (e.get("class") or "").strip().lower() == "warlock"
+            for e in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": "warlock",
+                "got": cls,
+            })
+
+    warlock_lv = _warlock_level_from_sheet(sheet)
+    min_lv = int(entry.get("min_warlock_level") or 1)
+    if warlock_lv < min_lv:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low",
+            "required": min_lv,
+            "got": warlock_lv,
+        })
+
+    prereq_subclass = entry.get("prereq_subclass")
+    if prereq_subclass:
+        subclass = (sheet.get("subclass") or "").strip().lower()
+        if prereq_subclass not in subclass:
+            return JSONResponse(status_code=409, content={
+                "error": "subclass_prereq_unmet",
+                "required": prereq_subclass,
+                "got": subclass,
+            })
+
+    prereq_pact = entry.get("prereq_pact")
+    if prereq_pact:
+        pact_boon = (sheet.get("pact_boon") or "").strip().lower()
+        if prereq_pact not in pact_boon:
+            return JSONResponse(status_code=409, content={
+                "error": "pact_prereq_unmet",
+                "required": prereq_pact,
+                "got": pact_boon,
+            })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    name = entry["name"]
+    icon = entry.get("icon") or "✨"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"{icon} {name}",
+            "feature_desc": (
+                f"{char.name} invokes {name}: {entry['desc']} "
+                f"(Eldritch Invocation; Warlock Lv {min_lv}+.)"
+            ),
+            "source": "eldritch-invocation",
+            "invocation_slug": invocation_slug,
+            "invocation_name": name,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "eldritch-invocation",
+        "invocation_slug": invocation_slug,
+        "invocation_name": name,
+        "min_warlock_level": min_lv,
     }
 
 
