@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.237] - 2026-06-04 — "The Trickster's Touch" — Trickery Domain Cleric Blessing of the Trickster (Phase H.1 fourth domain)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 fourth non-Life Cleric domain of the v2.99.193 phased completion plan.** RAW PHB p.62: Trickery Cleric Lv 1+ action — touch a willing creature OTHER than yourself; advantage on Dex (Stealth) for 1 hour or until recast. No daily cap. v2.99.237 ships the announce + buff installer; the "only one at a time" RAW constraint is filed.
+**Description:** One helper + one endpoint. (1) `_pc_has_trickery_domain(sheet, min_level)` — multiclass-aware Cleric + "trickery" subclass gate. (2) `/use_blessing_of_the_trickster` — body `{character_id, target_combatant_id, override?}`. Validates Trickery Cleric Lv 1+ + target combatant exists in active battle + non-self + Phase 4 action chip. Installs `blessing-of-the-trickster` buff (`effects.stealth_advantage: True` + `stealth_bonus: 5` as advantage proxy for the v2.99.214 /roll consumer, 600-round duration ≈ 1 hour). Marks action chip, broadcasts. Brother Tavik Stonebrow is the demo fixture; tests seed Tavik + Pip Quickfingers in a battle so Pip can be the target. One new harness test file with 4 tests.
+
+### Added
+- `_pc_has_trickery_domain(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_blessing_of_the_trickster` endpoint.
+- `tests/harness/test_blessing_of_the_trickster.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 4 regression tests. No schema change.
+- **Buff shape mirrors Supreme Sneak.** Uses the same `effects.stealth_bonus: 5` shape as v2.99.224 Supreme Sneak so the v2.99.214 `/roll` Stealth consumer picks it up without re-touching. The duration is much longer (600 rounds vs 10 rounds for Supreme Sneak).
+- **"Only one at a time" filed.** RAW: "using this feature again ends the prior blessing." v1 installs without sweeping prior installs off other combatants. Future commit can walk every combatant's `buffs` for `key == "blessing-of-the-trickster"` and drop them before installing the new one.
+- **No resource cost RAW.** Unlike v2.99.234 Warding Flare / v2.99.235 Wrath of the Storm / v2.99.236 War Priest, Blessing of the Trickster has no daily cap — purely action-gated.
+- **Phase H.1 progress: 4 of 11 domains have first features shipped.** Remaining: Knowledge, Nature, Forge, Grave, Death, Order, Twilight, Peace.
+- **53 ships this session.**
+- **Total harness count: 1277** (was 1273 in v2.99.236).
+
+---
+
 ## [2.99.236] - 2026-06-04 — "The Warrior's Spare Swing" — War Domain Cleric War Priest (Phase H.1 third domain)
 
 **Schema version:** 66

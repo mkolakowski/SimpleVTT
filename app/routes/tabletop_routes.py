@@ -25469,6 +25469,35 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_trickery_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.237 — RAW Trickery Domain features (Cleric, PHB
+    p.62): Blessing of the Trickster (Lv 1), Channel Divinity:
+    Invoke Duplicity (Lv 2 — curated), Channel Divinity: Cloak
+    of Shadows (Lv 6), Divine Strike (Lv 8 — passive poison
+    uplift), Improved Duplicity (Lv 17).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "trickery" + meets `min_level` (multiclass-aware).
+    Gates the Trickery Domain endpoints.
+
+    Phase H.1 fourth non-Life Cleric domain to ship.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "trickery" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_war_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.236 — RAW War Domain features (Cleric, PHB p.63):
     War Priest (Lv 1), Channel Divinity: Guided Strike (Lv 2 —
@@ -38121,6 +38150,170 @@ async def use_war_priest(
         "ok": True,
         "feature": "war-priest",
         "uses_remaining": wp_cur - 1,
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_blessing_of_the_trickster")
+async def use_blessing_of_the_trickster(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.237 — Phase H.1 fourth non-Life Cleric domain of
+    the v2.99.193 phased completion plan. Blessing of the
+    Trickster (Trickery Domain Cleric Lv 1+, PHB p.62):
+    "Starting when you choose this domain at 1st level, you can
+    use your action to touch a willing creature other than
+    yourself to give it advantage on Dexterity (Stealth) checks.
+    This blessing lasts for 1 hour or until you use this feature
+    again."
+
+    Body: ``{character_id, target_combatant_id, override?}``.
+
+    Validates Trickery Cleric Lv 1+ + target combatant exists in
+    the active battle + Phase 4 action chip. Installs
+    `blessing-of-the-trickster` buff on the target with
+    `effects.stealth_advantage: True`. RAW one-at-a-time —
+    future commit can drop a prior blessing when re-cast.
+
+    No resource cost — Blessing of the Trickster has no daily
+    cap.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_trickery_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "trickery domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    # Locate the target combatant's char_id.
+    state = hub.get_battle(campaign_id) or {}
+    target_char_id = None
+    target_name = ""
+    for c in (state.get("combatants") or []):
+        if c.get("id") == target_combatant_id:
+            target_char_id = c.get("char_id")
+            target_name = c.get("name") or ""
+            break
+    if target_char_id is None:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_in_battle",
+            "target_combatant_id": target_combatant_id,
+        })
+    if int(target_char_id) == int(char.id):
+        return JSONResponse(status_code=409, content={
+            "error": "self_targeting_not_allowed",
+            "expected": "any willing creature other than yourself",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "blessing-of-the-trickster",
+            "label": "Blessing of the Trickster",
+            "strict": strict,
+        })
+
+    trickster_buff = {
+        "key": "blessing-of-the-trickster",
+        "name": "Blessing of the Trickster — Stealth advantage",
+        "icon": "🃏",
+        "duration_rounds": 600,  # 1 hour ≈ 600 rounds
+        "duration_max": 600,
+        "concentration": False,
+        "source": "blessing-of-the-trickster",
+        "source_char_id": char.id,
+        "effects": {
+            "stealth_advantage": True,
+            "stealth_bonus": 5,  # advantage proxy for /roll consumer
+        },
+        "desc": (
+            "Advantage on Dexterity (Stealth) checks. 1 hour. "
+            "RAW: only one creature at a time; using the feature "
+            "again ends the prior blessing."
+        ),
+    }
+    await _install_buff(campaign_id, int(target_char_id), trickster_buff)
+    _mirror_buffs_to_sheet(
+        db, int(target_char_id),
+        _get_buffs(campaign_id, int(target_char_id)),
+    )
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🃏 Blessing of the Trickster — {target_name or 'ally'}"
+            ),
+            "feature_desc": (
+                f"{char.name} touches {target_name or 'an ally'} "
+                f"with deceitful divine favor — advantage on "
+                f"Dexterity (Stealth) checks for 1 hour or until "
+                f"recast. (Trickery Domain Cleric Lv 1+ class "
+                f"feature.)"
+            ),
+            "source": "blessing-of-the-trickster",
+            "target_combatant_id": target_combatant_id,
+            "target_char_id": target_char_id,
+            "target_name": target_name,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "blessing-of-the-trickster",
+        "target_combatant_id": target_combatant_id,
+        "target_char_id": target_char_id,
+        "buff_installed": True,
         "over_budget": was_used,
     }
 

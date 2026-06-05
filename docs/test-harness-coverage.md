@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1273 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.236, 2026-06-04).
+**Total tests:** 1277 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.237, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,16 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_blessing_of_the_trickster.py`
+v2.99.237 — Trickery Domain Cleric (PHB p.62) Blessing of the Trickster (Phase H.1 fourth domain). Touch-an-ally buff installer (no daily cap RAW). Brother Tavik Stonebrow is the fixture; tests PATCH his subclass to "Trickery Domain" and seed Tavik + Pip in a battle.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_botrickster_happy` | Tavik blesses Pip → `target_char_id == pip.id`, `buff_installed: True`, broadcast (source `blessing-of-the-trickster`). |
+| `test_use_botrickster_self_target` | Target is Tavik himself → 409 `self_targeting_not_allowed`. |
+| `test_use_botrickster_target_not_in_battle` | Unknown `target_combatant_id` → 404 `target_not_in_battle`. |
+| `test_use_botrickster_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 
 ### `test_war_priest.py`
 v2.99.236 — War Domain Cleric (PHB p.63) War Priest bonus-action attack (Phase H.1 third domain). Brother Tavik Stonebrow is the demo fixture; tests PATCH his subclass to "War Domain" + seed a `war-priest` resource.
