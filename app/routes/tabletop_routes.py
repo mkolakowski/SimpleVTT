@@ -44499,6 +44499,172 @@ async def use_elder_champion(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_avenging_angel")
+async def use_avenging_angel(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.289 — Phase H.2 deeper (Vengeance Paladin Lv 20)
+    of the v2.99.193 phased completion plan. Avenging Angel
+    (Vengeance Paladin Lv 20, PHB p.88): "Using your action,
+    you undergo a transformation. For 1 hour, you gain wings
+    + fly speed 60 ft, plus a 30-ft frightful aura: first
+    time an enemy enters the aura or starts its turn there,
+    Wis save DC 8 + prof + CHA or frightened (1 min, ends on
+    damage). Attack rolls against the frightened creature
+    have advantage. Once used, can't again until long rest."
+
+    Body: ``{character_id, override?}``. Costs an action chip.
+    Auto-bootstraps an `avenging-angel` resource if missing.
+    v1 announce-only — wings/fly, aura, frightened install
+    GM-tracked. DC included in broadcast.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_vengeance_oath(sheet, 20):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "vengeance paladin lv 20",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "avenging-angel",
+            "label": "Avenging Angel",
+            "strict": strict,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    aa_row = None
+    aa_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "avenging-angel":
+            aa_row = dict(r); aa_idx = i; break
+    if aa_row is None:
+        aa_row = {
+            "key": "avenging-angel",
+            "label": "Avenging Angel",
+            "current": 1, "max": 1, "reset": "long",
+        }
+        aa_idx = len(resources)
+        resources.append(aa_row)
+    aa_cur = int(aa_row.get("current") or 0)
+    aa_max = int(aa_row.get("max") or 1)
+    if aa_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Avenging Angel",
+            "current": aa_cur, "max": aa_max,
+        })
+
+    aa_row["current"] = aa_cur - 1
+    resources[aa_idx] = aa_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    prof = int(sheet.get("proficiency_bonus") or 6)
+    cha = int((sheet.get("abilities") or {}).get("CHA") or 10)
+    cha_mod = (cha - 10) // 2
+    save_dc = 8 + prof + cha_mod
+    pal_lv = _paladin_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "avenging-angel",
+            "current": aa_cur - 1, "max": aa_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"😇 Avenging Angel — fly 60 ft + 30 ft frightful aura (DC {save_dc})"
+            ),
+            "feature_desc": (
+                f"{char.name} transforms into an angelic avenger for "
+                f"1 hour: wings grant 60 ft fly speed; 30 ft frightful "
+                f"aura — first time an enemy enters or starts turn in "
+                f"the aura, Wis save DC {save_dc} or be frightened "
+                f"(1 min / until damaged). Attacks vs frightened "
+                f"creature have advantage. (Vengeance Paladin Lv 20 "
+                f"capstone; once per long rest.)"
+            ),
+            "source": "avenging-angel",
+            "uses_remaining": aa_cur - 1,
+            "duration_minutes": 60,
+            "fly_speed_ft": 60,
+            "aura_radius_ft": 30,
+            "save_dc": save_dc,
+            "save_ability": "WIS",
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "avenging-angel",
+        "uses_remaining": aa_cur - 1,
+        "max_uses": aa_max,
+        "duration_minutes": 60,
+        "fly_speed_ft": 60,
+        "aura_radius_ft": 30,
+        "save_dc": save_dc,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

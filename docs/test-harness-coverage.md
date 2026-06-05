@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1458 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.288, 2026-06-05).
+**Total tests:** 1462 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.289, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -602,6 +602,16 @@ v2.99.288 — Ancients Paladin (PHB p.87) Elder Champion Lv 20 capstone transfor
 | `test_use_ec_level_gate` | Ancients at Lv 19 → 409. |
 | `test_use_ec_out_of_uses` | Second back-to-back call → 409 `no_uses_left`. |
 | `test_use_ec_long_rest_refills` | Use → long rest → use again → 200 (resource refilled). |
+
+### `test_avenging_angel.py`
+v2.99.289 — Vengeance Paladin (PHB p.88) Avenging Angel Lv 20 capstone transform (H.2 deeper). 1 hour: wings + fly 60 ft; 30 ft frightful aura (Wis save DC 8 + prof + CHA). Auto-bootstraps an `avenging-angel` resource if missing; refilled by long rest. Action chip + transform broadcast. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_aa_happy_lv20` | Lv 20 Caelan (stale prof 3, CHA 16) → `save_dc == 14`, `fly_speed_ft == 60`, `aura_radius_ft == 30`, `duration_minutes == 60`, broadcast (source `avenging-angel`). |
+| `test_use_aa_wrong_subclass` | Default Caelan (Devotion) → 409. |
+| `test_use_aa_level_gate` | Vengeance at Lv 19 → 409. |
+| `test_use_aa_long_rest_refills` | Use → long rest → use again → 200 (resource refilled). |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

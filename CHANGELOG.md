@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.289] - 2026-06-05 — "Wings of the Avenger" — Vengeance Paladin Avenging Angel (H.2 deeper, Lv 20 capstone transform)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Vengeance Paladin Lv 20 capstone transform.** RAW PHB p.88: action to transform for 1 hour: wings + fly 60 ft; 30 ft frightful aura (Wis save DC 8 + prof + CHA first time entering or starting turn there, or frightened 1 min / until damaged; attacks vs frightened have advantage). Once per long rest.
+**Description:** One endpoint. `/use_avenging_angel` — body `{character_id, override?}`. Validates Vengeance Paladin Lv 20 + action chip Phase 4 gate. Auto-bootstraps an `avenging-angel` resource (max=1, reset=long). Computes DC = 8 + prof + CHA mod. Marks action chip, broadcasts `resource_update` + `feature_used` with `source: avenging-angel`. v1 announce-only — wings/fly, aura, frightened install GM-tracked. One new harness test file with 4 tests including long-rest refill.
+
+### Added
+- `/api/campaign/{cid}/use_avenging_angel` endpoint.
+- `tests/harness/test_avenging_angel.py` — 4 tests.
+
+### Notes
+- **H.2 Lv 20 batch progress:** 2 of 5 oaths shipped at Lv 20 (Ancients, Vengeance). Remaining: Conquest Invincible Conqueror, Glory Living Legend, Redemption Emissary of Redemption.
+- **105 ships this session.**
+- **Total harness count: 1462** (was 1458 in v2.99.288; +4 new tests).
+
+---
+
 ## [2.99.288] - 2026-06-05 — "Form of the Ancient" — Ancients Paladin Elder Champion (H.2 deeper, Lv 20 capstone transform)
 
 **Schema version:** 66
