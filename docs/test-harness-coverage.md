@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1391 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.268, 2026-06-04).
+**Total tests:** 1395 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.269, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -620,6 +620,16 @@ v2.99.234 — Light Domain Cleric (PHB p.60) Warding Flare reaction (Phase H.1 f
 | `test_use_warding_flare_out_of_uses` | `warding-flare.current = 0` → 409 `out_of_uses`. |
 | `test_use_warding_flare_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 | `test_use_warding_flare_no_resource` | Light Cleric without the `warding-flare` resource entry → 404. |
+
+### `test_eldritch_knight_capstones.py`
+v2.99.269 — Eldritch Knight Fighter (PHB p.74) Arcane Charge + Improved War Magic announces (Phase E.2 Phase 4, **closes E.2**). Lv 15 Arcane Charge (teleport 30 ft with Action Surge); Lv 18 Improved War Magic (Lv 1+ spell variant of War Magic).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ac_happy_lv15` | Lv 15 EK Garrik → `teleport_max_ft == 30`, broadcast (source `arcane-charge`). |
+| `test_use_ac_level_gate` | Lv 14 → 409. |
+| `test_use_iwm_happy_lv18` | Lv 18 EK Garrik → broadcast (source `improved-war-magic`), bonus chip marked. |
+| `test_use_iwm_level_gate` | Lv 17 → 409. |
 
 ### `test_eldritch_strike.py`
 v2.99.268 — Eldritch Knight Fighter (PHB p.74) Eldritch Strike buff install (Phase E.2 Phase 3). Lv 10+; on hit, target has disadvantage on next save vs an EK spell before end of next turn.

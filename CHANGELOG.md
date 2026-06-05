@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.269] - 2026-06-04 — "The Knight's Capstone" — Eldritch Knight Arcane Charge + Improved War Magic (Phase E.2 Phase 4 — E.2 COMPLETE)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.2 Phase 4 of the v2.99.193 phased completion plan — CLOSES E.2.** Ships both Lv 15 Arcane Charge + Lv 18 Improved War Magic in one bundled commit. **With this commit, all 4 phases of docs/plans/eldritch-knight.md are shipped end-to-end.**
+**Description:** Two endpoints in one commit. (1) `/use_arcane_charge` — body `{character_id, override?}`. Validates EK Lv 15+. Broadcasts `teleport_max_ft: 30`. v1 announces; the "must be tied to Action Surge" prereq is GM-tracked; future commit can extend `/use_action_surge` with a `teleport_dest_cell` body field. (2) `/use_improved_war_magic` — body `{character_id, override?}`. Validates EK Lv 18+ + Phase 4 bonus chip. Same shape as Phase 2 War Magic but the gate is "Lv 1+ spell" instead of cantrip (still GM-tracked). One new harness test file with 4 tests (2 per endpoint).
+
+### Added
+- `/api/campaign/{cid}/use_arcane_charge` endpoint.
+- `/api/campaign/{cid}/use_improved_war_magic` endpoint.
+- `tests/harness/test_eldritch_knight_capstones.py` — 4 tests.
+
+### Notes
+- **🎉 Phase E.2 ✅ COMPLETE.** All 4 phases of `docs/plans/eldritch-knight.md` shipped end-to-end:
+  1. v2.99.232 — Weapon Bond (Lv 3 picker).
+  2. v2.99.267 — War Magic (Lv 7 cantrip-bonus-action).
+  3. v2.99.268 — Eldritch Strike (Lv 10 save-disadvantage buff).
+  4. v2.99.269 — Arcane Charge (Lv 15 teleport) + Improved War Magic (Lv 18 Lv 1+ spell variant). **This commit.**
+- **Phase E status: E.1 (Battle Master) 16/16 maneuvers + Phase 1 spine done; E.2 (Eldritch Knight) ✅ all 4 phases done.** Plus E.3-E.8 from earlier in the session. Phase E is now substantially complete end-to-end.
+- **85 ships this session.**
+- **Total harness count: 1395** (was 1391 in v2.99.268).
+
+---
+
 ## [2.99.268] - 2026-06-04 — "The Spell-Marked Foe" — Eldritch Knight Eldritch Strike (Phase E.2 Phase 3)
 
 **Schema version:** 66

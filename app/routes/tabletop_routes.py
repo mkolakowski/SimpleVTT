@@ -37739,6 +37739,187 @@ async def use_spell_bombardment(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_arcane_charge")
+async def use_arcane_charge(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.269 — Phase E.2 Phase 4a of the v2.99.193 phased
+    completion plan. Arcane Charge (Eldritch Knight Lv 15+, PHB
+    p.74): "At 15th level, you gain the ability to teleport up
+    to 30 feet to an unoccupied space you can see when you use
+    your Action Surge."
+
+    Body: ``{character_id, override?}``. Validates EK Lv 15+.
+    v1 announces the teleport; the "must be tied to Action
+    Surge" prereq is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_knight(sheet, 15):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "eldritch knight fighter lv 15+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🌀 Arcane Charge — teleport 30 ft",
+            "feature_desc": (
+                f"{char.name} invokes Arcane Charge: when using "
+                f"Action Surge, teleport up to 30 ft to an "
+                f"unoccupied space you can see (before or after "
+                f"the additional action). (Eldritch Knight Lv 15+ "
+                f"class feature.)"
+            ),
+            "source": "arcane-charge",
+            "teleport_max_ft": 30,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "arcane-charge",
+        "teleport_max_ft": 30,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_improved_war_magic")
+async def use_improved_war_magic(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.269 — Phase E.2 Phase 4b of the v2.99.193 phased
+    completion plan. Improved War Magic (Eldritch Knight Lv 18+,
+    PHB p.74): "Starting at 18th level, when you use your action
+    to cast a spell, you can make one weapon attack as a bonus
+    action."
+
+    Body: ``{character_id, override?}``. Same shape as Phase 2
+    War Magic but the gate is "Lv 1+ spell" instead of cantrip
+    (GM-tracked); validates EK Lv 18+ + Phase 4 bonus chip.
+
+    **CLOSES PHASE E.2.** With this commit + sibling Arcane
+    Charge, all 4 phases of docs/plans/eldritch-knight.md are
+    shipped.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_knight(sheet, 18):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "eldritch knight fighter lv 18+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "improved-war-magic",
+            "label": "Improved War Magic",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "⚡ Improved War Magic — bonus weapon attack",
+            "feature_desc": (
+                f"{char.name} invokes Improved War Magic: after "
+                f"casting a Lv 1+ spell with your action, make one "
+                f"weapon attack as a bonus action. (Eldritch Knight "
+                f"Lv 18+ class feature.)"
+            ),
+            "source": "improved-war-magic",
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "improved-war-magic",
+        "over_budget": was_used,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_eldritch_strike")
 async def use_eldritch_strike(
     campaign_id: int,
