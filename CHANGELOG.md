@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.306] - 2026-06-05 — "The Killing Blow" — Assassin Rogue Assassinate (Lv 3+) — E.3 Rogue subclass batch opener (pivot)
+
+**Schema version:** 66
+**Commit summary:** **E.3 Rogue subclass batch opener — Assassin Rogue Lv 3+ Assassinate.** First non-trivial ship in the Rogue subclass depth pass. Pivoted to Assassin after discovering Thief Fast Hands was already shipped in v2.99.224. RAW PHB p.97: advantage on attack rolls vs creatures that haven't taken a turn yet in combat; auto-crit vs surprised creatures.
+**Description:** Adds `_pc_has_assassin_subclass` helper. One endpoint. `/use_assassinate` — body `{character_id, override?}`. Validates Assassin Rogue Lv 3+. No chip — passive declaration. Broadcasts `feature_used` with `source: assassinate` + `advantage_vs_pre_turn: true` + `auto_crit_vs_surprised: true`. v1 announce-only — the actual advantage / auto-crit mechanics are GM-applied at attack time. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_assassinate` endpoint.
+- `_pc_has_assassin_subclass` helper.
+- `tests/harness/test_assassinate.py` — 3 tests.
+
+### Notes
+- **E.3 Rogue batch opened — Assassin is the *new* subclass ship; Thief was already covered in v2.99.224.** 2 of 8 Rogue subclasses now shipped (Thief, Assassin). Remaining: Arcane Trickster (covered partially via spell features), Inquisitive, Mastermind, Scout, Soulknife (TCE), Phantom (TCE), Swashbuckler.
+- **Audit lesson:** before shipping a feature, grep for the endpoint slug in `tabletop_routes.py` to catch duplicates. Took an extra round trip to discover Fast Hands was already wired.
+- **122 ships this session.**
+- **Total harness count: 1520** (was 1517 in v2.99.305; +3 new tests).
+
+---
+
 ## [2.99.305] - 2026-06-05 — "Wrath of Law" — Order Domain Cleric Order's Wrath (H.1 deeper, Lv 17 — CLOSES H.1 Lv 17 FULL BATCH 13/13)
 
 **Schema version:** 66

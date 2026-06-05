@@ -25963,6 +25963,33 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
+    Bonus Proficiencies + Assassinate (Lv 3), Infiltration
+    Expertise (Lv 9), Impostor (Lv 13), Death Strike (Lv 17).
+
+    Returns True when the PC is a Rogue with subclass slug
+    containing "assassin" + meets `min_level` (multiclass-aware).
+    Opens the E.3 Rogue subclass batch with this commit (Thief
+    Fast Hands was already wired in v2.99.224 — pivoted to
+    Assassin's Assassinate as the actual E.3 opener).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "rogue":
+        has_rogue = any(
+            (entry.get("class") or "").strip().lower() == "rogue"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_rogue:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "assassin" not in subclass:
+        return False
+    return _rogue_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_arcana_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.304 — RAW Arcana Domain features (Cleric, SCAG
     p.125-126): Bonus cantrips + Arcane Initiate (Lv 1), CD
@@ -46467,6 +46494,100 @@ async def use_orders_wrath(
         "psychic_damage_expression": "2d8",
         "expires_on": "next_turn_start",
         "cleric_level": cleric_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_assassinate")
+async def use_assassinate(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.306 — Phase E.3 Rogue subclass opener (Assassin
+    Rogue Lv 3+) of the v2.99.193 phased completion plan.
+    Pivots after discovering Thief Fast Hands was already
+    wired in v2.99.224. Assassinate (Assassin Rogue Lv 3+,
+    PHB p.97): "Starting at 3rd level, you are at your
+    deadliest when you get the drop on your enemies. You
+    have advantage on attack rolls against any creature that
+    hasn't taken a turn in the combat yet. In addition, any
+    hit you score against a creature that is surprised is a
+    critical hit."
+
+    Body: ``{character_id, override?}``. No chip cost — this
+    is a passive declaration that the next attack against a
+    not-yet-acted (or surprised) target gets the bonus.
+    v1 announce-only — the actual advantage / auto-crit
+    mechanics are applied by the GM at attack time.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Rogue character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_assassin_subclass(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "assassin rogue lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _rogue_level_from_sheet(sheet),
+        })
+
+    rogue_lv = _rogue_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🗡️ Assassinate — advantage vs not-acted, auto-crit on surprised"
+            ),
+            "feature_desc": (
+                f"{char.name} has advantage on attack rolls against "
+                f"creatures that haven't taken a turn yet in this "
+                f"combat. Any hit against a surprised creature is a "
+                f"critical hit. (Assassin Rogue Lv 3+ class feature.)"
+            ),
+            "source": "assassinate",
+            "advantage_vs_pre_turn": True,
+            "auto_crit_vs_surprised": True,
+            "rogue_level": rogue_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "assassinate",
+        "advantage_vs_pre_turn": True,
+        "auto_crit_vs_surprised": True,
+        "rogue_level": rogue_lv,
     }
 
 

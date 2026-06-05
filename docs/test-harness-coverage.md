@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1517 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.305, 2026-06-05).
+**Total tests:** 1520 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.306, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -763,6 +763,15 @@ v2.99.305 — Order Domain Cleric (TCE p.40) Order's Wrath Lv 17 (H.1 deeper —
 | `test_use_ow_with_target` | Optional `target_combatant_id` passed through in response. |
 | `test_use_ow_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_ow_level_gate` | Order at Lv 16 → 409. |
+
+### `test_assassinate.py`
+v2.99.306 — Assassin Rogue (PHB p.97) Assassinate Lv 3+ (E.3 Rogue subclass batch opener — pivoted after Thief Fast Hands was found already wired in v2.99.224). Advantage vs creatures that haven't taken a turn; auto-crit vs surprised. No chip — passive declaration. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ass_happy_lv7` | PATCH Pip → Assassin Lv 7 → `advantage_vs_pre_turn == True`, `auto_crit_vs_surprised == True`, broadcast (source `assassinate`). |
+| `test_use_ass_wrong_subclass` | Default Pip (Thief) → 409. |
+| `test_use_ass_level_gate` | Assassin at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
