@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1604 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.326, 2026-06-05).
+**Total tests:** 1607 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.327, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -976,6 +976,15 @@ v2.99.326 — Creation College Bard (TCE p.31) Mote of Potential Lv 3+ (F.1 Bard
 | `test_use_mp_mode_save` | mode="save" passes through. |
 | `test_use_mp_wrong_subclass` | Default Lyra (Lore) → 409. |
 | `test_use_mp_level_gate` | Creation at Lv 2 → 409. |
+
+### `test_arcane_ward.py`
+v2.99.327 — Abjuration School Wizard (PHB p.115) Arcane Ward Lv 2+ (G.1 Wizard subclass batch opener). On abjuration cast Lv 1+, create magical ward HP = 2 × wizard_lv + INT mod. Refills 2 × spell-level HP per abjuration cast. Lasts until long rest. Once-per-long-rest creation. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_aw_happy_lv7` | PATCH Thalindra → Abjuration Lv 7 (INT 16 mod 3) → `ward_hp_max == 17`, broadcast (source `arcane-ward`). |
+| `test_use_aw_wrong_subclass` | Default Thalindra (Evocation) → 409. |
+| `test_use_aw_level_gate` | Abjuration at Lv 1 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

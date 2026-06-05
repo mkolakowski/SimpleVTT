@@ -25985,6 +25985,32 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_abjuration_wizard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.327 — RAW Abjuration School Wizard (Wizard, PHB
+    p.115): Abjuration Savant + Arcane Ward (Lv 2), Projected
+    Ward (Lv 6), Improved Abjuration (Lv 10), Spell Resistance
+    (Lv 14).
+
+    Returns True when the PC is a Wizard with subclass slug
+    containing "abjuration" + meets `min_level` (multiclass-aware).
+    Opens the G.1 Wizard subclass batch.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "abjuration" not in subclass:
+        return False
+    return _wizard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_creation_bard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.326 — RAW Creation College Bard (Bard, TCE p.31):
     Mote of Potential + Performance of Creation (Lv 3),
@@ -49501,6 +49527,148 @@ async def use_mote_of_potential(
         "die_size": die_size,
         "cha_mod": cha_mod,
         "bard_level": bard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_arcane_ward")
+async def use_arcane_ward(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.327 — Phase G.1 Wizard subclass batch opener
+    (Abjuration School Wizard Lv 2+) of the v2.99.193 phased
+    completion plan. Arcane Ward (Abjuration Wizard Lv 2+,
+    PHB p.115): "When you cast an abjuration spell of 1st
+    level or higher, you can simultaneously create a magical
+    ward on yourself that lasts until you finish a long rest.
+    Ward HP = 2 × wizard_level + INT mod. Whenever you take
+    damage, the ward absorbs first. The ward regains 2 × spell
+    level HP when you cast an abjuration spell of 1st level or
+    higher. Once created, you can't create it again until
+    you finish a long rest."
+
+    Body: ``{character_id, override?}``. No chip — the ward
+    creation rides on an abjuration cast. Auto-bootstraps an
+    `arcane-ward-hp` resource (max=2*wiz_lv + INT mod,
+    current=max, reset=long). v1 announce-only — actual
+    damage-absorption hook is GM-tracked (the ward HP pool is
+    tracked as a resource).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_abjuration_wizard(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "abjuration wizard lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    wizard_lv = _wizard_level_from_sheet(sheet)
+    abilities = sheet.get("abilities") or {}
+    try:
+        int_mod = (int(abilities.get("INT") or 10) - 10) // 2
+    except (TypeError, ValueError):
+        int_mod = 0
+    ward_max_hp = 2 * wizard_lv + int_mod
+
+    resources = list(sheet.get("resources") or [])
+    aw_row = None
+    aw_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "arcane-ward-hp":
+            aw_row = dict(r); aw_idx = i; break
+    if aw_row is None:
+        aw_row = {
+            "key": "arcane-ward-hp",
+            "label": "Arcane Ward HP",
+            "current": ward_max_hp, "max": ward_max_hp, "reset": "long",
+        }
+        aw_idx = len(resources)
+        resources.append(aw_row)
+    else:
+        # Refresh max in case wizard_lv / INT changed.
+        aw_row["max"] = ward_max_hp
+        # Setting current = max represents fresh ward casting.
+        aw_row["current"] = ward_max_hp
+
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "arcane-ward-hp",
+            "current": ward_max_hp, "max": ward_max_hp,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🛡️ Arcane Ward — {ward_max_hp} HP barrier "
+                f"(2 × wizard_lv + INT mod)"
+            ),
+            "feature_desc": (
+                f"{char.name} weaves abjuration magic into a "
+                f"{ward_max_hp} HP magical ward that absorbs "
+                f"damage. Refills 2 × spell-level HP per "
+                f"abjuration cast of 1st+ level. Lasts until "
+                f"long rest. (Abjuration Wizard Lv 2+ class "
+                f"feature.)"
+            ),
+            "source": "arcane-ward",
+            "ward_hp_max": ward_max_hp,
+            "wizard_level": wizard_lv,
+            "int_mod": int_mod,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "arcane-ward",
+        "ward_hp_max": ward_max_hp,
+        "wizard_level": wizard_lv,
+        "int_mod": int_mod,
     }
 
 

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.327] - 2026-06-05 — "The Woven Shield" — Abjuration School Wizard Arcane Ward (Lv 2+) — G.1 Wizard subclass batch opener
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch opener — Abjuration School Wizard Lv 2+ Arcane Ward.** First Wizard subclass shipped. RAW PHB p.115: when you cast an abjuration spell of 1st level or higher, you create a magical ward. Ward HP = 2 × wizard_level + INT mod. Refills 2 × spell-level HP per abjuration cast of 1st+ level. Lasts until long rest. Once-per-long-rest creation.
+**Description:** Adds `_pc_has_abjuration_wizard` helper. One endpoint. `/use_arcane_ward` — body `{character_id, override?}`. Validates Abjuration Wizard Lv 2+. No chip — ward creation rides on an abjuration cast. Auto-bootstraps `arcane-ward-hp` resource (max=2*wiz_lv + INT mod, current=max, reset=long). Broadcasts. v1 announce-only — damage-absorption hook is GM-tracked; ward HP pool tracked as resource. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_arcane_ward` endpoint.
+- `_pc_has_abjuration_wizard` helper.
+- `tests/harness/test_arcane_ward.py` — 3 tests.
+
+### Notes
+- **G.1 Wizard subclass batch opened.** 1 of ~10 Wizard subclasses shipped (Abjuration). Remaining: Conjuration, Divination, Enchantment, Illusion, Necromancy, Transmutation (+ TCE Bladesinging, Order of Scribes, Chronurgy, Graviturgy).
+- **143 ships this session.**
+- **Total harness count: 1607** (was 1604 in v2.99.326; +3 new tests).
+
+---
+
 ## [2.99.326] - 2026-06-05 — "The Living Spark" — Creation College Bard Mote of Potential (Lv 3+, TCE) — 🎉 CLOSES F.1 Bard batch (8/8)
 
 **Schema version:** 66
