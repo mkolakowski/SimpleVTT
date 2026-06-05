@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.345] - 2026-06-05 — "The Divine Ledger" — Favored by the Gods use now server-tracked (Divine Soul, XGE)
+
+**Schema version:** 66
+**Commit summary:** **Deepen Favored by the Gods (Divine Soul Sorcerer Lv 1+, XGE) past v1 announce-only — the single use-per-short-or-long-rest is now server-tracked.** RAW XGE p.50 recharges on a SHORT or long rest. `/use_favored_by_the_gods` now reads/decrements `sheet.favored_by_gods_uses` (seeded to 1 when absent), returns 409 `out_of_uses` when depleted, and the /rest hook refills it on either rest type.
+**Description:** Adds a `favored_by_gods_uses` sheet counter (allowlisted for sheet-field PATCH). The endpoint gates on the remaining charge before rolling the 2d4, decrements + persists on success, and now returns `uses_remaining` / `uses_max` (also added to the `feature_used` broadcast). The refill is wired into the `/rest` handler's shared short-OR-long-rest section (before the long-only branch), so it recharges on a short rest too — distinct from Restore Balance's long-rest-only refill (v2.99.344). Harness test file grows from 3 to 4 tests (adds the `out_of_uses` exhaustion path; happy test now asserts the 1→0 decrement).
+
+### Changed
+- `/api/campaign/{cid}/use_favored_by_the_gods` now server-tracks its single use (was v1 announce-only): decrements `favored_by_gods_uses`, returns 409 `out_of_uses` when depleted, and reports `uses_remaining` / `uses_max` in the response + broadcast.
+
+### Added
+- `favored_by_gods_uses` sheet field (allowlisted) + short-OR-long-rest refill hook in `/rest`.
+- `tests/harness/test_favored_by_the_gods.py::test_use_fbg_out_of_uses` — exhausted-charge 409.
+
+### Notes
+- Second "deepening" pass on a G.2 Sorcerer batch feature (after Restore Balance in v2.99.344). Exercises the short-rest refill path for the first time. Tempestuous Magic, Telepathic Speech, and Strength of the Grave remain v1 announce-only.
+- **161 ships this session.**
+- **Total harness count: 1671** (was 1670 in v2.99.344; +1 new test).
+
+---
+
 ## [2.99.344] - 2026-06-05 — "The Counted Cogs" — Restore Balance uses now server-tracked (Clockwork Soul, TCE)
 
 **Schema version:** 66

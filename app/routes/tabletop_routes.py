@@ -51597,7 +51597,14 @@ async def use_favored_by_the_gods(
 
     Body: ``{character_id}``. Costs no action / bonus / reaction
     (a reactive once-per-rest trigger). Rolls the 2d4 server-side
-    and broadcasts the total. v1 — once-per-rest limit GM-tracked.
+    and broadcasts the total.
+
+    v2.99.345 — deepened past v1 announce-only: the single
+    use-per-short-or-long-rest is now server-tracked.
+    `sheet.favored_by_gods_uses` holds the remaining charge (seeded
+    to 1 when absent); using the feature decrements it to 0 and a
+    depleted charge returns 409 ``out_of_uses``. The /rest hook
+    refills it on a SHORT or long rest (RAW recharge cadence).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -51625,10 +51632,32 @@ async def use_favored_by_the_gods(
             "got_level": _sorcerer_level_from_sheet(sheet),
         })
 
+    # v2.99.345 — single use per short or long rest. Seed to 1 when
+    # the counter has never been set so a freshly-statted PC can use
+    # it before their first rest.
+    raw_uses = sheet.get("favored_by_gods_uses")
+    uses = int(raw_uses) if raw_uses is not None else 1
+    if uses <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Favored by the Gods",
+            "char_name": char.name,
+            "source": "favored-by-the-gods",
+            "uses_remaining": 0,
+            "uses_max": 1,
+        })
+
     import random
     d1 = random.randint(1, 4)
     d2 = random.randint(1, 4)
     bonus_total = d1 + d2
+
+    uses_remaining = uses - 1
+    sheet["favored_by_gods_uses"] = uses_remaining
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
 
     sorc_lv = _sorcerer_level_from_sheet(sheet)
 
@@ -51663,6 +51692,8 @@ async def use_favored_by_the_gods(
             "source": "favored-by-the-gods",
             "dice": [d1, d2],
             "bonus_total": bonus_total,
+            "uses_remaining": uses_remaining,
+            "uses_max": 1,
             "sorcerer_level": sorc_lv,
         },
     })
@@ -51672,6 +51703,8 @@ async def use_favored_by_the_gods(
         "feature": "favored-by-the-gods",
         "dice": [d1, d2],
         "bonus_total": bonus_total,
+        "uses_remaining": uses_remaining,
+        "uses_max": 1,
         "sorcerer_level": sorc_lv,
     }
 
@@ -58792,6 +58825,14 @@ async def rest_character(
     if "relentless_rage_dc" in sheet:
         sheet["relentless_rage_dc"] = 10
 
+    # v2.99.345 — Favored by the Gods (Divine Soul Sorcerer Lv 1+)
+    # short-OR-long-rest refill. RAW XGE p.50: "Once you use this
+    # feature, you can't use it again until you finish a short or
+    # long rest." Counter caps at 1 use, so refills on either rest
+    # type (this block runs before the long-only branch below).
+    if _pc_has_divine_soul(sheet, 1):
+        sheet["favored_by_gods_uses"] = 1
+
     if rest_type == "long":
         long_rest_new_cur = hp_max if hp_max > 0 else hp_cur
         hp["temp"] = 0
@@ -65894,6 +65935,11 @@ _SHEET_PATCH_KEYS = {
     # hook. Allowlisted so the test can seed/exhaust Zara's counter
     # without a full sheet rebuild.
     "restore_balance_uses",
+    # v2.99.345 — favored_by_gods_uses (int 0..1). Read by
+    # /use_favored_by_the_gods + the /rest short-OR-long-rest refill
+    # hook. Allowlisted so the test can seed/exhaust the counter
+    # without a full sheet rebuild.
+    "favored_by_gods_uses",
     # v2.99.238 — knowledge_blessings (dict {skills, languages}).
     # Read by /select_knowledge_blessings (Knowledge Domain Cleric
     # Lv 1+). Allowlisted so the test can reset to {} between
