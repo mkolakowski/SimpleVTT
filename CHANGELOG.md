@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.280] - 2026-06-05 — "The Closing Step" — Vengeance Paladin Relentless Avenger (H.2 depth, Lv 7 OA-rider)
+
+**Schema version:** 66
+**Commit summary:** **H.2 depth — Vengeance Paladin Lv 7+ Relentless Avenger.** RAW PHB p.88: when you hit a creature with an opportunity attack, you can move up to half your speed immediately after the attack as part of the same reaction; this movement doesn't provoke OAs.
+**Description:** One endpoint. `/use_relentless_avenger` — body `{character_id, override?}`. Validates Vengeance Paladin Lv 7+. Computes `bonus_move_ft = base_speed // 2` from `speed_walk` (or `speed`, default 30). Broadcasts `feature_used` with `source: relentless-avenger`. v1 announce-only — the actual half-speed-without-provoke move application is GM-tracked. Player triggers this *after* an OA hits to announce the bonus move. Note: Relentless Avenger is RAW an OA-rider, not an aura — slightly different shape from the v2.99.273 Aura of Conquest / v2.99.279 Aura of Warding sibling ships, but it's still the canonical Vengeance Lv 7 depth feature. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_relentless_avenger` endpoint.
+- `tests/harness/test_relentless_avenger.py` — 3 tests.
+
+### Notes
+- **H.2 depth Lv 7 batch progress:** 3 of 5 oaths now have a Lv 7 feature shipped (Conquest Aura of Conquest v2.99.273, Ancients Aura of Warding v2.99.279, Vengeance Relentless Avenger this). Remaining Lv 7 features: Redemption Aura of the Guardian, Glory Aura of Alacrity.
+- **96 ships this session.**
+- **Total harness count: 1428** (was 1425 in v2.99.279; +3 new tests).
+
+---
+
 ## [2.99.279] - 2026-06-05 — "The Verdant Ward" — Ancients Paladin Aura of Warding (H.2 depth, Lv 7 aura)
 
 **Schema version:** 66

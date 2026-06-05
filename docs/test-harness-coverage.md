@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1425 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.279, 2026-06-05).
+**Total tests:** 1428 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.280, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -515,6 +515,15 @@ v2.99.279 — Ancients Paladin (PHB p.87) Aura of Warding passive (H.2 depth). L
 | `test_use_aow_lv18_radius_upgrade` | Lv 18 Caelan → `radius_ft == 30`. |
 | `test_use_aow_wrong_subclass` | Default Caelan (Devotion) → 409. |
 | `test_use_aow_level_gate` | Ancients at Lv 6 → 409. |
+
+### `test_relentless_avenger.py`
+v2.99.280 — Vengeance Paladin (PHB p.88) Relentless Avenger OA-rider (H.2 depth). Lv 7+: on OA hit, you can move up to half your speed as part of the same reaction without provoking OAs. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ra_happy_lv7` | Lv 7 Caelan (speed 30) → `bonus_move_ft == 15`, `base_speed == 30`, broadcast (source `relentless-avenger`). |
+| `test_use_ra_wrong_subclass` | Default Caelan (Devotion) → 409. |
+| `test_use_ra_level_gate` | Vengeance at Lv 6 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

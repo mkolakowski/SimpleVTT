@@ -43476,6 +43476,103 @@ async def use_aura_of_warding(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_relentless_avenger")
+async def use_relentless_avenger(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.280 — Phase H.2 depth (Vengeance Paladin Lv 7+) of
+    the v2.99.193 phased completion plan. Relentless Avenger
+    (Vengeance Paladin Lv 7+, PHB p.88): "Starting at 7th level,
+    your supernatural focus helps you close on an enemy. When
+    you hit a creature with an opportunity attack, you can move
+    up to half your speed immediately after the attack and as
+    part of the same reaction. This movement doesn't provoke
+    opportunity attacks."
+
+    Body: ``{character_id, override?}``. No chip cost — bonus
+    move bundled into the OA reaction. v1 announce-only; the
+    actual half-speed-without-provoke movement application is
+    GM-tracked. Player triggers this *after* an OA hits to
+    announce the bonus move.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_vengeance_oath(sheet, 7):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "vengeance paladin lv 7+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+    base_speed = int(sheet.get("speed_walk") or sheet.get("speed") or 30)
+    bonus_move_ft = base_speed // 2
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🏃 Relentless Avenger — +{bonus_move_ft} ft "
+                f"(half speed, no OA provoked)"
+            ),
+            "feature_desc": (
+                f"{char.name} closes on the target after their "
+                f"OA hit — moves up to {bonus_move_ft} ft "
+                f"(half walking speed) as part of the same "
+                f"reaction. This movement doesn't provoke "
+                f"opportunity attacks. (Vengeance Paladin Lv 7+ "
+                f"class feature; triggered on a successful OA.)"
+            ),
+            "source": "relentless-avenger",
+            "bonus_move_ft": bonus_move_ft,
+            "base_speed": base_speed,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "relentless-avenger",
+        "bonus_move_ft": bonus_move_ft,
+        "base_speed": base_speed,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
