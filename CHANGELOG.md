@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.255] - 2026-06-04 — "The Bared Throat" — Battle Master Goading Attack (Phase E.1 maneuver 5 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 5 of 16).** RAW PHB p.74: on hit, expend 1 superiority die; +die damage and target WIS save DC 8 + prof + max(STR, DEX) or have disadvantage on attacks vs others than attacker until end of attacker's next turn. Same shape as Menacing Attack with a different on-fail.
+**Description:** One endpoint mirroring Menacing. `/use_goading_attack` — same gates + DC formula + dice decrement. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_goading_attack` endpoint.
+- `tests/harness/test_goading_attack.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 5 of 16** (Trip + Disarming + Menacing + Pushing + Goading). 11 remaining.
+- **71 ships this session.**
+- **Total harness count: 1351** (was 1348 in v2.99.254).
+
+---
+
 ## [2.99.254] - 2026-06-04 — "The Shoving Strike" — Battle Master Pushing Attack (Phase E.1 maneuver 4 of 16)
 
 **Schema version:** 66
