@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.330] - 2026-06-05 — "The Locking Eye" — Enchantment School Wizard Hypnotic Gaze (Lv 2+)
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Enchantment School Wizard Lv 2+ Hypnotic Gaze.** Fourth Wizard subclass shipped. RAW PHB p.117: action, target within 5 ft → WIS save DC 8 + prof + INT mod; on fail, charmed + incapacitated + speed 0 until end of caster's next turn. Extendable via action on subsequent turns. Ends on damage, caster moving >5 ft, target losing sight/hearing. Once a target succeeds, no re-use until long rest.
+**Description:** Adds `_pc_has_enchantment_wizard` helper. One endpoint. `/use_hypnotic_gaze` — body `{character_id, target_combatant_id?, override?}`. Validates Enchantment Wizard Lv 2+ + action chip. Computes save DC = 8 + prof + INT mod. Broadcasts. v1 announce-only. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_hypnotic_gaze` endpoint.
+- `_pc_has_enchantment_wizard` helper.
+- `tests/harness/test_hypnotic_gaze.py` — 4 tests.
+
+### Notes
+- **G.1 Wizard batch progress:** 4 of ~10 subclasses shipped (Abjuration, Divination, Conjuration, Enchantment).
+- **146 ships this session.**
+- **Total harness count: 1621** (was 1617 in v2.99.329; +4 new tests).
+
+---
+
 ## [2.99.329] - 2026-06-05 — "The Summoned Lantern" — Conjuration School Wizard Minor Conjuration (Lv 2+)
 
 **Schema version:** 66

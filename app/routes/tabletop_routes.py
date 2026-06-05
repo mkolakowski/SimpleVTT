@@ -25985,6 +25985,32 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_enchantment_wizard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.330 — RAW Enchantment School Wizard (Wizard, PHB
+    p.117): Enchantment Savant + Hypnotic Gaze (Lv 2),
+    Instinctive Charm (Lv 6), Split Enchantment (Lv 10),
+    Alter Memories (Lv 14).
+
+    Returns True when the PC is a Wizard with subclass slug
+    containing "enchantment" + meets `min_level`
+    (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "enchantment" not in subclass:
+        return False
+    return _wizard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_conjuration_wizard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.329 — RAW Conjuration School Wizard (Wizard, PHB
     p.116): Conjuration Savant + Minor Conjuration (Lv 2),
@@ -49968,6 +49994,134 @@ async def use_minor_conjuration(
         "max_dim_ft": 3,
         "max_weight_lb": 10,
         "dim_light_radius_ft": 5,
+        "wizard_level": wizard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_hypnotic_gaze")
+async def use_hypnotic_gaze(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.330 — Phase G.1 Wizard subclass batch (Enchantment
+    School Wizard Lv 2+) of the v2.99.193 phased completion
+    plan. Hypnotic Gaze (Enchantment Wizard Lv 2+, PHB p.117):
+    "Action: choose one creature within 5 ft. WIS save DC 8 +
+    prof + INT mod; on fail, target charmed + incapacitated +
+    speed 0 until end of next turn. Subsequent turns: action
+    to extend. Ends on damage, you move >5 ft away, or target
+    loses sight/hearing. Once a target succeeds, no re-use
+    until long rest."
+
+    Body: ``{character_id, target_combatant_id?, override?}``.
+    Costs an action chip. v1 announce-only — WIS save +
+    charm/incapacitated install is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    target_combatant_id = body.get("target_combatant_id") or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_enchantment_wizard(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "enchantment wizard lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "hypnotic-gaze",
+            "label": "Hypnotic Gaze",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    wizard_lv = _wizard_level_from_sheet(sheet)
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    abilities = sheet.get("abilities") or {}
+    try:
+        int_mod = (int(abilities.get("INT") or 10) - 10) // 2
+    except (TypeError, ValueError):
+        int_mod = 0
+    save_dc = 8 + prof + int_mod
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_text = (
+        f"combatant {target_combatant_id}"
+        if target_combatant_id else "the target within 5 ft"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"😵 Hypnotic Gaze — WIS save DC {save_dc} or charmed+0-speed"
+            ),
+            "feature_desc": (
+                f"{char.name} locks gaze on {target_text}. WIS save "
+                f"DC {save_dc}; on fail, charmed + incapacitated + "
+                f"speed 0 until end of {char.name}'s next turn. Use "
+                f"action on subsequent turns to extend. Ends if "
+                f"{char.name} moves >5 ft away, target loses "
+                f"sight/hearing, or target takes damage. (Enchantment "
+                f"Wizard Lv 2+ class feature; once per target per "
+                f"long rest.)"
+            ),
+            "source": "hypnotic-gaze",
+            "target_combatant_id": target_combatant_id,
+            "save_ability": "WIS",
+            "save_dc": save_dc,
+            "range_ft": 5,
+            "wizard_level": wizard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "hypnotic-gaze",
+        "target_combatant_id": target_combatant_id,
+        "save_ability": "WIS",
+        "save_dc": save_dc,
+        "range_ft": 5,
         "wizard_level": wizard_lv,
     }
 
