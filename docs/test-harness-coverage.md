@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1534 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.310, 2026-06-05).
+**Total tests:** 1537 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.311, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -810,6 +810,15 @@ v2.99.310 — Inquisitive Rogue (XGE p.45) Insightful Fighting Lv 3+ (E.3 Rogue 
 | `test_use_if_with_target` | Optional `target_combatant_id` passes through. |
 | `test_use_if_wrong_subclass` | Default Pip (Thief) → 409. |
 | `test_use_if_level_gate` | Inquisitive at Lv 2 → 409. |
+
+### `test_psychic_blades.py`
+v2.99.311 — Soulknife Rogue (TCE p.62) Psychic Blades Lv 3+ (E.3 Rogue batch). Bonus action to manifest Psychic Blades in each free hand. Simple melee + thrown (60/120 ft), 1d6 psychic, finesse + light. Counts as monk weapon. Usable with Sneak Attack. Costs bonus chip. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_pb_happy_lv7` | PATCH Pip → Soulknife Lv 7 → `damage_expression == "1d6"`, `damage_type == "psychic"`, `thrown_range_ft == [60, 120]`, properties include finesse/light/thrown, `counts_as_monk_weapon == True`, broadcast (source `psychic-blades`). |
+| `test_use_pb_wrong_subclass` | Default Pip (Thief) → 409. |
+| `test_use_pb_level_gate` | Soulknife at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

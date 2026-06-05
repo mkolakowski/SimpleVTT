@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.311] - 2026-06-05 — "The Manifest Blade" — Soulknife Rogue Psychic Blades (Lv 3+, TCE)
+
+**Schema version:** 66
+**Commit summary:** **E.3 Rogue subclass batch — Soulknife Rogue Lv 3+ Psychic Blades (TCE).** RAW TCE p.62: bonus action to manifest Psychic Blades in each free hand. Simple melee + thrown (60/120 ft), 1d6 psychic, finesse + light. Counts as monk weapon. Usable with Sneak Attack.
+**Description:** Adds `_pc_has_soulknife_subclass` helper. One endpoint. `/use_psychic_blades` — body `{character_id, override?}`. Validates Soulknife Rogue Lv 3+ + bonus chip. Broadcasts `feature_used` with `source: psychic-blades` + `damage_expression: "1d6"` + `damage_type: psychic` + `thrown_range_ft: [60, 120]`. v1 announce-only — actual attack rolls + Sneak Attack integration via existing /attack flow. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_psychic_blades` endpoint.
+- `_pc_has_soulknife_subclass` helper.
+- `tests/harness/test_psychic_blades.py` — 3 tests.
+
+### Notes
+- **E.3 Rogue batch progress:** 7 of 8 subclasses shipped (Thief, Assassin, Swashbuckler, Mastermind, Scout, Inquisitive, Soulknife). One remaining: Phantom (TCE). Arcane Trickster covered via spell features.
+- **127 ships this session.**
+- **Total harness count: 1537** (was 1534 in v2.99.310; +3 new tests).
+
+---
+
 ## [2.99.310] - 2026-06-05 — "The Reading Eye" — Inquisitive Rogue Insightful Fighting (Lv 3+)
 
 **Schema version:** 66
