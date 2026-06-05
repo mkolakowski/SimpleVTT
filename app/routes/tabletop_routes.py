@@ -25469,6 +25469,36 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_order_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.244 — RAW Order Domain features (Cleric, TCE p.39):
+    Voice of Authority + Bonus Proficiencies (Lv 1), Channel
+    Divinity: Order's Demand (Lv 2 — curated), Embodiment of
+    the Law (Lv 6 — enchantment as bonus action), Divine Strike
+    (Lv 8 — passive psychic uplift), Order's Wrath (Lv 17 —
+    enchantment+psychic on target after spell-induced effect).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "order" + meets `min_level` (multiclass-aware).
+    Gates the Order Domain endpoints.
+
+    Phase H.1 eleventh non-Life Cleric domain to ship.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "order" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_peace_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.243 — RAW Peace Domain features (Cleric, TCE p.40):
     Emboldening Bond + Implement of Peace (Lv 1), Channel
@@ -39363,6 +39393,150 @@ async def use_emboldening_bond(
         "bonded_names": bonded_names,
         "max_allowed": prof,
         "buff_installed": True,
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_voice_of_authority")
+async def use_voice_of_authority(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.244 — Phase H.1 eleventh + FINAL non-Life Cleric
+    domain of the v2.99.193 phased completion plan. Voice of
+    Authority (Order Domain Cleric Lv 1+, TCE p.39): "If you
+    cast a spell with a spell slot of 1st level or higher and
+    target an ally with the spell, that ally can use their
+    reaction immediately after the spell to make one weapon
+    attack against a creature of your choice that you can see.
+    If the spell targets more than one ally, you choose the ally
+    who can make the attack."
+
+    Body: ``{character_id, ally_combatant_id, target_name?, override?}``.
+
+    Validates Order Cleric Lv 1+ + ally combatant in active
+    battle + non-self ally + ally's reaction chip available.
+    Marks the ally's reaction chip + broadcasts the directive.
+    v1 ships as a manual trigger — the cleric/GM invokes after
+    a qualifying spell cast. Future commit can hook /cast_spell
+    post-cast for automatic offering when a Lv 1+ spell targets
+    an ally.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    ally_combatant_id = (str(body.get("ally_combatant_id") or "")).strip()
+    target_name = (str(body.get("target_name") or "")).strip()[:80]
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not ally_combatant_id:
+        raise HTTPException(400, "ally_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_order_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "order domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    ally_char_id = None
+    ally_name = ""
+    for c in (state.get("combatants") or []):
+        if c.get("id") == ally_combatant_id:
+            ally_char_id = c.get("char_id")
+            ally_name = c.get("name") or ""
+            break
+    if ally_char_id is None:
+        return JSONResponse(status_code=404, content={
+            "error": "ally_not_in_battle",
+            "ally_combatant_id": ally_combatant_id,
+        })
+    if int(ally_char_id) == int(char.id):
+        return JSONResponse(status_code=409, content={
+            "error": "self_targeting_not_allowed",
+            "expected": "an ally (not yourself)",
+        })
+
+    # RAW: the ALLY uses their reaction. Mark the ally's reaction
+    # chip, not the cleric's.
+    was_used = _is_slot_used(campaign_id, int(ally_char_id), "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": ally_name or "ally",
+            "source": "voice-of-authority",
+            "label": "Voice of Authority (ally reaction)",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, int(ally_char_id), "reaction")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_phrase = f" vs {target_name}" if target_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⚖️ Voice of Authority — {ally_name or 'ally'} "
+                f"reaction attack{target_phrase}"
+            ),
+            "feature_desc": (
+                f"After {char.name}'s Lv 1+ spell targets "
+                f"{ally_name or 'an ally'}, the ally takes one "
+                f"weapon attack as a reaction{target_phrase}. "
+                f"(Order Domain Cleric Lv 1+ class feature.)"
+            ),
+            "source": "voice-of-authority",
+            "ally_combatant_id": ally_combatant_id,
+            "ally_char_id": ally_char_id,
+            "ally_name": ally_name,
+            "target_name": target_name,
+            "over_budget": was_used,
+            "over_budget_slot": "reaction" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "voice-of-authority",
+        "ally_combatant_id": ally_combatant_id,
+        "ally_char_id": ally_char_id,
+        "ally_name": ally_name,
+        "target_name": target_name,
         "over_budget": was_used,
     }
 

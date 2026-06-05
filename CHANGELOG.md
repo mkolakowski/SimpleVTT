@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.244] - 2026-06-04 — "The Court's Decree" — Order Domain Cleric Voice of Authority (Phase H.1 ELEVENTH — H.1 substantially complete)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 eleventh non-Life Cleric domain of the v2.99.193 phased completion plan.** RAW TCE p.39: Order Cleric Lv 1+ — after casting a Lv 1+ spell that targets an ally, the ally takes one weapon attack as a reaction. **With this commit, H.1's coverage spans Light, Tempest, War, Trickery, Knowledge, Nature, Forge, Grave, Twilight, Peace, Order — 11 of the 11 non-Life Cleric domains tracked in the plan now have at least one Lv 1 feature shipped.** Death Domain (DMG) was outside the original H.1 scope per the plan doc; if it lands, it'll ship as a follow-up.
+**Description:** One helper + one endpoint. (1) `_pc_has_order_domain(sheet, min_level)` — multiclass-aware. (2) `/use_voice_of_authority` — body `{character_id, ally_combatant_id, target_name?, override?}`. Validates Order Cleric Lv 1+ + ally combatant exists in active battle + non-self + the **ALLY's** reaction chip available. Marks the ally's reaction chip (RAW: the ally spends their reaction, not the cleric), broadcasts. v1 is a manual trigger — the cleric/GM invokes after a qualifying spell cast. Future commit can hook `/cast_spell` post-cast for automatic offering. Brother Tavik Stonebrow is the demo fixture. One new harness test file with 4 tests.
+
+### Added
+- `_pc_has_order_domain(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_voice_of_authority` endpoint.
+- `tests/harness/test_voice_of_authority.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 4 regression tests. No schema change.
+- **First H.1 endpoint that marks a non-caster's economy chip.** Every prior Cleric H.1 endpoint marked the cleric's own action/bonus/reaction chip (or no chip for self-bond targeting). Voice of Authority RAW makes the ally spend their reaction — so `_mark_battle_economy(campaign_id, ally_char_id, "reaction")` operates on the ally's combatant, not the cleric's. The 409 `over_budget` path also checks the ally's chip, not the cleric's.
+- **Manual trigger v1.** RAW the feature auto-fires after any qualifying spell. v1 ships as a manual `/use_*` endpoint so the cleric/GM declares the trigger. Auto-offer at `/cast_spell` post-cast site is filed (would need a `_pc_has_order_domain(caster_sheet, 1)` check + an ally-target detection there).
+- **Phase H.1 substantially complete.** 11 of 11 non-Life Cleric domain rows tracked in the plan have at least one Lv 1 feature shipped: Light (v2.99.234), Tempest (.235), War (.236), Trickery (.237), Knowledge (.238), Nature (.239), Forge (.240), Grave (.241), Twilight (.242), Peace (.243), Order (.244). **Each ship was its own commit, one domain per commit.** The Lv 6/8/17 features for each domain, the Death Domain (DMG), and any additional XGE/TCE extras are filed as Phase H.1-deep follow-ups but don't block the H.2 + H.3 + H.4 work that precedes 3.0.0.
+- **Next step toward 3.0.0:** H.2 (non-Devotion Paladin oaths, ~6) is now unblocked.
+- **60 ships this session.**
+- **Total harness count: 1306** (was 1302 in v2.99.243).
+
+---
+
 ## [2.99.243] - 2026-06-04 — "Hands Across the Circle" — Peace Domain Cleric Emboldening Bond (Phase H.1 tenth domain)
 
 **Schema version:** 66

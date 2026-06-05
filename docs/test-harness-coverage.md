@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1302 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.243, 2026-06-04).
+**Total tests:** 1306 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.244, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,16 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_voice_of_authority.py`
+v2.99.244 — Order Domain Cleric (TCE p.39) Voice of Authority manual trigger (Phase H.1 final domain). Authorizes an ally to take a reaction weapon attack after the cleric casts a Lv 1+ spell. Marks the ALLY's reaction chip.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_voa_ally_happy` | Tavik authorizes Caelan vs Bandit Alpha → ally reaction marked, broadcast (source `voice-of-authority`). |
+| `test_use_voa_self_target` | Targeting self → 409 `self_targeting_not_allowed` (RAW: ally only). |
+| `test_use_voa_unknown_ally` | Unknown ally_combatant_id → 404 `ally_not_in_battle`. |
+| `test_use_voa_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 
 ### `test_emboldening_bond.py`
 v2.99.243 — Peace Domain Cleric (TCE p.40) Emboldening Bond multi-target buff (Phase H.1 tenth domain). Up to prof-bonus creatures get +1d4 to attack/check/save while within 30 ft of one another.
