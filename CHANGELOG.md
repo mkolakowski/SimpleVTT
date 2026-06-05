@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.263] - 2026-06-04 — "The Dancing Step" — Battle Master Evasive Footwork (Phase E.1 maneuver 13 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 13 of 16).** RAW PHB p.74: when you move, expend 1 die; +die AC until movement stops.
+**Description:** One endpoint. `/use_evasive_footwork` — body `{character_id}`. Movement-tied; **no chip gate** (this is intentional per RAW — Evasive Footwork doesn't cost an action / bonus / reaction). Broadcast carries `ac_bonus`. v1 announce-only — the AC bump is GM-tracked until movement stops this turn. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_evasive_footwork` endpoint.
+- `tests/harness/test_evasive_footwork.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 13 of 16.** 3 remaining: Commander's Strike, Distracting Strike, Maneuvering Attack.
+- **79 ships this session.**
+- **Total harness count: 1375** (was 1372 in v2.99.262).
+
+---
+
 ## [2.99.262] - 2026-06-04 — "The Glinting Counter" — Battle Master Riposte (Phase E.1 maneuver 12 of 16)
 
 **Schema version:** 66
