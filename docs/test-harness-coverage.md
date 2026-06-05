@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1586 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.322, 2026-06-05).
+**Total tests:** 1591 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.323, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -934,6 +934,17 @@ v2.99.322 — Whispers College Bard (XGE p.17) Psychic Blades Lv 3+ (F.1 Bard ba
 | `test_use_wpb_lv15` | Lv 15 → `damage_expression == "8d6"`. |
 | `test_use_wpb_wrong_subclass` | Default Lyra (Lore) → 409. |
 | `test_use_wpb_level_gate` | Whispers at Lv 2 → 409. |
+
+### `test_blade_flourish.py`
+v2.99.323 — Swords College Bard (XGE p.16) Blade Flourish Lv 3+ (F.1 Bard batch). On Attack action walking speed +10 ft until end of turn; on weapon hit, expend 1 BI use → one Flourish (Defensive / Slashing / Mobile). Once per turn. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_bf_happy_lv6_defensive` | PATCH Lyra → Swords Lv 6 default Defensive → `flourish == "defensive"`, `walking_speed_bonus_ft == 10`, `consumed_bardic_inspiration == True`, broadcast (source `blade-flourish`). |
+| `test_use_bf_slashing` | flourish="slashing" passes through. |
+| `test_use_bf_mobile` | flourish="mobile" passes through. |
+| `test_use_bf_wrong_subclass` | Default Lyra (Lore) → 409. |
+| `test_use_bf_level_gate` | Swords at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

@@ -25985,6 +25985,30 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_swords_bard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.323 — RAW Swords College Bard (Bard, XGE p.16):
+    Bonus Proficiencies + Fighting Style + Blade Flourish (Lv 3),
+    Extra Attack (Lv 6), Master's Flourish (Lv 14).
+
+    Returns True when the PC is a Bard with subclass slug
+    containing "swords" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "bard":
+        has_bard = any(
+            (entry.get("class") or "").strip().lower() == "bard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_bard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "swords" not in subclass:
+        return False
+    return _bard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_whispers_bard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.322 — RAW Whispers College Bard (Bard, XGE p.17):
     Psychic Blades + Words of Terror (Lv 3), Mantle of
@@ -48920,6 +48944,123 @@ async def use_whispers_psychic_blades(
         "target_combatant_id": target_combatant_id,
         "damage_expression": damage_expression,
         "damage_type": "psychic",
+        "consumed_bardic_inspiration": True,
+        "bard_level": bard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_blade_flourish")
+async def use_blade_flourish(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.323 — Phase F.1 Bard subclass batch (Swords
+    College Bard Lv 3+, XGE) of the v2.99.193 phased completion
+    plan. Blade Flourish (Swords College Bard Lv 3+, XGE p.16):
+    "On your Attack action, walking speed +10 ft until end of
+    turn. If a weapon attack hits, expend 1 BI use to apply
+    one Flourish: Defensive (+BI to damage + AC until next
+    turn), Slashing (+BI bonus dmg to nearby creature), or
+    Mobile (+BI bonus dmg + push 5 ft + free reaction-move
+    adjacent to target). Once per turn."
+
+    Body: ``{character_id, flourish?, target_combatant_id?,
+    override?}``. flourish: "defensive" (default), "slashing",
+    or "mobile". No chip — BI decrement via existing flow.
+    v1 announce-only — actual BI roll + applied bonus is
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    flourish = (body.get("flourish") or "defensive").strip().lower()
+    if flourish not in ("defensive", "slashing", "mobile"):
+        flourish = "defensive"
+    target_combatant_id = body.get("target_combatant_id") or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Bard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_swords_bard(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "swords bard lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _bard_level_from_sheet(sheet),
+        })
+
+    bard_lv = _bard_level_from_sheet(sheet)
+    walking_speed_bonus_ft = 10
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    flourish_text = {
+        "defensive": (
+            "Defensive Flourish: +BI to damage and AC until "
+            "the start of your next turn."
+        ),
+        "slashing": (
+            "Slashing Flourish: +BI bonus damage to another "
+            "creature within 5 ft of the target."
+        ),
+        "mobile": (
+            "Mobile Flourish: +BI bonus damage + push target "
+            "5 ft + free reaction-move adjacent to target."
+        ),
+    }[flourish]
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⚔️ Blade Flourish — {flourish.title()} + "
+                f"+{walking_speed_bonus_ft} ft speed"
+            ),
+            "feature_desc": (
+                f"{char.name} performs a {flourish.title()} Flourish. "
+                f"{flourish_text} Walking speed +{walking_speed_bonus_ft} "
+                f"ft until end of turn. (Swords College Bard Lv 3+ "
+                f"XGE class feature; consumes 1 BI use, once per turn.)"
+            ),
+            "source": "blade-flourish",
+            "flourish": flourish,
+            "target_combatant_id": target_combatant_id,
+            "walking_speed_bonus_ft": walking_speed_bonus_ft,
+            "consumed_bardic_inspiration": True,
+            "bard_level": bard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "blade-flourish",
+        "flourish": flourish,
+        "target_combatant_id": target_combatant_id,
+        "walking_speed_bonus_ft": walking_speed_bonus_ft,
         "consumed_bardic_inspiration": True,
         "bard_level": bard_lv,
     }

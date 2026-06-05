@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.323] - 2026-06-05 — "The Dancing Edge" — Swords College Bard Blade Flourish (Lv 3+, XGE)
+
+**Schema version:** 66
+**Commit summary:** **F.1 Bard subclass batch — Swords College Bard Lv 3+ Blade Flourish (XGE).** Fifth Bard subclass shipped. RAW XGE p.16: on Attack action walking speed +10 ft until end of turn; on weapon hit, expend 1 BI use → one Flourish (Defensive: +BI to damage + AC, Slashing: +BI bonus damage to nearby creature, Mobile: +BI bonus damage + push 5 ft + free reaction-move). Once per turn.
+**Description:** Adds `_pc_has_swords_bard` helper. One endpoint. `/use_blade_flourish` — body `{character_id, flourish?, target_combatant_id?, override?}`. flourish "defensive" (default), "slashing", or "mobile". Validates Swords Bard Lv 3+. No chip — BI decrement via existing flow. Broadcasts `walking_speed_bonus_ft: 10`. v1 announce-only. One new harness test file with 5 tests.
+
+### Added
+- `/api/campaign/{cid}/use_blade_flourish` endpoint.
+- `_pc_has_swords_bard` helper.
+- `tests/harness/test_blade_flourish.py` — 5 tests.
+
+### Notes
+- **F.1 Bard batch progress:** 5 of ~8 subclasses shipped (Lore, Valor, Glamour, Whispers, Swords). Remaining: Eloquence (TCE), Spirits (TCE), Creation (TCE).
+- **139 ships this session.**
+- **Total harness count: 1591** (was 1586 in v2.99.322; +5 new tests).
+
+---
+
 ## [2.99.322] - 2026-06-05 — "The Toxic Whisper" — Whispers College Bard Psychic Blades (Lv 3+, XGE)
 
 **Schema version:** 66
