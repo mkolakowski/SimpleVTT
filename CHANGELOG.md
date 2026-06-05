@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.275] - 2026-06-04 — "The Soft Word" — Redemption Paladin Emissary of Peace CD (H.2 depth)
+
+**Schema version:** 66
+**Commit summary:** **H.2 depth — Redemption sibling CD to Rebuke the Violent.** RAW XGE p.39: bonus action; self +5 to Persuasion checks for 10 minutes.
+**Description:** One endpoint. `/use_emissary_of_peace` — body `{character_id, override?}`. Validates Redemption Lv 3+ + CD >= 1 + bonus chip. Decrements CD, marks chip, broadcasts `persuasion_bonus: 5` + `duration_minutes: 10`. v1 announce-only; the +5 application to next Persuasion check is GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_emissary_of_peace` endpoint.
+- `tests/harness/test_emissary_of_peace.py` — 3 tests.
+
+### Notes
+- **H.2 depth progress:** 3 of 5 oaths now have a Phase 2 ship (Ancients Turn the Faithless, Vengeance Abjure Enemy, Redemption Emissary of Peace); Conquest has Aura of Conquest (no Lv 3 sibling per RAW); Glory remains. After Glory's Phase 2 ships, every oath in the H.2 batch will have at least its Phase 2 sibling done.
+- **91 ships this session.**
+- **Total harness count: 1415** (was 1412 in v2.99.274).
+
+---
+
 ## [2.99.274] - 2026-06-04 — "The Adjuration" — Vengeance Paladin Abjure Enemy CD (H.2 depth, sibling to Vow of Enmity)
 
 **Schema version:** 66

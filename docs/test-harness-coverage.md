@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1412 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.274, 2026-06-04).
+**Total tests:** 1415 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.275, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -454,6 +454,15 @@ v2.99.250 — Phase H.3 batched 5-invocation breadth ship. Single `/use_invocati
 | `test_use_inv_lifedrinker_no_pact` | Magnus PATCH'd to Lv 12 (level prereq satisfied) but no `pact_boon == "blade"` → 409 `pact_prereq_unmet`. |
 | `test_use_inv_lifedrinker_level_too_low` | Lifedrinker at Lv 5 (needs 12) → 409 `level_too_low`. |
 | `test_use_inv_hex_warrior_wrong_subclass` | Magnus default subclass "The Fiend" → 409 `subclass_prereq_unmet` (Hex Warrior needs Hexblade). |
+
+### `test_emissary_of_peace.py`
+v2.99.275 — Redemption Paladin (XGE p.39) Emissary of Peace CD (H.2 depth). Bonus action self-buff: +5 Persuasion 10 min.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_eop_happy` | Redemption Caelan → `persuasion_bonus == 5`, `duration_minutes == 10`, CD 1 → 0. |
+| `test_use_eop_out_of_cd` | CD 0 → 409. |
+| `test_use_eop_wrong_subclass` | Default Caelan (Devotion) → 409. |
 
 ### `test_rebuke_the_violent.py`
 v2.99.249 — Oath of Redemption (Paladin subclass, XGE p.39) Rebuke the Violent reaction CD (Phase H.2 FIFTH + FINAL oath). Caelan PATCH'd to Redemption + CD 1/1 + Bandit attacker in battle. DC 14.
