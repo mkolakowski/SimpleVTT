@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.332] - 2026-06-05 — "The Bone-Drinker's Toll" — Necromancy School Wizard Grim Harvest (Lv 2+)
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Necromancy School Wizard Lv 2+ Grim Harvest.** Sixth Wizard subclass shipped. RAW PHB p.118: once per turn, on killing a creature with a Lv 1+ spell, regain HP = 2 × spell level (3 × spell level if necromancy). Doesn't apply to constructs or undead.
+**Description:** Adds `_pc_has_necromancy_wizard` helper. One endpoint. `/use_grim_harvest` — body `{character_id, spell_level, is_necromancy?, override?}`. spell_level (≥1) required. Validates Necromancy Wizard Lv 2+. Computes `heal_amount = (3 if is_necromancy else 2) × spell_level`. No chip — passive on kill. Broadcasts. v1 announce-only — HP gain GM-applied via existing /heal flow. One new harness test file with 5 tests.
+
+### Added
+- `/api/campaign/{cid}/use_grim_harvest` endpoint.
+- `_pc_has_necromancy_wizard` helper.
+- `tests/harness/test_grim_harvest.py` — 5 tests.
+
+### Notes
+- **G.1 Wizard batch progress:** 6 of ~10 subclasses shipped (Abjuration, Divination, Conjuration, Enchantment, Illusion, Necromancy).
+- **148 ships this session.**
+- **Total harness count: 1629** (was 1624 in v2.99.331; +5 new tests).
+
+---
+
 ## [2.99.331] - 2026-06-05 — "Sound and Vision" — Illusion School Wizard Improved Minor Illusion (Lv 2+)
 
 **Schema version:** 66
