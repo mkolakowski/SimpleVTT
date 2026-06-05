@@ -27067,6 +27067,31 @@ def _pc_has_clockwork_soul(sheet: "dict | None", min_level: int) -> bool:
     return _sorcerer_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_shadow_magic(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.343 — RAW Shadow Magic (Sorcerer subclass, XGE
+    p.50): Eyes of the Dark + Strength of the Grave (Lv 1),
+    Hound of Ill Omen (Lv 6), Shadow Walk (Lv 14), Umbral Form
+    (Lv 18).
+
+    Returns True when the PC is a Sorcerer with subclass slug
+    containing "shadow" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        has_sorc = any(
+            (entry.get("class") or "").strip().lower() == "sorcerer"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_sorc:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "shadow" not in subclass:
+        return False
+    return _sorcerer_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_wild_magic(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.227 — RAW Wild Magic (Sorcerer subclass, PHB p.103):
     Wild Magic Surge + Tides of Chaos (Lv 1), Bend Luck (Lv 6),
@@ -51871,6 +51896,129 @@ async def use_restore_balance(
         "feature": "restore-balance",
         "range_ft": 60,
         "cancels_adv_disadv": True,
+        "sorcerer_level": sorc_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_strength_of_the_grave")
+async def use_strength_of_the_grave(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.343 — Phase G.2 Sorcerer subclass batch ship #5
+    (Shadow Magic Lv 1+, XGE) of the v2.99.193 phased completion
+    plan — CLOSES the Sorcerer batch. Strength of the Grave
+    (Shadow Magic Lv 1+, XGE p.50): "Starting at 1st level, your
+    flickering life force allows you to cling to life. When damage
+    reduces you to 0 hit points and doesn't kill you outright, you
+    can make a Charisma saving throw (DC 5 + the damage taken). On
+    a success, you drop to 1 hit point instead." Once per long
+    rest; doesn't work against radiant damage or a critical hit.
+
+    Body: ``{character_id, damage}``. Costs no action. Rolls the
+    CHA save server-side (d20 + CHA mod vs DC 5 + damage) and
+    broadcasts the result. v1 — once-per-rest limit + damage-type
+    /crit exclusions GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    damage = int(body.get("damage") or 0)
+    if damage < 0:
+        raise HTTPException(400, "damage must be >= 0")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_shadow_magic(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "shadow magic sorcerer lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _sorcerer_level_from_sheet(sheet),
+        })
+
+    try:
+        cha_score = int((sheet.get("abilities") or {}).get("CHA", 10))
+    except (TypeError, ValueError):
+        cha_score = 10
+    cha_mod = (cha_score - 10) // 2
+    dc = 5 + damage
+
+    import random
+    d20 = random.randint(1, 20)
+    total = d20 + cha_mod
+    success = total >= dc
+
+    sorc_lv = _sorcerer_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    outcome = (
+        f"clings to life — drops to 1 HP instead of 0"
+        if success else
+        f"succumbs — the save fails"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"💀 Strength of the Grave — CHA save "
+                f"{total} vs DC {dc} ({'✓' if success else '✗'})"
+            ),
+            "feature_desc": (
+                f"{char.name} {outcome}. Charisma saving throw "
+                f"(d20 {d20} {'+' if cha_mod >= 0 else '−'} "
+                f"{abs(cha_mod)} = {total}) vs DC 5 + {damage} "
+                f"damage = {dc}. Once per long rest; no effect vs "
+                f"radiant damage or a critical hit. (Shadow Magic "
+                f"Sorcerer Lv 1+ XGE class feature.)"
+            ),
+            "source": "strength-of-the-grave",
+            "d20": d20,
+            "cha_mod": cha_mod,
+            "total": total,
+            "dc": dc,
+            "damage": damage,
+            "success": success,
+            "sorcerer_level": sorc_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "strength-of-the-grave",
+        "d20": d20,
+        "cha_mod": cha_mod,
+        "total": total,
+        "dc": dc,
+        "damage": damage,
+        "success": success,
         "sorcerer_level": sorc_lv,
     }
 

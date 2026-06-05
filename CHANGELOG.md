@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.343] - 2026-06-05 — "The Clinging Dark" — Shadow Magic Sorcerer Strength of the Grave (Lv 1+, XGE) — 🎉 G.2 Sorcerer batch CLOSE 8/8
+
+**Schema version:** 66
+**Commit summary:** **G.2 Sorcerer subclass batch ship #5 — Shadow Magic Lv 1+ Strength of the Grave (XGE) — CLOSES the Sorcerer batch (all 8 subclasses now have ≥1 first-feature ship).** RAW XGE p.50: when damage reduces you to 0 HP and doesn't kill you outright, make a Charisma saving throw (DC 5 + the damage taken); on a success you drop to 1 HP instead. Once per long rest; no effect vs radiant damage or a critical hit.
+**Description:** Adds `_pc_has_shadow_magic` helper. One endpoint. `/use_strength_of_the_grave` — body `{character_id, damage}`. Validates Shadow Magic Lv 1+. Rolls the CHA save **server-side** (d20 + CHA mod vs DC 5 + damage) and broadcasts `feature_used` with `source: strength-of-the-grave`, `d20`, `cha_mod`, `total`, `dc`, `success`. v1 — once-per-rest limit + damage-type/crit exclusions GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_strength_of_the_grave` endpoint.
+- `_pc_has_shadow_magic` helper.
+- `tests/harness/test_strength_of_the_grave.py` — 3 tests.
+
+### Notes
+- **G.2 Sorcerer batch CLOSE:** all 8 Sorcerer subclasses now have ≥1 first-feature ship — Draconic Bloodline, Wild Magic, Storm Sorcery, Divine Soul, Aberrant Mind, Clockwork Soul, Shadow Magic (this ship), plus the Lv 1 base. Shadow Magic was the last untouched subclass.
+- **159 ships this session.**
+- **Total harness count: 1669** (was 1666 in v2.99.342; +3 new tests).
+
+---
+
 ## [2.99.342] - 2026-06-05 — "The Even Hand" — Clockwork Soul Sorcerer Restore Balance (Lv 1+, TCE) — 🎉 G.2 Sorcerer batch
 
 **Schema version:** 66
