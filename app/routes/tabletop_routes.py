@@ -26741,6 +26741,31 @@ def _pc_has_great_old_one_warlock(sheet: "dict | None", min_level: int) -> bool:
     return _warlock_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_celestial_warlock(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.353 — RAW The Celestial (Warlock patron, XGE p.54):
+    Healing Light + Bonus Cantrips (Lv 1), Radiant Soul (Lv 6),
+    Celestial Resilience (Lv 10), Searing Vengeance (Lv 14).
+
+    Returns True when the PC is a Warlock with subclass slug
+    containing "celestial" (e.g. "The Celestial") + meets
+    `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "warlock":
+        has_warlock = any(
+            (entry.get("class") or "").strip().lower() == "warlock"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "celestial" not in subclass:
+        return False
+    return _warlock_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -49822,6 +49847,193 @@ async def use_awakened_mind(
         "ok": True,
         "feature": "awakened-mind",
         "range_ft": 30,
+        "warlock_level": warlock_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_healing_light")
+async def use_healing_light(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.353 — Phase G Warlock patron subclass batch ship #5
+    (The Celestial Lv 1+, XGE) of the v2.99.193 phased completion
+    plan. Healing Light (The Celestial Lv 1+, XGE p.54): "You have
+    a pool of d6s that you spend to fuel this healing. The number
+    of dice in the pool equals 1 + your warlock level. As a bonus
+    action, you can heal one creature you can see within 60 feet
+    of you, spending dice from the pool. The maximum number of
+    dice you can spend at once equals your Charisma modifier (a
+    minimum of one die). You regain all expended dice when you
+    finish a long rest."
+
+    Body: ``{character_id, dice_spent?, override?}``. Default
+    dice_spent = 1, capped at the per-use max (CHA mod, min 1) and
+    the remaining pool. Costs a bonus chip. Auto-bootstraps a
+    `healing-light-dice` resource (max = 1 + warlock_lv,
+    reset=long). The heal dice are rolled server-side and
+    broadcast; target HP application is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    dice_spent_raw = body.get("dice_spent") or 1
+    try:
+        dice_spent = max(1, int(dice_spent_raw))
+    except (TypeError, ValueError):
+        dice_spent = 1
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_celestial_warlock(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "the celestial warlock lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _warlock_level_from_sheet(sheet),
+        })
+
+    warlock_lv = _warlock_level_from_sheet(sheet)
+    try:
+        cha_score = int((sheet.get("abilities") or {}).get("CHA", 10))
+    except (TypeError, ValueError):
+        cha_score = 10
+    cha_mod = (cha_score - 10) // 2
+    per_use_max = max(1, cha_mod)
+    pool_max = 1 + warlock_lv
+    dice_spent = min(dice_spent, per_use_max)
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "healing-light",
+            "label": "Healing Light",
+            "strict": strict,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    hl_row = None
+    hl_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "healing-light-dice":
+            hl_row = dict(r); hl_idx = i; break
+    if hl_row is None:
+        hl_row = {
+            "key": "healing-light-dice",
+            "label": "Healing Light dice",
+            "current": pool_max, "max": pool_max, "reset": "long",
+        }
+        hl_idx = len(resources)
+        resources.append(hl_row)
+    hl_cur = int(hl_row.get("current") or 0)
+    hl_max = int(hl_row.get("max") or pool_max)
+    if hl_cur < dice_spent:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Healing Light dice",
+            "current": hl_cur, "max": hl_max,
+            "requested": dice_spent,
+        })
+
+    try:
+        result = dice_mod.roll(f"{dice_spent}d6")
+        heal_total = max(dice_spent, int(result.total))
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        heal_total = dice_spent
+        breakdown = ""
+
+    hl_row["current"] = hl_cur - dice_spent
+    resources[hl_idx] = hl_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "healing-light-dice",
+            "current": hl_cur - dice_spent, "max": hl_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌟 Healing Light — heal {heal_total} HP "
+                f"(spent {dice_spent}d6)"
+            ),
+            "feature_desc": (
+                f"{char.name} channels celestial energy to restore "
+                f"{heal_total} HP to a creature within 60 ft "
+                f"(spent {dice_spent}d6 of the pool). (The "
+                f"Celestial Warlock Lv 1+ XGE class feature; pool "
+                f"= 1 + warlock level, refills on long rest.)"
+            ),
+            "source": "healing-light",
+            "dice_spent": dice_spent,
+            "dice_breakdown": breakdown,
+            "heal_amount": heal_total,
+            "max_range_ft": 60,
+            "dice_remaining": hl_cur - dice_spent,
+            "max_dice": hl_max,
+            "per_use_max": per_use_max,
+            "warlock_level": warlock_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "healing-light",
+        "dice_spent": dice_spent,
+        "heal_amount": heal_total,
+        "max_range_ft": 60,
+        "dice_remaining": hl_cur - dice_spent,
+        "max_dice": hl_max,
+        "per_use_max": per_use_max,
         "warlock_level": warlock_lv,
     }
 

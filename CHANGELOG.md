@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.353] - 2026-06-05 — "The Radiant Pool" — The Celestial Warlock Healing Light (Lv 1+, XGE) — 🔮 Warlock patron batch
+
+**Schema version:** 66
+**Commit summary:** **Warlock patron subclass batch ship #5 — The Celestial Lv 1+ Healing Light (XGE).** Fifth Warlock patron batch ship; opens The Celestial. RAW XGE p.54: pool of d6s = 1 + warlock level. As a bonus action, heal one creature within 60 ft, spending up to CHA-mod dice (min 1) at once. Regain all dice on a long rest.
+**Description:** Adds `_pc_has_celestial_warlock` helper. One endpoint. `/use_healing_light` — body `{character_id, dice_spent?, override?}`. Validates The Celestial Warlock Lv 1+ + bonus chip. Auto-bootstraps a `healing-light-dice` resource (max = 1 + warlock level, reset=long) — the first dice-pool-tracked ship in the Warlock batch (mirrors the Dreams Druid Balm of the Summer Court pattern). Caps `dice_spent` at the per-use max (CHA mod, min 1) and the remaining pool; rolls `<dice_spent>d6` **server-side**; decrements the pool; returns 409 `no_uses_left` when the pool can't cover the request. Broadcasts `resource_update` + `feature_used` with `source: healing-light`, `heal_amount`, `dice_remaining`, `max_dice`, `per_use_max`. The generic `/rest` long-rest resource loop refills the pool. Target HP application is GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_healing_light` endpoint.
+- `_pc_has_celestial_warlock` helper.
+- `tests/harness/test_healing_light.py` — 3 tests.
+
+### Notes
+- **Warlock patron batch progress:** 5 of ~7 patrons shipped (The Fiend, The Archfey, The Hexblade, The Great Old One, The Celestial). Remaining untouched: Fathomless (Tentacle of the Deeps), Genie (Genie's Vessel).
+- **169 ships this session.**
+- **Total harness count: 1695** (was 1692 in v2.99.352; +3 new tests).
+
+---
+
 ## [2.99.352] - 2026-06-05 — "The Alien Whisper" — The Great Old One Warlock Awakened Mind (Lv 1+, PHB) — 🔮 Warlock patron batch
 
 **Schema version:** 66
