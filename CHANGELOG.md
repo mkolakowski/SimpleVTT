@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.341] - 2026-06-05 — "The Open Mind" — Aberrant Mind Sorcerer Telepathic Speech (Lv 1+, TCE) — 🌪️ G.2 Sorcerer batch
+
+**Schema version:** 66
+**Commit summary:** **G.2 Sorcerer subclass batch ship #3 — Aberrant Mind Lv 1+ Telepathic Speech (TCE).** Third Sorcerer batch ship; opens Aberrant Mind. RAW TCE p.68: as a bonus action, form a telepathic connection to a creature you can see within 30 ft; the link lasts a number of minutes equal to your sorcerer level.
+**Description:** Adds `_pc_has_aberrant_mind` helper. One endpoint. `/use_telepathic_speech` — body `{character_id, override?}`. Validates Aberrant Mind Lv 1+ + bonus chip. Broadcasts `feature_used` with `source: telepathic-speech`, `range_ft: 30`, `duration_minutes: <sorcerer level>`. v1 announce-only — target choice + range + duration GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_telepathic_speech` endpoint.
+- `_pc_has_aberrant_mind` helper.
+- `tests/harness/test_telepathic_speech.py` — 3 tests.
+
+### Notes
+- **G.2 Sorcerer batch progress:** 2 Sorcerer subclasses still need first-feature ships (Aberrant Mind now opened; Storm Sorcery, Divine Soul, Draconic Bloodline + Wild Magic already have ≥1 feature each). Remaining untouched: Shadow Magic (XGE), Clockwork Soul (TCE).
+- **157 ships this session.**
+- **Total harness count: 1663** (was 1660 in v2.99.340; +3 new tests).
+
+---
+
 ## [2.99.340] - 2026-06-05 — "The Lucky Saint" — Divine Soul Sorcerer Favored by the Gods (Lv 1+, XGE) — 🌪️ G.2 Sorcerer batch
 
 **Schema version:** 66

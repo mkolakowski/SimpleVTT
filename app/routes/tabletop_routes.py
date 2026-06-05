@@ -27017,6 +27017,31 @@ def _pc_has_divine_soul(sheet: "dict | None", min_level: int) -> bool:
     return _sorcerer_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_aberrant_mind(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.341 — RAW Aberrant Mind (Sorcerer subclass, TCE
+    p.68): Psionic Spells + Telepathic Speech (Lv 1), Psionic
+    Sorcery + Psychic Defenses (Lv 6), Revelation in Flesh
+    (Lv 14), Warping Implosion (Lv 18).
+
+    Returns True when the PC is a Sorcerer with subclass slug
+    containing "aberrant" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        has_sorc = any(
+            (entry.get("class") or "").strip().lower() == "sorcerer"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_sorc:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "aberrant" not in subclass:
+        return False
+    return _sorcerer_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_wild_magic(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.227 — RAW Wild Magic (Sorcerer subclass, PHB p.103):
     Wild Magic Surge + Tides of Chaos (Lv 1), Bend Luck (Lv 6),
@@ -51597,6 +51622,118 @@ async def use_favored_by_the_gods(
         "feature": "favored-by-the-gods",
         "dice": [d1, d2],
         "bonus_total": bonus_total,
+        "sorcerer_level": sorc_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_telepathic_speech")
+async def use_telepathic_speech(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.341 — Phase G.2 Sorcerer subclass batch ship #3
+    (Aberrant Mind Lv 1+, TCE) of the v2.99.193 phased completion
+    plan. Telepathic Speech (Aberrant Mind Lv 1+, TCE p.68):
+    "Starting at 1st level, you can form a telepathic connection
+    between your mind and the mind of another. As a bonus action,
+    choose one creature you can see within 30 feet of you. You and
+    the chosen creature can speak telepathically with each other
+    while the two of you are within a number of miles of each other
+    equal to your Charisma modifier (minimum of 1 mile). ... The
+    connection lasts for a number of minutes equal to your
+    sorcerer level."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip. v1
+    announce-only — target choice + range + duration GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_aberrant_mind(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "aberrant mind sorcerer lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _sorcerer_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "telepathic-speech",
+            "label": "Telepathic Speech",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    sorc_lv = _sorcerer_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🧠 Telepathic Speech — link for {sorc_lv} min"
+            ),
+            "feature_desc": (
+                f"{char.name} opens a telepathic connection to a "
+                f"creature within 30 ft as a bonus action. The two "
+                f"can speak mind-to-mind for {sorc_lv} "
+                f"minute{'s' if sorc_lv != 1 else ''} (sorcerer "
+                f"level), within Charisma-modifier miles of each "
+                f"other. (Aberrant Mind Sorcerer Lv 1+ TCE class "
+                f"feature.)"
+            ),
+            "source": "telepathic-speech",
+            "range_ft": 30,
+            "duration_minutes": sorc_lv,
+            "sorcerer_level": sorc_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "telepathic-speech",
+        "range_ft": 30,
+        "duration_minutes": sorc_lv,
         "sorcerer_level": sorc_lv,
     }
 
