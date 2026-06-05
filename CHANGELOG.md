@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.257] - 2026-06-04 — "The Long Reach" — Battle Master Lunging Attack (Phase E.1 maneuver 7 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 7 of 16).** RAW PHB p.74: melee attack on your turn — expend 1 die; +5 ft reach for that attack + die added to damage on hit.
+**Description:** One endpoint. `/use_lunging_attack` — broadcasts `extra_reach_ft: 5` + `extra_damage_on_hit`. Distinct broadcast shape from save-based maneuvers (no save_dc / save_ability) and from Precision Attack (no attack_bonus). v1 announce-only — extended-reach gate at /attack time is filed. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_lunging_attack` endpoint.
+- `tests/harness/test_lunging_attack.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 7 of 16.** 9 remaining.
+- **73 ships this session.**
+- **Total harness count: 1357** (was 1354 in v2.99.256).
+
+---
+
 ## [2.99.256] - 2026-06-04 — "The True Strike" — Battle Master Precision Attack (Phase E.1 maneuver 6 of 16)
 
 **Schema version:** 66
