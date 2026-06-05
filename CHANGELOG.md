@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.333] - 2026-06-05 — "Three Threes" — Transmutation School Wizard Minor Alchemy (Lv 2+) — 🎰 three-of-a-kind PATCH
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Transmutation School Wizard Lv 2+ Minor Alchemy.** Seventh Wizard subclass shipped. RAW PHB p.119: 10 min / cubic foot transformation of one nonmagical object (wood, stone, iron, copper, silver) into another. Reverts after 1 hour or on losing concentration.
+**Description:** Adds `_pc_has_transmutation_wizard` helper + `_MINOR_ALCHEMY_MATERIALS` set. One endpoint. `/use_minor_alchemy` — body `{character_id, source_material?, target_material?, override?}`. Materials default wood → stone; invalid materials clamp to defaults. No chip. Broadcasts. v1 announce-only. One new harness test file with 5 tests.
+
+### Added
+- `/api/campaign/{cid}/use_minor_alchemy` endpoint.
+- `_pc_has_transmutation_wizard` helper.
+- `_MINOR_ALCHEMY_MATERIALS` set (5 entries).
+- `tests/harness/test_minor_alchemy.py` — 5 tests.
+
+### Notes
+- **🎰 v2.99.333 — three-of-a-kind PATCH version.** Just numerology.
+- **G.1 Wizard batch progress:** 7 of ~10 subclasses shipped (Abjuration, Divination, Conjuration, Enchantment, Illusion, Necromancy, Transmutation). Remaining: Evocation, Bladesinging (TCE), Order of Scribes (TCE), War Magic (XGE), Chronurgy + Graviturgy (Wildemount).
+- **149 ships this session.**
+- **Total harness count: 1634** (was 1629 in v2.99.332; +5 new tests).
+
+---
+
 ## [2.99.332] - 2026-06-05 — "The Bone-Drinker's Toll" — Necromancy School Wizard Grim Harvest (Lv 2+)
 
 **Schema version:** 66

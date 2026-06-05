@@ -25985,6 +25985,32 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_transmutation_wizard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.333 — RAW Transmutation School Wizard (Wizard,
+    PHB p.119): Transmutation Savant + Minor Alchemy (Lv 2),
+    Transmuter's Stone (Lv 6), Shapechanger (Lv 10), Master
+    Transmuter (Lv 14).
+
+    Returns True when the PC is a Wizard with subclass slug
+    containing "transmutation" + meets `min_level`
+    (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "transmutation" not in subclass:
+        return False
+    return _wizard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_necromancy_wizard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.332 — RAW Necromancy School Wizard (Wizard, PHB
     p.118): Necromancy Savant + Grim Harvest (Lv 2), Undead
@@ -50366,6 +50392,116 @@ async def use_grim_harvest(
         "spell_level": spell_level,
         "is_necromancy": is_necromancy,
         "heal_amount": heal_amount,
+        "wizard_level": wizard_lv,
+    }
+
+
+_MINOR_ALCHEMY_MATERIALS = {
+    "wood", "stone", "iron", "copper", "silver",
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_minor_alchemy")
+async def use_minor_alchemy(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.333 — Phase G.1 Wizard subclass batch (Transmutation
+    School Wizard Lv 2+) of the v2.99.193 phased completion
+    plan. Minor Alchemy (Transmutation Wizard Lv 2+, PHB
+    p.119): "10 min ritual per cubic foot of material to
+    transform one nonmagical object (wood / stone / iron /
+    copper / silver) into another of those materials. Reverts
+    after 1 hour or on losing concentration."
+
+    Body: ``{character_id, source_material?, target_material?,
+    override?}``. Materials default to "wood" → "stone". v1
+    announce-only — the transformation is GM-tracked, with the
+    1-hour reversion + concentration linkage handled in
+    narrative.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    source_material = (body.get("source_material") or "wood").strip().lower()
+    target_material = (body.get("target_material") or "stone").strip().lower()
+    if source_material not in _MINOR_ALCHEMY_MATERIALS:
+        source_material = "wood"
+    if target_material not in _MINOR_ALCHEMY_MATERIALS:
+        target_material = "stone"
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_transmutation_wizard(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "transmutation wizard lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    wizard_lv = _wizard_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⚗️ Minor Alchemy — {source_material} → {target_material} "
+                f"(10 min / cu ft)"
+            ),
+            "feature_desc": (
+                f"{char.name} performs an alchemical procedure: "
+                f"{source_material} → {target_material}. Takes 10 "
+                f"min per cubic foot. Reverts after 1 hour or if "
+                f"{char.name} loses concentration. (Transmutation "
+                f"Wizard Lv 2+ class feature.)"
+            ),
+            "source": "minor-alchemy",
+            "source_material": source_material,
+            "target_material": target_material,
+            "time_per_cubic_foot_minutes": 10,
+            "duration_minutes": 60,
+            "concentration": True,
+            "wizard_level": wizard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "minor-alchemy",
+        "source_material": source_material,
+        "target_material": target_material,
+        "time_per_cubic_foot_minutes": 10,
+        "duration_minutes": 60,
+        "concentration": True,
         "wizard_level": wizard_lv,
     }
 
