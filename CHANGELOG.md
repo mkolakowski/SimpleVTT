@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.335] - 2026-06-05 — "The Ink-Free Pen" — Order of Scribes Wizard Wizardly Quill (Lv 2+, TCE)
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Order of Scribes Wizard Lv 2+ Wizardly Quill (TCE).** RAW TCE p.75: bonus action to conjure a magical quill — no ink; writes in any language/script in any color; 4× normal speed; self-erases as a free action. Vanishes after a long rest.
+**Description:** Adds `_pc_has_scribes_wizard` helper. One endpoint. `/use_wizardly_quill` — body `{character_id, override?}`. Validates Scribes Wizard Lv 2+ + bonus chip. Broadcasts. v1 announce-only — actual writing/erasing/scribing GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_wizardly_quill` endpoint.
+- `_pc_has_scribes_wizard` helper.
+- `tests/harness/test_wizardly_quill.py` — 3 tests.
+
+### Notes
+- **G.1 Wizard batch progress:** 8 PHB schools + 2 TCE (Bladesinging, Order of Scribes) shipped. Remaining: War Magic (XGE), Chronurgy + Graviturgy (Wildemount).
+- **151 ships this session.**
+- **Total harness count: 1641** (was 1638 in v2.99.334; +3 new tests).
+
+---
+
 ## [2.99.334] - 2026-06-05 — "The Singing Blade" — Bladesinging Wizard Bladesong (Lv 2+, TCE) (pivot)
 
 **Schema version:** 66
