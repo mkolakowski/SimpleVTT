@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.340] - 2026-06-05 — "The Lucky Saint" — Divine Soul Sorcerer Favored by the Gods (Lv 1+, XGE) — 🌪️ G.2 Sorcerer batch
+
+**Schema version:** 66
+**Commit summary:** **G.2 Sorcerer subclass batch ship #2 — Divine Soul Lv 1+ Favored by the Gods (XGE).** Second Sorcerer batch ship; opens Divine Soul. RAW XGE p.50: if you fail a saving throw or miss with an attack roll, roll 2d4 and add it to the total, possibly changing the outcome. Once per short or long rest. Costs no action.
+**Description:** Adds `_pc_has_divine_soul` helper. One endpoint. `/use_favored_by_the_gods` — body `{character_id}`. Validates Divine Soul Lv 1+. Rolls the 2d4 **server-side** and broadcasts `feature_used` with `source: favored-by-the-gods`, `dice: [d1, d2]`, `bonus_total`. v1 — once-per-rest limit GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_favored_by_the_gods` endpoint.
+- `_pc_has_divine_soul` helper.
+- `tests/harness/test_favored_by_the_gods.py` — 3 tests.
+
+### Notes
+- **G.2 Sorcerer batch progress:** 4/8 Sorcerer subclasses still need first-feature ships (Divine Soul now opened; Storm Sorcery, Draconic Bloodline + Wild Magic already have ≥1 feature each). Remaining untouched: Shadow Magic (XGE), Aberrant Mind (TCE), Clockwork Soul (TCE).
+- **156 ships this session.**
+- **Total harness count: 1660** (was 1657 in v2.99.339; +3 new tests).
+
+---
+
 ## [2.99.339] - 2026-06-05 — "The Sky Stride" — Storm Sorcery Sorcerer Tempestuous Magic (Lv 1+, PHB) — 🌪️ G.2 Sorcerer batch OPEN
 
 **Schema version:** 66

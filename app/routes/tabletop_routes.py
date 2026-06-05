@@ -26991,6 +26991,32 @@ def _pc_has_storm_sorcery(sheet: "dict | None", min_level: int) -> bool:
     return _sorcerer_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_divine_soul(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.340 — RAW Divine Soul (Sorcerer subclass, XGE
+    p.50): Divine Magic + Favored by the Gods (Lv 1), Empowered
+    Healing (Lv 6), Otherworldly Wings (Lv 14), Unearthly
+    Recovery (Lv 18).
+
+    Returns True when the PC is a Sorcerer with subclass slug
+    containing "divine" (e.g. "Divine Soul") + meets `min_level`
+    (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        has_sorc = any(
+            (entry.get("class") or "").strip().lower() == "sorcerer"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_sorc:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "divine" not in subclass:
+        return False
+    return _sorcerer_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_wild_magic(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.227 — RAW Wild Magic (Sorcerer subclass, PHB p.103):
     Wild Magic Surge + Tides of Chaos (Lv 1), Bend Luck (Lv 6),
@@ -51474,6 +51500,103 @@ async def use_tempestuous_magic(
         "feature": "tempestuous-magic",
         "fly_distance": 10,
         "oa_free": True,
+        "sorcerer_level": sorc_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_favored_by_the_gods")
+async def use_favored_by_the_gods(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.340 — Phase G.2 Sorcerer subclass batch ship #2
+    (Divine Soul Lv 1+, XGE) of the v2.99.193 phased completion
+    plan. Favored by the Gods (Divine Soul Lv 1+, XGE p.50):
+    "Starting at 1st level, divine power guards your destiny. If
+    you fail a saving throw or miss with an attack roll, you can
+    roll 2d4 and add it to the total, possibly changing the
+    outcome. Once you use this feature, you can't use it again
+    until you finish a short or long rest."
+
+    Body: ``{character_id}``. Costs no action / bonus / reaction
+    (a reactive once-per-rest trigger). Rolls the 2d4 server-side
+    and broadcasts the total. v1 — once-per-rest limit GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_divine_soul(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "divine soul sorcerer lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _sorcerer_level_from_sheet(sheet),
+        })
+
+    import random
+    d1 = random.randint(1, 4)
+    d2 = random.randint(1, 4)
+    bonus_total = d1 + d2
+
+    sorc_lv = _sorcerer_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"✨ Favored by the Gods — +{bonus_total} (2d4: "
+                f"{d1}+{d2})"
+            ),
+            "feature_desc": (
+                f"{char.name} calls on divine favor: rolls 2d4 "
+                f"({d1}+{d2} = +{bonus_total}) and adds it to a "
+                f"failed save or missed attack, possibly changing "
+                f"the outcome. Refreshes on a short or long rest. "
+                f"(Divine Soul Sorcerer Lv 1+ XGE class feature.)"
+            ),
+            "source": "favored-by-the-gods",
+            "dice": [d1, d2],
+            "bonus_total": bonus_total,
+            "sorcerer_level": sorc_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "favored-by-the-gods",
+        "dice": [d1, d2],
+        "bonus_total": bonus_total,
         "sorcerer_level": sorc_lv,
     }
 
