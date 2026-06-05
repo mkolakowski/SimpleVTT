@@ -25469,6 +25469,35 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_nature_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.239 — RAW Nature Domain features (Cleric, PHB
+    p.61): Acolyte of Nature (Lv 1), Channel Divinity: Charm
+    Animals and Plants (Lv 2 — curated), Dampen Elements
+    (Lv 6 reaction), Divine Strike (Lv 8 — passive cold/fire/
+    lightning uplift), Master of Nature (Lv 17).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "nature" + meets `min_level` (multiclass-aware).
+    Gates the Nature Domain endpoints.
+
+    Phase H.1 sixth non-Life Cleric domain to ship.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "nature" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_knowledge_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.238 — RAW Knowledge Domain features (Cleric, PHB
     p.59): Blessings of Knowledge (Lv 1), Channel Divinity:
@@ -38474,6 +38503,117 @@ async def select_knowledge_blessings(
     }
 
 
+_ACOLYTE_OF_NATURE_SKILLS = {"animal-handling", "nature", "survival"}
+
+
+@router.post("/api/campaign/{campaign_id}/select_acolyte_of_nature")
+async def select_acolyte_of_nature(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.239 — Phase H.1 sixth non-Life Cleric domain of the
+    v2.99.193 phased completion plan. Acolyte of Nature (Nature
+    Domain Cleric Lv 1+, PHB p.61): "At 1st level, you learn one
+    cantrip of your choice from the druid spell list. You also
+    gain proficiency in one of the following skills of your
+    choice: Animal Handling, Nature, or Survival."
+
+    Body: ``{character_id, cantrip, skill}`` where:
+      - cantrip: free-form druid cantrip name/slug
+      - skill: one of {animal-handling, nature, survival}
+
+    Validates Nature Cleric Lv 1+ + skill in the PHB set.
+    Persists `sheet.acolyte_of_nature = {cantrip, skill}`.
+    Broadcasts. v1 records the picks; appending the cantrip to
+    `sheet.spells` and adding the skill proficiency to
+    `sheet.skills.<skill>.proficient = True` are filed as
+    follow-up steps.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    cantrip = (str(body.get("cantrip") or "")).strip()[:80]
+    skill = (str(body.get("skill") or "")).strip().lower()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not cantrip:
+        raise HTTPException(400, "cantrip is required")
+    if skill not in _ACOLYTE_OF_NATURE_SKILLS:
+        raise HTTPException(
+            400,
+            f"skill must be one of {sorted(_ACOLYTE_OF_NATURE_SKILLS)}",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_nature_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "nature domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    sheet["acolyte_of_nature"] = {"cantrip": cantrip, "skill": skill}
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    skill_pretty = skill.replace("-", " ").title()
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌿 Acolyte of Nature — {cantrip} + {skill_pretty}"
+            ),
+            "feature_desc": (
+                f"{char.name} chooses Acolyte of Nature: learns "
+                f"druid cantrip {cantrip} + gains proficiency in "
+                f"{skill_pretty}. (Nature Domain Cleric Lv 1+ "
+                f"class feature; one-time pick.)"
+            ),
+            "source": "acolyte-of-nature",
+            "cantrip": cantrip,
+            "skill": skill,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "acolyte-of-nature",
+        "cantrip": cantrip,
+        "skill": skill,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/select_hunters_prey")
 async def select_hunters_prey(
     campaign_id: int,
@@ -51294,6 +51434,10 @@ _SHEET_PATCH_KEYS = {
     # Lv 1+). Allowlisted so the test can reset to {} between
     # cases.
     "knowledge_blessings",
+    # v2.99.239 — acolyte_of_nature (dict {cantrip, skill}).
+    # Read by /select_acolyte_of_nature (Nature Domain Cleric
+    # Lv 1+). Same shape rationale as knowledge_blessings.
+    "acolyte_of_nature",
     # v2.99.232 — bonded_weapons (list[str] of weapon slugs).
     # Read by /use_weapon_bond (Eldritch Knight Lv 3+). Capped
     # at 2 per RAW. Allowlisted so the test can reset the bond

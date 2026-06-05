@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1282 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.238, 2026-06-04).
+**Total tests:** 1286 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.239, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,16 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_acolyte_of_nature.py`
+v2.99.239 — Nature Domain Cleric (PHB p.61) Acolyte of Nature one-time picker (Phase H.1 sixth domain). Picks 1 druid cantrip + 1 skill from {Animal Handling, Nature, Survival}.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_select_aon_happy` | Tavik picks Druidcraft + Survival → persisted, broadcast (source `acolyte-of-nature`). |
+| `test_select_aon_bad_skill` | Arcana isn't in valid set → 400. |
+| `test_select_aon_missing_cantrip` | Empty cantrip → 400. |
+| `test_select_aon_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 
 ### `test_blessings_of_knowledge.py`
 v2.99.238 — Knowledge Domain Cleric (PHB p.59) Blessings of Knowledge one-time picker (Phase H.1 fifth domain). Picks 2 skills from {Arcana, History, Nature, Religion} + 2 languages.

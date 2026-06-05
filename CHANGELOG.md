@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.239] - 2026-06-04 — "The Wilderness Disciple" — Nature Domain Cleric Acolyte of Nature (Phase H.1 sixth domain)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 sixth non-Life Cleric domain of the v2.99.193 phased completion plan.** RAW PHB p.61: Nature Cleric Lv 1+ one-time pick — 1 druid cantrip + 1 skill from {Animal Handling, Nature, Survival}.
+**Description:** One helper + one endpoint + one valid set + one patch key. (1) `_pc_has_nature_domain(sheet, min_level)` — multiclass-aware. (2) `_ACOLYTE_OF_NATURE_SKILLS` valid set. (3) `/select_acolyte_of_nature` — body `{character_id, cantrip, skill}`. Validates Nature Cleric Lv 1+ + skill in PHB set. Persists `sheet.acolyte_of_nature = {cantrip, skill}`. Broadcasts. v1 records the picks; appending the cantrip to `sheet.spells` + adding skill proficiency to `sheet.skills.<skill>.proficient = True` are filed as follow-up steps. (4) `acolyte_of_nature` added to `_SHEET_PATCH_KEYS`. Brother Tavik Stonebrow is the demo fixture. One new harness test file with 4 tests.
+
+### Added
+- `_pc_has_nature_domain(sheet, min_level)` helper gate.
+- `_ACOLYTE_OF_NATURE_SKILLS = {"animal-handling", "nature", "survival"}` valid set.
+- `/api/campaign/{cid}/select_acolyte_of_nature` endpoint.
+- `acolyte_of_nature` in `_SHEET_PATCH_KEYS`.
+- `tests/harness/test_acolyte_of_nature.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 1 set + 1 patch key + 4 regression tests. No schema change.
+- **Mirrors v2.99.238 Blessings of Knowledge shape.** Both are one-time character-creation pickers persisted to a top-level sheet field. The downstream wiring (cantrip into sheet.spells; skill into sheet.skills) is the same shape for both — filed as a joint follow-up.
+- **Phase H.1 progress: 6 of 11 domains have first features shipped.** Over halfway. Remaining: Forge, Grave, Death, Order, Twilight, Peace. (5 to go, all PHB+TCE+XGE.)
+- **55 ships this session.**
+- **Total harness count: 1286** (was 1282 in v2.99.238).
+
+---
+
 ## [2.99.238] - 2026-06-04 — "The Scholar's Twin Talents" — Knowledge Domain Cleric Blessings of Knowledge (Phase H.1 fifth domain)
 
 **Schema version:** 66
