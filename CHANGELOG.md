@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.302] - 2026-06-05 — "The Whispered Command" — Nature Domain Cleric Master of Nature (H.1 deeper, Lv 17)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Nature Domain Cleric Lv 17+ Master of Nature.** RAW PHB p.62: bonus action to verbally command beasts and plants charmed by your Charm Animals and Plants CD what to do on their next turn.
+**Description:** One endpoint. `/use_master_of_nature` — body `{character_id, override?}`. Validates Nature Domain Cleric Lv 17+ + bonus chip Phase 4 gate. Broadcasts `feature_used` with `source: master-of-nature`. v1 announce-only — actual charmed-creature command interpretation is GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_master_of_nature` endpoint.
+- `tests/harness/test_master_of_nature.py` — 3 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 10 of 11 domains shipped at Lv 17. One remaining: Peace (Arcana is a TCE-only domain not yet wired in the H.1 first-pass; Order's Lv 17 capstone is "Order's Wrath" — both can ship after Peace).
+- **118 ships this session.**
+- **Total harness count: 1507** (was 1504 in v2.99.301; +3 new tests).
+
+---
+
 ## [2.99.301] - 2026-06-05 — "Echoes in the Stone" — Knowledge Domain Cleric Visions of the Past (H.1 deeper, Lv 17)
 
 **Schema version:** 66

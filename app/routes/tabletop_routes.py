@@ -46049,6 +46049,111 @@ async def use_visions_of_the_past(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_master_of_nature")
+async def use_master_of_nature(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.302 — Phase H.1 deeper (Nature Domain Cleric
+    Lv 17+) of the v2.99.193 phased completion plan. Master
+    of Nature (Nature Domain Cleric Lv 17+, PHB p.62): "At
+    17th level, you gain the ability to command animals and
+    plant creatures. While creatures are charmed by your
+    Charm Animals and Plants feature, you can take a bonus
+    action on your turn to verbally command what each of
+    those creatures will do on its next turn."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip
+    (RAW: bonus action to issue commands while charm holds).
+    v1 announce-only — actual charmed-creature command
+    interpretation is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_nature_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "nature domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "master-of-nature",
+            "label": "Master of Nature",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🌿 Master of Nature — command charmed beasts & plants"
+            ),
+            "feature_desc": (
+                f"{char.name} verbally commands the beasts and "
+                f"plants charmed by their Charm Animals and Plants "
+                f"CD what to do on their next turn. (Nature Domain "
+                f"Cleric Lv 17+ class feature; bonus action while "
+                f"the charm holds.)"
+            ),
+            "source": "master-of-nature",
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "master-of-nature",
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
