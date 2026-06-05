@@ -43383,6 +43383,99 @@ async def use_aura_of_conquest(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_aura_of_warding")
+async def use_aura_of_warding(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.279 — Phase H.2 depth (Ancients Paladin Lv 7+) of
+    the v2.99.193 phased completion plan. Aura of Warding
+    (Ancients Paladin Lv 7+, PHB p.87): "Starting at 7th level,
+    ancient magic lies so deeply within you that it forms an
+    eldritch ward. You and friendly creatures within 10 feet of
+    you have resistance to damage from spells. When you reach
+    18th level in this class, the range of this aura increases
+    to 30 feet."
+
+    Body: ``{character_id, override?}``. No chip cost — passive
+    aura. v1 announce-only; the resistance-to-spell-damage
+    application would land as a deeper /attack damage-pipeline
+    hook (filed for follow-up).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_ancients_oath(sheet, 7):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "ancients paladin lv 7+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+    radius_ft = 30 if pal_lv >= 18 else 10
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌿 Aura of Warding — {radius_ft} ft, "
+                f"resistance to spell damage"
+            ),
+            "feature_desc": (
+                f"{char.name} emanates an Aura of Warding "
+                f"({radius_ft} ft radius). {char.name} and "
+                f"friendly creatures within the aura have "
+                f"resistance to damage from spells. "
+                f"(Ancients Paladin Lv 7+ class feature; "
+                f"passive — no action required.)"
+            ),
+            "source": "aura-of-warding",
+            "radius_ft": radius_ft,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "aura-of-warding",
+        "radius_ft": radius_ft,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

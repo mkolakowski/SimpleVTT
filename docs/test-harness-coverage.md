@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1421 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.278, 2026-06-04).
+**Total tests:** 1425 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.279, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -505,6 +505,16 @@ v2.99.273 — Conquest Paladin (XGE p.37) Aura of Conquest passive (H.2 depth). 
 | `test_use_aoc_lv18_radius_upgrade` | Lv 18 Caelan → `radius_ft == 30`, `psychic_damage == 9`. |
 | `test_use_aoc_wrong_subclass` | Default Caelan (Devotion) → 409. |
 | `test_use_aoc_level_gate` | Conquest at Lv 6 → 409. |
+
+### `test_aura_of_warding.py`
+v2.99.279 — Ancients Paladin (PHB p.87) Aura of Warding passive (H.2 depth). Lv 7+ aura: you + friendly creatures within have resistance to damage from spells. Lv 18+ radius bumps 10 → 30 ft. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_aow_happy_lv7` | Lv 7 Caelan → `radius_ft == 10`, broadcast (source `aura-of-warding`). |
+| `test_use_aow_lv18_radius_upgrade` | Lv 18 Caelan → `radius_ft == 30`. |
+| `test_use_aow_wrong_subclass` | Default Caelan (Devotion) → 409. |
+| `test_use_aow_level_gate` | Ancients at Lv 6 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

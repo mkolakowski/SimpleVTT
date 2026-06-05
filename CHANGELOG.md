@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.279] - 2026-06-05 — "The Verdant Ward" — Ancients Paladin Aura of Warding (H.2 depth, Lv 7 aura)
+
+**Schema version:** 66
+**Commit summary:** **H.2 depth — first Lv 7 aura ship in the post-Phase-2 batch.** RAW PHB p.87: 10 ft aura (30 ft at Lv 18+); you + friendly creatures within have resistance to damage from spells.
+**Description:** One endpoint. `/use_aura_of_warding` — body `{character_id, override?}`. Validates Ancients Paladin Lv 7+. Computes `radius_ft = 30 if level >= 18 else 10`. Broadcasts `feature_used` with `source: aura-of-warding`. v1 announce-only — the resistance-to-spell-damage application would land as a deeper `/attack` damage-pipeline hook (filed). Mirrors the v2.99.273 Aura of Conquest shape. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_aura_of_warding` endpoint.
+- `tests/harness/test_aura_of_warding.py` — 4 tests.
+
+### Notes
+- **H.2 depth Lv 7 aura progress:** 2 of 5 oaths now have a Lv 7 aura shipped (Conquest Aura of Conquest v2.99.273, Ancients Aura of Warding this). Remaining Lv 7 auras: Vengeance Relentless Avenger, Redemption Aura of the Guardian, Glory Aura of Alacrity.
+- **95 ships this session.**
+- **Total harness count: 1425** (was 1421 in v2.99.278; +4 new tests).
+
+---
+
 ## [2.99.278] - 2026-06-04 — "The Order's Echo" — Order Domain Divine Strike (psychic) — closes H.1 Lv 8 coverage
 
 **Schema version:** 66
