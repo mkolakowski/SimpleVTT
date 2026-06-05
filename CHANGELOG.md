@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.251] - 2026-06-04 — "The Long Look Back" — Phase H.4 doc audit (3.0.0 held until class-feature depth is complete)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.4 of the v2.99.193 phased completion plan — class-content plan-doc audit. Per user-confirmed direction in this commit, the 3.0.0 cut is deliberately held until the per-class tables reach near-100% ✅.** The original H.4 step (doc audit + 3.0.0 cut) is split: this commit ships the audit; the cut is deferred until the remaining Phase E Phase 2+ items + the H.1/H.2 deep features (Lv 6/8/17 / aura / capstone tiers) are all wired.
+**Description:** Doc-only edit to `docs/plans/class-content-status.md`. Adds a v2.99.251 re-audit block at the top of the file noting that 26 class-feature commits landed between v2.99.192 and v2.99.250 (Phase E + Phase H.1/H.2/H.3) without per-row table re-colouring; per-row bumps are filed as follow-up doc-only commits since they have no runtime impact. Explicitly renames the H.4 step from "doc audit + 3.0.0 cut" to "doc audit + continued class-feature depth ships" so future readers understand the deliberate pacing.
+
+### Changed
+- `docs/plans/class-content-status.md` — added v2.99.251 re-audit block + renamed H.4 step + noted 3.0.0 hold.
+
+### Notes
+- **PATCH bump** — single doc-only edit. No code change, no test change, no schema change.
+- **Why this commit ships at all.** Per CLAUDE.md "every commit ships a bump" rule, even doc-only changes get a version bump + changelog entry + commit. The plan doc was 26 ships stale and the rename of the H.4 step is load-bearing for the next phase of work (no one should think 3.0.0 is imminent based on H.1/H.2/H.3 ✅).
+- **Per-row table updates are filed.** The 2959-line file's per-class tables (Wizard, Sorcerer, Fighter, Ranger, Rogue, Cleric, Paladin, Druid, Warlock, Bard, Monk, Barbarian) still carry their last-curated v2.99.192 colour codes. Updating each row is a doc-only doc commit on a future day — non-blocking for the next code-shipping cadence.
+- **What ships next.** The renamed H.4 step's "continued depth" agenda includes: Phase E Phase 2+ items (Battle Master's 15 remaining maneuvers, Eldritch Knight Phases 2-4); each shipped Cleric domain's Lv 6/8/17 features; each shipped Paladin oath's Lv 7 aura + Lv 15/20 capstone; Phase G system frameworks (deferred). The 3.0.0 cut waits until coverage approaches 100%.
+- **67 ships this session.**
+- **Total harness count: 1338** (unchanged — doc-only commit).
+
+---
+
 ## [2.99.250] - 2026-06-04 — "Five Whispered Pacts" — Phase H.3 Eldritch Invocation breadth ship (5 invocations bundled)
 
 **Schema version:** 66

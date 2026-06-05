@@ -7,6 +7,29 @@ work begins. Add follow-up plans for items in 🟠 / ⚪ status as they
 become priorities; do **not** start a feature without first writing
 its plan section here.
 
+> **Re-audit (v2.99.251, 2026-06-04) — H.1 / H.2 / H.3 ✅ substantially complete.**
+> The per-class tables below have NOT been re-coloured per-row since
+> v2.99.192. Between then and v2.99.250, **26 class-feature commits
+> shipped end-to-end** spanning Phase E (Wild Magic, Eldritch Knight,
+> Battle Master, Berserker, Evocation, Thief, Hunter, Draconic, etc.)
+> and Phase H (11 non-Life Cleric domains + 5 non-Devotion Paladin
+> oaths + 5 batched Eldritch Invocations). Each ship has its own plan
+> doc reachable from the wiki Design plans table. Per-row status
+> bumps in the per-class tables below are filed as doc-only follow-up
+> commits (no runtime impact). When updating the per-row status,
+> check the changelog entries v2.99.225–250 for the canonical "shipped"
+> moment.
+>
+> **The 3.0.0 cut is deliberately held until the per-class tables
+> reach near-100% ✅** (per user-confirmed direction v2.99.251). The
+> Phase H.4 step is renamed from "doc audit + 3.0.0 cut" to "doc
+> audit (this commit) + continued class-feature depth ships."
+> The next ship cadence focuses on **deepening the already-shipped
+> subclasses** (Lv 6/8/17 Cleric domain features, Lv 7 Paladin oath
+> auras, Lv 15/20 capstones) plus the remaining Phase E Phase 2+
+> items (Battle Master maneuver batch, Eldritch Knight War Magic /
+> Eldritch Strike).
+
 > **Recent shipped work (through v2.15.10):** Phase A demo content
 > (A.1-A.3: Caelan Paladin v2.14.0 / Lyra Bard v2.14.1 / Mira Druid
 > v2.14.2 — demo party now 6 PCs covering Rogue/Wizard/Cleric/Paladin/
