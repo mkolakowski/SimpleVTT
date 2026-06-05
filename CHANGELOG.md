@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.295] - 2026-06-05 — "The Healer's Apex" — Life Domain Cleric Supreme Healing (H.1 deeper, Lv 17 passive)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Life Domain Cleric Lv 17+ Supreme Healing.** RAW PHB p.61: when you would roll dice to restore HP with a spell, use the max on each die instead.
+**Description:** Adds `_pc_has_life_domain` helper next to the other domain-gate helpers. One endpoint. `/use_supreme_healing` — body `{character_id, override?}`. Validates Life Domain Cleric Lv 17+. No chip — passive permanent. Broadcasts `feature_used` with `source: supreme-healing`. v1 announce-only — the max-dice substitution for heal-spell dice is GM-tracked (a follow-up could wire this into the heal-spell pipeline). One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_supreme_healing` endpoint.
+- `_pc_has_life_domain` helper.
+- `tests/harness/test_supreme_healing.py` — 3 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 3 of 11 domains shipped at Lv 17 (Light, Tempest, Life).
+- **111 ships this session.**
+- **Total harness count: 1482** (was 1479 in v2.99.294; +3 new tests).
+
+---
+
 ## [2.99.294] - 2026-06-05 — "Wings of the Storm" — Tempest Domain Cleric Stormborn (H.1 deeper, Lv 17 passive)
 
 **Schema version:** 66

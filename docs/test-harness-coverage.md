@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1479 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.294, 2026-06-05).
+**Total tests:** 1482 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.295, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -659,6 +659,15 @@ v2.99.294 — Tempest Domain Cleric (PHB p.63) Stormborn Lv 17 passive (H.1 deep
 | `test_use_sb_happy_lv17` | Lv 17 Tavik (dwarf speed 25) → `fly_speed_ft == 25`, `outdoor_only == True`, broadcast (source `stormborn`). |
 | `test_use_sb_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_sb_level_gate` | Tempest at Lv 16 → 409. |
+
+### `test_supreme_healing.py`
+v2.99.295 — Life Domain Cleric (PHB p.61) Supreme Healing Lv 17 passive (H.1 deeper). When you would roll dice to restore HP with a spell, use max on each die instead. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_sh_happy_lv17` | Lv 17 Tavik → `max_dice_substitution == True`, broadcast (source `supreme-healing`). |
+| `test_use_sh_wrong_subclass` | Light Domain Tavik at Lv 17 → 409. |
+| `test_use_sh_level_gate` | Life at Lv 16 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
