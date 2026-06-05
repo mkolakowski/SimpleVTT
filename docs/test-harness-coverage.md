@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1321 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.247, 2026-06-04).
+**Total tests:** 1326 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.248, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,17 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_inspiring_smite.py`
+v2.99.248 — Oath of Glory (Paladin subclass, TCE p.55) Inspiring Smite bonus-action CD (Phase H.2 fourth oath). Rolls 2d8 + paladin level temp HP, divides evenly (remainder to first targets).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_is_happy_two_targets` | 2 targets → `paladin_level == 7`, `total_temp_hp` in [9, 23], allocations sum equals total, broadcast. |
+| `test_use_is_three_targets_remainder` | 3 targets → sum of allocations == total, first allocation >= last (remainder skew). |
+| `test_use_is_empty_list` | Empty target list → 400. |
+| `test_use_is_out_of_cd` | `channel-divinity.current = 0` → 409 `out_of_uses`. |
+| `test_use_is_wrong_subclass` | Default Caelan (Devotion) → 409 `wrong_subclass_or_level`. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

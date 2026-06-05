@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.248] - 2026-06-04 — "Glory's Sustenance" — Glory Paladin Inspiring Smite CD (Phase H.2 fourth oath)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.2 fourth non-Devotion Paladin oath of the v2.99.193 phased completion plan.** RAW TCE p.55: Glory Paladin Lv 3+ bonus action CD after Divine Smite — distribute 2d8 + paladin level temp HP among chosen creatures within 30 ft.
+**Description:** One helper + one endpoint. (1) `_pc_has_glory_oath(sheet, min_level)` — multiclass-aware. (2) `/use_inspiring_smite` — body `{character_id, target_combatant_ids: [...], override?}`. Validates Glory Paladin Lv 3+ + CD resource current >= 1 + non-empty target list + each target in active battle + Phase 4 bonus chip. Decrements CD counter, rolls 2d8 + paladin level via `dice_mod.roll`, divides evenly among targets (remainder skews to earliest in list order), marks chip, broadcasts the per-target allocation. v1 ships the announce + allocation calc; the actual temp-HP application on each target's sheet is filed. Caelan Lv 7 default → total range [9, 23]. One new harness test file with 5 tests.
+
+### Added
+- `_pc_has_glory_oath(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_inspiring_smite` endpoint.
+- `tests/harness/test_inspiring_smite.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 5 regression tests. No schema change.
+- **Even-split with remainder.** RAW: "divided among the chosen creatures however you like." v1 picks an even split with the remainder going to the first targets in the body list, so the player can control allocation by ordering targets — earliest gets the extra HP. Future commit can accept an explicit `allocations: [{combatant_id, temp_hp}]` body field for full control.
+- **"After Divine Smite" gate GM-tracked.** RAW the CD only fires immediately after a Divine Smite damage roll. The endpoint doesn't gate on a recent Smite — the player/GM tracks the timing. Future commit can add a per-turn flag set by the existing Divine Smite resolution.
+- **Temp HP application filed.** v1 emits the per-target allocation but doesn't walk the targets to call `_apply_hp_change` with temp-HP semantics. The existing `/cast_spell_heal` path for Heroism (v2.97.58 temp-HP grant) is the template for the future apply step.
+- **Phase H.2 progress: 4 of 5 oaths have first features shipped** (Ancients v2.99.245, Vengeance v2.99.246, Conquest v2.99.247, Glory v2.99.248). Only Redemption remains.
+- **64 ships this session.**
+- **Total harness count: 1326** (was 1321 in v2.99.247).
+
+---
+
 ## [2.99.247] - 2026-06-04 — "The Tyrant's Voice" — Conquest Paladin Conquering Presence CD (Phase H.2 third oath)
 
 **Schema version:** 66
