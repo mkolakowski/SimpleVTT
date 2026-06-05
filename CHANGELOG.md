@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.286] - 2026-06-05 — "Sudden Retribution" — Glory Paladin Glorious Defense (H.2 deeper, Lv 15 reactive)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Glory Paladin Lv 15+ Glorious Defense.** RAW XGE p.38: when you or another creature within 10 ft is hit by an attack, reaction → +CHA mod (min +1) AC against the attack. If it now misses, you can make a weapon attack against the attacker as part of the same reaction.
+**Description:** One endpoint. `/use_glorious_defense` — body `{character_id, override?}`. Validates Glory Paladin Lv 15+ + reaction-chip Phase 4 gate. Computes `ac_bonus = max(1, CHA_mod)`. Marks reaction chip, broadcasts `feature_used` with `source: glorious-defense`. v1 announce-only — the AC-bonus application + the follow-up weapon attack on a miss is GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_glorious_defense` endpoint.
+- `tests/harness/test_glorious_defense.py` — 3 tests.
+
+### Notes
+- **H.2 Lv 15 batch progress:** 4 of 5 oaths shipped at Lv 15 (Ancients, Vengeance, Conquest, Glory). One remaining: Redemption Protective Spirit.
+- **102 ships this session.**
+- **Total harness count: 1450** (was 1447 in v2.99.285; +3 new tests).
+
+---
+
 ## [2.99.285] - 2026-06-05 — "The Psychic Backhand" — Conquest Paladin Scornful Rebuke (H.2 deeper, Lv 15 passive)
 
 **Schema version:** 66

@@ -44114,6 +44114,122 @@ async def use_scornful_rebuke(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_glorious_defense")
+async def use_glorious_defense(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.286 — Phase H.2 deeper (Glory Paladin Lv 15+) of
+    the v2.99.193 phased completion plan. Glorious Defense
+    (Glory Paladin Lv 15+, XGE p.38): "Starting at 15th level,
+    you can turn defense into sudden retribution. When you or
+    another creature within 10 feet of you is hit by an
+    attack roll, you can use your reaction to grant a bonus
+    to the target's AC against that attack, potentially
+    causing the attack to miss. The bonus equals your
+    Charisma modifier (minimum of +1). If the attack misses,
+    you can make one weapon attack against the attacker as
+    part of this reaction, provided that the attacker is
+    within your weapon's range."
+
+    Body: ``{character_id, override?}``. Costs a reaction chip.
+    v1 announce-only — the actual AC-bonus application + the
+    follow-up weapon attack on a miss is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_glory_oath(sheet, 15):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "glory paladin lv 15+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "glorious-defense",
+            "label": "Glorious Defense",
+            "strict": strict,
+        })
+
+    abilities = sheet.get("abilities") or {}
+    try:
+        cha_mod = (int(abilities.get("CHA") or 10) - 10) // 2
+    except (TypeError, ValueError):
+        cha_mod = 0
+    ac_bonus = max(1, cha_mod)
+    pal_lv = _paladin_level_from_sheet(sheet)
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🛡️ Glorious Defense — +{ac_bonus} AC vs the hit"
+            ),
+            "feature_desc": (
+                f"{char.name} grants the target a +{ac_bonus} bonus "
+                f"to AC against the triggering attack. If the attack "
+                f"now misses, {char.name} may make a weapon attack "
+                f"against the attacker as part of this reaction. "
+                f"(Glory Paladin Lv 15+ class feature.)"
+            ),
+            "source": "glorious-defense",
+            "ac_bonus": ac_bonus,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "glorious-defense",
+        "ac_bonus": ac_bonus,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
