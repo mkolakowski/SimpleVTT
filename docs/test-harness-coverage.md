@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1338 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.250, 2026-06-04).
+**Total tests:** 1342 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.252, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -620,6 +620,16 @@ v2.99.234 — Light Domain Cleric (PHB p.60) Warding Flare reaction (Phase H.1 f
 | `test_use_warding_flare_out_of_uses` | `warding-flare.current = 0` → 409 `out_of_uses`. |
 | `test_use_warding_flare_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 | `test_use_warding_flare_no_resource` | Light Cleric without the `warding-flare` resource entry → 404. |
+
+### `test_disarming_attack.py`
+v2.99.252 — Battle Master maneuver 2 of 16 — Disarming Attack (PHB p.74). Mirrors Trip Attack's shape; on-fail effect is "drop one held object" vs Prone.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_da_happy` | Lv 9 Garrik (Battle Master, d8) → `extra_damage` in 1..8, `save_dc == 16` (prof +4 + max(STR +4, DEX +2)), dice 4 → 3, broadcast (source `disarming-attack`). |
+| `test_use_da_out_of_dice` | `superiority-dice.current = 0` → 409 `out_of_uses`. |
+| `test_use_da_wrong_subclass` | Default Garrik (Champion) → 409 `wrong_subclass_or_level`. |
+| `test_use_da_level_gate` | Battle Master at Lv 2 → 409. |
 
 ### `test_trip_attack.py`
 v2.99.233 — Battle Master Fighter (PHB p.74) Combat Superiority pool + Trip Attack maneuver (Phase 1 of [docs/plans/battle-master.md](../plans/battle-master.md)). Garrik Ironside is the demo fixture; tests PATCH his subclass to "Battle Master" + seed a `superiority-dice` resource.

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.252] - 2026-06-04 — "The Falling Blade" — Battle Master Disarming Attack (Phase E.1 maneuver 2 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 2 of 16) of the v2.99.193 phased completion plan.** Per the post-H.4 renaming, this commit is part of the "continued class-feature depth" agenda — resumes the per-maneuver Battle Master cadence after v2.99.233 shipped Trip Attack as maneuver 1. RAW PHB p.74: on a hit, expend 1 superiority die for +die damage and target STR save DC 8 + prof + max(STR, DEX) or drop one held object.
+**Description:** One endpoint. `/use_disarming_attack` — body `{character_id, override?}`. Mirrors Trip Attack (v2.99.233): validates Battle Master Lv 3+ + `superiority-dice` resource current >= 1, decrements counter, rolls 1d<size> via `dice_mod.roll`, computes Maneuver Save DC = 8 + prof + max(STR, DEX) mod, broadcasts `resource_update` + `feature_used` (source `disarming-attack`) with `(extra_damage, die_size, save_dc, dice_remaining)`. The only delta from Trip Attack is the on-fail effect phrasing (drop object vs Prone). v1 ships announce-only. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_disarming_attack` endpoint.
+- `tests/harness/test_disarming_attack.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 4 regression tests. No schema change.
+- **Maneuver-2-of-16 cadence resumed.** With Trip Attack (v2.99.233) and Disarming Attack (v2.99.252), 2 of the 16 PHB maneuvers are shipped. Remaining: Commander's Strike, Distracting Strike, Evasive Footwork, Feinting Attack, Goading Attack, Lunging Attack, Maneuvering Attack, Menacing Attack, Parry, Precision Attack, Pushing Attack, Rally, Riposte, Sweeping Attack.
+- **68 ships this session.**
+- **Total harness count: 1342** (was 1338 in v2.99.251).
+
+---
+
 ## [2.99.251] - 2026-06-04 — "The Long Look Back" — Phase H.4 doc audit (3.0.0 held until class-feature depth is complete)
 
 **Schema version:** 66
