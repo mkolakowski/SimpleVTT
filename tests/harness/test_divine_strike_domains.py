@@ -176,6 +176,14 @@ async def test_divine_strike_twilight_radiant(gm_client, tavik_at_lv_8, roster):
     )
 
 
+async def test_divine_strike_order_psychic(gm_client, tavik_at_lv_8, roster):
+    """v2.99.278 — Order Domain → 1d8 psychic (XGE p.39)."""
+    await _run_domain_test(
+        gm_client, tavik_at_lv_8, roster["Krieger Stonefist"],
+        "Order Domain", "psychic",
+    )
+
+
 async def test_divine_strike_war_uses_weapon_damage_type(
     gm_client, tavik_at_lv_8, roster,
 ):

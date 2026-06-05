@@ -21823,6 +21823,9 @@ def _compute_attack_auto_uplifts(
             "nature":   "fire",      # DM choice of cold/fire/lightning; v1 picks fire
             "forge":    "fire",
             "twilight": "radiant",
+            # v2.99.278 — Order Domain (XGE p.39): Lv 8 Divine
+            # Strike deals psychic damage RAW.
+            "order":    "psychic",
         }
         if subclass_slug in _DIVINE_STRIKE_BY_DOMAIN:
             already_used = bool(

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.278] - 2026-06-04 — "The Order's Echo" — Order Domain Divine Strike (psychic) — closes H.1 Lv 8 coverage
+
+**Schema version:** 66
+**Commit summary:** **H.1 depth — 1-line `_DIVINE_STRIKE_BY_DOMAIN` map addition for Order Domain.** Per RAW XGE p.39, Order Domain Cleric Lv 8+ gets Divine Strike with psychic damage. Closes the H.1 Lv 8 coverage gap to **9/11 domains wired** (4 Potent Spellcasting via `/use_potent_spellcasting` + 5 Divine Strike auto via the map). Only Light has no Lv 8 wiring beyond Potent Spellcasting; Grave Lv 8 is Potent Spellcasting too — all Cleric Lv 8 features are accounted for.
+**Description:** One-line addition `"order": "psychic"` to `_DIVINE_STRIKE_BY_DOMAIN` at `app/routes/tabletop_routes.py:21817` + one new harness test (`test_divine_strike_order_psychic` in `test_divine_strike_domains.py`) following the established v2.99.94 multi-domain test shape.
+
+### Changed
+- `_DIVINE_STRIKE_BY_DOMAIN` map adds `"order": "psychic"`.
+- `tests/harness/test_divine_strike_domains.py` — added `test_divine_strike_order_psychic`.
+
+### Notes
+- **94 ships this session.**
+- **Total harness count: 1421** (was 1420 in v2.99.277).
+
+---
+
 ## [2.99.277] - 2026-06-04 — "Four Hands, One Power" — Grave + Peace Cleric Potent Spellcasting (H.1 depth pivot)
 
 **Schema version:** 66
