@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.328] - 2026-06-05 — "The Opened Eye" — Divination School Wizard The Third Eye (Lv 10+) (pivot)
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Divination School Wizard Lv 10+ The Third Eye.** Pivoted to Third Eye (Lv 10) after discovering Portent (Lv 2) was already wired in v2.99.219 (Phase B.1). RAW PHB p.116: action to gain one of four magical senses until dismissed or short/long rest: Darkvision (60 ft), Ethereal Sight (60 ft), Greater Comprehension (read any language), See Invisibility (10 ft).
+**Description:** Adds `_pc_has_divination_wizard_lv` helper (Lv-parameterized; complements the existing `_pc_has_portent` which is Lv 2-gated only). Adds `_THIRD_EYE_SENSES` table. One endpoint. `/use_third_eye` — body `{character_id, sense?, override?}`. sense one of "darkvision" (default), "ethereal-sight", "greater-comprehension", or "see-invisibility". Validates Divination Wizard Lv 10+ + action chip. Broadcasts. v1 announce-only. One new harness test file with 6 tests.
+
+### Added
+- `/api/campaign/{cid}/use_third_eye` endpoint.
+- `_pc_has_divination_wizard_lv` helper (Lv-parameterized).
+- `_THIRD_EYE_SENSES` table (4 entries).
+- `tests/harness/test_third_eye.py` — 6 tests.
+
+### Notes
+- **Audit lesson reaffirmed again:** Portent was already shipped in v2.99.219 (Phase B.1 of the v2.99.193 plan). Pivoted to The Third Eye (Lv 10) instead. Same pattern as Fast Hands (v2.99.306) and Cutting Words (v2.99.320).
+- **G.1 Wizard batch progress:** 2 of ~10 subclasses shipped (Abjuration, Divination — Lv 2 Portent + Lv 10 Third Eye both wired now).
+- **144 ships this session.**
+- **Total harness count: 1613** (was 1607 in v2.99.327; +6 new tests).
+
+---
+
 ## [2.99.327] - 2026-06-05 — "The Woven Shield" — Abjuration School Wizard Arcane Ward (Lv 2+) — G.1 Wizard subclass batch opener
 
 **Schema version:** 66

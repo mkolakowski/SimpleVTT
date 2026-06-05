@@ -25985,6 +25985,33 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_divination_wizard_lv(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.328 — RAW Divination School Wizard (Wizard, PHB
+    p.116): Divination Savant + Portent (Lv 2), Expert Divination
+    (Lv 6), The Third Eye (Lv 10), Greater Portent (Lv 14).
+
+    Returns True when the PC is a Wizard with subclass slug
+    containing "divination" + meets `min_level`. Complements the
+    existing v2.99.219 `_pc_has_portent` which is Lv 2-gated only;
+    this helper accepts an arbitrary `min_level` for deeper
+    Divination features (Third Eye Lv 10 etc.).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "divination" not in subclass:
+        return False
+    return _wizard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_abjuration_wizard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.327 — RAW Abjuration School Wizard (Wizard, PHB
     p.115): Abjuration Savant + Arcane Ward (Lv 2), Projected
@@ -49669,6 +49696,138 @@ async def use_arcane_ward(
         "ward_hp_max": ward_max_hp,
         "wizard_level": wizard_lv,
         "int_mod": int_mod,
+    }
+
+
+_THIRD_EYE_SENSES = {
+    "darkvision": (
+        "Darkvision out to 60 ft."
+    ),
+    "ethereal-sight": (
+        "Ethereal Sight 60 ft — see into Ethereal Plane."
+    ),
+    "greater-comprehension": (
+        "Greater Comprehension — read any written language."
+    ),
+    "see-invisibility": (
+        "See Invisibility 10 ft — see invisible creatures."
+    ),
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_third_eye")
+async def use_third_eye(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.328 — Phase G.1 Wizard subclass batch (Divination
+    School Wizard Lv 10+) of the v2.99.193 phased completion
+    plan. The Third Eye (Divination Wizard Lv 10+, PHB p.116):
+    "Action to gain one of four magical senses until you
+    dismiss it or finish a short or long rest: Darkvision (60
+    ft), Ethereal Sight (60 ft), Greater Comprehension (read
+    any written language), See Invisibility (10 ft)."
+
+    Pivoted to Third Eye after discovering Portent (the Lv 2
+    feature) is already wired in v2.99.219 with a different
+    body shape (uses roll_id to consume a banked die).
+
+    Body: ``{character_id, sense?, override?}``. sense one of
+    "darkvision" (default), "ethereal-sight",
+    "greater-comprehension", or "see-invisibility". Costs an
+    action chip. v1 announce-only — sense application is
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    sense = (body.get("sense") or "darkvision").strip().lower()
+    if sense not in _THIRD_EYE_SENSES:
+        sense = "darkvision"
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_divination_wizard_lv(sheet, 10):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "divination wizard lv 10+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "third-eye",
+            "label": "The Third Eye",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    wizard_lv = _wizard_level_from_sheet(sheet)
+    sense_desc = _THIRD_EYE_SENSES[sense]
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"👁️ The Third Eye — {sense.replace('-', ' ').title()}"
+            ),
+            "feature_desc": (
+                f"{char.name} opens their third eye and gains "
+                f"{sense_desc} Lasts until dismissed or until "
+                f"{char.name} finishes a short or long rest. "
+                f"(Divination Wizard Lv 10+ class feature.)"
+            ),
+            "source": "third-eye",
+            "sense": sense,
+            "sense_description": sense_desc,
+            "wizard_level": wizard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "third-eye",
+        "sense": sense,
+        "sense_description": sense_desc,
+        "wizard_level": wizard_lv,
     }
 
 
