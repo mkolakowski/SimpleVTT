@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.281] - 2026-06-05 — "The Borrowed Wound" — Redemption Paladin Aura of the Guardian (H.2 depth, Lv 7 reactive shield)
+
+**Schema version:** 66
+**Commit summary:** **H.2 depth — Redemption Paladin Lv 7+ Aura of the Guardian.** RAW XGE p.39: when an ally within 10 ft (30 ft at Lv 18+) takes damage, you can use your reaction to magically take that damage instead. Damage can't be reduced; no other effects transfer.
+**Description:** One endpoint. `/use_aura_of_the_guardian` — body `{character_id, override?}`. Validates Redemption Paladin Lv 7+ + reaction-chip Phase 4 gate. Computes `radius_ft = 30 if level >= 18 else 10`. Marks reaction chip, broadcasts `feature_used` with `source: aura-of-the-guardian`. v1 announce-only — the actual damage-redirection swap (HP decrement on Paladin, HP restore on ally) is GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_aura_of_the_guardian` endpoint.
+- `tests/harness/test_aura_of_the_guardian.py` — 4 tests.
+
+### Notes
+- **H.2 depth Lv 7 batch progress:** 4 of 5 oaths now have a Lv 7 feature shipped (Conquest, Ancients, Vengeance, Redemption). One remaining: Glory Aura of Alacrity.
+- **97 ships this session.**
+- **Total harness count: 1432** (was 1428 in v2.99.280; +4 new tests).
+
+---
+
 ## [2.99.280] - 2026-06-05 — "The Closing Step" — Vengeance Paladin Relentless Avenger (H.2 depth, Lv 7 OA-rider)
 
 **Schema version:** 66
