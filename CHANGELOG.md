@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.256] - 2026-06-04 — "The True Strike" — Battle Master Precision Attack (Phase E.1 maneuver 6 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 6 of 16).** RAW PHB p.74: expend 1 superiority die; add it to the ATTACK roll (not damage). No save. First non-save maneuver in the series.
+**Description:** One endpoint. `/use_precision_attack` — body `{character_id, override?}`. Validates Battle Master Lv 3+ + dice >= 1, decrements counter, rolls 1d<size>, broadcasts `attack_bonus` (separate field from damage maneuvers' `extra_damage`). v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_precision_attack` endpoint.
+- `tests/harness/test_precision_attack.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 6 of 16.** First with a different broadcast field (`attack_bonus` vs `extra_damage`) — future clients can distinguish attack-roll vs damage-roll maneuvers by which field is present.
+- **72 ships this session.**
+- **Total harness count: 1354** (was 1351 in v2.99.255).
+
+---
+
 ## [2.99.255] - 2026-06-04 — "The Bared Throat" — Battle Master Goading Attack (Phase E.1 maneuver 5 of 16)
 
 **Schema version:** 66
