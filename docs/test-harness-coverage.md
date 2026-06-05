@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1256 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.232, 2026-06-04).
+**Total tests:** 1261 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.233, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,16 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_trip_attack.py`
+v2.99.233 — Battle Master Fighter (PHB p.74) Combat Superiority pool + Trip Attack maneuver (Phase 1 of [docs/plans/battle-master.md](../plans/battle-master.md)). Garrik Ironside is the demo fixture; tests PATCH his subclass to "Battle Master" + seed a `superiority-dice` resource.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_trip_attack_happy` | Lv 9 Garrik (Battle Master, d8 die) → `extra_damage` in 1..8, `save_dc == 16` (prof +4 + max(STR +4, DEX +2)), dice 4 → 3 + broadcast (source `trip-attack`). |
+| `test_use_trip_attack_out_of_dice` | `superiority-dice.current = 0` → 409 `out_of_uses`. |
+| `test_use_trip_attack_wrong_subclass` | Default Garrik (Champion) → 409 `wrong_subclass_or_level`. |
+| `test_use_trip_attack_level_gate` | Battle Master at Lv 2 (not 3+) → 409. |
 
 ### `test_weapon_bond.py`
 v2.99.232 — Eldritch Knight Fighter (PHB p.74) Weapon Bond (Phase 1 of [docs/plans/eldritch-knight.md](../plans/eldritch-knight.md)). Garrik Ironside is the demo fixture; tests PATCH his subclass to "Eldritch Knight".

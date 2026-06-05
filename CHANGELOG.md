@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.233] - 2026-06-04 — "The Sweep that Lands" — Battle Master Fighter Trip Attack (Phase 1) + plan doc
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 1 of the v2.99.193 phased completion plan — Battle Master Combat Superiority + Trip Attack.** Ships [`docs/plans/battle-master.md`](docs/plans/battle-master.md) freezing the 5-phase + 15-maneuver roadmap. Phase 1: superiority-dice pool + Trip Attack as the canonical maneuver. With this commit, **all 8 Phase E items have at least Phase 1 shipped — Phase E is in flight end-to-end (6/8 fully done, 2/8 partially).**
+**Description:** One plan doc + one helper + one endpoint + two sheet patch keys + wiki surfacing. (1) `docs/plans/battle-master.md` written with 5 phases (Phase 1 = pool + Trip Attack, Phase 2 = rest refill, Phase 3 = 15 remaining maneuvers batched, Phase 4 = Know Your Enemy, Phase 5 = Relentless). (2) `_pc_has_battle_master(sheet, min_level)` returns True for Fighter with subclass containing "battle master" at or above `min_level` (multiclass-aware via `_fighter_level_from_sheet`). (3) `/use_trip_attack` — body `{character_id, override?}`. Validates Battle Master Lv 3+ + `sheet.resources` has a `superiority-dice` entry with `current >= 1`. Decrements the counter, rolls `1d<size>` (size from `sheet.superiority_die_size`, default `d8`), computes Maneuver Save DC = 8 + prof + max(STR_mod, DEX_mod), broadcasts `resource_update` + `feature_used` (source `trip-attack`) with `(extra_damage, save_dc, die_size, dice_remaining)`. (4) `superiority_die_size` + `resources` added to `_SHEET_PATCH_KEYS` so the harness can seed the dice pool without rebuilding the demo. (5) Wiki surfacing per the doc-discovery rule. Garrik Ironside (Fighter Champion Lv 9 default) is the demo fixture; tests PATCH his subclass to "Battle Master". One new harness test file with 4 tests + 1 wiki smoke test.
+
+### Added
+- `docs/plans/battle-master.md` — design plan freezing the 5-phase + 15-maneuver roadmap.
+- `_pc_has_battle_master(sheet, min_level)` helper gate (multiclass-aware).
+- `_SUPERIORITY_DIE_SIZES = {"d8", "d10", "d12"}` valid set.
+- `/api/campaign/{cid}/use_trip_attack` endpoint.
+- `superiority_die_size` + `resources` in `_SHEET_PATCH_KEYS`.
+- `_DOC_ALLOWLIST["plan-battle-master"]` in `wiki_routes.py`.
+- "Battle Master (Fighter subclass)" row in `wiki.html` Design plans table.
+- "Battle Master (Fighter subclass)" row in `docs/wiki/README.md` Design plans table.
+- `tests/harness/test_trip_attack.py` — 4 tests.
+- `test_wiki_doc_serves_battle_master_plan` in `test_wiki.py`.
+- `test_wiki_home_renders` now also asserts the battle-master plan link.
+
+### Notes
+- **PATCH bump** — 1 plan doc + 1 helper + 1 endpoint + 2 patch keys + 4 regression tests + wiki surfacing. No schema change.
+- **`resources` is now allowlisted.** First time the full resources list is mutable via PATCH. Required so the harness can seed Battle Master's superiority-dice pool onto Garrik's sheet (Garrik defaults to Champion with no superiority-dice resource). The existing `/character/{id}/resource` endpoint only mutates EXISTING resources (`raise HTTPException(404, "Resource not found")` when missing); adding is the harness's job. Future tests that need new resources on a non-default sheet can lean on the same patch.
+- **Maneuver DC formula.** RAW: 8 + prof + max(STR, DEX) mod. Garrik at Lv 9: prof +4, STR +4, DEX +2 → max = 4 → DC = 16. Test asserts 16.
+- **v1 ships announce-only.** The +d8 damage and Str save are announced for the GM to apply manually. The `/attack` endpoint does not yet take a `maneuver: "trip"` body field that would auto-apply the damage bump and emit the prone-save request. Filed for a future deep-wire commit.
+- **15 remaining maneuvers filed.** Per the plan, ship one maneuver per commit batched by player demand: Commander's Strike, Disarming, Distracting, Evasive Footwork, Feinting, Goading, Lunging, Maneuvering, Menacing, Parry, Precision, Pushing, Rally, Riposte, Sweeping.
+- **Phase E ✅ 6.5/8 (with all 8 in flight).** E.3 + E.4 + E.5 + E.6 + E.7 + E.8 fully done. E.1 advanced from 0/5 → 1/5; E.2 still at 1/4. **Every Phase E item now has at least Phase 1 shipped.** The remaining work is deepening the unstarted phases.
+- **49 ships this session.**
+- **Total harness count: 1261** (was 1256 in v2.99.232; +4 new trip-attack + 1 new wiki test = 5 new).
+
+---
+
 ## [2.99.232] - 2026-06-04 — "The Bonded Blade" — Eldritch Knight Fighter Weapon Bond (Phase 1) + plan doc
 
 **Schema version:** 66

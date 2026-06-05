@@ -25469,6 +25469,36 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_battle_master(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.233 — RAW Battle Master features (Fighter, PHB
+    p.73-74): Combat Superiority + Student of War (Lv 3), Know
+    Your Enemy (Lv 7), Improved Combat Superiority (Lv 10
+    d8→d10, Lv 18 d10→d12), Relentless (Lv 15).
+
+    Returns True when the PC is a Fighter with subclass slug
+    containing "battle master" + meets `min_level`. Gates each
+    Battle-Master-specific endpoint.
+
+    Phase E.1 of the v2.99.193 phased completion plan. Phase 1
+    (Combat Superiority pool + Trip Attack) ships in v2.99.233;
+    Phases 2-5 deferred — see docs/plans/battle-master.md.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        has_fighter = any(
+            (entry.get("class") or "").strip().lower() == "fighter"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_fighter:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "battle master" not in subclass:
+        return False
+    return _fighter_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_eldritch_knight(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.232 — RAW Eldritch Knight features (Fighter, PHB
     p.74): Spellcasting + Weapon Bond (Lv 3), War Magic (Lv 7),
@@ -37352,6 +37382,167 @@ async def use_weapon_bond(
         "weapon_slug": weapon_slug,
         "bonded_weapons": bonded,
         "already_bonded": False,
+    }
+
+
+_SUPERIORITY_DIE_SIZES = {"d8", "d10", "d12"}
+
+
+@router.post("/api/campaign/{campaign_id}/use_trip_attack")
+async def use_trip_attack(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.233 — Phase E.1 Phase 1 of the v2.99.193 phased
+    completion plan. Trip Attack maneuver (Battle Master Lv 3+,
+    PHB p.74): "When you hit a creature with a weapon attack,
+    you can expend one superiority die to attempt to knock the
+    target down. You add the superiority die to the attack's
+    damage roll, and if the target is Large or smaller, it must
+    make a Strength saving throw. On a failed save, you knock
+    the target prone."
+
+    Body: ``{character_id, override?}``.
+
+    Validates Battle Master Lv 3+ + ``sheet.resources`` has a
+    `superiority-dice` entry with `current >= 1`. Decrements the
+    counter, rolls 1d<size> (size from `sheet.superiority_die_size`,
+    default d8), computes Maneuver DC = 8 + prof + max(STR_mod,
+    DEX_mod), broadcasts.
+
+    v1 ships announce-only — the +damage and STR save are
+    announced for the GM to apply manually. /attack does not yet
+    accept a `maneuver: "trip"` body field. See
+    docs/plans/battle-master.md Phase 3.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_battle_master(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "battle master fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    # Superiority-dice resource lookup.
+    resources = list(sheet.get("resources") or [])
+    sd_row = None
+    sd_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "superiority-dice":
+            sd_row = dict(r)
+            sd_idx = i
+            break
+    if sd_row is None:
+        raise HTTPException(
+            404,
+            "No Superiority Dice resource on this sheet",
+        )
+    sd_cur = int(sd_row.get("current") or 0)
+    sd_max = int(sd_row.get("max") or 0)
+    if sd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Superiority Dice",
+        })
+
+    die_size = (sheet.get("superiority_die_size") or "d8").strip().lower()
+    if die_size not in _SUPERIORITY_DIE_SIZES:
+        die_size = "d8"
+
+    new_sd = sd_cur - 1
+    sd_row["current"] = new_sd
+    resources[sd_idx] = sd_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    try:
+        extra = dice_mod.roll(f"1{die_size}").total
+    except Exception:
+        extra = 1
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    abilities = sheet.get("abilities") or {}
+    str_mod = (int(abilities.get("STR") or 10) - 10) // 2
+    dex_mod = (int(abilities.get("DEX") or 10) - 10) // 2
+    save_dc = 8 + prof + max(str_mod, dex_mod)
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "superiority-dice",
+            "current": new_sd,
+            "max": sd_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🦵 Trip Attack — +{extra} damage (1{die_size}); "
+                f"Str DC {save_dc} or Prone"
+            ),
+            "feature_desc": (
+                f"{char.name} expends a superiority die: +{extra} "
+                f"damage on the hit + the target (Large or smaller) "
+                f"makes a Str save DC {save_dc} or fall Prone. "
+                f"(Battle Master Lv 3+ maneuver; "
+                f"{new_sd}/{sd_max} dice remaining.)"
+            ),
+            "source": "trip-attack",
+            "extra_damage": extra,
+            "die_size": die_size,
+            "save_dc": save_dc,
+            "dice_remaining": new_sd,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "trip-attack",
+        "extra_damage": extra,
+        "die_size": die_size,
+        "save_dc": save_dc,
+        "dice_remaining": new_sd,
     }
 
 
@@ -50175,6 +50366,13 @@ _SHEET_PATCH_KEYS = {
     # at 2 per RAW. Allowlisted so the test can reset the bond
     # list to [] between cases.
     "bonded_weapons",
+    # v2.99.233 — superiority_die_size ("d8" | "d10" | "d12") +
+    # resources list. Read by /use_trip_attack (Battle Master Lv
+    # 3+). The harness PATCHes Garrik with a "superiority-dice"
+    # resource entry + die size so the maneuver path can be
+    # exercised without rebuilding the demo seed.
+    "superiority_die_size",
+    "resources",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the
