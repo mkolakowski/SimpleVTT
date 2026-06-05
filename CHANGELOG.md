@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.290] - 2026-06-05 — "Avatar of Conquest" — Conquest Paladin Invincible Conqueror (H.2 deeper, Lv 20 capstone)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Conquest Paladin Lv 20 capstone.** RAW XGE p.37: action to become avatar of conquest for 1 min — resistance to all damage, +1 extra attack on Attack action, melee weapon crits on 19-20. Once per long rest.
+**Description:** One endpoint. `/use_invincible_conqueror` — body `{character_id, override?}`. Validates Conquest Paladin Lv 20 + action chip. Auto-bootstraps an `invincible-conqueror` resource if missing. Marks action chip, broadcasts. v1 announce-only — resistance, extra attack, expanded crit range are GM-tracked. One new harness test file with 4 tests including long-rest refill.
+
+### Added
+- `/api/campaign/{cid}/use_invincible_conqueror` endpoint.
+- `tests/harness/test_invincible_conqueror.py` — 4 tests.
+
+### Notes
+- **H.2 Lv 20 batch progress:** 3 of 5 oaths shipped at Lv 20 (Ancients, Vengeance, Conquest). Remaining: Glory Living Legend, Redemption Emissary of Redemption.
+- **106 ships this session.**
+- **Total harness count: 1466** (was 1462 in v2.99.289; +4 new tests).
+
+---
+
 ## [2.99.289] - 2026-06-05 — "Wings of the Avenger" — Vengeance Paladin Avenging Angel (H.2 deeper, Lv 20 capstone transform)
 
 **Schema version:** 66

@@ -44665,6 +44665,165 @@ async def use_avenging_angel(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_invincible_conqueror")
+async def use_invincible_conqueror(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.290 — Phase H.2 deeper (Conquest Paladin Lv 20)
+    of the v2.99.193 phased completion plan. Invincible
+    Conqueror (Conquest Paladin Lv 20, XGE p.37): "As an
+    action, you can magically become an avatar of conquest,
+    gaining the following benefits for 1 minute: resistance
+    to all damage; when you take the Attack action, you can
+    make one additional attack as part of that action; your
+    melee weapon attacks score a critical hit on a roll of
+    19 or 20. Once used, can't again until long rest."
+
+    Body: ``{character_id, override?}``. Costs an action chip.
+    Auto-bootstraps an `invincible-conqueror` resource if
+    missing. v1 announce-only — resistance, extra attack, and
+    expanded crit range are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_conquest_oath(sheet, 20):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "conquest paladin lv 20",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "invincible-conqueror",
+            "label": "Invincible Conqueror",
+            "strict": strict,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    ic_row = None
+    ic_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "invincible-conqueror":
+            ic_row = dict(r); ic_idx = i; break
+    if ic_row is None:
+        ic_row = {
+            "key": "invincible-conqueror",
+            "label": "Invincible Conqueror",
+            "current": 1, "max": 1, "reset": "long",
+        }
+        ic_idx = len(resources)
+        resources.append(ic_row)
+    ic_cur = int(ic_row.get("current") or 0)
+    ic_max = int(ic_row.get("max") or 1)
+    if ic_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Invincible Conqueror",
+            "current": ic_cur, "max": ic_max,
+        })
+
+    ic_row["current"] = ic_cur - 1
+    resources[ic_idx] = ic_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "invincible-conqueror",
+            "current": ic_cur - 1, "max": ic_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "👑 Invincible Conqueror — resist all + extra attack + crit 19-20"
+            ),
+            "feature_desc": (
+                f"{char.name} becomes an avatar of conquest for 1 "
+                f"minute: resistance to all damage; +1 extra attack "
+                f"on the Attack action (3 total with Extra Attack); "
+                f"melee weapon attacks crit on 19 or 20. (Conquest "
+                f"Paladin Lv 20 capstone; once per long rest.)"
+            ),
+            "source": "invincible-conqueror",
+            "uses_remaining": ic_cur - 1,
+            "duration_minutes": 1,
+            "extra_attack": 1,
+            "crit_range_min": 19,
+            "resistance_all_damage": True,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "invincible-conqueror",
+        "uses_remaining": ic_cur - 1,
+        "max_uses": ic_max,
+        "duration_minutes": 1,
+        "extra_attack": 1,
+        "crit_range_min": 19,
+        "resistance_all_damage": True,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
