@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.266] - 2026-06-04 — "The Captain's Order" — Battle Master Commander's Strike (Phase E.1 maneuver 16 of 16 — ALL 16 SHIPPED)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 16 of 16 — FINAL).** RAW PHB p.74: on your turn, forgo one Attack-action attack and use bonus action to direct an ally — chosen ally uses reaction to make a weapon attack + die added to damage. **With this commit, ALL 16 PHB Battle Master maneuvers are shipped end-to-end.**
+**Description:** One endpoint. `/use_commanders_strike` — body `{character_id, ally_name?, override?}`. Bonus-chip gated. v1 announce-only. One new harness test file with 3 tests. **Phase E.1 Phase 3 ✅ complete.**
+
+### Added
+- `/api/campaign/{cid}/use_commanders_strike` endpoint.
+- `tests/harness/test_commanders_strike.py` — 3 tests.
+
+### Notes
+- **🎉 Phase E.1 Phase 3 ✅ COMPLETE.** All 16 PHB Battle Master maneuvers are now shipped end-to-end as individual `/use_*` endpoints, each with a harness test file:
+  1. v2.99.233 Trip Attack
+  2. v2.99.252 Disarming Attack
+  3. v2.99.253 Menacing Attack
+  4. v2.99.254 Pushing Attack
+  5. v2.99.255 Goading Attack
+  6. v2.99.256 Precision Attack
+  7. v2.99.257 Lunging Attack
+  8. v2.99.258 Sweeping Attack
+  9. v2.99.259 Feinting Attack
+  10. v2.99.260 Rally
+  11. v2.99.261 Parry
+  12. v2.99.262 Riposte
+  13. v2.99.263 Evasive Footwork
+  14. v2.99.264 Distracting Strike
+  15. v2.99.265 Maneuvering Attack
+  16. v2.99.266 Commander's Strike (this)
+- **Phase E.1 status: Phases 1 (pool + Trip) + 3 (16 maneuvers) ✅; Phase 2 (rest refill), 4 (Know Your Enemy), 5 (Relentless) still ⚪.**
+- **82 ships this session.**
+- **Total harness count: 1384** (was 1381 in v2.99.265).
+
+---
+
 ## [2.99.265] - 2026-06-04 — "The Tactical Nudge" — Battle Master Maneuvering Attack (Phase E.1 maneuver 15 of 16)
 
 **Schema version:** 66
