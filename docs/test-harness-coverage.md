@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1261 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.233, 2026-06-04).
+**Total tests:** 1265 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.234, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,16 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_warding_flare.py`
+v2.99.234 — Light Domain Cleric (PHB p.60) Warding Flare reaction (Phase H.1 first ship). Brother Tavik Stonebrow is the demo fixture; tests PATCH his subclass to "Light Domain" + seed a `warding-flare` resource with 3 uses (WIS 16 → +3 mod).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_warding_flare_happy` | Light Cleric Tavik (in battle) → `uses_remaining == 2`, broadcast (source `warding-flare`) carries `attacker_name == "Bandit Alpha"`. |
+| `test_use_warding_flare_out_of_uses` | `warding-flare.current = 0` → 409 `out_of_uses`. |
+| `test_use_warding_flare_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
+| `test_use_warding_flare_no_resource` | Light Cleric without the `warding-flare` resource entry → 404. |
 
 ### `test_trip_attack.py`
 v2.99.233 — Battle Master Fighter (PHB p.74) Combat Superiority pool + Trip Attack maneuver (Phase 1 of [docs/plans/battle-master.md](../plans/battle-master.md)). Garrik Ironside is the demo fixture; tests PATCH his subclass to "Battle Master" + seed a `superiority-dice` resource.

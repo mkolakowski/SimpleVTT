@@ -25469,6 +25469,38 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_light_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.234 — RAW Light Domain features (Cleric, PHB
+    p.59-60): Bonus Cantrip (Light) + Warding Flare (Lv 1),
+    Channel Divinity: Radiance of the Dawn (Lv 2 — curated),
+    Improved Flare (Lv 6), Potent Spellcasting (Lv 8), Corona
+    of Light (Lv 17).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "light" + meets `min_level` (multiclass-aware).
+    Gates the Light Domain endpoints.
+
+    Phase H.1 of the v2.99.193 completion plan — first non-Life
+    Cleric domain to ship. Phases 2-5 (Improved Flare, Potent
+    Spellcasting, Corona of Light, plus the other 10 domains)
+    deferred to follow-up commits.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "light" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_battle_master(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.233 — RAW Battle Master features (Fighter, PHB
     p.73-74): Combat Superiority + Student of War (Lv 3), Know
@@ -37543,6 +37575,166 @@ async def use_trip_attack(
         "die_size": die_size,
         "save_dc": save_dc,
         "dice_remaining": new_sd,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_warding_flare")
+async def use_warding_flare(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.234 — Phase H.1 first ship of the v2.99.193 phased
+    completion plan. Warding Flare (Light Domain Cleric Lv 1+,
+    PHB p.60): "Also at 1st level, the light of your deity flares
+    out to mete out divine punishment to attackers. When you are
+    attacked by a creature within 30 feet of you that you can
+    see, you can use your reaction to impose disadvantage on the
+    attack roll, causing light to flare before the attacker
+    before it hits or misses. An attacker that can't be blinded
+    is immune to this feature. You can use this feature a number
+    of times equal to your Wisdom modifier (a minimum of once).
+    You regain all expended uses when you finish a long rest."
+
+    Body: ``{character_id, attacker_name?, override?}``.
+
+    Validates Light Domain Cleric Lv 1+ + ``sheet.resources`` has
+    a `warding-flare` entry with `current >= 1` + Phase 4 reaction
+    chip. Decrements the counter, marks the reaction chip,
+    broadcasts. v1 ships announce-only — the disadvantage on the
+    attacker's roll is announced for the GM to apply manually.
+
+    The "attacker that can't be blinded is immune" half is filed
+    (would need a condition-immunity lookup on the attacker's
+    sheet / monster stat block).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    attacker_name = (str(body.get("attacker_name") or "")).strip()[:80]
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_light_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "light domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    # warding-flare resource lookup.
+    resources = list(sheet.get("resources") or [])
+    wf_row = None
+    wf_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "warding-flare":
+            wf_row = dict(r)
+            wf_idx = i
+            break
+    if wf_row is None:
+        raise HTTPException(
+            404,
+            "No Warding Flare resource on this sheet",
+        )
+    wf_cur = int(wf_row.get("current") or 0)
+    wf_max = int(wf_row.get("max") or 0)
+    if wf_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Warding Flare",
+        })
+
+    # Phase 4 reaction-chip gate.
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "warding-flare",
+            "label": "Warding Flare",
+            "strict": strict,
+        })
+
+    wf_row["current"] = wf_cur - 1
+    resources[wf_idx] = wf_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "warding-flare",
+            "current": wf_cur - 1,
+            "max": wf_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    attacker_phrase = f" against {attacker_name}" if attacker_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"✨ Warding Flare — disadvantage{attacker_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} flares with divine light: the next "
+                f"attack roll{attacker_phrase} is at disadvantage. "
+                f"(Light Domain Cleric Lv 1+ class feature; "
+                f"{wf_cur - 1}/{wf_max} uses remaining. Attackers "
+                f"immune to being blinded are immune.)"
+            ),
+            "source": "warding-flare",
+            "attacker_name": attacker_name,
+            "uses_remaining": wf_cur - 1,
+            "over_budget": was_used,
+            "over_budget_slot": "reaction" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "warding-flare",
+        "uses_remaining": wf_cur - 1,
+        "over_budget": was_used,
     }
 
 

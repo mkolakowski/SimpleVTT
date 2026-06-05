@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.234] - 2026-06-04 — "The Divine Glare" — Light Domain Cleric Warding Flare (Phase H.1 first ship)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 first ship of the v2.99.193 phased completion plan — non-Life Cleric domain coverage on the road to 3.0.0.** Warding Flare (Light Domain Lv 1+, PHB p.60): reaction to impose disadvantage on a visible attacker within 30 ft. v2.99.234 ships the endpoint as the first non-Life Cleric subclass feature; 10 more domains + the Lv 6/8/17 Light features filed for follow-up commits.
+**Description:** One helper + one endpoint. (1) `_pc_has_light_domain(sheet, min_level)` returns True for Cleric with subclass slug containing "light" at or above `min_level` (multiclass-aware). (2) `/use_warding_flare` — body `{character_id, attacker_name?, override?}`. Validates Light Cleric Lv 1+ + `sheet.resources` has a `warding-flare` entry with `current >= 1` + Phase 4 reaction-chip gate. Decrements counter, marks reaction chip, broadcasts `resource_update` + `feature_used` (source `warding-flare`) with `(attacker_name, uses_remaining)`. v1 ships announce-only — the disadvantage on the attacker's roll is announced for the GM to apply manually. "Attacker can't be blinded → immune" half filed (would need condition-immunity lookup on attacker). Brother Tavik Stonebrow (Cleric Life Domain Lv 8 default, WIS 16 → 3 uses) is the demo fixture; tests PATCH his subclass to "Light Domain" + seed the resource. One new harness test file with 4 tests.
+
+### Added
+- `_pc_has_light_domain(sheet, min_level)` helper gate (multiclass-aware).
+- `/api/campaign/{cid}/use_warding_flare` endpoint.
+- `tests/harness/test_warding_flare.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 4 regression tests. No schema change.
+- **Phase H.1 progress: 1 of 11 domains has its first feature shipped.** Remaining Light Domain features (Lv 6 Improved Flare, Lv 8 Potent Spellcasting, Lv 17 Corona of Light) and 10 other domains (Knowledge, Nature, Tempest, Trickery, War, and the Tasha's/Xanathar additions) are each filed for follow-up commits.
+- **Reaction-offer infrastructure already in place.** The Light Domain Warding Flare entry appears in the reaction-offer registry at line 20881 of `tabletop_routes.py` (from a prior commit) as a clickable label. v2.99.234 wires the actual endpoint behind that label. Future commit can connect the popup click to a fetch against `/use_warding_flare`.
+- **Phase H readiness.** Per the plan, the 3.0.0 cut requires H.1 (non-Life domains, 11 of them), H.2 (non-Devotion oaths, ~6), and H.3 (Eldritch Invocation breadth, 5 filed). v2.99.234 progresses H.1 by one. The cut is not imminent — there's still substantial H.1/H.2/H.3 work before the major-version bump.
+- **50 ships this session.**
+- **Total harness count: 1265** (was 1261 in v2.99.233).
+
+---
+
 ## [2.99.233] - 2026-06-04 — "The Sweep that Lands" — Battle Master Fighter Trip Attack (Phase 1) + plan doc
 
 **Schema version:** 66
