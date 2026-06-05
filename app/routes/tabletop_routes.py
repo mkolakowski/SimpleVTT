@@ -46370,6 +46370,106 @@ async def use_arcane_mastery(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_orders_wrath")
+async def use_orders_wrath(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.305 — Phase H.1 deeper (Order Domain Cleric Lv 17+)
+    of the v2.99.193 phased completion plan. CLOSES the H.1 Lv 17
+    batch (13/13 PHB+TCE+SCAG domains). Order's Wrath (Order
+    Domain Cleric Lv 17+, TCE p.40): "When you deal your Divine
+    Strike damage to a creature, you can curse it until the
+    start of your next turn. The next time one of your allies
+    hits the cursed creature with an attack, the cursed creature
+    takes 2d8 psychic damage, and the curse ends. You can curse
+    a creature only once per turn."
+
+    Body: ``{character_id, target_combatant_id?, override?}``.
+    No chip — passive trigger on Divine Strike. v1
+    announce-only — the curse install + ally-hit trigger is
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id") or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_order_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "order domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_text = (
+        f"combatant {target_combatant_id}"
+        if target_combatant_id else "the Divine Strike target"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "⚖️ Order's Wrath — 2d8 psychic curse on Divine Strike target"
+            ),
+            "feature_desc": (
+                f"{char.name} curses {target_text} until the start "
+                f"of their next turn. The next time an ally hits the "
+                f"cursed creature, the curse triggers 2d8 psychic "
+                f"damage and ends. (Order Domain Cleric Lv 17+ class "
+                f"feature; once per turn.)"
+            ),
+            "source": "orders-wrath",
+            "target_combatant_id": target_combatant_id,
+            "psychic_damage_expression": "2d8",
+            "expires_on": "next_turn_start",
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "orders-wrath",
+        "target_combatant_id": target_combatant_id,
+        "psychic_damage_expression": "2d8",
+        "expires_on": "next_turn_start",
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

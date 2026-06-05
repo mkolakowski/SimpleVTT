@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.305] - 2026-06-05 — "Wrath of Law" — Order Domain Cleric Order's Wrath (H.1 deeper, Lv 17 — CLOSES H.1 Lv 17 FULL BATCH 13/13)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Order Domain Cleric Lv 17+ Order's Wrath. CLOSES the H.1 Lv 17 batch ENTIRELY (13/13 PHB+TCE+SCAG domains).** RAW TCE p.40: when you deal Divine Strike damage, curse target until start of next turn. Next ally-hit triggers 2d8 psychic and ends curse. Once per turn.
+**Description:** One endpoint. `/use_orders_wrath` — body `{character_id, target_combatant_id?, override?}`. Validates Order Domain Cleric Lv 17+. Broadcasts `feature_used` with `source: orders-wrath` + `psychic_damage_expression: "2d8"` + `expires_on: "next_turn_start"`. v1 announce-only — curse install + ally-hit trigger GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_orders_wrath` endpoint.
+- `tests/harness/test_orders_wrath.py` — 4 tests.
+
+### Notes
+- **🎉 H.1 Lv 17 batch ✅ FULLY COMPLETE (13/13 domains).** All PHB+TCE+SCAG Cleric domains now have their Lv 17 capstone shipped: Light Corona of Light, Tempest Stormborn, Life Supreme Healing, War Avatar of Battle, Death Improved Reaper, Trickery Improved Duplicity, Forge Saint of Forge and Fire, Grave Keeper of Souls, Knowledge Visions of the Past, Nature Master of Nature, Peace Expansive Bond, Arcana Arcane Mastery, Order Order's Wrath.
+- **121 ships this session.**
+- **Total harness count: 1517** (was 1513 in v2.99.304; +4 new tests).
+
+---
+
 ## [2.99.304] - 2026-06-05 — "The Borrowed Tome" — Arcana Domain Cleric Arcane Mastery (H.1 deeper, Lv 17 — H.1 Lv 17 batch extension)
 
 **Schema version:** 66
