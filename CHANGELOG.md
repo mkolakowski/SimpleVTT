@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.294] - 2026-06-05 — "Wings of the Storm" — Tempest Domain Cleric Stormborn (H.1 deeper, Lv 17 passive)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Tempest Domain Cleric Lv 17+ Stormborn.** RAW PHB p.63: fly speed = walking speed when not underground or indoors.
+**Description:** One endpoint. `/use_stormborn` — body `{character_id, override?}`. Validates Tempest Domain Cleric Lv 17+. Computes `fly_speed_ft = walking_speed`. No chip — passive permanent. Broadcasts `feature_used` with `source: stormborn`. v1 announce-only — outdoor/indoor gating is GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_stormborn` endpoint.
+- `tests/harness/test_stormborn.py` — 3 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 2 of 11 domains shipped at Lv 17 (Light, Tempest).
+- **110 ships this session.**
+- **Total harness count: 1479** (was 1476 in v2.99.293; +3 new tests).
+
+---
+
 ## [2.99.293] - 2026-06-05 — "The Sunlit Stand" — Light Domain Cleric Corona of Light (H.1 deeper, Lv 17 opener)
 
 **Schema version:** 66

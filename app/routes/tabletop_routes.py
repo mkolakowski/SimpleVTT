@@ -45196,6 +45196,98 @@ async def use_corona_of_light(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_stormborn")
+async def use_stormborn(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.294 — Phase H.1 deeper (Tempest Domain Cleric
+    Lv 17+) of the v2.99.193 phased completion plan. Stormborn
+    (Tempest Domain Cleric Lv 17+, PHB p.63): "At 17th level,
+    you gain a flying speed equal to your current walking
+    speed whenever you are not underground or indoors."
+
+    Body: ``{character_id, override?}``. No chip cost —
+    passive permanent feature. The endpoint announces the
+    flying speed equal to walking speed. v1 announce-only —
+    the outdoor/indoor gating is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_tempest_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "tempest domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    walking_speed = int(sheet.get("speed_walk") or sheet.get("speed") or 30)
+    fly_speed_ft = walking_speed
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⛈️ Stormborn — fly {fly_speed_ft} ft (outdoors only)"
+            ),
+            "feature_desc": (
+                f"{char.name} gains a flying speed of {fly_speed_ft} "
+                f"ft equal to their walking speed — only outdoors "
+                f"(not underground or indoors). (Tempest Domain "
+                f"Cleric Lv 17+ class feature; passive.)"
+            ),
+            "source": "stormborn",
+            "walking_speed_ft": walking_speed,
+            "fly_speed_ft": fly_speed_ft,
+            "outdoor_only": True,
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "stormborn",
+        "walking_speed_ft": walking_speed,
+        "fly_speed_ft": fly_speed_ft,
+        "outdoor_only": True,
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
