@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.315] - 2026-06-05 — "The Summoner's Call" — Shepherd Druid Spirit Totem (Lv 2+, XGE)
+
+**Schema version:** 66
+**Commit summary:** **E.4 Druid subclass batch — Shepherd Druid Lv 2+ Spirit Totem (XGE).** Second Druid subclass shipped. RAW XGE p.24: bonus action to summon Bear/Hawk/Unicorn spirit at a point within 60 ft. 30-ft radius aura, persists 1 min. Once per short or long rest.
+**Description:** Adds `_pc_has_shepherd_druid` helper. One endpoint. `/use_spirit_totem` — body `{character_id, spirit?, override?}`. Spirit "bear" (default — 5+druid_lv temp HP), "hawk" (reaction → ally advantage on attack), or "unicorn" (heal-spell rider HP = druid level). Costs bonus chip. Auto-bootstraps `spirit-totem` resource (max=1, reset=short). Broadcasts. v1 announce-only. One new harness test file with 6 tests.
+
+### Added
+- `/api/campaign/{cid}/use_spirit_totem` endpoint.
+- `_pc_has_shepherd_druid` helper.
+- `tests/harness/test_spirit_totem.py` — 6 tests.
+
+### Notes
+- **E.4 Druid batch progress:** 2 of ~8 subclasses shipped (Land, Shepherd).
+- **131 ships this session.**
+- **Total harness count: 1556** (was 1550 in v2.99.314; +6 new tests).
+
+---
+
 ## [2.99.314] - 2026-06-05 — "Meditation Under Leaves" — Land Druid Natural Recovery (Lv 2+)
 
 **Schema version:** 66

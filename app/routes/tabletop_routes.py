@@ -25985,6 +25985,30 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_shepherd_druid(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.315 — RAW Shepherd Druid (Druid, XGE p.24):
+    Speech of the Woods + Spirit Totem (Lv 2), Mighty Summoner
+    (Lv 6), Guardian Spirit (Lv 10), Faithful Summons (Lv 14).
+
+    Returns True when the PC is a Druid with subclass slug
+    containing "shepherd" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "druid":
+        has_druid = any(
+            (entry.get("class") or "").strip().lower() == "druid"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_druid:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "shepherd" not in subclass:
+        return False
+    return _druid_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_land_druid(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.313 — RAW Land Druid (Druid, PHB p.68): Bonus
     Cantrip (Lv 2), Natural Recovery (Lv 2), Circle Spells
@@ -47658,6 +47682,185 @@ async def use_natural_recovery(
         "max_slot_level": max_slot_level,
         "uses_remaining": nr_cur - 1,
         "max_uses": nr_max,
+        "druid_level": druid_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_spirit_totem")
+async def use_spirit_totem(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.315 — Phase E.4 Druid subclass batch (Shepherd
+    Druid Lv 2+, XGE) of the v2.99.193 phased completion plan.
+    Spirit Totem (Shepherd Druid Lv 2+, XGE p.24): bonus
+    action to summon a Bear/Hawk/Unicorn spirit at a point
+    within 60 ft. Spirit creates a 30-ft radius aura, persists
+    1 min, once per short or long rest.
+
+    Body: ``{character_id, spirit?, override?}``. Spirit:
+    "bear" (default — 5+druid_lv temp HP), "hawk" (reaction
+    → ally advantage on attack roll), or "unicorn" (heal-spell
+    rider HP equal to druid level). Costs a bonus chip.
+    Auto-bootstraps `spirit-totem` resource (max=1, reset=short).
+    v1 announce-only — aura effects are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    spirit = (body.get("spirit") or "bear").strip().lower()
+    if spirit not in ("bear", "hawk", "unicorn"):
+        spirit = "bear"
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Druid character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_shepherd_druid(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "shepherd druid lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _druid_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "spirit-totem",
+            "label": "Spirit Totem",
+            "strict": strict,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    st_row = None
+    st_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "spirit-totem":
+            st_row = dict(r); st_idx = i; break
+    if st_row is None:
+        st_row = {
+            "key": "spirit-totem",
+            "label": "Spirit Totem",
+            "current": 1, "max": 1, "reset": "short",
+        }
+        st_idx = len(resources)
+        resources.append(st_row)
+    st_cur = int(st_row.get("current") or 0)
+    st_max = int(st_row.get("max") or 1)
+    if st_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Spirit Totem",
+            "current": st_cur, "max": st_max,
+        })
+
+    st_row["current"] = st_cur - 1
+    resources[st_idx] = st_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    druid_lv = _druid_level_from_sheet(sheet)
+    bear_temp_hp = 5 + druid_lv
+    unicorn_heal_bonus = druid_lv
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    if spirit == "bear":
+        effect_text = (
+            f"You and allies in the 30-ft aura gain "
+            f"{bear_temp_hp} temporary HP."
+        )
+    elif spirit == "hawk":
+        effect_text = (
+            "Reaction: when ally in aura attacks, give them "
+            "advantage on the attack roll."
+        )
+    else:  # unicorn
+        effect_text = (
+            f"When you cast a healing spell using a slot, "
+            f"allies in aura also heal {unicorn_heal_bonus} HP."
+        )
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "spirit-totem",
+            "current": st_cur - 1, "max": st_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🐻 Spirit Totem — {spirit.title()} (30 ft aura, 1 min)"
+            ),
+            "feature_desc": (
+                f"{char.name} summons the {spirit.title()} Spirit at "
+                f"a point within 60 ft. {effect_text} (Shepherd Druid "
+                f"Lv 2+ class feature; once per short or long rest.)"
+            ),
+            "source": "spirit-totem",
+            "spirit": spirit,
+            "aura_radius_ft": 30,
+            "duration_minutes": 1,
+            "bear_temp_hp": bear_temp_hp,
+            "unicorn_heal_bonus": unicorn_heal_bonus,
+            "uses_remaining": st_cur - 1,
+            "druid_level": druid_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "spirit-totem",
+        "spirit": spirit,
+        "aura_radius_ft": 30,
+        "duration_minutes": 1,
+        "bear_temp_hp": bear_temp_hp,
+        "unicorn_heal_bonus": unicorn_heal_bonus,
+        "uses_remaining": st_cur - 1,
+        "max_uses": st_max,
         "druid_level": druid_lv,
     }
 

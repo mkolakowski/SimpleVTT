@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1550 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.314, 2026-06-05).
+**Total tests:** 1556 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.315, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -850,6 +850,18 @@ v2.99.314 — Land Druid (PHB p.68) Natural Recovery Lv 2+ (E.4 Druid batch). Du
 | `test_use_nr_level_gate` | Land at Lv 1 → 409. |
 | `test_use_nr_out_of_uses` | Back-to-back → 409 `no_uses_left`. |
 | `test_use_nr_long_rest_refills` | Use → long rest → use again → 200. |
+
+### `test_spirit_totem.py`
+v2.99.315 — Shepherd Druid (XGE p.24) Spirit Totem Lv 2+ (E.4 Druid batch). Bonus action to summon Bear/Hawk/Unicorn spirit at point within 60 ft. 30-ft aura, 1 min. Bear = 5+druid_lv temp HP to allies in aura; Hawk = reaction ally-attack advantage; Unicorn = heal-spell rider HP = druid level. Once per short or long rest. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_st_happy_lv5_bear` | PATCH Mira → Shepherd Lv 5 default Bear → `bear_temp_hp == 10`, `aura_radius_ft == 30`, broadcast (source `spirit-totem`). |
+| `test_use_st_hawk` | spirit="hawk" passes through. |
+| `test_use_st_unicorn` | spirit="unicorn" → `unicorn_heal_bonus == 5`. |
+| `test_use_st_wrong_subclass` | Default Mira (Moon) → 409. |
+| `test_use_st_level_gate` | Shepherd at Lv 1 → 409. |
+| `test_use_st_out_of_uses` | Back-to-back → 409 `no_uses_left`. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
