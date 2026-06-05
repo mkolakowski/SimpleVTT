@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.350] - 2026-06-05 — "The Beguiling Court" — The Archfey Warlock Fey Presence (Lv 1+, PHB) — 🔮 Warlock patron batch
+
+**Schema version:** 66
+**Commit summary:** **Warlock patron subclass batch ship #2 — The Archfey Lv 1+ Fey Presence (PHB).** Second Warlock patron batch ship; opens The Archfey. RAW PHB p.109: as an action, each creature in a 10-ft cube makes a WIS save vs your warlock spell save DC or is charmed OR frightened (your choice) until the end of your next turn. Once per short or long rest.
+**Description:** Adds `_pc_has_archfey_warlock` helper. One endpoint. `/use_fey_presence` — body `{character_id, effect?, override?}` (effect "charmed" default or "frightened"). Validates The Archfey Warlock Lv 1+ + action chip. Computes the warlock spell save DC **server-side** (8 + PB + CHA mod). Broadcasts `feature_used` with `source: fey-presence`, `save_dc`, `effect`, `cube_ft: 10`. v1 announce-only — the cube targets + WIS saves + once-per-rest limit stay GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_fey_presence` endpoint.
+- `_pc_has_archfey_warlock` helper.
+- `tests/harness/test_fey_presence.py` — 4 tests.
+
+### Notes
+- **Warlock patron batch progress:** 2 of ~7 patrons shipped (The Fiend, The Archfey). Remaining untouched: The Great Old One (Awakened Mind), Hexblade (Hexblade's Curse), Celestial (Healing Light), Fathomless, Genie.
+- **166 ships this session.**
+- **Total harness count: 1686** (was 1682 in v2.99.349; +4 new tests).
+
+---
+
 ## [2.99.349] - 2026-06-05 — "The Fiendish Vigor" — The Fiend Warlock Dark One's Blessing (Lv 1+, PHB) — 🔮 Warlock patron batch OPEN
 
 **Schema version:** 66
