@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.241] - 2026-06-04 — "The Reaper's Sight" — Grave Domain Cleric Eyes of the Grave (Phase H.1 eighth domain)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 eighth non-Life Cleric domain of the v2.99.193 phased completion plan.** RAW XGE p.19: Grave Cleric Lv 1+ action — detect undead within 60 ft for 1 round. Location-only (no capabilities/identity); ignores total cover + anti-divination. WIS mod uses per long rest.
+**Description:** One helper + one endpoint. (1) `_pc_has_grave_domain(sheet, min_level)` — multiclass-aware. (2) `/use_eyes_of_the_grave` — body `{character_id, override?}`. Validates Grave Cleric Lv 1+ + `sheet.resources` has an `eyes-of-the-grave` entry with `current >= 1` + Phase 4 action chip. Decrements counter, marks chip, broadcasts. Brother Tavik Stonebrow is the demo fixture. One new harness test file with 3 tests.
+
+### Added
+- `_pc_has_grave_domain(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_eyes_of_the_grave` endpoint.
+- `tests/harness/test_eyes_of_the_grave.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 3 regression tests. No schema change.
+- **Mirrors Warding Flare / Wrath of the Storm / War Priest pattern.** Same WIS-mod-uses-per-long-rest resource decrement + action-chip mark + announce broadcast. Distinguished only by the action slot (not reaction, not bonus) and the lack of damage / target params.
+- **Circle of Mortality filed.** RAW Grave's other Lv 1 feature is the passive "max healing on creatures at 0 HP" — needs a hook in the healing-roll site. v1 ships only Eyes of the Grave; future commit can wire Circle of Mortality into `_apply_hp_change` / `/cast_spell` heal path.
+- **Phase H.1 progress: 8 of 11 domains have first features shipped.** Remaining: Death, Order, Twilight, Peace. (3 to go.)
+- **57 ships this session.**
+- **Total harness count: 1294** (was 1291 in v2.99.240).
+
+---
+
 ## [2.99.240] - 2026-06-04 — "The Anvil's Gift" — Forge Domain Cleric Blessing of the Forge (Phase H.1 seventh domain)
 
 **Schema version:** 66

@@ -25469,6 +25469,36 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_grave_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.241 — RAW Grave Domain features (Cleric, XGE p.19):
+    Circle of Mortality + Eyes of the Grave (Lv 1), Channel
+    Divinity: Path to the Grave (Lv 2 — curated), Sentinel at
+    Death's Door (Lv 6 reaction), Potent Spellcasting (Lv 8 —
+    passive cantrip uplift), Keeper of Souls (Lv 17 — passive
+    death triggers temp HP).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "grave" + meets `min_level` (multiclass-aware).
+    Gates the Grave Domain endpoints.
+
+    Phase H.1 eighth non-Life Cleric domain to ship.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "grave" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_forge_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.240 — RAW Forge Domain features (Cleric, XGE p.18):
     Blessing of the Forge (Lv 1), Channel Divinity: Artisan's
@@ -38790,6 +38820,156 @@ async def use_blessing_of_the_forge(
         "slug": slug,
         "name": name,
         "kind": kind,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_eyes_of_the_grave")
+async def use_eyes_of_the_grave(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.241 — Phase H.1 eighth non-Life Cleric domain of
+    the v2.99.193 phased completion plan. Eyes of the Grave
+    (Grave Domain Cleric Lv 1+, XGE p.19): "As an action, you
+    can open your awareness to magically detect undead. Until
+    the end of your next turn, you know the location of any
+    undead within 60 feet of you that isn't behind total cover
+    and that isn't protected from divination magic. This sense
+    doesn't tell you anything about a creature's capabilities or
+    identity. You can use this feature a number of times equal
+    to your Wisdom modifier (a minimum of once). You regain all
+    expended uses when you finish a long rest."
+
+    Body: ``{character_id, override?}``.
+
+    Validates Grave Cleric Lv 1+ + ``sheet.resources`` has an
+    `eyes-of-the-grave` entry with `current >= 1` + Phase 4
+    action chip. Decrements counter, marks chip, broadcasts.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_grave_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "grave domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    e_row = None
+    e_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "eyes-of-the-grave":
+            e_row = dict(r)
+            e_idx = i
+            break
+    if e_row is None:
+        raise HTTPException(
+            404,
+            "No Eyes of the Grave resource on this sheet",
+        )
+    e_cur = int(e_row.get("current") or 0)
+    e_max = int(e_row.get("max") or 0)
+    if e_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Eyes of the Grave",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "eyes-of-the-grave",
+            "label": "Eyes of the Grave",
+            "strict": strict,
+        })
+
+    e_row["current"] = e_cur - 1
+    resources[e_idx] = e_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "eyes-of-the-grave",
+            "current": e_cur - 1,
+            "max": e_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "💀 Eyes of the Grave — detect undead 60 ft"
+            ),
+            "feature_desc": (
+                f"{char.name} opens awareness to undead within "
+                f"60 ft. Location-only sense (no capabilities / "
+                f"identity); ignores creatures behind total cover "
+                f"or anti-divination protection. Lasts until end "
+                f"of next turn. (Grave Domain Cleric Lv 1+ class "
+                f"feature; {e_cur - 1}/{e_max} uses remaining.)"
+            ),
+            "source": "eyes-of-the-grave",
+            "uses_remaining": e_cur - 1,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "eyes-of-the-grave",
+        "uses_remaining": e_cur - 1,
+        "over_budget": was_used,
     }
 
 
