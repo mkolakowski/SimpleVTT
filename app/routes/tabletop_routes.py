@@ -25985,6 +25985,33 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_bladesinging_wizard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.334 — RAW Bladesinging School Wizard (Wizard,
+    TCE p.74): Training in War and Song + Bladesong (Lv 2),
+    Extra Attack (Lv 6), Song of Defense (Lv 10), Song of
+    Victory (Lv 14).
+
+    Pivoted from Evocation (Sculpt Spells already wired in
+    v2.99.225 / Phase E.7). Returns True when the PC is a
+    Wizard with subclass slug containing "bladesinging" or
+    "blade singing" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "bladesinging" not in subclass and "blade singing" not in subclass:
+        return False
+    return _wizard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_transmutation_wizard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.333 — RAW Transmutation School Wizard (Wizard,
     PHB p.119): Transmutation Savant + Minor Alchemy (Lv 2),
@@ -50502,6 +50529,185 @@ async def use_minor_alchemy(
         "time_per_cubic_foot_minutes": 10,
         "duration_minutes": 60,
         "concentration": True,
+        "wizard_level": wizard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_bladesong")
+async def use_bladesong(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.334 — Phase G.1 Wizard subclass batch (Bladesinging
+    Wizard Lv 2+, TCE) of the v2.99.193 phased completion plan.
+    Pivoted after discovering Sculpt Spells was already wired
+    in v2.99.225 (Phase E.7). Bladesong (Bladesinging Wizard
+    Lv 2+, TCE p.74): "Bonus action to start 1-min bladesong.
+    Benefits while active: +CHA mod (min +1) to AC; walking
+    speed +10 ft; advantage on Dex (Acrobatics) checks; +INT
+    mod (min +1) to concentration checks; +INT mod to one
+    weapon damage roll once per turn. Ends when incapacitated,
+    don medium/heavy armor or shield, two-handed weapon, or
+    activated again. Twice per short or long rest."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip.
+    Auto-bootstraps a `bladesong-uses` resource (max=2,
+    reset=short). v1 announce-only — actual buff application
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_bladesinging_wizard(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "bladesinging wizard lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "bladesong",
+            "label": "Bladesong",
+            "strict": strict,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    bs_row = None
+    bs_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "bladesong-uses":
+            bs_row = dict(r); bs_idx = i; break
+    if bs_row is None:
+        bs_row = {
+            "key": "bladesong-uses",
+            "label": "Bladesong uses",
+            "current": 2, "max": 2, "reset": "short",
+        }
+        bs_idx = len(resources)
+        resources.append(bs_row)
+    bs_cur = int(bs_row.get("current") or 0)
+    bs_max = int(bs_row.get("max") or 2)
+    if bs_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Bladesong",
+            "current": bs_cur, "max": bs_max,
+        })
+
+    bs_row["current"] = bs_cur - 1
+    resources[bs_idx] = bs_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    wizard_lv = _wizard_level_from_sheet(sheet)
+    abilities = sheet.get("abilities") or {}
+    try:
+        cha_mod = (int(abilities.get("CHA") or 10) - 10) // 2
+    except (TypeError, ValueError):
+        cha_mod = 0
+    try:
+        int_mod = (int(abilities.get("INT") or 10) - 10) // 2
+    except (TypeError, ValueError):
+        int_mod = 0
+    ac_bonus = max(1, cha_mod)
+    concentration_bonus = max(1, int_mod)
+    weapon_damage_bonus = int_mod
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "bladesong-uses",
+            "current": bs_cur - 1, "max": bs_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🎵 Bladesong — +{ac_bonus} AC, +10 ft speed, +{int_mod} weapon damage"
+            ),
+            "feature_desc": (
+                f"{char.name} begins the bladesong (1 min). "
+                f"+{ac_bonus} AC (= max(1, CHA mod)), walking speed "
+                f"+10 ft, advantage on Dex (Acrobatics), "
+                f"+{concentration_bonus} concentration checks, and "
+                f"+{int_mod} to one weapon damage roll per turn. "
+                f"Ends on incapacitation, donning medium/heavy "
+                f"armor/shield, two-handed weapon, or re-activation. "
+                f"(Bladesinging Wizard Lv 2+ TCE class feature; "
+                f"twice per short or long rest.)"
+            ),
+            "source": "bladesong",
+            "ac_bonus": ac_bonus,
+            "speed_bonus_ft": 10,
+            "concentration_bonus": concentration_bonus,
+            "weapon_damage_bonus_per_turn": weapon_damage_bonus,
+            "duration_minutes": 1,
+            "uses_remaining": bs_cur - 1,
+            "wizard_level": wizard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "bladesong",
+        "ac_bonus": ac_bonus,
+        "speed_bonus_ft": 10,
+        "concentration_bonus": concentration_bonus,
+        "weapon_damage_bonus_per_turn": weapon_damage_bonus,
+        "duration_minutes": 1,
+        "uses_remaining": bs_cur - 1,
+        "max_uses": bs_max,
         "wizard_level": wizard_lv,
     }
 

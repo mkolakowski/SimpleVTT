@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.334] - 2026-06-05 — "The Singing Blade" — Bladesinging Wizard Bladesong (Lv 2+, TCE) (pivot)
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Bladesinging Wizard Lv 2+ Bladesong (TCE).** Pivoted to Bladesinging after discovering Sculpt Spells was already wired in v2.99.225 (Phase E.7). All 8 PHB Wizard schools now have their Lv 2 first-feature shipped (Sculpt Spells was wired earlier than recognized).
+
+RAW TCE p.74: bonus action to start 1-min bladesong. Benefits while active: +CHA mod (min +1) to AC; +10 ft walking speed; advantage on Dex (Acrobatics); +INT mod (min +1) to concentration checks; +INT mod to one weapon damage roll per turn. Ends when incapacitated, donning medium/heavy armor or shield, holding two-handed weapon, or re-activation. Twice per short or long rest.
+
+**Description:** Adds `_pc_has_bladesinging_wizard` helper. One endpoint. `/use_bladesong` — body `{character_id, override?}`. Validates Bladesinging Wizard Lv 2+ + bonus chip. Auto-bootstraps `bladesong-uses` resource (max=2, reset=short). Computes AC bonus (max(1, CHA mod)), concentration bonus (max(1, INT mod)), weapon damage bonus (INT mod). Broadcasts. v1 announce-only. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_bladesong` endpoint.
+- `_pc_has_bladesinging_wizard` helper.
+- `tests/harness/test_bladesong.py` — 4 tests.
+
+### Notes
+- **🎉 G.1 Wizard PHB schools batch ✅ COMPLETE (8/8) — confirmed via the v2.99.225 Sculpt Spells discovery.** All 8 PHB Wizard schools shipped with their Lv 2 first-feature: Abjuration Arcane Ward (v2.99.327), Divination Portent + Third Eye (v2.99.219 + v2.99.328), Conjuration Minor Conjuration (v2.99.329), Enchantment Hypnotic Gaze (v2.99.330), Illusion Improved Minor Illusion (v2.99.331), Necromancy Grim Harvest (v2.99.332), Transmutation Minor Alchemy (v2.99.333), Evocation Sculpt Spells (v2.99.225 / Phase E.7). Bladesinging (this) opens the TCE/Wildemount Wizard extension batch.
+- **Audit lesson reaffirmed yet again:** Sculpt Spells was already shipped in v2.99.225. Pivoted gracefully to Bladesinging. Same pattern as Fast Hands (v2.99.306), Cutting Words (v2.99.320), Portent (v2.99.328).
+- **G.1 Wizard batch progress:** 8 PHB schools + 1 TCE (Bladesinging) shipped. Remaining: Order of Scribes (TCE), War Magic (XGE), Chronurgy + Graviturgy (Wildemount).
+- **150 ships this session.** 🎯
+- **Total harness count: 1638** (was 1634 in v2.99.333; +4 new tests).
+
+---
+
 ## [2.99.333] - 2026-06-05 — "Three Threes" — Transmutation School Wizard Minor Alchemy (Lv 2+) — 🎰 three-of-a-kind PATCH
 
 **Schema version:** 66

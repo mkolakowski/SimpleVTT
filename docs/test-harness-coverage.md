@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1634 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.333, 2026-06-05).
+**Total tests:** 1638 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.334, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1048,6 +1048,16 @@ v2.99.333 — Transmutation School Wizard (PHB p.119) Minor Alchemy Lv 2+ (G.1 W
 | `test_use_ma_invalid_material_clamps` | "gold"/"diamond" → clamped to wood/stone defaults. |
 | `test_use_ma_wrong_subclass` | Default Thalindra (Evocation) → 409. |
 | `test_use_ma_level_gate` | Transmutation at Lv 1 → 409. |
+
+### `test_bladesong.py`
+v2.99.334 — Bladesinging Wizard (TCE p.74) Bladesong Lv 2+ (G.1 Wizard batch — pivot after Sculpt Spells found already wired in v2.99.225). Bonus action 1 min: +CHA mod AC, +10 ft speed, advantage on Acrobatics, +INT mod concentration/weapon damage. Twice per short or long rest. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_bs_happy_lv7` | PATCH Thalindra → Bladesinging Lv 7 (CHA 10 mod 0, INT 16 mod 3) → `ac_bonus == 1` (max(1, CHA)), `speed_bonus_ft == 10`, `concentration_bonus == 3`, `weapon_damage_bonus_per_turn == 3`, `duration_minutes == 1`, `uses_remaining == 1`, broadcast (source `bladesong`). |
+| `test_use_bs_wrong_subclass` | Default Thalindra (Evocation) → 409. |
+| `test_use_bs_level_gate` | Bladesinging at Lv 1 → 409. |
+| `test_use_bs_two_uses_then_out` | 1st → uses_remaining 1; 2nd → 0; 3rd → 409 `no_uses_left`. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
