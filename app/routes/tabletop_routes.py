@@ -45708,6 +45708,101 @@ async def use_improved_duplicity(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_saint_of_forge_and_fire")
+async def use_saint_of_forge_and_fire(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.299 — Phase H.1 deeper (Forge Domain Cleric Lv 17+)
+    of the v2.99.193 phased completion plan. Saint of Forge
+    and Fire (Forge Domain Cleric Lv 17+, XGE p.18): "At 17th
+    level, your blessed affinity with fire and metal becomes
+    more powerful. You gain immunity to fire damage, and while
+    you're wearing heavy armor, you have resistance to
+    bludgeoning, piercing, and slashing damage from nonmagical
+    attacks."
+
+    Body: ``{character_id, override?}``. No chip cost —
+    passive permanent. v1 announce-only — fire immunity +
+    nonmagical BPS resistance (in heavy armor) are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_forge_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "forge domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🔥 Saint of Forge and Fire — fire immune + heavy-armor BPS resist"
+            ),
+            "feature_desc": (
+                f"{char.name} is immune to fire damage. While "
+                f"wearing heavy armor, also has resistance to "
+                f"bludgeoning, piercing, and slashing damage from "
+                f"nonmagical attacks. (Forge Domain Cleric Lv 17+ "
+                f"class feature; passive permanent.)"
+            ),
+            "source": "saint-of-forge-and-fire",
+            "fire_immunity": True,
+            "heavy_armor_bps_resistance": True,
+            "resistance_types": ["bludgeoning", "piercing", "slashing"],
+            "resistance_nonmagical_only": True,
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "saint-of-forge-and-fire",
+        "fire_immunity": True,
+        "heavy_armor_bps_resistance": True,
+        "resistance_types": ["bludgeoning", "piercing", "slashing"],
+        "resistance_nonmagical_only": True,
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

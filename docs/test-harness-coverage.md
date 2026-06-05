@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1491 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.298, 2026-06-05).
+**Total tests:** 1494 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.299, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -695,6 +695,15 @@ v2.99.298 — Trickery Domain Cleric (PHB p.62) Improved Duplicity Lv 17 passive
 | `test_use_id_happy_lv17` | Lv 17 Tavik → `max_duplicates == 4`, `bonus_move_per_duplicate_ft == 30`, `max_range_ft == 120`, broadcast (source `improved-duplicity`). |
 | `test_use_id_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_id_level_gate` | Trickery at Lv 16 → 409. |
+
+### `test_saint_of_forge_and_fire.py`
+v2.99.299 — Forge Domain Cleric (XGE p.18) Saint of Forge and Fire Lv 17 passive (H.1 deeper). Fire immunity + (while wearing heavy armor) resistance to BPS from nonmagical attacks. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_sff_happy_lv17` | Lv 17 Tavik → `fire_immunity == True`, `heavy_armor_bps_resistance == True`, BPS in `resistance_types`, broadcast (source `saint-of-forge-and-fire`). |
+| `test_use_sff_wrong_subclass` | Default Tavik (Life Domain) → 409. |
+| `test_use_sff_level_gate` | Forge at Lv 16 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

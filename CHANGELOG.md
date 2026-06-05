@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.299] - 2026-06-05 — "The Forge-Blessed Saint" — Forge Domain Cleric Saint of Forge and Fire (H.1 deeper, Lv 17 passive)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Forge Domain Cleric Lv 17+ Saint of Forge and Fire.** RAW XGE p.18: fire immunity + (while wearing heavy armor) resistance to BPS from nonmagical attacks.
+**Description:** One endpoint. `/use_saint_of_forge_and_fire` — body `{character_id, override?}`. Validates Forge Domain Cleric Lv 17+. No chip — passive permanent. Broadcasts `feature_used` with `source: saint-of-forge-and-fire` + `fire_immunity: true` + `heavy_armor_bps_resistance: true`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_saint_of_forge_and_fire` endpoint.
+- `tests/harness/test_saint_of_forge_and_fire.py` — 3 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 7 of 11 domains shipped at Lv 17 (Light, Tempest, Life, War, Death, Trickery, Forge). Remaining: Knowledge, Nature, Grave, Arcana, Peace.
+- **115 ships this session.**
+- **Total harness count: 1494** (was 1491 in v2.99.298; +3 new tests).
+
+---
+
 ## [2.99.298] - 2026-06-05 — "Four Faces, One Smile" — Trickery Domain Cleric Improved Duplicity (H.1 deeper, Lv 17 passive)
 
 **Schema version:** 66
