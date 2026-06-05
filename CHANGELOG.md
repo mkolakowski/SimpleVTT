@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.260] - 2026-06-04 — "The Rallying Word" — Battle Master Rally (Phase E.1 maneuver 10 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 10 of 16).** RAW PHB p.74: bonus action; ally who can see or hear you gets temp HP = die + CHA mod. Garrik CHA 10 → mod 0; temp HP equals die roll.
+**Description:** One endpoint. `/use_rally` — body `{character_id, ally_name?, override?}`. Bonus-chip gated. Rolls 1d<size> + computes temp_hp clamped at 0 (in case of negative CHA mod). Broadcast carries `temp_hp` + `die_roll` + `cha_mod` so the GM can verify the math. v1 announce-only — temp HP application on the ally's sheet is filed. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_rally` endpoint.
+- `tests/harness/test_rally.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 10 of 16.** 6 remaining: Commander's Strike, Distracting Strike, Evasive Footwork, Maneuvering Attack, Parry, Riposte.
+- **76 ships this session.**
+- **Total harness count: 1366** (was 1363 in v2.99.259).
+
+---
+
 ## [2.99.259] - 2026-06-04 — "The Quick Misdirection" — Battle Master Feinting Attack (Phase E.1 maneuver 9 of 16)
 
 **Schema version:** 66
