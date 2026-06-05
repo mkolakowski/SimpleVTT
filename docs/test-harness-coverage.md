@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1641 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.335, 2026-06-05).
+**Total tests:** 1645 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.336, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1067,6 +1067,16 @@ v2.99.335 — Order of Scribes Wizard (TCE p.75) Wizardly Quill Lv 2+ (G.1 Wizar
 | `test_use_wq_happy_lv7` | PATCH Thalindra → Scribes Lv 7 → `speed_multiplier == 4`, all property flags True, `duration == "until_long_rest"`, broadcast (source `wizardly-quill`). |
 | `test_use_wq_wrong_subclass` | Default Thalindra (Evocation) → 409. |
 | `test_use_wq_level_gate` | Scribes at Lv 1 → 409. |
+
+### `test_arcane_deflection.py`
+v2.99.336 — War Magic Wizard (XGE p.59) Arcane Deflection Lv 2+ (G.1 Wizard batch). Reaction on hit by attack or failed save → +2 AC vs the triggering attack OR +4 to the failed save. Can't cast leveled spells (cantrips only) until end of next turn. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ad_happy_lv7_ac` | PATCH Thalindra → War Magic Lv 7 → `mode == "ac"`, `bonus == 2`, `leveled_spell_lockout == True`, `wizard_level == 7`, broadcast (source `arcane-deflection`). |
+| `test_use_ad_save_mode` | `mode="save"` → `bonus == 4`. |
+| `test_use_ad_wrong_subclass` | Default Thalindra (Evocation) → 409. |
+| `test_use_ad_level_gate` | War Magic at Lv 1 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

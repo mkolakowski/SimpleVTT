@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.336] - 2026-06-05 — "The Magic Wall" — War Magic Wizard Arcane Deflection (Lv 2+, XGE)
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — War Magic Wizard Lv 2+ Arcane Deflection (XGE).** RAW XGE p.59: reaction on being hit by attack OR failing a save — +2 AC vs the triggering attack, OR +4 to the failed save. Can't cast leveled spells (cantrips only) until end of next turn.
+**Description:** Adds `_pc_has_war_magic_wizard` helper. One endpoint. `/use_arcane_deflection` — body `{character_id, mode?, override?}`. `mode` "ac" (default → +2) or "save" (→ +4). Validates War Magic Wizard Lv 2+ + reaction chip. Broadcasts `feature_used` with `source: arcane-deflection`, `mode`, `bonus`, `leveled_spell_lockout: True`, `wizard_level`. v1 announce-only — bonus application + cantrip-only lockout GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_arcane_deflection` endpoint.
+- `_pc_has_war_magic_wizard` helper.
+- `tests/harness/test_arcane_deflection.py` — 4 tests.
+
+### Notes
+- **G.1 Wizard batch progress:** 8 PHB schools + 3 TCE/XGE (Bladesinging, Order of Scribes, War Magic) shipped. Remaining: Chronurgy + Graviturgy (Wildemount).
+- **152 ships this session.**
+- **Total harness count: 1645** (was 1641 in v2.99.335; +4 new tests).
+
+---
+
 ## [2.99.335] - 2026-06-05 — "The Ink-Free Pen" — Order of Scribes Wizard Wizardly Quill (Lv 2+, TCE)
 
 **Schema version:** 66
