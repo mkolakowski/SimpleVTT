@@ -44334,6 +44334,171 @@ async def use_protective_spirit(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_elder_champion")
+async def use_elder_champion(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.288 — Phase H.2 deeper (Ancients Paladin Lv 20)
+    of the v2.99.193 phased completion plan. Opens the H.2
+    Lv 20 capstone batch. Elder Champion (Ancients Paladin
+    Lv 20, PHB p.87): "Using your action, you undergo a
+    transformation. For 1 minute, you gain the following
+    benefits: at the start of each of your turns, you regain
+    10 hit points; whenever you cast a paladin spell with a
+    casting time of 1 action, you can cast it using a bonus
+    action instead; enemy creatures within 10 feet of you
+    have disadvantage on saving throws against your paladin
+    spells and Channel Divinity options. Once you use this
+    feature, you can't use it again until you finish a long
+    rest."
+
+    Body: ``{character_id, override?}``. Costs an action chip.
+    Auto-bootstraps an `elder-champion` resource (max=1,
+    reset=long) if missing — refilled by long rest. v1
+    announce-only — the 10 HP/turn-start heal, bonus-action
+    spell cast option, and 10 ft enemy-save-disadvantage aura
+    are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_ancients_oath(sheet, 20):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "ancients paladin lv 20",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "elder-champion",
+            "label": "Elder Champion",
+            "strict": strict,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    ec_row = None
+    ec_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "elder-champion":
+            ec_row = dict(r); ec_idx = i; break
+    if ec_row is None:
+        ec_row = {
+            "key": "elder-champion",
+            "label": "Elder Champion",
+            "current": 1, "max": 1, "reset": "long",
+        }
+        ec_idx = len(resources)
+        resources.append(ec_row)
+    ec_cur = int(ec_row.get("current") or 0)
+    ec_max = int(ec_row.get("max") or 1)
+    if ec_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Elder Champion",
+            "current": ec_cur, "max": ec_max,
+        })
+
+    ec_row["current"] = ec_cur - 1
+    resources[ec_idx] = ec_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "elder-champion",
+            "current": ec_cur - 1, "max": ec_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🌳 Elder Champion — ancient form, 1 minute"
+            ),
+            "feature_desc": (
+                f"{char.name} assumes the form of an ancient "
+                f"force of nature for 1 minute: regain 10 HP at "
+                f"the start of each turn; cast 1-action paladin "
+                f"spells as a bonus action; enemies within 10 ft "
+                f"have disadvantage on saves vs your paladin "
+                f"spells + CD options. (Ancients Paladin Lv 20 "
+                f"capstone; once per long rest.)"
+            ),
+            "source": "elder-champion",
+            "uses_remaining": ec_cur - 1,
+            "duration_minutes": 1,
+            "turn_start_heal": 10,
+            "aura_radius_ft": 10,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "elder-champion",
+        "uses_remaining": ec_cur - 1,
+        "max_uses": ec_max,
+        "duration_minutes": 1,
+        "turn_start_heal": 10,
+        "aura_radius_ft": 10,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

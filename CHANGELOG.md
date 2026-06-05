@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.288] - 2026-06-05 — "Form of the Ancient" — Ancients Paladin Elder Champion (H.2 deeper, Lv 20 capstone transform)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Ancients Paladin Lv 20 capstone transform. Opens the H.2 Lv 20 batch (1/5 oaths).** RAW PHB p.87: action to transform for 1 min; gain 10 HP / turn start; cast 1-action paladin spells as bonus actions; enemies within 10 ft have disadvantage on saves vs your paladin spells + CDs. Once-per-long-rest.
+**Description:** One endpoint. `/use_elder_champion` — body `{character_id, override?}`. Validates Ancients Paladin Lv 20 + action chip Phase 4 gate. Auto-bootstraps an `elder-champion` resource (max=1, reset=long) if missing — refilled by long rest. Decrements counter, marks action chip, broadcasts `resource_update` + `feature_used` with `source: elder-champion`. v1 announce-only — the heal, bonus-cast option, and aura are GM-tracked. One new harness test file with 5 tests including a long-rest refill cycle.
+
+### Added
+- `/api/campaign/{cid}/use_elder_champion` endpoint.
+- `tests/harness/test_elder_champion.py` — 5 tests.
+
+### Notes
+- **H.2 Lv 20 batch progress:** 1 of 5 oaths shipped at Lv 20 (Ancients). Remaining Lv 20: Vengeance Avenging Angel, Conquest Invincible Conqueror, Glory Living Legend, Redemption Emissary of Redemption.
+- **104 ships this session.**
+- **Total harness count: 1458** (was 1453 in v2.99.287; +5 new tests).
+
+---
+
 ## [2.99.287] - 2026-06-05 — "Holy Mending" — Redemption Paladin Protective Spirit (H.2 deeper, Lv 15 self-heal — CLOSES the H.2 Lv 15 batch)
 
 **Schema version:** 66
