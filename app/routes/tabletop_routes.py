@@ -27042,6 +27042,31 @@ def _pc_has_aberrant_mind(sheet: "dict | None", min_level: int) -> bool:
     return _sorcerer_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_clockwork_soul(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.342 — RAW Clockwork Soul (Sorcerer subclass, TCE
+    p.69): Clockwork Magic + Restore Balance (Lv 1), Bastion of
+    Law (Lv 6), Trance of Order (Lv 14), Clockwork Cavalcade
+    (Lv 18).
+
+    Returns True when the PC is a Sorcerer with subclass slug
+    containing "clockwork" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        has_sorc = any(
+            (entry.get("class") or "").strip().lower() == "sorcerer"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_sorc:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "clockwork" not in subclass:
+        return False
+    return _sorcerer_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_wild_magic(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.227 — RAW Wild Magic (Sorcerer subclass, PHB p.103):
     Wild Magic Surge + Tides of Chaos (Lv 1), Bend Luck (Lv 6),
@@ -51734,6 +51759,118 @@ async def use_telepathic_speech(
         "feature": "telepathic-speech",
         "range_ft": 30,
         "duration_minutes": sorc_lv,
+        "sorcerer_level": sorc_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_restore_balance")
+async def use_restore_balance(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.342 — Phase G.2 Sorcerer subclass batch ship #4
+    (Clockwork Soul Lv 1+, TCE) of the v2.99.193 phased completion
+    plan. Restore Balance (Clockwork Soul Lv 1+, TCE p.69): "Your
+    connection to the plane of absolute order allows you to
+    equalize chaotic moments. When a creature you can see within
+    60 feet of you is about to roll a d20 with advantage or
+    disadvantage, you can use your reaction to prevent the roll
+    from being affected by advantage and disadvantage. You can use
+    this feature a number of times equal to your proficiency
+    bonus, and you regain all expended uses when you finish a long
+    rest."
+
+    Body: ``{character_id, override?}``. Costs a reaction. v1
+    announce-only — target + 60 ft range + uses-per-long-rest
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_clockwork_soul(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "clockwork soul sorcerer lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _sorcerer_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "restore-balance",
+            "label": "Restore Balance",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+
+    sorc_lv = _sorcerer_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⚖️ Restore Balance — cancel adv/disadv (60 ft)"
+            ),
+            "feature_desc": (
+                f"{char.name} equalizes a chaotic moment: as a "
+                f"reaction, a creature within 60 ft about to roll "
+                f"a d20 rolls without advantage or disadvantage. "
+                f"Usable a number of times equal to proficiency "
+                f"bonus per long rest. (Clockwork Soul Sorcerer "
+                f"Lv 1+ TCE class feature.)"
+            ),
+            "source": "restore-balance",
+            "range_ft": 60,
+            "cancels_adv_disadv": True,
+            "sorcerer_level": sorc_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "restore-balance",
+        "range_ft": 60,
+        "cancels_adv_disadv": True,
         "sorcerer_level": sorc_lv,
     }
 

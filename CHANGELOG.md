@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.342] - 2026-06-05 — "The Even Hand" — Clockwork Soul Sorcerer Restore Balance (Lv 1+, TCE) — 🎉 G.2 Sorcerer batch
+
+**Schema version:** 66
+**Commit summary:** **G.2 Sorcerer subclass batch ship #4 — Clockwork Soul Lv 1+ Restore Balance (TCE).** Fourth Sorcerer batch ship; opens Clockwork Soul. RAW TCE p.69: when a creature you can see within 60 ft is about to roll a d20 with advantage or disadvantage, use your reaction to prevent the roll from being affected by advantage and disadvantage. Uses = proficiency bonus per long rest.
+**Description:** Adds `_pc_has_clockwork_soul` helper. One endpoint. `/use_restore_balance` — body `{character_id, override?}`. Validates Clockwork Soul Lv 1+ + reaction chip. Broadcasts `feature_used` with `source: restore-balance`, `range_ft: 60`, `cancels_adv_disadv: True`. v1 announce-only — target + range + uses-per-long-rest GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_restore_balance` endpoint.
+- `_pc_has_clockwork_soul` helper.
+- `tests/harness/test_restore_balance.py` — 3 tests.
+
+### Notes
+- **G.2 Sorcerer batch progress:** 1 Sorcerer subclass still needs a first-feature ship (Clockwork Soul now opened; Storm Sorcery, Divine Soul, Aberrant Mind, Draconic Bloodline + Wild Magic already have ≥1 feature each). Remaining untouched: Shadow Magic (XGE).
+- **158 ships this session.**
+- **Total harness count: 1666** (was 1663 in v2.99.341; +3 new tests).
+
+---
+
 ## [2.99.341] - 2026-06-05 — "The Open Mind" — Aberrant Mind Sorcerer Telepathic Speech (Lv 1+, TCE) — 🌪️ G.2 Sorcerer batch
 
 **Schema version:** 66
