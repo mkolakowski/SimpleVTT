@@ -6,13 +6,14 @@ RAW XGE p.50: when damage reduces you to 0 HP (and doesn't kill
 you outright), make a CHA save (DC 5 + damage taken); on a success
 drop to 1 HP instead. Once per long rest.
 
-v1 — rolls the CHA save server-side (d20 + CHA mod vs DC 5 +
-damage); once-per-rest limit + damage-type/crit exclusions
-GM-tracked. No action cost.
+v2.99.346 — deepened past v1 announce-only: the single
+use-per-long-rest is server-tracked on `sheet.strength_of_grave_uses`
+(seeded to 1). Using it decrements to 0; a depleted charge returns
+409 `out_of_uses`; the /rest long-rest hook refills it.
 
 Tests:
-  - Lv 5 happy: DC = 5 + damage, total = d20 + cha_mod, success
-    coherent, broadcast fires.
+  - Lv 5 happy: DC = 5 + damage, total = d20 + cha_mod, uses 1→0.
+  - Exhausted charge (strength_of_grave_uses=0) → 409 out_of_uses.
   - Wrong subclass (default Zara Draconic) → 409.
   - Wrong class (Caelan paladin) → 409.
 """
@@ -43,11 +44,11 @@ def _sg_broadcasts(gm_ws, character_id):
 
 @pytest_asyncio.fixture
 async def zara_shadow(gm_client, roster):
-    """PATCH Zara to Shadow Magic."""
+    """PATCH Zara to Shadow Magic; seed the single charge to 1."""
     zara = roster["Zara Emberfire"]
     await _patch_sheet(
         gm_client, zara["id"],
-        {"subclass": "Shadow Magic"},
+        {"subclass": "Shadow Magic", "strength_of_grave_uses": 1},
         class_slug="sorcerer",
     )
     try:
@@ -63,7 +64,7 @@ async def zara_shadow(gm_client, roster):
 async def test_use_sg_happy_lv5(
     gm_client, gm_ws, zara_shadow,
 ):
-    """Lv 5 Shadow Magic → DC 5+damage, coherent CHA save roll."""
+    """Lv 5 Shadow Magic → DC 5+damage, coherent CHA save, uses 1→0."""
     zara = zara_shadow
     gm_ws.mark()
     r = await gm_client.post(
@@ -78,11 +79,41 @@ async def test_use_sg_happy_lv5(
     assert 1 <= data["d20"] <= 20
     assert data["total"] == data["d20"] + data["cha_mod"]
     assert data["success"] == (data["total"] >= data["dc"])
+    assert data["uses_max"] == 1
+    assert data["uses_remaining"] == 0
     assert data["sorcerer_level"] == 5
     await asyncio.sleep(0.3)
     feats = _sg_broadcasts(gm_ws, zara["id"])
     assert feats
     assert feats[-1]["data"]["dc"] == 17
+    assert feats[-1]["data"]["uses_remaining"] == 0
+
+
+async def test_use_sg_out_of_uses(
+    gm_client, roster,
+):
+    """Shadow Magic with an exhausted charge (0 uses) → 409."""
+    zara = roster["Zara Emberfire"]
+    await _patch_sheet(
+        gm_client, zara["id"],
+        {"subclass": "Shadow Magic", "strength_of_grave_uses": 0},
+        class_slug="sorcerer",
+    )
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_strength_of_the_grave",
+            json={"character_id": zara["id"], "damage": 8},
+        )
+        assert r.status_code == 409, r.text
+        data = r.json()
+        assert data.get("error") == "out_of_uses"
+        assert data.get("uses_remaining") == 0
+    finally:
+        await _patch_sheet(
+            gm_client, zara["id"],
+            {"subclass": "Draconic Bloodline"},
+            class_slug="sorcerer",
+        )
 
 
 async def test_use_sg_wrong_subclass(

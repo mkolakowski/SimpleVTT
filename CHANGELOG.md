@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.346] - 2026-06-05 — "The Last Breath" — Strength of the Grave use now server-tracked (Shadow Magic, XGE)
+
+**Schema version:** 66
+**Commit summary:** **Deepen Strength of the Grave (Shadow Magic Sorcerer Lv 1+, XGE) past v1 announce-only — the single use-per-long-rest is now server-tracked.** RAW XGE p.50 recharges on a long rest. `/use_strength_of_the_grave` now reads/decrements `sheet.strength_of_grave_uses` (seeded to 1 when absent), returns 409 `out_of_uses` when depleted, and the /rest long-rest hook refills it.
+**Description:** Adds a `strength_of_grave_uses` sheet counter (allowlisted for sheet-field PATCH). The endpoint gates on the remaining charge before rolling the CHA save, decrements + persists on success, and now returns `uses_remaining` / `uses_max` (also added to the `feature_used` broadcast). The long-rest refill is wired into the `/rest` long-only branch alongside Tides of Chaos and Restore Balance. Harness test file grows from 3 to 4 tests (adds the `out_of_uses` exhaustion path; happy test now asserts the 1→0 decrement). Completes the use-tracking deepening pass across all three counter-based Sorcerer batch features (Restore Balance, Favored by the Gods, Strength of the Grave).
+
+### Changed
+- `/api/campaign/{cid}/use_strength_of_the_grave` now server-tracks its single use (was v1 announce-only): decrements `strength_of_grave_uses`, returns 409 `out_of_uses` when depleted, and reports `uses_remaining` / `uses_max` in the response + broadcast.
+
+### Added
+- `strength_of_grave_uses` sheet field (allowlisted) + long-rest refill hook in `/rest`.
+- `tests/harness/test_strength_of_the_grave.py::test_use_sg_out_of_uses` — exhausted-charge 409.
+
+### Notes
+- Third and final "deepening" pass on the G.2 Sorcerer batch's counter-based features. The remaining two (Tempestuous Magic, Telepathic Speech) have no use cap — they gate on a bonus chip / are reusable — so there's no counter to track.
+- **162 ships this session.**
+- **Total harness count: 1672** (was 1671 in v2.99.345; +1 new test).
+
+---
+
 ## [2.99.345] - 2026-06-05 — "The Divine Ledger" — Favored by the Gods use now server-tracked (Divine Soul, XGE)
 
 **Schema version:** 66

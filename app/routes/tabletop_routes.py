@@ -51987,8 +51987,15 @@ async def use_strength_of_the_grave(
 
     Body: ``{character_id, damage}``. Costs no action. Rolls the
     CHA save server-side (d20 + CHA mod vs DC 5 + damage) and
-    broadcasts the result. v1 — once-per-rest limit + damage-type
-    /crit exclusions GM-tracked.
+    broadcasts the result.
+
+    v2.99.346 — deepened past v1 announce-only: the single
+    use-per-long-rest is now server-tracked.
+    `sheet.strength_of_grave_uses` holds the remaining charge
+    (seeded to 1 when absent); using the feature decrements it to 0
+    and a depleted charge returns 409 ``out_of_uses``. The /rest
+    long-rest hook refills it. Damage-type / crit exclusions stay
+    GM-tracked.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -52019,6 +52026,21 @@ async def use_strength_of_the_grave(
             "got_level": _sorcerer_level_from_sheet(sheet),
         })
 
+    # v2.99.346 — single use per long rest. Seed to 1 when the
+    # counter has never been set so a freshly-statted PC can use it
+    # before their first long rest.
+    raw_uses = sheet.get("strength_of_grave_uses")
+    uses = int(raw_uses) if raw_uses is not None else 1
+    if uses <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Strength of the Grave",
+            "char_name": char.name,
+            "source": "strength-of-the-grave",
+            "uses_remaining": 0,
+            "uses_max": 1,
+        })
+
     try:
         cha_score = int((sheet.get("abilities") or {}).get("CHA", 10))
     except (TypeError, ValueError):
@@ -52030,6 +52052,13 @@ async def use_strength_of_the_grave(
     d20 = random.randint(1, 20)
     total = d20 + cha_mod
     success = total >= dc
+
+    uses_remaining = uses - 1
+    sheet["strength_of_grave_uses"] = uses_remaining
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
 
     sorc_lv = _sorcerer_level_from_sheet(sheet)
 
@@ -52074,6 +52103,8 @@ async def use_strength_of_the_grave(
             "dc": dc,
             "damage": damage,
             "success": success,
+            "uses_remaining": uses_remaining,
+            "uses_max": 1,
             "sorcerer_level": sorc_lv,
         },
     })
@@ -52087,6 +52118,8 @@ async def use_strength_of_the_grave(
         "dc": dc,
         "damage": damage,
         "success": success,
+        "uses_remaining": uses_remaining,
+        "uses_max": 1,
         "sorcerer_level": sorc_lv,
     }
 
@@ -58909,6 +58942,12 @@ async def rest_character(
             if _rb_pb <= 0:
                 _rb_pb = 2 + (max(1, _sorcerer_level_from_sheet(sheet)) - 1) // 4
             sheet["restore_balance_uses"] = _rb_pb
+        # v2.99.346 — Strength of the Grave (Shadow Magic Sorcerer
+        # Lv 1+) long-rest refill. RAW XGE p.50: "Once you use this
+        # feature, you can't use it again until you finish a long
+        # rest." Counter caps at 1 use.
+        if _pc_has_shadow_magic(sheet, 1):
+            sheet["strength_of_grave_uses"] = 1
         char.sheet = sheet
         # Long rest restores HP to max and clears any dying/stable state.
         # Route through the death-save state machine so the broadcast +
@@ -65940,6 +65979,11 @@ _SHEET_PATCH_KEYS = {
     # hook. Allowlisted so the test can seed/exhaust the counter
     # without a full sheet rebuild.
     "favored_by_gods_uses",
+    # v2.99.346 — strength_of_grave_uses (int 0..1). Read by
+    # /use_strength_of_the_grave + the /rest long-rest refill hook.
+    # Allowlisted so the test can seed/exhaust the counter without a
+    # full sheet rebuild.
+    "strength_of_grave_uses",
     # v2.99.238 — knowledge_blessings (dict {skills, languages}).
     # Read by /select_knowledge_blessings (Knowledge Domain Cleric
     # Lv 1+). Allowlisted so the test can reset to {} between
