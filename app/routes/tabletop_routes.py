@@ -26691,6 +26691,31 @@ def _pc_has_archfey_warlock(sheet: "dict | None", min_level: int) -> bool:
     return _warlock_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_hexblade_warlock(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.351 — RAW The Hexblade (Warlock patron, XGE p.55):
+    Hexblade's Curse + Hex Warrior (Lv 1), Accursed Specter
+    (Lv 6), Armor of Hexes (Lv 10), Master of Hexes (Lv 14).
+
+    Returns True when the PC is a Warlock with subclass slug
+    containing "hexblade" (e.g. "The Hexblade") + meets
+    `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "warlock":
+        has_warlock = any(
+            (entry.get("class") or "").strip().lower() == "warlock"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "hexblade" not in subclass:
+        return False
+    return _warlock_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -49551,6 +49576,135 @@ async def use_fey_presence(
         "save_dc": save_dc,
         "effect": effect,
         "cube_ft": 10,
+        "warlock_level": warlock_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_hexblades_curse")
+async def use_hexblades_curse(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.351 — Phase G Warlock patron subclass batch ship #3
+    (The Hexblade Lv 1+, XGE) of the v2.99.193 phased completion
+    plan. Hexblade's Curse (The Hexblade Lv 1+, XGE p.55): "As a
+    bonus action, choose one creature you can see within 30 feet
+    of you. The target is cursed for 1 minute. ... you gain a
+    bonus to damage rolls against the cursed target equal to your
+    proficiency bonus; any attack roll you make against the cursed
+    target is a critical hit on a roll of 19 or 20; if the cursed
+    target dies, you regain hit points equal to your warlock level
+    + your Charisma modifier (minimum of 1)." Once per short or
+    long rest.
+
+    Body: ``{character_id, override?}``. Costs a bonus chip.
+    Computes the PB damage bonus + the on-death heal server-side.
+    v1 announce-only — the target choice, the +PB/crit-19 attack
+    riders, the on-death heal, and the once-per-rest limit stay
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_hexblade_warlock(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "the hexblade warlock lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _warlock_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "hexblades-curse",
+            "label": "Hexblade's Curse",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    try:
+        cha_score = int((sheet.get("abilities") or {}).get("CHA", 10))
+    except (TypeError, ValueError):
+        cha_score = 10
+    cha_mod = (cha_score - 10) // 2
+    warlock_lv = _warlock_level_from_sheet(sheet)
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, warlock_lv) - 1) // 4
+    death_heal = max(1, warlock_lv + cha_mod)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🗡️ Hexblade's Curse — +{pb} dmg, crit 19-20, "
+                f"heal {death_heal} on kill"
+            ),
+            "feature_desc": (
+                f"{char.name} curses a target within 30 ft for 1 "
+                f"minute: +{pb} damage (proficiency bonus) and "
+                f"crits on a 19-20 against it; on the target's "
+                f"death, regain {death_heal} HP (warlock level "
+                f"{warlock_lv} + CHA mod {cha_mod:+d}, min 1). "
+                f"Refreshes on a short or long rest. (The Hexblade "
+                f"Warlock Lv 1+ XGE class feature.)"
+            ),
+            "source": "hexblades-curse",
+            "range_ft": 30,
+            "damage_bonus": pb,
+            "crit_range": 19,
+            "death_heal": death_heal,
+            "warlock_level": warlock_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "hexblades-curse",
+        "range_ft": 30,
+        "damage_bonus": pb,
+        "crit_range": 19,
+        "death_heal": death_heal,
         "warlock_level": warlock_lv,
     }
 

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.351] - 2026-06-05 — "The Binding Hex" — The Hexblade Warlock Hexblade's Curse (Lv 1+, XGE) — 🔮 Warlock patron batch
+
+**Schema version:** 66
+**Commit summary:** **Warlock patron subclass batch ship #3 — The Hexblade Lv 1+ Hexblade's Curse (XGE).** Third Warlock patron batch ship; opens The Hexblade. RAW XGE p.55: bonus action, curse a target within 30 ft for 1 minute — +PB damage against it, crit on a 19-20, and on its death regain HP = warlock level + CHA mod (min 1). Once per short or long rest.
+**Description:** Adds `_pc_has_hexblade_warlock` helper. One endpoint. `/use_hexblades_curse` — body `{character_id, override?}`. Validates The Hexblade Warlock Lv 1+ + bonus chip. Computes the PB damage bonus + the on-death heal **server-side**. Broadcasts `feature_used` with `source: hexblades-curse`, `range_ft: 30`, `damage_bonus`, `crit_range: 19`, `death_heal`. v1 announce-only — the target choice, the +PB/crit-19 attack riders, the on-death heal, and the once-per-rest limit stay GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_hexblades_curse` endpoint.
+- `_pc_has_hexblade_warlock` helper.
+- `tests/harness/test_hexblades_curse.py` — 3 tests.
+
+### Notes
+- **Warlock patron batch progress:** 3 of ~7 patrons shipped (The Fiend, The Archfey, The Hexblade). Remaining untouched: The Great Old One (Awakened Mind), Celestial (Healing Light), Fathomless, Genie.
+- **167 ships this session.**
+- **Total harness count: 1689** (was 1686 in v2.99.350; +3 new tests).
+
+---
+
 ## [2.99.350] - 2026-06-05 — "The Beguiling Court" — The Archfey Warlock Fey Presence (Lv 1+, PHB) — 🔮 Warlock patron batch
 
 **Schema version:** 66
