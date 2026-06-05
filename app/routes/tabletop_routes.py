@@ -25985,6 +25985,31 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_spirits_bard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.325 — RAW Spirits College Bard (Bard, TCE p.30):
+    Guiding Whispers + Spiritual Focus + Tales from Beyond
+    (Lv 3), Spirit Session (Lv 6), Mystical Connection
+    (Lv 14).
+
+    Returns True when the PC is a Bard with subclass slug
+    containing "spirits" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "bard":
+        has_bard = any(
+            (entry.get("class") or "").strip().lower() == "bard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_bard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "spirits" not in subclass:
+        return False
+    return _bard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_eloquence_bard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.324 — RAW Eloquence College Bard (Bard, TCE p.28):
     Silver Tongue + Unsettling Words (Lv 3), Unfailing
@@ -49179,6 +49204,146 @@ async def use_silver_tongue(
         "minimum_d20_value": 10,
         "applies_to": ["persuasion", "deception"],
         "ability": "CHA",
+        "bard_level": bard_lv,
+    }
+
+
+_SPIRIT_TALES = {
+    1: ("Tale of the Clever Animal",
+        "Target gains advantage on next ability check or save."),
+    2: ("Tale of the Renowned Duelist",
+        "Make a melee attack vs target — +your spell save DC."),
+    3: ("Tale of the Beloved Friends",
+        "Target + creature within 5 ft each gain 2d6 + bard_lv temp HP."),
+    4: ("Tale of the Brute",
+        "Target makes STR save; fail → 2d10 force damage + prone."),
+    5: ("Tale of the Tragic Romance",
+        "Target makes WIS save; fail → charmed by Bard for 1 min."),
+    6: ("Tale of the Traveler",
+        "Target gains 2d6 + bard_lv temp HP + +10 ft walking speed for 10 min."),
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_tales_from_beyond")
+async def use_tales_from_beyond(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.325 — Phase F.1 Bard subclass batch (Spirits
+    College Bard Lv 3+, TCE) of the v2.99.193 phased completion
+    plan. Tales from Beyond (Spirits College Bard Lv 3+, TCE
+    p.30): "Bonus action to roll on the Spirit Tales table.
+    Action to choose a creature within 30 ft as the target."
+
+    Body: ``{character_id, override?, force_tale?}``.
+    `force_tale` (1-6) is a TEST_MODE escape hatch to
+    deterministically pick a tale; otherwise rolls 1d6. Costs
+    a bonus chip. v1 announce-only — actual tale effect
+    application is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    force_tale = body.get("force_tale")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Bard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_spirits_bard(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "spirits bard lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _bard_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "tales-from-beyond",
+            "label": "Tales from Beyond",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    _test_mode = (
+        os.environ.get("TEST_MODE", "").strip().lower()
+        in ("1", "true", "yes", "on")
+    )
+    tale_roll = None
+    if force_tale is not None and _test_mode:
+        try:
+            tale_roll = max(1, min(6, int(force_tale)))
+        except (TypeError, ValueError):
+            tale_roll = None
+    if tale_roll is None:
+        try:
+            tale_roll = max(1, min(6, int(dice_mod.roll("1d6").total)))
+        except dice_mod.DiceParseError:
+            tale_roll = 1
+    tale_name, tale_desc = _SPIRIT_TALES.get(tale_roll, _SPIRIT_TALES[1])
+    bard_lv = _bard_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"👻 Tales from Beyond — {tale_name} (rolled {tale_roll})"
+            ),
+            "feature_desc": (
+                f"{char.name} channels a spirit's tale: {tale_name}. "
+                f"{tale_desc} (Spirits College Bard Lv 3+ TCE class "
+                f"feature; bonus action to roll, action to apply.)"
+            ),
+            "source": "tales-from-beyond",
+            "tale_roll": tale_roll,
+            "tale_name": tale_name,
+            "tale_description": tale_desc,
+            "bard_level": bard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "tales-from-beyond",
+        "tale_roll": tale_roll,
+        "tale_name": tale_name,
+        "tale_description": tale_desc,
         "bard_level": bard_lv,
     }
 

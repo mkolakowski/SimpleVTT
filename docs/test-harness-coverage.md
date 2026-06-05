@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1594 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.324, 2026-06-05).
+**Total tests:** 1599 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.325, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -954,6 +954,17 @@ v2.99.324 — Eloquence College Bard (TCE p.28) Silver Tongue Lv 3+ (F.1 Bard ba
 | `test_use_st_happy_lv6` | PATCH Lyra → Eloquence Lv 6 → `minimum_d20_value == 10`, applies_to includes persuasion + deception, `ability == "CHA"`, broadcast (source `silver-tongue`). |
 | `test_use_st_wrong_subclass` | Default Lyra (Lore) → 409. |
 | `test_use_st_level_gate` | Eloquence at Lv 2 → 409. |
+
+### `test_tales_from_beyond.py`
+v2.99.325 — Spirits College Bard (TCE p.30) Tales from Beyond Lv 3+ (F.1 Bard batch). Bonus action to roll 1d6 on Spirit Tales table; action to apply tale (6 tales: Clever Animal/Duelist/Beloved Friends/Brute/Tragic Romance/Traveler). `force_tale` body param (1-6) is a TEST_MODE escape hatch. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_tb_happy_lv6` | PATCH Lyra → Spirits Lv 6 → `tale_roll` in [1,6], `tale_name` non-empty, broadcast (source `tales-from-beyond`). |
+| `test_use_tb_force_tale_4_brute` | `force_tale=4` → roll 4, name contains "Brute". |
+| `test_use_tb_force_tale_2_duelist` | `force_tale=2` → roll 2, name contains "Duelist". |
+| `test_use_tb_wrong_subclass` | Default Lyra (Lore) → 409. |
+| `test_use_tb_level_gate` | Spirits at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

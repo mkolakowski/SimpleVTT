@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.325] - 2026-06-05 — "The Spirit's Voice" — Spirits College Bard Tales from Beyond (Lv 3+, TCE)
+
+**Schema version:** 66
+**Commit summary:** **F.1 Bard subclass batch — Spirits College Bard Lv 3+ Tales from Beyond (TCE).** Seventh Bard subclass shipped. RAW TCE p.30: bonus action to roll 1d6 on the Spirit Tales table; action to apply the chosen tale to a creature within 30 ft. 6 tales: Clever Animal, Renowned Duelist, Beloved Friends, Brute, Tragic Romance, Traveler.
+**Description:** Adds `_pc_has_spirits_bard` helper + `_SPIRIT_TALES` table. One endpoint. `/use_tales_from_beyond` — body `{character_id, override?, force_tale?}`. Validates Spirits Bard Lv 3+ + bonus chip. Rolls 1d6 server-side (or accepts `force_tale` 1-6 when `TEST_MODE=true`). Broadcasts tale name + description. v1 announce-only — tale effect application GM-tracked. One new harness test file with 5 tests including force_tale path.
+
+### Added
+- `/api/campaign/{cid}/use_tales_from_beyond` endpoint.
+- `_pc_has_spirits_bard` helper.
+- `_SPIRIT_TALES` table (6 entries).
+- `tests/harness/test_tales_from_beyond.py` — 5 tests.
+
+### Notes
+- **F.1 Bard batch progress:** 7 of ~8 subclasses shipped. Only Creation (TCE) remains.
+- **141 ships this session.**
+- **Total harness count: 1599** (was 1594 in v2.99.324; +5 new tests).
+
+---
+
 ## [2.99.324] - 2026-06-05 — "The Floor of Ten" — Eloquence College Bard Silver Tongue (Lv 3+, TCE)
 
 **Schema version:** 66
