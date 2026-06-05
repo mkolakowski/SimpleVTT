@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.301] - 2026-06-05 — "Echoes in the Stone" — Knowledge Domain Cleric Visions of the Past (H.1 deeper, Lv 17)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Knowledge Domain Cleric Lv 17+ Visions of the Past.** RAW PHB p.60: 1 min meditation, then dream-like glimpses of recent events. Concentration up to WIS-score minutes (min 1). Once per short or long rest. Modes: object reading (24h history of held object) + area reading (24h history of 50-ft cube).
+**Description:** One endpoint. `/use_visions_of_the_past` — body `{character_id, mode?, override?}`. Validates Knowledge Domain Cleric Lv 17+. Mode "object" (default) or "area". Auto-bootstraps `visions-of-the-past` resource (max=1, reset=short). Decrements counter, broadcasts. v1 announce-only — vision content is GM/DM-narrated. One new harness test file with 6 tests.
+
+### Added
+- `/api/campaign/{cid}/use_visions_of_the_past` endpoint.
+- `tests/harness/test_visions_of_the_past.py` — 6 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 9 of 11 domains shipped at Lv 17 (Light, Tempest, Life, War, Death, Trickery, Forge, Grave, Knowledge). Remaining: Nature, Peace, Arcana.
+- **117 ships this session.**
+- **Total harness count: 1504** (was 1498 in v2.99.300; +6 new tests).
+
+---
+
 ## [2.99.300] - 2026-06-05 — "Soul-Catcher's Hand" — Grave Domain Cleric Keeper of Souls (H.1 deeper, Lv 17 passive) — 🎂 3-digit minor
 
 **Schema version:** 66

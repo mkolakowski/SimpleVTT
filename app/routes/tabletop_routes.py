@@ -45900,6 +45900,155 @@ async def use_keeper_of_souls(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_visions_of_the_past")
+async def use_visions_of_the_past(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.301 — Phase H.1 deeper (Knowledge Domain Cleric
+    Lv 17+) of the v2.99.193 phased completion plan. Visions
+    of the Past (Knowledge Domain Cleric Lv 17+, PHB p.60):
+    Spend at least 1 min in meditation, then receive
+    dream-like glimpses of recent events. Concentration:
+    minutes equal to WIS score (min 1). Once per short rest.
+
+    Modes:
+    - Object Reading: hold an object → 24h history + who used.
+    - Area Reading: 50-ft cube → 24h history.
+
+    Body: ``{character_id, mode?, override?}``. Mode: "object"
+    or "area" (default "object"). Auto-bootstraps a
+    `visions-of-the-past` resource (max=1, reset=short).
+    v1 announce-only.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    mode = (body.get("mode") or "object").strip().lower()
+    if mode not in ("object", "area"):
+        mode = "object"
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_knowledge_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "knowledge domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    vp_row = None
+    vp_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "visions-of-the-past":
+            vp_row = dict(r); vp_idx = i; break
+    if vp_row is None:
+        vp_row = {
+            "key": "visions-of-the-past",
+            "label": "Visions of the Past",
+            "current": 1, "max": 1, "reset": "short",
+        }
+        vp_idx = len(resources)
+        resources.append(vp_row)
+    vp_cur = int(vp_row.get("current") or 0)
+    vp_max = int(vp_row.get("max") or 1)
+    if vp_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Visions of the Past",
+            "current": vp_cur, "max": vp_max,
+        })
+
+    vp_row["current"] = vp_cur - 1
+    resources[vp_idx] = vp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    wis = int((sheet.get("abilities") or {}).get("WIS") or 10)
+    max_duration_minutes = max(1, wis)
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    if mode == "object":
+        mode_text = "an object's 24-hour history (and who used it)"
+    else:
+        mode_text = "a 50-ft cube's 24-hour history"
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "visions-of-the-past",
+            "current": vp_cur - 1, "max": vp_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"📜 Visions of the Past — {mode} reading "
+                f"(concentrate {max_duration_minutes} min)"
+            ),
+            "feature_desc": (
+                f"{char.name} meditates 1+ min and receives "
+                f"shadowy glimpses of {mode_text}. Concentration "
+                f"up to {max_duration_minutes} min (= WIS score). "
+                f"(Knowledge Domain Cleric Lv 17+ class feature; "
+                f"once per short or long rest.)"
+            ),
+            "source": "visions-of-the-past",
+            "mode": mode,
+            "max_duration_minutes": max_duration_minutes,
+            "uses_remaining": vp_cur - 1,
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "visions-of-the-past",
+        "mode": mode,
+        "max_duration_minutes": max_duration_minutes,
+        "uses_remaining": vp_cur - 1,
+        "max_uses": vp_max,
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
