@@ -25985,6 +25985,32 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_conjuration_wizard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.329 — RAW Conjuration School Wizard (Wizard, PHB
+    p.116): Conjuration Savant + Minor Conjuration (Lv 2),
+    Benign Transposition (Lv 6), Focused Conjuration (Lv 10),
+    Durable Summons (Lv 14).
+
+    Returns True when the PC is a Wizard with subclass slug
+    containing "conjuration" + meets `min_level`
+    (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "conjuration" not in subclass:
+        return False
+    return _wizard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_divination_wizard_lv(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.328 — RAW Divination School Wizard (Wizard, PHB
     p.116): Divination Savant + Portent (Lv 2), Expert Divination
@@ -49827,6 +49853,121 @@ async def use_third_eye(
         "feature": "third-eye",
         "sense": sense,
         "sense_description": sense_desc,
+        "wizard_level": wizard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_minor_conjuration")
+async def use_minor_conjuration(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.329 — Phase G.1 Wizard subclass batch (Conjuration
+    School Wizard Lv 2+) of the v2.99.193 phased completion
+    plan. Minor Conjuration (Conjuration Wizard Lv 2+, PHB
+    p.116): "Action to conjure a nonmagical inanimate object
+    ≤3 ft any dim, ≤10 lb, in hand or unoccupied space within
+    10 ft. Object glows dim light 5 ft. Persists 1 hr or until
+    re-conjured or damaged."
+
+    Body: ``{character_id, object_name?, override?}``. Optional
+    `object_name` informs the announce. Costs an action chip.
+    v1 announce-only — actual object creation is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    object_name = (body.get("object_name") or "an unspecified nonmagical object").strip()
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_conjuration_wizard(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "conjuration wizard lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "minor-conjuration",
+            "label": "Minor Conjuration",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    wizard_lv = _wizard_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🪄 Minor Conjuration — {object_name} (60 min)"
+            ),
+            "feature_desc": (
+                f"{char.name} conjures {object_name} in their hand "
+                f"or an unoccupied space within 10 ft. Glows dim "
+                f"light 5 ft. Lasts 1 hour, until re-conjured, or "
+                f"until damaged. ≤3 ft any dimension, ≤10 lb, "
+                f"nonmagical, must be a form {char.name} has seen. "
+                f"(Conjuration Wizard Lv 2+ class feature.)"
+            ),
+            "source": "minor-conjuration",
+            "object_name": object_name,
+            "duration_minutes": 60,
+            "max_dim_ft": 3,
+            "max_weight_lb": 10,
+            "dim_light_radius_ft": 5,
+            "wizard_level": wizard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "minor-conjuration",
+        "object_name": object_name,
+        "duration_minutes": 60,
+        "max_dim_ft": 3,
+        "max_weight_lb": 10,
+        "dim_light_radius_ft": 5,
         "wizard_level": wizard_lv,
     }
 

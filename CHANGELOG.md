@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.329] - 2026-06-05 — "The Summoned Lantern" — Conjuration School Wizard Minor Conjuration (Lv 2+)
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Conjuration School Wizard Lv 2+ Minor Conjuration.** Third Wizard subclass shipped. RAW PHB p.116: action to conjure a nonmagical inanimate object ≤3 ft any dim, ≤10 lb, in hand or unoccupied space within 10 ft. Persists 1 hr or until re-conjured/damaged.
+**Description:** Adds `_pc_has_conjuration_wizard` helper. One endpoint. `/use_minor_conjuration` — body `{character_id, object_name?, override?}`. Validates Conjuration Wizard Lv 2+ + action chip. Optional `object_name` informs announce. Broadcasts. v1 announce-only. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_minor_conjuration` endpoint.
+- `_pc_has_conjuration_wizard` helper.
+- `tests/harness/test_minor_conjuration.py` — 4 tests.
+
+### Notes
+- **G.1 Wizard batch progress:** 3 of ~10 subclasses shipped (Abjuration, Divination, Conjuration).
+- **145 ships this session.**
+- **Total harness count: 1617** (was 1613 in v2.99.328; +4 new tests).
+
+---
+
 ## [2.99.328] - 2026-06-05 — "The Opened Eye" — Divination School Wizard The Third Eye (Lv 10+) (pivot)
 
 **Schema version:** 66
