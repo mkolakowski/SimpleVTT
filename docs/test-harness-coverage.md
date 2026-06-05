@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1384 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.266, 2026-06-04).
+**Total tests:** 1387 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.267, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -620,6 +620,15 @@ v2.99.234 — Light Domain Cleric (PHB p.60) Warding Flare reaction (Phase H.1 f
 | `test_use_warding_flare_out_of_uses` | `warding-flare.current = 0` → 409 `out_of_uses`. |
 | `test_use_warding_flare_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 | `test_use_warding_flare_no_resource` | Light Cleric without the `warding-flare` resource entry → 404. |
+
+### `test_war_magic.py`
+v2.99.267 — Eldritch Knight Fighter (PHB p.74) War Magic announce (Phase E.2 Phase 2). Lv 7+; after casting a cantrip with action, make one weapon attack as a bonus action.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_wm_happy` | Lv 9 Eldritch Knight Garrik → 200, broadcast (source `war-magic`), bonus chip marked. |
+| `test_use_wm_wrong_subclass` | Default Garrik (Champion) → 409 `wrong_subclass_or_level`. |
+| `test_use_wm_level_gate` | Eldritch Knight at Lv 6 (not 7+) → 409. |
 
 ### `test_commanders_strike.py`
 v2.99.266 — Battle Master maneuver 16 of 16 — Commander's Strike (PHB p.74). **Closes the 16-maneuver batch.** Bonus action: ally takes free weapon attack as reaction + die added to damage.

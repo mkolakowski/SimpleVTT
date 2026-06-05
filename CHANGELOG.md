@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.267] - 2026-06-04 — "The Cantrip's Echo" — Eldritch Knight War Magic (Phase E.2 Phase 2)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.2 Phase 2 of the v2.99.193 phased completion plan.** Per [docs/plans/eldritch-knight.md](docs/plans/eldritch-knight.md): Eldritch Knight Lv 7+ — after casting a cantrip with action, make one weapon attack as a bonus action. v1 ships announce-only — cantrip prereq is GM-tracked.
+**Description:** One endpoint. `/use_war_magic` — body `{character_id, override?}`. Validates Eldritch Knight Lv 7+ + Phase 4 bonus chip. Marks bonus chip + broadcasts. The deeper integration (auto-flagging War Magic availability via /cast_spell post-cast hook + /attack `as_war_magic_bonus` consumer) is filed for follow-up. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_war_magic` endpoint.
+- `tests/harness/test_war_magic.py` — 3 tests.
+
+### Notes
+- **Phase E.2 progress: 2 of 4 phases.** Phase 1 (Weapon Bond v2.99.232) + Phase 2 (War Magic, this). Remaining: Phase 3 Eldritch Strike (Lv 10), Phase 4 Arcane Charge + Improved War Magic (Lv 15 + 18).
+- **83 ships this session.**
+- **Total harness count: 1387** (was 1384 in v2.99.266).
+
+---
+
 ## [2.99.266] - 2026-06-04 — "The Captain's Order" — Battle Master Commander's Strike (Phase E.1 maneuver 16 of 16 — ALL 16 SHIPPED)
 
 **Schema version:** 66

@@ -37739,6 +37739,106 @@ async def use_spell_bombardment(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_war_magic")
+async def use_war_magic(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.267 — Phase E.2 Phase 2 of the v2.99.193 phased
+    completion plan. War Magic (Eldritch Knight Lv 7+, PHB p.74):
+    "Beginning at 7th level, when you use your action to cast a
+    cantrip, you can make one weapon attack as a bonus action."
+
+    Body: ``{character_id, override?}``.
+
+    Validates Eldritch Knight Lv 7+ + Phase 4 bonus chip. v1
+    ships as announce-only — the cantrip cast prerequisite is
+    GM-tracked; future commit can hook /cast_spell post-cast
+    for cantrips to stamp a per-turn flag and have /attack
+    consume it via `as_war_magic_bonus: true` body field.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_eldritch_knight(sheet, 7):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "eldritch knight fighter lv 7+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "war-magic",
+            "label": "War Magic",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "⚡ War Magic — bonus weapon attack",
+            "feature_desc": (
+                f"{char.name} invokes War Magic: after casting a "
+                f"cantrip with your action, make one weapon attack "
+                f"as a bonus action. (Eldritch Knight Lv 7+ class "
+                f"feature.) Roll the attack via the normal path."
+            ),
+            "source": "war-magic",
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "war-magic",
+        "over_budget": was_used,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_weapon_bond")
 async def use_weapon_bond(
     campaign_id: int,
