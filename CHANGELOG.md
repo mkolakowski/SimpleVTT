@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.246] - 2026-06-04 — "The Sworn Mark" — Vengeance Paladin Vow of Enmity CD (Phase H.2 second oath)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.2 second non-Devotion Paladin oath of the v2.99.193 phased completion plan.** RAW PHB p.87: Vengeance Paladin Lv 3+ bonus action CD — utter a vow vs a target within 10 ft you can see. Advantage on attacks vs the target for 1 minute or until the target drops to 0 HP.
+**Description:** One helper + one endpoint. (1) `_pc_has_vengeance_oath(sheet, min_level)` — multiclass-aware. (2) `/use_vow_of_enmity` — body `{character_id, target_combatant_id, override?}`. Validates Vengeance Paladin Lv 3+ + `sheet.resources` has a `channel-divinity` entry with `current >= 1` + target combatant exists + Phase 4 bonus chip. Decrements CD counter, installs `vow-of-enmity-active` buff on the caster with `effects.attack_advantage_vs_target_combatant_id: <target_id>` (10-round duration), marks chip, broadcasts. v1 ships the buff install + announce. The "ends when target drops to 0 HP" half is filed (would need a damage-resolution hook). One new harness test file with 4 tests.
+
+### Added
+- `_pc_has_vengeance_oath(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_vow_of_enmity` endpoint.
+- `tests/harness/test_vow_of_enmity.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 4 regression tests. No schema change.
+- **Buff with target-id targeting.** The buff's `effects.attack_advantage_vs_target_combatant_id` field carries the marked target's combatant id. The v2.99.214 attack-resolution hook reads `attack_advantage_vs_target_combatant_id` per buff and grants advantage when the attacker's target matches — same wire that other v2.99.x target-tagged buffs use.
+- **End condition filed.** RAW: "for 1 minute or until it drops to 0 HP or falls unconscious." v1 ships the 10-round expiry (handled by the existing buff-tick path); the 0-HP early-end requires a damage-resolution hook to walk the attacker's buffs and drop the vow if the marked target's HP dropped to 0.
+- **Phase H.2 progress: 2 of 5 oaths have first features shipped** (Ancients v2.99.245, Vengeance v2.99.246). Remaining: Conquest, Redemption, Glory.
+- **62 ships this session.**
+- **Total harness count: 1316** (was 1312 in v2.99.245).
+
+---
+
 ## [2.99.245] - 2026-06-04 — "The Verdant Bind" — Ancients Paladin Nature's Wrath CD (Phase H.2 Phase 1) + plan doc
 
 **Schema version:** 66

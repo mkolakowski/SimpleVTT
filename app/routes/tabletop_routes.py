@@ -25469,6 +25469,35 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_vengeance_oath(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.246 — RAW Oath of Vengeance (Paladin, PHB p.87):
+    Channel Divinity options Abjure Enemy + Vow of Enmity (Lv 3),
+    Relentless Avenger (Lv 7), Soul of Vengeance (Lv 15),
+    Avenging Angel (Lv 20).
+
+    Returns True when the PC is a Paladin with subclass slug
+    containing "vengeance" + meets `min_level` (multiclass-
+    aware). Gates the Vengeance oath endpoints.
+
+    Phase H.2 second non-Devotion Paladin oath. See
+    docs/plans/paladin-oaths.md.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "paladin":
+        has_paladin = any(
+            (entry.get("class") or "").strip().lower() == "paladin"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_paladin:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "vengeance" not in subclass:
+        return False
+    return _paladin_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_ancients_oath(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.245 — RAW Oath of the Ancients (Paladin, PHB
     p.86-87): Channel Divinity options Nature's Wrath +
@@ -39771,6 +39800,202 @@ async def use_natures_wrath(
         "save_ability": save_ability,
         "save_dc": save_dc,
         "uses_remaining": cd_cur - 1,
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_vow_of_enmity")
+async def use_vow_of_enmity(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.246 — Phase H.2 second non-Devotion Paladin oath
+    of the v2.99.193 phased completion plan. Vow of Enmity
+    (Vengeance Paladin Lv 3+, PHB p.87): "As a bonus action,
+    you can utter a vow of enmity against a creature you can
+    see within 10 feet of you, using your Channel Divinity. You
+    gain advantage on attack rolls against the creature for 1
+    minute or until it drops to 0 hit points or falls
+    unconscious."
+
+    Body: ``{character_id, target_combatant_id, override?}``.
+
+    Validates Vengeance Paladin Lv 3+ + `sheet.resources` has a
+    `channel-divinity` entry with `current >= 1` + Phase 4
+    bonus chip. Decrements CD counter, marks chip, installs
+    `vow-of-enmity-active` buff on the caster with
+    `effects.attack_advantage_vs_target_combatant_id` set so
+    the v2.99.214 attack-resolution hook can grant advantage
+    against that specific combatant. Broadcasts.
+
+    The "ends when target drops to 0 HP" half is filed (would
+    need a damage-resolution hook to detect target KO).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_vengeance_oath(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "vengeance paladin lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    cd_row = None
+    cd_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "channel-divinity":
+            cd_row = dict(r)
+            cd_idx = i
+            break
+    if cd_row is None:
+        raise HTTPException(
+            404,
+            "No Channel Divinity resource on this sheet",
+        )
+    cd_cur = int(cd_row.get("current") or 0)
+    cd_max = int(cd_row.get("max") or 0)
+    if cd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Channel Divinity",
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    target_name = ""
+    found = False
+    for c in (state.get("combatants") or []):
+        if c.get("id") == target_combatant_id:
+            target_name = c.get("name") or ""
+            found = True
+            break
+    if not found:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_in_battle",
+            "target_combatant_id": target_combatant_id,
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "vow-of-enmity",
+            "label": "Vow of Enmity",
+            "strict": strict,
+        })
+
+    cd_row["current"] = cd_cur - 1
+    resources[cd_idx] = cd_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    voe_buff = {
+        "key": "vow-of-enmity-active",
+        "name": f"Vow of Enmity vs {target_name or 'target'}",
+        "icon": "🩸",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source": "vow-of-enmity",
+        "source_char_id": char.id,
+        "effects": {
+            "attack_advantage_vs_target_combatant_id": target_combatant_id,
+        },
+        "desc": (
+            f"Advantage on attack rolls against "
+            f"{target_name or 'the marked target'} for 1 minute "
+            f"or until they drop to 0 HP."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, voe_buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "channel-divinity",
+            "current": cd_cur - 1,
+            "max": cd_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🩸 Vow of Enmity vs {target_name or 'target'}"
+            ),
+            "feature_desc": (
+                f"{char.name} swears a Vow of Enmity against "
+                f"{target_name or 'the marked target'}. Advantage "
+                f"on attacks against them for 1 minute or until "
+                f"they drop to 0 HP. (Vengeance Paladin Lv 3+ "
+                f"Channel Divinity.)"
+            ),
+            "source": "vow-of-enmity",
+            "target_combatant_id": target_combatant_id,
+            "target_name": target_name,
+            "uses_remaining": cd_cur - 1,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "vow-of-enmity",
+        "target_combatant_id": target_combatant_id,
+        "target_name": target_name,
+        "uses_remaining": cd_cur - 1,
+        "buff_installed": True,
         "over_budget": was_used,
     }
 
