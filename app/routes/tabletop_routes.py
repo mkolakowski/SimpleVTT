@@ -26615,6 +26615,32 @@ def _pc_has_land_druid(sheet: "dict | None", min_level: int) -> bool:
     return _druid_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_moon_druid(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.348 — RAW Moon Druid (Druid, PHB p.69): Combat Wild
+    Shape + Circle Forms (Lv 2), Primal Strike (Lv 6), Elemental
+    Wild Shape (Lv 10), Thousand Forms (Lv 14).
+
+    Returns True when the PC is a Druid with subclass slug
+    containing "moon" (e.g. "Circle of the Moon") + meets
+    `min_level` (multiclass-aware). Closes the Druid subclass
+    batch — Moon was the last untouched circle.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "druid":
+        has_druid = any(
+            (entry.get("class") or "").strip().lower() == "druid"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_druid:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "moon" not in subclass:
+        return False
+    return _druid_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -49104,6 +49130,153 @@ async def use_balm_of_the_summer_court(
         "max_range_ft": 120,
         "dice_remaining": bsc_cur - dice_spent,
         "max_dice": bsc_max,
+        "druid_level": druid_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_combat_wild_shape")
+async def use_combat_wild_shape(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.348 — Phase E.4 Druid subclass batch ship (Moon
+    Druid Lv 2+, PHB) of the v2.99.193 phased completion plan —
+    CLOSES the Druid batch (Moon was the last untouched circle).
+    Combat Wild Shape (Moon Druid Lv 2+, PHB p.69): "You can use
+    Wild Shape as a bonus action, rather than as an action.
+    Additionally, while you are transformed by Wild Shape, you can
+    use a bonus action to expend one spell slot to regain 1d8 hit
+    points per level of the spell slot expended."
+
+    Body: ``{character_id, slot_level?, override?}``. Costs a bonus
+    chip. Two modes:
+      - no ``slot_level`` → announce the bonus-action Wild Shape
+        (use the existing /transform flow to actually shapeshift).
+      - ``slot_level >= 1`` → roll ``<slot_level>d8`` server-side
+        and announce the in-beast-form heal.
+    v1 announce-only — the transform itself + spell-slot spend +
+    HP application stay GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    slot_level_raw = body.get("slot_level")
+    slot_level = 0
+    if slot_level_raw is not None:
+        try:
+            slot_level = int(slot_level_raw)
+        except (TypeError, ValueError):
+            slot_level = 0
+    if slot_level < 0 or slot_level > 9:
+        raise HTTPException(400, "slot_level must be between 1 and 9")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Druid character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_moon_druid(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "moon druid lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _druid_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "combat-wild-shape",
+            "label": "Combat Wild Shape",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    druid_lv = _druid_level_from_sheet(sheet)
+    mode = "heal" if slot_level >= 1 else "transform"
+    heal_amount = 0
+    dice_breakdown = ""
+    if mode == "heal":
+        try:
+            result = dice_mod.roll(f"{slot_level}d8")
+            heal_amount = max(slot_level, int(result.total))
+            dice_breakdown = result.breakdown
+        except dice_mod.DiceParseError:
+            heal_amount = slot_level
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    if mode == "heal":
+        feature_name = (
+            f"🐺 Combat Wild Shape — heal {heal_amount} HP "
+            f"(Lv {slot_level} slot, {slot_level}d8)"
+        )
+        feature_desc = (
+            f"{char.name} expends a level {slot_level} spell slot "
+            f"as a bonus action while transformed, regaining "
+            f"{heal_amount} HP (1d8 per slot level). (Moon Druid "
+            f"Lv 2+ PHB class feature.)"
+        )
+    else:
+        feature_name = "🐺 Combat Wild Shape — Wild Shape as a bonus action"
+        feature_desc = (
+            f"{char.name} shapeshifts via Wild Shape as a bonus "
+            f"action (rather than an action). While transformed, "
+            f"can spend a bonus action + a spell slot to heal 1d8 "
+            f"HP per slot level. (Moon Druid Lv 2+ PHB class "
+            f"feature.)"
+        )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": feature_name,
+            "feature_desc": feature_desc,
+            "source": "combat-wild-shape",
+            "mode": mode,
+            "slot_level": slot_level,
+            "heal_amount": heal_amount,
+            "dice_breakdown": dice_breakdown,
+            "druid_level": druid_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "combat-wild-shape",
+        "mode": mode,
+        "slot_level": slot_level,
+        "heal_amount": heal_amount,
         "druid_level": druid_lv,
     }
 

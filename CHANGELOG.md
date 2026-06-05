@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.348] - 2026-06-05 — "The Moonlit Beast" — Moon Druid Combat Wild Shape (Lv 2+, PHB) — 🎉 E.4 Druid batch CLOSE 7/7
+
+**Schema version:** 66
+**Commit summary:** **E.4 Druid subclass batch ship — Circle of the Moon Lv 2+ Combat Wild Shape (PHB) — CLOSES the Druid batch (all 7 circles now have ≥1 first-feature ship).** Moon was the last untouched circle. RAW PHB p.69: use Wild Shape as a bonus action (rather than an action); while transformed, spend a bonus action + one spell slot to regain 1d8 HP per slot level.
+**Description:** Adds `_pc_has_moon_druid` helper. One endpoint. `/use_combat_wild_shape` — body `{character_id, slot_level?, override?}`. Validates Moon Druid Lv 2+ + bonus chip. Two modes: no `slot_level` announces the bonus-action Wild Shape; `slot_level >= 1` rolls `<slot_level>d8` server-side and announces the in-beast-form heal. Broadcasts `feature_used` with `source: combat-wild-shape`, `mode`, `slot_level`, `heal_amount`. v1 announce-only — the transform itself (via the existing /transform flow), spell-slot spend, and HP application stay GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_combat_wild_shape` endpoint.
+- `_pc_has_moon_druid` helper.
+- `tests/harness/test_combat_wild_shape.py` — 4 tests.
+
+### Notes
+- **🎉 E.4 Druid subclass batch ✅ CLOSED — 7/7.** All seven Druid circles now have a Lv 2 first-feature shipped: Land (Bonus Cantrip + Natural Recovery), Shepherd (Spirit Totem), Stars (Star Map), Spores (Halo of Spores), Wildfire (Summon Wildfire Spirit), Dreams (Balm of the Summer Court), Moon (Combat Wild Shape — this ship).
+- **164 ships this session.**
+- **Total harness count: 1679** (was 1675 in v2.99.347; +4 new tests).
+
+---
+
 ## [2.99.347] - 2026-06-05 — "The Well-Rested Sorcerer" — Rest-refill coverage for the three tracked Sorcerer features
 
 **Schema version:** 66
