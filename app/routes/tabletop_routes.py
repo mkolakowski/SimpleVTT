@@ -26966,6 +26966,31 @@ def _pc_has_eldritch_knight(sheet: "dict | None", min_level: int) -> bool:
     return _fighter_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_storm_sorcery(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.339 — RAW Storm Sorcery (Sorcerer subclass, PHB
+    p.137): Wind Speaker + Tempestuous Magic (Lv 1), Heart of
+    the Storm + Storm Guide (Lv 6), Storm's Fury (Lv 14),
+    Wind Soul (Lv 18).
+
+    Returns True when the PC is a Sorcerer with subclass slug
+    containing "storm" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        has_sorc = any(
+            (entry.get("class") or "").strip().lower() == "sorcerer"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_sorc:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "storm" not in subclass:
+        return False
+    return _sorcerer_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_wild_magic(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.227 — RAW Wild Magic (Sorcerer subclass, PHB p.103):
     Wild Magic Surge + Tides of Chaos (Lv 1), Bend Luck (Lv 6),
@@ -51342,6 +51367,114 @@ async def use_adjust_density(
         "target_character_id": target_id,
         "target_character_name": target_name,
         "wizard_level": wizard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_tempestuous_magic")
+async def use_tempestuous_magic(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.339 — Phase G.2 Sorcerer subclass batch ship #1
+    (Storm Sorcery Lv 1+, PHB) of the v2.99.193 phased completion
+    plan. Tempestuous Magic (Storm Sorcery Lv 1+, PHB p.137):
+    "Starting at 1st level, you can use a bonus action on your
+    turn to fly up to 10 feet without provoking opportunity
+    attacks immediately after you cast a spell of 1st level or
+    higher. You must be on the ground when you cast the spell."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip.
+    v1 announce-only — recent-cast requirement + ground
+    restriction + OA-free fly GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_storm_sorcery(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "storm sorcery sorcerer lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _sorcerer_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "tempestuous-magic",
+            "label": "Tempestuous Magic",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    sorc_lv = _sorcerer_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌪️ Tempestuous Magic — fly 10 ft (no OAs)"
+            ),
+            "feature_desc": (
+                f"{char.name} rides the storm: flies up to 10 ft "
+                f"as a bonus action immediately after casting a "
+                f"Lv 1+ sorcerer spell. Movement doesn't provoke "
+                f"opportunity attacks. (Storm Sorcery Lv 1+ PHB "
+                f"class feature; must be on the ground when "
+                f"casting.)"
+            ),
+            "source": "tempestuous-magic",
+            "fly_distance": 10,
+            "oa_free": True,
+            "sorcerer_level": sorc_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "tempestuous-magic",
+        "fly_distance": 10,
+        "oa_free": True,
+        "sorcerer_level": sorc_lv,
     }
 
 

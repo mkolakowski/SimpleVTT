@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.339] - 2026-06-05 — "The Sky Stride" — Storm Sorcery Sorcerer Tempestuous Magic (Lv 1+, PHB) — 🌪️ G.2 Sorcerer batch OPEN
+
+**Schema version:** 66
+**Commit summary:** **G.2 Sorcerer subclass batch OPEN — Storm Sorcery Lv 1+ Tempestuous Magic (PHB).** First Sorcerer batch ship. RAW PHB p.137: bonus action to fly up to 10 ft without provoking opportunity attacks, immediately after casting a Lv 1+ sorcerer spell. Must be on the ground when casting.
+**Description:** Adds `_pc_has_storm_sorcery` helper. One endpoint. `/use_tempestuous_magic` — body `{character_id, override?}`. Validates Storm Sorcery Lv 1+ + bonus chip. Broadcasts `feature_used` with `source: tempestuous-magic`, `fly_distance: 10`, `oa_free: True`. v1 announce-only — recent-cast requirement + on-ground gate + OA-free movement GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_tempestuous_magic` endpoint.
+- `_pc_has_storm_sorcery` helper.
+- `tests/harness/test_tempestuous_magic.py` — 3 tests.
+
+### Notes
+- **G.2 Sorcerer batch progress:** 5/8 Sorcerer subclasses still need first-feature ships (Storm Sorcery now opened; Draconic Bloodline + Wild Magic already have ≥1 feature each). Remaining untouched: Divine Soul (XGE), Shadow Magic (XGE), Aberrant Mind (TCE), Clockwork Soul (TCE).
+- **155 ships this session.**
+- **Total harness count: 1657** (was 1654 in v2.99.338; +3 new tests).
+
+---
+
 ## [2.99.338] - 2026-06-05 — "The Heavy Hand" — Graviturgy Magic Wizard Adjust Density (Lv 2+, EGtW) — 🎉 G.1 Wizard batch CLOSE
 
 **Schema version:** 66
