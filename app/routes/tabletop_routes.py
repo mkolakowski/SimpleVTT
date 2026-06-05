@@ -43683,6 +43683,106 @@ async def use_aura_of_the_guardian(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_aura_of_alacrity")
+async def use_aura_of_alacrity(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.282 — Phase H.2 depth (Glory Paladin Lv 7+) of
+    the v2.99.193 phased completion plan. Aura of Alacrity
+    (Glory Paladin Lv 7+, XGE p.37): "Starting at 7th level,
+    your walking speed increases by 10 feet. In addition,
+    while you aren't incapacitated, any ally who starts their
+    turn within 5 feet of you has their walking speed
+    increased by 10 feet until the end of that turn. When you
+    reach 18th level in this class, the range of this aura
+    increases to 10 feet."
+
+    Body: ``{character_id, override?}``. No chip cost — passive
+    aura. v1 announce-only — the actual speed-bonus application
+    (self always +10 ft, allies +10 ft turn-start within range)
+    is GM-tracked. Closes the H.2 Lv 7 aura batch.
+
+    Note: radius is 5 ft (10 ft at Lv 18), distinct from the
+    other H.2 oath auras which run 10 ft (30 ft at Lv 18).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_glory_oath(sheet, 7):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "glory paladin lv 7+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+    radius_ft = 10 if pal_lv >= 18 else 5
+    speed_bonus_ft = 10
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⚡ Aura of Alacrity — {radius_ft} ft, "
+                f"+{speed_bonus_ft} ft walking speed"
+            ),
+            "feature_desc": (
+                f"{char.name} emanates an Aura of Alacrity. "
+                f"{char.name}'s walking speed is +{speed_bonus_ft} ft "
+                f"permanently. Allies who start their turn within "
+                f"{radius_ft} ft get +{speed_bonus_ft} ft walking "
+                f"speed until end of turn. (Glory Paladin Lv 7+ "
+                f"class feature; passive — no action required.)"
+            ),
+            "source": "aura-of-alacrity",
+            "radius_ft": radius_ft,
+            "speed_bonus_ft": speed_bonus_ft,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "aura-of-alacrity",
+        "radius_ft": radius_ft,
+        "speed_bonus_ft": speed_bonus_ft,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

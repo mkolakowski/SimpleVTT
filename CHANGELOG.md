@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.282] - 2026-06-05 — "Quick Step, Long Stride" — Glory Paladin Aura of Alacrity (H.2 depth, Lv 7 speed aura — CLOSES the Lv 7 batch)
+
+**Schema version:** 66
+**Commit summary:** **H.2 depth — Glory Paladin Lv 7+ Aura of Alacrity. CLOSES the H.2 Lv 7 aura batch (5/5 oaths).** RAW XGE p.37: your walking speed +10 ft permanently; allies starting their turn within 5 ft (10 ft at Lv 18+) get +10 ft walking speed until end of turn.
+**Description:** One endpoint. `/use_aura_of_alacrity` — body `{character_id, override?}`. Validates Glory Paladin Lv 7+. Computes `radius_ft = 10 if level >= 18 else 5` (note 5/10 ft, distinct from the 10/30 ft pattern of the other H.2 oath auras) + `speed_bonus_ft = 10`. Broadcasts `feature_used` with `source: aura-of-alacrity`. v1 announce-only — the actual speed-bonus application is GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_aura_of_alacrity` endpoint.
+- `tests/harness/test_aura_of_alacrity.py` — 4 tests.
+
+### Notes
+- **🎉 H.2 depth Lv 7 batch ✅ COMPLETE.** All 5 non-Devotion oaths shipped in the H.2 first-pass (v2.99.245-249) now have their Lv 7 feature shipped:
+  1. **Ancients** Nature's Wrath (v2.99.245) + Turn the Faithless (v2.99.272) + Aura of Warding (v2.99.279).
+  2. **Vengeance** Vow of Enmity (v2.99.246) + Abjure Enemy (v2.99.274) + Relentless Avenger (v2.99.280).
+  3. **Conquest** Conquering Presence (v2.99.247) + Aura of Conquest (v2.99.273).
+  4. **Glory** Inspiring Smite (v2.99.248) + Peerless Athlete (v2.99.276) + Aura of Alacrity (this).
+  5. **Redemption** Rebuke the Violent (v2.99.249) + Emissary of Peace (v2.99.275) + Aura of the Guardian (v2.99.281).
+- **98 ships this session.**
+- **Total harness count: 1436** (was 1432 in v2.99.281; +4 new tests).
+
+---
+
 ## [2.99.281] - 2026-06-05 — "The Borrowed Wound" — Redemption Paladin Aura of the Guardian (H.2 depth, Lv 7 reactive shield)
 
 **Schema version:** 66
