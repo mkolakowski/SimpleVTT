@@ -26641,6 +26641,31 @@ def _pc_has_moon_druid(sheet: "dict | None", min_level: int) -> bool:
     return _druid_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_fiend_warlock(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.349 — RAW The Fiend (Warlock patron, PHB p.109):
+    Dark One's Blessing (Lv 1), Dark One's Own Luck (Lv 6),
+    Fiendish Resilience (Lv 10), Hurl Through Hell (Lv 14).
+
+    Returns True when the PC is a Warlock with subclass slug
+    containing "fiend" (e.g. "The Fiend") + meets `min_level`
+    (multiclass-aware). Opens the Warlock patron subclass batch.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "warlock":
+        has_warlock = any(
+            (entry.get("class") or "").strip().lower() == "warlock"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "fiend" not in subclass:
+        return False
+    return _warlock_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -49278,6 +49303,102 @@ async def use_combat_wild_shape(
         "slot_level": slot_level,
         "heal_amount": heal_amount,
         "druid_level": druid_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_dark_ones_blessing")
+async def use_dark_ones_blessing(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.349 — Phase G Warlock patron subclass batch OPEN
+    (The Fiend Lv 1+, PHB) of the v2.99.193 phased completion
+    plan. Dark One's Blessing (The Fiend Lv 1+, PHB p.109):
+    "Starting at 1st level, when you reduce a hostile creature to
+    0 hit points, you gain temporary hit points equal to your
+    Charisma modifier + your warlock level (minimum of 1)."
+
+    Body: ``{character_id}``. Costs no action (a reactive trigger
+    on a kill). Computes the temp-HP amount server-side and
+    broadcasts it. v1 announce-only — the kill trigger + temp-HP
+    application stay GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_fiend_warlock(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "the fiend warlock lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _warlock_level_from_sheet(sheet),
+        })
+
+    try:
+        cha_score = int((sheet.get("abilities") or {}).get("CHA", 10))
+    except (TypeError, ValueError):
+        cha_score = 10
+    cha_mod = (cha_score - 10) // 2
+    warlock_lv = _warlock_level_from_sheet(sheet)
+    temp_hp = max(1, cha_mod + warlock_lv)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"😈 Dark One's Blessing — +{temp_hp} temp HP"
+            ),
+            "feature_desc": (
+                f"{char.name} drops a foe and is wreathed in "
+                f"fiendish vigor: gains {temp_hp} temporary HP "
+                f"(CHA mod {cha_mod:+d} + warlock level "
+                f"{warlock_lv}, min 1). (The Fiend Warlock Lv 1+ "
+                f"PHB class feature.)"
+            ),
+            "source": "dark-ones-blessing",
+            "temp_hp": temp_hp,
+            "cha_mod": cha_mod,
+            "warlock_level": warlock_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "dark-ones-blessing",
+        "temp_hp": temp_hp,
+        "cha_mod": cha_mod,
+        "warlock_level": warlock_lv,
     }
 
 

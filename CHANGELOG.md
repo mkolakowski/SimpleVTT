@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.349] - 2026-06-05 — "The Fiendish Vigor" — The Fiend Warlock Dark One's Blessing (Lv 1+, PHB) — 🔮 Warlock patron batch OPEN
+
+**Schema version:** 66
+**Commit summary:** **Warlock patron subclass batch OPEN — The Fiend Lv 1+ Dark One's Blessing (PHB).** First Warlock patron batch ship. RAW PHB p.109: when you reduce a hostile creature to 0 hit points, you gain temporary HP equal to your Charisma modifier + your warlock level (minimum of 1).
+**Description:** Adds `_pc_has_fiend_warlock` helper. One endpoint. `/use_dark_ones_blessing` — body `{character_id}`. Validates The Fiend Warlock Lv 1+. Computes the temp-HP amount **server-side** (`max(1, CHA mod + warlock level)`) and broadcasts `feature_used` with `source: dark-ones-blessing`, `temp_hp`, `cha_mod`, `warlock_level`. v1 announce-only — the kill trigger + temp-HP application stay GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_dark_ones_blessing` endpoint.
+- `_pc_has_fiend_warlock` helper.
+- `tests/harness/test_dark_ones_blessing.py` — 3 tests.
+
+### Notes
+- **Warlock patron batch OPEN.** The Fiend is the first of the Warlock Otherworldly Patrons to get a first-feature ship. Magnus Hexbinder (Warlock The Fiend Lv 5) is the demo fixture. Remaining patrons (untouched): The Archfey (Fey Presence), The Great Old One (Awakened Mind), Hexblade (Hexblade's Curse), Celestial (Healing Light), Fathomless, Genie.
+- **165 ships this session.**
+- **Total harness count: 1682** (was 1679 in v2.99.348; +3 new tests).
+
+---
+
 ## [2.99.348] - 2026-06-05 — "The Moonlit Beast" — Moon Druid Combat Wild Shape (Lv 2+, PHB) — 🎉 E.4 Druid batch CLOSE 7/7
 
 **Schema version:** 66
