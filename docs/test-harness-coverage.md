@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1369 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.261, 2026-06-04).
+**Total tests:** 1372 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.262, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -620,6 +620,15 @@ v2.99.234 — Light Domain Cleric (PHB p.60) Warding Flare reaction (Phase H.1 f
 | `test_use_warding_flare_out_of_uses` | `warding-flare.current = 0` → 409 `out_of_uses`. |
 | `test_use_warding_flare_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 | `test_use_warding_flare_no_resource` | Light Cleric without the `warding-flare` resource entry → 404. |
+
+### `test_riposte.py`
+v2.99.262 — Battle Master maneuver 12 of 16 — Riposte (PHB p.74). Reaction when missed by melee: counter-attack + die added to damage on hit.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ri_happy` | Lv 9 Garrik d8 → `extra_damage_on_hit` 1..8, dice 4 → 3. |
+| `test_use_ri_out_of_dice` | Dice 0 → 409. |
+| `test_use_ri_wrong_subclass` | Default Champion → 409. |
 
 ### `test_parry.py`
 v2.99.261 — Battle Master maneuver 11 of 16 — Parry (PHB p.74). First defensive maneuver: reaction; reduce melee damage by die + DEX mod.

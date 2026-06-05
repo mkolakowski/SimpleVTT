@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.262] - 2026-06-04 — "The Glinting Counter" — Battle Master Riposte (Phase E.1 maneuver 12 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 12 of 16).** RAW PHB p.74: reaction when missed by melee; make a melee weapon attack vs the attacker. If hit, die added to damage.
+**Description:** One endpoint. `/use_riposte` — body `{character_id, override?}`. Reaction-chip gated. Rolls 1d<size>, broadcasts `extra_damage_on_hit`. The counter-attack itself rolls via the normal `/attack` path. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_riposte` endpoint.
+- `tests/harness/test_riposte.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 12 of 16.** 4 remaining: Commander's Strike, Distracting Strike, Evasive Footwork, Maneuvering Attack.
+- **78 ships this session.**
+- **Total harness count: 1372** (was 1369 in v2.99.261).
+
+---
+
 ## [2.99.261] - 2026-06-04 — "The Steady Shield" — Battle Master Parry (Phase E.1 maneuver 11 of 16, first defensive)
 
 **Schema version:** 66
