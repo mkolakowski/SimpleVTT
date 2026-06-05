@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.322] - 2026-06-05 — "The Toxic Whisper" — Whispers College Bard Psychic Blades (Lv 3+, XGE)
+
+**Schema version:** 66
+**Commit summary:** **F.1 Bard subclass batch — Whispers College Bard Lv 3+ Psychic Blades (XGE).** Fourth Bard subclass shipped. RAW XGE p.17: on weapon hit, expend 1 BI use to deal extra psychic damage. Die count scales 2d6/3d6/5d6/8d6 at Lv 3/5/10/15.
+**Description:** Adds `_pc_has_whispers_bard` helper. One endpoint. `/use_whispers_psychic_blades` — body `{character_id, target_combatant_id?, override?}`. Endpoint slug intentionally namespaced (`whispers_psychic_blades`) to avoid collision with Soulknife Rogue's `/use_psychic_blades` from v2.99.311 (both features share the RAW name "Psychic Blades" but are different class features). Validates Whispers Bard Lv 3+. No chip — damage rider. Broadcasts. v1 announce-only — BI decrement via existing flow. One new harness test file with 5 tests including die-scaling steps.
+
+### Added
+- `/api/campaign/{cid}/use_whispers_psychic_blades` endpoint.
+- `_pc_has_whispers_bard` helper.
+- `tests/harness/test_whispers_psychic_blades.py` — 5 tests.
+
+### Notes
+- **Endpoint-slug collision note.** RAW name "Psychic Blades" is shared between TCE Soulknife Rogue and XGE Whispers Bard. Soulknife was shipped first (v2.99.311) at `/use_psychic_blades`; Whispers is namespaced as `/use_whispers_psychic_blades` to disambiguate. Feature names remain "Psychic Blades" in user-facing text.
+- **F.1 Bard batch progress:** 4 of ~8 subclasses shipped (Lore, Valor, Glamour, Whispers).
+- **138 ships this session.**
+- **Total harness count: 1586** (was 1581 in v2.99.321; +5 new tests).
+
+---
+
 ## [2.99.321] - 2026-06-05 — "The Glamoured Stride" — Glamour College Bard Mantle of Inspiration (Lv 3+, XGE)
 
 **Schema version:** 66

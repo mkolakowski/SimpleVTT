@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1581 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.321, 2026-06-05).
+**Total tests:** 1586 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.322, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -923,6 +923,17 @@ v2.99.321 — Glamour College Bard (XGE p.16) Mantle of Inspiration Lv 3+ (F.1 B
 | `test_use_mi_happy_lv6` | PATCH Lyra → Glamour Lv 6 (CHA 17 mod 3) → `max_targets == 3`, `temp_hp_per_target == 11`, `max_range_ft == 60`, `free_move_no_oa == True`, broadcast (source `mantle-of-inspiration`). |
 | `test_use_mi_wrong_subclass` | Default Lyra (Lore) → 409. |
 | `test_use_mi_level_gate` | Glamour at Lv 2 → 409. |
+
+### `test_whispers_psychic_blades.py`
+v2.99.322 — Whispers College Bard (XGE p.17) Psychic Blades Lv 3+ (F.1 Bard batch). On weapon hit, expend 1 BI use to deal extra psychic damage. Dice scale 2d6/3d6/5d6/8d6 at Lv 3/5/10/15. Endpoint slug `/use_whispers_psychic_blades` to avoid collision with Soulknife Rogue's `/use_psychic_blades` (v2.99.311). v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_wpb_happy_lv6` | PATCH Lyra → Whispers Lv 6 → `damage_expression == "3d6"`, `damage_type == "psychic"`, `consumed_bardic_inspiration == True`, broadcast (source `whispers-psychic-blades`). |
+| `test_use_wpb_lv10` | Lv 10 → `damage_expression == "5d6"`. |
+| `test_use_wpb_lv15` | Lv 15 → `damage_expression == "8d6"`. |
+| `test_use_wpb_wrong_subclass` | Default Lyra (Lore) → 409. |
+| `test_use_wpb_level_gate` | Whispers at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

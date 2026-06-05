@@ -25985,6 +25985,30 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_whispers_bard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.322 — RAW Whispers College Bard (Bard, XGE p.17):
+    Psychic Blades + Words of Terror (Lv 3), Mantle of
+    Whispers (Lv 6), Shadow Lore (Lv 14).
+
+    Returns True when the PC is a Bard with subclass slug
+    containing "whispers" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "bard":
+        has_bard = any(
+            (entry.get("class") or "").strip().lower() == "bard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_bard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "whispers" not in subclass:
+        return False
+    return _bard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_glamour_bard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.321 — RAW Glamour College Bard (Bard, XGE p.16):
     Mantle of Inspiration + Enthralling Performance (Lv 3),
@@ -48778,6 +48802,124 @@ async def use_mantle_of_inspiration(
         "temp_hp_per_target": temp_hp,
         "max_range_ft": 60,
         "free_move_no_oa": True,
+        "consumed_bardic_inspiration": True,
+        "bard_level": bard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_whispers_psychic_blades")
+async def use_whispers_psychic_blades(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.322 — Phase F.1 Bard subclass batch (Whispers
+    College Bard Lv 3+, XGE) of the v2.99.193 phased completion
+    plan. Psychic Blades (Whispers College Bard Lv 3+, XGE
+    p.17): "When you hit a creature with a weapon attack, you
+    can expend one use of your Bardic Inspiration to deal
+    extra psychic damage to that target."
+
+    Endpoint slug is `/use_whispers_psychic_blades` to avoid
+    collision with Soulknife Rogue's `/use_psychic_blades`
+    (v2.99.311) — both features share the RAW name "Psychic
+    Blades" but are different class features.
+
+    Damage by bard level:
+    - Lv 3-4: 2d6
+    - Lv 5-9: 3d6
+    - Lv 10-14: 5d6
+    - Lv 15+: 8d6
+
+    Body: ``{character_id, target_combatant_id?, override?}``.
+    No chip — this is a damage rider on a successful weapon
+    attack. BI decrement via the existing flow. v1
+    announce-only.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id") or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Bard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_whispers_bard(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "whispers bard lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _bard_level_from_sheet(sheet),
+        })
+
+    bard_lv = _bard_level_from_sheet(sheet)
+    if bard_lv >= 15:
+        dice_count = 8
+    elif bard_lv >= 10:
+        dice_count = 5
+    elif bard_lv >= 5:
+        dice_count = 3
+    else:
+        dice_count = 2
+    damage_expression = f"{dice_count}d6"
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_text = (
+        f"combatant {target_combatant_id}"
+        if target_combatant_id else "the target"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🗣️ Psychic Blades — +{damage_expression} psychic to {target_text}"
+            ),
+            "feature_desc": (
+                f"{char.name} channels a BI use into their weapon hit. "
+                f"{target_text} takes additional {damage_expression} "
+                f"psychic damage. (Whispers College Bard Lv 3+ XGE "
+                f"class feature; consumes 1 BI use.)"
+            ),
+            "source": "whispers-psychic-blades",
+            "target_combatant_id": target_combatant_id,
+            "damage_expression": damage_expression,
+            "damage_type": "psychic",
+            "consumed_bardic_inspiration": True,
+            "bard_level": bard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "whispers-psychic-blades",
+        "target_combatant_id": target_combatant_id,
+        "damage_expression": damage_expression,
+        "damage_type": "psychic",
         "consumed_bardic_inspiration": True,
         "bard_level": bard_lv,
     }
