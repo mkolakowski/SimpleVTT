@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1306 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.244, 2026-06-04).
+**Total tests:** 1312 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.245, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -442,6 +442,17 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_natures_wrath.py`
+v2.99.245 — Oath of the Ancients (Paladin subclass, PHB p.86) Nature's Wrath Channel Divinity (Phase H.2 Phase 1 of [docs/plans/paladin-oaths.md](../plans/paladin-oaths.md)). Sir Caelan Lightbringer is the demo fixture; tests PATCH his subclass to "Oath of the Ancients" and seed Bandit in battle. Caelan Lv 8 CHA 16: DC = 8 + prof 3 + CHA +3 = 14.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_nw_str_happy` | Ancients Caelan vs Bandit with `save_ability: "STR"` → `save_dc == 14`, `uses_remaining == 0`, broadcast (source `natures-wrath`). |
+| `test_use_nw_dex_mode` | `save_ability: "DEX"` → mirrored in response. |
+| `test_use_nw_bad_save_ability` | CON isn't in `{STR, DEX}` → 400. |
+| `test_use_nw_out_of_cd` | `channel-divinity.current = 0` → 409 `out_of_uses`. |
+| `test_use_nw_wrong_subclass` | Default Caelan (Devotion) → 409 `wrong_subclass_or_level`. |
 
 ### `test_voice_of_authority.py`
 v2.99.244 — Order Domain Cleric (TCE p.39) Voice of Authority manual trigger (Phase H.1 final domain). Authorizes an ally to take a reaction weapon attack after the cleric casts a Lv 1+ spell. Marks the ALLY's reaction chip.

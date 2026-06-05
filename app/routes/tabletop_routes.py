@@ -25469,6 +25469,35 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_ancients_oath(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.245 — RAW Oath of the Ancients (Paladin, PHB
+    p.86-87): Channel Divinity options Nature's Wrath +
+    Turn the Faithless (Lv 3), Aura of Warding (Lv 7),
+    Undying Sentinel (Lv 15), Elder Champion (Lv 20).
+
+    Returns True when the PC is a Paladin with subclass slug
+    containing "ancients" + meets `min_level` (multiclass-
+    aware). Gates the Ancients oath endpoints.
+
+    Phase H.2 first non-Devotion Paladin oath to ship. See
+    docs/plans/paladin-oaths.md for the per-oath roadmap.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "paladin":
+        has_paladin = any(
+            (entry.get("class") or "").strip().lower() == "paladin"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_paladin:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "ancients" not in subclass:
+        return False
+    return _paladin_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_order_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.244 — RAW Order Domain features (Cleric, TCE p.39):
     Voice of Authority + Bonus Proficiencies (Lv 1), Channel
@@ -39537,6 +39566,211 @@ async def use_voice_of_authority(
         "ally_char_id": ally_char_id,
         "ally_name": ally_name,
         "target_name": target_name,
+        "over_budget": was_used,
+    }
+
+
+_NATURES_WRATH_SAVE_ABILITIES = {"STR", "DEX"}
+
+
+@router.post("/api/campaign/{campaign_id}/use_natures_wrath")
+async def use_natures_wrath(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.245 — Phase H.2 Phase 1 of the v2.99.193 phased
+    completion plan. Nature's Wrath (Ancients Paladin Lv 3+,
+    PHB p.86): "You can use your Channel Divinity to invoke
+    primeval forces to ensnare a foe. As an action, you can
+    cause spectral vines to spring up and reach for a creature
+    within 10 feet of you that you can see. The creature must
+    succeed on a Strength or Dexterity saving throw (its choice)
+    or be restrained. While restrained by the vines, the
+    creature repeats the saving throw at the end of each of its
+    turns. On a success, it frees itself and the vines
+    disappear."
+
+    Body: ``{character_id, target_combatant_id, save_ability,
+    override?}`` where save_ability ∈ {STR, DEX} (target's
+    choice RAW).
+
+    Validates Ancients Paladin Lv 3+ + `sheet.resources` has a
+    `channel-divinity` entry with `current >= 1` + Phase 4
+    action chip. Decrements CD counter, marks chip, computes
+    spell save DC = 8 + prof + CHA mod, broadcasts the save
+    request. v1 ships announce-only — the GM rolls the target's
+    save + installs Restrained manually.
+
+    See docs/plans/paladin-oaths.md for the Phase 2+ roadmap.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    save_ability = (str(body.get("save_ability") or "")).strip().upper()
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+    if save_ability not in _NATURES_WRATH_SAVE_ABILITIES:
+        raise HTTPException(
+            400,
+            f"save_ability must be one of "
+            f"{sorted(_NATURES_WRATH_SAVE_ABILITIES)}",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_ancients_oath(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "ancients paladin lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    cd_row = None
+    cd_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "channel-divinity":
+            cd_row = dict(r)
+            cd_idx = i
+            break
+    if cd_row is None:
+        raise HTTPException(
+            404,
+            "No Channel Divinity resource on this sheet",
+        )
+    cd_cur = int(cd_row.get("current") or 0)
+    cd_max = int(cd_row.get("max") or 0)
+    if cd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Channel Divinity",
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    target_char_id = None
+    target_name = ""
+    for c in (state.get("combatants") or []):
+        if c.get("id") == target_combatant_id:
+            target_char_id = c.get("char_id")
+            target_name = c.get("name") or ""
+            break
+    if target_combatant_id and target_char_id is None and not any(
+        c.get("id") == target_combatant_id
+        for c in (state.get("combatants") or [])
+    ):
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_in_battle",
+            "target_combatant_id": target_combatant_id,
+        })
+    # Look for the combatant by id (could be NPC with no char_id).
+    for c in (state.get("combatants") or []):
+        if c.get("id") == target_combatant_id and not target_name:
+            target_name = c.get("name") or ""
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "natures-wrath",
+            "label": "Nature's Wrath",
+            "strict": strict,
+        })
+
+    cd_row["current"] = cd_cur - 1
+    resources[cd_idx] = cd_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    cha = int((sheet.get("abilities") or {}).get("CHA") or 10)
+    cha_mod = (cha - 10) // 2
+    save_dc = 8 + prof + cha_mod
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "channel-divinity",
+            "current": cd_cur - 1,
+            "max": cd_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_phrase = f" against {target_name}" if target_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌿 Nature's Wrath — {save_ability} DC {save_dc} "
+                f"or Restrained{target_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} summons spectral vines{target_phrase}. "
+                f"Target makes a {save_ability} save DC {save_dc} "
+                f"or be Restrained until end of next turn (repeat "
+                f"save on each of its turns). (Ancients Paladin "
+                f"Lv 3+ Channel Divinity.)"
+            ),
+            "source": "natures-wrath",
+            "target_combatant_id": target_combatant_id,
+            "target_name": target_name,
+            "save_ability": save_ability,
+            "save_dc": save_dc,
+            "uses_remaining": cd_cur - 1,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "natures-wrath",
+        "target_combatant_id": target_combatant_id,
+        "target_name": target_name,
+        "save_ability": save_ability,
+        "save_dc": save_dc,
+        "uses_remaining": cd_cur - 1,
         "over_budget": was_used,
     }
 

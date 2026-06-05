@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.245] - 2026-06-04 — "The Verdant Bind" — Ancients Paladin Nature's Wrath CD (Phase H.2 Phase 1) + plan doc
+
+**Schema version:** 66
+**Commit summary:** **Phase H.2 first non-Devotion Paladin oath of the v2.99.193 phased completion plan.** Ships [`docs/plans/paladin-oaths.md`](docs/plans/paladin-oaths.md) freezing the 6-oath roadmap. Phase 1: Ancients Channel Divinity — Nature's Wrath (Lv 3) RAW PHB p.86. Target within 10 ft makes Str OR Dex save (target's choice) DC 8 + prof + CHA or be Restrained until end of next turn (repeat save each of its turns).
+**Description:** One plan doc + one helper + one endpoint + one valid set + wiki surfacing. (1) `docs/plans/paladin-oaths.md` written with 6 phases — Phase 1 = Ancients Nature's Wrath, Phase 2 = Ancients Turn the Faithless, Phase 3 = Vengeance / Conquest / Redemption / Glory CDs (one commit each), Phase 4 = Lv 7 auras, Phase 5 = Lv 15 capstones, Phase 6 = Lv 20 transforms. (2) `_pc_has_ancients_oath(sheet, min_level)` — multiclass-aware Paladin + "ancients" gate. (3) `_NATURES_WRATH_SAVE_ABILITIES = {"STR", "DEX"}` valid set. (4) `/use_natures_wrath` — body `{character_id, target_combatant_id, save_ability, override?}`. Validates Ancients Paladin Lv 3+ + `sheet.resources` has a `channel-divinity` entry with `current >= 1` + Phase 4 action chip. Decrements CD counter, marks chip, computes spell save DC, broadcasts. v1 ships announce-only — the GM rolls the target's save + installs Restrained manually. (5) Wiki surfacing per the doc-discovery rule: allowlist + landing-page row + on-disk index + harness smoke + `test_wiki_home_renders` assertion. Sir Caelan Lightbringer (Paladin Devotion Lv 8 default, CHA 16) is the demo fixture; tests PATCH his subclass to "Oath of the Ancients" + seed `channel-divinity` resource (1/1). Expected DC = 14 (8 + prof 3 + CHA +3). One new harness test file with 5 tests + 1 wiki smoke test.
+
+### Added
+- `docs/plans/paladin-oaths.md` — design plan freezing the 6-phase / 5-oath roadmap.
+- `_pc_has_ancients_oath(sheet, min_level)` helper gate.
+- `_NATURES_WRATH_SAVE_ABILITIES = {"STR", "DEX"}` valid set.
+- `/api/campaign/{cid}/use_natures_wrath` endpoint.
+- `_DOC_ALLOWLIST["plan-paladin-oaths"]` in `wiki_routes.py`.
+- "Paladin oaths (non-Devotion)" row in `wiki.html` Design plans table.
+- "Paladin oaths (non-Devotion)" row in `docs/wiki/README.md` Design plans table.
+- `tests/harness/test_natures_wrath.py` — 5 tests.
+- `test_wiki_doc_serves_paladin_oaths_plan` in `test_wiki.py`.
+- `test_wiki_home_renders` now also asserts the paladin-oaths plan link.
+
+### Notes
+- **PATCH bump** — 1 plan doc + 1 helper + 1 endpoint + 1 valid set + 5 regression tests + wiki surfacing. No schema change.
+- **First H.2 ship.** With H.1 substantially complete (v2.99.234–244, 11 non-Life domains), H.2 (non-Devotion oaths, 5 remaining oaths) is the next H block on the road to 3.0.0.
+- **CD as resource.** Mirrors the Cleric H.1 endpoints' resource-decrement pattern, but routes through `channel-divinity` (already curated on the Paladin sheet) rather than a per-feature resource. The `subclass_slug` on the resource entry is informational; the gate is on `sheet.subclass`.
+- **5 oaths to go.** Per the plan doc Phase 3 lists Vengeance / Conquest / Redemption / Glory at one commit each; Phase 2 (Ancients Turn the Faithless) is a sibling CD for the same oath.
+- **61 ships this session.**
+- **Total harness count: 1312** (was 1306 in v2.99.244; +5 new natures-wrath + 1 new wiki test = 6 new).
+
+---
+
 ## [2.99.244] - 2026-06-04 — "The Court's Decree" — Order Domain Cleric Voice of Authority (Phase H.1 ELEVENTH — H.1 substantially complete)
 
 **Schema version:** 66
