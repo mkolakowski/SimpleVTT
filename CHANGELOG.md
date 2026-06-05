@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.313] - 2026-06-05 — "The Wood-Wisdom Whisper" — Land Druid Bonus Cantrip (Lv 2+) — E.4 Druid subclass batch opener
+
+**Schema version:** 66
+**Commit summary:** **E.4 Druid subclass batch opener — Land Druid Lv 2+ Bonus Cantrip.** First ship in the new Druid Circle subclass depth pass. RAW PHB p.68: +1 druid cantrip of your choice.
+**Description:** Adds `_druid_level_from_sheet` + `_pc_has_land_druid` helpers. One endpoint. `/use_bonus_cantrip` — body `{character_id, cantrip_name?, override?}`. Validates Land Druid Lv 2+. No chip — passive list addition. Broadcasts `feature_used` with `source: bonus-cantrip` + `added_cantrip_count: 1`. v1 announce-only — actual cantrip addition via existing spellcasting flow; this endpoint declares which cantrip was selected. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_bonus_cantrip` endpoint.
+- `_druid_level_from_sheet` helper.
+- `_pc_has_land_druid` helper.
+- `tests/harness/test_bonus_cantrip.py` — 4 tests.
+
+### Notes
+- **E.4 Druid Circle batch opened.** 1 of ~8 Druid subclasses shipped (Land). Remaining first-features: Moon (Combat Wild Shape — partially covered by existing Wild Shape flow), Shepherd (TCE), Spores (TCE), Stars (TCE), Wildfire (TCE), Dreams (XGE), Spores (TCE), etc.
+- **129 ships this session.**
+- **Total harness count: 1545** (was 1541 in v2.99.312; +4 new tests).
+
+---
+
 ## [2.99.312] - 2026-06-05 — "The Borrowed Skill" — Phantom Rogue Whispers of the Dead (Lv 3+, TCE) — 🎉 CLOSES E.3 Rogue batch (8/8)
 
 **Schema version:** 66

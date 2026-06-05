@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1541 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.312, 2026-06-05).
+**Total tests:** 1545 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.313, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -829,6 +829,16 @@ v2.99.312 — Phantom Rogue (TCE p.61) Whispers of the Dead Lv 3+ (E.3 Rogue bat
 | `test_use_wd_default_prof` | Missing `proficiency_name` → fallback string with "unspecified". |
 | `test_use_wd_wrong_subclass` | Default Pip (Thief) → 409. |
 | `test_use_wd_level_gate` | Phantom at Lv 2 → 409. |
+
+### `test_bonus_cantrip.py`
+v2.99.313 — Land Druid (PHB p.68) Bonus Cantrip Lv 2+ (E.4 Druid subclass batch opener). +1 druid cantrip of your choice. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_bc_happy_lv5` | PATCH Mira → Land Lv 5 with "Shillelagh" → `cantrip_name == "Shillelagh"`, `added_cantrip_count == 1`, broadcast (source `bonus-cantrip`). |
+| `test_use_bc_default_name` | Missing `cantrip_name` → fallback string with "unspecified". |
+| `test_use_bc_wrong_subclass` | Default Mira (Moon) → 409. |
+| `test_use_bc_level_gate` | Land at Lv 1 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
