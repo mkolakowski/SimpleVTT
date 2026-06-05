@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.314] - 2026-06-05 — "Meditation Under Leaves" — Land Druid Natural Recovery (Lv 2+)
+
+**Schema version:** 66
+**Commit summary:** **E.4 Druid subclass batch — Land Druid Lv 2+ Natural Recovery.** Second Land Druid feature shipped. RAW PHB p.68: during a short rest, recover spell slots totaling ceil(druid level / 2) levels (max slot level 5). Once per long rest.
+**Description:** One endpoint. `/use_natural_recovery` — body `{character_id, override?}`. Validates Land Druid Lv 2+. Auto-bootstraps `natural-recovery` resource (max=1, reset=long). Computes `recoverable_level_pool = (druid_lv + 1) // 2`. Decrements counter, broadcasts. v1 announce-only — actual spell-slot refund is GM-tracked. One new harness test file with 5 tests including long-rest refill cycle.
+
+### Added
+- `/api/campaign/{cid}/use_natural_recovery` endpoint.
+- `tests/harness/test_natural_recovery.py` — 5 tests.
+
+### Notes
+- **E.4 Druid batch progress:** Land subclass fully covered (Bonus Cantrip + Natural Recovery), more to come on other Druid Circles.
+- **130 ships this session.**
+- **Total harness count: 1550** (was 1545 in v2.99.313; +5 new tests).
+
+---
+
 ## [2.99.313] - 2026-06-05 — "The Wood-Wisdom Whisper" — Land Druid Bonus Cantrip (Lv 2+) — E.4 Druid subclass batch opener
 
 **Schema version:** 66

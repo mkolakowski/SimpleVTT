@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1545 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.313, 2026-06-05).
+**Total tests:** 1550 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.314, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -839,6 +839,17 @@ v2.99.313 — Land Druid (PHB p.68) Bonus Cantrip Lv 2+ (E.4 Druid subclass batc
 | `test_use_bc_default_name` | Missing `cantrip_name` → fallback string with "unspecified". |
 | `test_use_bc_wrong_subclass` | Default Mira (Moon) → 409. |
 | `test_use_bc_level_gate` | Land at Lv 1 → 409. |
+
+### `test_natural_recovery.py`
+v2.99.314 — Land Druid (PHB p.68) Natural Recovery Lv 2+ (E.4 Druid batch). During short rest, recover spell slots totaling ceil(druid level / 2) levels (max Lv 5). Once per long rest. Auto-bootstraps `natural-recovery` resource. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_nr_happy_lv5` | PATCH Mira → Land Lv 5 → `recoverable_level_pool == 3`, `max_slot_level == 5`, broadcast (source `natural-recovery`). |
+| `test_use_nr_wrong_subclass` | Default Mira (Moon) → 409. |
+| `test_use_nr_level_gate` | Land at Lv 1 → 409. |
+| `test_use_nr_out_of_uses` | Back-to-back → 409 `no_uses_left`. |
+| `test_use_nr_long_rest_refills` | Use → long rest → use again → 200. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

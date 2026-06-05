@@ -47521,6 +47521,147 @@ async def use_bonus_cantrip(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_natural_recovery")
+async def use_natural_recovery(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.314 — Phase E.4 Druid subclass batch (Land Druid
+    Lv 2+) of the v2.99.193 phased completion plan. Natural
+    Recovery (Land Druid Lv 2+, PHB p.68): "During a short
+    rest, you choose expended spell slots to recover. The
+    spell slots can have a combined level that is equal to
+    or less than half your druid level (rounded up), and none
+    of the slots can be 6th level or higher. You can't use
+    this feature again until you finish a long rest."
+
+    Body: ``{character_id, override?}``. No chip — happens
+    during short rest. Auto-bootstraps a `natural-recovery`
+    resource (max=1, reset=long). Computes recoverable pool =
+    ceil(druid_lv / 2). v1 announce-only — actual spell-slot
+    refund is GM-tracked (or follow-up sheet patch).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Druid character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_land_druid(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "land druid lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _druid_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    nr_row = None
+    nr_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "natural-recovery":
+            nr_row = dict(r); nr_idx = i; break
+    if nr_row is None:
+        nr_row = {
+            "key": "natural-recovery",
+            "label": "Natural Recovery",
+            "current": 1, "max": 1, "reset": "long",
+        }
+        nr_idx = len(resources)
+        resources.append(nr_row)
+    nr_cur = int(nr_row.get("current") or 0)
+    nr_max = int(nr_row.get("max") or 1)
+    if nr_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Natural Recovery",
+            "current": nr_cur, "max": nr_max,
+        })
+
+    nr_row["current"] = nr_cur - 1
+    resources[nr_idx] = nr_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    druid_lv = _druid_level_from_sheet(sheet)
+    recoverable_level_pool = (druid_lv + 1) // 2  # ceil(druid_lv / 2)
+    max_slot_level = 5
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "natural-recovery",
+            "current": nr_cur - 1, "max": nr_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌿 Natural Recovery — recover spell-slot levels "
+                f"(pool {recoverable_level_pool}, max Lv 5)"
+            ),
+            "feature_desc": (
+                f"{char.name} meditates during a short rest and "
+                f"recovers spell slots totaling up to "
+                f"{recoverable_level_pool} levels (none Lv 6+). "
+                f"(Land Druid Lv 2+ class feature; once per long "
+                f"rest.)"
+            ),
+            "source": "natural-recovery",
+            "recoverable_level_pool": recoverable_level_pool,
+            "max_slot_level": max_slot_level,
+            "uses_remaining": nr_cur - 1,
+            "druid_level": druid_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "natural-recovery",
+        "recoverable_level_pool": recoverable_level_pool,
+        "max_slot_level": max_slot_level,
+        "uses_remaining": nr_cur - 1,
+        "max_uses": nr_max,
+        "druid_level": druid_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
