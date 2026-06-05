@@ -25469,6 +25469,36 @@ def _pc_has_thief_features(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_peace_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.243 — RAW Peace Domain features (Cleric, TCE p.40):
+    Emboldening Bond + Implement of Peace (Lv 1), Channel
+    Divinity: Balm of Peace (Lv 2 — curated), Protective Bond
+    (Lv 6 — reaction-teleport), Potent Spellcasting (Lv 8 —
+    passive cantrip uplift), Expansive Bond (Lv 17 — bond range
+    extends to 60 ft + half resistance).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "peace" + meets `min_level` (multiclass-aware).
+    Gates the Peace Domain endpoints.
+
+    Phase H.1 tenth non-Life Cleric domain to ship.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "peace" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_twilight_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.242 — RAW Twilight Domain features (Cleric, TCE
     p.41): Eyes of Night + Vigilant Blessing (Lv 1), Channel
@@ -39156,6 +39186,182 @@ async def use_vigilant_blessing(
         "target_combatant_id": target_combatant_id,
         "target_char_id": target_char_id,
         "is_self": is_self,
+        "buff_installed": True,
+        "over_budget": was_used,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_emboldening_bond")
+async def use_emboldening_bond(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.243 — Phase H.1 tenth non-Life Cleric domain of the
+    v2.99.193 phased completion plan. Emboldening Bond (Peace
+    Domain Cleric Lv 1+, TCE p.40): "You can use your action to
+    forge an empowering bond among people who are at peace with
+    one another... The total number of creatures who can be
+    bonded by this feature at one time equals your proficiency
+    bonus. While bonded creatures are within 30 feet of one
+    another, they can each roll a d4 whenever they make an
+    ability check, attack roll, or saving throw."
+
+    Body: ``{character_id, target_combatant_ids: [...], override?}``.
+
+    Validates Peace Cleric Lv 1+ + target list non-empty + count
+    <= sheet.proficiency_bonus + each target exists in active
+    battle + Phase 4 action chip. Installs `emboldening-bond-
+    active` buff on each target with `effects.bonus_d4: True` +
+    600-round duration (1 hour). Marks chip, broadcasts.
+
+    The "while within 30 ft of one another" range check is filed
+    (no automatic enforcement); RAW the 1-minute ritual to forge
+    the bond is also dropped — v1 ships as a single action for
+    in-play utility.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_ids = body.get("target_combatant_ids") or []
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not isinstance(target_ids, list) or len(target_ids) < 1:
+        raise HTTPException(
+            400,
+            "target_combatant_ids must be a non-empty list",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_peace_domain(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "peace domain cleric lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    if len(target_ids) > prof:
+        return JSONResponse(status_code=409, content={
+            "error": "too_many_targets",
+            "max": prof,
+            "got": len(target_ids),
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    cb_by_id = {
+        c.get("id"): c for c in (state.get("combatants") or [])
+    }
+    bonded_char_ids: list[int] = []
+    bonded_names: list[str] = []
+    for tcid in target_ids:
+        tcid = str(tcid).strip()
+        cb = cb_by_id.get(tcid)
+        if not cb or cb.get("char_id") is None:
+            return JSONResponse(status_code=404, content={
+                "error": "target_not_in_battle",
+                "target_combatant_id": tcid,
+            })
+        bonded_char_ids.append(int(cb["char_id"]))
+        bonded_names.append(cb.get("name") or "")
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "emboldening-bond",
+            "label": "Emboldening Bond",
+            "strict": strict,
+        })
+
+    eb_template = {
+        "key": "emboldening-bond-active",
+        "name": "Emboldening Bond — +1d4 to rolls",
+        "icon": "🕊️",
+        "duration_rounds": 600,
+        "duration_max": 600,
+        "concentration": False,
+        "source": "emboldening-bond",
+        "source_char_id": char.id,
+        "effects": {
+            "bonus_d4": True,
+            "while_within_ft": 30,
+        },
+        "desc": (
+            "While within 30 ft of another bonded creature, add "
+            "1d4 to attack rolls, ability checks, and (via "
+            "reaction) saving throws."
+        ),
+    }
+    for tcid in bonded_char_ids:
+        eb_buff = dict(eb_template)
+        await _install_buff(campaign_id, tcid, eb_buff)
+        _mirror_buffs_to_sheet(db, tcid, _get_buffs(campaign_id, tcid))
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    names_pretty = ", ".join(n for n in bonded_names if n) or "the bonded creatures"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🕊️ Emboldening Bond — {len(bonded_char_ids)} bonded"
+            ),
+            "feature_desc": (
+                f"{char.name} forges an Emboldening Bond among "
+                f"{names_pretty}. Within 30 ft of one another, "
+                f"each can add 1d4 to one attack/check/save. "
+                f"Lasts 1 hour or until recast. (Peace Domain "
+                f"Cleric Lv 1+ class feature.)"
+            ),
+            "source": "emboldening-bond",
+            "target_combatant_ids": [str(t) for t in target_ids],
+            "bonded_char_ids": bonded_char_ids,
+            "bonded_names": bonded_names,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "emboldening-bond",
+        "bonded_char_ids": bonded_char_ids,
+        "bonded_names": bonded_names,
+        "max_allowed": prof,
         "buff_installed": True,
         "over_budget": was_used,
     }

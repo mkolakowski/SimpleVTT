@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.243] - 2026-06-04 — "Hands Across the Circle" — Peace Domain Cleric Emboldening Bond (Phase H.1 tenth domain)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 tenth non-Life Cleric domain of the v2.99.193 phased completion plan.** RAW TCE p.40: Peace Cleric Lv 1+ action — forge a magical bond among up to prof-bonus creatures (incl self). While within 30 ft of one another, each can add 1d4 to attack/check/save. Lasts 1 hour.
+**Description:** One helper + one endpoint. (1) `_pc_has_peace_domain(sheet, min_level)` — multiclass-aware. (2) `/use_emboldening_bond` — body `{character_id, target_combatant_ids: [...], override?}`. Validates Peace Cleric Lv 1+ + non-empty target list + `len(targets) <= sheet.proficiency_bonus` + each target in active battle + Phase 4 action chip. Installs `emboldening-bond-active` buff on each target (`effects.bonus_d4: True`, `while_within_ft: 30`, 600-round duration). Marks chip, broadcasts. The 30-ft proximity check is filed (no auto-enforcement); the 1-minute ritual is dropped for in-play utility. Brother Tavik Stonebrow (Lv 8, prof +3) is the demo fixture. One new harness test file with 4 tests.
+
+### Added
+- `_pc_has_peace_domain(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_emboldening_bond` endpoint.
+- `tests/harness/test_emboldening_bond.py` — 4 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 4 regression tests. No schema change.
+- **First multi-target buff installer in the Cleric H.1 series.** Loops over `target_combatant_ids`, installs the same buff template on each via `_install_buff`. Mirrors the v2.97.31 _SPELL_BUFF_MAP multi-target install pattern.
+- **Proficiency cap.** RAW: "The total number of creatures who can be bonded by this feature at one time equals your proficiency bonus." Tavik prof +3 → max 3. The 409 `too_many_targets` test exercises the cap.
+- **30-ft proximity filed.** The buff's `effects.while_within_ft: 30` is descriptive; the v2.99.214 /roll consumer doesn't yet read it. v1 announces the rule; future commit can gate the +1d4 on a token-distance check.
+- **Phase H.1 progress: 10 of 11 domains have first features shipped.** Remaining: Order, Death. Two ships from H.1 complete.
+- **59 ships this session.**
+- **Total harness count: 1302** (was 1298 in v2.99.242).
+
+---
+
 ## [2.99.242] - 2026-06-04 — "The Dusk Sentry" — Twilight Domain Cleric Vigilant Blessing (Phase H.1 ninth domain)
 
 **Schema version:** 66
