@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.284] - 2026-06-05 — "The Returning Strike" — Vengeance Paladin Soul of Vengeance (H.2 deeper, Lv 15 reactive)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Vengeance Paladin Lv 15+ Soul of Vengeance.** RAW PHB p.88: when a creature under your Vow of Enmity makes an attack, you can use your reaction to make a melee weapon attack against that creature if in range.
+**Description:** One endpoint. `/use_soul_of_vengeance` — body `{character_id, override?}`. Validates Vengeance Paladin Lv 15+ + reaction-chip Phase 4 gate. Marks reaction chip, broadcasts `feature_used` with `source: soul-of-vengeance`. v1 announce-only — the actual reactive melee weapon attack is a follow-up `/attack` call by the player. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_soul_of_vengeance` endpoint.
+- `tests/harness/test_soul_of_vengeance.py` — 3 tests.
+
+### Notes
+- **H.2 Lv 15 batch progress:** 2 of 5 oaths shipped at Lv 15 (Ancients, Vengeance). Remaining: Conquest Scornful Rebuke, Glory Glorious Defense, Redemption Protective Spirit.
+- **100 ships this session.** 💯
+- **Total harness count: 1444** (was 1441 in v2.99.283; +3 new tests).
+
+---
+
 ## [2.99.283] - 2026-06-05 — "The Refused Fall" — Ancients Paladin Undying Sentinel (H.2 deeper, Lv 15)
 
 **Schema version:** 66
