@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.253] - 2026-06-04 — "The Dread Riposte" — Battle Master Menacing Attack (Phase E.1 maneuver 3 of 16)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 3 of 16).** RAW PHB p.74: on hit, expend 1 superiority die; +die damage and target makes WIS save DC 8 + prof + max(STR, DEX) or be Frightened of attacker until end of attacker's next turn.
+**Description:** One endpoint mirroring Trip / Disarming Attack. `/use_menacing_attack` — body `{character_id, override?}`. Validates Battle Master Lv 3+ + `superiority-dice` resource current >= 1, decrements counter, rolls 1d<size>, computes DC (same Battle Master formula across maneuvers — 8 + prof + max(STR, DEX) mod), broadcasts. The save_ability field on the broadcast is now explicitly `"WIS"` to disambiguate from STR-save maneuvers (Trip target's choice STR/DEX, Disarming STR). v1 ships announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_menacing_attack` endpoint.
+- `tests/harness/test_menacing_attack.py` — 3 tests.
+
+### Notes
+- **PATCH bump** — 1 endpoint + 3 regression tests. No schema change.
+- **`save_ability` field added to broadcast.** Trip/Disarming broadcasts only carried `save_dc`; Menacing adds `save_ability: "WIS"` so any future client that distinguishes save types can render the right label. Trip+Disarming will get a backfill in a future doc-only commit.
+- **Maneuvers shipped: 3 of 16.** Trip + Disarming + Menacing. 13 remaining: Commander's Strike, Distracting Strike, Evasive Footwork, Feinting Attack, Goading Attack, Lunging Attack, Maneuvering Attack, Parry, Precision Attack, Pushing Attack, Rally, Riposte, Sweeping Attack.
+- **69 ships this session.**
+- **Total harness count: 1345** (was 1342 in v2.99.252).
+
+---
+
 ## [2.99.252] - 2026-06-04 — "The Falling Blade" — Battle Master Disarming Attack (Phase E.1 maneuver 2 of 16)
 
 **Schema version:** 66
