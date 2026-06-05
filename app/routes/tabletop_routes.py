@@ -43096,6 +43096,107 @@ async def use_vow_of_enmity(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_aura_of_conquest")
+async def use_aura_of_conquest(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.273 — Phase H.2 depth (Conquest Paladin Lv 7+) of
+    the v2.99.193 phased completion plan. Aura of Conquest
+    (Conquest Paladin Lv 7+, XGE p.37): "Starting at 7th level,
+    you constantly emanate a menacing aura while you're not
+    incapacitated. The aura extends 10 feet from you in every
+    direction, but not through total cover. If a creature is
+    frightened of you, its speed is reduced to 0 while in the
+    aura, and that creature takes psychic damage equal to half
+    your paladin level if it starts its turn there. At 18th
+    level, the range of this aura increases to 30 feet."
+
+    Body: ``{character_id, override?}``. No chip cost — passive
+    aura.
+
+    Note: Conquest Paladin RAW (XGE) has only Conquering
+    Presence as a Lv 3 CD; there is no "Guided Strike" sibling
+    CD per RAW. Aura of Conquest is the canonical Conquest
+    depth-feature ship.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_conquest_oath(sheet, 7):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "conquest paladin lv 7+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+    psychic_damage = pal_lv // 2
+    radius_ft = 30 if pal_lv >= 18 else 10
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"👑 Aura of Conquest — {radius_ft} ft, "
+                f"{psychic_damage} psychic / turn-start vs frightened"
+            ),
+            "feature_desc": (
+                f"{char.name} emanates an Aura of Conquest "
+                f"({radius_ft} ft radius). Frightened creatures "
+                f"in the aura: speed reduced to 0 + take "
+                f"{psychic_damage} psychic damage at turn start. "
+                f"(Conquest Paladin Lv 7+ class feature; "
+                f"passive — no action required.)"
+            ),
+            "source": "aura-of-conquest",
+            "radius_ft": radius_ft,
+            "psychic_damage": psychic_damage,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "aura-of-conquest",
+        "radius_ft": radius_ft,
+        "psychic_damage": psychic_damage,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

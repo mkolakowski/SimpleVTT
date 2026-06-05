@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.273] - 2026-06-04 — "The Tyrant's Field" — Conquest Paladin Aura of Conquest passive (H.2 depth)
+
+**Schema version:** 66
+**Commit summary:** **H.2 depth ship — Conquest Paladin Lv 7+ Aura of Conquest.** RAW XGE p.37: 10 ft aura (30 ft at Lv 18+); frightened creatures in aura have speed reduced to 0 + take half-paladin-level psychic damage at turn start.
+**Description:** One endpoint. `/use_aura_of_conquest` — body `{character_id, override?}`. Validates Conquest Paladin Lv 7+. Computes `psychic_damage = paladin_level // 2` and `radius_ft = 30 if level >= 18 else 10`. Broadcasts. v1 ships announce-only — the actual aura effect (speed-to-0 + turn-start psychic damage) is GM-tracked. **Per RAW XGE, Conquest has only Conquering Presence as a Lv 3 CD; there is no "Guided Strike" sibling CD per RAW.** Aura of Conquest is the canonical Conquest depth-feature ship at Lv 7. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_aura_of_conquest` endpoint.
+- `tests/harness/test_aura_of_conquest.py` — 4 tests.
+
+### Notes
+- **RAW CD-options count correction.** The picker option "Conquest Paladin sibling CD — Guided Strike" was a docs-error in the previous turn's picker text; RAW Conquest has only Conquering Presence as a Lv 3 CD. The ship pivoted to Aura of Conquest (Lv 7 aura), which is the actual canonical Conquest depth-feature next ship. Future picker text will be checked against the source before going out.
+- **H.2 depth progress:** 1 oath has Phase 2 sibling CD shipped (Ancients); 1 oath has a Lv 7 aura shipped (Conquest, this commit). Remaining Lv 7 auras: Ancients Aura of Warding, Vengeance Relentless Avenger, Redemption Aura of the Guardian, Glory Aura of Alacrity.
+- **89 ships this session.**
+- **Total harness count: 1408** (was 1404 in v2.99.272).
+
+---
+
 ## [2.99.272] - 2026-06-04 — "The Holy Symbol's Glare" — Ancients Paladin Turn the Faithless CD (H.2 Phase 2)
 
 **Schema version:** 66

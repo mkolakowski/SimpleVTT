@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1404 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.272, 2026-06-04).
+**Total tests:** 1408 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.273, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -477,6 +477,16 @@ v2.99.248 — Oath of Glory (Paladin subclass, TCE p.55) Inspiring Smite bonus-a
 | `test_use_is_empty_list` | Empty target list → 400. |
 | `test_use_is_out_of_cd` | `channel-divinity.current = 0` → 409 `out_of_uses`. |
 | `test_use_is_wrong_subclass` | Default Caelan (Devotion) → 409 `wrong_subclass_or_level`. |
+
+### `test_aura_of_conquest.py`
+v2.99.273 — Conquest Paladin (XGE p.37) Aura of Conquest passive (H.2 depth). Lv 7+ aura that reduces frightened creatures' speed to 0 + deals half-paladin-level psychic at turn start. Lv 18+ radius bumps 10 → 30 ft. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_aoc_happy_lv7` | Lv 7 Caelan → `radius_ft == 10`, `psychic_damage == 3`, broadcast (source `aura-of-conquest`). |
+| `test_use_aoc_lv18_radius_upgrade` | Lv 18 Caelan → `radius_ft == 30`, `psychic_damage == 9`. |
+| `test_use_aoc_wrong_subclass` | Default Caelan (Devotion) → 409. |
+| `test_use_aoc_level_gate` | Conquest at Lv 6 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
