@@ -45402,6 +45402,93 @@ async def use_supreme_healing(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_avatar_of_battle")
+async def use_avatar_of_battle(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.296 — Phase H.1 deeper (War Domain Cleric Lv 17+)
+    of the v2.99.193 phased completion plan. Avatar of Battle
+    (War Domain Cleric Lv 17+, PHB p.63): "At 17th level, you
+    gain resistance to bludgeoning, piercing, and slashing
+    damage from nonmagical attacks."
+
+    Body: ``{character_id, override?}``. No chip cost —
+    passive permanent. The endpoint serves as an announce
+    trigger. v1 announce-only — the actual resistance vs
+    nonmagical BPS damage is GM-tracked (a follow-up could
+    wire this into the /apply_damage pipeline).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_war_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "war domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "⚔️ Avatar of Battle — resist nonmagical BPS",
+            "feature_desc": (
+                f"{char.name} has resistance to bludgeoning, "
+                f"piercing, and slashing damage from nonmagical "
+                f"attacks. (War Domain Cleric Lv 17+ class feature; "
+                f"passive permanent.)"
+            ),
+            "source": "avatar-of-battle",
+            "resistance_types": ["bludgeoning", "piercing", "slashing"],
+            "nonmagical_only": True,
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "avatar-of-battle",
+        "resistance_types": ["bludgeoning", "piercing", "slashing"],
+        "nonmagical_only": True,
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

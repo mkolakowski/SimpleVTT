@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.296] - 2026-06-05 — "The Steel-Skinned Saint" — War Domain Cleric Avatar of Battle (H.1 deeper, Lv 17 passive)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — War Domain Cleric Lv 17+ Avatar of Battle.** RAW PHB p.63: resistance to bludgeoning, piercing, and slashing damage from nonmagical attacks.
+**Description:** One endpoint. `/use_avatar_of_battle` — body `{character_id, override?}`. Validates War Domain Cleric Lv 17+. No chip — passive permanent. Broadcasts `feature_used` with `source: avatar-of-battle` + `resistance_types: ["bludgeoning", "piercing", "slashing"]` + `nonmagical_only: true`. v1 announce-only — the actual resistance vs nonmagical BPS damage is GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_avatar_of_battle` endpoint.
+- `tests/harness/test_avatar_of_battle.py` — 3 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 4 of 11 domains shipped at Lv 17 (Light, Tempest, Life, War).
+- **112 ships this session.**
+- **Total harness count: 1485** (was 1482 in v2.99.295; +3 new tests).
+
+---
+
 ## [2.99.295] - 2026-06-05 — "The Healer's Apex" — Life Domain Cleric Supreme Healing (H.1 deeper, Lv 17 passive)
 
 **Schema version:** 66
