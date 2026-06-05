@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.285] - 2026-06-05 — "The Psychic Backhand" — Conquest Paladin Scornful Rebuke (H.2 deeper, Lv 15 passive)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Conquest Paladin Lv 15+ Scornful Rebuke.** RAW XGE p.37: when a creature hits you with an attack, they take psychic damage equal to your CHA modifier (minimum 1) if you're not incapacitated.
+**Description:** One endpoint. `/use_scornful_rebuke` — body `{character_id, override?}`. Validates Conquest Paladin Lv 15+. Computes `psychic_damage = max(1, CHA_mod)`. Broadcasts `feature_used` with `source: scornful-rebuke`. No chip — passive auto-trigger. v1 announce-only — the actual psychic-damage application to the attacker is GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_scornful_rebuke` endpoint.
+- `tests/harness/test_scornful_rebuke.py` — 3 tests.
+
+### Notes
+- **H.2 Lv 15 batch progress:** 3 of 5 oaths shipped at Lv 15 (Ancients Undying Sentinel, Vengeance Soul of Vengeance, Conquest Scornful Rebuke). Remaining: Glory Glorious Defense, Redemption Protective Spirit.
+- **101 ships this session.**
+- **Total harness count: 1447** (was 1444 in v2.99.284; +3 new tests).
+
+---
+
 ## [2.99.284] - 2026-06-05 — "The Returning Strike" — Vengeance Paladin Soul of Vengeance (H.2 deeper, Lv 15 reactive)
 
 **Schema version:** 66

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1444 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.284, 2026-06-05).
+**Total tests:** 1447 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.285, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -564,6 +564,15 @@ v2.99.284 — Vengeance Paladin (PHB p.88) Soul of Vengeance reactive melee (H.2
 | `test_use_sov_happy_lv15` | Lv 15 Caelan → 200, broadcast (source `soul-of-vengeance`). |
 | `test_use_sov_wrong_subclass` | Default Caelan (Devotion) → 409. |
 | `test_use_sov_level_gate` | Vengeance at Lv 14 → 409. |
+
+### `test_scornful_rebuke.py`
+v2.99.285 — Conquest Paladin (XGE p.37) Scornful Rebuke passive psychic counter (H.2 deeper, Lv 15). When a creature hits you with an attack, they take psychic damage = max(1, CHA mod). No chip — passive auto-trigger. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_sr_happy_lv15` | Lv 15 Caelan (CHA 16) → `psychic_damage == 3`, broadcast (source `scornful-rebuke`). |
+| `test_use_sr_wrong_subclass` | Default Caelan (Devotion) → 409. |
+| `test_use_sr_level_gate` | Conquest at Lv 14 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
