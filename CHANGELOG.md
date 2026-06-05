@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.261] - 2026-06-04 — "The Steady Shield" — Battle Master Parry (Phase E.1 maneuver 11 of 16, first defensive)
+
+**Schema version:** 66
+**Commit summary:** **Phase E.1 Phase 3 (maneuver 11 of 16) — first defensive maneuver.** RAW PHB p.74: reaction when damaged by melee — reduce damage by die + DEX mod.
+**Description:** One endpoint. `/use_parry` — body `{character_id, override?}`. Reaction-chip gated. Rolls 1d<size>, computes `damage_reduction` = die + DEX mod clamped at 0. Broadcast carries `damage_reduction` + `die_roll` + `dex_mod`. v1 announce-only — damage application happens externally. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_parry` endpoint.
+- `tests/harness/test_parry.py` — 3 tests.
+
+### Notes
+- **Maneuvers shipped: 11 of 16.** 5 remaining: Commander's Strike, Distracting Strike, Evasive Footwork, Maneuvering Attack, Riposte.
+- **77 ships this session.**
+- **Total harness count: 1369** (was 1366 in v2.99.260).
+
+---
+
 ## [2.99.260] - 2026-06-04 — "The Rallying Word" — Battle Master Rally (Phase E.1 maneuver 10 of 16)
 
 **Schema version:** 66
