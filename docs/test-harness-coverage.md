@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1556 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.315, 2026-06-05).
+**Total tests:** 1559 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.316, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -862,6 +862,15 @@ v2.99.315 — Shepherd Druid (XGE p.24) Spirit Totem Lv 2+ (E.4 Druid batch). Bo
 | `test_use_st_wrong_subclass` | Default Mira (Moon) → 409. |
 | `test_use_st_level_gate` | Shepherd at Lv 1 → 409. |
 | `test_use_st_out_of_uses` | Back-to-back → 409 `no_uses_left`. |
+
+### `test_star_map.py`
+v2.99.316 — Stars Druid (TCE p.37) Star Map Lv 2+ (E.4 Druid batch). Star chart focus + Guidance & Guiding Bolt always prepared. Guiding Bolt castable WIS_mod times (min 1) per long rest without slot. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_sm_happy_lv5` | PATCH Mira → Stars Lv 5 (WIS 17 mod 3) → `free_guiding_bolt_uses == 3`, always_prepared includes Guidance + Guiding Bolt, broadcast (source `star-map`). |
+| `test_use_sm_wrong_subclass` | Default Mira (Moon) → 409. |
+| `test_use_sm_level_gate` | Stars at Lv 1 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

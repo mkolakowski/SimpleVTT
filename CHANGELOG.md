@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.316] - 2026-06-05 — "The Astronomer's Eye" — Stars Druid Star Map (Lv 2+, TCE)
+
+**Schema version:** 66
+**Commit summary:** **E.4 Druid subclass batch — Stars Druid Lv 2+ Star Map (TCE).** Third Druid subclass shipped. RAW TCE p.37: star chart spellcasting focus. Guidance + Guiding Bolt always prepared. Guiding Bolt is Lv 1 druid spell, castable WIS_mod times (min 1) per long rest without slot.
+**Description:** Adds `_pc_has_stars_druid` helper. One endpoint. `/use_star_map` — body `{character_id, override?}`. Validates Stars Druid Lv 2+. No chip — passive declaration. Broadcasts `feature_used` with `source: star-map` + `free_guiding_bolt_uses: max(1, WIS_mod)` + `always_prepared: ["Guidance", "Guiding Bolt"]`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_star_map` endpoint.
+- `_pc_has_stars_druid` helper.
+- `tests/harness/test_star_map.py` — 3 tests.
+
+### Notes
+- **E.4 Druid batch progress:** 3 of ~8 subclasses shipped (Land, Shepherd, Stars).
+- **132 ships this session.**
+- **Total harness count: 1559** (was 1556 in v2.99.315; +3 new tests).
+
+---
+
 ## [2.99.315] - 2026-06-05 — "The Summoner's Call" — Shepherd Druid Spirit Totem (Lv 2+, XGE)
 
 **Schema version:** 66

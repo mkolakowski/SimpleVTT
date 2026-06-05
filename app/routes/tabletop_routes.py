@@ -25985,6 +25985,30 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_stars_druid(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.316 — RAW Stars Druid (Druid, TCE p.37): Star
+    Map + Starry Form (Lv 2), Cosmic Omen (Lv 6), Twinkling
+    Constellations (Lv 10), Full of Stars (Lv 14).
+
+    Returns True when the PC is a Druid with subclass slug
+    containing "stars" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "druid":
+        has_druid = any(
+            (entry.get("class") or "").strip().lower() == "druid"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_druid:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "stars" not in subclass:
+        return False
+    return _druid_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_shepherd_druid(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.315 — RAW Shepherd Druid (Druid, XGE p.24):
     Speech of the Woods + Spirit Totem (Lv 2), Mighty Summoner
@@ -47861,6 +47885,106 @@ async def use_spirit_totem(
         "unicorn_heal_bonus": unicorn_heal_bonus,
         "uses_remaining": st_cur - 1,
         "max_uses": st_max,
+        "druid_level": druid_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_star_map")
+async def use_star_map(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.316 — Phase E.4 Druid subclass batch (Stars
+    Druid Lv 2+, TCE) of the v2.99.193 phased completion plan.
+    Star Map (Stars Druid Lv 2+, TCE p.37): Star chart as
+    spellcasting focus. Guidance + Guiding Bolt always prepared
+    (don't count against prep limit). Guiding Bolt is a 1st-
+    level druid spell for you, and you can cast it without a
+    slot WIS_mod times per long rest (min 1).
+
+    Body: ``{character_id, override?}``. No chip — passive
+    declaration. Auto-bootstraps a `guiding-bolt-charges`
+    resource (max=WIS_mod, reset=long) if missing. v1
+    announce-only — the actual prepared-spell + free-cast
+    mechanics are GM-tracked via the existing spellcasting
+    flow.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Druid character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_stars_druid(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "stars druid lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _druid_level_from_sheet(sheet),
+        })
+
+    abilities = sheet.get("abilities") or {}
+    try:
+        wis_mod = (int(abilities.get("WIS") or 10) - 10) // 2
+    except (TypeError, ValueError):
+        wis_mod = 0
+    free_guiding_bolt_uses = max(1, wis_mod)
+    druid_lv = _druid_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌌 Star Map — Guidance + Guiding Bolt ({free_guiding_bolt_uses}/rest free)"
+            ),
+            "feature_desc": (
+                f"{char.name}'s star chart is a spellcasting focus. "
+                f"Guidance + Guiding Bolt are always prepared (don't "
+                f"count against prep limit). Guiding Bolt is a Lv 1 "
+                f"druid spell, castable {free_guiding_bolt_uses} "
+                f"times without a slot per long rest (= WIS mod, "
+                f"min 1). (Stars Druid Lv 2+ TCE class feature.)"
+            ),
+            "source": "star-map",
+            "free_guiding_bolt_uses": free_guiding_bolt_uses,
+            "always_prepared": ["Guidance", "Guiding Bolt"],
+            "druid_level": druid_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "star-map",
+        "free_guiding_bolt_uses": free_guiding_bolt_uses,
+        "always_prepared": ["Guidance", "Guiding Bolt"],
         "druid_level": druid_lv,
     }
 
