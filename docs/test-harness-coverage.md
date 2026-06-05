@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1530 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.309, 2026-06-05).
+**Total tests:** 1534 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.310, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -800,6 +800,16 @@ v2.99.309 — Scout Rogue (XGE p.46) Skirmisher Lv 3+ (E.3 Rogue batch). Reactio
 | `test_use_sk_happy_lv7` | PATCH Pip → Scout Lv 7 (halfling speed 25) → `bonus_move_ft == 12`, `no_oa == True`, broadcast (source `skirmisher`). |
 | `test_use_sk_wrong_subclass` | Default Pip (Thief) → 409. |
 | `test_use_sk_level_gate` | Scout at Lv 2 → 409. |
+
+### `test_insightful_fighting.py`
+v2.99.310 — Inquisitive Rogue (XGE p.45) Insightful Fighting Lv 3+ (E.3 Rogue batch). Bonus action Wis (Insight) vs target Cha (Deception). On win, Sneak Attack without advantage (still blocked by disadvantage) for 1 min or until used vs different target. Costs bonus chip. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_if_happy_lv7` | PATCH Pip → Inquisitive Lv 7 → `duration_minutes == 1`, broadcast (source `insightful-fighting`). |
+| `test_use_if_with_target` | Optional `target_combatant_id` passes through. |
+| `test_use_if_wrong_subclass` | Default Pip (Thief) → 409. |
+| `test_use_if_level_gate` | Inquisitive at Lv 2 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

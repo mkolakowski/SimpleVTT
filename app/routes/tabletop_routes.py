@@ -25963,6 +25963,31 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_inquisitive_subclass(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.310 — RAW Inquisitive features (Rogue, XGE p.45):
+    Ear for Deceit + Eye for Detail + Insightful Fighting (Lv 3),
+    Steady Eye (Lv 9), Unerring Eye (Lv 13), Eye for Weakness
+    (Lv 17).
+
+    Returns True when the PC is a Rogue with subclass slug
+    containing "inquisitive" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "rogue":
+        has_rogue = any(
+            (entry.get("class") or "").strip().lower() == "rogue"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_rogue:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "inquisitive" not in subclass:
+        return False
+    return _rogue_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_scout_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.309 — RAW Scout features (Rogue, XGE p.46):
     Skirmisher + Survivalist (Lv 3), Superior Mobility (Lv 9),
@@ -46973,6 +46998,124 @@ async def use_skirmisher(
         "bonus_move_ft": bonus_move_ft,
         "base_speed": base_speed,
         "no_oa": True,
+        "rogue_level": rogue_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_insightful_fighting")
+async def use_insightful_fighting(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.310 — Phase E.3 Rogue subclass batch (Inquisitive
+    Rogue Lv 3+) of the v2.99.193 phased completion plan.
+    Insightful Fighting (Inquisitive Rogue Lv 3+, XGE p.45):
+    "As a bonus action, you can make a Wisdom (Insight) check
+    against a creature you can see that isn't incapacitated,
+    contested by the target's Charisma (Deception) check. If
+    you succeed, you can use your Sneak Attack against that
+    target even if you don't have advantage on the attack roll,
+    but not if you have disadvantage on it. This benefit lasts
+    for 1 minute or until you successfully use this feature
+    against a different target."
+
+    Body: ``{character_id, target_combatant_id?, override?}``.
+    Costs a bonus chip. v1 announce-only — the actual
+    Insight-vs-Deception contest is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    target_combatant_id = body.get("target_combatant_id") or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Rogue character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_inquisitive_subclass(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "inquisitive rogue lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _rogue_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "insightful-fighting",
+            "label": "Insightful Fighting",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    rogue_lv = _rogue_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_text = (
+        f"combatant {target_combatant_id}"
+        if target_combatant_id else "the chosen target"
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🧐 Insightful Fighting — Insight vs Deception (Sneak Attack 1 min)"
+            ),
+            "feature_desc": (
+                f"{char.name} makes a Wisdom (Insight) check vs "
+                f"{target_text}'s Charisma (Deception). On a win, "
+                f"{char.name} can use Sneak Attack against this "
+                f"target without needing advantage (still blocked "
+                f"by disadvantage) for 1 minute or until used "
+                f"against a different target. (Inquisitive Rogue "
+                f"Lv 3+ class feature.)"
+            ),
+            "source": "insightful-fighting",
+            "target_combatant_id": target_combatant_id,
+            "duration_minutes": 1,
+            "rogue_level": rogue_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "insightful-fighting",
+        "target_combatant_id": target_combatant_id,
+        "duration_minutes": 1,
         "rogue_level": rogue_lv,
     }
 

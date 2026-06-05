@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.310] - 2026-06-05 — "The Reading Eye" — Inquisitive Rogue Insightful Fighting (Lv 3+)
+
+**Schema version:** 66
+**Commit summary:** **E.3 Rogue subclass batch — Inquisitive Rogue Lv 3+ Insightful Fighting.** RAW XGE p.45: bonus action Wis (Insight) vs target's Cha (Deception). On win, Sneak Attack without needing advantage (still blocked by disadvantage) for 1 min or until used vs different target.
+**Description:** Adds `_pc_has_inquisitive_subclass` helper. One endpoint. `/use_insightful_fighting` — body `{character_id, target_combatant_id?, override?}`. Validates Inquisitive Rogue Lv 3+ + bonus chip. Broadcasts `feature_used` with `source: insightful-fighting` + `duration_minutes: 1`. v1 announce-only. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_insightful_fighting` endpoint.
+- `_pc_has_inquisitive_subclass` helper.
+- `tests/harness/test_insightful_fighting.py` — 4 tests.
+
+### Notes
+- **E.3 Rogue batch progress:** 6 of 8 subclasses shipped (Thief, Assassin, Swashbuckler, Mastermind, Scout, Inquisitive). Remaining: Soulknife (TCE), Phantom (TCE). Arcane Trickster's spellcasting layer is covered via the existing spellcasting flow.
+- **126 ships this session.**
+- **Total harness count: 1534** (was 1530 in v2.99.309; +4 new tests).
+
+---
+
 ## [2.99.309] - 2026-06-05 — "The Sliding Shadow" — Scout Rogue Skirmisher (Lv 3+)
 
 **Schema version:** 66
