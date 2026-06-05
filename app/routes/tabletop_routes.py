@@ -43783,6 +43783,141 @@ async def use_aura_of_alacrity(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_undying_sentinel")
+async def use_undying_sentinel(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.283 — Phase H.2 depth (Ancients Paladin Lv 15+) of
+    the v2.99.193 phased completion plan. Undying Sentinel
+    (Ancients Paladin Lv 15+, PHB p.87): "Starting at 15th
+    level, when you are reduced to 0 hit points and are not
+    killed outright, you can choose to drop to 1 hit point
+    instead. Once you use this ability, you can't use it again
+    until you finish a long rest. Additionally, you suffer
+    none of the drawbacks of old age, and you can't be aged
+    magically."
+
+    Body: ``{character_id, override?}``. Once-per-long-rest.
+    Auto-bootstraps an `undying-sentinel` resource (max=1,
+    current=1, reset=long) if missing — the /rest long-rest
+    hook handles refill via the generic resource-refill loop.
+
+    v1 announce-only — the actual "drop to 1 HP instead of 0"
+    HP-mutation is GM-tracked (a follow-up could wire this into
+    the /apply_damage path to set HP to 1 instead of 0 when
+    Undying Sentinel uses remain).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_ancients_oath(sheet, 15):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "ancients paladin lv 15+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    us_row = None
+    us_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "undying-sentinel":
+            us_row = dict(r); us_idx = i; break
+    if us_row is None:
+        us_row = {
+            "key": "undying-sentinel",
+            "label": "Undying Sentinel",
+            "current": 1, "max": 1, "reset": "long",
+        }
+        us_idx = len(resources)
+        resources.append(us_row)
+    us_cur = int(us_row.get("current") or 0)
+    us_max = int(us_row.get("max") or 1)
+    if us_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Undying Sentinel",
+            "current": us_cur, "max": us_max,
+        })
+
+    us_row["current"] = us_cur - 1
+    resources[us_idx] = us_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "undying-sentinel",
+            "current": us_cur - 1, "max": us_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🪦 Undying Sentinel — drop to 1 HP, not 0",
+            "feature_desc": (
+                f"{char.name} refuses to fall — instead of being "
+                f"reduced to 0 HP, they drop to 1 HP. (Ancients "
+                f"Paladin Lv 15+ class feature; once per long rest.)"
+            ),
+            "source": "undying-sentinel",
+            "uses_remaining": us_cur - 1,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "undying-sentinel",
+        "uses_remaining": us_cur - 1,
+        "max_uses": us_max,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

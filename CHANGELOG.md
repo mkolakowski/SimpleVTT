@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.283] - 2026-06-05 — "The Refused Fall" — Ancients Paladin Undying Sentinel (H.2 deeper, Lv 15)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Ancients Paladin Lv 15+ Undying Sentinel. Opens the H.2 Lv 15 batch (1/5 oaths shipped at Lv 15).** RAW PHB p.87: once-per-long-rest; when reduced to 0 HP and not killed outright, drop to 1 HP instead. Also: no old-age drawbacks + no magical aging.
+**Description:** One endpoint. `/use_undying_sentinel` — body `{character_id, override?}`. Validates Ancients Paladin Lv 15+. Auto-bootstraps an `undying-sentinel` resource (max=1, current=1, reset=long) if missing — the existing `/rest` long-rest hook refills it via the generic resource-refill loop. Decrements counter, broadcasts `resource_update` + `feature_used`. v1 announce-only — the actual "drop to 1 HP instead of 0" HP-mutation hook into `/apply_damage` is filed as a follow-up. One new harness test file with 5 tests including a long-rest refill cycle.
+
+### Added
+- `/api/campaign/{cid}/use_undying_sentinel` endpoint.
+- `tests/harness/test_undying_sentinel.py` — 5 tests.
+
+### Notes
+- **H.2 deeper progress:** 1 of 5 oaths shipped at Lv 15 (Ancients). Remaining Lv 15: Vengeance Soul of Vengeance, Conquest Scornful Rebuke, Glory Glorious Defense, Redemption Protective Spirit.
+- **99 ships this session.**
+- **Total harness count: 1441** (was 1436 in v2.99.282; +5 new tests).
+
+---
+
 ## [2.99.282] - 2026-06-05 — "Quick Step, Long Stride" — Glory Paladin Aura of Alacrity (H.2 depth, Lv 7 speed aura — CLOSES the Lv 7 batch)
 
 **Schema version:** 66
