@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.271] - 2026-06-04 — "Two Domains, One Power" — Knowledge Domain Cleric Lv 8 Potent Spellcasting (H.1 depth, second domain)
+
+**Schema version:** 66
+**Commit summary:** **H.1 depth ship — second Lv 6/8/17 deep feature for an already-shipped Cleric domain.** Extends the v2.99.270 `/use_potent_spellcasting` endpoint to also accept Knowledge Domain Cleric Lv 8+. RAW Potent Spellcasting (Knowledge Domain Cleric Lv 8+, PHB p.59) is verbatim-identical to the Light Domain version — so one endpoint with an `OR` on the subclass gate covers both.
+**Description:** Single endpoint update — the gate now checks for `_pc_has_light_domain(sheet, 8) or _pc_has_knowledge_domain(sheet, 8)`. The 409 error string reads "light or knowledge domain cleric lv 8+" so the response is self-documenting. One new harness test added to the existing file (`test_use_ps_knowledge_lv8`) for the Knowledge subclass happy path; existing tests still pass unchanged.
+
+### Changed
+- `/use_potent_spellcasting` validation gate extended from `_pc_has_light_domain(sheet, 8)` to `_pc_has_light_domain(sheet, 8) or _pc_has_knowledge_domain(sheet, 8)`.
+- `tests/harness/test_potent_spellcasting.py` — added `test_use_ps_knowledge_lv8` happy path.
+
+### Notes
+- **PATCH bump** — single-line gate extension + one new test. No new endpoint.
+- **DRY across identical RAW.** When a feature has verbatim-identical RAW across multiple subclasses (Potent Spellcasting → Light + Knowledge; future: Divine Strike → Tempest + War + Forge + Grave; Aura of Warding → Ancients; etc.) the simpler ship is to extend the gate of an existing endpoint rather than duplicate the endpoint.
+- **H.1 depth progress: 2 of 11 domains have a Lv 6/8/17 feature shipped** (Light + Knowledge, both via the same endpoint). 9 more domains × Lv 6/8/17 = ~27 more features filed.
+- **87 ships this session.**
+- **Total harness count: 1399** (was 1398 in v2.99.270; +1 new test in the existing file).
+
+---
+
 ## [2.99.270] - 2026-06-04 — "The Light's Echo" — Light Domain Cleric Lv 8 Potent Spellcasting (H.1 depth first)
 
 **Schema version:** 66

@@ -40788,10 +40788,16 @@ async def use_potent_spellcasting(
         raise HTTPException(403, "Not your character")
 
     sheet = dict(char.sheet or {})
-    if not _pc_has_light_domain(sheet, 8):
+    # v2.99.271: extended to accept Knowledge Domain at Lv 8+
+    # too. RAW Potent Spellcasting is verbatim-identical for
+    # both subclasses, so a single endpoint handles both.
+    if not (
+        _pc_has_light_domain(sheet, 8)
+        or _pc_has_knowledge_domain(sheet, 8)
+    ):
         return JSONResponse(status_code=409, content={
             "error": "wrong_subclass_or_level",
-            "expected": "light domain cleric lv 8+",
+            "expected": "light or knowledge domain cleric lv 8+",
             "got_class": (sheet.get("class") or "").lower(),
             "got_subclass": (sheet.get("subclass") or "").lower(),
             "got_level": _cleric_level_from_sheet(sheet),

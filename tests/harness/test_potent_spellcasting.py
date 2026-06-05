@@ -119,3 +119,30 @@ async def test_use_ps_level_gate(
             {"subclass": "Life Domain", "level": 8},
             class_slug="cleric",
         )
+
+
+async def test_use_ps_knowledge_lv8(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.271 — Knowledge Domain Tavik Lv 8 also works (RAW
+    Potent Spellcasting is identical for Light + Knowledge)."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    await _patch_sheet(
+        gm_client, tavik["id"],
+        {"subclass": "Knowledge Domain"},
+        class_slug="cleric",
+    )
+    try:
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_potent_spellcasting",
+            json={"character_id": tavik["id"]},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["wis_mod"] == 3
+    finally:
+        await _patch_sheet(
+            gm_client, tavik["id"],
+            {"subclass": "Life Domain"},
+            class_slug="cleric",
+        )
