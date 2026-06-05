@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.276] - 2026-06-04 — "The Heroic Stride" — Glory Paladin Peerless Athlete CD (H.2 depth — closes Phase 2 batch)
+
+**Schema version:** 66
+**Commit summary:** **H.2 depth — Glory sibling CD to Inspiring Smite. CLOSES the H.2 Phase 2 sibling-CD batch.** RAW TCE p.55: bonus action; 10 min advantage on Str (Athletics) + Dex (Acrobatics) checks + long/high jump +10 ft.
+**Description:** One endpoint. `/use_peerless_athlete` — body `{character_id, override?}`. Validates Glory Lv 3+ + CD >= 1 + bonus chip. Decrements CD, marks chip, broadcasts `jump_bonus_ft: 10` + `duration_minutes: 10`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_peerless_athlete` endpoint.
+- `tests/harness/test_peerless_athlete.py` — 3 tests.
+
+### Notes
+- **🎉 H.2 depth Phase 2 sibling-CD batch ✅ COMPLETE.** All 5 non-Devotion oaths shipped in the H.2 first-pass (v2.99.245-249) now have their Phase 2 sibling-CD shipped:
+  1. **Ancients** Nature's Wrath (v2.99.245) + Turn the Faithless (v2.99.272).
+  2. **Vengeance** Vow of Enmity (v2.99.246) + Abjure Enemy (v2.99.274).
+  3. **Conquest** Conquering Presence (v2.99.247) + Aura of Conquest (v2.99.273) — RAW Conquest has only the one Lv 3 CD, so Aura of Conquest is the Phase 2 stand-in.
+  4. **Glory** Inspiring Smite (v2.99.248) + Peerless Athlete (this).
+  5. **Redemption** Rebuke the Violent (v2.99.249) + Emissary of Peace (v2.99.275).
+- **92 ships this session.**
+- **Total harness count: 1418** (was 1415 in v2.99.275).
+
+---
+
 ## [2.99.275] - 2026-06-04 — "The Soft Word" — Redemption Paladin Emissary of Peace CD (H.2 depth)
 
 **Schema version:** 66

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1415 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.275, 2026-06-04).
+**Total tests:** 1418 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.276, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -475,6 +475,15 @@ v2.99.249 — Oath of Redemption (Paladin subclass, XGE p.39) Rebuke the Violent
 | `test_use_rtv_attacker_not_in_battle` | Unknown attacker_combatant_id → 404. |
 | `test_use_rtv_out_of_cd` | `channel-divinity.current = 0` → 409 `out_of_uses`. |
 | `test_use_rtv_wrong_subclass` | Default Caelan (Devotion) → 409 `wrong_subclass_or_level`. |
+
+### `test_peerless_athlete.py`
+v2.99.276 — Glory Paladin (TCE p.55) Peerless Athlete CD (H.2 depth). Bonus action: 10 min advantage on Athletics + Acrobatics + +10 ft jump distance.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_pa_happy` | Glory Caelan → `jump_bonus_ft == 10`, `duration_minutes == 10`, CD 1 → 0. |
+| `test_use_pa_out_of_cd` | CD 0 → 409. |
+| `test_use_pa_wrong_subclass` | Default Caelan (Devotion) → 409. |
 
 ### `test_inspiring_smite.py`
 v2.99.248 — Oath of Glory (Paladin subclass, TCE p.55) Inspiring Smite bonus-action CD (Phase H.2 fourth oath). Rolls 2d8 + paladin level temp HP, divides evenly (remainder to first targets).
