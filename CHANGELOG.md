@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.344] - 2026-06-05 — "The Counted Cogs" — Restore Balance uses now server-tracked (Clockwork Soul, TCE)
+
+**Schema version:** 66
+**Commit summary:** **Deepen Restore Balance (Clockwork Soul Sorcerer Lv 1+, TCE) past v1 announce-only — the uses-per-long-rest budget is now server-tracked.** RAW TCE p.69 grants a number of uses equal to proficiency bonus, refilled on a long rest. `/use_restore_balance` now reads/decrements `sheet.restore_balance_uses` (seeded to proficiency bonus when absent), returns 409 `out_of_uses` when depleted, and the /rest long-rest hook refills it.
+**Description:** Adds a `restore_balance_uses` sheet counter (allowlisted for sheet-field PATCH). The endpoint computes the max budget from `proficiency_bonus` (falling back to a level-derived PB), gates on remaining uses *after* the reaction-economy check, decrements + persists on success, and now returns `uses_remaining` / `uses_max` (also added to the `feature_used` broadcast). The `/rest` long-rest handler refills the counter to the proficiency bonus for Clockwork Soul sorcerers, alongside the existing Tides of Chaos refill. Harness test file grows from 3 to 4 tests (adds the `out_of_uses` exhaustion path; happy test now asserts the 3→2 decrement).
+
+### Changed
+- `/api/campaign/{cid}/use_restore_balance` now server-tracks uses (was v1 announce-only): decrements `restore_balance_uses`, returns 409 `out_of_uses` when depleted, and reports `uses_remaining` / `uses_max` in the response + broadcast.
+
+### Added
+- `restore_balance_uses` sheet field (allowlisted) + long-rest refill hook in `/rest`.
+- `tests/harness/test_restore_balance.py::test_use_rb_out_of_uses` — exhausted-budget 409.
+
+### Notes
+- First "deepening" pass on a G.2 Sorcerer batch feature (the batch closed in v2.99.343). The other four new Sorcerer features remain v1 announce-only.
+- **160 ships this session.**
+- **Total harness count: 1670** (was 1669 in v2.99.343; +1 new test).
+
+---
+
 ## [2.99.343] - 2026-06-05 — "The Clinging Dark" — Shadow Magic Sorcerer Strength of the Grave (Lv 1+, XGE) — 🎉 G.2 Sorcerer batch CLOSE 8/8
 
 **Schema version:** 66

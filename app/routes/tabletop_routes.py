@@ -51807,9 +51807,14 @@ async def use_restore_balance(
     bonus, and you regain all expended uses when you finish a long
     rest."
 
-    Body: ``{character_id, override?}``. Costs a reaction. v1
-    announce-only — target + 60 ft range + uses-per-long-rest
-    GM-tracked.
+    Body: ``{character_id, override?}``. Costs a reaction.
+
+    v2.99.344 — deepened past v1 announce-only: the uses-per-long-
+    rest budget is now server-tracked. `sheet.restore_balance_uses`
+    holds the remaining charges (seeded to proficiency bonus when
+    absent); each use decrements it and a depleted budget returns
+    409 ``out_of_uses``. The /rest long-rest hook refills it to the
+    proficiency bonus. Target choice + 60 ft range stay GM-tracked.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -51852,7 +51857,32 @@ async def use_restore_balance(
             "strict": strict,
         })
 
+    # v2.99.344 — uses-per-long-rest budget (= proficiency bonus).
+    # Seed to the max when the counter has never been set so a
+    # freshly-statted PC can use it before their first long rest.
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, _sorcerer_level_from_sheet(sheet)) - 1) // 4
+    raw_uses = sheet.get("restore_balance_uses")
+    uses = int(raw_uses) if raw_uses is not None else pb
+    if uses <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Restore Balance",
+            "char_name": char.name,
+            "source": "restore-balance",
+            "uses_remaining": 0,
+            "uses_max": pb,
+        })
+
     await _mark_battle_economy(campaign_id, char.id, "reaction")
+
+    uses_remaining = uses - 1
+    sheet["restore_balance_uses"] = uses_remaining
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
 
     sorc_lv = _sorcerer_level_from_sheet(sheet)
 
@@ -51880,13 +51910,16 @@ async def use_restore_balance(
                 f"{char.name} equalizes a chaotic moment: as a "
                 f"reaction, a creature within 60 ft about to roll "
                 f"a d20 rolls without advantage or disadvantage. "
-                f"Usable a number of times equal to proficiency "
-                f"bonus per long rest. (Clockwork Soul Sorcerer "
-                f"Lv 1+ TCE class feature.)"
+                f"{uses_remaining}/{pb} use"
+                f"{'s' if pb != 1 else ''} left until a long rest. "
+                f"(Clockwork Soul Sorcerer Lv 1+ TCE class "
+                f"feature.)"
             ),
             "source": "restore-balance",
             "range_ft": 60,
             "cancels_adv_disadv": True,
+            "uses_remaining": uses_remaining,
+            "uses_max": pb,
             "sorcerer_level": sorc_lv,
         },
     })
@@ -51896,6 +51929,8 @@ async def use_restore_balance(
         "feature": "restore-balance",
         "range_ft": 60,
         "cancels_adv_disadv": True,
+        "uses_remaining": uses_remaining,
+        "uses_max": pb,
         "sorcerer_level": sorc_lv,
     }
 
@@ -58824,6 +58859,15 @@ async def rest_character(
         # 1 regardless of pre-rest value (RAW caps at 1 use).
         if _pc_has_wild_magic(sheet, 1):
             sheet["tides_of_chaos_uses"] = 1
+        # v2.99.344 — Restore Balance (Clockwork Soul Sorcerer Lv 1+)
+        # long-rest refill. RAW TCE p.69: "you regain all expended
+        # uses when you finish a long rest." Budget = proficiency
+        # bonus.
+        if _pc_has_clockwork_soul(sheet, 1):
+            _rb_pb = int(sheet.get("proficiency_bonus") or 0)
+            if _rb_pb <= 0:
+                _rb_pb = 2 + (max(1, _sorcerer_level_from_sheet(sheet)) - 1) // 4
+            sheet["restore_balance_uses"] = _rb_pb
         char.sheet = sheet
         # Long rest restores HP to max and clears any dying/stable state.
         # Route through the death-save state machine so the broadcast +
@@ -65845,6 +65889,11 @@ _SHEET_PATCH_KEYS = {
     # Allowlisted so the test can flip Zara's counter without a
     # full sheet rebuild.
     "tides_of_chaos_uses",
+    # v2.99.344 — restore_balance_uses (int 0..proficiency bonus).
+    # Read by /use_restore_balance + the /rest long-rest refill
+    # hook. Allowlisted so the test can seed/exhaust Zara's counter
+    # without a full sheet rebuild.
+    "restore_balance_uses",
     # v2.99.238 — knowledge_blessings (dict {skills, languages}).
     # Read by /select_knowledge_blessings (Knowledge Domain Cleric
     # Lv 1+). Allowlisted so the test can reset to {} between
