@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.235] - 2026-06-04 — "The Thunderhead's Rebuke" — Tempest Domain Cleric Wrath of the Storm (Phase H.1 second domain)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.1 second domain of the v2.99.193 phased completion plan — Tempest Domain Wrath of the Storm.** RAW PHB p.62: Cleric Lv 1 reaction — when a creature within 5 ft hits you, target makes Dex save DC = 8 + prof + WIS or take 2d8 lightning / thunder (player picks at use time), half on success. Uses per long rest = WIS mod. Brother Tavik Stonebrow is the demo fixture (Lv 8 → DC 14 via prof +3 + WIS +3).
+**Description:** One helper + one endpoint + one valid-set. (1) `_pc_has_tempest_domain(sheet, min_level)` — multiclass-aware Cleric + "tempest" subclass gate. (2) `_WOTS_DAMAGE_TYPES = {"lightning", "thunder"}` valid set. (3) `/use_wrath_of_the_storm` — body `{character_id, damage_type, attacker_name?, override?}`. Validates Tempest Cleric Lv 1+ + `sheet.resources` has a `wrath-of-the-storm` entry with `current >= 1` + Phase 4 reaction-chip gate. Decrements counter, marks chip, rolls 2d8 server-side, computes spell save DC = 8 + prof + WIS mod, broadcasts `resource_update` + `feature_used` (source `wrath-of-the-storm`) with `(damage, damage_type, save_dc, attacker_name, uses_remaining)`. v1 ships announce-only — the GM applies the damage post-save manually. One new harness test file with 5 tests.
+
+### Added
+- `_pc_has_tempest_domain(sheet, min_level)` helper gate.
+- `_WOTS_DAMAGE_TYPES = {"lightning", "thunder"}` valid set.
+- `/api/campaign/{cid}/use_wrath_of_the_storm` endpoint.
+- `tests/harness/test_wrath_of_the_storm.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 1 set + 5 regression tests. No schema change.
+- **Mirrors v2.99.234 Warding Flare shape.** Same WIS-mod-uses pool, same long-rest refill (via the generic `resources[*].reset == "long"` plumbing), same reaction-chip + per-use sheet decrement pattern. The only delta is the damage roll + DC + player-picked damage type at use time.
+- **Reaction-offer registry already mentions both.** The v2.99.234 path noted Warding Flare appears in the reaction-offer registry at line 20881 of `tabletop_routes.py`; the same `_offerable_reactions` block at line 20898 lists Wrath of the Storm. v2.99.235 wires the endpoint; future commit can wire the popup-click → fetch chain.
+- **Phase H.1 progress: 2 of 11 domains have first features shipped.** Remaining: Knowledge, Nature, Trickery, War, Forge, Grave, Death, Order, Twilight, Peace. The Light Domain Lv 6/8/17 (Improved Flare / Potent Spellcasting / Corona of Light) and Tempest Domain Lv 6/8/17 (Thunderbolt Strike / Divine Strike / Stormborn) features remain.
+- **Phase H readiness.** 3.0.0 cut still requires H.2 + H.3 work too. Not imminent.
+- **51 ships this session.**
+- **Total harness count: 1270** (was 1265 in v2.99.234).
+
+---
+
 ## [2.99.234] - 2026-06-04 — "The Divine Glare" — Light Domain Cleric Warding Flare (Phase H.1 first ship)
 
 **Schema version:** 66
