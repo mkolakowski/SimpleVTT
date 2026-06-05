@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.298] - 2026-06-05 — "Four Faces, One Smile" — Trickery Domain Cleric Improved Duplicity (H.1 deeper, Lv 17 passive)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Trickery Domain Cleric Lv 17+ Improved Duplicity.** RAW PHB p.62: Invoke Duplicity now creates up to 4 duplicates (was 1). Bonus action moves any number up to 30 ft each, max 120 ft range.
+**Description:** One endpoint. `/use_improved_duplicity` — body `{character_id, override?}`. Validates Trickery Domain Cleric Lv 17+. No chip — passive upgrade to the existing Lv 2 CD. Broadcasts. v1 announce-only — duplicate-count + per-bonus-action move logic GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_improved_duplicity` endpoint.
+- `tests/harness/test_improved_duplicity.py` — 3 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 6 of 11 domains shipped at Lv 17 (Light, Tempest, Life, War, Death, Trickery). Past halfway. Remaining: Knowledge, Nature, Forge, Grave, Arcana, Peace, Order (note: some of these don't have a Lv 17 feature in their RAW source — TCE Twilight, Peace, Order all have Lv 17 capstones; Forge has "Saint of Forge and Fire"; Grave has "Keeper of Souls"; Arcana has "Arcane Mastery"; Knowledge has "Visions of the Past"; Nature has "Master of Nature").
+- **114 ships this session.**
+- **Total harness count: 1491** (was 1488 in v2.99.297; +3 new tests).
+
+---
+
 ## [2.99.297] - 2026-06-05 — "The Twin Reaping" — Death Domain Cleric Improved Reaper (H.1 deeper, Lv 17 passive)
 
 **Schema version:** 66

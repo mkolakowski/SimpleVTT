@@ -45614,6 +45614,100 @@ async def use_improved_reaper(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_improved_duplicity")
+async def use_improved_duplicity(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.298 — Phase H.1 deeper (Trickery Domain Cleric
+    Lv 17+) of the v2.99.193 phased completion plan. Improved
+    Duplicity (Trickery Domain Cleric Lv 17+, PHB p.62): "At
+    17th level, you can create up to four duplicates of
+    yourself, instead of one, when you use Invoke Duplicity.
+    As a bonus action on your turn, you can move any number
+    of them up to 30 feet, to a maximum range of 120 feet."
+
+    Body: ``{character_id, override?}``. No chip cost —
+    passive upgrade to Invoke Duplicity CD. The endpoint
+    serves as an announce trigger. v1 announce-only — the
+    duplicate-count + per-bonus-action move logic is
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_trickery_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "trickery domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🎭 Improved Duplicity — 4 duplicates, 30 ft bonus move"
+            ),
+            "feature_desc": (
+                f"{char.name}'s Invoke Duplicity now creates up to "
+                f"4 duplicates (was 1). As a bonus action, move any "
+                f"number of duplicates up to 30 ft each (max 120 ft "
+                f"range from {char.name}). (Trickery Domain Cleric "
+                f"Lv 17+ class feature; passive upgrade.)"
+            ),
+            "source": "improved-duplicity",
+            "max_duplicates": 4,
+            "bonus_move_per_duplicate_ft": 30,
+            "max_range_ft": 120,
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "improved-duplicity",
+        "max_duplicates": 4,
+        "bonus_move_per_duplicate_ft": 30,
+        "max_range_ft": 120,
+        "cleric_level": cleric_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,
