@@ -26766,6 +26766,32 @@ def _pc_has_celestial_warlock(sheet: "dict | None", min_level: int) -> bool:
     return _warlock_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_fathomless_warlock(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.354 — RAW The Fathomless (Warlock patron, TCE p.70):
+    Tentacle of the Deeps + Gift of the Sea (Lv 1), Oceanic Soul
+    + Guardian Coil (Lv 6), Grasping Tentacles (Lv 10), Fathomless
+    Plunge (Lv 14).
+
+    Returns True when the PC is a Warlock with subclass slug
+    containing "fathomless" (e.g. "The Fathomless") + meets
+    `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "warlock":
+        has_warlock = any(
+            (entry.get("class") or "").strip().lower() == "warlock"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "fathomless" not in subclass:
+        return False
+    return _warlock_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -50034,6 +50060,147 @@ async def use_healing_light(
         "dice_remaining": hl_cur - dice_spent,
         "max_dice": hl_max,
         "per_use_max": per_use_max,
+        "warlock_level": warlock_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_tentacle_of_the_deeps")
+async def use_tentacle_of_the_deeps(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.354 — Phase G Warlock patron subclass batch ship #6
+    (The Fathomless Lv 1+, TCE) of the v2.99.193 phased completion
+    plan. Tentacle of the Deeps (The Fathomless Lv 1+, TCE p.70):
+    "As a bonus action, you can create a 10-foot-long tentacle at
+    a point you can see within 60 feet of you. ... you can make a
+    melee spell attack against one creature within 10 feet of it.
+    On a hit, the target takes 1d8 cold damage, and for 1 minute,
+    its speed is reduced by 10 feet." Cold damage rises to 2d8 at
+    Lv 10. Summonable a number of times equal to proficiency
+    bonus per long rest.
+
+    Body: ``{character_id, override?}``. Costs a bonus chip. Rolls
+    the cold damage server-side + reports the melee-spell-attack
+    bonus. v1 announce-only — the attack roll resolution, target
+    choice, speed reduction, and uses-per-rest limit stay
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Warlock character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_fathomless_warlock(sheet, 1):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "the fathomless warlock lv 1+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _warlock_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "tentacle-of-the-deeps",
+            "label": "Tentacle of the Deeps",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    warlock_lv = _warlock_level_from_sheet(sheet)
+    try:
+        cha_score = int((sheet.get("abilities") or {}).get("CHA", 10))
+    except (TypeError, ValueError):
+        cha_score = 10
+    cha_mod = (cha_score - 10) // 2
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, warlock_lv) - 1) // 4
+    attack_bonus = pb + cha_mod
+    dice_count = 2 if warlock_lv >= 10 else 1
+    try:
+        result = dice_mod.roll(f"{dice_count}d8")
+        cold_damage = int(result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        cold_damage = dice_count
+        breakdown = ""
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🐙 Tentacle of the Deeps — melee spell atk "
+                f"{attack_bonus:+d}, {cold_damage} cold on hit"
+            ),
+            "feature_desc": (
+                f"{char.name} summons a 10-ft spectral tentacle "
+                f"within 60 ft and lashes out: melee spell attack "
+                f"{attack_bonus:+d} vs a creature within 10 ft. On "
+                f"a hit, {cold_damage} cold damage ({dice_count}d8) "
+                f"and the target's speed drops by 10 ft for 1 min. "
+                f"(The Fathomless Warlock Lv 1+ TCE class feature; "
+                f"summon PB times per long rest.)"
+            ),
+            "source": "tentacle-of-the-deeps",
+            "summon_range_ft": 60,
+            "reach_ft": 10,
+            "attack_bonus": attack_bonus,
+            "cold_damage": cold_damage,
+            "damage_dice": f"{dice_count}d8",
+            "dice_breakdown": breakdown,
+            "speed_reduction_ft": 10,
+            "warlock_level": warlock_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "tentacle-of-the-deeps",
+        "summon_range_ft": 60,
+        "reach_ft": 10,
+        "attack_bonus": attack_bonus,
+        "cold_damage": cold_damage,
+        "damage_dice": f"{dice_count}d8",
+        "speed_reduction_ft": 10,
         "warlock_level": warlock_lv,
     }
 

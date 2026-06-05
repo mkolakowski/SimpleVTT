@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.354] - 2026-06-05 — "The Grasping Deep" — The Fathomless Warlock Tentacle of the Deeps (Lv 1+, TCE) — 🔮 Warlock patron batch
+
+**Schema version:** 66
+**Commit summary:** **Warlock patron subclass batch ship #6 — The Fathomless Lv 1+ Tentacle of the Deeps (TCE).** Sixth Warlock patron batch ship; opens The Fathomless. RAW TCE p.70: bonus action, summon a 10-ft spectral tentacle within 60 ft and make a melee spell attack vs a creature within 10 ft; on a hit, 1d8 cold (2d8 at Lv 10) + speed -10 ft for 1 minute.
+**Description:** Adds `_pc_has_fathomless_warlock` helper. One endpoint. `/use_tentacle_of_the_deeps` — body `{character_id, override?}`. Validates The Fathomless Warlock Lv 1+ + bonus chip. Computes the melee-spell-attack bonus (PB + CHA mod) and rolls the cold damage **server-side** (`1d8`, scaling to `2d8` at Lv 10). Broadcasts `feature_used` with `source: tentacle-of-the-deeps`, `attack_bonus`, `cold_damage`, `damage_dice`, `summon_range_ft: 60`, `reach_ft: 10`, `speed_reduction_ft: 10`. v1 announce-only — the attack roll resolution, target choice, speed reduction, and uses-per-rest limit stay GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_tentacle_of_the_deeps` endpoint.
+- `_pc_has_fathomless_warlock` helper.
+- `tests/harness/test_tentacle_of_the_deeps.py` — 3 tests.
+
+### Notes
+- **Warlock patron batch progress:** 6 of ~7 patrons shipped (The Fiend, The Archfey, The Hexblade, The Great Old One, The Celestial, The Fathomless). Remaining untouched: Genie (Genie's Wrath / Bottled Respite). One more ship closes the batch.
+- **170 ships this session.**
+- **Total harness count: 1698** (was 1695 in v2.99.353; +3 new tests).
+
+---
+
 ## [2.99.353] - 2026-06-05 — "The Radiant Pool" — The Celestial Warlock Healing Light (Lv 1+, XGE) — 🔮 Warlock patron batch
 
 **Schema version:** 66
