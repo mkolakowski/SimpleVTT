@@ -44824,6 +44824,162 @@ async def use_invincible_conqueror(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_living_legend")
+async def use_living_legend(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.291 — Phase H.2 deeper (Glory Paladin Lv 20) of
+    the v2.99.193 phased completion plan. Living Legend
+    (Glory Paladin Lv 20, XGE p.38): "As a bonus action, you
+    become an avatar of legend for 1 minute. Advantage on all
+    Charisma checks. Once per turn when you make a weapon
+    attack and miss, you can cause that attack to hit instead
+    (up to 4 times during the duration). If you fail a save,
+    you can use your reaction to reroll it (once per short or
+    long rest). Once used, can't again until long rest."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip.
+    Auto-bootstraps `living-legend` resource. v1 announce-only.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_glory_oath(sheet, 20):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "glory paladin lv 20",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "living-legend",
+            "label": "Living Legend",
+            "strict": strict,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    ll_row = None
+    ll_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "living-legend":
+            ll_row = dict(r); ll_idx = i; break
+    if ll_row is None:
+        ll_row = {
+            "key": "living-legend",
+            "label": "Living Legend",
+            "current": 1, "max": 1, "reset": "long",
+        }
+        ll_idx = len(resources)
+        resources.append(ll_row)
+    ll_cur = int(ll_row.get("current") or 0)
+    ll_max = int(ll_row.get("max") or 1)
+    if ll_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Living Legend",
+            "current": ll_cur, "max": ll_max,
+        })
+
+    ll_row["current"] = ll_cur - 1
+    resources[ll_idx] = ll_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    pal_lv = _paladin_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "living-legend",
+            "current": ll_cur - 1, "max": ll_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "🌟 Living Legend — adv CHA + miss→hit ×4 + save reroll"
+            ),
+            "feature_desc": (
+                f"{char.name} becomes an avatar of legend for 1 "
+                f"minute: advantage on all CHA checks; up to 4 "
+                f"times, turn a missed weapon attack into a hit "
+                f"(1/turn); once, reroll a failed save as reaction. "
+                f"(Glory Paladin Lv 20 capstone; once per long "
+                f"rest.)"
+            ),
+            "source": "living-legend",
+            "uses_remaining": ll_cur - 1,
+            "duration_minutes": 1,
+            "miss_to_hit_uses": 4,
+            "save_reroll_uses": 1,
+            "paladin_level": pal_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "living-legend",
+        "uses_remaining": ll_cur - 1,
+        "max_uses": ll_max,
+        "duration_minutes": 1,
+        "miss_to_hit_uses": 4,
+        "save_reroll_uses": 1,
+        "paladin_level": pal_lv,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_conquering_presence")
 async def use_conquering_presence(
     campaign_id: int,

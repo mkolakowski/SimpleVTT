@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1466 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.290, 2026-06-05).
+**Total tests:** 1470 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.291, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -622,6 +622,16 @@ v2.99.290 — Conquest Paladin (XGE p.37) Invincible Conqueror Lv 20 capstone (H
 | `test_use_ic_wrong_subclass` | Default Caelan (Devotion) → 409. |
 | `test_use_ic_level_gate` | Conquest at Lv 19 → 409. |
 | `test_use_ic_long_rest_refills` | Use → long rest → use again → 200 (resource refilled). |
+
+### `test_living_legend.py`
+v2.99.291 — Glory Paladin (XGE p.38) Living Legend Lv 20 capstone (H.2 deeper). Bonus action transform 1 min: advantage on CHA checks; 1/turn (up to 4 total) turn missed weapon attack into hit; once, reroll a failed save as reaction. Auto-bootstraps `living-legend` resource; refilled by long rest. Bonus chip. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ll_happy_lv20` | Lv 20 Caelan → `miss_to_hit_uses == 4`, `save_reroll_uses == 1`, `duration_minutes == 1`, broadcast (source `living-legend`). |
+| `test_use_ll_wrong_subclass` | Default Caelan (Devotion) → 409. |
+| `test_use_ll_level_gate` | Glory at Lv 19 → 409. |
+| `test_use_ll_long_rest_refills` | Use → long rest → use again → 200 (resource refilled). |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

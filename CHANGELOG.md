@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.291] - 2026-06-05 — "The Legend Speaks" — Glory Paladin Living Legend (H.2 deeper, Lv 20 capstone)
+
+**Schema version:** 66
+**Commit summary:** **H.2 deeper — Glory Paladin Lv 20 capstone.** RAW XGE p.38: bonus action to become an avatar of legend for 1 minute. Advantage on CHA checks; up to 4 times (1/turn) turn a missed weapon attack into a hit; once, reroll a failed save as reaction. Once per long rest.
+**Description:** One endpoint. `/use_living_legend` — body `{character_id, override?}`. Validates Glory Paladin Lv 20 + bonus chip. Auto-bootstraps a `living-legend` resource (max=1, reset=long). Marks bonus chip, broadcasts. v1 announce-only — miss→hit conversion, save reroll, advantage on CHA checks are GM-tracked. One new harness test file with 4 tests including long-rest refill.
+
+### Added
+- `/api/campaign/{cid}/use_living_legend` endpoint.
+- `tests/harness/test_living_legend.py` — 4 tests.
+
+### Notes
+- **H.2 Lv 20 batch progress:** 4 of 5 oaths shipped at Lv 20 (Ancients, Vengeance, Conquest, Glory). One remaining: Redemption Emissary of Redemption.
+- **107 ships this session.**
+- **Total harness count: 1470** (was 1466 in v2.99.290; +4 new tests).
+
+---
+
 ## [2.99.290] - 2026-06-05 — "Avatar of Conquest" — Conquest Paladin Invincible Conqueror (H.2 deeper, Lv 20 capstone)
 
 **Schema version:** 66
