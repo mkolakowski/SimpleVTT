@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.312] - 2026-06-05 — "The Borrowed Skill" — Phantom Rogue Whispers of the Dead (Lv 3+, TCE) — 🎉 CLOSES E.3 Rogue batch (8/8)
+
+**Schema version:** 66
+**Commit summary:** **E.3 Rogue subclass batch — Phantom Rogue Lv 3+ Whispers of the Dead (TCE). CLOSES the E.3 batch (8/8 PHB+XGE+TCE Rogue subclasses).** RAW TCE p.61: on each rest, choose one skill or tool proficiency; you have it until next short or long rest.
+**Description:** Adds `_pc_has_phantom_subclass` helper. One endpoint. `/use_whispers_of_the_dead` — body `{character_id, proficiency_name?, override?}`. Validates Phantom Rogue Lv 3+. No chip — selection happens on rest, endpoint serves as "declare chosen proficiency" announce. Broadcasts `feature_used` with `source: whispers-of-the-dead`. v1 announce-only. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_whispers_of_the_dead` endpoint.
+- `_pc_has_phantom_subclass` helper.
+- `tests/harness/test_whispers_of_the_dead.py` — 4 tests.
+
+### Notes
+- **🎉 E.3 Rogue subclass batch ✅ COMPLETE (8/8 PHB+XGE+TCE).** All Rogue subclasses with non-spell-only first-features now have their Lv 3 feature wired: Thief Fast Hands (v2.99.224), Assassin Assassinate (v2.99.306), Swashbuckler Fancy Footwork (v2.99.307), Mastermind Master of Tactics (v2.99.308), Scout Skirmisher (v2.99.309), Inquisitive Insightful Fighting (v2.99.310), Soulknife Psychic Blades (v2.99.311), Phantom Whispers of the Dead (this). Arcane Trickster is covered via the existing spellcasting flow.
+- **128 ships this session.**
+- **Total harness count: 1541** (was 1537 in v2.99.311; +4 new tests).
+
+---
+
 ## [2.99.311] - 2026-06-05 — "The Manifest Blade" — Soulknife Rogue Psychic Blades (Lv 3+, TCE)
 
 **Schema version:** 66
