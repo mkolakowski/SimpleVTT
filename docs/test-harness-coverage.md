@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1621 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.330, 2026-06-05).
+**Total tests:** 1624 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.331, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1017,6 +1017,15 @@ v2.99.330 — Enchantment School Wizard (PHB p.117) Hypnotic Gaze Lv 2+ (G.1 Wiz
 | `test_use_hg_with_target` | `target_combatant_id` passes through. |
 | `test_use_hg_wrong_subclass` | Default Thalindra (Evocation) → 409. |
 | `test_use_hg_level_gate` | Enchantment at Lv 1 → 409. |
+
+### `test_improved_minor_illusion.py`
+v2.99.331 — Illusion School Wizard (PHB p.118) Improved Minor Illusion Lv 2+ (G.1 Wizard batch). Free Minor Illusion cantrip + dual-mode sound + image in single cast. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_imi_happy_lv7` | PATCH Thalindra → Illusion Lv 7 → `dual_mode == True`, free_cantrip mentions Minor Illusion, broadcast (source `improved-minor-illusion`). |
+| `test_use_imi_wrong_subclass` | Default Thalindra (Evocation) → 409. |
+| `test_use_imi_level_gate` | Illusion at Lv 1 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.

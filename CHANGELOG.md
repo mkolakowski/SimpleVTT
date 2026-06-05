@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.331] - 2026-06-05 — "Sound and Vision" — Illusion School Wizard Improved Minor Illusion (Lv 2+)
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Illusion School Wizard Lv 2+ Improved Minor Illusion.** Fifth Wizard subclass shipped. RAW PHB p.118: free Minor Illusion cantrip (or alt wizard cantrip if already known); Minor Illusion can create sound + image simultaneously.
+**Description:** Adds `_pc_has_illusion_wizard` helper. One endpoint. `/use_improved_minor_illusion` — body `{character_id, override?}`. Validates Illusion Wizard Lv 2+. No chip — passive cantrip upgrade. Broadcasts `feature_used` with `source: improved-minor-illusion` + `dual_mode: true`. v1 announce-only. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_improved_minor_illusion` endpoint.
+- `_pc_has_illusion_wizard` helper.
+- `tests/harness/test_improved_minor_illusion.py` — 3 tests.
+
+### Notes
+- **G.1 Wizard batch progress:** 5 of ~10 subclasses shipped (Abjuration, Divination, Conjuration, Enchantment, Illusion). Halfway.
+- **147 ships this session.**
+- **Total harness count: 1624** (was 1621 in v2.99.330; +3 new tests).
+
+---
+
 ## [2.99.330] - 2026-06-05 — "The Locking Eye" — Enchantment School Wizard Hypnotic Gaze (Lv 2+)
 
 **Schema version:** 66
