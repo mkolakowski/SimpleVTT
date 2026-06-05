@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.274] - 2026-06-04 — "The Adjuration" — Vengeance Paladin Abjure Enemy CD (H.2 depth, sibling to Vow of Enmity)
+
+**Schema version:** 66
+**Commit summary:** **H.2 depth — Vengeance Paladin sibling CD to Vow of Enmity.** RAW PHB p.87: action; target Wis save DC 8 + prof + CHA (fiends/undead at disadvantage); fail → Frightened + speed 0, success → speed halved; both end on damage.
+**Description:** One endpoint mirroring Nature's Wrath / Vow of Enmity / Turn the Faithless single-target CD shape. `/use_abjure_enemy` — body `{character_id, target_combatant_id, override?}`. Validates Vengeance Lv 3+ + CD resource >= 1 + target in active battle + Phase 4 action chip. Decrements CD, computes DC, broadcasts. v1 announce-only — Wis save + Frightened install + speed mutation GM-tracked. Caelan Lv 7 → DC 14. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_abjure_enemy` endpoint.
+- `tests/harness/test_abjure_enemy.py` — 4 tests.
+
+### Notes
+- **H.2 depth progress:** 2 oaths have Phase 2 sibling CDs shipped (Ancients Turn the Faithless, Vengeance Abjure Enemy); 1 oath has a Lv 7 aura shipped (Conquest). 3 oaths remain at Phase 2 sibling CD: Redemption Emissary of Peace, Glory Peerless Athlete (and Conquest doesn't have a Lv 3 sibling — already noted in v2.99.273).
+- **90 ships this session.**
+- **Total harness count: 1412** (was 1408 in v2.99.273).
+
+---
+
 ## [2.99.273] - 2026-06-04 — "The Tyrant's Field" — Conquest Paladin Aura of Conquest passive (H.2 depth)
 
 **Schema version:** 66

@@ -42900,6 +42900,183 @@ async def use_natures_wrath(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_abjure_enemy")
+async def use_abjure_enemy(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.274 — H.2 depth (Vengeance sibling CD) of the
+    v2.99.193 phased completion plan. Abjure Enemy (Vengeance
+    Paladin Lv 3+, PHB p.87): "As an action, present holy symbol
+    and choose one creature within 60 ft of you. That creature
+    must make a Wisdom saving throw (unless immune to being
+    frightened). Fiends and undead have disadvantage on this
+    saving throw. On a failed save, the creature is frightened
+    for 1 minute or until it takes any damage; while frightened,
+    its speed is 0. On a successful save, the creature's speed
+    is halved for 1 minute or until the creature takes any
+    damage."
+
+    Body: ``{character_id, target_combatant_id, override?}``.
+
+    Validates Vengeance Paladin Lv 3+ + CD >= 1 + target in
+    battle + action chip. Decrements CD, computes DC, broadcasts.
+    v1 announce-only — Wis save + Frightened install + speed
+    mutation GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (str(body.get("target_combatant_id") or "")).strip()
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_vengeance_oath(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "vengeance paladin lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    cd_row = None
+    cd_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "channel-divinity":
+            cd_row = dict(r)
+            cd_idx = i
+            break
+    if cd_row is None:
+        raise HTTPException(404, "No Channel Divinity resource on this sheet")
+    cd_cur = int(cd_row.get("current") or 0)
+    cd_max = int(cd_row.get("max") or 0)
+    if cd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Channel Divinity",
+        })
+
+    state = hub.get_battle(campaign_id) or {}
+    target_name = ""
+    found = False
+    for c in (state.get("combatants") or []):
+        if c.get("id") == target_combatant_id:
+            target_name = c.get("name") or ""
+            found = True
+            break
+    if not found:
+        return JSONResponse(status_code=404, content={
+            "error": "target_not_in_battle",
+            "target_combatant_id": target_combatant_id,
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "abjure-enemy",
+            "label": "Abjure Enemy",
+            "strict": strict,
+        })
+
+    cd_row["current"] = cd_cur - 1
+    resources[cd_idx] = cd_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    cha = int((sheet.get("abilities") or {}).get("CHA") or 10)
+    cha_mod = (cha - 10) // 2
+    save_dc = 8 + prof + cha_mod
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "channel-divinity",
+            "current": cd_cur - 1,
+            "max": cd_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_phrase = f" → {target_name}" if target_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🩸 Abjure Enemy — Wis DC {save_dc}{target_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} adjures {target_name or 'the target'}: "
+                f"Wis save DC {save_dc} (fiends/undead at "
+                f"disadvantage). Fail → Frightened 1 min + speed "
+                f"0; success → speed halved 1 min. Ends on any "
+                f"damage. (Vengeance Paladin Lv 3+ Channel "
+                f"Divinity.)"
+            ),
+            "source": "abjure-enemy",
+            "target_combatant_id": target_combatant_id,
+            "target_name": target_name,
+            "save_dc": save_dc,
+            "uses_remaining": cd_cur - 1,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "abjure-enemy",
+        "target_combatant_id": target_combatant_id,
+        "target_name": target_name,
+        "save_dc": save_dc,
+        "uses_remaining": cd_cur - 1,
+        "over_budget": was_used,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_vow_of_enmity")
 async def use_vow_of_enmity(
     campaign_id: int,

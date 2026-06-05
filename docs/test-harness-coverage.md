@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1408 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.273, 2026-06-04).
+**Total tests:** 1412 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.274, 2026-06-04).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -498,6 +498,16 @@ v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence 
 | `test_use_cp_unknown_target` | One unknown target in list → 404 `target_not_in_battle`. |
 | `test_use_cp_out_of_cd` | `channel-divinity.current = 0` → 409 `out_of_uses`. |
 | `test_use_cp_wrong_subclass` | Default Caelan (Devotion) → 409 `wrong_subclass_or_level`. |
+
+### `test_abjure_enemy.py`
+v2.99.274 — Vengeance Paladin (PHB p.87) Abjure Enemy CD (H.2 depth). Sibling CD to Vow of Enmity (v2.99.246). Single target Wis save DC 8 + prof + CHA; fail Frightened + speed 0 or success speed halved (both end on damage).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ae_happy` | Vengeance Caelan adjures Bandit → `save_dc == 14`, `uses_remaining == 0`, broadcast. |
+| `test_use_ae_target_not_in_battle` | Unknown target → 404. |
+| `test_use_ae_out_of_cd` | CD 0 → 409. |
+| `test_use_ae_wrong_subclass` | Default Caelan (Devotion) → 409. |
 
 ### `test_vow_of_enmity.py`
 v2.99.246 — Oath of Vengeance (Paladin subclass, PHB p.87) Vow of Enmity bonus-action CD (Phase H.2 second oath). Caelan PATCH'd to Vengeance + CD 1/1 + Bandit in battle.
