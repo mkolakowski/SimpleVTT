@@ -25963,6 +25963,34 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_death_domain(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.297 — RAW Death Domain features (Cleric, DMG
+    p.96-97): Bonus Proficiency + Reaper (Lv 1), CD Touch of
+    Death (Lv 2 — curated), Inescapable Destruction (Lv 6),
+    Divine Strike necrotic (Lv 8 — wired via
+    _DIVINE_STRIKE_BY_DOMAIN), Improved Reaper (Lv 17).
+
+    Returns True when the PC is a Cleric with subclass slug
+    containing "death" + meets `min_level` (multiclass-aware).
+    Gates the Death Domain endpoints (Improved Reaper in
+    v2.99.297).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "cleric":
+        has_cleric = any(
+            (entry.get("class") or "").strip().lower() == "cleric"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_cleric:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "death" not in subclass:
+        return False
+    return _cleric_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_life_domain(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.295 — RAW Life Domain features (Cleric, PHB
     p.60): Bonus Proficiency (heavy armor) + Disciple of Life
@@ -45485,6 +45513,103 @@ async def use_avatar_of_battle(
         "feature": "avatar-of-battle",
         "resistance_types": ["bludgeoning", "piercing", "slashing"],
         "nonmagical_only": True,
+        "cleric_level": cleric_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_improved_reaper")
+async def use_improved_reaper(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.297 — Phase H.1 deeper (Death Domain Cleric Lv 17+)
+    of the v2.99.193 phased completion plan. Improved Reaper
+    (Death Domain Cleric Lv 17+, DMG p.97): "Starting at 17th
+    level, when you cast a necromancy spell of 1st through 5th
+    level that targets only one creature, the spell can
+    instead target two creatures within range and within 5
+    feet of each other."
+
+    Body: ``{character_id, override?}``. No chip cost —
+    passive permanent (modifies necromancy spell casts). v1
+    announce-only — the dual-target option is GM-tracked via
+    the player invoking the spell with two targets.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_death_domain(sheet, 17):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "death domain cleric lv 17+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                "💀 Improved Reaper — necromancy ×2 targets (Lv 1-5)"
+            ),
+            "feature_desc": (
+                f"{char.name}'s 1st-5th level necromancy spells that "
+                f"target one creature can now target two creatures "
+                f"within range and within 5 ft of each other. "
+                f"(Death Domain Cleric Lv 17+ class feature; "
+                f"passive permanent.)"
+            ),
+            "source": "improved-reaper",
+            "min_spell_level": 1,
+            "max_spell_level": 5,
+            "school": "necromancy",
+            "max_targets": 2,
+            "max_target_separation_ft": 5,
+            "cleric_level": cleric_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "improved-reaper",
+        "min_spell_level": 1,
+        "max_spell_level": 5,
+        "school": "necromancy",
+        "max_targets": 2,
+        "max_target_separation_ft": 5,
         "cleric_level": cleric_lv,
     }
 

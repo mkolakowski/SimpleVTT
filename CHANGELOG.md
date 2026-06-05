@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.297] - 2026-06-05 — "The Twin Reaping" — Death Domain Cleric Improved Reaper (H.1 deeper, Lv 17 passive)
+
+**Schema version:** 66
+**Commit summary:** **H.1 deeper — Death Domain Cleric Lv 17+ Improved Reaper.** RAW DMG p.97: 1st-5th level necromancy spells that target one creature can target two creatures within range + within 5 ft of each other.
+**Description:** Adds `_pc_has_death_domain` helper. One endpoint. `/use_improved_reaper` — body `{character_id, override?}`. Validates Death Domain Cleric Lv 17+. No chip — passive permanent (modifies necromancy spell casts). Broadcasts `feature_used` with `source: improved-reaper`. v1 announce-only — the dual-target option is GM-tracked via the player invoking the spell with two targets. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_improved_reaper` endpoint.
+- `_pc_has_death_domain` helper.
+- `tests/harness/test_improved_reaper.py` — 3 tests.
+
+### Notes
+- **H.1 Lv 17 batch progress:** 5 of 11 domains shipped at Lv 17 (Light, Tempest, Life, War, Death).
+- **113 ships this session.**
+- **Total harness count: 1488** (was 1485 in v2.99.296; +3 new tests).
+
+---
+
 ## [2.99.296] - 2026-06-05 — "The Steel-Skinned Saint" — War Domain Cleric Avatar of Battle (H.1 deeper, Lv 17 passive)
 
 **Schema version:** 66
