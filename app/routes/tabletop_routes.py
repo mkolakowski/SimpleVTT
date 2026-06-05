@@ -25985,6 +25985,32 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_dreams_druid(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.319 — RAW Dreams Druid (Druid, XGE p.23):
+    Balm of the Summer Court + Hidden Paths (Lv 6 hides
+    away), Hearth of Moonlight and Shadow (Lv 6 lol no — that's
+    Lv 6 in dreams), Walker in Dreams (Lv 10), Hearth of
+    Moonlight and Shadow (Lv 14).
+
+    Returns True when the PC is a Druid with subclass slug
+    containing "dreams" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "druid":
+        has_druid = any(
+            (entry.get("class") or "").strip().lower() == "druid"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_druid:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "dreams" not in subclass:
+        return False
+    return _druid_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_wildfire_druid(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.318 — RAW Wildfire Druid (Druid, TCE p.38):
     Summon Wildfire Spirit + Wildfire Spirit (Lv 2),
@@ -48295,6 +48321,183 @@ async def use_summon_wildfire_spirit(
         "resource_used": resource_used,
         "slot_level": slot_level,
         "duration_minutes": 60,
+        "druid_level": druid_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_balm_of_the_summer_court")
+async def use_balm_of_the_summer_court(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.319 — Phase E.4 Druid subclass batch (Dreams
+    Druid Lv 2+, XGE) of the v2.99.193 phased completion plan.
+    Balm of the Summer Court (Dreams Druid Lv 2+, XGE p.23):
+    "Pool of d6 fey energy = druid level. As a bonus action,
+    spend up to half-druid-level dice; ally within 120 ft
+    regains HP = total rolled, +1 temp HP per die spent.
+    Refills on long rest."
+
+    Body: ``{character_id, dice_spent?, override?}``. Default
+    dice_spent = 1. Costs a bonus chip. Auto-bootstraps a
+    `balm-of-summer-court-dice` resource (max=druid_lv,
+    reset=long). v1 announce-only — actual heal dice are
+    rolled server-side and broadcast; ally HP/temp HP
+    application is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    dice_spent_raw = body.get("dice_spent") or 1
+    try:
+        dice_spent = max(1, int(dice_spent_raw))
+    except (TypeError, ValueError):
+        dice_spent = 1
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Druid character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_dreams_druid(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "dreams druid lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _druid_level_from_sheet(sheet),
+        })
+
+    druid_lv = _druid_level_from_sheet(sheet)
+    half_lv = max(1, druid_lv // 2)
+    dice_spent = min(dice_spent, half_lv)
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "balm-of-the-summer-court",
+            "label": "Balm of the Summer Court",
+            "strict": strict,
+        })
+
+    resources = list(sheet.get("resources") or [])
+    bsc_row = None
+    bsc_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "balm-of-summer-court-dice":
+            bsc_row = dict(r); bsc_idx = i; break
+    if bsc_row is None:
+        bsc_row = {
+            "key": "balm-of-summer-court-dice",
+            "label": "Balm of the Summer Court dice",
+            "current": druid_lv, "max": druid_lv, "reset": "long",
+        }
+        bsc_idx = len(resources)
+        resources.append(bsc_row)
+    bsc_cur = int(bsc_row.get("current") or 0)
+    bsc_max = int(bsc_row.get("max") or druid_lv)
+    if bsc_cur < dice_spent:
+        return JSONResponse(status_code=409, content={
+            "error": "no_uses_left",
+            "label": "Balm of the Summer Court dice",
+            "current": bsc_cur, "max": bsc_max,
+            "requested": dice_spent,
+        })
+
+    try:
+        result = dice_mod.roll(f"{dice_spent}d6")
+        heal_total = max(dice_spent, int(result.total))
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        heal_total = dice_spent
+        breakdown = ""
+    temp_hp = dice_spent
+
+    bsc_row["current"] = bsc_cur - dice_spent
+    resources[bsc_idx] = bsc_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "balm-of-summer-court-dice",
+            "current": bsc_cur - dice_spent, "max": bsc_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"☀️ Balm of the Summer Court — heal {heal_total} HP + "
+                f"{temp_hp} temp HP (spent {dice_spent}d6)"
+            ),
+            "feature_desc": (
+                f"{char.name} spends {dice_spent}d6 of fey energy to "
+                f"restore {heal_total} HP and grant {temp_hp} temp HP "
+                f"to an ally within 120 ft. (Dreams Druid Lv 2+ XGE "
+                f"class feature; pool refills on long rest.)"
+            ),
+            "source": "balm-of-the-summer-court",
+            "dice_spent": dice_spent,
+            "dice_breakdown": breakdown,
+            "heal_amount": heal_total,
+            "temp_hp": temp_hp,
+            "max_range_ft": 120,
+            "dice_remaining": bsc_cur - dice_spent,
+            "druid_level": druid_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "balm-of-the-summer-court",
+        "dice_spent": dice_spent,
+        "heal_amount": heal_total,
+        "temp_hp": temp_hp,
+        "max_range_ft": 120,
+        "dice_remaining": bsc_cur - dice_spent,
+        "max_dice": bsc_max,
         "druid_level": druid_lv,
     }
 

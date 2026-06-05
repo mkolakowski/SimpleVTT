@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.319] - 2026-06-05 — "Summer's Mercy" — Dreams Druid Balm of the Summer Court (Lv 2+, XGE)
+
+**Schema version:** 66
+**Commit summary:** **E.4 Druid subclass batch — Dreams Druid Lv 2+ Balm of the Summer Court (XGE).** Sixth Druid subclass shipped. RAW XGE p.23: pool of d6 fey energy = druid_lv dice. Bonus action: spend up to half-druid-level dice; ally within 120 ft heals total + 1 temp HP per die spent.
+**Description:** Adds `_pc_has_dreams_druid` helper. One endpoint. `/use_balm_of_the_summer_court` — body `{character_id, dice_spent?, override?}`. Validates Dreams Druid Lv 2+ + bonus chip. Auto-bootstraps `balm-of-summer-court-dice` resource (max=druid_lv, reset=long). Clamps `dice_spent` to half-druid-level. Rolls dice_spent d6, decrements counter, broadcasts heal total + temp HP. v1 announce-only — HP/temp HP application GM-tracked. One new harness test file with 5 tests.
+
+### Added
+- `/api/campaign/{cid}/use_balm_of_the_summer_court` endpoint.
+- `_pc_has_dreams_druid` helper.
+- `tests/harness/test_balm_of_the_summer_court.py` — 5 tests.
+
+### Notes
+- **E.4 Druid batch progress:** 6 of ~8 subclasses shipped (Land, Shepherd, Stars, Spores, Wildfire, Dreams). Moon (Combat Wild Shape mostly covered by existing flow), Twilight (TCE — that's actually Cleric not Druid, so Druid batch may be effectively done — to verify).
+- **135 ships this session.**
+- **Total harness count: 1573** (was 1568 in v2.99.318; +5 new tests).
+
+---
+
 ## [2.99.318] - 2026-06-05 — "The Burning Companion" — Wildfire Druid Summon Wildfire Spirit (Lv 2+, TCE)
 
 **Schema version:** 66

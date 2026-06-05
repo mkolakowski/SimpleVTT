@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1568 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.318, 2026-06-05).
+**Total tests:** 1573 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.319, 2026-06-05).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -892,6 +892,17 @@ v2.99.318 — Wildfire Druid (TCE p.38) Summon Wildfire Spirit Lv 2+ (E.4 Druid 
 | `test_use_ws_slot_variant` | slot_level 3 → `resource_used == "spell-slot"`, `slot_level == 3`. |
 | `test_use_ws_wrong_subclass` | Default Mira (Moon) → 409. |
 | `test_use_ws_level_gate` | Wildfire at Lv 1 → 409. |
+
+### `test_balm_of_the_summer_court.py`
+v2.99.319 — Dreams Druid (XGE p.23) Balm of the Summer Court Lv 2+ (E.4 Druid batch). Pool of d6 fey energy = druid_lv dice. Bonus action: spend up to half-druid-lv dice → ally within 120 ft heals total + 1 temp HP per die. Pool refills on long rest. v1 announce-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_bsc_happy_lv5_one_die` | PATCH Mira → Dreams Lv 5 default 1 die → `heal_amount` in [1, 6], `temp_hp == 1`, `max_range_ft == 120`, `dice_remaining == 4`, broadcast (source `balm-of-the-summer-court`). |
+| `test_use_bsc_two_dice` | dice_spent 2 → `heal_amount` in [2, 12], `temp_hp == 2`. |
+| `test_use_bsc_dice_clamp` | dice_spent 99 → clamped to half-druid-level 2. |
+| `test_use_bsc_wrong_subclass` | Default Mira (Moon) → 409. |
+| `test_use_bsc_level_gate` | Dreams at Lv 1 → 409. |
 
 ### `test_conquering_presence.py`
 v2.99.247 — Oath of Conquest (Paladin subclass, XGE p.37) Conquering Presence CD (Phase H.2 third oath). Caelan PATCH'd to Conquest + CD 1/1 + 2 Bandits in battle. DC 14.
