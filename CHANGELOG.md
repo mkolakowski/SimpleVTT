@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.247] - 2026-06-04 — "The Tyrant's Voice" — Conquest Paladin Conquering Presence CD (Phase H.2 third oath)
+
+**Schema version:** 66
+**Commit summary:** **Phase H.2 third non-Devotion Paladin oath of the v2.99.193 phased completion plan.** RAW XGE p.37: Conquest Paladin Lv 3+ action CD — pick creatures within 30 ft; each makes a Wis save DC 8 + prof + CHA or be Frightened of you for 1 minute (repeat save at end of each turn).
+**Description:** One helper + one endpoint. (1) `_pc_has_conquest_oath(sheet, min_level)` — multiclass-aware. (2) `/use_conquering_presence` — body `{character_id, target_combatant_ids: [...], override?}`. Validates Conquest Paladin Lv 3+ + `channel-divinity` resource current >= 1 + non-empty target list + each target in active battle + Phase 4 action chip. Decrements CD counter, marks chip, computes spell save DC, broadcasts the multi-target save request. v1 ships announce-only — GM rolls each Wis save and installs Frightened on failures. Caelan Lv 8 CHA 16 → DC 14 (8 + prof 3 + CHA +3). Caelan PATCH'd to "Oath of Conquest" + 2 Bandits seeded. One new harness test file with 5 tests.
+
+### Added
+- `_pc_has_conquest_oath(sheet, min_level)` helper gate.
+- `/api/campaign/{cid}/use_conquering_presence` endpoint.
+- `tests/harness/test_conquering_presence.py` — 5 tests.
+
+### Notes
+- **PATCH bump** — 1 helper + 1 endpoint + 5 regression tests. No schema change.
+- **Multi-target AOE CD shape.** Mirrors the v2.99.243 Peace Domain Emboldening Bond multi-target loop, but instead of installing buffs on the targets, just emits a save request for each. The Frightened condition install on save-fail is the GM's call in v1; future commit can auto-roll the saves + install via the existing condition-buff registry.
+- **Phase H.2 progress: 3 of 5 oaths have first features shipped** (Ancients v2.99.245, Vengeance v2.99.246, Conquest v2.99.247). Remaining: Redemption, Glory.
+- **63 ships this session.**
+- **Total harness count: 1321** (was 1316 in v2.99.246).
+
+---
+
 ## [2.99.246] - 2026-06-04 — "The Sworn Mark" — Vengeance Paladin Vow of Enmity CD (Phase H.2 second oath)
 
 **Schema version:** 66
