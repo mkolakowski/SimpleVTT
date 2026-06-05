@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.338] - 2026-06-05 — "The Heavy Hand" — Graviturgy Magic Wizard Adjust Density (Lv 2+, EGtW) — 🎉 G.1 Wizard batch CLOSE
+
+**Schema version:** 66
+**Commit summary:** **G.1 Wizard subclass batch — Graviturgy Magic Wizard Lv 2+ Adjust Density (EGtW).** Closes the Wizard subclass batch at 13/13. RAW EGtW p.185: action + concentration up to 1 min. Target one willing creature within 30 ft, double or halve its weight. Doubled: speed -10 ft, advantage on STR checks/saves. Halved: speed +10 ft, disadvantage on STR checks/saves.
+**Description:** Adds `_pc_has_graviturgy_wizard` helper. One endpoint. `/use_adjust_density` — body `{character_id, mode?, target_character_id?, override?}`. `mode` "double" (default) or "halve". Validates Graviturgy Wizard Lv 2+ + action chip. Optional `target_character_id` (404 if not in campaign). Broadcasts `feature_used` with `source: adjust-density`, `mode`, `speed_delta` (±10), `str_effect`. v1 announce-only — weight/STR-advantage application GM-tracked. One new harness test file with 5 tests.
+
+### Added
+- `/api/campaign/{cid}/use_adjust_density` endpoint.
+- `_pc_has_graviturgy_wizard` helper.
+- `tests/harness/test_adjust_density.py` — 5 tests.
+
+### Notes
+- **🎉 G.1 Wizard subclass batch ✅ CLOSED — 13/13.** All 8 PHB schools (Abjuration, Conjuration, Divination, Enchantment, Evocation, Illusion, Necromancy, Transmutation) + 5 extension schools (Bladesinging TCE, Order of Scribes TCE, War Magic XGE, Chronurgy EGtW, Graviturgy EGtW). Wizard now has at least one Lv 2 first-feature shipped for every subclass in print.
+- **154 ships this session.** 🎯
+- **Total harness count: 1654** (was 1649 in v2.99.337; +5 new tests).
+
+---
+
 ## [2.99.337] - 2026-06-05 — "The Second Throw" — Chronurgy Magic Wizard Chronal Shift (Lv 2+, EGtW)
 
 **Schema version:** 66

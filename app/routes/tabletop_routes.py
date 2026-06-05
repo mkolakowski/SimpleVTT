@@ -25985,6 +25985,30 @@ def _pc_has_tempest_domain(sheet: "dict | None", min_level: int) -> bool:
     return _cleric_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_graviturgy_wizard(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.338 — RAW Graviturgy Magic School Wizard (Wizard,
+    EGtW p.185): Adjust Density (Lv 2), Gravity Well (Lv 6),
+    Violent Attraction (Lv 10), Event Horizon (Lv 14).
+
+    Returns True when the PC is a Wizard with subclass slug
+    containing "graviturgy" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "wizard":
+        has_wizard = any(
+            (entry.get("class") or "").strip().lower() == "wizard"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_wizard:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "graviturgy" not in subclass:
+        return False
+    return _wizard_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_chronurgy_wizard(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.337 — RAW Chronurgy Magic School Wizard (Wizard,
     EGtW p.184): Chronal Shift + Temporal Awareness (Lv 2),
@@ -51167,6 +51191,156 @@ async def use_chronal_shift(
         "feature": "chronal-shift",
         "uses_remaining": cs_cur - 1,
         "uses_max": cs_max,
+        "wizard_level": wizard_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_adjust_density")
+async def use_adjust_density(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.338 — Phase G.1 Wizard subclass batch (Graviturgy
+    Magic Wizard Lv 2+, EGtW) of the v2.99.193 phased completion
+    plan. Adjust Density (Graviturgy Magic Wizard Lv 2+, EGtW
+    p.185): "Action, concentration up to 1 min. Target a willing
+    creature within 30 ft; double or halve its weight. Doubled:
+    speed -10 ft, advantage on STR checks/saves. Halved: speed
+    +10 ft, disadvantage on STR checks/saves." Closes G.1
+    Wizard batch (13/13).
+
+    Body: ``{character_id, mode?, target_character_id?,
+    override?}``. mode "double" (default) or "halve". Costs
+    an action chip. v1 announce-only — actual weight change +
+    STR-advantage application GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    mode = (body.get("mode") or "double").strip().lower()
+    if mode not in ("double", "halve"):
+        mode = "double"
+    target_id = body.get("target_character_id")
+    try:
+        target_id = int(target_id) if target_id is not None else None
+    except (TypeError, ValueError):
+        target_id = None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_graviturgy_wizard(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "graviturgy wizard lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _wizard_level_from_sheet(sheet),
+        })
+
+    target_name = None
+    if target_id is not None:
+        target_char = db.query(Character).filter(
+            Character.id == target_id,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not target_char:
+            return JSONResponse(status_code=404, content={
+                "error": "target_not_found",
+                "target_character_id": target_id,
+            })
+        target_name = target_char.name
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "adjust-density",
+            "label": "Adjust Density",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    wizard_lv = _wizard_level_from_sheet(sheet)
+    if mode == "double":
+        speed_delta = -10
+        str_effect = "advantage"
+        effect_text = (
+            "weight doubled — speed -10 ft, advantage on STR "
+            "checks and saves"
+        )
+    else:
+        speed_delta = 10
+        str_effect = "disadvantage"
+        effect_text = (
+            "weight halved — speed +10 ft, disadvantage on STR "
+            "checks and saves"
+        )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_blurb = f" on {target_name}" if target_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🪐 Adjust Density{target_blurb} — {effect_text}"
+            ),
+            "feature_desc": (
+                f"{char.name} bends gravity{target_blurb}: "
+                f"{effect_text}. Concentration up to 1 min. "
+                f"(Graviturgy Magic Wizard Lv 2+ EGtW class "
+                f"feature.)"
+            ),
+            "source": "adjust-density",
+            "mode": mode,
+            "speed_delta": speed_delta,
+            "str_effect": str_effect,
+            "target_character_id": target_id,
+            "target_character_name": target_name,
+            "wizard_level": wizard_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "adjust-density",
+        "mode": mode,
+        "speed_delta": speed_delta,
+        "str_effect": str_effect,
+        "target_character_id": target_id,
+        "target_character_name": target_name,
         "wizard_level": wizard_lv,
     }
 
