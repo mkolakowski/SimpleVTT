@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.419] - 2026-06-06 — "The Steeled Resolve" — Fighting Spirit applies temp HP (automation Phase 4.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 4.2 — Fighting Spirit (Samurai Fighter) now applies its temp HP to the samurai via `_grant_temp_hp` instead of announce-only.**
+**Description:** `/use_fighting_spirit` computes its temp HP (5/10/15 by Fighter level) and the 3-per-long-rest budget as before, then applies the temp HP to the samurai's sheet via `_grant_temp_hp` (RAW non-stacking). The until-end-of-turn attack advantage stays GM-tracked. Response gains `temp_hp_applied`.
+
+### Changed
+- `/api/campaign/{cid}/use_fighting_spirit` applies the temp HP to the samurai (was announce-only); response gains `temp_hp_applied`.
+
+### Added
+- `tests/harness/test_fighting_spirit.py::test_fs_applies_temp_hp` — long-rests (temp → 0, refills uses), then asserts the grant via the `character_hp_update` broadcast (5 at Lv 9).
+
+### Notes
+- Third P4.2 retrofit (the last simple self-grant). Remaining: Inspiring Smite (multi-target allocation) + Spirit Totem (bear aura).
+- **Total harness count: 1844** (was 1843 in v2.99.418; +1 new test).
+
+---
+
 ## [2.99.418] - 2026-06-06 — "The Reaper's Tithe" — Touch of Death applies temp HP (automation Phase 4.2)
 
 **Schema version:** 66

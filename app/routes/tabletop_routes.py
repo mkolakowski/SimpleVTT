@@ -53951,8 +53951,13 @@ async def use_fighting_spirit(
 
     Body: ``{character_id, override?}``. Costs a bonus chip.
     Computes the temp-HP amount by Fighter level (5/10/15)
-    server-side. v1 announce-only — the advantage + temp-HP
-    application + 3-per-long-rest limit are GM-tracked.
+    server-side. The 3-per-long-rest budget is server-tracked (v2.99.387).
+
+    v2.99.419 — Phase 4.2 of docs/plans/temp-hp-and-bonuses.md: the temp
+    HP (5/10/15 by level) is now **applied to the samurai** via
+    `_grant_temp_hp` (RAW non-stacking) instead of announce-only. The
+    until-end-of-turn attack advantage stays GM-tracked. Response gains
+    `temp_hp_applied`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -54055,6 +54060,12 @@ async def use_fighting_spirit(
         },
     })
 
+    # v2.99.419 — Phase 4.2: apply the temp HP to the samurai (self).
+    gr = await _grant_temp_hp(
+        db, campaign_id, {"char_id": char.id}, temp_hp,
+        source="fighting-spirit",
+    )
+
     return {
         "ok": True,
         "feature": "fighting-spirit",
@@ -54063,6 +54074,7 @@ async def use_fighting_spirit(
         "uses_remaining": uses_remaining,
         "uses_max": uses_max,
         "fighter_level": fighter_lv,
+        "temp_hp_applied": gr["temp_after"] > 0,
     }
 
 

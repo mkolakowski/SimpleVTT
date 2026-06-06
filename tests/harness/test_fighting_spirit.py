@@ -181,3 +181,34 @@ async def test_use_fs_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_fs_applies_temp_hp(
+    gm_client, gm_ws, garrik_samurai,
+):
+    """v2.99.419 — Phase 4.2: Fighting Spirit applies the temp HP to the
+    samurai's sheet via _grant_temp_hp.
+
+    Long-rest first (temp → 0, refills uses), then assert the grant via
+    the character_hp_update broadcast (hp.temp + temp_delta == 5 at Lv 9).
+    """
+    garrik = garrik_samurai
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_fighting_spirit",
+        json={"character_id": garrik["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    temp = data["temp_hp"]
+    assert temp == 5  # Lv 9 → 5
+    assert data["temp_hp_applied"] is True
+
+    bu = await gm_ws.wait_for("character_hp_update")
+    assert bu["data"]["character_id"] == garrik["id"]
+    assert int(bu["data"]["hp"].get("temp") or 0) == temp
+    assert int(bu["data"].get("temp_delta") or 0) == temp
