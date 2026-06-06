@@ -33903,20 +33903,29 @@ async def use_draconic_presence(
     you chose awe) or frightened (if you chose fear) until the
     aura ends."
 
-    Body: ``{character_id, mode: "awe" | "fear", override?}``.
+    Body: ``{character_id, mode: "awe" | "fear",
+    target_combatant_ids?, override?}``.
 
     Validates Sorcerer Draconic Bloodline Lv 18+ + sorcery
     points >= 5 + Phase 4 action slot gate. Decrements 5 SP,
-    marks the action chip, broadcasts feature_used. v1 ships
-    as announce-only — the per-turn CHA save resolution + the
-    24-hour immunity-on-success tracking are filed (would
-    require per-target save tracking + a campaign-wide
-    immunity ledger).
+    marks the action chip, broadcasts feature_used.
+
+    v2.99.411 — Phase 3.4 of docs/plans/feature-saves.md: when
+    ``target_combatant_ids`` (the hostile creatures in the 60-ft aura)
+    is supplied, each target auto-resolves a CHA save (DC 8 + PB + CHA
+    mod) via `_resolve_feature_save` and, on a fail, is Charmed (awe) or
+    Frightened (fear) for 1 minute WITH a repeated save. Without a list
+    it stays announce-only. (RAW concentration — dropping it should end
+    the aura early; that anchor wiring stays GM-tracked for now, the
+    1-minute duration caps it.)
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     mode = (str(body.get("mode") or "awe")).strip().lower()
     override = bool(body.get("override"))
+    target_ids = body.get("target_combatant_ids") or []
+    if not isinstance(target_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
     if mode not in ("awe", "fear"):
         mode = "awe"
     if char_id <= 0:
@@ -34009,6 +34018,7 @@ async def use_draconic_presence(
     caster_color = char.color or player_color
     condition = "charmed" if mode == "awe" else "frightened"
     icon = "✨" if mode == "awe" else "😱"
+    save_dc = _feature_save_dc(sheet, "CHA")
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -34030,6 +34040,7 @@ async def use_draconic_presence(
             "source": "draconic-presence",
             "mode": mode,
             "condition": condition,
+            "save_dc": save_dc,
             "sp_spent": 5,
             "remaining_sp": sp_cur - 5,
             "max_sp": sp_max,
@@ -34047,13 +34058,55 @@ async def use_draconic_presence(
         },
     })
 
+    # v2.99.411 — Phase 3.4: resolve each aura target's CHA save. On a
+    # fail → Charmed (awe) / Frightened (fear) for 1 minute (10 rounds)
+    # WITH a repeated save (RAW: repeat at end of each turn).
+    condition_buff = {
+        "key": condition,
+        "name": (f"{'Charmed' if condition == 'charmed' else 'Frightened'} "
+                 f"(Draconic Presence)"),
+        "icon": icon,
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source_spell": "Draconic Presence",
+        "effects": (
+            ["regards the caster with awe", "won't willingly attack the caster"]
+            if condition == "charmed" else
+            ["disadvantage on ability checks / attacks while the caster "
+             "is in sight",
+             "can't willingly move closer to the caster"]
+        ),
+    }
+    feature_saves: list[dict] = []
+    for tcid in target_ids:
+        cb = _lookup_combatant(campaign_id, str(tcid).strip())
+        if cb is None:
+            continue
+        sr = await _resolve_feature_save(
+            db, campaign_id,
+            caster_char_id=char.id, caster_char_name=char.name,
+            target_combatant=cb,
+            save_ability="CHA", dc=save_dc,
+            note_label=f"Draconic Presence save (DC {save_dc})",
+            condition_buff=condition_buff,
+            repeated_save=True,
+            source="draconic-presence",
+            campaign=campaign,
+            prompt_user=user,
+            feature_name="Draconic Presence",
+        )
+        feature_saves.append(sr)
+
     return {
         "ok": True,
         "mode": mode,
         "condition": condition,
+        "save_dc": save_dc,
         "sp_spent": 5,
         "remaining_sp": sp_cur - 5,
         "max_sp": sp_max,
+        "feature_saves": feature_saves,
     }
 
 

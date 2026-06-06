@@ -258,3 +258,77 @@ async def test_draconic_presence_not_enough_sp(
                  "current": 5, "max": 5, "reset": "long"},
             ]},
         )
+
+
+async def test_dp_resolves_npc_save_installs_condition(
+    gm_client, gm_ws, zara_lv18_with_sp,
+):
+    """v2.99.411 — Phase 3.4: with a target list, Draconic Presence
+    resolves each aura target's CHA save and installs Charmed (awe) /
+    Frightened (fear) with a repeated save on a fail.
+
+    Re-seed a deep SP pool (each use costs 5) so the loop can retry until
+    a template bandit fails its CHA save.
+    """
+    zara = zara_lv18_with_sp
+    await _patch_sheet(
+        gm_client, zara["id"],
+        {"resources": [
+            {"key": "sorcery-points", "label": "Sorcery Points",
+             "current": 200, "max": 200, "reset": "long"},
+        ]},
+    )
+    tmpl_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = tmpl_resp.json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    zara_tok = f"tok_dp_zara_{zara['id']}"
+    bandit_tok = "tok_dp_bandit"
+
+    def _battle():
+        return {"combatants": [
+            {"id": zara_tok, "char_id": zara["id"], "name": zara["name"],
+             "initiative": 12, "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": bandit_tok, "char_id": None,
+             "token_template_id": bandit["id"], "name": "Bandit",
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True}
+
+    installed = False
+    for _ in range(40):
+        await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/battle", json=_battle())
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_draconic_presence",
+            json={"character_id": zara["id"], "mode": "fear",
+                  "target_combatant_ids": [bandit_tok], "override": True},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["save_dc"] >= 8
+        fs = data["feature_saves"]
+        assert len(fs) == 1, fs
+        assert fs[0]["resolved"] is True
+        assert fs[0]["save_ability"] == "CHA"
+        if fs[0]["condition_installed"]:
+            assert fs[0]["condition_key"] == "frightened"
+            installed = True
+            break
+    assert installed, "no failed bandit CHA save in 40 tries"
+
+    bu = await gm_ws.wait_for("battle_update")
+    cb = next((c for c in (bu["data"].get("combatants") or [])
+               if c.get("id") == bandit_tok), None)
+    assert cb is not None
+    fr = next((b for b in (cb.get("buffs") or [])
+               if (b or {}).get("key") == "frightened"), None)
+    assert fr is not None, cb.get("buffs")
+    assert fr.get("name") == "Frightened (Draconic Presence)"
+    # Repeated save (RAW: repeat at end of each turn).
+    assert (fr.get("repeated_save_ability") or "").upper() == "CHA"

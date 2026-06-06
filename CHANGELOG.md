@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.411] - 2026-06-06 — "The Dragon's Awe" — Draconic Presence resolves its saves (automation Phase 3.4)
+
+**Schema version:** 66
+**Commit summary:** **Phase 3.4 — Draconic Presence (Draconic Sorcerer Lv 18) now resolves each aura target's CHA save and installs Charmed (awe) / Frightened (fear) with a repeated save on a fail.** Third presence retrofit; also gives the feature a server-computed DC for the first time.
+**Description:** `/use_draconic_presence` gains an optional `target_combatant_ids` list (the hostile creatures in the 60-ft aura). When supplied, it computes the save DC (`_feature_save_dc(sheet, "CHA")` = 8 + PB + CHA mod — previously the feature had no DC at all) and resolves each target's CHA save via `_resolve_feature_save` (NPC inline / PC prompt). On a fail the target is Charmed (awe) or Frightened (fear) for 1 minute (10 rounds) WITH a repeated save (RAW: repeat at end of each turn). Without a target list it stays announce-only. Response + broadcast gain `save_dc`; response gains `feature_saves`.
+
+### Changed
+- `/api/campaign/{cid}/use_draconic_presence` auto-resolves each aura target's CHA save + installs the condition (was announce-only); now computes + surfaces `save_dc`; response gains `feature_saves`.
+
+### Added
+- `tests/harness/test_draconic_wings_and_presence.py::test_dp_resolves_npc_save_installs_condition` — loops until a template bandit fails its CHA save and asserts the Frightened (Draconic Presence) buff installs with the repeated-save stamp (CHA).
+
+### Notes
+- RAW concentration — dropping it should end the aura early; that anchor wiring stays GM-tracked for now (the 1-minute duration caps it). Remaining P3.4 feature: Champion Challenge (custom "can't move away" condition). Then P3.5 (targeted gaze).
+- **Total harness count: 1836** (was 1835 in v2.99.410; +1 new test).
+
+---
+
 ## [2.99.410] - 2026-06-06 — "The Beguiling Cube" — Fey Presence resolves its saves (automation Phase 3.4)
 
 **Schema version:** 66
