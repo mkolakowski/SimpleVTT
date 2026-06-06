@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.357] - 2026-06-05 — "The Steady Bow" — Way of the Kensei Monk Kensei's Shot (Lv 3+, XGE) — 🥋 Monk Ways batch
+
+**Schema version:** 66
+**Commit summary:** **Monk Ways subclass batch ship #2 — Way of the Kensei Lv 3+ Kensei's Shot (XGE).** Second Monk way ship; opens Way of the Kensei. RAW XGE p.34: as a bonus action, ranged kensei weapon attacks this turn deal an extra 1d4 damage of the weapon's type, until the end of the turn. No ki.
+**Description:** Adds `_pc_has_way_of_kensei` helper. One endpoint. `/use_kensei_shot` — body `{character_id, override?}`. Validates Way of the Kensei Monk Lv 3+ + bonus chip (no ki). Rolls the 1d4 bonus damage **server-side**. Broadcasts `feature_used` with `source: kensei-shot`, `bonus_damage`, `damage_dice: 1d4`. v1 announce-only — the actual on-hit damage application stays GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_kensei_shot` endpoint.
+- `_pc_has_way_of_kensei` helper.
+- `tests/harness/test_kensei_shot.py` — 3 tests.
+
+### Notes
+- **Monk Ways batch progress:** Open Hand (shipped earlier), Shadow (v2.99.356), Kensei (this) all have first features. Remaining untouched: Four Elements (Elemental Attunement), Drunken Master (XGE), Mercy (TCE), Astral Self (TCE), Sun Soul (XGE), Long Death (SCAG).
+- **173 ships this session.**
+- **Total harness count: 1709** (was 1706 in v2.99.356; +3 new tests).
+
+---
+
 ## [2.99.356] - 2026-06-05 — "The Borrowed Dark" — Way of Shadow Monk Shadow Arts (Lv 3+, PHB) — 🥋 Monk Ways batch OPEN
 
 **Schema version:** 66

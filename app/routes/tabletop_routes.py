@@ -26843,6 +26843,31 @@ def _pc_has_way_of_shadow(sheet: "dict | None", min_level: int) -> bool:
     return _monk_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_way_of_kensei(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.357 — RAW Way of the Kensei (Monk subclass, XGE
+    p.34): Kensei Weapons + Agile Parry + Kensei's Shot + Way of
+    the Brush (Lv 3), One with the Blade (Lv 6), Sharpen the
+    Blade (Lv 11), Unerring Accuracy (Lv 17).
+
+    Returns True when the PC is a Monk with subclass slug
+    containing "kensei" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        has_monk = any(
+            (entry.get("class") or "").strip().lower() == "monk"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_monk:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "kensei" not in subclass:
+        return False
+    return _monk_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -50532,6 +50557,121 @@ async def use_shadow_arts(
         "spell": spell,
         "ki_spent": 2,
         "ki_remaining": ki_remaining,
+        "monk_level": monk_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_kensei_shot")
+async def use_kensei_shot(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.357 — Phase G Monk Ways subclass batch ship #2 (Way
+    of the Kensei Lv 3+, XGE) of the v2.99.193 phased completion
+    plan. Kensei's Shot (Way of the Kensei Lv 3+, XGE p.34): "You
+    can use a bonus action on your turn to make your ranged
+    attacks more deadly. When you do so, any ranged attack you
+    make with a kensei weapon this turn deals an extra 1d4 damage
+    of the weapon's type. This benefit lasts until the end of the
+    current turn."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip, no
+    ki. Rolls the 1d4 bonus damage server-side. v1 announce-only —
+    the actual on-hit damage application stays GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_way_of_kensei(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of the kensei monk lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _monk_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "kensei-shot",
+            "label": "Kensei's Shot",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    monk_lv = _monk_level_from_sheet(sheet)
+    try:
+        result = dice_mod.roll("1d4")
+        bonus_damage = int(result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        bonus_damage = 1
+        breakdown = ""
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🏹 Kensei's Shot — +{bonus_damage} dmg this turn"
+            ),
+            "feature_desc": (
+                f"{char.name} steadies the bow: ranged kensei "
+                f"weapon attacks deal +{bonus_damage} (1d4) damage "
+                f"of the weapon's type until the end of this turn. "
+                f"(Way of the Kensei Monk Lv 3+ XGE class feature.)"
+            ),
+            "source": "kensei-shot",
+            "bonus_damage": bonus_damage,
+            "damage_dice": "1d4",
+            "dice_breakdown": breakdown,
+            "monk_level": monk_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "kensei-shot",
+        "bonus_damage": bonus_damage,
+        "damage_dice": "1d4",
         "monk_level": monk_lv,
     }
 
