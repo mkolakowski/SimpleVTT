@@ -27299,6 +27299,32 @@ def _pc_has_rune_knight(sheet: "dict | None", min_level: int) -> bool:
     return _fighter_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_echo_knight(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.373 — RAW Echo Knight (Fighter martial archetype,
+    EGtW p.183): Manifest Echo + Unleash Incarnation (Lv 3),
+    Echo Avatar (Lv 7), Shadow Martyr (Lv 10), Reclaim Potential
+    (Lv 15), Legion of One (Lv 18).
+
+    Returns True when the PC is a Fighter with subclass slug
+    containing "echo" (e.g. "Echo Knight") + meets `min_level`
+    (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        has_fighter = any(
+            (entry.get("class") or "").strip().lower() == "fighter"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_fighter:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "echo" not in subclass:
+        return False
+    return _fighter_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -52939,6 +52965,126 @@ async def use_giants_might(
         "str_advantage": True,
         "bonus_damage_die": f"1d{bonus_die}",
         "duration_minutes": 1,
+        "fighter_level": fighter_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_manifest_echo")
+async def use_manifest_echo(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.373 — Phase G Fighter martial archetype sweep (Echo
+    Knight Lv 3+, EGtW) of the v2.99.193 phased completion plan.
+    Manifest Echo (Echo Knight Lv 3+, EGtW p.183): "You can use a
+    bonus action to magically manifest an echo of yourself in an
+    unoccupied space you can see within 15 feet of you. ... It has
+    AC 14 + your proficiency bonus, 1 hit point, and immunity to
+    all conditions. ... As a bonus action, you can swap places
+    with your echo (within 30 ft) ... When you take the Attack
+    action, any attack can originate from your echo's space ... As
+    a bonus action, you can move the echo up to 30 feet."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip.
+    Computes the echo's AC (14 + proficiency bonus) server-side.
+    v1 announce-only — the echo token placement, swap, and
+    attack-from-echo are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_echo_knight(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "echo knight fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "manifest-echo",
+            "label": "Manifest Echo",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, fighter_lv) - 1) // 4
+    echo_ac = 14 + pb
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"👤 Manifest Echo — echo AC {echo_ac}, 1 HP (15 ft)"
+            ),
+            "feature_desc": (
+                f"{char.name} manifests a spectral echo in an "
+                f"unoccupied space within 15 ft (AC {echo_ac}, 1 "
+                f"HP, immune to all conditions). Swap places with "
+                f"it as a bonus action (within 30 ft), attack from "
+                f"its space, or move it 30 ft as a bonus action. "
+                f"(Echo Knight Fighter Lv 3+ EGtW class feature.)"
+            ),
+            "source": "manifest-echo",
+            "echo_ac": echo_ac,
+            "echo_hp": 1,
+            "manifest_range_ft": 15,
+            "swap_range_ft": 30,
+            "fighter_level": fighter_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "manifest-echo",
+        "echo_ac": echo_ac,
+        "echo_hp": 1,
+        "manifest_range_ft": 15,
+        "swap_range_ft": 30,
         "fighter_level": fighter_lv,
     }
 

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.373] - 2026-06-05 — "The Spectral Twin" — Echo Knight Fighter Manifest Echo (Lv 3+, EGtW) — ⚔️ Fighter archetype sweep
+
+**Schema version:** 66
+**Commit summary:** **Fighter martial archetype sweep ship #4 — Echo Knight Lv 3+ Manifest Echo (EGtW).** Fourth Fighter archetype sweep ship; opens Echo Knight. RAW EGtW p.183: as a bonus action, manifest a spectral echo within 15 ft (AC 14 + proficiency bonus, 1 HP, immune to all conditions). Swap places with it (within 30 ft), attack from its space, or move it 30 ft as a bonus action.
+**Description:** Adds `_pc_has_echo_knight` helper. One endpoint. `/use_manifest_echo` — body `{character_id, override?}`. Validates Echo Knight Fighter Lv 3+ + bonus chip. Computes the echo's AC (14 + proficiency bonus) **server-side**. Broadcasts `feature_used` with `source: manifest-echo`, `echo_ac`, `echo_hp: 1`, `manifest_range_ft: 15`, `swap_range_ft: 30`. v1 announce-only — the echo token placement, swap, and attack-from-echo are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_manifest_echo` endpoint.
+- `_pc_has_echo_knight` helper.
+- `tests/harness/test_manifest_echo.py` — 3 tests.
+
+### Notes
+- **Fighter archetype sweep progress:** Champion, Battle Master, Eldritch Knight (shipped earlier), Samurai, Psi Warrior, Rune Knight, Echo Knight (this) all have first features. Remaining untouched: Cavalier (Unwavering Mark), Arcane Archer (Arcane Shot), Banneret (Rallying Cry).
+- **189 ships this session.**
+- **Total harness count: 1761** (was 1758 in v2.99.372; +3 new tests).
+
+---
+
 ## [2.99.372] - 2026-06-05 — "The Giant's Stature" — Rune Knight Fighter Giant's Might (Lv 3+, TCE) — ⚔️ Fighter archetype sweep
 
 **Schema version:** 66
