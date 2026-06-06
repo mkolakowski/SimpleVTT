@@ -117,8 +117,9 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    (primitive + endpoint).** `_combatant_token` + `_force_move` (mutates
    the target token's `x/y` along the source→target axis, broadcasts
    `token_move forced:true`, bypasses speed cap + OA) + the `/force_move`
-   endpoint. Tested directly (push 15 ft → token moves 3 cells). The
-   Pushing Attack retrofit is the next commit.
+   endpoint. Tested directly (push 15 ft → token moves 3 cells). Pushing
+   Attack (v2.99.433) rolls the STR save server-side + force-moves the
+   target 15 ft away on a fail.
 3. **P6.3 — more forced movers (S-M).** Open Hand push, Thorn Whip
    (pull), Thunderwave / Gust (push), Repelling Blast.
 4. **P7.1 — `_summon_companion` + a companion registry (L).** The

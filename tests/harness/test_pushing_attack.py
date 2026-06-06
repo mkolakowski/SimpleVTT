@@ -126,3 +126,78 @@ async def test_use_pa_wrong_subclass(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+def _cb(cid, char_id, name):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": 40, "hp_max": 40, "buffs": [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def _place_token(gm_client, char_id, x, y):
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/place-token",
+        json={"x": float(x), "y": float(y)},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def _token_y(gm_client, char_id):
+    resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
+    for t in resp.json()["tokens"]:
+        if t.get("character_id") == char_id:
+            return float(t["y"])
+    return None
+
+
+async def test_pa_push_moves_target_on_failed_save(
+    gm_client, roster, garrik_battle_master,
+):
+    """v2.99.433 — Phase 6.2: on a failed STR save, Pushing Attack pushes
+    the target's token 15 ft away from the Battle Master via _force_move.
+
+    Garrik (above Pip) pushes Pip downward. The save is rolled, so loop
+    until Pip fails — then push_applied is True and Pip's token moved
+    +210 px (3 cells / 15 ft). Deep die pool so the loop is just POSTs.
+    """
+    garrik = garrik_battle_master
+    pip = roster["Pip Quickfingers"]
+    await _patch_sheet(
+        gm_client, garrik["id"],
+        {"resources": [_superiority_dice_block(40, 40)]},
+    )
+    pip_cb, garrik_cb = "tok_pa_pip", "tok_pa_garrik"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _cb(garrik_cb, garrik["id"], garrik["name"]),
+            _cb(pip_cb, pip["id"], pip["name"]),
+        ], "turn_index": 0, "round": 1, "active": False},
+    )
+    # Garrik directly above Pip (same x) → push is straight down (+y).
+    await _place_token(gm_client, garrik["id"], 700.0, 560.0)
+    await _place_token(gm_client, pip["id"], 700.0, 700.0)
+
+    pushed = False
+    for _ in range(30):
+        before_y = await _token_y(gm_client, pip["id"])
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_pushing_attack",
+            json={"character_id": garrik["id"], "target_combatant_id": pip_cb},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["save_resolved"] is True
+        if data["save_passed"] is False:
+            assert data["push_applied"] is True
+            after_y = await _token_y(gm_client, pip["id"])
+            assert after_y == before_y + 210.0  # 15 ft on the 70-px grid
+            pushed = True
+            break
+        # On a pass nothing moved.
+        assert data["push_applied"] is False
+        assert await _token_y(gm_client, pip["id"]) == before_y
+    assert pushed, "no failed STR save in 30 swings"

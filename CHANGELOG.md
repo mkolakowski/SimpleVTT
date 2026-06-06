@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.433] - 2026-06-06 — "The Driving Blow" — Pushing Attack moves the target (automation Phase 6.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 6.2 — Pushing Attack (Battle Master) now resolves the STR save server-side and, on a fail, pushes the target's token 15 ft away from the Battle Master via `_force_move`.** First forced-move retrofit.
+**Description:** `/use_pushing_attack` gains an optional `target_combatant_id`. When supplied, the target's STR save is rolled server-side (v1: rolled for any target including PCs — the table rolls; a PC roll-request prompt is a follow-up) against the maneuver DC, broadcast as a `roll`, and on a fail `_force_move` pushes the target's token 15 ft directly away from the attacker (resolved from the active battle by `char_id`). Needs the target on a gridded map with a token (off-grid → the save resolves but no move). Response gains `save_resolved` / `save_passed` / `push_applied`.
+
+### Changed
+- `/api/campaign/{cid}/use_pushing_attack` rolls the STR save + pushes the target on a fail (was announce-only); response gains the push-result fields.
+
+### Added
+- `tests/harness/test_pushing_attack.py::test_pa_push_moves_target_on_failed_save` — Garrik (above Pip) loops until Pip fails the STR save, then asserts `push_applied` + Pip's token moved +210 px (3 cells); a passed save moves nothing.
+
+### Notes
+- First `_force_move` retrofit. Next push/pull features (Open Hand push, Thorn Whip pull, Thunderwave) follow the same shape (P6.3).
+- **Total harness count: 1869** (was 1868 in v2.99.432; +1 new test).
+
+---
+
 ## [2.99.432] - 2026-06-06 — "The Unseen Hand" — Forced-movement primitive + /force_move (automation Phase 6.2)
 
 **Schema version:** 66

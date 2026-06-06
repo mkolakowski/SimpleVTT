@@ -43311,15 +43311,23 @@ async def use_pushing_attack(
     it must make a Strength saving throw. On a failed save, you
     push the target up to 15 feet away from you."
 
-    Body: ``{character_id, override?}``. Mirrors Trip / Disarming
-    / Menacing Attack. Save ability is STR; on-fail effect is
-    "pushed up to 15 ft away" (GM positions). Size-gate
-    (Large-or-smaller) is GM-tracked in v1.
+    Body: ``{character_id, target_combatant_id?, override?}``. Mirrors
+    Trip / Disarming / Menacing Attack. Save ability is STR.
+
+    v2.99.433 — Phase 6.2 of docs/plans/movement-and-summons.md: when a
+    ``target_combatant_id`` is supplied, the STR save is rolled
+    server-side (v1: rolled for any target, including PCs — the table
+    rolls) and, on a fail, the target's token is **pushed 15 ft away**
+    from the Battle Master via `_force_move`. Needs the target on a
+    gridded map with a token (off-grid → save resolves but no move). The
+    size gate (Large-or-smaller) stays GM-tracked. Response gains
+    `save_resolved` / `save_passed` / `push_applied`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id") or None
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -43436,6 +43444,63 @@ async def use_pushing_attack(
         },
     })
 
+    # v2.99.433 — Phase 6.2: resolve the STR save vs the target and, on a
+    # fail, push its token 15 ft away from the Battle Master.
+    save_resolved = False
+    save_passed = None
+    push_applied = False
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant:
+            _tmod = None
+            if target_combatant.get("char_id"):
+                _tchar = db.query(Character).filter(
+                    Character.id == int(target_combatant["char_id"]),
+                ).first()
+                if _tchar:
+                    _tmod, _ = _resolve_stat_modifier(
+                        _tchar.sheet or {}, "dnd5e", "str_save")
+            elif target_combatant.get("token_template_id"):
+                _tmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(
+                        target_combatant["token_template_id"]),
+                ).first()
+                if _tmpl:
+                    _tmod, _ = _resolve_stat_modifier(
+                        _monster_template_to_sheet(_tmpl, campaign_id),
+                        "dnd5e", "str_save")
+            if _tmod is not None:
+                _expr = f"1d20{_tmod:+d}"
+                try:
+                    _r = dice_mod.roll(_expr)
+                    _total, _bd = int(_r.total), _r.breakdown
+                except dice_mod.DiceParseError:
+                    _total, _bd = 0, ""
+                save_resolved = True
+                save_passed = _total >= save_dc
+                _tname = target_combatant.get("name") or "Target"
+                await hub.broadcast(campaign_id, {
+                    "type": "roll",
+                    "data": {
+                        "expression": _expr, "total": _total,
+                        "breakdown": _bd,
+                        "note": f"Pushing Attack save (DC {save_dc})",
+                        "user_name": _tname, "char_name": _tname,
+                        "visibility": Visibility.PUBLIC.value, "dc": save_dc,
+                    },
+                })
+                if not save_passed:
+                    _state = hub.get_battle(campaign_id)
+                    _attacker_cb = next(
+                        (c for c in (_state.get("combatants") or [])
+                         if c.get("char_id") == char.id), None,
+                    ) if _state else None
+                    gr = await _force_move(
+                        db, campaign_id, target_combatant, 15,
+                        source_combatant=_attacker_cb,
+                    )
+                    push_applied = gr["moved"]
+
     return {
         "ok": True,
         "feature": "pushing-attack",
@@ -43445,6 +43510,9 @@ async def use_pushing_attack(
         "save_ability": "STR",
         "push_max_ft": 15,
         "dice_remaining": new_sd,
+        "save_resolved": save_resolved,
+        "save_passed": save_passed,
+        "push_applied": push_applied,
     }
 
 
