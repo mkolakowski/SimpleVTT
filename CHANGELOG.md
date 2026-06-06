@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.362] - 2026-06-05 — "The Fire Snake's Fangs" — Way of the Four Elements Monk Fangs of the Fire Snake (Lv 3+, PHB) — 🥋 Monk Ways batch
+
+**Schema version:** 66
+**Commit summary:** **Monk Ways subclass batch ship #8 — Way of the Four Elements Lv 3+ Fangs of the Fire Snake (PHB).** Seventh Monk way ship; opens Way of the Four Elements. RAW PHB p.81 (a Disciple of the Elements discipline): when you take the Attack action, spend 1 ki to grow flame tendrils — unarmed strike reach +10 ft for that action; on a hit you may spend a 2nd ki to deal an extra 1d10 fire damage.
+**Description:** Adds `_pc_has_way_of_four_elements` helper. One endpoint. `/use_fangs_of_the_fire_snake` — body `{character_id, override?}`. Validates Way of the Four Elements Monk Lv 3+, the `ki` resource has ≥ 1, and the action chip. Spends 1 ki, reports the +10 ft reach + rolls the potential 1d10 fire bonus **server-side**. Broadcasts `resource_update` + `feature_used` with `source: fangs-of-the-fire-snake`, `reach_bonus_ft: 10`, `fire_damage`, `fire_damage_die: 1d10`, `ki_remaining`. v1 announce-only — the attacks + the 2nd-ki fire spend stay GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_fangs_of_the_fire_snake` endpoint.
+- `_pc_has_way_of_four_elements` helper.
+- `tests/harness/test_fangs_of_the_fire_snake.py` — 3 tests.
+
+### Notes
+- **Monk Ways batch progress:** Open Hand (shipped earlier), Shadow, Kensei, Mercy, Sun Soul, Drunken Master, Astral Self, Four Elements (this) all have first features. Remaining untouched: Way of the Long Death (SCAG). One more ship closes the batch.
+- **178 ships this session.**
+- **Total harness count: 1724** (was 1721 in v2.99.361; +3 new tests).
+
+---
+
 ## [2.99.361] - 2026-06-05 — "The Spectral Arms" — Way of the Astral Self Monk Arms of the Astral Self (Lv 3+, TCE) — 🥋 Monk Ways batch
 
 **Schema version:** 66

@@ -26979,6 +26979,32 @@ def _pc_has_way_of_astral_self(sheet: "dict | None", min_level: int) -> bool:
     return _monk_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_way_of_four_elements(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.362 — RAW Way of the Four Elements (Monk subclass,
+    PHB p.80): Disciple of the Elements — Elemental Attunement +
+    elemental disciplines (Lv 3), more disciplines + scaling
+    (Lv 6/11/17).
+
+    Returns True when the PC is a Monk with subclass slug
+    containing "elements" (e.g. "Way of the Four Elements") +
+    meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        has_monk = any(
+            (entry.get("class") or "").strip().lower() == "monk"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_monk:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "elements" not in subclass:
+        return False
+    return _monk_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -51340,6 +51366,169 @@ async def use_arms_of_the_astral_self(
         "melee_damage_die": f"1d{ma_die}",
         "wis_mod": wis_mod,
         "duration_minutes": 10,
+        "ki_spent": 1,
+        "ki_remaining": ki_remaining,
+        "monk_level": monk_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_fangs_of_the_fire_snake")
+async def use_fangs_of_the_fire_snake(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.362 — Phase G Monk Ways subclass batch ship #8 (Way
+    of the Four Elements Lv 3+, PHB) of the v2.99.193 phased
+    completion plan. Fangs of the Fire Snake (a Disciple of the
+    Elements discipline, Way of the Four Elements Lv 3+, PHB
+    p.81): "When you use the Attack action on your turn, you can
+    spend 1 ki point to cause tendrils of flame to stretch out
+    from your fists and feet. Your reach with your unarmed strikes
+    increases by 10 feet for that action ... If you hit a creature
+    with the unarmed strike, you can spend 1 ki point to deal an
+    extra 1d10 fire damage."
+
+    Body: ``{character_id, override?}``. Costs an action chip +
+    1 ki (the discipline). Reports the +10 ft reach + rolls the
+    potential 1d10 fire bonus (a hit can spend a 2nd ki to apply
+    it) server-side. v1 announce-only — the attacks + the 2nd-ki
+    fire spend stay GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_way_of_four_elements(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of the four elements monk lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _monk_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    ki_row = None
+    ki_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "ki":
+            ki_row = dict(r); ki_idx = i; break
+    if ki_row is None:
+        raise HTTPException(404, "No Ki resource on this sheet")
+    ki_cur = int(ki_row.get("current") or 0)
+    if ki_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_ki",
+            "available": ki_cur,
+            "required": 1,
+            "label": "Fangs of the Fire Snake",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "fangs-of-the-fire-snake",
+            "label": "Fangs of the Fire Snake",
+            "strict": strict,
+        })
+
+    ki_remaining = ki_cur - 1
+    ki_row["current"] = ki_remaining
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    monk_lv = _monk_level_from_sheet(sheet)
+    try:
+        result = dice_mod.roll("1d10")
+        fire_damage = int(result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        fire_damage = 1
+        breakdown = ""
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "ki",
+            "current": ki_remaining,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🔥 Fangs of the Fire Snake — +10 ft reach, "
+                f"{fire_damage} fire on hit (2nd ki)"
+            ),
+            "feature_desc": (
+                f"{char.name} extends tendrils of flame: unarmed "
+                f"strikes reach 10 ft farther this turn (spent 1 "
+                f"ki, {ki_remaining} left). On a hit, may spend a "
+                f"2nd ki to deal {fire_damage} fire (1d10). (Way "
+                f"of the Four Elements Monk Lv 3+ PHB discipline.)"
+            ),
+            "source": "fangs-of-the-fire-snake",
+            "reach_bonus_ft": 10,
+            "fire_damage": fire_damage,
+            "fire_damage_die": "1d10",
+            "dice_breakdown": breakdown,
+            "ki_spent": 1,
+            "ki_remaining": ki_remaining,
+            "monk_level": monk_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "fangs-of-the-fire-snake",
+        "reach_bonus_ft": 10,
+        "fire_damage": fire_damage,
+        "fire_damage_die": "1d10",
         "ki_spent": 1,
         "ki_remaining": ki_remaining,
         "monk_level": monk_lv,
