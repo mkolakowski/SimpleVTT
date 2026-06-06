@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.358] - 2026-06-05 — "The Merciful Touch" — Way of Mercy Monk Hands of Healing (Lv 3+, TCE) — 🥋 Monk Ways batch
+
+**Schema version:** 66
+**Commit summary:** **Monk Ways subclass batch ship #4 — Way of Mercy Lv 3+ Hands of Healing (TCE).** Third Monk way ship; opens Way of Mercy. RAW TCE p.51: as an action, spend 1 ki to touch a creature and restore HP = a roll of your Martial Arts die + your WIS modifier.
+**Description:** Adds `_pc_has_way_of_mercy` helper + a `_martial_arts_die(monk_lv)` helper (d4/d6/d8/d10 by level per PHB p.78). One endpoint. `/use_hands_of_healing` — body `{character_id, override?}`. Validates Way of Mercy Monk Lv 3+, the `ki` resource has ≥ 1, and the action chip. Spends 1 ki, rolls the heal (Martial Arts die + WIS mod, min 1) **server-side**. Broadcasts `resource_update` + `feature_used` with `source: hands-of-healing`, `heal_amount`, `martial_arts_die`, `die_roll`, `wis_mod`, `ki_remaining`. v1 announce-only — the target choice + HP application stay GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_hands_of_healing` endpoint.
+- `_pc_has_way_of_mercy` helper + `_martial_arts_die` helper.
+- `tests/harness/test_hands_of_healing.py` — 3 tests.
+
+### Notes
+- **Monk Ways batch progress:** Open Hand (shipped earlier), Shadow (v2.99.356), Kensei (v2.99.357), Mercy (this) all have first features. Remaining untouched: Four Elements (Elemental Attunement), Drunken Master (XGE), Astral Self (TCE), Sun Soul (XGE), Long Death (SCAG).
+- **174 ships this session.**
+- **Total harness count: 1712** (was 1709 in v2.99.357; +3 new tests).
+
+---
+
 ## [2.99.357] - 2026-06-05 — "The Steady Bow" — Way of the Kensei Monk Kensei's Shot (Lv 3+, XGE) — 🥋 Monk Ways batch
 
 **Schema version:** 66

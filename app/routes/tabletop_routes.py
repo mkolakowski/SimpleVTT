@@ -26868,6 +26868,44 @@ def _pc_has_way_of_kensei(sheet: "dict | None", min_level: int) -> bool:
     return _monk_level_from_sheet(sheet) >= min_level
 
 
+def _martial_arts_die(monk_lv: int) -> int:
+    """v2.99.358 — RAW Monk Martial Arts die size by level (PHB
+    p.78): d4 (Lv 1-4), d6 (Lv 5-10), d8 (Lv 11-16), d10 (Lv
+    17+). Returns the die face count."""
+    if monk_lv >= 17:
+        return 10
+    if monk_lv >= 11:
+        return 8
+    if monk_lv >= 5:
+        return 6
+    return 4
+
+
+def _pc_has_way_of_mercy(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.358 — RAW Way of Mercy (Monk subclass, TCE p.51):
+    Implements of Mercy + Hands of Healing + Hands of Harm (Lv 3),
+    Physician's Touch (Lv 6), Flurry of Healing and Harm (Lv 11),
+    Hand of Ultimate Mercy (Lv 17).
+
+    Returns True when the PC is a Monk with subclass slug
+    containing "mercy" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        has_monk = any(
+            (entry.get("class") or "").strip().lower() == "monk"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_monk:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "mercy" not in subclass:
+        return False
+    return _monk_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -50672,6 +50710,172 @@ async def use_kensei_shot(
         "feature": "kensei-shot",
         "bonus_damage": bonus_damage,
         "damage_dice": "1d4",
+        "monk_level": monk_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_hands_of_healing")
+async def use_hands_of_healing(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.358 — Phase G Monk Ways subclass batch ship #3 (Way
+    of Mercy Lv 3+, TCE) of the v2.99.193 phased completion plan.
+    Hands of Healing (Way of Mercy Lv 3+, TCE p.51): "As an
+    action, you can spend 1 ki point to touch a creature and
+    restore a number of hit points equal to a roll of your Martial
+    Arts die + your Wisdom modifier."
+
+    Body: ``{character_id, override?}``. Costs an action chip +
+    1 ki. Rolls the heal (Martial Arts die + WIS mod) server-side.
+    v1 announce-only — the target choice + HP application stay
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_way_of_mercy(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of mercy monk lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _monk_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    ki_row = None
+    ki_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "ki":
+            ki_row = dict(r); ki_idx = i; break
+    if ki_row is None:
+        raise HTTPException(404, "No Ki resource on this sheet")
+    ki_cur = int(ki_row.get("current") or 0)
+    if ki_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_ki",
+            "available": ki_cur,
+            "required": 1,
+            "label": "Hands of Healing",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "hands-of-healing",
+            "label": "Hands of Healing",
+            "strict": strict,
+        })
+
+    ki_remaining = ki_cur - 1
+    ki_row["current"] = ki_remaining
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    monk_lv = _monk_level_from_sheet(sheet)
+    ma_die = _martial_arts_die(monk_lv)
+    try:
+        wis_score = int((sheet.get("abilities") or {}).get("WIS", 10))
+    except (TypeError, ValueError):
+        wis_score = 10
+    wis_mod = (wis_score - 10) // 2
+    try:
+        result = dice_mod.roll(f"1d{ma_die}")
+        die_roll = int(result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        die_roll = 1
+        breakdown = ""
+    heal_amount = max(1, die_roll + wis_mod)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "ki",
+            "current": ki_remaining,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🩹 Hands of Healing — heal {heal_amount} HP (1 ki)"
+            ),
+            "feature_desc": (
+                f"{char.name} channels mercy: touches a creature "
+                f"and restores {heal_amount} HP (1d{ma_die} Martial "
+                f"Arts die {die_roll} + WIS mod {wis_mod:+d}). Spent "
+                f"1 ki, {ki_remaining} left. (Way of Mercy Monk "
+                f"Lv 3+ TCE class feature.)"
+            ),
+            "source": "hands-of-healing",
+            "heal_amount": heal_amount,
+            "martial_arts_die": f"1d{ma_die}",
+            "die_roll": die_roll,
+            "wis_mod": wis_mod,
+            "dice_breakdown": breakdown,
+            "ki_spent": 1,
+            "ki_remaining": ki_remaining,
+            "monk_level": monk_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "hands-of-healing",
+        "heal_amount": heal_amount,
+        "martial_arts_die": f"1d{ma_die}",
+        "die_roll": die_roll,
+        "wis_mod": wis_mod,
+        "ki_spent": 1,
+        "ki_remaining": ki_remaining,
         "monk_level": monk_lv,
     }
 
