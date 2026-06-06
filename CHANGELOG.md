@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.418] - 2026-06-06 — "The Reaper's Tithe" — Touch of Death applies temp HP (automation Phase 4.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 4.2 — Touch of Death (Way of the Long Death Monk) now applies its temp HP to the monk via `_grant_temp_hp` instead of announce-only.**
+**Description:** `/use_touch_of_death` computes its temp HP (WIS mod + monk level, min 1) as before, then applies it to the monk's sheet via `_grant_temp_hp` (RAW non-stacking). The GM still triggers the on-kill moment by invoking the endpoint. Response gains `temp_hp_applied`.
+
+### Changed
+- `/api/campaign/{cid}/use_touch_of_death` applies the temp HP to the monk (was announce-only); response gains `temp_hp_applied`.
+
+### Added
+- `tests/harness/test_touch_of_death.py::test_tod_applies_temp_hp` — long-rests (temp → 0), then asserts the grant via the `character_hp_update` broadcast.
+
+### Notes
+- Second P4.2 retrofit (self-grant, same shape as Dark One's Blessing). Next: Fighting Spirit (self), Inspiring Smite (multi-target), Spirit Totem (bear aura).
+- **Total harness count: 1843** (was 1842 in v2.99.417; +1 new test).
+
+---
+
 ## [2.99.417] - 2026-06-06 — "The Fiend's Vigor" — Dark One's Blessing applies temp HP (automation Phase 4.2)
 
 **Schema version:** 66

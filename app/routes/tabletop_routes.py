@@ -53121,9 +53121,13 @@ async def use_touch_of_death(
     temporary hit point)."
 
     Body: ``{character_id}``. No action cost (a reactive trigger
-    on a kill). Computes the temp-HP amount server-side. v1
-    announce-only — the kill trigger + temp-HP application stay
-    GM-tracked.
+    on a kill). Computes the temp-HP amount server-side.
+
+    v2.99.418 — Phase 4.2 of docs/plans/temp-hp-and-bonuses.md: the temp
+    HP (WIS mod + monk level, min 1) is now **applied to the monk** via
+    `_grant_temp_hp` (RAW non-stacking) instead of announce-only. The GM
+    still decides when the on-kill trigger fires (the endpoint is the
+    trigger). Response gains `temp_hp_applied`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -53193,12 +53197,19 @@ async def use_touch_of_death(
         },
     })
 
+    # v2.99.418 — Phase 4.2: apply the temp HP to the monk (self).
+    gr = await _grant_temp_hp(
+        db, campaign_id, {"char_id": char.id}, temp_hp,
+        source="touch-of-death",
+    )
+
     return {
         "ok": True,
         "feature": "touch-of-death",
         "temp_hp": temp_hp,
         "wis_mod": wis_mod,
         "monk_level": monk_lv,
+        "temp_hp_applied": gr["temp_after"] > 0,
     }
 
 
