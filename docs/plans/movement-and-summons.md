@@ -109,10 +109,10 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
 
 ## 4. Phased implementation
 
-1. **P6.1 — speed buffs (S).** Wire `speed_bonus_ft` (+ a Haste ×2
-   multiplier) into `effective_speed_walk`; retrofit Longstrider / Haste /
-   Eagle Totem to install the buff. Test: a buffed combatant's move cap
-   rises (the move endpoint accepts a longer move).
+1. **P6.1 — speed buffs (S). ✅ shipped v2.99.431.** `effective_speed_walk`
+   now reads `speed_bonus_ft` (additive) + `speed_multiplier` (Haste ×2);
+   Haste + Longstrider install the keys. Unit-tested. (The client JS speed
+   mirror is a cosmetic follow-up — the server move-cap is authoritative.)
 2. **P6.2 — `_force_move` + endpoint (M).** The primitive + the
    `/force_move` endpoint; retrofit Pushing Attack (push on a failed STR
    save moves the target's token). Test: the token's `x/y` moved by the

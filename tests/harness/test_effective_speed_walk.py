@@ -15,6 +15,8 @@ v2.99.92 Lance of Lethargy buff format (and any future Slow / web
 import pytest
 
 from app.content.effective_speed import (
+    effective_speed_bonus_ft as _effective_speed_bonus_ft,
+    effective_speed_multiplier as _effective_speed_multiplier,
     effective_speed_reduction_ft as _effective_speed_reduction_ft,
     effective_speed_walk as _effective_speed_walk,
 )
@@ -148,3 +150,57 @@ def test_kael_40_speed_minus_10_returns_30():
 
 def test_none_combatant_returns_30_default():
     assert _effective_speed_walk(None) == 30
+
+
+# ---- v2.99.431 — Phase 6.1: speed bonuses + multiplier ----------------
+
+def test_speed_bonus_ft_sums():
+    combatant = {"speed_walk": 30, "buffs": [
+        {"key": "longstrider", "effects": {"speed_bonus_ft": 10}},
+        {"key": "x", "effects": {"speed_bonus_ft": 5}},
+    ]}
+    assert _effective_speed_bonus_ft(combatant) == 15
+
+
+def test_longstrider_raises_walk_to_40():
+    combatant = {"speed_walk": 30, "buffs": [
+        {"key": "longstrider", "effects": {"speed_bonus_ft": 10}},
+    ]}
+    assert _effective_speed_walk(combatant) == 40
+
+
+def test_haste_multiplier_doubles_walk():
+    combatant = {"speed_walk": 30, "buffs": [
+        {"key": "haste", "effects": {"speed_multiplier": 2}},
+    ]}
+    assert _effective_speed_multiplier(combatant) == 2
+    assert _effective_speed_walk(combatant) == 60
+
+
+def test_haste_multiplier_takes_max_not_stack():
+    combatant = {"speed_walk": 30, "buffs": [
+        {"key": "haste", "effects": {"speed_multiplier": 2}},
+        {"key": "other", "effects": {"speed_multiplier": 2}},
+    ]}
+    assert _effective_speed_multiplier(combatant) == 2  # not 4
+
+
+def test_bonus_then_multiplier_then_reduction():
+    """RAW order: (base + bonus) × mult − reduction, clamped ≥ 0.
+    (30 + 10) × 2 − 15 = 65."""
+    combatant = {"speed_walk": 30, "buffs": [
+        {"key": "longstrider", "effects": {"speed_bonus_ft": 10}},
+        {"key": "haste", "effects": {"speed_multiplier": 2}},
+        {"key": "lance-of-lethargy", "effects": {"speed_reduction_ft": 15}},
+    ]}
+    assert _effective_speed_walk(combatant) == 65
+
+
+def test_no_speed_keys_unchanged():
+    """No bonus/multiplier keys → base unchanged (back-compat)."""
+    combatant = {"speed_walk": 30, "buffs": [
+        {"key": "bless", "effects": {"bless_attack_bonus": "d4"}},
+    ]}
+    assert _effective_speed_walk(combatant) == 30
+    assert _effective_speed_bonus_ft(combatant) == 0
+    assert _effective_speed_multiplier(combatant) == 1

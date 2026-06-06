@@ -1251,8 +1251,27 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         "concentration": True,  # RAW
         "effects": {
             "ac_bonus": 2,
+            # v2.99.431 — Phase 6.1: Haste doubles your speed. Read by
+            # effective_speed_walk (× speed_multiplier).
+            "speed_multiplier": 2,
         },
-        "desc": "+2 AC (plus the GM-tracked extra action, doubled speed, and Dex-save advantage) for 1 minute (concentration).",
+        "desc": "+2 AC and doubled speed (plus the GM-tracked extra action and Dex-save advantage) for 1 minute (concentration).",
+    },
+    # v2.99.431 — Phase 6.1 of docs/plans/movement-and-summons.md.
+    # Longstrider (Ranger / Wizard / etc. L1): "+10 ft speed for 1 hour,
+    # no concentration." Modeled as effects.speed_bonus_ft = 10, read by
+    # effective_speed_walk so the move-endpoint speed cap rises.
+    "longstrider": {
+        "key": "longstrider",
+        "name": "Longstrider",
+        "icon": "🏃",
+        "duration_rounds": 600,  # 1 hour RAW
+        "duration_max": 600,
+        "concentration": False,
+        "effects": {
+            "speed_bonus_ft": 10,
+        },
+        "desc": "Speed increases by 10 ft for 1 hour.",
     },
 }
 

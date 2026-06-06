@@ -43,10 +43,68 @@ def effective_speed_reduction_ft(combatant: dict | None) -> int:
     return max(0, total)
 
 
+def effective_speed_bonus_ft(combatant: dict | None) -> int:
+    """v2.99.431 — Phase 6.1: sum the active speed-BONUS effects on a
+    combatant's buff list (``effects.speed_bonus_ft``). The additive
+    complement to ``effective_speed_reduction_ft`` — Longstrider (+10),
+    Eagle Totem / Step of the Wind dash bonuses, etc. install this key.
+    Returns 0 on the same empty/non-dict guards.
+    """
+    if not combatant:
+        return 0
+    buffs = combatant.get("buffs") or []
+    if not isinstance(buffs, list):
+        return 0
+    total = 0
+    for b in buffs:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        try:
+            total += int(effects.get("speed_bonus_ft") or 0)
+        except (TypeError, ValueError):
+            continue
+    return max(0, total)
+
+
+def effective_speed_multiplier(combatant: dict | None) -> int:
+    """v2.99.431 — Phase 6.1: the largest ``effects.speed_multiplier`` on
+    a combatant's buffs (default 1). Haste doubles your speed
+    (``speed_multiplier: 2``). RAW these don't stack — take the max.
+    """
+    if not combatant:
+        return 1
+    buffs = combatant.get("buffs") or []
+    if not isinstance(buffs, list):
+        return 1
+    best = 1
+    for b in buffs:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        try:
+            m = int(effects.get("speed_multiplier") or 1)
+        except (TypeError, ValueError):
+            m = 1
+        if m > best:
+            best = m
+    return best
+
+
 def effective_speed_walk(combatant: dict | None) -> int:
-    """Return ``combatant.speed_walk`` minus the sum of speed-
-    reduction effects from active buffs, clamped to a minimum of 0.
-    Pure derivation; does not mutate the combatant.
+    """Return a combatant's effective walking speed: ``(speed_walk +
+    Σ speed_bonus_ft) × speed_multiplier − Σ speed_reduction_ft``,
+    clamped to a minimum of 0. Pure derivation; does not mutate the
+    combatant.
+
+    v2.99.431 — Phase 6.1 added the bonus + multiplier terms (Longstrider
+    / Haste / Eagle Totem); pre-v2.99.431 this was ``base − reduction``
+    only. Haste's ×2 applies to the buffed base before reductions
+    (RAW "your speed is doubled").
     """
     if not combatant:
         return 30
@@ -54,5 +112,7 @@ def effective_speed_walk(combatant: dict | None) -> int:
         base = int(combatant.get("speed_walk") or 30)
     except (TypeError, ValueError):
         base = 30
+    bonus = effective_speed_bonus_ft(combatant)
+    mult = effective_speed_multiplier(combatant)
     reduction = effective_speed_reduction_ft(combatant)
-    return max(0, base - reduction)
+    return max(0, (base + bonus) * mult - reduction)

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.431] - 2026-06-06 — "The Quickened Step" — Speed bonuses + Haste/Longstrider (automation Phase 6.1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 6.1 of [docs/plans/movement-and-summons.md](docs/plans/movement-and-summons.md) — `effective_speed_walk` now reads `effects.speed_bonus_ft` (additive) + `effects.speed_multiplier` (Haste ×2), so the move-endpoint speed cap rises for buffed creatures.** Haste + Longstrider install the keys.
+**Description:** `app/content/effective_speed.py` gains `effective_speed_bonus_ft` (sums `effects.speed_bonus_ft`) + `effective_speed_multiplier` (max `effects.speed_multiplier`, default 1), and `effective_speed_walk` becomes `(base + Σ speed_bonus_ft) × speed_multiplier − Σ speed_reduction_ft` (clamped ≥ 0; RAW order — Haste's ×2 applies to the buffed base before reductions). The move endpoint's speed cap already reads `effective_speed_walk`, so a buffed creature can now move farther with no new read site. Haste's `_SPELL_BUFF_MAP` entry gains `speed_multiplier: 2`; a new `longstrider` entry installs `speed_bonus_ft: 10` (1 hour, no concentration).
+
+### Added
+- `effective_speed_bonus_ft` + `effective_speed_multiplier` helpers; `speed_bonus_ft` / `speed_multiplier` terms in `effective_speed_walk`.
+- `_SPELL_BUFF_MAP` `longstrider` entry (`speed_bonus_ft: 10`); Haste gains `speed_multiplier: 2`.
+- 7 pure-Python unit tests in `tests/harness/test_effective_speed_walk.py` (bonus sums, Longstrider → 40, Haste ×2 → 60, max-not-stack, combined order (30+10)×2−15 = 65, back-compat).
+
+### Notes
+- First Phase-6 code (the low-risk speed-buff wiring; no new endpoint). The client-side JS speed mirror is a cosmetic follow-up — the server cap is authoritative. Next: P6.2 (`_force_move` + the `/force_move` endpoint + Pushing Attack).
+- **Total harness count: 1864** (was 1857 in v2.99.430; +7 new unit tests).
+
+---
+
 ## [2.99.430] - 2026-06-06 — "The Shoved & The Summoned, Charted" — Movement + summons design sub-plan (automation Phase 6)
 
 **Schema version:** 66
