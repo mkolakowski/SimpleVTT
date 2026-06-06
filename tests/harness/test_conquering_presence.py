@@ -201,3 +201,95 @@ async def test_use_cp_wrong_subclass(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_cp_resolves_npc_saves_installs_frightened(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.409 — Phase 3.4: each NPC target auto-resolves its WIS save;
+    on a fail Frightened (1 min, repeated save) installs.
+
+    Deterministic part (per call): both template bandits get a resolved
+    WIS DC-14 save. Random part: the install — loop (re-seed CD + battle)
+    until a bandit fails, then assert its Frightened buff carries the
+    repeated-save stamps (repeated_save=True → end-of-turn re-save).
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    await _patch_sheet(
+        gm_client, caelan["id"],
+        {"subclass": "Oath of Conquest", "resources": [_cd_resource(40, 40)]},
+        class_slug="paladin",
+    )
+    tmpl_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = tmpl_resp.json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    caelan_tok = f"tok_cpsave_{caelan['id']}"
+    tok_a, tok_b = "tok_cpsave_a", "tok_cpsave_b"
+
+    def _battle():
+        return {"combatants": [
+            {"id": caelan_tok, "char_id": caelan["id"], "name": caelan["name"],
+             "initiative": 12, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": tok_a, "char_id": None, "token_template_id": bandit["id"],
+             "name": "Bandit A", "initiative": 8, "hp_current": 50,
+             "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": tok_b, "char_id": None, "token_template_id": bandit["id"],
+             "name": "Bandit B", "initiative": 6, "hp_current": 50,
+             "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True}
+
+    try:
+        installed_on = None
+        for _ in range(30):
+            await gm_client.put(
+                f"/api/campaign/{CAMPAIGN_ID}/battle", json=_battle())
+            gm_ws.mark()
+            r = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/use_conquering_presence",
+                json={"character_id": caelan["id"],
+                      "target_combatant_ids": [tok_a, tok_b],
+                      "override": True},
+            )
+            assert r.status_code == 200, r.text
+            fs = r.json()["feature_saves"]
+            # Deterministic: both NPC targets resolved a WIS DC-14 save.
+            assert len(fs) == 2, fs
+            for s in fs:
+                assert s["resolved"] is True
+                assert s["save_ability"] == "WIS"
+                assert s["save_dc"] == 14
+            hit = next((s for s in fs if s["condition_installed"]), None)
+            if hit:
+                installed_on = hit["target_combatant_id"]
+                break
+        assert installed_on, "no failed bandit WIS save in 30 tries"
+
+        # Verify the installed Frightened carries the repeated-save stamp
+        # (repeated_save=True) — read the latest battle_update.
+        bus = gm_ws.buffered("battle_update")
+        assert bus
+        latest = bus[-1]
+        cb = next((c for c in (latest["data"].get("combatants") or [])
+                   if c.get("id") == installed_on), None)
+        assert cb is not None
+        fr = next((b for b in (cb.get("buffs") or [])
+                   if (b or {}).get("key") == "frightened"), None)
+        assert fr is not None, cb.get("buffs")
+        assert fr.get("name") == "Frightened (Conquering Presence)"
+        assert (fr.get("repeated_save_ability") or "").upper() == "WIS"
+        assert int(fr.get("repeated_save_dc") or 0) == 14
+    finally:
+        await _patch_sheet(
+            gm_client, caelan["id"],
+            {"subclass": "Oath of Devotion", "resources": []},
+            class_slug="paladin",
+        )

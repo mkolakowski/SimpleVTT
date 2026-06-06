@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.409] - 2026-06-06 — "The Conqueror's Glare" — Multi-target presence saves (automation Phase 3.4)
+
+**Schema version:** 66
+**Commit summary:** **Phase 3.4 of [docs/plans/feature-saves.md](docs/plans/feature-saves.md) — multi-target presence saves: Conquering Presence now resolves each chosen creature's WIS save through `_resolve_feature_save` and installs Frightened (1 min, repeated save) on failures.** First feature where the resolver is looped over a target list.
+**Description:** `/use_conquering_presence` no longer ships announce-only — after decrementing Channel Divinity and computing the DC, it loops the supplied `target_combatant_ids` and calls `_resolve_feature_save` per target (NPC inline / PC prompt) with a `frightened` condition (10-round / 1-minute, `repeated_save=True` so the end-of-turn auto-fire ends it on a later success). The response gains a `feature_saves` list (one result entry per target). Bare NPC combatants (no `token_template_id`, no `char_id`) resolve to `resolved=False` and are left to the GM — only template-backed NPCs and PCs auto-resolve. This is the multi-target pattern the remaining presence features (Fey / Draconic Presence, Champion Challenge) will reuse.
+
+### Changed
+- `/api/campaign/{cid}/use_conquering_presence` auto-resolves each target's WIS save + installs Frightened on a fail (was announce-only); response gains `feature_saves`.
+
+### Added
+- `tests/harness/test_conquering_presence.py::test_cp_resolves_npc_saves_installs_frightened` — two template bandits each get a resolved WIS DC-14 save (deterministic), and a loop-until-fail asserts the installed Frightened carries the repeated-save stamps (ability WIS, DC 14).
+
+### Notes
+- Reuses the P3.1/P3.2 resolver unchanged — the only new shape is the per-target loop. Next presence retrofits (Fey / Draconic / Champion Challenge) differ only in the condition + the choice-of-condition wrinkle. P3.5 (targeted gaze) is the last sub-step.
+- **Total harness count: 1834** (was 1833 in v2.99.408; +1 new test).
+
+---
+
 ## [2.99.408] - 2026-06-06 — "The Maneuver Lands" — On-hit feature-save riders (automation Phase 3.3)
 
 **Schema version:** 66

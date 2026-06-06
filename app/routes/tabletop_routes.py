@@ -58965,10 +58965,14 @@ async def use_conquering_presence(
     `channel-divinity` entry with `current >= 1` + non-empty
     target list + each target exists in active battle + Phase 4
     action chip. Decrements CD counter, marks chip, computes
-    spell save DC = 8 + prof + CHA mod, broadcasts the save
-    request for each target. v1 ships announce-only — the GM
-    rolls each target's Wis save + installs Frightened on
-    failures.
+    save DC = 8 + prof + CHA mod.
+
+    v2.99.409 — Phase 3.4 of docs/plans/feature-saves.md: each target
+    now auto-resolves its WIS save via `_resolve_feature_save` (NPC
+    inline / PC prompt) and, on a fail, gets Frightened for 1 minute WITH
+    a repeated save (the end-of-turn auto-fire ends it on a later
+    success). Response gains a `feature_saves` list (one entry per
+    target).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -59115,6 +59119,44 @@ async def use_conquering_presence(
         },
     })
 
+    # v2.99.409 — Phase 3.4: resolve each target's WIS save independently.
+    # On a fail → Frightened for 1 minute (10 rounds) WITH a repeated save
+    # (RAW: repeat at end of each of its turns). NPC targets resolve
+    # inline; PC targets are prompted (install on /respond).
+    frightened_buff = {
+        "key": "frightened",
+        "name": "Frightened (Conquering Presence)",
+        "icon": "👑",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source_spell": "Conquering Presence",
+        "effects": [
+            "disadvantage on ability checks / attacks while the source "
+            "is in sight",
+            "can't willingly move closer to the source",
+        ],
+    }
+    feature_saves: list[dict] = []
+    for tcid in target_ids:
+        cb = cb_by_id.get(str(tcid).strip())
+        if cb is None:
+            continue
+        sr = await _resolve_feature_save(
+            db, campaign_id,
+            caster_char_id=char.id, caster_char_name=char.name,
+            target_combatant=cb,
+            save_ability="WIS", dc=save_dc,
+            note_label=f"Conquering Presence save (DC {save_dc})",
+            condition_buff=frightened_buff,
+            repeated_save=True,
+            source="conquering-presence",
+            campaign=campaign,
+            prompt_user=user,
+            feature_name="Conquering Presence",
+        )
+        feature_saves.append(sr)
+
     return {
         "ok": True,
         "feature": "conquering-presence",
@@ -59123,6 +59165,7 @@ async def use_conquering_presence(
         "save_dc": save_dc,
         "uses_remaining": cd_cur - 1,
         "over_budget": was_used,
+        "feature_saves": feature_saves,
     }
 
 
