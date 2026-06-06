@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.402] - 2026-06-06 — "The Zealot's Spark" — Divine Fury installs a non-target rider (automation Phase 2)
+
+**Schema version:** 66
+**Commit summary:** **Divine Fury (Path of the Zealot Barbarian) now installs a `divine-fury` rider buff so its +1d6 + half-level auto-applies on the first weapon hit each turn** — the first dice+flat once-per-turn rider, exercising the P2.1 substrate's combined-bonus path.
+**Description:** `/use_divine_fury` now `_install_buff`s a non-target, once-per-turn `divine-fury` rider on the barbarian — `weapon_hit_bonus_dice: "1d6"`, `weapon_hit_bonus_flat: <half barbarian level>`, `weapon_hit_bonus_damage_type: <radiant|necrotic>`, `weapon_hit_once_per_turn: True`, `weapon_hit_flag: "divine_fury"`, and **no** target key (Divine Fury applies to the first creature you hit each turn, not a marked one). The first weapon hit each turn auto-adds +1d6+half-level via `_compute_attack_auto_uplifts`; the 1d6 is re-rolled at `/attack` time. 10-round duration approximates the 1-minute rage; the RAW "while raging" gate stays GM-tracked. `buff_installed` added to the response.
+
+### Changed
+- `/api/campaign/{cid}/use_divine_fury` now installs an on-hit rider buff (was announce-only); response + broadcast gain `buff_installed`.
+
+### Added
+- `tests/harness/test_divine_fury.py::test_df_installs_rider_and_lands` — asserts the rider buff effects (including the absence of a target key) via `buff_update` AND that the +1d6+3 necrotic uplift lands on the first `/attack` hit (retry-until-hit; once-per-turn riders strip on a miss).
+
+### Notes
+- First dice+flat combined rider retrofit. Next: Kensei's Shot (this-turn, every ranged hit).
+- **Total harness count: 1828** (was 1827 in v2.99.401; +1 new test).
+
+---
+
 ## [2.99.401] - 2026-06-06 — "The Rider's Ledger" — Feature-flag riders registry-ized (automation Phase 2.5)
 
 **Schema version:** 66

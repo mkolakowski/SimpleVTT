@@ -52622,9 +52622,15 @@ async def use_divine_fury(
     Body: ``{character_id, damage_type?}``. ``damage_type`` is
     radiant (default) or necrotic. No action cost (a rider on the
     first weapon hit each turn while raging). Rolls the bonus
-    damage server-side (1d6 + barbarian level // 2). v1
-    announce-only — the on-hit application + first-hit-per-turn
-    limit stay GM-tracked.
+    damage server-side (1d6 + barbarian level // 2).
+
+    v2.99.402 — Phase 2 of docs/plans/on-hit-riders.md: installs a
+    `divine-fury` on-hit rider buff (non-target, once-per-turn) so the
+    first weapon hit each turn auto-adds +1d6 + half-level of the chosen
+    type through the /attack pipeline — `weapon_hit_bonus_dice: "1d6"` +
+    `weapon_hit_bonus_flat: <half level>` + `weapon_hit_once_per_turn`,
+    no target key (applies to any hit). 1-minute (10-round) duration
+    approximates "while raging"; the RAW rage gate stays GM-tracked.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -52666,6 +52672,35 @@ async def use_divine_fury(
         breakdown = ""
     bonus_damage = die_roll + half_lv
 
+    # v2.99.402 — install the non-target, once-per-turn on-hit rider so
+    # the first weapon hit each turn auto-adds +1d6 + half-level of the
+    # chosen type via _compute_attack_auto_uplifts. No target key (Divine
+    # Fury applies to any creature you hit, not a marked one); the 1d6 is
+    # re-rolled at /attack time. 10-round duration ≈ the 1-minute rage.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "divine-fury",
+        "name": "Divine Fury",
+        "icon": "⚡",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "weapon_hit_bonus_dice": "1d6",
+            "weapon_hit_bonus_flat": half_lv,
+            "weapon_hit_bonus_damage_type": damage_type,
+            "weapon_hit_once_per_turn": True,
+            "weapon_hit_flag": "divine_fury",
+        },
+        "desc": (
+            f"The first weapon hit each turn (while raging) deals "
+            f"+1d6+{half_lv} {damage_type} damage. (Path of the "
+            f"Zealot Barbarian Lv 3+.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -52702,6 +52737,7 @@ async def use_divine_fury(
             "half_level": half_lv,
             "dice_breakdown": breakdown,
             "barbarian_level": barb_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -52713,6 +52749,7 @@ async def use_divine_fury(
         "die_roll": die_roll,
         "half_level": half_lv,
         "barbarian_level": barb_lv,
+        "buff_installed": buff_installed,
     }
 
 
