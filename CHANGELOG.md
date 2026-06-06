@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.405] - 2026-06-06 — "The Saving Throw, Charted" — Feature-saves design sub-plan (automation Phase 3)
+
+**Schema version:** 66
+**Commit summary:** **New sub-plan — `docs/plans/feature-saves.md` — the Phase 3 design for extracting a reusable `_resolve_feature_save` helper out of the `/cast_spell` save path so the ~8 announce-only save-or-condition subclass features auto-resolve.** Planning + wiki-surfacing commit; no runtime behavior changed.
+**Description:** Grounds Phase 3 of the full-feature-automation plan in the actual engine: the spell save path already builds a DC (`_compute_spell_save_dc_from_sheet`), rolls/prompts the save (PC roll-request via `_save_request_context` + the dozen advantage intercepts, NPC server-side roll), and on a fail installs a condition (`_SPELL_CONDITION_MAP` + `_install_buff` + `_target_condition_immune`) with repeated-save metadata (`_resolve_repeated_save_for_buff`) or applies save-for-half damage (`_apply_damage_to_combatant`) — but the logic is inlined in `/cast_spell` + `/roll_request/respond`, not callable. Proposes a `_resolve_feature_save(db, campaign_id, *, caster, target, save_ability, dc, on_fail, …)` coroutine that reuses that machinery, and sequences a 5-step implementation (P3.1 NPC resolver → P3.2 PC roll-request → P3.3 on-hit save riders → P3.4 presence AoE → P3.5 targeted gaze) with verified retrofit targets (Menacing/Trip Attack, Fey/Conquering/Draconic Presence, Champion Challenge, Hypnotic Gaze, Control Undead) and their endpoint line numbers. Defines the test contract: assert the installed condition on a forced NPC fail (and its absence on a pass).
+
+### Added
+- `docs/plans/feature-saves.md` — Phase 3 design sub-plan (proposed).
+- Wiki surfacing: `_DOC_ALLOWLIST` slug `plan-feature-saves`, the landing-page "Design plans" row, and the on-disk index row.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_feature_saves_plan` + the new slug added to the `test_wiki_home_renders` assertion list.
+
+### Notes
+- Planning only — kicks off Phase 3 with a grounded design before touching the save hot path. Implementation begins at P3.1 (NPC-path resolver).
+- **Total harness count: 1830** (was 1829 in v2.99.404; +1 new wiki smoke test).
+
+---
+
 ## [2.99.404] - 2026-06-06 — "The Ledger Reconciled" — Mark Phase 2 done in the parent plan (automation housekeeping)
 
 **Schema version:** 66
