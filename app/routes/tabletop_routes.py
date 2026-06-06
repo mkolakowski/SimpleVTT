@@ -54673,7 +54673,36 @@ async def use_watchers_will(
             "strict": strict,
         })
 
+    # v2.99.392 — Phase 1: spend a Channel Divinity use from the shared
+    # pool (Watcher's Will is a Channel Divinity option). Refilled by
+    # the generic /rest resource loop. (The save-advantage application
+    # stays GM-tracked pending the Phase 4 roll-bonus engine.)
+    cd = _consume_channel_divinity(sheet)
+    if cd == "no_resource":
+        raise HTTPException(404, "No Channel Divinity resource on this sheet")
+    if cd == "out_of_uses":
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Channel Divinity",
+            "char_name": char.name,
+            "source": "watchers-will",
+        })
+    cd_remaining, cd_max = cd
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
     await _mark_battle_economy(campaign_id, char.id, "action")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "channel-divinity",
+            "current": cd_remaining,
+            "max": cd_max,
+        },
+    })
 
     paladin_lv = _paladin_level_from_sheet(sheet)
     try:
@@ -54718,6 +54747,8 @@ async def use_watchers_will(
             "range_ft": 30,
             "advantage_saves": ["int", "wis", "cha"],
             "duration_minutes": 1,
+            "cd_remaining": cd_remaining,
+            "cd_max": cd_max,
             "paladin_level": paladin_lv,
         },
     })
@@ -54729,6 +54760,8 @@ async def use_watchers_will(
         "range_ft": 30,
         "advantage_saves": ["int", "wis", "cha"],
         "duration_minutes": 1,
+        "cd_remaining": cd_remaining,
+        "cd_max": cd_max,
         "paladin_level": paladin_lv,
     }
 
@@ -64759,6 +64792,32 @@ def _consume_feature_use(sheet: dict, field: str) -> "tuple[int, int] | None":
     remaining = cur - 1
     sheet[field] = remaining
     return remaining, cap
+
+
+def _consume_channel_divinity(sheet: dict) -> "tuple[int, int] | str":
+    """v2.99.392 — Spend one use from the shared ``channel-divinity``
+    resource pool (Cleric / Paladin Channel Divinity).
+
+    Returns ``(remaining, max)`` on success, or the sentinel string
+    ``"no_resource"`` (no CD pool on the sheet → caller 404s) /
+    ``"out_of_uses"`` (pool empty → caller 409s). Mutates
+    ``sheet["resources"]`` in place; the caller commits + broadcasts
+    the ``resource_update``. The pool itself refills via the generic
+    ``/rest`` resource loop, so no registry refill entry is needed.
+    """
+    resources = list(sheet.get("resources") or [])
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "channel-divinity":
+            cur = int(r.get("current") or 0)
+            cap = int(r.get("max") or 0)
+            if cur < 1:
+                return "out_of_uses"
+            resources[i] = {**r, "current": cur - 1}
+            sheet["resources"] = resources
+            return cur - 1, cap
+    return "no_resource"
 
 
 def _refill_feature_uses(sheet: dict, rest_type: str) -> None:

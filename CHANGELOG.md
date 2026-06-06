@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.392] - 2026-06-06 — "The Channeled Vigil" — Watcher's Will Channel Divinity tracking (automation Phase 1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 1 — wire Watcher's Will (Oath of the Watchers) to the shared Channel Divinity pool via a new `_consume_channel_divinity` helper.** First of the Channel Divinity oath retrofits — a shared-resource shape distinct from the per-feature use counters.
+**Description:** Adds `_consume_channel_divinity(sheet)` — spends one use from the shared `channel-divinity` resource (returns `(remaining, max)`, or the sentinels `"no_resource"` / `"out_of_uses"`). The pool refills via the generic `/rest` resource loop, so no registry entry is needed. `/use_watchers_will` now calls it after the action-economy gate: decrements the CD pool, 404s if the sheet has no CD resource, returns 409 `out_of_uses` when the pool is empty, broadcasts a `resource_update`, and reports `cd_remaining` / `cd_max`. The save-advantage application stays GM-tracked pending the Phase 4 roll-bonus engine.
+
+### Added
+- `_consume_channel_divinity` helper.
+- `tests/harness/test_watchers_will.py::test_use_ww_out_of_channel_divinity` — second-use exhaustion 409; happy test now asserts the Channel Divinity 1→0 decrement (Caelan's pool max 1).
+
+### Changed
+- `/api/campaign/{cid}/use_watchers_will` now spends a Channel Divinity use from the shared pool (was announce-only).
+
+### Notes
+- Introduces the shared-pool retrofit shape. The existing Channel Divinity oath endpoints (Vow of Enmity, Conquering Presence, Inspiring Smite, Turn the Unholy, Abjure Enemy) already decrement the same pool with an inline pattern; they can adopt the helper later. Remaining new-oath CD retrofits queued: Champion Challenge (Crown), Control Undead (Oathbreaker).
+- **Total harness count: 1812** (was 1811 in v2.99.391; +1 new test).
+
+---
+
 ## [2.99.391] - 2026-06-06 — "The Counted Deep" — Tentacle of the Deeps use-tracking (automation Phase 1)
 
 **Schema version:** 66
