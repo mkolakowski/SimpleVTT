@@ -21705,56 +21705,83 @@ def _compute_attack_auto_uplifts(
                 "source": "rage",
             })
 
-    # 2. Hunter's Mark / Hex weapon-hit riders. Target-keyed: only
-    #    fire when target_combatant_id matches the buff's stored
-    #    target. Skip when target is unknown.
+    # 2. Buff-based weapon-hit riders (Hunter's Mark / Hex / and the
+    #    v2.99.395+ Phase-2 activated riders). A rider buff carries
+    #    `effects.weapon_hit_bonus_dice` and/or `weapon_hit_bonus_flat`,
+    #    optionally keyed to a stored target. See docs/plans/on-hit-riders.md.
+    #
+    #    Target gating: a buff WITH `weapon_hit_bonus_target_combatant_id`
+    #    requires a match (Hunter's Mark / Hex / Slayer's Prey — list or
+    #    string for Twinned). A buff WITHOUT one is a self/"this-turn"
+    #    rider that applies to any hit (Kensei's Shot / Divine Fury).
+    #    Once-per-turn riders carry `weapon_hit_once_per_turn` + an
+    #    optional `weapon_hit_flag`; they skip when the attacker's
+    #    `economy.<flag>_used` is set, and stamp `once_per_turn_flag` so
+    #    the /attack hit-handler marks the flag after a confirmed hit.
     if target_combatant_id:
+        attacker_econ = (attacker_combatant or {}).get("economy") or {}
         for b in attacker_buffs:
             if not isinstance(b, dict):
                 continue
             # v2.49.230: condition buffs (Frightened / Charmed / etc.)
-            # carry `effects` as a string list, not a dict. The
-            # weapon-hit-rider lookup only applies to dict-shaped
-            # mechanical buffs — skip non-dict shapes to avoid the
-            # `'list' object has no attribute 'get'` crash that bit
-            # the Sleep wake-on-damage harness tests.
+            # carry `effects` as a string list, not a dict. Skip
+            # non-dict shapes to avoid the `'list' object has no
+            # attribute 'get'` crash that bit the Sleep harness tests.
             effects = b.get("effects")
             if not isinstance(effects, dict):
                 continue
             dice = (effects.get("weapon_hit_bonus_dice") or "").strip()
-            tgt = effects.get("weapon_hit_bonus_target_combatant_id")
-            # v2.99.187 — accept list-or-string. /cast_hunters_mark
-            # now installs a list shape when Twinned Spell folds in
-            # a second target, so the rider needs to match either
-            # entry. Single-string buffs from earlier installs (and
-            # /cast_hex's still-singular field) keep working via the
-            # equality branch.
-            if isinstance(tgt, list):
-                tgt_match = target_combatant_id in tgt
-            else:
-                tgt_match = (tgt == target_combatant_id)
-            if not dice or not tgt_match:
-                continue
+            flat_raw = effects.get("weapon_hit_bonus_flat")
             try:
-                r = dice_mod.roll(dice)
-                rider_type = (effects.get("weapon_hit_bonus_damage_type")
-                              or attack_damage_type or "force")
-                uplifts.append({
-                    "label": b.get("name") or b.get("key") or "Bonus dice",
-                    "expression": dice,
-                    "total": r.total,
-                    "breakdown": r.breakdown,
-                    "damage_type": rider_type,
-                    "source": b.get("key") or "buff",
-                    # v2.99.188 — stamp which target the rider fired
-                    # against so chat-card / UI can render "Hunter's
-                    # Mark (vs NAME)" without re-resolving combatant
-                    # ids. Mirrors the v2.99.187 list-shape rider
-                    # which can match either of two Twinned targets.
-                    "vs_combatant_id": target_combatant_id,
-                })
-            except dice_mod.DiceParseError:
-                pass
+                flat_n = int(flat_raw) if flat_raw is not None else 0
+            except (TypeError, ValueError):
+                flat_n = 0
+            if not dice and flat_n <= 0:
+                continue
+            # v2.99.187 — accept list-or-string for the target key.
+            tgt = effects.get("weapon_hit_bonus_target_combatant_id")
+            if tgt is not None:
+                if isinstance(tgt, list):
+                    tgt_match = target_combatant_id in tgt
+                else:
+                    tgt_match = (tgt == target_combatant_id)
+                if not tgt_match:
+                    continue
+            # Once-per-turn gating (v2.99.395).
+            opt = bool(effects.get("weapon_hit_once_per_turn"))
+            flag = (effects.get("weapon_hit_flag")
+                    or b.get("key") or "").strip()
+            if opt and flag and attacker_econ.get(f"{flag}_used"):
+                continue
+            rider_type = (effects.get("weapon_hit_bonus_damage_type")
+                          or attack_damage_type or "force")
+            # Build the uplift expression (dice and/or flat).
+            if dice:
+                try:
+                    r = dice_mod.roll(dice)
+                except dice_mod.DiceParseError:
+                    continue
+                expr, total, bd = dice, int(r.total), r.breakdown
+                if flat_n > 0:
+                    expr = f"{dice}+{flat_n}"
+                    total += flat_n
+                    bd = f"{bd}+{flat_n}"
+            else:
+                expr, total, bd = f"+{flat_n}", flat_n, f"+{flat_n}"
+            uplift = {
+                "label": b.get("name") or b.get("key") or "Bonus dice",
+                "expression": expr,
+                "total": total,
+                "breakdown": bd,
+                "damage_type": rider_type,
+                "source": b.get("key") or "buff",
+                # v2.99.188 — stamp the target so the chat card / UI can
+                # render "<rider> (vs NAME)".
+                "vs_combatant_id": target_combatant_id,
+            }
+            if opt and flag:
+                uplift["once_per_turn_flag"] = flag
+            uplifts.append(uplift)
 
     # 3. Colossus Slayer (Ranger Hunter's Prey at Lv 3+).
     #    Once per turn: +1d6 vs target whose current HP < max HP. Uses
@@ -22025,13 +22052,18 @@ async def _mark_divine_strike_used(
     hub.set_battle(campaign_id, state)
 
 
-async def _mark_colossus_slayer_used(
-    campaign_id: int, attacker_char_id: int,
+async def _mark_attack_flag(
+    campaign_id: int, attacker_char_id: int, flag: str,
 ) -> None:
-    """Set ``combatant.economy.colossus_slayer_used = True`` on the
-    attacker so subsequent attacks this turn don't re-roll Colossus
-    Slayer. Reset is handled client-side by the GM's nextTurn handler.
+    """v2.99.395 — Phase 2.1: set ``combatant.economy.<flag>_used = True``
+    on the attacker so once-per-turn on-hit riders (Colossus Slayer,
+    Divine Strike, and the buff-based riders that carry
+    ``weapon_hit_once_per_turn``) don't fire twice in one turn. The flag
+    is cleared when the GM advances the turn (the whole ``economy`` dict
+    resets). See docs/plans/on-hit-riders.md.
     """
+    if not flag:
+        return
     state = hub.get_battle(campaign_id)
     if not state:
         return
@@ -22046,8 +22078,18 @@ async def _mark_colossus_slayer_used(
     if not isinstance(economy, dict):
         economy = {}
         target["economy"] = economy
-    economy["colossus_slayer_used"] = True
+    economy[f"{flag}_used"] = True
     hub.set_battle(campaign_id, state)
+
+
+async def _mark_colossus_slayer_used(
+    campaign_id: int, attacker_char_id: int,
+) -> None:
+    """Set ``combatant.economy.colossus_slayer_used = True`` on the
+    attacker so subsequent attacks this turn don't re-roll Colossus
+    Slayer. Reset is handled client-side by the GM's nextTurn handler.
+    Thin wrapper over the generic `_mark_attack_flag` (v2.99.395)."""
+    await _mark_attack_flag(campaign_id, attacker_char_id, "colossus_slayer")
 
 
 def _attacker_has_str_attack_advantage(
@@ -66985,15 +67027,27 @@ async def use_attack(
         # player). Mark "used this turn" only on a hit, so a missed
         # swing doesn't burn the once-per-turn charge.
         if not hit:
+            # On-hit-only riders don't fire on a miss: strip the hardcoded
+            # once-per-turn features + the v2.99.395 buff riders that carry
+            # a `once_per_turn_flag` (so a missed swing neither inflates the
+            # card nor burns the charge).
             auto_uplifts = [
                 u for u in auto_uplifts
                 if u.get("source") not in ("colossus-slayer", "divine-strike")
+                and not u.get("once_per_turn_flag")
             ]
         else:
             if any(u.get("source") == "colossus-slayer" for u in auto_uplifts):
                 await _mark_colossus_slayer_used(campaign_id, char.id)
             if any(u.get("source") == "divine-strike" for u in auto_uplifts):
                 await _mark_divine_strike_used(campaign_id, char.id)
+            # v2.99.395 — Phase 2.1: mark the once-per-turn flag for each
+            # buff rider that fired on this hit so it can't fire again
+            # until the GM advances the turn.
+            for _u in auto_uplifts:
+                _flag = _u.get("once_per_turn_flag")
+                if _flag:
+                    await _mark_attack_flag(campaign_id, char.id, _flag)
         if (
             hit
             and bool(campaign.auto_apply_damage)

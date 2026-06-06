@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.395] - 2026-06-06 — "The Rider's Rail" — On-hit rider substrate (automation Phase 2.1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 2.1 of [docs/plans/on-hit-riders.md](docs/plans/on-hit-riders.md) — extend the buff-based weapon-hit rider substrate so activated riders can express flat bonuses, self/this-turn (non-target) riders, and once-per-turn limits.** Pure substrate — no feature behavior change yet; Hunter's Mark / Hex are unaffected.
+**Description:** Generalizes block 2 of `_compute_attack_auto_uplifts` (read on every `/attack`): a rider buff may now carry `weapon_hit_bonus_flat` (a flat `+N` bonus, alone or combined with `weapon_hit_bonus_dice`), may omit `weapon_hit_bonus_target_combatant_id` to apply to **any** hit (self/this-turn riders like Kensei's Shot / Divine Fury rather than target-keyed like Hunter's Mark), and may carry `weapon_hit_once_per_turn` + an optional `weapon_hit_flag` to fire only while the attacker's `combatant.economy.<flag>_used` is unset. Adds the generic `_mark_attack_flag(campaign_id, char_id, flag)` helper (the existing `_mark_colossus_slayer_used` is now a thin wrapper over it). The `/attack` hit-handler marks each fired rider's `once_per_turn_flag` on a confirmed hit and strips once-per-turn riders from `auto_uplifts` on a miss (so a missed swing neither inflates the card nor burns the charge) — mirroring the existing Colossus Slayer / Divine Strike on-hit-only bookkeeping.
+
+### Added
+- `_mark_attack_flag` generic once-per-turn flag helper.
+- New rider effect keys honored by `_compute_attack_auto_uplifts`: `weapon_hit_bonus_flat`, `weapon_hit_once_per_turn`, `weapon_hit_flag`.
+- `tests/harness/test_attack_rider_substrate.py` — 4 tests installing synthetic rider buffs via PUT /battle and asserting flat / non-target / dice+flat / once-per-turn-gated behavior in the `/attack` `auto_uplifts`.
+
+### Notes
+- First code step of Phase 2. The next steps (P2.2/P2.3) retrofit the activated rider features (Slayer's Prey, Hexblade's Curse, Divine Fury, Kensei's Shot, Gathered Swarm) to **install** such a buff so their bonus damage auto-applies on a hit. Existing Hunter's Mark / Hex riders use the unchanged dice-only target-keyed path and are unaffected (regression-guarded by `test_attack_uplift_vs_label.py`).
+- **Total harness count: 1819** (was 1815 in v2.99.394; +4 new tests).
+
+---
+
 ## [2.99.394] - 2026-06-06 — "The Rider's Map" — On-hit damage riders design sub-plan (automation Phase 2)
 
 **Schema version:** 66
