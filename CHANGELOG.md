@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.387] - 2026-06-06 — "The Use Ledger" — Feature-use registry (full-feature-automation Phase 1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 1 of [docs/plans/full-feature-automation.md](docs/plans/full-feature-automation.md) — a data-driven feature-use registry (`_FEATURE_USES`) that centralizes per-rest use-counters, plus the first announce-only → tracked retrofit (Samurai Fighting Spirit).** Replaces the four hand-written rest-refill hooks with one registry loop, and adds reusable `_consume_feature_use` / `_feature_use_max` / `_refill_feature_uses` / `_sheet_pb` helpers.
+**Description:** Introduces `_FEATURE_USES` — a list of entries each declaring a bare `sheet.<field>` counter, its subclass/level gate, a `max_fn(sheet)` returning max uses, and a `reset` cadence (`"short"` refills on a short OR long rest; `"long"` on a long rest only). `_refill_feature_uses(sheet, rest_type)` (called from `/rest`) replaces the bespoke Tides of Chaos / Restore Balance / Favored by the Gods / Strength of the Grave long-rest hooks with one loop (parity refactor — existing rest-refill tests guard it). `_consume_feature_use(sheet, field)` seeds an absent counter to full, decrements it, and returns `None` when depleted so the endpoint can 409. As the first retrofit, `/use_fighting_spirit` (Samurai, announce-only since v2.99.370) is now **server-tracked**: it decrements `fighting_spirit_uses` (3/long rest), returns 409 `out_of_uses` when depleted, reports `uses_remaining` / `uses_max`, and refills on a long rest via the registry. (The temp-HP application stays GM-tracked pending the Phase 4 temp-HP primitive.)
+
+### Added
+- `_FEATURE_USES` registry + `_consume_feature_use` / `_feature_use_max` / `_feature_use_spec` / `_refill_feature_uses` / `_sheet_pb` helpers.
+- `fighting_spirit_uses` sheet field (allowlisted) + registry entry (Samurai, 3/long rest).
+- `tests/harness/test_fighting_spirit.py::test_use_fs_out_of_uses` + `::test_fs_long_rest_refill` — exhaustion + refill state assertions; happy test now asserts the 3→2 decrement.
+
+### Changed
+- `/api/campaign/{cid}/use_fighting_spirit` now server-tracks its 3-per-long-rest budget (was announce-only).
+- `rest_character` refills feature-use counters via `_refill_feature_uses` (replaces 4 bespoke hooks).
+
+### Notes
+- First execution commit of the full-feature-automation plan. The registry is the foundation the rest of Phase 1 builds on — subsequent commits retrofit the remaining announce-only use-per-rest features (Hexblade's Curse, the Channel Divinity oaths, etc.) by adding one registry entry + one `_consume_feature_use` call each.
+- **Total harness count: 1803** (was 1801 in v2.99.386; +2 new tests).
+
+---
+
 ## [2.99.386] - 2026-06-05 — "The Automation Blueprint" — Full class-feature automation design plan
 
 **Schema version:** 66

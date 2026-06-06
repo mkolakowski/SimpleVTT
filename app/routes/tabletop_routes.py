@@ -52982,6 +52982,25 @@ async def use_fighting_spirit(
             "strict": strict,
         })
 
+    # v2.99.387 — Phase 1: server-tracked 3-per-long-rest budget via the
+    # feature-use registry. Refilled by /rest. (Temp-HP application is
+    # still GM-tracked pending the Phase 4 temp-HP primitive.)
+    spent = _consume_feature_use(sheet, "fighting_spirit_uses")
+    if spent is None:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Fighting Spirit",
+            "char_name": char.name,
+            "source": "fighting-spirit",
+            "uses_remaining": 0,
+            "uses_max": _feature_use_max(sheet, "fighting_spirit_uses") or 3,
+        })
+    uses_remaining, uses_max = spent
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
     fighter_lv = _fighter_level_from_sheet(sheet)
@@ -53017,6 +53036,8 @@ async def use_fighting_spirit(
             "source": "fighting-spirit",
             "advantage_on_weapon_attacks": True,
             "temp_hp": temp_hp,
+            "uses_remaining": uses_remaining,
+            "uses_max": uses_max,
             "fighter_level": fighter_lv,
         },
     })
@@ -53026,6 +53047,8 @@ async def use_fighting_spirit(
         "feature": "fighting-spirit",
         "advantage_on_weapon_attacks": True,
         "temp_hp": temp_hp,
+        "uses_remaining": uses_remaining,
+        "uses_max": uses_max,
         "fighter_level": fighter_lv,
     }
 
@@ -64538,6 +64561,106 @@ async def apply_healing(
             "claimed_count": claimed_count, "max_targets": max_targets}
 
 
+# ----------- Feature-use registry (Phase 1, full-feature-automation) -----------
+
+def _sheet_pb(sheet: "dict | None", level: int) -> int:
+    """v2.99.387 — Proficiency bonus from the sheet, falling back to a
+    level-derived value (2 + (level-1)//4) when the sheet doesn't carry
+    a ``proficiency_bonus`` field."""
+    pb = int((sheet or {}).get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, level) - 1) // 4
+    return pb
+
+
+# v2.99.387 — Phase 1 of docs/plans/full-feature-automation.md: a
+# data-driven registry of per-rest feature-use counters. Each entry
+# declares the bare ``sheet.<field>`` counter, the subclass/level gate
+# that owns it, a ``max_fn(sheet)`` returning the max uses, and the
+# ``reset`` cadence (``"short"`` refills on a short OR long rest;
+# ``"long"`` refills on a long rest only). ``_refill_feature_uses``
+# (called from /rest) replaces the hand-written per-feature long-rest
+# hooks; ``_feature_use_max`` / ``_consume_feature_use`` let endpoints
+# seed + decrement the counter uniformly (decrement → 409 out_of_uses).
+_FEATURE_USES: "list[dict]" = [
+    # Wild Magic Sorcerer — Tides of Chaos (1/long rest).
+    {"field": "tides_of_chaos_uses", "gate": _pc_has_wild_magic,
+     "min_level": 1, "max_fn": lambda s: 1, "reset": "long"},
+    # Clockwork Soul Sorcerer — Restore Balance (PB/long rest).
+    {"field": "restore_balance_uses", "gate": _pc_has_clockwork_soul,
+     "min_level": 1,
+     "max_fn": lambda s: _sheet_pb(s, _sorcerer_level_from_sheet(s)),
+     "reset": "long"},
+    # Divine Soul Sorcerer — Favored by the Gods (1/short OR long rest).
+    {"field": "favored_by_gods_uses", "gate": _pc_has_divine_soul,
+     "min_level": 1, "max_fn": lambda s: 1, "reset": "short"},
+    # Shadow Magic Sorcerer — Strength of the Grave (1/long rest).
+    {"field": "strength_of_grave_uses", "gate": _pc_has_shadow_magic,
+     "min_level": 1, "max_fn": lambda s: 1, "reset": "long"},
+    # Samurai Fighter — Fighting Spirit (3/long rest). v2.99.387 — first
+    # announce-only → tracked retrofit via the registry.
+    {"field": "fighting_spirit_uses", "gate": _pc_has_samurai,
+     "min_level": 3, "max_fn": lambda s: 3, "reset": "long"},
+]
+
+
+def _feature_use_spec(field: str) -> "dict | None":
+    """Return the ``_FEATURE_USES`` entry for ``field`` (or None)."""
+    for spec in _FEATURE_USES:
+        if spec["field"] == field:
+            return spec
+    return None
+
+
+def _feature_use_max(sheet: "dict | None", field: str) -> "int | None":
+    """v2.99.387 — Max uses for a registered feature-use counter when the
+    PC's subclass/level gate passes, else None (feature not available to
+    this PC). Endpoints use this to seed an absent counter to full."""
+    if not sheet:
+        return None
+    spec = _feature_use_spec(field)
+    if spec is None or not spec["gate"](sheet, spec["min_level"]):
+        return None
+    return int(spec["max_fn"](sheet))
+
+
+def _consume_feature_use(sheet: dict, field: str) -> "tuple[int, int] | None":
+    """v2.99.387 — Spend one use of a registered feature-use counter.
+
+    Seeds an absent counter to its max (so a freshly-statted PC can use
+    the feature before resting). Returns ``(remaining, max)`` on success,
+    or ``None`` when the counter is already depleted (caller returns 409
+    ``out_of_uses``). Mutates ``sheet[field]`` in place; the caller is
+    responsible for the ``flag_modified`` + commit.
+    """
+    cap = _feature_use_max(sheet, field)
+    if cap is None:
+        cap = 1
+    raw = sheet.get(field)
+    cur = int(raw) if raw is not None else cap
+    if cur <= 0:
+        return None
+    remaining = cur - 1
+    sheet[field] = remaining
+    return remaining, cap
+
+
+def _refill_feature_uses(sheet: dict, rest_type: str) -> None:
+    """v2.99.387 — Refill every registered feature-use counter whose gate
+    passes and whose reset cadence matches ``rest_type``. reset="short"
+    refills on a short OR long rest; reset="long" on a long rest only.
+    Called from /rest in place of the bespoke per-feature hooks."""
+    for spec in _FEATURE_USES:
+        reset = spec.get("reset", "long")
+        matches = (reset == "short" and rest_type in ("short", "long")) or (
+            reset == "long" and rest_type == "long")
+        if not matches:
+            continue
+        if not spec["gate"](sheet, spec["min_level"]):
+            continue
+        sheet[spec["field"]] = int(spec["max_fn"](sheet))
+
+
 # ----------- API: short / long rest -----------
 
 @router.post("/api/campaign/{campaign_id}/character/{char_id}/rest")
@@ -64618,13 +64741,12 @@ async def rest_character(
     if "relentless_rage_dc" in sheet:
         sheet["relentless_rage_dc"] = 10
 
-    # v2.99.345 — Favored by the Gods (Divine Soul Sorcerer Lv 1+)
-    # short-OR-long-rest refill. RAW XGE p.50: "Once you use this
-    # feature, you can't use it again until you finish a short or
-    # long rest." Counter caps at 1 use, so refills on either rest
-    # type (this block runs before the long-only branch below).
-    if _pc_has_divine_soul(sheet, 1):
-        sheet["favored_by_gods_uses"] = 1
+    # v2.99.387 — Phase 1 feature-use registry refill (replaces the
+    # bespoke Tides of Chaos / Restore Balance / Favored by the Gods /
+    # Strength of the Grave hooks). Handles both short- and long-rest
+    # cadences via each entry's `reset`, so it runs in the shared
+    # (short OR long) section. See docs/plans/full-feature-automation.md.
+    _refill_feature_uses(sheet, rest_type)
 
     if rest_type == "long":
         long_rest_new_cur = hp_max if hp_max > 0 else hp_cur
@@ -64687,27 +64809,9 @@ async def rest_character(
                 _random_portent.randint(1, 20)
                 for _ in range(_portent_count)
             ]
-        # v2.99.227 — Tides of Chaos (Wild Magic Sorcerer Lv 1+)
-        # long-rest refill. RAW: "you must finish a long rest
-        # before you can use this feature again." Counter goes to
-        # 1 regardless of pre-rest value (RAW caps at 1 use).
-        if _pc_has_wild_magic(sheet, 1):
-            sheet["tides_of_chaos_uses"] = 1
-        # v2.99.344 — Restore Balance (Clockwork Soul Sorcerer Lv 1+)
-        # long-rest refill. RAW TCE p.69: "you regain all expended
-        # uses when you finish a long rest." Budget = proficiency
-        # bonus.
-        if _pc_has_clockwork_soul(sheet, 1):
-            _rb_pb = int(sheet.get("proficiency_bonus") or 0)
-            if _rb_pb <= 0:
-                _rb_pb = 2 + (max(1, _sorcerer_level_from_sheet(sheet)) - 1) // 4
-            sheet["restore_balance_uses"] = _rb_pb
-        # v2.99.346 — Strength of the Grave (Shadow Magic Sorcerer
-        # Lv 1+) long-rest refill. RAW XGE p.50: "Once you use this
-        # feature, you can't use it again until you finish a long
-        # rest." Counter caps at 1 use.
-        if _pc_has_shadow_magic(sheet, 1):
-            sheet["strength_of_grave_uses"] = 1
+        # v2.99.387 — Tides of Chaos / Restore Balance / Strength of the
+        # Grave long-rest refills now run via `_refill_feature_uses` in
+        # the shared section above (Phase 1 feature-use registry).
         char.sheet = sheet
         # Long rest restores HP to max and clears any dying/stable state.
         # Route through the death-save state machine so the broadcast +
@@ -71744,6 +71848,10 @@ _SHEET_PATCH_KEYS = {
     # Allowlisted so the test can seed/exhaust the counter without a
     # full sheet rebuild.
     "strength_of_grave_uses",
+    # v2.99.387 — fighting_spirit_uses (int 0..3). Read by
+    # /use_fighting_spirit + the /rest long-rest refill (feature-use
+    # registry). Allowlisted so the test can seed/exhaust the counter.
+    "fighting_spirit_uses",
     # v2.99.238 — knowledge_blessings (dict {skills, languages}).
     # Read by /select_knowledge_blessings (Knowledge Domain Cleric
     # Lv 1+). Allowlisted so the test can reset to {} between
