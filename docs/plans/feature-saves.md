@@ -1,6 +1,6 @@
 # Feature saving throws — Phase 3 sub-plan
 
-**Status:** ⚪ proposed (planning only)
+**Status:** ✅ shipped (P3.1 → P3.5 complete, v2.99.405–.414)
 **Parent:** [full-feature-automation.md](full-feature-automation.md) Phase 3.
 **Goal:** Extract the save-construction + condition-install + save-for-half
 path out of `/cast_spell` into a reusable **`_resolve_feature_save`**
@@ -170,8 +170,10 @@ first and tackle the PC roll-request extraction in P3.2.
    Conquering Presence (Frightened, repeated save), Fey Presence (charm
    /fear choice, fixed), Draconic Presence (CHA, charm/fear, repeated),
    Champion Challenge (`challenged` marker, GM-enforced tether).
-5. **P3.5 — targeted gaze (S).** Retrofit Hypnotic Gaze + Control Undead
-   (single target; budgets already tracked from Phase 1).
+5. **P3.5 — targeted gaze (S). ✅ shipped v2.99.413–.414.** Hypnotic Gaze
+   (WIS → Charmed) + Control Undead (CHA → `controlled-undead` marker)
+   resolve their single-target saves through the resolver. **Completes
+   Phase 3.**
 
 ---
 

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.414] - 2026-06-06 — "The Broken Oath's Thrall" — Control Undead resolves its save (Phase 3 COMPLETE)
+
+**Schema version:** 66
+**Commit summary:** **Phase 3.5 — Control Undead (Oathbreaker Paladin) now resolves its target's CHA save and installs a `controlled-undead` marker on a fail. This is the last Phase 3 retrofit — `_resolve_feature_save` now backs every save-or-condition feature in the plan.**
+**Description:** `/use_control_undead` gains an optional `target_combatant_id`. When supplied, the CHA save auto-resolves via `_resolve_feature_save` (NPC inline / PC prompt) and, on a fail, installs a `controlled-undead` marker buff (24-hour control; the GM drives the obedience). No repeated save (RAW: lasts 24 hours). The "must be undead" + "CR ≥ your level is immune" gates stay GM-tracked (no creature-type / CR engine check). Without a target it stays announce-only. Response gains the save-result fields.
+
+### Changed
+- `/api/campaign/{cid}/use_control_undead` auto-resolves the CHA save + installs the `controlled-undead` marker on a fail (was announce-only); response gains `save_resolved` / `save_passed` / `condition_installed` / `save_prompted` / `save_prompt_id`.
+
+### Added
+- `tests/harness/test_control_undead.py::test_cu_resolves_npc_save_installs_control` — long-rest-refill loop until a template NPC fails its CHA save; asserts the `controlled-undead` marker installs with no repeated-save stamp.
+
+### Notes
+- **Phase 3 of [full-feature-automation.md](full-feature-automation.md) is complete.** `_resolve_feature_save` (+ the `weapon_hit_save` on-hit rider) now powers Menacing/Trip-style maneuvers, the four presence/AoE features, and the two targeted-gaze features — across NPC + PC targets, single + multi-target, on-hit + activated, fixed + repeated saves. Next phase: P4 (temp-HP + roll-bonus completion).
+- **Total harness count: 1839** (was 1838 in v2.99.413; +1 new test).
+
+---
+
 ## [2.99.413] - 2026-06-06 — "The Locked Gaze" — Hypnotic Gaze resolves its save (automation Phase 3.5)
 
 **Schema version:** 66

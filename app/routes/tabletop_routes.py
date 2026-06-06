@@ -55934,17 +55934,25 @@ async def use_control_undead(
     rating is equal to or greater than your level is immune to
     this effect."
 
-    Body: ``{character_id, override?}``. Costs an action chip
-    (Channel Divinity). Computes the Paladin spell save DC (8 + PB
-    + CHA mod) + the max controllable CR (your level − 1)
-    server-side. v1 announce-only — the targeting + save + 24h
-    control + Channel Divinity uses are GM-tracked.
+    Body: ``{character_id, target_combatant_id?, override?}``. Costs an
+    action chip (Channel Divinity). Computes the Paladin spell save DC
+    (8 + PB + CHA mod) + the max controllable CR (your level − 1)
+    server-side.
+
+    v2.99.414 — Phase 3.5 of docs/plans/feature-saves.md (completes
+    Phase 3): when a ``target_combatant_id`` is supplied, the CHA save
+    auto-resolves via `_resolve_feature_save` (NPC inline / PC prompt)
+    and, on a fail, installs a `controlled-undead` marker (24-hour
+    control). The "must be undead" + "CR ≥ your level is immune" gates
+    stay GM-tracked (no creature-type/CR engine check here). Without a
+    target it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    target_combatant_id = body.get("target_combatant_id") or None
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -56064,6 +56072,48 @@ async def use_control_undead(
         },
     })
 
+    # v2.99.414 — Phase 3.5: resolve the target's CHA save. On a fail →
+    # a `controlled-undead` marker (24h control; GM drives the obedience).
+    # No repeated save (RAW: lasts 24h, no end-of-turn re-save). The
+    # "must be undead" + CR-immunity gates stay GM-tracked.
+    save_resolved = False
+    save_passed = None
+    condition_installed = False
+    save_prompted = False
+    save_prompt_id = 0
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant:
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=char.id, caster_char_name=char.name,
+                target_combatant=target_combatant,
+                save_ability="CHA", dc=save_dc,
+                note_label=f"Control Undead save (DC {save_dc})",
+                condition_buff={
+                    "key": "controlled-undead",
+                    "name": "Controlled (Control Undead)",
+                    "icon": "💀",
+                    "duration_rounds": 600,
+                    "duration_max": 600,
+                    "concentration": False,
+                    "source_spell": "Control Undead",
+                    "effects": [
+                        "obeys the Oathbreaker's commands (24 hours)",
+                    ],
+                },
+                repeated_save=False,
+                source="control-undead",
+                campaign=campaign,
+                prompt_user=user,
+                feature_name="Control Undead",
+            )
+            save_resolved = sr["resolved"]
+            save_passed = sr["passed"]
+            condition_installed = sr["condition_installed"]
+            save_prompted = sr["prompted"]
+            save_prompt_id = sr["prompt_id"]
+
     return {
         "ok": True,
         "feature": "control-undead",
@@ -56075,6 +56125,11 @@ async def use_control_undead(
         "cd_remaining": cd_remaining,
         "cd_max": cd_max,
         "paladin_level": paladin_lv,
+        "save_resolved": save_resolved,
+        "save_passed": save_passed,
+        "condition_installed": condition_installed,
+        "save_prompted": save_prompted,
+        "save_prompt_id": save_prompt_id,
     }
 
 

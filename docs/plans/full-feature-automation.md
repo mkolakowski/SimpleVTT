@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 1 ✅ + Phase 2 ✅ (sub-plan [on-hit-riders.md](on-hit-riders.md), shipped v2.99.395–.403); Phase 3 next.
+**Status:** 🟠 in progress — Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414); Phase 4 next.
 **Author:** drafted v2.99.386
 **Scope:** Turn every shipped class/subclass feature from "v1 announce-only"
 into a **server-applied, state-changing, harness-verified** mechanic — and
@@ -130,7 +130,7 @@ Kensei's Shot, Gathered Swarm, Hexblade's Curse, Planar Warrior, the Battle
 Master maneuvers, etc. all register a rider and let the attack flow apply it —
 including the **once-per-turn** bookkeeping (per-turn flag on `combatant.economy`).
 
-### P3 — Feature save resolver (`_resolve_feature_save`)
+### P3 — Feature save resolver (`_resolve_feature_save`) ✅ shipped
 Extract the save-construction + condition-install path out of `/cast_spell` so a
 feature endpoint can say "target makes a {ability} save vs DC {n}; on fail
 install {condition} / take {damage}". Reuses `_SPELL_CONDITION_MAP`,
@@ -198,7 +198,7 @@ Hexblade's Curse, Planar Warrior, Divine Fury, Kensei's Shot). The remaining
 announce-only riders (Genie's Wrath, Battle Master maneuvers, …) follow the same
 install-a-buff shape as a long tail.
 
-### Phase 3 — P3 feature save resolver (M-L, ~6 commits) ← next
+### Phase 3 — P3 feature save resolver (M-L, ~6 commits) ✅ shipped (v2.99.405–.414)
 Extract `_resolve_feature_save`; retrofit the save-or-condition features. Pairs
 with the existing repeated-save / save-on-damage auto-fire so installed
 conditions tick correctly.

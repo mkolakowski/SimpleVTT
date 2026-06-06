@@ -136,3 +136,69 @@ async def test_use_cu_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_cu_resolves_npc_save_installs_control(
+    gm_client, gm_ws, caelan_oathbreaker,
+):
+    """v2.99.414 — Phase 3.5 (completes Phase 3): against an NPC target,
+    Control Undead resolves the CHA save and installs the
+    `controlled-undead` marker on a fail.
+
+    Single-target + 1 Channel Divinity use per long rest → loop with a
+    long-rest refill each iteration until the bandit fails its CHA save.
+    """
+    caelan = caelan_oathbreaker
+    tmpl_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = tmpl_resp.json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    caelan_tok = f"tok_cu_{caelan['id']}"
+    bandit_tok = "tok_cu_bandit"
+
+    def _battle():
+        return {"combatants": [
+            {"id": caelan_tok, "char_id": caelan["id"], "name": caelan["name"],
+             "initiative": 12, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": bandit_tok, "char_id": None,
+             "token_template_id": bandit["id"], "name": "Skeleton",
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True}
+
+    installed = False
+    for _ in range(40):
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/battle", json=_battle())
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_control_undead",
+            json={"character_id": caelan["id"],
+                  "target_combatant_id": bandit_tok, "override": True},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["save_resolved"] is True, data
+        assert data["save"] == "cha"
+        if data["condition_installed"]:
+            installed = True
+            break
+    assert installed, "no failed bandit CHA save in 40 tries"
+
+    bu = await gm_ws.wait_for("battle_update")
+    cb = next((c for c in (bu["data"].get("combatants") or [])
+               if c.get("id") == bandit_tok), None)
+    assert cb is not None
+    ctrl = next((b for b in (cb.get("buffs") or [])
+                 if (b or {}).get("key") == "controlled-undead"), None)
+    assert ctrl is not None, cb.get("buffs")
+    assert ctrl.get("name") == "Controlled (Control Undead)"
+    assert not ctrl.get("repeated_save_ability")  # 24h, no re-save
