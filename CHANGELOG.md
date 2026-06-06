@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.356] - 2026-06-05 — "The Borrowed Dark" — Way of Shadow Monk Shadow Arts (Lv 3+, PHB) — 🥋 Monk Ways batch OPEN
+
+**Schema version:** 66
+**Commit summary:** **Monk Ways subclass batch OPEN — Way of Shadow Lv 3+ Shadow Arts (PHB).** First new Monk way beyond the already-shipped Way of the Open Hand. RAW PHB p.80: as an action, spend 2 ki points to cast Darkness, Darkvision, Pass without Trace, or Silence without material components; also grants the Minor Illusion cantrip.
+**Description:** Adds `_pc_has_way_of_shadow` helper + a `_SHADOW_ARTS_SPELLS` set. One endpoint. `/use_shadow_arts` — body `{character_id, spell?, override?}` (spell one of darkness / darkvision / pass without trace / silence, default "darkness"). Validates Way of Shadow Monk Lv 3+, the `ki` resource has ≥ 2, and the action chip. Spends 2 ki, broadcasts `resource_update` + `feature_used` with `source: shadow-arts`, `spell`, `ki_spent: 2`, `ki_remaining`. v1 announce-only — the actual spell effect is GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_shadow_arts` endpoint.
+- `_pc_has_way_of_shadow` helper + `_SHADOW_ARTS_SPELLS` set.
+- `tests/harness/test_shadow_arts.py` — 4 tests.
+
+### Notes
+- **Monk Ways batch OPEN.** Way of the Open Hand already had Open Hand Technique (v2.49.57). Way of Shadow is the first ship of the formal Monk Ways subclass batch. Remaining untouched: Four Elements (Elemental Attunement), Kensei (TCE), Drunken Master (XGE), Mercy (TCE), Astral Self (TCE), Sun Soul (XGE), Long Death (SCAG).
+- **172 ships this session.**
+- **Total harness count: 1706** (was 1702 in v2.99.355; +4 new tests).
+
+---
+
 ## [2.99.355] - 2026-06-05 — "The Vessel's Wrath" — The Genie Warlock Genie's Wrath (Lv 1+, TCE) — 🎉 Warlock patron batch CLOSE 7/7
 
 **Schema version:** 66

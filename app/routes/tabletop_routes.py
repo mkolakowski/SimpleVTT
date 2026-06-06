@@ -26818,6 +26818,31 @@ def _pc_has_genie_warlock(sheet: "dict | None", min_level: int) -> bool:
     return _warlock_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_way_of_shadow(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.356 — RAW Way of Shadow (Monk subclass, PHB p.80):
+    Shadow Arts (Lv 3), Shadow Step (Lv 6), Cloak of Shadows
+    (Lv 11), Opportunist (Lv 17). Opens the Monk Ways subclass
+    batch beyond the already-shipped Way of the Open Hand.
+
+    Returns True when the PC is a Monk with subclass slug
+    containing "shadow" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        has_monk = any(
+            (entry.get("class") or "").strip().lower() == "monk"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_monk:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "shadow" not in subclass:
+        return False
+    return _monk_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -50349,6 +50374,165 @@ async def use_genies_wrath(
         "damage_type": damage_type,
         "bonus_damage": bonus_damage,
         "warlock_level": warlock_lv,
+    }
+
+
+_SHADOW_ARTS_SPELLS = {
+    "darkness", "darkvision", "pass without trace", "silence",
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_shadow_arts")
+async def use_shadow_arts(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.356 — Phase G Monk Ways subclass batch OPEN (Way of
+    Shadow Lv 3+, PHB) of the v2.99.193 phased completion plan.
+    Shadow Arts (Way of Shadow Lv 3+, PHB p.80): "As an action,
+    you can spend 2 ki points to cast Darkness, Darkvision, Pass
+    without Trace, or Silence, without providing material
+    components. Additionally, you gain the Minor Illusion cantrip
+    if you don't already know it."
+
+    Body: ``{character_id, spell?, override?}``. ``spell`` is one
+    of darkness / darkvision / pass without trace / silence
+    (default "darkness"). Costs an action chip + 2 ki. v1
+    announce-only — the actual spell effect is GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    spell = (body.get("spell") or "darkness").strip().lower().replace("-", " ")
+    if spell not in _SHADOW_ARTS_SPELLS:
+        raise HTTPException(
+            400,
+            "spell must be darkness, darkvision, pass without trace, "
+            "or silence",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_way_of_shadow(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of shadow monk lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _monk_level_from_sheet(sheet),
+        })
+
+    # Ki resource lookup (key "ki"); Shadow Arts costs 2 ki.
+    resources = list(sheet.get("resources") or [])
+    ki_row = None
+    ki_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "ki":
+            ki_row = dict(r); ki_idx = i; break
+    if ki_row is None:
+        raise HTTPException(404, "No Ki resource on this sheet")
+    ki_cur = int(ki_row.get("current") or 0)
+    if ki_cur < 2:
+        return JSONResponse(status_code=409, content={
+            "error": "no_ki",
+            "available": ki_cur,
+            "required": 2,
+            "label": "Shadow Arts",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "shadow-arts",
+            "label": "Shadow Arts",
+            "strict": strict,
+        })
+
+    ki_remaining = ki_cur - 2
+    ki_row["current"] = ki_remaining
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    monk_lv = _monk_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "ki",
+            "current": ki_remaining,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌑 Shadow Arts — cast {spell.title()} (2 ki)"
+            ),
+            "feature_desc": (
+                f"{char.name} bends shadow to ki, casting "
+                f"{spell.title()} without material components "
+                f"(spent 2 ki, {ki_remaining} left). (Way of "
+                f"Shadow Monk Lv 3+ PHB class feature; also grants "
+                f"Minor Illusion.)"
+            ),
+            "source": "shadow-arts",
+            "spell": spell,
+            "ki_spent": 2,
+            "ki_remaining": ki_remaining,
+            "monk_level": monk_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "shadow-arts",
+        "spell": spell,
+        "ki_spent": 2,
+        "ki_remaining": ki_remaining,
+        "monk_level": monk_lv,
     }
 
 
