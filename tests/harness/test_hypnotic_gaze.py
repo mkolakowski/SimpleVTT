@@ -135,3 +135,65 @@ async def test_use_hg_level_gate(
             {"subclass": "School of Evocation", "level": 7},
             class_slug="wizard",
         )
+
+
+async def test_hg_resolves_npc_save_installs_charmed(
+    gm_client, gm_ws, thalindra_enchantment,
+):
+    """v2.99.413 — Phase 3.5: against an NPC target, Hypnotic Gaze
+    auto-resolves the WIS save and installs Charmed on a fail.
+
+    No resource counter (rest-gated), so call repeatedly with override;
+    re-PUT the battle each iteration to reset the bandit. Loop until a
+    fail lands (DC 14 vs a Bandit's +0 WIS).
+    """
+    thal = thalindra_enchantment
+    tmpl_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = tmpl_resp.json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    thal_tok = f"tok_hg_thal_{thal['id']}"
+    bandit_tok = "tok_hg_bandit"
+
+    def _battle():
+        return {"combatants": [
+            {"id": thal_tok, "char_id": thal["id"], "name": thal["name"],
+             "initiative": 12, "hp_current": 37, "hp_max": 37, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": bandit_tok, "char_id": None,
+             "token_template_id": bandit["id"], "name": "Bandit",
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True}
+
+    installed = False
+    for _ in range(40):
+        await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/battle", json=_battle())
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_hypnotic_gaze",
+            json={"character_id": thal["id"],
+                  "target_combatant_id": bandit_tok, "override": True},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["save_resolved"] is True, data
+        assert data["save_dc"] == 14
+        if data["condition_installed"]:
+            installed = True
+            break
+    assert installed, "no failed bandit WIS save in 40 tries"
+
+    bu = await gm_ws.wait_for("battle_update")
+    cb = next((c for c in (bu["data"].get("combatants") or [])
+               if c.get("id") == bandit_tok), None)
+    assert cb is not None
+    ch = next((b for b in (cb.get("buffs") or [])
+               if (b or {}).get("key") == "charmed"), None)
+    assert ch is not None, cb.get("buffs")
+    assert ch.get("name") == "Charmed (Hypnotic Gaze)"
+    assert not ch.get("repeated_save_ability")  # sustained, no re-save

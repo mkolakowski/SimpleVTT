@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.413] - 2026-06-06 — "The Locked Gaze" — Hypnotic Gaze resolves its save (automation Phase 3.5)
+
+**Schema version:** 66
+**Commit summary:** **Phase 3.5 — Hypnotic Gaze (Enchantment Wizard) now resolves its single target's WIS save and installs Charmed (Hypnotic Gaze) on a fail.** First targeted-gaze retrofit.
+**Description:** `/use_hypnotic_gaze` already took a `target_combatant_id`; it now auto-resolves that target's WIS save via `_resolve_feature_save` (NPC inline / PC prompt) and, on a fail, installs a `charmed` condition (until the end of the caster's next turn ≈ 2 rounds). The incapacitated + speed-0 riders are carried as descriptive `effects` (GM-enforced — no engine speed-clamp wired for this one yet); no repeated save (the gaze is sustained by re-using the action, not shrugged off at end of turn). Without a target it stays announce-only. Response gains `save_resolved` / `save_passed` / `condition_installed` / `save_prompted` / `save_prompt_id`.
+
+### Changed
+- `/api/campaign/{cid}/use_hypnotic_gaze` auto-resolves the WIS save + installs Charmed on a fail (was announce-only); response gains the save-result fields.
+
+### Added
+- `tests/harness/test_hypnotic_gaze.py::test_hg_resolves_npc_save_installs_charmed` — loops until a template bandit fails its WIS save and asserts the Charmed (Hypnotic Gaze) buff installs with no repeated-save stamp.
+
+### Notes
+- Penultimate Phase 3 retrofit. Control Undead (CHA save → 24h control) is the last P3.5 feature; then Phase 3 is complete.
+- **Total harness count: 1838** (was 1837 in v2.99.412; +1 new test).
+
+---
+
 ## [2.99.412] - 2026-06-06 — "The Sworn Foe" — Champion Challenge resolves its saves (automation Phase 3.4 complete)
 
 **Schema version:** 66

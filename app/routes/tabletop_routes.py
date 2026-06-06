@@ -57315,8 +57315,16 @@ async def use_hypnotic_gaze(
     until long rest."
 
     Body: ``{character_id, target_combatant_id?, override?}``.
-    Costs an action chip. v1 announce-only — WIS save +
-    charm/incapacitated install is GM-tracked.
+    Costs an action chip.
+
+    v2.99.413 — Phase 3.5 of docs/plans/feature-saves.md: when a
+    ``target_combatant_id`` is supplied, the WIS save auto-resolves via
+    `_resolve_feature_save` (NPC inline / PC prompt) and, on a fail,
+    installs a `charmed` condition (Hypnotic Gaze) until the end of the
+    caster's next turn. The incapacitated + speed-0 riders are carried as
+    descriptive effects (GM-enforced) and there's no repeated save (the
+    gaze is sustained by re-using the action, not shrugged off). Without
+    a target it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -57414,6 +57422,50 @@ async def use_hypnotic_gaze(
         },
     })
 
+    # v2.99.413 — Phase 3.5: resolve the single target's WIS save. On a
+    # fail → Charmed (Hypnotic Gaze) until end of the caster's next turn
+    # (≈ 2 rounds; the incapacitated + speed-0 riders ride as descriptive
+    # effects, GM-enforced). No repeated save (sustained, not shrugged).
+    save_resolved = False
+    save_passed = None
+    condition_installed = False
+    save_prompted = False
+    save_prompt_id = 0
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant:
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=char.id, caster_char_name=char.name,
+                target_combatant=target_combatant,
+                save_ability="WIS", dc=save_dc,
+                note_label=f"Hypnotic Gaze save (DC {save_dc})",
+                condition_buff={
+                    "key": "charmed",
+                    "name": "Charmed (Hypnotic Gaze)",
+                    "icon": "😵",
+                    "duration_rounds": 2,
+                    "duration_max": 2,
+                    "concentration": False,
+                    "source_spell": "Hypnotic Gaze",
+                    "effects": [
+                        "charmed by the gazer",
+                        "incapacitated",
+                        "speed 0",
+                    ],
+                },
+                repeated_save=False,
+                source="hypnotic-gaze",
+                campaign=campaign,
+                prompt_user=user,
+                feature_name="Hypnotic Gaze",
+            )
+            save_resolved = sr["resolved"]
+            save_passed = sr["passed"]
+            condition_installed = sr["condition_installed"]
+            save_prompted = sr["prompted"]
+            save_prompt_id = sr["prompt_id"]
+
     return {
         "ok": True,
         "feature": "hypnotic-gaze",
@@ -57422,6 +57474,11 @@ async def use_hypnotic_gaze(
         "save_dc": save_dc,
         "range_ft": 5,
         "wizard_level": wizard_lv,
+        "save_resolved": save_resolved,
+        "save_passed": save_passed,
+        "condition_installed": condition_installed,
+        "save_prompted": save_prompted,
+        "save_prompt_id": save_prompt_id,
     }
 
 
