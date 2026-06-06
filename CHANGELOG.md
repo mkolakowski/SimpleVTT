@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.408] - 2026-06-06 — "The Maneuver Lands" — On-hit feature-save riders (automation Phase 3.3)
+
+**Schema version:** 66
+**Commit summary:** **Phase 3.3 of [docs/plans/feature-saves.md](docs/plans/feature-saves.md) — compose the Phase 2 on-hit rider substrate with the Phase 3 save resolver: a new `weapon_hit_save` rider key fires a feature save on a confirmed weapon hit.** Menacing Attack can now be ARMED (no target) so the next hit auto-adds the superiority die AND triggers the WIS save → Frightened.
+**Description:** New `_fire_weapon_hit_saves` helper — called in the `/attack` **hit** branch (before the once-per-turn mark loop) — walks the attacker's buffs for an `effects.weapon_hit_save` spec (`{save_ability, dc, condition_buff, source, repeated_save, label}`) and resolves it against the hit target via `_resolve_feature_save` (NPC inline / PC prompt). Target-keying + once-per-turn gating mirror the block-2 dice riders; the shared `weapon_hit_flag` is marked by the existing mark loop (the rider also carries `weapon_hit_bonus_dice`, so its uplift stamps the flag). The `/attack` response + `weapon_attack` broadcast gain a `feature_saves` list. `/use_menacing_attack` called **without** a `target_combatant_id` now ARMS a 1-round, once-per-turn `menacing-attack` rider (`weapon_hit_bonus_dice: 1d<size>` + the `weapon_hit_save` spec) instead of staying announce-only; the next weapon hit this turn applies the die to damage and fires the save. The with-target immediate-resolution mode (P3.1/P3.2) is unchanged.
+
+### Added
+- `_fire_weapon_hit_saves` helper + the `weapon_hit_save` rider effect key (read in the `/attack` hit branch).
+- `feature_saves` field on the `/attack` response + `weapon_attack` broadcast; `source` field on the `_resolve_feature_save` result.
+- `tests/harness/test_menacing_attack.py::test_ma_armed_rider_fires_save_on_hit` — arms the maneuver (no target), asserts the rider buff effects via `buff_update`, then attacks an NPC until a hit lands and asserts the +1d8 uplift rode AND the WIS DC-16 save fired (`feature_saves`).
+
+### Changed
+- `/api/campaign/{cid}/use_menacing_attack` without a target now arms an on-hit rider (was announce-only); response gains `buff_installed`.
+
+### Fixed
+- `_break_buffs_on_damage` crashed (`'list' object has no attribute 'get'`) when a combatant taking damage carried a condition buff with list-shaped `effects` (Frightened / Charmed / …). Latent since condition buffs use list effects; surfaced by the P3.3 on-hit Frightened rider (which installs Frightened on the target mid-`/attack`, before the same swing's damage application). Now guards `isinstance(effects, dict)`.
+
+### Notes
+- First rider that fires a *save* (not just bonus damage) on a hit — the substrate now spans damage riders (P2) and save riders (P3). Trip Attack (→ Prone) is the natural next retrofit using the same `weapon_hit_save` key. The full save advantage-stack sharing (P3.2 note) is still a follow-up.
+- **Total harness count: 1833** (was 1832 in v2.99.407; +1 new test).
+
+---
+
 ## [2.99.407] - 2026-06-06 — "The Player's Reckoning" — Feature saves prompt PC targets (automation Phase 3.2)
 
 **Schema version:** 66

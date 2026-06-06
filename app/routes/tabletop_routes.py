@@ -5934,8 +5934,13 @@ async def _break_buffs_on_damage(
     removed: list[dict] = []
     for b in buffs:
         if isinstance(b, dict):
-            effects = b.get("effects") or {}
-            if bool(effects.get("break_on_damage")):
+            effects = b.get("effects")
+            # v2.99.408 — guard non-dict effects. Condition buffs
+            # (Frightened / Charmed / …) carry ``effects`` as a string
+            # list, not a dict; calling ``.get`` on those crashed when a
+            # list-effects condition was present on a combatant taking
+            # damage (surfaced by the Phase 3.3 on-hit Frightened rider).
+            if isinstance(effects, dict) and bool(effects.get("break_on_damage")):
                 rec = dict(b)
                 rec["_dropped_from_combatant_id"] = combatant_id
                 removed.append(rec)
@@ -23985,6 +23990,7 @@ async def _resolve_feature_save(
     """
     result = {
         "resolved": False,
+        "source": source,
         "target_combatant_id": (target_combatant or {}).get("id") or "",
         "save_total": 0,
         "save_breakdown": "",
@@ -24114,6 +24120,91 @@ async def _resolve_feature_save(
             result["condition_key"] = str(buff.get("key") or "")
 
     return result
+
+
+async def _fire_weapon_hit_saves(
+    db: Session,
+    campaign_id: int,
+    *,
+    attacker_char_id: int,
+    attacker_char_name: str,
+    target_combatant: "dict | None",
+    campaign: "Campaign | None" = None,
+    prompt_user: "User | None" = None,
+) -> list[dict]:
+    """v2.99.408 — Phase 3.3 of docs/plans/feature-saves.md: after a
+    confirmed weapon hit, fire any ``effects.weapon_hit_save`` rider on
+    the attacker against the hit target via ``_resolve_feature_save``.
+    This composes the Phase 2 on-hit rider substrate with the Phase 3
+    feature-save resolver: a Battle Master maneuver (Menacing / Trip
+    Attack) armed for "the next hit this turn" installs a rider carrying
+    both ``weapon_hit_bonus_dice`` (the superiority die — applied by
+    block 2 of ``_compute_attack_auto_uplifts``) and ``weapon_hit_save``
+    (a ``{save_ability, dc, condition_buff, source, repeated_save,
+    label}`` spec), so the bonus damage AND the save both land on the
+    swing.
+
+    Target-keying + once-per-turn gating mirror the block-2 dice riders;
+    the shared ``weapon_hit_flag`` is marked by the existing /attack mark
+    loop (the rider also carries ``weapon_hit_bonus_dice``, so its uplift
+    stamps the flag). Call this in the /attack **hit** branch BEFORE that
+    mark loop so the flag check still reads unset. Returns the list of
+    ``_resolve_feature_save`` result dicts (for the /attack response).
+    """
+    results: list[dict] = []
+    if not target_combatant:
+        return results
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return results
+    attacker = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == attacker_char_id:
+            attacker = c
+            break
+    if attacker is None:
+        return results
+    econ = attacker.get("economy") or {}
+    tgt_id = target_combatant.get("id")
+    for b in attacker.get("buffs") or []:
+        if not isinstance(b, dict):
+            continue
+        eff = b.get("effects")
+        if not isinstance(eff, dict):
+            continue
+        spec = eff.get("weapon_hit_save")
+        if not isinstance(spec, dict):
+            continue
+        # Target gating (same shape as the block-2 dice riders).
+        tgt = eff.get("weapon_hit_bonus_target_combatant_id")
+        if tgt is not None:
+            if isinstance(tgt, list):
+                if tgt_id not in tgt:
+                    continue
+            elif tgt != tgt_id:
+                continue
+        # Once-per-turn gating.
+        flag = (eff.get("weapon_hit_flag") or b.get("key") or "").strip()
+        if (eff.get("weapon_hit_once_per_turn") and flag
+                and econ.get(f"{flag}_used")):
+            continue
+        sr = await _resolve_feature_save(
+            db, campaign_id,
+            caster_char_id=attacker_char_id,
+            caster_char_name=attacker_char_name,
+            target_combatant=target_combatant,
+            save_ability=str(spec.get("save_ability") or "WIS"),
+            dc=int(spec.get("dc") or 10),
+            note_label=str(spec.get("label") or "Feature save"),
+            condition_buff=spec.get("condition_buff"),
+            repeated_save=bool(spec.get("repeated_save")),
+            source=str(spec.get("source") or b.get("key") or ""),
+            campaign=campaign,
+            prompt_user=prompt_user,
+            feature_name=str(spec.get("label") or ""),
+        )
+        results.append(sr)
+    return results
 
 
 def _make_paralyzed_buff(
@@ -42859,23 +42950,29 @@ async def use_menacing_attack(
     condition_installed = False
     save_prompted = False
     save_prompt_id = 0
+    buff_installed = False
+    # The Frightened condition this maneuver imposes (cond-shape: the
+    # /respond + NPC install paths both read these fields). Until end of
+    # the attacker's next turn ≈ 2 rounds; not a repeated save.
+    frightened_buff = {
+        "key": "frightened",
+        "name": "Frightened (Menacing Attack)",
+        "icon": "😱",
+        "duration_rounds": 2,
+        "duration_max": 2,
+        "concentration": False,
+        "source_spell": "Menacing Attack",
+        "effects": [
+            "disadvantage on ability checks / attacks while the "
+            "attacker is in sight",
+            "can't willingly move closer to the attacker",
+        ],
+    }
     if target_combatant_id:
+        # Immediate resolution (P3.1/P3.2): the caller already hit and
+        # named the target, so resolve the save now.
         target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
         if target_combatant:
-            frightened_buff = {
-                "key": "frightened",
-                "name": "Frightened (Menacing Attack)",
-                "icon": "😱",
-                "duration_rounds": 2,
-                "duration_max": 2,
-                "concentration": False,
-                "source_spell": "Menacing Attack",
-                "effects": [
-                    "disadvantage on ability checks / attacks while the "
-                    "attacker is in sight",
-                    "can't willingly move closer to the attacker",
-                ],
-            }
             sr = await _resolve_feature_save(
                 db, campaign_id,
                 caster_char_id=char.id, caster_char_name=char.name,
@@ -42894,6 +42991,43 @@ async def use_menacing_attack(
             condition_installed = sr["condition_installed"]
             save_prompted = sr["prompted"]
             save_prompt_id = sr["prompt_id"]
+    else:
+        # v2.99.408 — Phase 3.3: no target → ARM the maneuver as an on-hit
+        # rider (composes the Phase 2 substrate with the Phase 3 save
+        # resolver). The next weapon hit this turn auto-adds the
+        # superiority die to damage AND fires the WIS save → Frightened on
+        # a fail. 1-round, once-per-turn; installs only when the attacker
+        # is a battle combatant (else stays announce-only).
+        maneuver_rider = {
+            "key": "menacing-attack",
+            "name": "Menacing Attack (armed)",
+            "icon": "😱",
+            "duration_rounds": 1,
+            "duration_max": 1,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "weapon_hit_bonus_dice": f"1{die_size}",
+                "weapon_hit_once_per_turn": True,
+                "weapon_hit_flag": "menacing_attack",
+                "weapon_hit_save": {
+                    "save_ability": "WIS",
+                    "dc": save_dc,
+                    "condition_buff": frightened_buff,
+                    "source": "menacing-attack",
+                    "repeated_save": False,
+                    "label": "Menacing Attack",
+                },
+            },
+            "desc": (
+                f"The next weapon hit this turn adds +1{die_size} damage "
+                f"and forces a WIS save (DC {save_dc}) or Frightened. "
+                f"(Battle Master Lv 3+ maneuver.)"
+            ),
+        }
+        buff_installed = await _install_buff(campaign_id, char.id, maneuver_rider)
+        if buff_installed:
+            _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     return {
         "ok": True,
@@ -42908,6 +43042,7 @@ async def use_menacing_attack(
         "condition_installed": condition_installed,
         "save_prompted": save_prompted,
         "save_prompt_id": save_prompt_id,
+        "buff_installed": buff_installed,
     }
 
 
@@ -67679,6 +67814,9 @@ async def use_attack(
     attack_id = uuid.uuid4().hex[:12]
     hit = None
     target_ac = None
+    # v2.99.408 — Phase 3.3: results of any weapon_hit_save riders fired
+    # on a confirmed hit (Battle Master maneuvers armed for the next hit).
+    feature_save_results: list[dict] = []
     damage_applied = 0
     target_hp_before = None
     target_hp_after = None
@@ -67722,6 +67860,17 @@ async def use_attack(
             )
             if _conv_type:
                 damage_type = _conv_type
+            # v2.99.408 — Phase 3.3: fire any `weapon_hit_save` rider
+            # (Battle Master maneuver armed for the next hit) against the
+            # target. Runs BEFORE the once-per-turn mark loop below, which
+            # marks the shared flag (the rider also carries
+            # weapon_hit_bonus_dice, so its uplift stamps it).
+            feature_save_results = await _fire_weapon_hit_saves(
+                db, campaign_id,
+                attacker_char_id=char.id, attacker_char_name=char.name,
+                target_combatant=target_combatant,
+                campaign=campaign, prompt_user=user,
+            )
             if any(u.get("source") == "colossus-slayer" for u in auto_uplifts):
                 await _mark_colossus_slayer_used(campaign_id, char.id)
             if any(u.get("source") == "divine-strike" for u in auto_uplifts):
@@ -68015,6 +68164,9 @@ async def use_attack(
         "damage_type": damage_type,
         "damage_total": damage_total,
         "damage_breakdown": damage_breakdown,
+        # v2.99.408 — Phase 3.3: weapon_hit_save rider results (Battle
+        # Master maneuvers that fired their save on this hit).
+        "feature_saves": feature_save_results,
         # v2.16.0: per-attack uplifts. ``bonus_damage_*`` is null when no
         # uplift was applied; populated when the caller passed a
         # ``bonus_damage`` expression. Chat card renders this on its own
@@ -68218,6 +68370,8 @@ async def use_attack(
         "slot_spent_level": slot_spent_level,
         "auto_uplifts": auto_uplifts,
         "auto_uplift_total": auto_uplift_total,
+        # v2.99.408 — Phase 3.3: weapon_hit_save rider results.
+        "feature_saves": feature_save_results,
         # v2.62.1 — F1 Sneak Attack ally-adjacency advisory (mirror of
         # the broadcast-side return above). Gated on Rogue Lv 1+; the
         # client UI can render an "eligible" hint based on this flag.

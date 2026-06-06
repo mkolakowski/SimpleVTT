@@ -159,9 +159,12 @@ first and tackle the PC roll-request extraction in P3.2.
    metamagic — is not yet shared; PC feature saves use the plain
    `base_expression="1d20"` + stat-mod path, same as Stunning Strike
    today. Sharing that stack with `/cast_spell` is a follow-up.)
-3. **P3.3 — on-hit save riders (S-M).** Retrofit Menacing Attack + Trip
-   Attack: the maneuver's save fires on a confirmed hit (compose with the
-   Phase 2 rider substrate).
+3. **P3.3 — on-hit save riders (S-M). ✅ shipped v2.99.408 (Menacing
+   Attack).** New `weapon_hit_save` rider key + `_fire_weapon_hit_saves`
+   (called in the `/attack` hit branch) fire a feature save on a
+   confirmed hit. Menacing Attack armed without a target installs a rider
+   that adds the superiority die AND triggers the WIS save on the next
+   hit. Trip Attack (→ Prone) is the natural follow-up using the same key.
 4. **P3.4 — presence AoE saves (M).** Retrofit Fey / Conquering /
    Draconic Presence + Champion Challenge: each target in the list saves;
    Conquering stamps a repeated save.

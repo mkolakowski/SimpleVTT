@@ -280,3 +280,94 @@ async def test_ma_resolves_pc_save_installs_frightened(
     # repeated_save=False → no end-of-turn re-save stamp (fixed duration).
     assert not frightened.get("repeated_save_ability")
     assert int(frightened.get("repeated_save_dc") or 0) == 0
+
+
+async def test_ma_armed_rider_fires_save_on_hit(
+    gm_client, gm_ws, garrik_battle_master,
+):
+    """v2.99.408 — Phase 3.3: calling Menacing Attack with NO target ARMS
+    an on-hit rider; the next weapon hit auto-adds the superiority die to
+    damage AND fires the WIS save via _fire_weapon_hit_saves.
+
+    Arms once, then attacks an NPC bandit until a swing lands (misses
+    don't consume a once-per-turn rider). On the hit asserts: the
+    `menacing-attack` +1d8 damage uplift rode, and `feature_saves` reports
+    the WIS DC-16 save fired against the target.
+    """
+    garrik = garrik_battle_master
+    await _patch_sheet(
+        gm_client, garrik["id"],
+        {"resources": [_superiority_dice_block(40, 40)]},
+    )
+    tmpl_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = tmpl_resp.json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    garrik_tok = f"tok_maarm_garrik_{garrik['id']}"
+    dummy_tok = "tok_maarm_bandit"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": garrik_tok, "char_id": garrik["id"], "name": garrik["name"],
+             "initiative": 12, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": dummy_tok, "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+
+    # Arm the maneuver (no target) → installs the on-hit rider.
+    gm_ws.mark()
+    arm = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_menacing_attack",
+        json={"character_id": garrik["id"]},
+    )
+    assert arm.status_code == 200, arm.text
+    assert arm.json()["buff_installed"] is True
+
+    bu = await gm_ws.wait_for("buff_update")
+    rider = next((b for b in bu["data"]["buffs"]
+                  if b.get("key") == "menacing-attack"), None)
+    assert rider is not None, bu["data"]["buffs"]
+    eff = rider.get("effects") or {}
+    assert eff.get("weapon_hit_bonus_dice") == "1d8"
+    assert eff.get("weapon_hit_once_per_turn") is True
+    assert eff.get("weapon_hit_flag") == "menacing_attack"
+    spec = eff.get("weapon_hit_save") or {}
+    assert spec.get("save_ability") == "WIS"
+    assert spec.get("dc") == 16
+    assert (spec.get("condition_buff") or {}).get("key") == "frightened"
+
+    # Attack until a swing connects; the rider fires on that hit.
+    fired = None
+    for _ in range(25):
+        a = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": garrik["id"], "attack_index": 0,
+                  "target_combatant_id": dummy_tok, "override": True},
+        )
+        assert a.status_code == 200, a.text
+        ad = a.json()
+        if ad["hit"]:
+            fired = ad
+            break
+    assert fired is not None, "no hit in 25 swings"
+
+    # The superiority die rode the damage as a menacing-attack uplift.
+    ups = [u for u in (fired.get("auto_uplifts") or [])
+           if u.get("source") == "menacing-attack"]
+    assert len(ups) == 1, fired.get("auto_uplifts")
+    assert ups[0]["expression"] == "1d8"
+    # The WIS save fired against the target on the hit.
+    fs = [s for s in (fired.get("feature_saves") or [])
+          if s.get("resolved") and s.get("source") == "menacing-attack"]
+    assert len(fs) == 1, fired.get("feature_saves")
+    assert fs[0]["save_ability"] == "WIS"
+    assert fs[0]["save_dc"] == 16
+    assert fs[0]["target_combatant_id"] == dummy_tok
