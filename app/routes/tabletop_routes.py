@@ -27005,6 +27005,32 @@ def _pc_has_way_of_four_elements(sheet: "dict | None", min_level: int) -> bool:
     return _monk_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_way_of_long_death(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.363 — RAW Way of the Long Death (Monk subclass, SCAG
+    p.130): Touch of Death (Lv 3), Hour of Reaping (Lv 6), Mastery
+    of Death (Lv 11), Touch of the Long Death (Lv 17). Closes the
+    Monk Ways subclass batch — Long Death was the last untouched
+    way.
+
+    Returns True when the PC is a Monk with subclass slug
+    containing "long death" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        has_monk = any(
+            (entry.get("class") or "").strip().lower() == "monk"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_monk:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "long death" not in subclass:
+        return False
+    return _monk_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -51531,6 +51557,104 @@ async def use_fangs_of_the_fire_snake(
         "fire_damage_die": "1d10",
         "ki_spent": 1,
         "ki_remaining": ki_remaining,
+        "monk_level": monk_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_touch_of_death")
+async def use_touch_of_death(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.363 — Phase G Monk Ways subclass batch ship #9 (Way
+    of the Long Death Lv 3+, SCAG) of the v2.99.193 phased
+    completion plan — CLOSES the Monk Ways batch (Long Death was
+    the last untouched way). Touch of Death (Way of the Long Death
+    Lv 3+, SCAG p.130): "When you reduce a creature within 5 feet
+    of you to 0 hit points, you gain temporary hit points equal to
+    your Wisdom modifier + your monk level (minimum of 1
+    temporary hit point)."
+
+    Body: ``{character_id}``. No action cost (a reactive trigger
+    on a kill). Computes the temp-HP amount server-side. v1
+    announce-only — the kill trigger + temp-HP application stay
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_way_of_long_death(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of the long death monk lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _monk_level_from_sheet(sheet),
+        })
+
+    monk_lv = _monk_level_from_sheet(sheet)
+    try:
+        wis_score = int((sheet.get("abilities") or {}).get("WIS", 10))
+    except (TypeError, ValueError):
+        wis_score = 10
+    wis_mod = (wis_score - 10) // 2
+    temp_hp = max(1, wis_mod + monk_lv)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"💀 Touch of Death — +{temp_hp} temp HP"
+            ),
+            "feature_desc": (
+                f"{char.name} drains vitality from a dying foe: "
+                f"gains {temp_hp} temporary HP (WIS mod "
+                f"{wis_mod:+d} + monk level {monk_lv}, min 1) on "
+                f"reducing a creature within 5 ft to 0 HP. (Way of "
+                f"the Long Death Monk Lv 3+ SCAG class feature.)"
+            ),
+            "source": "touch-of-death",
+            "temp_hp": temp_hp,
+            "wis_mod": wis_mod,
+            "monk_level": monk_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "touch-of-death",
+        "temp_hp": temp_hp,
+        "wis_mod": wis_mod,
         "monk_level": monk_lv,
     }
 

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.363] - 2026-06-05 — "The Vampire's Vigor" — Way of the Long Death Monk Touch of Death (Lv 3+, SCAG) — 🎉 Monk Ways batch CLOSE
+
+**Schema version:** 66
+**Commit summary:** **Monk Ways subclass batch ship #9 — Way of the Long Death Lv 3+ Touch of Death (SCAG) — CLOSES the Monk Ways batch (all in-print Monk subclasses now have ≥1 first-feature ship).** Long Death was the last untouched way. RAW SCAG p.130: when you reduce a creature within 5 ft to 0 HP, gain temporary HP = your WIS modifier + your monk level (minimum of 1).
+**Description:** Adds `_pc_has_way_of_long_death` helper. One endpoint. `/use_touch_of_death` — body `{character_id}`. Validates Way of the Long Death Monk Lv 3+. No action cost (a reactive trigger on a kill). Computes the temp-HP amount **server-side** (`max(1, WIS mod + monk level)`). Broadcasts `feature_used` with `source: touch-of-death`, `temp_hp`, `wis_mod`, `monk_level`. v1 announce-only — the kill trigger + temp-HP application stay GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_touch_of_death` endpoint.
+- `_pc_has_way_of_long_death` helper.
+- `tests/harness/test_touch_of_death.py` — 3 tests.
+
+### Notes
+- **🎉 Monk Ways subclass batch ✅ CLOSED.** Nine Monk ways now have a Lv 3 first-feature shipped: Open Hand (Open Hand Technique, v2.49.57), Shadow (Shadow Arts), Kensei (Kensei's Shot), Mercy (Hands of Healing), Sun Soul (Radiant Sun Bolt), Drunken Master (Drunken Technique), Astral Self (Arms of the Astral Self), Four Elements (Fangs of the Fire Snake), Long Death (Touch of Death — this ship).
+- **179 ships this session.**
+- **Total harness count: 1727** (was 1724 in v2.99.362; +3 new tests).
+
+---
+
 ## [2.99.362] - 2026-06-05 — "The Fire Snake's Fangs" — Way of the Four Elements Monk Fangs of the Fire Snake (Lv 3+, PHB) — 🥋 Monk Ways batch
 
 **Schema version:** 66
