@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.366] - 2026-06-05 — "The Warrior Spirits" — Path of the Ancestral Guardian Barbarian Ancestral Protectors (Lv 3+, XGE) — 🪓 Barbarian Paths batch
+
+**Schema version:** 66
+**Commit summary:** **Barbarian Paths subclass batch ship #3 — Path of the Ancestral Guardian Lv 3+ Ancestral Protectors (XGE).** Third Barbarian path ship; opens Path of the Ancestral Guardian. RAW XGE p.9: while raging, the first creature you hit each turn becomes the target of warrior spirits — until the start of your next turn it has disadvantage on attack rolls that aren't against you, and any other creature it hits resists the damage it deals.
+**Description:** Adds `_pc_has_ancestral_guardian` helper. One endpoint. `/use_ancestral_protectors` — body `{character_id}`. Validates Path of the Ancestral Guardian Barbarian Lv 3+. No action cost (a rider on the first weapon hit each turn while raging). Broadcasts `feature_used` with `source: ancestral-protectors`, `target_attack_disadvantage: true`, `target_damage_resisted: true`. v1 announce-only — the disadvantage + resistance effects + first-hit-per-turn limit are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_ancestral_protectors` endpoint.
+- `_pc_has_ancestral_guardian` helper.
+- `tests/harness/test_ancestral_protectors.py` — 3 tests.
+
+### Notes
+- **Barbarian Paths batch progress:** Berserker (Frenzy, shipped earlier), Totem Warrior (Totem Spirit), Zealot (Divine Fury), Ancestral Guardian (this) all have first features. Remaining untouched: Storm Herald (Storm Aura), Beast (Form of the Beast).
+- **182 ships this session.**
+- **Total harness count: 1738** (was 1735 in v2.99.365; +3 new tests).
+
+---
+
 ## [2.99.365] - 2026-06-05 — "The Divine Fury" — Path of the Zealot Barbarian Divine Fury (Lv 3+, XGE) — 🪓 Barbarian Paths batch
 
 **Schema version:** 66

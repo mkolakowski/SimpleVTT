@@ -27615,6 +27615,30 @@ def _pc_has_zealot_path(sheet: "dict | None", min_level: int) -> bool:
     return _barbarian_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_ancestral_guardian(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.366 — RAW Path of the Ancestral Guardian (Barbarian,
+    XGE p.9): Ancestral Protectors (Lv 3), Spirit Shield (Lv 6),
+    Consult the Spirits (Lv 10), Vengeful Ancestors (Lv 14).
+
+    Returns True when the PC is a Barbarian with subclass slug
+    containing "ancestral" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "barbarian":
+        has_barb = any(
+            (entry.get("class") or "").strip().lower() == "barbarian"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_barb:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "ancestral" not in subclass:
+        return False
+    return _barbarian_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_evocation_school(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.225 — RAW School of Evocation features (Wizard,
     PHB p.117): Evocation Savant + Sculpt Spells (Lv 2),
@@ -51933,6 +51957,102 @@ async def use_divine_fury(
         "bonus_damage": bonus_damage,
         "die_roll": die_roll,
         "half_level": half_lv,
+        "barbarian_level": barb_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_ancestral_protectors")
+async def use_ancestral_protectors(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.366 — Phase G Barbarian Paths subclass batch ship #3
+    (Path of the Ancestral Guardian Lv 3+, XGE) of the v2.99.193
+    phased completion plan. Ancestral Protectors (Path of the
+    Ancestral Guardian Lv 3+, XGE p.9): "While you're raging, the
+    first creature you hit with an attack on your turn becomes the
+    target of the warrior spirits. Until the start of your next
+    turn, that target has disadvantage on any attack roll that
+    isn't against you, and when the target hits a creature other
+    than you with an attack, that creature has resistance to the
+    damage dealt by the attack."
+
+    Body: ``{character_id}``. No action cost (a rider on the first
+    weapon hit each turn while raging). v1 announce-only — the
+    disadvantage + resistance effects + first-hit-per-turn limit
+    are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Barbarian character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_ancestral_guardian(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "ancestral guardian barbarian lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _barbarian_level_from_sheet(sheet),
+        })
+
+    barb_lv = _barbarian_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"👻 Ancestral Protectors — spirits mark the foe"
+            ),
+            "feature_desc": (
+                f"{char.name}'s warrior spirits mark the first foe "
+                f"hit this turn while raging: until the start of "
+                f"{char.name}'s next turn, that target has "
+                f"disadvantage on attack rolls that aren't against "
+                f"{char.name}, and any other creature it hits "
+                f"resists the damage. (Path of the Ancestral "
+                f"Guardian Barbarian Lv 3+ XGE class feature.)"
+            ),
+            "source": "ancestral-protectors",
+            "target_attack_disadvantage": True,
+            "target_damage_resisted": True,
+            "barbarian_level": barb_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "ancestral-protectors",
+        "target_attack_disadvantage": True,
+        "target_damage_resisted": True,
         "barbarian_level": barb_lv,
     }
 
