@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.385] - 2026-06-05 — "The Broken Vow" — Oathbreaker Paladin Control Undead (Lv 3+, DMG) — 🎉 Paladin oaths rounded out
+
+**Schema version:** 66
+**Commit summary:** **Paladin oath sweep — Oathbreaker Lv 3+ Control Undead (DMG) — rounds out every Paladin oath (all in-print oaths now have a first-feature ship).** Oathbreaker was the last untouched oath. RAW DMG p.97 (Channel Divinity): as an action, target an undead within 30 ft; it makes a CHA save (DC 8 + PB + CHA mod) or obeys your commands for 24 hours. Undead with CR ≥ your level are immune.
+**Description:** Adds `_pc_has_oathbreaker` helper. One endpoint. `/use_control_undead` — body `{character_id, override?}`. Validates Oathbreaker Paladin Lv 3+ + action chip (Channel Divinity). Computes the Paladin spell save DC (8 + PB + CHA mod) + the max controllable CR (level − 1) **server-side**. Broadcasts `feature_used` with `source: control-undead`, `save_dc`, `save: cha`, `range_ft: 30`, `max_cr`, `duration_hours: 24`. v1 announce-only — the targeting + save + 24h control + Channel Divinity uses are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_control_undead` endpoint.
+- `_pc_has_oathbreaker` helper.
+- `tests/harness/test_control_undead.py` — 3 tests.
+
+### Notes
+- **🎉 Paladin oaths rounded out.** Every in-print Paladin oath now has a Lv 3 first-feature: Devotion (Sacred Weapon / Turn the Unholy), Ancients, Vengeance (Vow of Enmity), Conquest (Conquering Presence), Redemption, Glory (Inspiring Smite), Watchers (Watcher's Will), Crown (Champion Challenge), Oathbreaker (Control Undead — this ship).
+- **201 ships this session.**
+- **Total harness count: 1800** (was 1797 in v2.99.384; +3 new tests).
+
+---
+
 ## [2.99.384] - 2026-06-05 — "The Sovereign's Call" — Oath of the Crown Paladin Champion Challenge (Lv 3+, SCAG) — 🛡️ Paladin oath sweep
 
 **Schema version:** 66
