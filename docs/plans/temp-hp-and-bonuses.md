@@ -102,11 +102,11 @@ Mage Armor / Haste / Defensive Duelist install a buff carrying
 
 ## 4. Phased implementation
 
-1. **P4.1 — temp-HP substrate (M).** Build `_grant_temp_hp` + make
-   `_apply_damage_to_combatant` spend temp HP before real HP. Prove with
-   a synthetic grant (PUT a temp pool / call the primitive via a retrofit
-   feature) then `/attack` and assert temp absorbed the hit before HP
-   dropped.
+1. **P4.1 — temp-HP substrate (M). ✅ shipped v2.99.416.** Built
+   `_grant_temp_hp` (PC `sheet.hp.temp` / NPC `combatant.temp_hp`,
+   non-stacking) + the temp-drain in `_apply_damage_to_combatant` (both
+   branches). Proven by retrofitting Rally (applies temp HP to a target
+   ally) + a deterministic /attack drain test.
 2. **P4.2 — retrofit temp-HP features (M).** Rally, Dark One's Blessing,
    Touch of Death, Fighting Spirit, Inspiring Smite, Spirit Totem (bear):
    call `_grant_temp_hp` on the target(s) instead of announce-only.

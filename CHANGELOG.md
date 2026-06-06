@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.416] - 2026-06-06 — "The Ablative Ward" — Temp-HP primitive + damage absorption (automation Phase 4.1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 4.1 of [docs/plans/temp-hp-and-bonuses.md](docs/plans/temp-hp-and-bonuses.md) — new `_grant_temp_hp` primitive + the damage pipeline now spends temp HP before real HP (RAW). Proven by retrofitting Rally so it applies its temp HP to the chosen ally.**
+**Description:** `_grant_temp_hp(db, campaign_id, combatant, amount, …)` grants temporary HP non-stacking (RAW: take the higher of the existing pool vs the new grant) — PCs persist it at `sheet["hp"]["temp"]`, NPCs store a volatile `combatant["temp_hp"]` in hub state — and broadcasts the update. `_apply_damage_to_combatant` now drains that pool first in **both** branches: `temp_absorbed = min(temp, applied)`, the remainder (`hp_damage`) hits real HP, and the drained temp is persisted into the sheet *before* `_apply_hp_change` (which re-reads it). The full damage total still flows to the damage-taken hooks (concentration save, wake-on-damage, fear re-save, break-on-damage) — you "took damage" even when temp absorbs it. `/use_rally` gains a `target_combatant_id`: when supplied it applies the rolled temp HP (die + CHA mod) to that ally via the primitive (was announce-only); response gains `temp_hp_applied`. Damage results gain `temp_absorbed` / `temp_after`; the PC `character_hp_update` broadcast gains `temp_delta`.
+
+### Added
+- `_grant_temp_hp` primitive + temp-HP absorption in `_apply_damage_to_combatant` (PC sheet `hp.temp` + NPC `combatant.temp_hp`).
+- `tests/harness/test_rally.py::test_ra_grants_temp_hp_and_absorbs_damage` — Rally applies temp HP to an ally, then a hit is asserted (deterministic invariant) to spend temp before real HP: `temp = max(0, T-D)`, `hp = hp_max - max(0, D-T)`.
+
+### Changed
+- `/api/campaign/{cid}/use_rally` applies temp HP to a `target_combatant_id` (was announce-only); response gains `temp_hp_applied`.
+- `_apply_damage_to_combatant` returns `temp_absorbed` + `temp_after`; PC `character_hp_update` broadcast gains `temp_delta`.
+
+### Notes
+- First step of Phase 4. The temp-drain is the only hot-path edit (two dict reads + a `min`). Next: P4.2 retrofits the remaining temp-HP features (Dark One's Blessing, Touch of Death, Fighting Spirit, Inspiring Smite, Spirit Totem) to call `_grant_temp_hp`.
+- **Total harness count: 1841** (was 1840 in v2.99.415; +1 new test).
+
+---
+
 ## [2.99.415] - 2026-06-06 — "The Ablative Ward, Charted" — Temp-HP + roll-bonus design sub-plan (automation Phase 4)
 
 **Schema version:** 66

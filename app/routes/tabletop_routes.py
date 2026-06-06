@@ -6109,10 +6109,30 @@ async def _apply_damage_to_combatant(
                 applied = damage_amount // 2
             else:
                 applied = damage_amount
-        new_hp = max(0, hp_cur - applied)
+        # v2.99.416 — Phase 4.1: temp HP absorbs damage before real HP
+        # (RAW). Drain the sheet's temp pool first; the remainder
+        # (`hp_damage`) hits real HP. `applied` stays the total damage
+        # dealt (so chat cards + the damage-taken hooks below — wake /
+        # concentration / fear re-save / break-on-damage — see the full
+        # amount; you "took damage" even when temp absorbs it). Persist
+        # the drained temp into the sheet BEFORE `_apply_hp_change`, which
+        # re-reads char.sheet and preserves the (now lower) temp.
+        temp_before = int(hp.get("temp") or 0)
+        temp_absorbed = (
+            min(temp_before, applied) if (temp_before > 0 and applied > 0) else 0
+        )
+        if temp_absorbed > 0:
+            hp["temp"] = temp_before - temp_absorbed
+            sheet = dict(sheet)
+            sheet["hp"] = hp
+            char.sheet = sheet
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(char, "sheet")
+        hp_damage = applied - temp_absorbed
+        new_hp = max(0, hp_cur - hp_damage)
         result = _apply_hp_change(
             char, new_hp,
-            is_damage=True, is_crit=is_crit, damage_amount=applied,
+            is_damage=True, is_crit=is_crit, damage_amount=hp_damage,
         )
         db.commit()
         # Phase C.2 concentration save trigger.
@@ -6123,7 +6143,8 @@ async def _apply_damage_to_combatant(
             "data": {
                 "character_id": char.id,
                 "hp": result["hp"],
-                "delta": -applied,
+                "delta": -hp_damage,
+                "temp_delta": -temp_absorbed,
                 "source": "attack",
             },
         })
@@ -6264,6 +6285,9 @@ async def _apply_damage_to_combatant(
             "resistance_applied": resistance_applied,
             # v2.99.132 — surface the v2.99.127 vulnerability flag.
             "vulnerability_applied": vulnerability_applied,
+            # v2.99.416 — Phase 4.1 temp-HP absorption.
+            "temp_absorbed": temp_absorbed,
+            "temp_after": int((result["hp"].get("temp") or 0)),
             "is_dying": result["death_saves"]["status"] == "dying",
             "is_dead": result["death_saves"]["status"] == "dead",
             "uncanny_dodge_used": uncanny_dodge_used,
@@ -6314,7 +6338,16 @@ async def _apply_damage_to_combatant(
             applied = damage_amount // 2
         else:
             applied = damage_amount
-    new_hp = max(0, hp_cur - applied)
+    # v2.99.416 — Phase 4.1: NPC temp HP (volatile, on the combatant dict)
+    # absorbs damage before real HP, mirroring the PC branch.
+    temp_before = int(target.get("temp_hp") or 0)
+    temp_absorbed = (
+        min(temp_before, applied) if (temp_before > 0 and applied > 0) else 0
+    )
+    if temp_absorbed > 0:
+        target["temp_hp"] = temp_before - temp_absorbed
+    hp_damage = applied - temp_absorbed
+    new_hp = max(0, hp_cur - hp_damage)
     target["hp_current"] = new_hp
     hub.set_battle(campaign_id, state)
     # v2.49.40 — ``force_gm_sync: True`` so the GM client picks up the
@@ -6371,6 +6404,9 @@ async def _apply_damage_to_combatant(
         "resistance_applied": resistance_applied,
         # v2.99.132 — NPC branch returns the vulnerability flag too.
         "vulnerability_applied": vulnerability_applied,
+        # v2.99.416 — Phase 4.1 temp-HP absorption.
+        "temp_absorbed": temp_absorbed,
+        "temp_after": int(target.get("temp_hp") or 0),
         "is_dying": False,
         "is_dead": new_hp == 0 and hp_max > 0,
         "uncanny_dodge_used": False,
@@ -6599,6 +6635,96 @@ async def _apply_heal_to_combatant(
         "hp_after": new_hp,
         "revived": False,
     }
+
+
+async def _grant_temp_hp(
+    db: Session,
+    campaign_id: int,
+    combatant: "dict | None",
+    amount: int,
+    *,
+    source: str = "",
+    cast_id: "str | None" = None,
+) -> dict:
+    """v2.99.416 — Phase 4.1 of docs/plans/temp-hp-and-bonuses.md: grant
+    temporary HP to a combatant. RAW: temp HP does NOT stack — take the
+    higher of the existing pool vs the new grant (re-granting a smaller
+    amount is a no-op). PCs persist it at ``sheet["hp"]["temp"]``; NPCs
+    store it on the hub combatant dict (``combatant["temp_hp"]``, volatile
+    — NPCs don't survive a battle reset anyway). Broadcasts the update.
+
+    The damage pipeline (``_apply_damage_to_combatant``) spends this pool
+    before real HP. Returns ``{applied, temp_before, temp_after}`` where
+    ``applied`` is the net increase (0 when the existing pool was already
+    higher).
+    """
+    amount = max(0, int(amount or 0))
+    result = {"applied": 0, "temp_before": 0, "temp_after": 0}
+    if amount <= 0 or not combatant:
+        return result
+
+    char_id = combatant.get("char_id")
+    if char_id:
+        char = db.query(Character).filter(Character.id == int(char_id)).first()
+        if not char:
+            return result
+        sheet = dict(char.sheet or {})
+        hp = dict(sheet.get("hp") or {})
+        before = int(hp.get("temp") or 0)
+        after = max(before, amount)
+        result.update(temp_before=before, temp_after=after,
+                      applied=max(0, after - before))
+        if after != before:
+            hp["temp"] = after
+            sheet["hp"] = hp
+            char.sheet = sheet
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(char, "sheet")
+            db.commit()
+            if cast_id:
+                _log_damage_entry(cast_id, {
+                    "kind": "temp_hp_grant",
+                    "campaign_id": campaign_id,
+                    "target_char_id": char.id,
+                    "temp_before": before,
+                    "temp_after": after,
+                })
+            await hub.broadcast(campaign_id, {
+                "type": "character_hp_update",
+                "data": {
+                    "character_id": char.id,
+                    "hp": hp,
+                    "delta": 0,
+                    "temp_delta": after - before,
+                    "source": source or "temp-hp",
+                },
+            })
+        return result
+
+    # NPC: volatile temp pool on the hub combatant.
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return result
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant.get("id"):
+            target = c
+            break
+    if target is None:
+        return result
+    before = int(target.get("temp_hp") or 0)
+    after = max(before, amount)
+    result.update(temp_before=before, temp_after=after,
+                  applied=max(0, after - before))
+    if after != before:
+        target["temp_hp"] = after
+        hub.set_battle(campaign_id, state)
+        await hub.broadcast(campaign_id, {
+            "type": "battle_update",
+            "data": state,
+            "force_gm_sync": True,
+        })
+    return result
 
 
 def _mirror_buffs_to_sheet(
@@ -41810,13 +41936,20 @@ async def use_rally(
     points equal to the superiority die roll + your Charisma
     modifier."
 
-    Body: ``{character_id, ally_name?, override?}``. Bonus
-    chip gated. Garrik CHA 10 → mod 0; future Battle Master
+    Body: ``{character_id, target_combatant_id?, ally_name?, override?}``.
+    Bonus chip gated. Garrik CHA 10 → mod 0; future Battle Master
     fixtures may have higher CHA.
+
+    v2.99.416 — Phase 4.1 of docs/plans/temp-hp-and-bonuses.md: when a
+    ``target_combatant_id`` is supplied, the rolled temp HP (die + CHA
+    mod) is **applied** to that ally via `_grant_temp_hp` (RAW
+    non-stacking — the higher of existing vs new wins). Without a target
+    it stays announce-only (`ally_name` back-compat).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     ally_name = (str(body.get("ally_name") or "")).strip()[:80]
+    target_combatant_id = body.get("target_combatant_id") or None
     override = bool(body.get("override"))
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
@@ -41947,6 +42080,17 @@ async def use_rally(
         },
     })
 
+    # v2.99.416 — Phase 4.1: apply the temp HP to the chosen ally
+    # combatant (RAW non-stacking). Without a target it's announce-only.
+    temp_hp_applied = False
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant:
+            gr = await _grant_temp_hp(
+                db, campaign_id, target_combatant, temp_hp, source="rally",
+            )
+            temp_hp_applied = gr["temp_after"] > 0
+
     return {
         "ok": True,
         "feature": "rally",
@@ -41957,6 +42101,7 @@ async def use_rally(
         "die_size": die_size,
         "dice_remaining": new_sd,
         "over_budget": was_used,
+        "temp_hp_applied": temp_hp_applied,
     }
 
 
