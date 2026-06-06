@@ -54829,7 +54829,36 @@ async def use_champion_challenge(
             "strict": strict,
         })
 
+    # v2.99.393 — Phase 1: spend a Channel Divinity use from the shared
+    # pool. Refilled by the generic /rest resource loop. (The saves +
+    # movement restriction stay GM-tracked pending the Phase 3 save
+    # resolver.)
+    cd = _consume_channel_divinity(sheet)
+    if cd == "no_resource":
+        raise HTTPException(404, "No Channel Divinity resource on this sheet")
+    if cd == "out_of_uses":
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Channel Divinity",
+            "char_name": char.name,
+            "source": "champion-challenge",
+        })
+    cd_remaining, cd_max = cd
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
     await _mark_battle_economy(campaign_id, char.id, "bonus")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "channel-divinity",
+            "current": cd_remaining,
+            "max": cd_max,
+        },
+    })
 
     paladin_lv = _paladin_level_from_sheet(sheet)
     pb = int(sheet.get("proficiency_bonus") or 0)
@@ -54875,6 +54904,8 @@ async def use_champion_challenge(
             "save": "wis",
             "range_ft": 30,
             "tether_ft": 30,
+            "cd_remaining": cd_remaining,
+            "cd_max": cd_max,
             "paladin_level": paladin_lv,
         },
     })
@@ -54886,6 +54917,8 @@ async def use_champion_challenge(
         "save": "wis",
         "range_ft": 30,
         "tether_ft": 30,
+        "cd_remaining": cd_remaining,
+        "cd_max": cd_max,
         "paladin_level": paladin_lv,
     }
 
@@ -54955,7 +54988,35 @@ async def use_control_undead(
             "strict": strict,
         })
 
+    # v2.99.393 — Phase 1: spend a Channel Divinity use from the shared
+    # pool. Refilled by the generic /rest resource loop. (The CHA save +
+    # 24h control stay GM-tracked pending the Phase 3 save resolver.)
+    cd = _consume_channel_divinity(sheet)
+    if cd == "no_resource":
+        raise HTTPException(404, "No Channel Divinity resource on this sheet")
+    if cd == "out_of_uses":
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Channel Divinity",
+            "char_name": char.name,
+            "source": "control-undead",
+        })
+    cd_remaining, cd_max = cd
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
     await _mark_battle_economy(campaign_id, char.id, "action")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "channel-divinity",
+            "current": cd_remaining,
+            "max": cd_max,
+        },
+    })
 
     paladin_lv = _paladin_level_from_sheet(sheet)
     pb = int(sheet.get("proficiency_bonus") or 0)
@@ -55004,6 +55065,8 @@ async def use_control_undead(
             "range_ft": 30,
             "max_cr": max_cr,
             "duration_hours": 24,
+            "cd_remaining": cd_remaining,
+            "cd_max": cd_max,
             "paladin_level": paladin_lv,
         },
     })
@@ -55016,6 +55079,8 @@ async def use_control_undead(
         "range_ft": 30,
         "max_cr": max_cr,
         "duration_hours": 24,
+        "cd_remaining": cd_remaining,
+        "cd_max": cd_max,
         "paladin_level": paladin_lv,
     }
 

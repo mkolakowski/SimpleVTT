@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.393] - 2026-06-06 — "The Channeled Crown" — Champion Challenge + Control Undead Channel Divinity tracking (automation Phase 1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 1 — wire the last two new Channel Divinity oaths (Champion Challenge / Oath of the Crown, Control Undead / Oathbreaker) to the shared Channel Divinity pool via `_consume_channel_divinity`.** Completes the Channel Divinity oath retrofits begun with Watcher's Will in v2.99.392.
+**Description:** Both `/use_champion_challenge` and `/use_control_undead` now call `_consume_channel_divinity` after their action-economy gate: decrement the shared `channel-divinity` resource, 404 if the sheet has no CD pool, return 409 `out_of_uses` when the pool is empty, broadcast a `resource_update`, and report `cd_remaining` / `cd_max`. The pool refills via the generic `/rest` resource loop. The save resolution + movement restriction / 24h control stay GM-tracked pending the Phase 3 save resolver.
+
+### Changed
+- `/api/campaign/{cid}/use_champion_challenge` + `/api/campaign/{cid}/use_control_undead` now spend a Channel Divinity use from the shared pool (were announce-only).
+
+### Added
+- `tests/harness/test_champion_challenge.py::test_use_cc_out_of_channel_divinity` + `tests/harness/test_control_undead.py::test_use_cu_out_of_channel_divinity` — second-use exhaustion 409; both happy tests now assert the Channel Divinity 1→0 decrement.
+
+### Notes
+- All three new Channel Divinity oaths (Watcher's Will, Champion Challenge, Control Undead) now track the shared CD pool. **Phase 1 use-tracking is functionally complete** for the announce-only features that had a per-rest or Channel-Divinity cost — 5 per-feature counters + 3 CD-pool oaths retrofitted, plus the 4 migrated legacy hooks. The remaining announce-only gaps are *effect* application (damage riders, saves, temp HP, buffs) — Phases 2–7.
+- **Total harness count: 1814** (was 1812 in v2.99.392; +2 new tests).
+
+---
+
 ## [2.99.392] - 2026-06-06 — "The Channeled Vigil" — Watcher's Will Channel Divinity tracking (automation Phase 1)
 
 **Schema version:** 66

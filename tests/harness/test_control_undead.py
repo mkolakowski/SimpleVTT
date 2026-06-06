@@ -5,9 +5,11 @@ RAW DMG p.97 (Channel Divinity): as an action, target an undead
 within 30 ft; it makes a CHA save (DC 8 + PB + CHA mod) or obeys
 your commands for 24 hours. Undead with CR ≥ your level are immune.
 
-v1 announce-only — the targeting + save + 24h control + Channel
-Divinity uses are GM-tracked. The save DC + max CR are computed
-server-side. Action chip.
+v2.99.393 — Phase 1: the Channel Divinity cost is now server-tracked
+(spends from the shared `channel-divinity` pool; 409 `out_of_uses`
+when depleted; refilled by /rest). The targeting + save + 24h
+control stay GM-tracked pending the Phase 3 save resolver. The save
+DC + max CR are computed server-side. Action chip.
 
 Sir Caelan Lightbringer (Paladin, PATCHed to Oathbreaker Lv 7) is
 the demo fixture (max CR 6).
@@ -44,12 +46,17 @@ def _cu_broadcasts(gm_ws, character_id):
 
 @pytest_asyncio.fixture
 async def caelan_oathbreaker(gm_client, roster):
-    """PATCH Caelan to Oathbreaker; restore to Devotion on teardown."""
+    """PATCH Caelan to Oathbreaker + long-rest (refill Channel Divinity);
+    restore to Devotion on teardown."""
     caelan = roster["Sir Caelan Lightbringer"]
     await _patch_sheet(
         gm_client, caelan["id"],
         {"subclass": "Oathbreaker"},
         class_slug="paladin",
+    )
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+        json={"type": "long"},
     )
     try:
         yield caelan
@@ -64,7 +71,7 @@ async def caelan_oathbreaker(gm_client, roster):
 async def test_use_cu_happy_lv7(
     gm_client, gm_ws, caelan_oathbreaker,
 ):
-    """Lv 7 Oathbreaker → CHA save DC computed, max CR 6, 24h."""
+    """Lv 7 Oathbreaker → CHA save DC, max CR 6, Channel Divinity 1→0."""
     caelan = caelan_oathbreaker
     gm_ws.mark()
     r = await gm_client.post(
@@ -78,11 +85,29 @@ async def test_use_cu_happy_lv7(
     assert data["save_dc"] >= 8
     assert data["max_cr"] == 6  # paladin level 7 - 1
     assert data["duration_hours"] == 24
+    assert data["cd_max"] == 1
+    assert data["cd_remaining"] == 0
     assert data["paladin_level"] == 7
     await asyncio.sleep(0.3)
     feats = _cu_broadcasts(gm_ws, caelan["id"])
     assert feats
-    assert feats[-1]["data"]["max_cr"] == 6
+    assert feats[-1]["data"]["cd_remaining"] == 0
+
+
+async def test_use_cu_out_of_channel_divinity(
+    gm_client, caelan_oathbreaker,
+):
+    """A second Control Undead with no Channel Divinity left → 409."""
+    caelan = caelan_oathbreaker
+    url = f"/api/campaign/{CAMPAIGN_ID}/use_control_undead"
+    r1 = await gm_client.post(url, json={
+        "character_id": caelan["id"], "override": True})
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["cd_remaining"] == 0
+    r2 = await gm_client.post(url, json={
+        "character_id": caelan["id"], "override": True})
+    assert r2.status_code == 409, r2.text
+    assert r2.json().get("error") == "out_of_uses"
 
 
 async def test_use_cu_wrong_subclass(
