@@ -111,9 +111,10 @@ Mage Armor / Haste / Defensive Duelist install a buff carrying
    Rally (P4.1), Dark One's Blessing, Touch of Death, Fighting Spirit,
    Inspiring Smite (multi-target), and Spirit Totem (bear aura) all call
    `_grant_temp_hp` on the target(s) instead of announce-only.
-3. **P4.3 — +AC spell completion (S).** Mage Armor / Haste / Defensive
-   Duelist install an `ac_bonus` buff; assert AC rises via `/attack`'s
-   `target_ac`.
+3. **P4.3 — +AC spell completion (S). ✅ shipped v2.99.422.** Mage Armor
+   (+3) and Haste (+2) install an `ac_bonus` buff via `_SPELL_BUFF_MAP`
+   (read by `_read_target_ac`); asserted via `/attack`'s `target_ac`.
+   Defensive Duelist (a per-attack reaction) is deferred to Phase 7.
 4. **P4.4 — buff-level save advantage (S).** `_buff_grants_save_advantage`
    + wire at the save sites; assert a buffed save rolls `2d20kh1`.
 

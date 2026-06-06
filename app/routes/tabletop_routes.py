@@ -1219,6 +1219,41 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Aberrations/celestials/elementals/fey/fiends/undead have disadvantage to attack the target. Target immune to their charm/frighten/possess; advantage on new saves vs ongoing effects from those types. 10 min concentration.",
     },
+    # v2.99.422 — Phase 4.3 of docs/plans/temp-hp-and-bonuses.md. Mage
+    # Armor (Sorcerer / Wizard L1): "AC becomes 13 + Dex while unarmored,
+    # 8 hours, no concentration." Modeled as +3 AC — the difference
+    # between Mage Armor's 13+Dex and the unarmored base 10+Dex that
+    # `sheet["ac"]` already reflects. Simplification: the buff adds +3
+    # unconditionally; RAW it only applies while unarmored (the GM casts
+    # it on unarmored targets). Read at `_read_target_ac` (effects.ac_bonus).
+    "mage-armor": {
+        "key": "mage-armor",
+        "name": "Mage Armor",
+        "icon": "🪄",
+        "duration_rounds": 4800,  # 8 hours RAW
+        "duration_max": 4800,
+        "concentration": False,
+        "effects": {
+            "ac_bonus": 3,
+        },
+        "desc": "AC 13 + Dex while unarmored (+3 vs unarmored base) for 8 hours.",
+    },
+    # v2.99.422 — Phase 4.3. Haste (L3, concentration, 1 minute): among
+    # its effects, "+2 to AC." Only the AC rider is wired here (the extra
+    # action / doubled speed / Dex-save advantage stay GM-tracked). Read
+    # at `_read_target_ac`.
+    "haste": {
+        "key": "haste",
+        "name": "Haste",
+        "icon": "⚡",
+        "duration_rounds": 10,  # 1 minute
+        "duration_max": 10,
+        "concentration": True,  # RAW
+        "effects": {
+            "ac_bonus": 2,
+        },
+        "desc": "+2 AC (plus the GM-tracked extra action, doubled speed, and Dex-save advantage) for 1 minute (concentration).",
+    },
 }
 
 

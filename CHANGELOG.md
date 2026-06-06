@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.422] - 2026-06-06 — "The Woven Ward" — Mage Armor + Haste install +AC buffs (automation Phase 4.3)
+
+**Schema version:** 66
+**Commit summary:** **Phase 4.3 of [docs/plans/temp-hp-and-bonuses.md](docs/plans/temp-hp-and-bonuses.md) — Mage Armor (+3) and Haste (+2) now install `ac_bonus` buffs via `_SPELL_BUFF_MAP`, picked up by the already-live `_read_target_ac` sum.** Pure data + the casting path that Shield of Faith already proves.
+**Description:** Adds `mage-armor` and `haste` entries to `_SPELL_BUFF_MAP` carrying `effects.ac_bonus` (3 and 2). `/cast_spell` already installs any `_SPELL_BUFF_MAP` buff on the resolved target(s), and `_read_target_ac` already sums `effects.ac_bonus` across a target's buffs at `/attack` hit determination — so the AC rise lands with no new read site. Mage Armor's +3 models the difference between its `13 + Dex` and the unarmored `10 + Dex` base the sheet already carries (simplification: applied unconditionally; RAW only while unarmored). Haste's other effects (extra action, doubled speed, Dex-save advantage) stay GM-tracked. Mage Armor is also added to Magnus Hexbinder's demo spell list (index 11, appended — the seed comment always claimed he had it; now he does). Defensive Duelist (a per-attack reaction, +PB AC) is deferred to Phase 7 (reactions), not modeled as a persistent buff.
+
+### Added
+- `_SPELL_BUFF_MAP` entries `mage-armor` (ac_bonus 3) + `haste` (ac_bonus 2).
+- `Mage Armor` on Magnus's demo spell list (`app/demo_seed.py`, index 11).
+- `tests/harness/test_ac_buff_spells.py::test_mage_armor_installs_ac_buff_and_raises_ac` — casts Mage Armor on self and asserts the `mage-armor` buff installs with `ac_bonus: 3` AND the target's `/attack` `target_ac` rises by exactly 3.
+
+### Notes
+- No new endpoint / broadcast shape — data into an existing map consumed by the already-tested cast + AC-read path (Shield of Faith). Next: P4.4 (buff-level save advantage), the last Phase 4 step.
+- **Total harness count: 1847** (was 1846 in v2.99.421; +1 new test).
+
+---
+
 ## [2.99.421] - 2026-06-06 — "The Bear's Aegis" — Spirit Totem (Bear) applies temp HP (automation Phase 4.2 complete)
 
 **Schema version:** 66

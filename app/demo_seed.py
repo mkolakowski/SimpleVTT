@@ -1559,6 +1559,12 @@ def _warlock_sheet(name: str) -> dict:
             # has only L3 slots (Pact Magic), so casts at L3 → 9d8
             # pool. Routed via /cast_sleep with class_slug="warlock".
             {"name": "Sleep", "level": 1, "prepared": True, "_slug": "sleep", "casting_time": "1 action"},
+            # v2.99.422 — Mage Armor (the comment above always claimed
+            # Magnus had it; now it's actually on the list). The Fiend's
+            # known list; +3 AC while unarmored via the v2.99.422
+            # _SPELL_BUFF_MAP entry. Index 11 (appended last so existing
+            # spell indices used by other harness tests are unchanged).
+            {"name": "Mage Armor", "level": 1, "prepared": True, "_slug": "mage-armor", "casting_time": "1 action"},
         ],
         # Pact Magic: 2 slots, ALL at the highest level Magnus can cast
         # (Lv 5 = L3). Refreshes on a SHORT rest (this is the unique
