@@ -62,6 +62,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-movement-oa-flow" in resp.text
     # v2.99.386: full class-feature automation plan listed.
     assert "/wiki/doc/plan-full-feature-automation" in resp.text
+    # v2.99.394: on-hit riders (automation Phase 2) sub-plan listed.
+    assert "/wiki/doc/plan-on-hit-riders" in resp.text
     # v2.82.0: reactions-automation GM how-to listed in the available-guides table.
     assert "/wiki/reactions" in resp.text
     # v2.99.8: testing-checklist per-version verification log listed.
@@ -215,6 +217,19 @@ async def test_wiki_doc_serves_full_feature_automation_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "automation" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_on_hit_riders_plan():
+    """v2.99.394: GET /wiki/doc/plan-on-hit-riders — 200 + body contains
+    the plan's H1 + the nav menu. Resolves through the _DOC_ALLOWLIST to
+    ``docs/plans/on-hit-riders.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-on-hit-riders")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "rider" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

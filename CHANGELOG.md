@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.394] - 2026-06-06 — "The Rider's Map" — On-hit damage riders design sub-plan (automation Phase 2)
+
+**Schema version:** 66
+**Commit summary:** **New sub-plan — `docs/plans/on-hit-riders.md` — the Phase 2 design for auto-applying the ~40 announce-only on-hit damage-rider features through the attack pipeline.** Planning + wiki-surfacing commit; no runtime code changed.
+**Description:** Grounds Phase 2 of the full-feature-automation plan in the actual engine: the two existing rider patterns (buff-based target-keyed riders via `effects.weapon_hit_bonus_*` read by `_compute_attack_auto_uplifts`, and feature-flag once-per-turn riders like Colossus Slayer / Divine Strike via `combatant.economy.<feature>_used`). Proposes extending the buff-rider substrate with new effect keys (`weapon_hit_bonus_flat`, `weapon_hit_once_per_turn`/`_flag`, `weapon_hit_convert_type`, `weapon_hit_crit_range`) so activated riders (Slayer's Prey, Hexblade's Curse, Divine Fury, Kensei's Shot, Gathered Swarm, Planar Warrior, …) install a buff and let the attack flow apply them — rather than adding 40 attack-path branches. Sequences a 5-step implementation (P2.1 substrate → P2.5 registry-ize the feature-flag riders) and defines the test contract: assert the rider damage lands on a real `/attack` against a marked target. Also flips the parent plan's wiki status to "🟠 Phase 1 shipped · 2–9 pending".
+
+### Added
+- `docs/plans/on-hit-riders.md` — Phase 2 design sub-plan (proposed).
+- Wiki surfacing: `_DOC_ALLOWLIST` slug `plan-on-hit-riders`, the landing-page "Design plans" row, and the on-disk index row.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_on_hit_riders_plan` + the new slug added to the `test_wiki_home_renders` assertion list.
+
+### Notes
+- Planning only — kicks off Phase 2 (the highest-leverage automation primitive) with a grounded design before touching the attack hot path. Implementation begins at P2.1 (extend the rider substrate).
+- **Total harness count: 1815** (was 1814 in v2.99.393; +1 new wiki smoke test).
+
+---
+
 ## [2.99.393] - 2026-06-06 — "The Channeled Crown" — Champion Challenge + Control Undead Channel Divinity tracking (automation Phase 1)
 
 **Schema version:** 66
