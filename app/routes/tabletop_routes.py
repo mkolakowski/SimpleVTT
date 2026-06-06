@@ -27591,6 +27591,30 @@ def _pc_has_totem_warrior(sheet: "dict | None", min_level: int) -> bool:
     return _barbarian_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_zealot_path(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.365 — RAW Path of the Zealot (Barbarian, XGE p.11):
+    Divine Fury + Warrior of the Gods (Lv 3), Fanatical Focus
+    (Lv 6), Zealous Presence (Lv 10), Rage Beyond Death (Lv 14).
+
+    Returns True when the PC is a Barbarian with subclass slug
+    containing "zealot" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "barbarian":
+        has_barb = any(
+            (entry.get("class") or "").strip().lower() == "barbarian"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_barb:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "zealot" not in subclass:
+        return False
+    return _barbarian_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_evocation_school(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.225 — RAW School of Evocation features (Wizard,
     PHB p.117): Evocation Savant + Sculpt Spells (Lv 2),
@@ -51797,6 +51821,118 @@ async def use_totem_spirit(
         "feature": "totem-spirit",
         "totem": totem,
         "benefit": benefit,
+        "barbarian_level": barb_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_divine_fury")
+async def use_divine_fury(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.365 — Phase G Barbarian Paths subclass batch ship #2
+    (Path of the Zealot Lv 3+, XGE) of the v2.99.193 phased
+    completion plan. Divine Fury (Path of the Zealot Lv 3+, XGE
+    p.11): "While you're raging, the first creature you hit on each
+    of your turns with a weapon attack takes extra damage equal to
+    1d6 + half your barbarian level. The extra damage is necrotic
+    or radiant; you choose the type when you gain this feature."
+
+    Body: ``{character_id, damage_type?}``. ``damage_type`` is
+    radiant (default) or necrotic. No action cost (a rider on the
+    first weapon hit each turn while raging). Rolls the bonus
+    damage server-side (1d6 + barbarian level // 2). v1
+    announce-only — the on-hit application + first-hit-per-turn
+    limit stay GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    damage_type = (body.get("damage_type") or "radiant").strip().lower()
+    if damage_type not in ("radiant", "necrotic"):
+        raise HTTPException(400, "damage_type must be radiant or necrotic")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Barbarian character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_zealot_path(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "zealot barbarian lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _barbarian_level_from_sheet(sheet),
+        })
+
+    barb_lv = _barbarian_level_from_sheet(sheet)
+    half_lv = barb_lv // 2
+    try:
+        result = dice_mod.roll("1d6")
+        die_roll = int(result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        die_roll = 1
+        breakdown = ""
+    bonus_damage = die_roll + half_lv
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⚡ Divine Fury — +{bonus_damage} {damage_type} "
+                f"(1d6 {die_roll} + {half_lv})"
+            ),
+            "feature_desc": (
+                f"{char.name} channels divine fury: the first "
+                f"creature hit this turn with a weapon attack while "
+                f"raging takes +{bonus_damage} {damage_type} damage "
+                f"(1d6 {die_roll} + half barbarian level {half_lv}). "
+                f"(Path of the Zealot Barbarian Lv 3+ XGE class "
+                f"feature.)"
+            ),
+            "source": "divine-fury",
+            "damage_type": damage_type,
+            "bonus_damage": bonus_damage,
+            "die_roll": die_roll,
+            "half_level": half_lv,
+            "dice_breakdown": breakdown,
+            "barbarian_level": barb_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "divine-fury",
+        "damage_type": damage_type,
+        "bonus_damage": bonus_damage,
+        "die_roll": die_roll,
+        "half_level": half_lv,
         "barbarian_level": barb_lv,
     }
 

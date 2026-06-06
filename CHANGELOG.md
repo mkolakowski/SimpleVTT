@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.365] - 2026-06-05 — "The Divine Fury" — Path of the Zealot Barbarian Divine Fury (Lv 3+, XGE) — 🪓 Barbarian Paths batch
+
+**Schema version:** 66
+**Commit summary:** **Barbarian Paths subclass batch ship #2 — Path of the Zealot Lv 3+ Divine Fury (XGE).** Second Barbarian path ship; opens Path of the Zealot. RAW XGE p.11: while raging, the first creature you hit each turn with a weapon attack takes extra damage = 1d6 + half your barbarian level, of a chosen type (necrotic or radiant).
+**Description:** Adds `_pc_has_zealot_path` helper. One endpoint. `/use_divine_fury` — body `{character_id, damage_type?}` (radiant default or necrotic). Validates Path of the Zealot Barbarian Lv 3+. No action cost (a rider on the first weapon hit each turn while raging). Rolls the bonus damage **server-side** (1d6 + barbarian level // 2). Broadcasts `feature_used` with `source: divine-fury`, `damage_type`, `bonus_damage`, `die_roll`, `half_level`. v1 announce-only — the on-hit application + first-hit-per-turn limit stay GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_divine_fury` endpoint.
+- `_pc_has_zealot_path` helper.
+- `tests/harness/test_divine_fury.py` — 4 tests.
+
+### Notes
+- **Barbarian Paths batch progress:** Berserker (Frenzy, shipped earlier), Totem Warrior (Totem Spirit, v2.99.364), Zealot (this) all have first features. Remaining untouched: Ancestral Guardian (Spirit Shield), Storm Herald (Storm Aura), Beast (Form of the Beast).
+- **181 ships this session.**
+- **Total harness count: 1735** (was 1731 in v2.99.364; +4 new tests).
+
+---
+
 ## [2.99.364] - 2026-06-05 — "The Spirit Totem" — Path of the Totem Warrior Barbarian Totem Spirit (Lv 3+, PHB) — 🪓 Barbarian Paths batch OPEN
 
 **Schema version:** 66
