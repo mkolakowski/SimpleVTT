@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.367] - 2026-06-05 — "The Roaming Storm" — Path of the Storm Herald Barbarian Storm Aura (Lv 3+, XGE) — 🪓 Barbarian Paths batch
+
+**Schema version:** 66
+**Commit summary:** **Barbarian Paths subclass batch ship #5 — Path of the Storm Herald Lv 3+ Storm Aura (XGE).** Fourth Barbarian path ship; opens Path of the Storm Herald. RAW XGE p.10: a 10-ft aura while raging — Desert (each other creature in the aura takes fire damage), Sea (one creature makes a DEX save or takes lightning), or Tundra (one creature gains temp HP); magnitudes scale at Lv 10/15/20.
+**Description:** Adds `_pc_has_storm_herald` helper (class-gated so it stays distinct from Storm Sorcery). One endpoint. `/use_storm_aura` — body `{character_id, environment?}` (environment desert default / sea / tundra). Validates Path of the Storm Herald Barbarian Lv 3+. No action cost (the aura activates with rage). Computes the per-environment magnitude from a level-tier count (10/15/20) and rolls the Sea lightning **server-side**. Broadcasts `feature_used` with `source: storm-aura`, `environment`, `aura_radius_ft: 10`, and the environment-specific field (`fire_damage` / `lightning_damage`+`lightning_dice`+`save` / `temp_hp`). v1 announce-only — the aura targeting + saves + HP/damage application are GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_storm_aura` endpoint.
+- `_pc_has_storm_herald` helper.
+- `tests/harness/test_storm_aura.py` — 4 tests.
+
+### Notes
+- **Barbarian Paths batch progress:** Berserker (Frenzy, shipped earlier), Totem Warrior, Zealot, Ancestral Guardian, Storm Herald (this) all have first features. Remaining untouched: Path of the Beast (Form of the Beast). One more ship closes the batch.
+- **183 ships this session.**
+- **Total harness count: 1742** (was 1738 in v2.99.366; +4 new tests).
+
+---
+
 ## [2.99.366] - 2026-06-05 — "The Warrior Spirits" — Path of the Ancestral Guardian Barbarian Ancestral Protectors (Lv 3+, XGE) — 🪓 Barbarian Paths batch
 
 **Schema version:** 66
