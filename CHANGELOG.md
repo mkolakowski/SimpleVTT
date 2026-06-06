@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.383] - 2026-06-05 — "The Vigilant Eye" — Oath of the Watchers Paladin Watcher's Will (Lv 3+, TCE) — 🛡️ Paladin oath sweep
+
+**Schema version:** 66
+**Commit summary:** **Paladin oath sweep — Oath of the Watchers Lv 3+ Watcher's Will (TCE).** Rounds out the non-Devotion Paladin oaths beyond the Phase H.2 batch (Ancients, Vengeance, Conquest, Redemption, Glory). RAW TCE p.56 (Channel Divinity): as an action, choose up to CHA-modifier creatures within 30 ft; for 1 minute you and they gain advantage on Intelligence, Wisdom, and Charisma saving throws.
+**Description:** Adds `_pc_has_watchers_oath` helper. One endpoint. `/use_watchers_will` — body `{character_id, override?}`. Validates Oath of the Watchers Paladin Lv 3+ + action chip (Channel Divinity). Computes the number of creatures (CHA mod, min 1) **server-side**. Broadcasts `feature_used` with `source: watchers-will`, `num_creatures`, `range_ft: 30`, `advantage_saves: [int, wis, cha]`, `duration_minutes: 1`. v1 announce-only — the targeting + save advantage + Channel Divinity uses are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_watchers_will` endpoint.
+- `_pc_has_watchers_oath` helper.
+- `tests/harness/test_watchers_will.py` — 3 tests.
+
+### Notes
+- **Paladin oath sweep.** Devotion (Sacred Weapon / Turn the Unholy), Ancients, Vengeance (Vow of Enmity), Conquest (Conquering Presence), Redemption, Glory (Inspiring Smite) already shipped; Oath of the Watchers (this) opens the last-mile oath sweep. Caelan Lightbringer (Paladin Lv 7) is the demo fixture. Remaining untouched: Oath of the Crown (Champion Challenge), Oathbreaker (Control Undead / Dreadful Aspect).
+- **199 ships this session.**
+- **Total harness count: 1794** (was 1791 in v2.99.382; +3 new tests).
+
+---
+
 ## [2.99.382] - 2026-06-05 — "The Planar Mark" — Horizon Walker Ranger Planar Warrior (Lv 3+, XGE) — 🎉 Ranger conclave batch CLOSE
 
 **Schema version:** 66

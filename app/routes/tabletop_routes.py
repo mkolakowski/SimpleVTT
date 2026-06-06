@@ -25604,6 +25604,33 @@ def _pc_has_glory_oath(sheet: "dict | None", min_level: int) -> bool:
     return _paladin_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_watchers_oath(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.383 — RAW Oath of the Watchers (Paladin, TCE p.56):
+    Channel Divinity options Watcher's Will + Abjure the
+    Extraplanar (Lv 3), Aura of the Sentinel (Lv 7), Vigilant
+    Rebuke (Lv 15), Mortal Bulwark (Lv 20).
+
+    Returns True when the PC is a Paladin with subclass slug
+    containing "watcher" + meets `min_level` (multiclass-aware).
+    Rounds out the non-Devotion Paladin oaths beyond the Phase
+    H.2 batch (Ancients, Vengeance, Conquest, Redemption, Glory).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "paladin":
+        has_paladin = any(
+            (entry.get("class") or "").strip().lower() == "paladin"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_paladin:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "watcher" not in subclass:
+        return False
+    return _paladin_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_conquest_oath(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.247 — RAW Oath of Conquest (Paladin, XGE p.37):
     Channel Divinity options Conquering Presence + Guided Strike
@@ -54410,6 +54437,128 @@ async def use_planar_warrior(
         "force_damage_dice": f"{dice_count}d8",
         "converts_to_force": True,
         "ranger_level": ranger_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_watchers_will")
+async def use_watchers_will(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.383 — Phase G Paladin oath sweep (Oath of the Watchers
+    Lv 3+, TCE) of the v2.99.193 phased completion plan. Watcher's
+    Will (Oath of the Watchers Channel Divinity, Lv 3+, TCE p.56):
+    "As an action, you can choose a number of creatures you can see
+    within 30 feet of you, up to a number equal to your Charisma
+    modifier (minimum of one creature). For 1 minute, you and the
+    chosen creatures have advantage on Intelligence, Wisdom, and
+    Charisma saving throws."
+
+    Body: ``{character_id, override?}``. Costs an action chip
+    (Channel Divinity). Computes the number of creatures (CHA mod,
+    min 1) server-side. v1 announce-only — the targeting + save
+    advantage + Channel Divinity uses are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_watchers_oath(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "oath of the watchers paladin lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "watchers-will",
+            "label": "Watcher's Will",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    paladin_lv = _paladin_level_from_sheet(sheet)
+    try:
+        cha_score = int((sheet.get("abilities") or {}).get("CHA", 10))
+    except (TypeError, ValueError):
+        cha_score = 10
+    cha_mod = (cha_score - 10) // 2
+    num_creatures = max(1, cha_mod)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"👁️ Watcher's Will — {num_creatures} allies: adv on "
+                f"INT/WIS/CHA saves"
+            ),
+            "feature_desc": (
+                f"{char.name} channels divine vigilance: {char.name} "
+                f"and up to {num_creatures} creature"
+                f"{'s' if num_creatures != 1 else ''} within 30 ft "
+                f"(Charisma modifier) gain advantage on Intelligence, "
+                f"Wisdom, and Charisma saving throws for 1 minute. "
+                f"(Oath of the Watchers Paladin Lv 3+ TCE Channel "
+                f"Divinity.)"
+            ),
+            "source": "watchers-will",
+            "num_creatures": num_creatures,
+            "range_ft": 30,
+            "advantage_saves": ["int", "wis", "cha"],
+            "duration_minutes": 1,
+            "paladin_level": paladin_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "watchers-will",
+        "num_creatures": num_creatures,
+        "range_ft": 30,
+        "advantage_saves": ["int", "wis", "cha"],
+        "duration_minutes": 1,
+        "paladin_level": paladin_lv,
     }
 
 
