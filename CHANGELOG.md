@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.426] - 2026-06-06 — "The Desert Wind" — Storm Aura (Desert) auto-ticks fire (automation Phase 5.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 5.2 of [docs/plans/auras.md](docs/plans/auras.md) — the desert Storm Aura now installs a `storm-aura` aura buff so the v2.99.425 tick deals its fire damage to every other creature in range at the start of each of the barbarian's turns.** First aura-feature retrofit.
+**Description:** `/use_storm_aura` with `environment: "desert"` now `_install_buff`s a `storm-aura` buff carrying `effects.aura = {radius_ft: 10, affects: "others", damage: {expr: "<2+tiers>", type: "fire"}}` — so `_tick_auras` auto-applies the fire damage to every other creature in the 10-ft aura each barbarian turn (RAW "each other creature"; allies included). The 10-round duration approximates the 1-minute rage. **Sea** (one creature, Dex save or lightning) and **Tundra** (one chosen creature gains temp HP) are single-target *choices*, not auto-tick-all, so they stay announce-only (GM/player picks the one target). Response gains `aura_installed`.
+
+### Changed
+- `/api/campaign/{cid}/use_storm_aura` (desert) installs an aura buff (was announce-only); response gains `aura_installed`.
+
+### Added
+- `tests/harness/test_storm_aura.py::test_sa_desert_installs_aura_and_ticks_fire` — end-to-end: activate desert → assert the installed buff's aura payload → advance the turn to the barbarian (carrying the captured buff) → assert each other creature took 2 fire (Lv 7 → tiers 0 → 2).
+
+### Notes
+- Reuses the P5.1 tick unchanged — desert is a clean fit for the owner-turn-start, affects-others model. Next: P5.3 (Spirit Totem bear ongoing re-grant), P5.4 (Paladin Lv 20 auras + save-on-enter).
+- **Total harness count: 1853** (was 1852 in v2.99.425; +1 new test).
+
+---
+
 ## [2.99.425] - 2026-06-06 — "The Turning Wheel" — Aura tick substrate (automation Phase 5.1)
 
 **Schema version:** 66

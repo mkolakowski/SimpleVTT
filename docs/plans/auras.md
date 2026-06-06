@@ -129,9 +129,12 @@ Countercharm already make. A GM-supplied target list can override later.
    fallback. Proven with a synthetic aura buff + a turn advance. (A
    fully NPC-aware combatant-distance helper for on-grid NPC auras is a
    follow-up — v1 uses the documented fallback.)
-2. **P5.2 — Storm Aura (M).** `use_storm_aura` installs a `storm-aura`
-   aura buff (desert damage / tundra temp HP / sea single-target); the
-   tick applies it each of the barbarian's turns.
+2. **P5.2 — Storm Aura (M). ✅ shipped v2.99.426 (Desert).** Desert
+   installs a `storm-aura` aura buff (fire `damage`, `affects: others`,
+   10 ft) the tick applies each barbarian turn. Sea (one creature, Dex
+   save) + Tundra (one chosen creature temp HP) are single-target
+   *choices*, not auto-tick-all — they stay announce-only (a per-turn
+   single-target endpoint could automate them later).
 3. **P5.3 — Spirit Totem bear ongoing re-grant (S).** Install the aura
    buff so the bear's temp HP re-grants each turn (closes the P4.2 defer).
 4. **P5.4 — Paladin Lv 20 auras (S-M).** Elder Champion self-heal,

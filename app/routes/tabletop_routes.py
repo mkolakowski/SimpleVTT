@@ -53837,8 +53837,18 @@ async def use_storm_aura(
     Body: ``{character_id, environment?}``. ``environment`` is
     desert (default), sea, or tundra. No action cost (the aura
     activates with your rage). The Sea lightning is rolled
-    server-side. v1 announce-only — the aura targeting + saves +
-    HP/damage application are GM-tracked.
+    server-side.
+
+    v2.99.426 — Phase 5.2 of docs/plans/auras.md: the **desert**
+    environment ("each other creature in your aura takes fire damage")
+    now installs a `storm-aura` aura buff (`effects.aura` with a fire
+    `damage` payload, `affects: "others"`, 10-ft radius), so the v2.99.425
+    aura tick auto-applies the fire damage to every other creature in
+    range at the start of each of the barbarian's turns. Sea (one
+    creature, Dex save) and Tundra (one chosen creature gains temp HP)
+    are single-target *choices*, not auto-tick-all, so they stay
+    announce-only (GM/player picks the target). Response gains
+    `aura_installed`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -53937,11 +53947,46 @@ async def use_storm_aura(
         },
     })
 
+    # v2.99.426 — Phase 5.2: the desert environment installs an aura buff
+    # so the v2.99.425 tick applies the fire damage to every other
+    # creature in range at the start of each of the barbarian's turns.
+    # RAW "each OTHER creature" → affects "others" (allies included). The
+    # 10-round duration approximates the 1-minute rage. Sea/tundra are
+    # single-target choices → stay announce-only.
+    aura_installed = False
+    if environment == "desert":
+        aura_installed = await _install_buff(campaign_id, char.id, {
+            "key": "storm-aura",
+            "name": "Storm Aura (Desert)",
+            "icon": env_icon,
+            "duration_rounds": 10,
+            "duration_max": 10,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "aura": {
+                    "radius_ft": 10,
+                    "affects": "others",
+                    "damage": {"expr": str(fire_damage), "type": "fire"},
+                    "source": "storm-aura-desert",
+                    "label": "Storm Aura (Desert)",
+                },
+            },
+            "desc": (
+                f"While raging, each other creature within 10 ft takes "
+                f"{fire_damage} fire damage at the start of your turn. "
+                f"(Storm Herald Barbarian Lv 3+.)"
+            ),
+        })
+        if aura_installed:
+            _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     return {
         "ok": True,
         "feature": "storm-aura",
         **effect,
         "barbarian_level": barb_lv,
+        "aura_installed": aura_installed,
     }
 
 

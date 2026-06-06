@@ -128,3 +128,82 @@ async def test_use_sa_invalid_environment(
         json={"character_id": krieger["id"], "environment": "jungle"},
     )
     assert r.status_code == 400, r.text
+
+
+def _npc(cid, name, hp=30):
+    return {
+        "id": cid, "char_id": None, "name": name,
+        "initiative": 5, "hp_current": hp, "hp_max": hp, "buffs": [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def test_sa_desert_installs_aura_and_ticks_fire(
+    gm_client, gm_ws, krieger_storm,
+):
+    """v2.99.426 — Phase 5.2: desert Storm Aura installs a storm-aura
+    aura buff, and the v2.99.425 tick deals its fire damage to every
+    other creature at the start of the barbarian's turn.
+
+    End-to-end: activate → assert the installed buff's aura payload →
+    advance the turn to the barbarian (carrying the captured buff) →
+    assert each other creature took 2 fire (Lv 7 → tiers 0 → 2+0).
+    """
+    krieger = krieger_storm
+    krieger_tok = f"tok_sa_krieger_{krieger['id']}"
+    npc_a, npc_b = "tok_sa_a", "tok_sa_b"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": krieger_tok, "char_id": krieger["id"], "name": krieger["name"],
+             "initiative": 20, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            _npc(npc_a, "Bandit A"),
+            _npc(npc_b, "Bandit B"),
+        ], "turn_index": 1, "round": 1, "active": True},
+    )
+
+    # Activate the desert aura → installs the storm-aura buff on Krieger.
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_storm_aura",
+        json={"character_id": krieger["id"], "environment": "desert"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["aura_installed"] is True
+
+    bu = await gm_ws.wait_for("buff_update")
+    sa = next((b for b in bu["data"]["buffs"]
+               if b.get("key") == "storm-aura"), None)
+    assert sa is not None, bu["data"]["buffs"]
+    aura = (sa.get("effects") or {}).get("aura") or {}
+    assert aura.get("radius_ft") == 10
+    assert aura.get("affects") == "others"
+    assert (aura.get("damage") or {}).get("type") == "fire"
+    assert (aura.get("damage") or {}).get("expr") == "2"
+    krieger_buffs = bu["data"]["buffs"]  # includes storm-aura
+
+    # Advance the turn to Krieger (index 0), carrying the installed buff,
+    # so the aura tick fires.
+    gm_ws.mark()
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": krieger_tok, "char_id": krieger["id"], "name": krieger["name"],
+             "initiative": 20, "hp_current": 60, "hp_max": 60,
+             "buffs": krieger_buffs,
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            _npc(npc_a, "Bandit A"),
+            _npc(npc_b, "Bandit B"),
+        ], "turn_index": 0, "round": 2, "active": True},
+    )
+    await asyncio.sleep(0.3)
+    bus = gm_ws.buffered("battle_update")
+    assert bus
+    combs = {c.get("id"): c for c in (bus[-1]["data"].get("combatants") or [])}
+    # Each other creature took 2 fire (30 → 28).
+    assert int(combs[npc_a].get("hp_current") or 0) == 28
+    assert int(combs[npc_b].get("hp_current") or 0) == 28
