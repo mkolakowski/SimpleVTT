@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.386] - 2026-06-05 — "The Automation Blueprint" — Full class-feature automation design plan
+
+**Schema version:** 66
+**Commit summary:** **New design plan — `docs/plans/full-feature-automation.md` — a roadmap to turn every shipped class/subclass feature from v1 announce-only into a server-applied, state-changing, harness-verified mechanic, plus fill the higher-level features.** Doc + wiki-surfacing commit.
+**Description:** The session's subclass-feature sweep delivered breadth (one Lv 1–3 first-feature per subclass across all 12 classes) but most ships are "announce-only" — they validate, spend a chip, roll display values, and broadcast, while the GM applies the actual effect. This plan defines "automated", inventories the existing automation engine (buff/effect system, condition slots, damage pipeline, on-hit uplift, action economy, resource pools, rest refills, reactions framework, roll-time intercepts), collapses the ~156 announce-only endpoints into ~10 automation archetypes, specifies the ~8 new reusable primitives needed (feature-use registry, on-hit rider registry, feature save resolver, temp-HP, aura tick, forced-move, summon-token, roll-bonus completion), and sequences the work into leverage-weighted phases. Includes a test-contract upgrade: automated features must assert the resulting state change, not just the broadcast.
+
+### Added
+- `docs/plans/full-feature-automation.md` — full design plan (proposed).
+- Wiki surfacing: `_DOC_ALLOWLIST` slug `plan-full-feature-automation` (`app/routes/wiki_routes.py`), the "Design plans" landing-page row (`app/templates/wiki.html`), and the on-disk index row (`docs/wiki/README.md`).
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_full_feature_automation_plan` — per-slug smoke test; plus the new slug added to the `test_wiki_home_renders` landing-page assertion list.
+
+### Notes
+- Planning only — no runtime/feature code changed. The plan estimates the full effort at a multi-session, ~150–250-commit scope, with the primitive phases (1–7) as the high-value core and the higher-level-feature long tail as Phase 8.
+- **Total harness count: 1801** (was 1800 in v2.99.385; +1 new wiki smoke test).
+
+---
+
 ## [2.99.385] - 2026-06-05 — "The Broken Vow" — Oathbreaker Paladin Control Undead (Lv 3+, DMG) — 🎉 Paladin oaths rounded out
 
 **Schema version:** 66

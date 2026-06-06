@@ -34,6 +34,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 |------|--------|----------|--------|
 | [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped · 2 + 3 deferred |
 | [Class / subclass / feat / race content](../plans/class-content-status.md) | Markdown (inventory) | Contributors | 🟢 / 🟠 / ⚪ living inventory |
+| [Full class-feature automation](../plans/full-feature-automation.md) | Markdown (design) | Contributors | ⚪ proposed |
 | [Death saving throws](../plans/death-saves.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped · 2–4 deferred |
 | [Demo mode](../plans/demo-mode.md) | Markdown (design) | Contributors | ✅ shipped (v2.3.0) |
 | [Encounter-sim test suite](../plans/encounter-sim-test-suite.md) | Markdown (design) | Contributors | ⚪ plan finalized · Phase 1 PoC pending |
