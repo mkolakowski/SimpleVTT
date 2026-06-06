@@ -39,6 +39,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Feature saving throws (automation Phase 3)](../plans/feature-saves.md) | Markdown (design) | Contributors | ✅ shipped |
 | [Temp HP + roll bonuses (automation Phase 4)](../plans/temp-hp-and-bonuses.md) | Markdown (design) | Contributors | ✅ shipped |
 | [Auras (automation Phase 5)](../plans/auras.md) | Markdown (design) | Contributors | ✅ shipped |
+| [Forced movement, speed & summons (automation Phase 6)](../plans/movement-and-summons.md) | Markdown (design) | Contributors | ⚪ proposed |
 | [Death saving throws](../plans/death-saves.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped · 2–4 deferred |
 | [Demo mode](../plans/demo-mode.md) | Markdown (design) | Contributors | ✅ shipped (v2.3.0) |
 | [Encounter-sim test suite](../plans/encounter-sim-test-suite.md) | Markdown (design) | Contributors | ⚪ plan finalized · Phase 1 PoC pending |

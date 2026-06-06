@@ -67,6 +67,7 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-feature-saves" in resp.text
     assert "/wiki/doc/plan-temp-hp-and-bonuses" in resp.text
     assert "/wiki/doc/plan-auras" in resp.text
+    assert "/wiki/doc/plan-movement-and-summons" in resp.text
     # v2.82.0: reactions-automation GM how-to listed in the available-guides table.
     assert "/wiki/reactions" in resp.text
     # v2.99.8: testing-checklist per-version verification log listed.
@@ -272,6 +273,19 @@ async def test_wiki_doc_serves_auras_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "aura" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_movement_and_summons_plan():
+    """v2.99.430: GET /wiki/doc/plan-movement-and-summons — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/movement-and-summons.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-movement-and-summons")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "summon" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

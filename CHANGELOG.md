@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.430] - 2026-06-06 — "The Shoved & The Summoned, Charted" — Movement + summons design sub-plan (automation Phase 6)
+
+**Schema version:** 66
+**Commit summary:** **New sub-plan — `docs/plans/movement-and-summons.md` — the Phase 6 design for server-side forced movement (`_force_move`) + speed buffs, and a summon-token primitive (`_summon_companion`) that creates a real combatant with its own token + init slot.** Planning + wiki-surfacing commit; no runtime code changed.
+**Description:** Grounds Phase 6 in the actual engine: tokens carry `x/y` on the `Token` row (`models.py:349`); `move_token` (line 10418) mutates them server-side with a speed-cap + OA check and broadcasts `token_move`; `effective_speed_walk` (`app/content/effective_speed.py`) reads `speed_reduction_ft` but **not** `speed_bonus_ft` (filed). Push features (Pushing Attack, Open Hand push) are announce-only (`push_authorized` / `push_max_ft` flags; the GM drags), and there's **no** server path that creates a Token + combatant for a summon. Proposes three primitives — extend `effective_speed_walk` with `speed_bonus_ft` (+ Haste ×2); a `/force_move` endpoint that mutates the target token's `x/y` (reusing the move math + `token_move` broadcast, bypassing the speed cap); and `_summon_companion` that creates a Token row + a synthetic combatant + adds it to the battle (reusing the damage/HP pipeline, with a rest/dismiss teardown). Sequences a 5-step plan (P6.1 speed buffs → P6.2 `_force_move` + Pushing Attack → P6.3 more push/pull → P7.1 `_summon_companion` + Spiritual Weapon → P7.2 more summons) + the test contract (assert the moved token `x/y` / the new combatant + token).
+
+### Added
+- `docs/plans/movement-and-summons.md` — Phase 6 design sub-plan (proposed).
+- Wiki surfacing: `_DOC_ALLOWLIST` slug `plan-movement-and-summons`, the landing-page "Design plans" row, and the on-disk index row.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_movement_and_summons_plan` + the new slug added to the `test_wiki_home_renders` assertion list.
+
+### Notes
+- Planning only — opens Phase 6 (the heaviest area: new server write surfaces for token movement + creation) with a grounded design. Implementation begins at P6.1 (the low-risk `speed_bonus_ft` wiring).
+- **Total harness count: 1857** (was 1856 in v2.99.429; +1 new wiki smoke test).
+
+---
+
 ## [2.99.429] - 2026-06-06 — "The Wrathful Halo" — Avenging Angel frightful aura (Phase 5.4 — Phase 5 COMPLETE)
 
 **Schema version:** 66
