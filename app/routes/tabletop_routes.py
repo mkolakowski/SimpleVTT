@@ -2554,6 +2554,110 @@ def _distance_ft_between_chars(
     )
 
 
+def _combatant_token(db: Session, campaign_id: int, combatant: "dict | None"):
+    """v2.99.432 — Phase 6.2: resolve a battle-state combatant to its
+    ``Token`` row on the campaign's active map. Prefers the combatant's
+    ``source_token_id`` (NPC); falls back to its ``char_id`` (PC). Returns
+    None when there's no active map / no matching token (off-grid scene).
+    """
+    if not combatant:
+        return None
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not campaign.active_map_id:
+        return None
+    stid = combatant.get("source_token_id")
+    if stid:
+        t = db.query(Token).filter(
+            Token.id == int(stid), Token.map_id == campaign.active_map_id,
+        ).first()
+        if t:
+            return t
+    cid = combatant.get("char_id")
+    if cid:
+        t = db.query(Token).filter(
+            Token.character_id == int(cid),
+            Token.map_id == campaign.active_map_id,
+        ).first()
+        if t:
+            return t
+    return None
+
+
+async def _force_move(
+    db: Session,
+    campaign_id: int,
+    target_combatant: "dict | None",
+    distance_ft: float,
+    *,
+    source_combatant: "dict | None" = None,
+    pull: bool = False,
+) -> dict:
+    """v2.99.432 — Phase 6.2 of docs/plans/movement-and-summons.md:
+    server-side forced movement. Move ``target_combatant``'s token
+    ``distance_ft`` along the line from ``source_combatant`` to the target
+    (pushed AWAY, or ``pull`` = toward); with no source, push along +x.
+    Mutates ``Token.x/y`` directly and broadcasts ``token_move`` (with
+    ``forced: True``). Does NOT consume the target's movement or hit the
+    speed cap (forced move is involuntary), and skips the OA check (RAW
+    forced movement doesn't provoke).
+
+    Off-grid (no active map / no grid / no token) → ``{moved: False}`` so
+    the caller can fall back to announce-only. Returns ``{moved,
+    token_id, from_x, from_y, to_x, to_y, distance_ft}``.
+    """
+    result = {"moved": False, "token_id": None, "from_x": 0.0,
+              "from_y": 0.0, "to_x": 0.0, "to_y": 0.0, "distance_ft": 0.0}
+    try:
+        dist = float(distance_ft or 0)
+    except (TypeError, ValueError):
+        dist = 0.0
+    if dist <= 0 or not target_combatant:
+        return result
+    token = _combatant_token(db, campaign_id, target_combatant)
+    if not token or not token.map or not token.map.grid_size_px:
+        return result
+    grid = int(token.map.grid_size_px)
+    from_x, from_y = float(token.x or 0), float(token.y or 0)
+    ux, uy = 1.0, 0.0  # default push direction (+x) when no source
+    if source_combatant:
+        src = _combatant_token(db, campaign_id, source_combatant)
+        if src:
+            sx, sy = float(src.x or 0), float(src.y or 0)
+            dx, dy = from_x - sx, from_y - sy  # source → target
+            mag = (dx * dx + dy * dy) ** 0.5
+            if mag > 0.001:
+                ux, uy = dx / mag, dy / mag
+            if pull:
+                ux, uy = -ux, -uy
+    px = dist / 5.0 * grid
+    to_x = from_x + ux * px
+    to_y = from_y + uy * px
+    grid_type = (
+        token.map.grid_type.value if token.map.grid_type else "square"
+    ).lower()
+    actual_ft = _distance_ft_between_points(
+        grid, grid_type, from_x, from_y, to_x, to_y,
+    )
+    token.x = to_x
+    token.y = to_y
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "token_move",
+        "data": {
+            "id": token.id,
+            "x": to_x, "y": to_y,
+            "from_x": from_x, "from_y": from_y,
+            "distance_ft": actual_ft,
+            "character_id": token.character_id,
+            "token_template_id": token.token_template_id,
+            "forced": True,
+        },
+    })
+    result.update(moved=True, token_id=token.id, from_x=from_x,
+                  from_y=from_y, to_x=to_x, to_y=to_y, distance_ft=actual_ft)
+    return result
+
+
 # v2.66.0 — F1 follow-up: Opportunity Attack trigger detection.
 # RAW (PHB p.195): "You can make an opportunity attack when a hostile
 # creature that you can see moves out of your reach. To make the
@@ -10891,6 +10995,54 @@ async def move_token(
             for t in oa_triggers
         ],
     }
+
+
+@router.post("/api/campaign/{campaign_id}/force_move")
+async def force_move(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.432 — Phase 6.2 of docs/plans/movement-and-summons.md:
+    server-side forced movement. Pushes (or pulls) a target combatant's
+    token ``distance_ft`` along the line from a source combatant (away by
+    default; ``pull: true`` toward), via ``_force_move`` — the primitive
+    the push/pull features (Pushing Attack, Thorn Whip, Thunderwave, …)
+    call after their save resolves.
+
+    Body: ``{target_combatant_id, distance_ft, source_combatant_id?,
+    pull?}``. Requires an active map with a grid + a token for the target
+    (off-grid → ``moved: false``). Bypasses the speed cap + OA check
+    (forced move is involuntary).
+    """
+    body = await request.json()
+    target_id = str(body.get("target_combatant_id") or "").strip()
+    if not target_id:
+        raise HTTPException(400, "target_combatant_id is required")
+    try:
+        distance_ft = float(body.get("distance_ft") or 0)
+    except (TypeError, ValueError):
+        distance_ft = 0.0
+    if distance_ft <= 0:
+        raise HTTPException(400, "distance_ft must be > 0")
+    source_id = str(body.get("source_combatant_id") or "").strip() or None
+    pull = bool(body.get("pull"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    target = _lookup_combatant(campaign_id, target_id)
+    if target is None:
+        raise HTTPException(404, "target_combatant not in battle")
+    source = _lookup_combatant(campaign_id, source_id) if source_id else None
+
+    result = await _force_move(
+        db, campaign_id, target, distance_ft,
+        source_combatant=source, pull=pull,
+    )
+    return {"ok": True, **result}
 
 
 @router.post("/api/campaign/{campaign_id}/use_dash")

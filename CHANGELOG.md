@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.432] - 2026-06-06 — "The Unseen Hand" — Forced-movement primitive + /force_move (automation Phase 6.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 6.2 of [docs/plans/movement-and-summons.md](docs/plans/movement-and-summons.md) — new `_force_move` primitive + a `/force_move` endpoint: server-side forced movement that mutates a target combatant's token `x/y` and broadcasts `token_move`.** The first new server write surface for token positions; the push/pull features call it.
+**Description:** `_force_move(db, campaign_id, target_combatant, distance_ft, *, source_combatant, pull)` resolves the target's `Token` (via the new `_combatant_token` helper — `source_token_id` for NPCs, `char_id` for PCs, on the active map), computes a destination `distance_ft` along the line from the source to the target (pushed away by default, or `pull` toward; with no source, along +x), mutates `token.x/y`, and broadcasts `token_move` with `forced: True`. It **bypasses the speed cap + OA check** (forced movement is involuntary, RAW doesn't provoke) and falls back to `{moved: false}` off-grid (no active map / grid / token). `POST /force_move` (body `{target_combatant_id, distance_ft, source_combatant_id?, pull?}`) wraps it for direct GM use + as the primitive the push/pull features (Pushing Attack, Thorn Whip, Thunderwave, …) invoke after their save resolves.
+
+### Added
+- `_combatant_token` + `_force_move` helpers; `POST /api/campaign/{cid}/force_move` endpoint.
+- `tests/harness/test_force_move.py` — push Pip 15 ft directly away from Tavik → the token moves +210 px (3 cells) on the axis + `token_move forced:true` broadcasts; plus 400 (missing target / 0 distance) + 404 (target not in battle).
+
+### Notes
+- First Phase-6 write surface. The retrofit (Pushing Attack pushes the target on a failed STR save) is the next commit. v1 skips OA on forced move + map-bounds clamping (noted in the sub-plan).
+- **Total harness count: 1868** (was 1864 in v2.99.431; +4 new tests).
+
+---
+
 ## [2.99.431] - 2026-06-06 — "The Quickened Step" — Speed bonuses + Haste/Longstrider (automation Phase 6.1)
 
 **Schema version:** 66
