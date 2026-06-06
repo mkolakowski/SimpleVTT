@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.391] - 2026-06-06 — "The Counted Deep" — Tentacle of the Deeps use-tracking (automation Phase 1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 1 retrofit — Tentacle of the Deeps (The Fathomless Warlock) is now server-tracked via the feature-use registry.** Fifth announce-only → tracked retrofit; closes the clean per-feature use-counter queue.
+**Description:** Adds a `tentacle_uses` entry to `_FEATURE_USES` (gate `_pc_has_fathomless_warlock`, `max_fn = _sheet_pb(...)` = proficiency bonus, reset `"long"`). `/use_tentacle_of_the_deeps` now calls `_consume_feature_use`: decrements `sheet.tentacle_uses`, returns 409 `out_of_uses` when depleted, reports `uses_remaining` / `uses_max`, and refills to the proficiency bonus on a long rest. The attack roll, cold-damage rider, and speed reduction stay GM-tracked pending the Phase 2 on-hit rider / Phase 7 summon-token primitives. The field is allowlisted for sheet-field PATCH.
+
+### Changed
+- `/api/campaign/{cid}/use_tentacle_of_the_deeps` now server-tracks its PB-per-long-rest budget (was announce-only).
+
+### Added
+- `tentacle_uses` registry entry (computed PB max) + allowlisted sheet field.
+- `tests/harness/test_tentacle_of_the_deeps.py::test_use_td_out_of_uses` + `::test_td_long_rest_refill` — exhaustion + computed-max refill assertions; happy test now asserts the 3→2 decrement (PB at Lv 5).
+
+### Notes
+- Fifth and final clean per-feature use-counter retrofit (after Fighting Spirit, Hexblade's Curse, Giant's Might, Arcane Shot). The Phase-1 registry now backs every announce-only feature that had a per-feature N-uses-per-rest limit. The remaining use-per-rest features (the Channel Divinity oaths — Watcher's Will, Champion Challenge, Control Undead) draw on a **shared Channel Divinity pool** rather than per-feature counters, a different shape addressed separately.
+- **Total harness count: 1811** (was 1809 in v2.99.390; +2 new tests).
+
+---
+
 ## [2.99.390] - 2026-06-06 — "The Counted Quiver" — Arcane Shot use-tracking (automation Phase 1)
 
 **Schema version:** 66

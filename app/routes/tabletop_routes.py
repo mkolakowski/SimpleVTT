@@ -50970,6 +50970,26 @@ async def use_tentacle_of_the_deeps(
             "strict": strict,
         })
 
+    # v2.99.391 — Phase 1: server-tracked PB-per-long-rest budget via the
+    # feature-use registry. Refilled by /rest. (The attack roll +
+    # cold-damage rider + speed reduction stay GM-tracked pending the
+    # Phase 2 on-hit rider / Phase 7 summon-token primitives.)
+    spent = _consume_feature_use(sheet, "tentacle_uses")
+    if spent is None:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Tentacle of the Deeps",
+            "char_name": char.name,
+            "source": "tentacle-of-the-deeps",
+            "uses_remaining": 0,
+            "uses_max": _feature_use_max(sheet, "tentacle_uses") or 0,
+        })
+    uses_remaining, uses_max = spent
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
     warlock_lv = _warlock_level_from_sheet(sheet)
@@ -51029,6 +51049,8 @@ async def use_tentacle_of_the_deeps(
             "damage_dice": f"{dice_count}d8",
             "dice_breakdown": breakdown,
             "speed_reduction_ft": 10,
+            "uses_remaining": uses_remaining,
+            "uses_max": uses_max,
             "warlock_level": warlock_lv,
         },
     })
@@ -51042,6 +51064,8 @@ async def use_tentacle_of_the_deeps(
         "cold_damage": cold_damage,
         "damage_dice": f"{dice_count}d8",
         "speed_reduction_ft": 10,
+        "uses_remaining": uses_remaining,
+        "uses_max": uses_max,
         "warlock_level": warlock_lv,
     }
 
@@ -64687,6 +64711,12 @@ _FEATURE_USES: "list[dict]" = [
     # v2.99.390 retrofit.
     {"field": "arcane_shot_uses", "gate": _pc_has_arcane_archer,
      "min_level": 3, "max_fn": lambda s: 2, "reset": "short"},
+    # Fathomless Warlock — Tentacle of the Deeps (PB/long rest).
+    # v2.99.391 retrofit.
+    {"field": "tentacle_uses", "gate": _pc_has_fathomless_warlock,
+     "min_level": 1,
+     "max_fn": lambda s: _sheet_pb(s, _warlock_level_from_sheet(s)),
+     "reset": "long"},
 ]
 
 
@@ -71950,6 +71980,10 @@ _SHEET_PATCH_KEYS = {
     # + the /rest short-OR-long-rest refill (feature-use registry).
     # Allowlisted for seed/exhaust in tests.
     "arcane_shot_uses",
+    # v2.99.391 — tentacle_uses (int 0..PB). Read by
+    # /use_tentacle_of_the_deeps + the /rest long-rest refill
+    # (feature-use registry). Allowlisted for seed/exhaust in tests.
+    "tentacle_uses",
     # v2.99.238 — knowledge_blessings (dict {skills, languages}).
     # Read by /select_knowledge_blessings (Knowledge Domain Cleric
     # Lv 1+). Allowlisted so the test can reset to {} between
