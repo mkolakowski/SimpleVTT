@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.372] - 2026-06-05 — "The Giant's Stature" — Rune Knight Fighter Giant's Might (Lv 3+, TCE) — ⚔️ Fighter archetype sweep
+
+**Schema version:** 66
+**Commit summary:** **Fighter martial archetype sweep ship #3 — Rune Knight Lv 3+ Giant's Might (TCE).** Third Fighter archetype sweep ship; opens Rune Knight. RAW TCE p.45: as a bonus action, become Large for 1 minute, gain advantage on STR checks/saves, and once per turn a weapon/unarmed hit deals +1d6 damage (grows to 1d8 at Lv 10, 1d10 at Lv 18). Usable proficiency-bonus times per long rest.
+**Description:** Adds `_pc_has_rune_knight` helper. One endpoint. `/use_giants_might` — body `{character_id, override?}`. Validates Rune Knight Fighter Lv 3+ + bonus chip. Computes the bonus-damage die by Fighter level (1d6/1d8/1d10). Broadcasts `feature_used` with `source: giants-might`, `size: Large`, `str_advantage: true`, `bonus_damage_die`, `duration_minutes: 1`. v1 announce-only — the size change, STR advantage, once-per-turn bonus damage, and uses-per-long-rest limit are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_giants_might` endpoint.
+- `_pc_has_rune_knight` helper.
+- `tests/harness/test_giants_might.py` — 3 tests.
+
+### Notes
+- **Fighter archetype sweep progress:** Champion, Battle Master, Eldritch Knight (shipped earlier), Samurai, Psi Warrior, Rune Knight (this) all have first features. Remaining untouched: Cavalier (Unwavering Mark), Arcane Archer (Arcane Shot), Echo Knight (Manifest Echo), Banneret (Rallying Cry).
+- **188 ships this session.**
+- **Total harness count: 1758** (was 1755 in v2.99.371; +3 new tests).
+
+---
+
 ## [2.99.371] - 2026-06-05 — "The Telekinetic Shield" — Psi Warrior Fighter Protective Field (Lv 3+, TCE) — ⚔️ Fighter archetype sweep
 
 **Schema version:** 66
