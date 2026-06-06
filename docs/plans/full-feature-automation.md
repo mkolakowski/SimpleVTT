@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** ⚪ proposed (planning only — no code yet)
+**Status:** 🟠 in progress — Phase 1 ✅ + Phase 2 ✅ (sub-plan [on-hit-riders.md](on-hit-riders.md), shipped v2.99.395–.403); Phase 3 next.
 **Author:** drafted v2.99.386
 **Scope:** Turn every shipped class/subclass feature from "v1 announce-only"
 into a **server-applied, state-changing, harness-verified** mechanic — and
@@ -114,14 +114,14 @@ below names the canonical recipe and the new primitive (if any) it needs.
 
 ## 4. New primitives to build (the engine gaps)
 
-### P1 — Feature-use registry (`_FEATURE_USES`)
+### P1 — Feature-use registry (`_FEATURE_USES`) ✅ shipped
 A data table mapping `feature_slug → {counter_field, max_fn(sheet), reset}`.
 Replaces the ~6 hand-written long-rest hooks in `rest_character` with one loop,
 and gives every use-per-rest feature decrement + 409 `out_of_uses` + refill for
 free. Bare counter for ≤PB uses; promote to `sheet.resources[]` when the UI
 should show a pip strip.
 
-### P2 — On-hit rider registry (`_ATTACK_RIDERS`)
+### P2 — On-hit rider registry (`_ATTACK_RIDERS`) ✅ shipped
 A table of active "next/each hit deals +Xd_ [type], once per turn" riders,
 keyed by attacker + (optional) target, consumed inside
 `_compute_attack_auto_uplifts`. Today Hex/Hunter's Mark ride a bespoke branch;
@@ -183,18 +183,22 @@ Generate `docs/automation-coverage.md`: every `use_*` feature endpoint tagged
 backlog the rest of the plan burns down; keep it in sync like the harness
 coverage catalog. *(This plan + that audit are the two living docs.)*
 
-### Phase 1 — P1 feature-use registry + retrofit (M, ~5 commits)
+### Phase 1 — P1 feature-use registry + retrofit (M, ~5 commits) ✅ shipped
 Build `_FEATURE_USES`; migrate the existing bespoke hooks; retrofit every
 announce-only use-per-rest feature (Fighting Spirit 3/long, Hexblade's Curse
 1/rest, Watcher's Will & Champion Challenge & Control Undead via Channel
 Divinity pool, etc.) to decrement + 409 + refill. **Biggest breadth win.**
 
-### Phase 2 — P2 on-hit rider registry (M-L, ~6 commits, own sub-plan)
+### Phase 2 — P2 on-hit rider registry (M-L, ~6 commits, own sub-plan) ✅ shipped (v2.99.395–.403)
 Generalize `_compute_attack_auto_uplifts`; add once-per-turn flagging; retrofit
-~40 damage-rider features. Write `docs/plans/on-hit-riders.md` first — this is
-the highest-effort primitive and touches the hot attack path.
+the damage-rider features. Shipped via the [on-hit-riders.md](on-hit-riders.md)
+sub-plan (P2.1 substrate → P2.5 `_ATTACK_RIDERS` registry), plus the
+activated-rider retrofits (Slayer's Prey, Dreadful Strike, Gathered Swarm,
+Hexblade's Curse, Planar Warrior, Divine Fury, Kensei's Shot). The remaining
+announce-only riders (Genie's Wrath, Battle Master maneuvers, …) follow the same
+install-a-buff shape as a long tail.
 
-### Phase 3 — P3 feature save resolver (M-L, ~6 commits)
+### Phase 3 — P3 feature save resolver (M-L, ~6 commits) ← next
 Extract `_resolve_feature_save`; retrofit the save-or-condition features. Pairs
 with the existing repeated-save / save-on-damage auto-fire so installed
 conditions tick correctly.

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.404] - 2026-06-06 — "The Ledger Reconciled" — Mark Phase 2 done in the parent plan (automation housekeeping)
+
+**Schema version:** 66
+**Commit summary:** **Doc-only housekeeping — flip Phase 1 + Phase 2 to ✅ shipped in [docs/plans/full-feature-automation.md](docs/plans/full-feature-automation.md) and sync the wiki status row.** No code change.
+**Description:** The on-hit rider sub-plan ([on-hit-riders.md](docs/plans/on-hit-riders.md)) and the activated-rider retrofits (through v2.99.403) completed Phase 2 of the parent automation plan, but the parent plan's status markers still read "planning only / Phase 1 shipped." Updates the top status line, the Phase 1/Phase 2 roadmap entries, and the P1/P2 primitive headers in §4 to ✅ shipped, points Phase 3 (feature save resolver) as the next phase, and bumps the wiki landing-page + on-disk index status from "🟠 Phase 1 shipped · 2–9 pending" to "🟠 Phases 1–2 shipped · 3–9 pending."
+
+### Changed
+- `docs/plans/full-feature-automation.md` — Phase 1 + Phase 2 marked ✅ shipped; Phase 3 flagged as next.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — parent-plan status row updated.
+
+### Notes
+- Doc-only / refactor-exempt — no new endpoint, no harness test required. Clears the way for Phase 3 (P3 `_resolve_feature_save`).
+- **Total harness count: 1829** (unchanged).
+
+---
+
 ## [2.99.403] - 2026-06-06 — "The Steadied Bow" — Kensei's Shot installs a this-turn rider (automation Phase 2)
 
 **Schema version:** 66
