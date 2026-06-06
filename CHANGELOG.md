@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.428] - 2026-06-06 — "The Ancient Form" — Elder Champion self-heal aura (automation Phase 5.4)
+
+**Schema version:** 66
+**Commit summary:** **Phase 5.4 of [docs/plans/auras.md](docs/plans/auras.md) — Elder Champion (Ancients Paladin Lv 20) now installs a self-heal aura buff so the v2.99.425 tick regains 10 HP at the start of each of the paladin's turns.**
+**Description:** `/use_elder_champion` now `_install_buff`s an `elder-champion` buff carrying `effects.aura = {radius_ft: 0, affects: "self", heal: 10}` (10-round duration). `_tick_auras` applies the heal to the paladin (self) each turn via `_apply_heal_to_combatant` (clamps to max). The bonus-action paladin-spell option + the 10-ft enemy-save-disadvantage aura stay GM-tracked. Response gains `buff_installed`. Fits the existing owner-turn-start tick with `affects: "self"` — no tick change needed.
+
+### Changed
+- `/api/campaign/{cid}/use_elder_champion` installs a self-heal aura buff (was announce-only); response gains `buff_installed`.
+
+### Added
+- `tests/harness/test_elder_champion.py::test_ec_aura_self_heals_at_turn_start` — lower the paladin's HP, activate, advance to his turn (carrying the buff), and assert `hp.current` rises 10 via `character_hp_update`.
+
+### Notes
+- First half of P5.4 (the owner-turn-start self-heal — fits the current tick). The other half, Avenging Angel (frightened-on-enter), needs the subject-turn-start model + `_resolve_feature_save` — next.
+- **Total harness count: 1855** (was 1854 in v2.99.427; +1 new test).
+
+---
+
 ## [2.99.427] - 2026-06-06 — "The Bear Walks With You" — Spirit Totem (Bear) ongoing re-grant (automation Phase 5.3)
 
 **Schema version:** 66

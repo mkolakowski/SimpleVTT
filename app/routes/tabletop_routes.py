@@ -47383,10 +47383,14 @@ async def use_elder_champion(
 
     Body: ``{character_id, override?}``. Costs an action chip.
     Auto-bootstraps an `elder-champion` resource (max=1,
-    reset=long) if missing — refilled by long rest. v1
-    announce-only — the 10 HP/turn-start heal, bonus-action
-    spell cast option, and 10 ft enemy-save-disadvantage aura
-    are GM-tracked.
+    reset=long) if missing — refilled by long rest.
+
+    v2.99.428 — Phase 5.4 of docs/plans/auras.md: installs an
+    `elder-champion` aura buff (`effects.aura` with `affects: "self"` +
+    `heal: 10`, 10-round duration) so the v2.99.425 tick regains 10 HP at
+    the start of each of the paladin's turns. The bonus-action paladin-
+    spell option + the 10-ft enemy-save-disadvantage aura stay GM-tracked.
+    Response gains `buff_installed`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -47513,6 +47517,33 @@ async def use_elder_champion(
         },
     })
 
+    # v2.99.428 — Phase 5.4: install a self-heal aura buff so the tick
+    # regains 10 HP at the start of each of the paladin's turns.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "elder-champion",
+        "name": "Elder Champion",
+        "icon": "🌳",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "aura": {
+                "radius_ft": 0,
+                "affects": "self",
+                "heal": 10,
+                "source": "elder-champion",
+                "label": "Elder Champion",
+            },
+        },
+        "desc": (
+            "Regain 10 HP at the start of each of your turns for 1 "
+            "minute. (Ancients Paladin Lv 20 capstone.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     return {
         "ok": True,
         "feature": "elder-champion",
@@ -47522,6 +47553,7 @@ async def use_elder_champion(
         "turn_start_heal": 10,
         "aura_radius_ft": 10,
         "paladin_level": pal_lv,
+        "buff_installed": buff_installed,
     }
 
 
