@@ -1,6 +1,6 @@
 # Temp HP + roll-bonus completion — Phase 4 sub-plan
 
-**Status:** ⚪ proposed (planning only)
+**Status:** ✅ shipped (P4.1 → P4.4 complete, v2.99.415–.423)
 **Parent:** [full-feature-automation.md](full-feature-automation.md) Phase 4 (P4 + P8).
 **Goal:** Build a **temp-HP primitive** (`_grant_temp_hp`) and make the
 damage pipeline spend temp HP before real HP (RAW), so the cluster of
@@ -115,8 +115,10 @@ Mage Armor / Haste / Defensive Duelist install a buff carrying
    (+3) and Haste (+2) install an `ac_bonus` buff via `_SPELL_BUFF_MAP`
    (read by `_read_target_ac`); asserted via `/attack`'s `target_ac`.
    Defensive Duelist (a per-attack reaction) is deferred to Phase 7.
-4. **P4.4 — buff-level save advantage (S).** `_buff_grants_save_advantage`
-   + wire at the save sites; assert a buffed save rolls `2d20kh1`.
+4. **P4.4 — buff-level save advantage (S). ✅ shipped v2.99.423.**
+   `_buff_grants_save_advantage` (reads `effects.save_advantage`) wired at
+   the single-target / AoE-cast / `/place_aoe` PC save sites; a buffed
+   save rolls `2d20kh1`. **Completes Phase 4.**
 
 ---
 

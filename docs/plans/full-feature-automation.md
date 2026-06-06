@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414); Phase 4 next.
+**Status:** 🟠 in progress — Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423); Phase 5 next.
 **Author:** drafted v2.99.386
 **Scope:** Turn every shipped class/subclass feature from "v1 announce-only"
 into a **server-applied, state-changing, harness-verified** mechanic — and
@@ -138,7 +138,7 @@ install {condition} / take {damage}". Reuses `_SPELL_CONDITION_MAP`,
 Unlocks Champion Challenge, Conquering Presence, Draconic Presence, Fey
 Presence, Menacing Attack, Trip Attack, Hypnotic Gaze, Control Undead, etc.
 
-### P4 — Temp-HP primitive (`_grant_temp_hp`)
+### P4 — Temp-HP primitive (`_grant_temp_hp`) ✅ shipped
 Apply temporary HP to a combatant (RAW: doesn't stack — take the higher),
 broadcast an HP/temp update. Unlocks Dark One's Blessing, Fighting Spirit,
 Touch of Death, Heroism's per-turn grant, Inspiring Smite, Bear totem-less, etc.
@@ -203,9 +203,12 @@ Extract `_resolve_feature_save`; retrofit the save-or-condition features. Pairs
 with the existing repeated-save / save-on-damage auto-fire so installed
 conditions tick correctly.
 
-### Phase 4 — P4 temp-HP + P8 roll-bonus completion (M, ~5 commits)
+### Phase 4 — P4 temp-HP + P8 roll-bonus completion (M, ~5 commits) ✅ shipped (v2.99.415–.423)
 Temp-HP primitive + wire the filed `ac_bonus` / `bless_*` / save-advantage read
 sites. Closes a cluster of "+temp HP", "+AC", "+d4 to save" features at once.
+Shipped via the [temp-hp-and-bonuses.md](temp-hp-and-bonuses.md) sub-plan
+(`_grant_temp_hp` + damage absorption → 6 temp-HP retrofits → +AC spells →
+buff-level save advantage).
 
 ### Phase 5 — P5 auras (L, ~6 commits, own sub-plan)
 Aura tick + radius picker; retrofit Storm Aura, Spirit Totem, the Paladin Lv 7

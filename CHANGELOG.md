@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.423] - 2026-06-06 — "The Steadfast Ward" — Buff-level save advantage (Phase 4.4 — Phase 4 COMPLETE)
+
+**Schema version:** 66
+**Commit summary:** **Phase 4.4 of [docs/plans/temp-hp-and-bonuses.md](docs/plans/temp-hp-and-bonuses.md) — new `_buff_grants_save_advantage` reads `effects.save_advantage` off the saver's buffs and is wired at the spell-save construction sites alongside the race-advantage gate.** Completes Phase 4.
+**Description:** `_buff_grants_save_advantage(campaign_id, char_id, save_ability)` returns True when the saver carries a buff whose `effects.save_advantage` covers the save — `True` grants advantage on every save; a list of ability strings (`["STR", "CON"]`) grants it only on those. It's wired at the three PC spell-save sites (single-target, AoE-cast, and `/place_aoe`) with the same `1d20 → 2d20kh1` swap idiom the race/Danger-Sense/Rage gates use, composing safely (kh1-of-kh1 is still kh1). This lets a feature or spell buff express "advantage on saves" generically (Magic Resistance, Holy Nimbus, Aura-of-Protection-style wards, …) — the value the earlier phases filed but never read.
+
+### Added
+- `_buff_grants_save_advantage` helper + the `effects.save_advantage` buff key, wired at the single-target, AoE-cast, and `/place_aoe` PC save-construction sites.
+- `tests/harness/test_buff_save_advantage.py` — a ward buff with `save_advantage: True` makes a WIS save prompt `2d20kh1`; a `["STR"]` ward leaves a WIS save at `1d20` (the list doesn't cover WIS).
+
+### Notes
+- **Phase 4 complete** — P4.1 temp-HP primitive + damage absorption, P4.2 the six temp-HP feature retrofits, P4.3 the +AC spells, P4.4 buff-level save advantage. The `ac_bonus` / temp-HP / save-advantage read-sites the earlier phases filed are now all closed. Next phase: P5 auras (own sub-plan).
+- **Total harness count: 1849** (was 1847 in v2.99.422; +2 new tests).
+
+---
+
 ## [2.99.422] - 2026-06-06 — "The Woven Ward" — Mage Armor + Haste install +AC buffs (automation Phase 4.3)
 
 **Schema version:** 66

@@ -16223,6 +16223,12 @@ async def cast_spell(
                 )
                 if _race_applies and not _ds_base.startswith("2d20kh1"):
                     _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.99.423 — Phase 4.4: buff-level save advantage
+                # (effects.save_advantage). Same kh1 swap idiom.
+                if not _ds_base.startswith("2d20kh1") and \
+                        _buff_grants_save_advantage(
+                            campaign_id, int(tgt_char.id), save_ability):
+                    _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
                 # v2.99.26 — Rage advantage on STR saves. Closes the
                 # third RAW Rage benefit (the buff has carried the
                 # `str_save` marker since v2.20.0 but no consumer
@@ -16690,6 +16696,11 @@ async def cast_spell(
                     )
                 )
                 if _aoe_race_applies and not _aoe_ds_base.startswith("2d20kh1"):
+                    _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.99.423 — Phase 4.4: buff-level save advantage.
+                if not _aoe_ds_base.startswith("2d20kh1") and \
+                        _buff_grants_save_advantage(
+                            campaign_id, int(extra_pc.id), save_ability):
                     _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
                 # v2.99.26 — Rage STR-save advantage on AoE saves.
                 _aoe_rage_str_save = _pc_has_rage_str_save_advantage(
@@ -17883,6 +17894,12 @@ async def place_aoe(
             _aoe_pl_rage_str_save = _pc_has_rage_str_save_advantage(
                 campaign_id, int(extra_pc.id), save_ability,
             )
+            # v2.99.423 — Phase 4.4: buff-level save advantage. Folded
+            # into the advantage cascade below (OR with the other
+            # sources) so a save_advantage buff grants 2d20kh1 here too.
+            _aoe_pl_buff_adv = _buff_grants_save_advantage(
+                campaign_id, int(extra_pc.id), save_ability,
+            )
             # v2.99.36 — Heightened Spell metamagic disadvantage at
             # /place_aoe PC server-rolled save site. Same one-use
             # semantics: drop the buff after the swap regardless of
@@ -17922,7 +17939,8 @@ async def place_aoe(
                     await _broadcast_rage_str_save_advantage(
                         campaign_id, extra_pc,
                     )
-            elif _ds_pc_applies or _aoe_pl_race_applies or _aoe_pl_rage_str_save:
+            elif (_ds_pc_applies or _aoe_pl_race_applies
+                  or _aoe_pl_rage_str_save or _aoe_pl_buff_adv):
                 # v2.99.41 — RAW PHB p.173 cancellation: if Heightened
                 # is also armed for this saver, advantage + disadvantage
                 # cancel and the roll is normal (1d20). Otherwise pure
@@ -25887,6 +25905,37 @@ def _race_grants_save_advantage(
         if matched:
             return True, rule.get("trait_slug") or "", rule.get("trait_name") or ""
     return False, "", ""
+
+
+def _buff_grants_save_advantage(
+    campaign_id: int, character_id: int, save_ability: str,
+) -> bool:
+    """v2.99.423 — Phase 4.4 of docs/plans/temp-hp-and-bonuses.md: True
+    when the saver carries a buff whose ``effects.save_advantage`` covers
+    this save. ``save_advantage: True`` grants advantage on EVERY save; a
+    list of ability strings (e.g. ``["STR", "CON"]``) grants it only on
+    those abilities (case-insensitive). Read alongside
+    ``_race_grants_save_advantage`` at the save-construction sites — the
+    caller swaps ``1d20 → 2d20kh1`` when this returns True (same kh1
+    idiom; composes safely with the other advantage sources). Lets a
+    feature/spell buff express "advantage on saves" generically (Magic
+    Resistance, Holy Nimbus, Aura of Protection-style wards, …).
+    """
+    ability = (save_ability or "").strip().upper()[:3]
+    for b in _get_buffs(campaign_id, int(character_id)) or []:
+        if not isinstance(b, dict):
+            continue
+        eff = b.get("effects")
+        if not isinstance(eff, dict):
+            continue
+        sa = eff.get("save_advantage")
+        if sa is True:
+            return True
+        if isinstance(sa, list) and ability in [
+            str(x).strip().upper()[:3] for x in sa
+        ]:
+            return True
+    return False
 
 
 async def _broadcast_race_save_advantage(
