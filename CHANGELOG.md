@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.389] - 2026-06-06 — "The Counted Colossus" — Giant's Might use-tracking (automation Phase 1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 1 retrofit — Giant's Might (Rune Knight Fighter) is now server-tracked via the feature-use registry.** Third announce-only → tracked retrofit; first to exercise a **computed** `max_fn` (proficiency bonus per long rest).
+**Description:** Adds a `giants_might_uses` entry to `_FEATURE_USES` (gate `_pc_has_rune_knight`, `max_fn = _sheet_pb(...)` = proficiency bonus, reset `"long"`). `/use_giants_might` now calls `_consume_feature_use`: decrements `sheet.giants_might_uses`, returns 409 `out_of_uses` when depleted, reports `uses_remaining` / `uses_max`, and refills to the proficiency bonus on a long rest via the registry. The Large size, STR advantage, and once-per-turn bonus damage stay GM-tracked pending the Phase 2/4 primitives. The field is allowlisted for sheet-field PATCH.
+
+### Changed
+- `/api/campaign/{cid}/use_giants_might` now server-tracks its PB-per-long-rest budget (was announce-only).
+
+### Added
+- `giants_might_uses` registry entry (computed PB max) + allowlisted sheet field.
+- `tests/harness/test_giants_might.py::test_use_gm_out_of_uses` + `::test_gm_long_rest_refill` — exhaustion + computed-max refill assertions; happy test now asserts the 4→3 decrement (PB at Lv 9).
+
+### Notes
+- Third Phase-1 retrofit (after Fighting Spirit and Hexblade's Curse). Confirms the registry's computed `max_fn` path (proficiency-bonus budgets). Remaining clean use-per-rest retrofits queued: Arcane Shot (2/short-or-long), Tentacle of the Deeps (PB/long).
+- **Total harness count: 1807** (was 1805 in v2.99.388; +2 new tests).
+
+---
+
 ## [2.99.388] - 2026-06-06 — "The Counted Curse" — Hexblade's Curse use-tracking (automation Phase 1)
 
 **Schema version:** 66

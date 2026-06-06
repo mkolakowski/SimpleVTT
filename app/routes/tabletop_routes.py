@@ -53270,6 +53270,26 @@ async def use_giants_might(
             "strict": strict,
         })
 
+    # v2.99.389 — Phase 1: server-tracked PB-per-long-rest budget via the
+    # feature-use registry. Refilled by /rest. (The Large size, STR
+    # advantage, and once-per-turn bonus damage stay GM-tracked pending
+    # the Phase 2/4 primitives.)
+    spent = _consume_feature_use(sheet, "giants_might_uses")
+    if spent is None:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Giant's Might",
+            "char_name": char.name,
+            "source": "giants-might",
+            "uses_remaining": 0,
+            "uses_max": _feature_use_max(sheet, "giants_might_uses") or 0,
+        })
+    uses_remaining, uses_max = spent
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
     fighter_lv = _fighter_level_from_sheet(sheet)
@@ -53309,6 +53329,8 @@ async def use_giants_might(
             "str_advantage": True,
             "bonus_damage_die": f"1d{bonus_die}",
             "duration_minutes": 1,
+            "uses_remaining": uses_remaining,
+            "uses_max": uses_max,
             "fighter_level": fighter_lv,
         },
     })
@@ -53320,6 +53342,8 @@ async def use_giants_might(
         "str_advantage": True,
         "bonus_damage_die": f"1d{bonus_die}",
         "duration_minutes": 1,
+        "uses_remaining": uses_remaining,
+        "uses_max": uses_max,
         "fighter_level": fighter_lv,
     }
 
@@ -64629,6 +64653,12 @@ _FEATURE_USES: "list[dict]" = [
     # v2.99.388 retrofit.
     {"field": "hexblades_curse_uses", "gate": _pc_has_hexblade_warlock,
      "min_level": 1, "max_fn": lambda s: 1, "reset": "short"},
+    # Rune Knight Fighter — Giant's Might (PB/long rest). v2.99.389
+    # retrofit — exercises a computed (proficiency-bonus) max_fn.
+    {"field": "giants_might_uses", "gate": _pc_has_rune_knight,
+     "min_level": 3,
+     "max_fn": lambda s: _sheet_pb(s, _fighter_level_from_sheet(s)),
+     "reset": "long"},
 ]
 
 
@@ -71884,6 +71914,10 @@ _SHEET_PATCH_KEYS = {
     # /use_hexblades_curse + the /rest short-OR-long-rest refill
     # (feature-use registry). Allowlisted for seed/exhaust in tests.
     "hexblades_curse_uses",
+    # v2.99.389 — giants_might_uses (int 0..PB). Read by
+    # /use_giants_might + the /rest long-rest refill (feature-use
+    # registry). Allowlisted for seed/exhaust in tests.
+    "giants_might_uses",
     # v2.99.238 — knowledge_blessings (dict {skills, languages}).
     # Read by /select_knowledge_blessings (Knowledge Domain Cleric
     # Lv 1+). Allowlisted so the test can reset to {} between
