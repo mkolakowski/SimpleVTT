@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.397] - 2026-06-06 — "The Feywild Scar" — Dreadful Strike installs a non-target rider (automation Phase 2.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 2.2 — Dreadful Strike (Fey Wanderer) now installs a `dreadful-strike` rider buff so its +1d4 psychic auto-applies on a hit.** First **non-target** rider retrofit — exercises the v2.99.395 substrate's "target-less rider applies to any hit" path.
+**Description:** `/use_dreadful_strike` now `_install_buff`s a `dreadful-strike` buff on the ranger with `effects.weapon_hit_bonus_dice: "1d{4|6}"`, `weapon_hit_bonus_damage_type: "psychic"`, `weapon_hit_once_per_turn: True`, `weapon_hit_flag: "dreadful_strike"` — and **no** `weapon_hit_bonus_target_combatant_id`, since Dreadful Strike applies to any creature you hit (once per turn), not a marked target. The first weapon hit each turn auto-adds +1d4 (1d6 at Lv 11) psychic through `_compute_attack_auto_uplifts`. At-will (no action cost); the buff persists through combat and drops on rest. `buff_installed` is added to the response.
+
+### Changed
+- `/api/campaign/{cid}/use_dreadful_strike` now installs a non-target on-hit rider buff (was announce-only).
+
+### Added
+- `tests/harness/test_dreadful_strike.py::test_ds_installs_rider_buff` — asserts the rider buff's effects (including the absence of a target key) via the `buff_update` broadcast.
+
+### Notes
+- Second Phase-2.2 rider retrofit (after Slayer's Prey). Confirms the non-target ("this-turn / any hit") rider path. Next: Gathered Swarm (target-keyed dice), then the flat + crit-range riders (Hexblade's Curse) at P2.3.
+- **Total harness count: 1822** (was 1821 in v2.99.396; +1 new test).
+
+---
+
 ## [2.99.396] - 2026-06-06 — "The Marked Prey, Tracked" — Slayer's Prey installs an on-hit rider (automation Phase 2.2)
 
 **Schema version:** 66

@@ -54528,6 +54528,34 @@ async def use_dreadful_strike(
         psychic_damage = 1
         breakdown = ""
 
+    # v2.99.397 — Phase 2.2: install the on-hit rider buff. Dreadful
+    # Strike is NOT target-keyed (it applies to any creature you hit,
+    # once per turn), so the buff omits the target field — block 2 of
+    # _compute_attack_auto_uplifts treats a target-less rider as
+    # applying to any hit. The +1d{die} psychic auto-applies on the
+    # first weapon hit each turn. No action cost (an at-will rider).
+    ds_buff = {
+        "key": "dreadful-strike",
+        "name": "Dreadful Strike",
+        "icon": "🃏",
+        "duration_rounds": 600,
+        "duration_max": 600,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "weapon_hit_bonus_dice": f"1d{die_size}",
+            "weapon_hit_bonus_damage_type": "psychic",
+            "weapon_hit_once_per_turn": True,
+            "weapon_hit_flag": "dreadful_strike",
+        },
+        "desc": (
+            f"First weapon hit each turn deals an extra 1d{die_size} "
+            f"psychic damage. (Fey Wanderer Lv 3+; at-will.)"
+        ),
+    }
+    buff_installed = await _install_buff(campaign_id, char.id, ds_buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -54558,6 +54586,7 @@ async def use_dreadful_strike(
             "source": "dreadful-strike",
             "psychic_damage": psychic_damage,
             "damage_die": f"1d{die_size}",
+            "buff_installed": buff_installed,
             "ranger_level": ranger_lv,
         },
     })
@@ -54567,6 +54596,7 @@ async def use_dreadful_strike(
         "feature": "dreadful-strike",
         "psychic_damage": psychic_damage,
         "damage_die": f"1d{die_size}",
+        "buff_installed": buff_installed,
         "ranger_level": ranger_lv,
     }
 
