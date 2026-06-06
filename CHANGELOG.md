@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.384] - 2026-06-05 — "The Sovereign's Call" — Oath of the Crown Paladin Champion Challenge (Lv 3+, SCAG) — 🛡️ Paladin oath sweep
+
+**Schema version:** 66
+**Commit summary:** **Paladin oath sweep — Oath of the Crown Lv 3+ Champion Challenge (SCAG).** Second oath-sweep ship. RAW SCAG p.131 (Channel Divinity): as a bonus action, each chosen creature within 30 ft makes a WIS save (DC 8 + PB + CHA mod); on a failure it can't willingly move more than 30 ft away from you.
+**Description:** Adds `_pc_has_crown_oath` helper. One endpoint. `/use_champion_challenge` — body `{character_id, override?}`. Validates Oath of the Crown Paladin Lv 3+ + bonus chip (Channel Divinity). Computes the Paladin spell save DC (8 + PB + CHA mod) **server-side**. Broadcasts `feature_used` with `source: champion-challenge`, `save_dc`, `save: wis`, `range_ft: 30`, `tether_ft: 30`. v1 announce-only — the targeting + saves + movement restriction + Channel Divinity uses are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_champion_challenge` endpoint.
+- `_pc_has_crown_oath` helper.
+- `tests/harness/test_champion_challenge.py` — 3 tests.
+
+### Notes
+- **Paladin oath sweep progress:** Devotion, Ancients, Vengeance, Conquest, Redemption, Glory (shipped earlier), Watchers (v2.99.383), Crown (this) all have first features. Remaining untouched: Oathbreaker (Control Undead / Dreadful Aspect). One more ship rounds out the Paladin oaths.
+- **200 ships this session.**
+- **Total harness count: 1797** (was 1794 in v2.99.383; +3 new tests).
+
+---
+
 ## [2.99.383] - 2026-06-05 — "The Vigilant Eye" — Oath of the Watchers Paladin Watcher's Will (Lv 3+, TCE) — 🛡️ Paladin oath sweep
 
 **Schema version:** 66

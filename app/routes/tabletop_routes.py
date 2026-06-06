@@ -25631,6 +25631,31 @@ def _pc_has_watchers_oath(sheet: "dict | None", min_level: int) -> bool:
     return _paladin_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_crown_oath(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.384 — RAW Oath of the Crown (Paladin, SCAG p.131):
+    Channel Divinity options Champion Challenge + Turn the
+    Faithless (Lv 3), Divine Allegiance (Lv 7), Unyielding Spirit
+    (Lv 15), Exalted Champion (Lv 20).
+
+    Returns True when the PC is a Paladin with subclass slug
+    containing "crown" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "paladin":
+        has_paladin = any(
+            (entry.get("class") or "").strip().lower() == "paladin"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_paladin:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "crown" not in subclass:
+        return False
+    return _paladin_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_conquest_oath(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.247 — RAW Oath of Conquest (Paladin, XGE p.37):
     Channel Divinity options Conquering Presence + Guided Strike
@@ -54558,6 +54583,130 @@ async def use_watchers_will(
         "range_ft": 30,
         "advantage_saves": ["int", "wis", "cha"],
         "duration_minutes": 1,
+        "paladin_level": paladin_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_champion_challenge")
+async def use_champion_challenge(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.384 — Phase G Paladin oath sweep (Oath of the Crown
+    Lv 3+, SCAG) of the v2.99.193 phased completion plan. Champion
+    Challenge (Oath of the Crown Channel Divinity, Lv 3+, SCAG
+    p.131): "As a bonus action, you issue a challenge that compels
+    other creatures to do battle with you. Each creature of your
+    choice that you can see within 30 feet of you must make a
+    Wisdom saving throw. On a failed save, a creature can't
+    willingly move more than 30 feet away from you."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip
+    (Channel Divinity). Computes the Paladin spell save DC (8 + PB
+    + CHA mod) server-side. v1 announce-only — the targeting +
+    saves + movement restriction + Channel Divinity uses are
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_crown_oath(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "oath of the crown paladin lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _paladin_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "champion-challenge",
+            "label": "Champion Challenge",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    paladin_lv = _paladin_level_from_sheet(sheet)
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, paladin_lv) - 1) // 4
+    try:
+        cha_score = int((sheet.get("abilities") or {}).get("CHA", 10))
+    except (TypeError, ValueError):
+        cha_score = 10
+    cha_mod = (cha_score - 10) // 2
+    save_dc = 8 + pb + cha_mod
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"👑 Champion Challenge — WIS save DC {save_dc} or "
+                f"can't flee"
+            ),
+            "feature_desc": (
+                f"{char.name} issues a challenge to battle: each "
+                f"chosen creature within 30 ft makes a WIS save (DC "
+                f"{save_dc}); on a failure it can't willingly move "
+                f"more than 30 ft away from {char.name}. (Oath of "
+                f"the Crown Paladin Lv 3+ SCAG Channel Divinity.)"
+            ),
+            "source": "champion-challenge",
+            "save_dc": save_dc,
+            "save": "wis",
+            "range_ft": 30,
+            "tether_ft": 30,
+            "paladin_level": paladin_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "champion-challenge",
+        "save_dc": save_dc,
+        "save": "wis",
+        "range_ft": 30,
+        "tether_ft": 30,
         "paladin_level": paladin_lv,
     }
 
