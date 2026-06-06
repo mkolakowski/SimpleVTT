@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.377] - 2026-06-05 — "The First Strike" — Gloom Stalker Ranger Dread Ambusher (Lv 3+, XGE) — 🏹 Ranger conclave batch OPEN
+
+**Schema version:** 66
+**Commit summary:** **Ranger conclave subclass batch OPEN — Gloom Stalker Lv 3+ Dread Ambusher (XGE).** First new Ranger conclave beyond the already-wired Hunter (Colossus Slayer). RAW XGE p.42: +WIS modifier to initiative; at the start of your first turn, +10 ft speed and (on a first-turn Attack action) one extra weapon attack that deals +1d8 on a hit.
+**Description:** Adds `_pc_has_gloom_stalker` helper. One endpoint. `/use_dread_ambusher` — body `{character_id}`. Validates Gloom Stalker Ranger Lv 3+. No separate action cost (the extra attack is part of the first-turn Attack action). Computes the WIS initiative bonus + rolls the 1d8 ambush damage **server-side**. Broadcasts `feature_used` with `source: dread-ambusher`, `initiative_bonus`, `speed_bonus_ft: 10`, `ambush_damage`, `ambush_damage_die: 1d8`. v1 announce-only — the initiative bonus, speed boost, and extra attack are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_dread_ambusher` endpoint.
+- `_pc_has_gloom_stalker` helper.
+- `tests/harness/test_dread_ambusher.py` — 3 tests.
+
+### Notes
+- **Ranger conclave batch OPEN.** Hunter already has Colossus Slayer wired into the attack flow. Gloom Stalker is the first ship of the formal Ranger conclave subclass batch. Rowan Quickbow (Ranger Lv 5) is the demo fixture. Remaining untouched: Beast Master (Ranger's Companion), Horizon Walker (Detect Portal / Planar Warrior), Swarmkeeper (Gathered Swarm), Fey Wanderer (Dreadful Strike), Monster Slayer (Hunter's Sense / Slayer's Prey).
+- **193 ships this session.**
+- **Total harness count: 1774** (was 1771 in v2.99.376; +3 new tests).
+
+---
+
 ## [2.99.376] - 2026-06-05 — "The Dragon's Banner" — Banneret Fighter Rallying Cry (Lv 3+, SCAG) — 🎉 Fighter archetype sweep CLOSE
 
 **Schema version:** 66
