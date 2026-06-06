@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.364] - 2026-06-05 — "The Spirit Totem" — Path of the Totem Warrior Barbarian Totem Spirit (Lv 3+, PHB) — 🪓 Barbarian Paths batch OPEN
+
+**Schema version:** 66
+**Commit summary:** **Barbarian Paths subclass batch OPEN — Path of the Totem Warrior Lv 3+ Totem Spirit (PHB).** First new Barbarian path beyond the already-shipped Path of the Berserker. RAW PHB p.50: at 3rd level choose a totem — Bear (resistance to all damage except psychic while raging), Eagle (opportunity attacks against you have disadvantage + Dash as a bonus action while raging), or Wolf (allies get advantage on melee attacks vs enemies within 5 ft of you while raging).
+**Description:** Adds `_pc_has_totem_warrior` helper + a `_TOTEM_SPIRIT_BENEFITS` map. One endpoint. `/use_totem_spirit` — body `{character_id, totem?}` (totem bear/eagle/wolf, default bear). Validates Path of the Totem Warrior Barbarian Lv 3+. No action cost (declares the chosen totem's passive rage benefit). Broadcasts `feature_used` with `source: totem-spirit`, `totem`, `benefit`. v1 announce-only — the resistance / OA-disadvantage / ally-advantage effects are GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_totem_spirit` endpoint.
+- `_pc_has_totem_warrior` helper + `_TOTEM_SPIRIT_BENEFITS` map.
+- `tests/harness/test_totem_spirit.py` — 4 tests.
+
+### Notes
+- **Barbarian Paths batch OPEN.** Path of the Berserker already had Frenzy (v2.99.226). Path of the Totem Warrior is the first ship of the formal Barbarian Paths subclass batch. Krieger Stonefist (Barbarian Lv 7) is the demo fixture. Remaining untouched: Ancestral Guardian (Spirit Shield), Storm Herald (Storm Aura), Zealot (Divine Fury), Beast (Form of the Beast).
+- **180 ships this session.**
+- **Total harness count: 1731** (was 1727 in v2.99.363; +4 new tests).
+
+---
+
 ## [2.99.363] - 2026-06-05 — "The Vampire's Vigor" — Way of the Long Death Monk Touch of Death (Lv 3+, SCAG) — 🎉 Monk Ways batch CLOSE
 
 **Schema version:** 66

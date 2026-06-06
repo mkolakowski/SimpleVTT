@@ -27565,6 +27565,32 @@ def _pc_has_berserker_path(sheet: "dict | None", min_level: int) -> bool:
     return _barbarian_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_totem_warrior(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.364 — RAW Path of the Totem Warrior (Barbarian, PHB
+    p.50): Spirit Seeker + Totem Spirit (Lv 3), Aspect of the
+    Beast (Lv 6), Spirit Walker (Lv 10), Totemic Attunement
+    (Lv 14). Opens the Barbarian Paths subclass batch beyond the
+    already-shipped Path of the Berserker.
+
+    Returns True when the PC is a Barbarian with subclass slug
+    containing "totem" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "barbarian":
+        has_barb = any(
+            (entry.get("class") or "").strip().lower() == "barbarian"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_barb:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "totem" not in subclass:
+        return False
+    return _barbarian_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_evocation_school(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.225 — RAW School of Evocation features (Wizard,
     PHB p.117): Evocation Savant + Sculpt Spells (Lv 2),
@@ -51656,6 +51682,122 @@ async def use_touch_of_death(
         "temp_hp": temp_hp,
         "wis_mod": wis_mod,
         "monk_level": monk_lv,
+    }
+
+
+_TOTEM_SPIRIT_BENEFITS = {
+    "bear": (
+        "While raging, you have resistance to all damage except "
+        "psychic — you can wade into any battle and shrug off "
+        "blows."
+    ),
+    "eagle": (
+        "While raging and not wearing heavy armor, opportunity "
+        "attacks against you have disadvantage and you can take "
+        "the Dash action as a bonus action."
+    ),
+    "wolf": (
+        "While raging, your allies have advantage on melee attack "
+        "rolls against any creature within 5 ft of you that is "
+        "hostile to you."
+    ),
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_totem_spirit")
+async def use_totem_spirit(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.364 — Phase G Barbarian Paths subclass batch OPEN
+    (Path of the Totem Warrior Lv 3+, PHB) of the v2.99.193 phased
+    completion plan. Totem Spirit (Path of the Totem Warrior Lv
+    3+, PHB p.50): at 3rd level you choose a totem animal — Bear,
+    Eagle, or Wolf — and gain its rage benefit. Bear: resistance
+    to all damage except psychic while raging. Eagle: attackers
+    have disadvantage on opportunity attacks + Dash as a bonus
+    action while raging (no heavy armor). Wolf: allies have
+    advantage on melee attacks vs enemies within 5 ft of you while
+    raging.
+
+    Body: ``{character_id, totem?}``. ``totem`` is bear (default),
+    eagle, or wolf. No action cost — declares the chosen totem's
+    passive rage benefit. v1 announce-only — the resistance /
+    OA-disadvantage / ally-advantage effects are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    totem = (body.get("totem") or "bear").strip().lower()
+    if totem not in _TOTEM_SPIRIT_BENEFITS:
+        raise HTTPException(400, "totem must be bear, eagle, or wolf")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Barbarian character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_totem_warrior(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "totem warrior barbarian lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _barbarian_level_from_sheet(sheet),
+        })
+
+    barb_lv = _barbarian_level_from_sheet(sheet)
+    benefit = _TOTEM_SPIRIT_BENEFITS[totem]
+    totem_icon = {"bear": "🐻", "eagle": "🦅", "wolf": "🐺"}[totem]
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"{totem_icon} Totem Spirit — {totem.title()}"
+            ),
+            "feature_desc": (
+                f"{char.name} calls on the spirit of the "
+                f"{totem.title()}: {benefit} (Path of the Totem "
+                f"Warrior Barbarian Lv 3+ PHB class feature.)"
+            ),
+            "source": "totem-spirit",
+            "totem": totem,
+            "benefit": benefit,
+            "barbarian_level": barb_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "totem-spirit",
+        "totem": totem,
+        "benefit": benefit,
+        "barbarian_level": barb_lv,
     }
 
 
