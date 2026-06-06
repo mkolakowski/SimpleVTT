@@ -54411,7 +54411,7 @@ async def use_gathered_swarm(
         })
 
     ranger_lv = _ranger_level_from_sheet(sheet)
-    result_fields = {"mode": mode}
+    result_fields = {"mode": mode, "buff_installed": False}
     if mode == "damage":
         try:
             roll = dice_mod.roll("1d6")
@@ -54422,6 +54422,34 @@ async def use_gathered_swarm(
         result_fields["bonus_damage_die"] = "1d6"
         result_fields["damage_type"] = "force"
         effect_summary = f"the target takes +{bonus_damage} force (1d6)"
+        # v2.99.398 — Phase 2.2: the damage mode installs a 1-round (this
+        # turn) non-target once-per-turn rider so the next weapon hit
+        # auto-applies +1d6 force via _compute_attack_auto_uplifts. RAW
+        # is a per-turn choice, so the buff lasts only the current turn
+        # (the player re-declares the mode each turn). The move modes are
+        # forced movement (Phase 6) and don't install a rider.
+        gs_buff = {
+            "key": "gathered-swarm",
+            "name": "Gathered Swarm",
+            "icon": "🦟",
+            "duration_rounds": 1,
+            "duration_max": 1,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "weapon_hit_bonus_dice": "1d6",
+                "weapon_hit_bonus_damage_type": "force",
+                "weapon_hit_once_per_turn": True,
+                "weapon_hit_flag": "gathered_swarm",
+            },
+            "desc": (
+                "Next weapon hit this turn deals an extra 1d6 force "
+                "damage. (Swarmkeeper Lv 3+; once per turn.)"
+            ),
+        }
+        result_fields["buff_installed"] = await _install_buff(
+            campaign_id, char.id, gs_buff)
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
     elif mode == "move_target":
         result_fields["move_distance_ft"] = 15
         result_fields["move_subject"] = "target"

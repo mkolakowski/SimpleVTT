@@ -24,6 +24,16 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
+def _mkc(cid, char_id=None, name="X"):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": 50, "hp_max": 50,
+        "buffs": [], "speed_walk": 30,
+        "economy": {"action": False, "bonus": False, "reaction": False,
+                    "movement": 0},
+    }
+
+
 async def _patch_sheet(gm_client, char_id, fields, class_slug=None):
     body = dict(fields)
     if class_slug:
@@ -126,3 +136,48 @@ async def test_use_gs_invalid_mode(
         json={"character_id": rowan["id"], "mode": "fly"},
     )
     assert r.status_code == 400, r.text
+
+
+async def test_gs_damage_mode_installs_rider_buff(
+    gm_client, gm_ws, rowan_swarm,
+):
+    """v2.99.398 — the damage mode installs a 1-round non-target
+    once-per-turn rider buff (1d6 force). Verified via buff_update."""
+    rowan = rowan_swarm
+    rowan_cid = f"tok_gs_rw_{rowan['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _mkc(rowan_cid, rowan["id"], name=rowan["name"]),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_gathered_swarm",
+        json={"character_id": rowan["id"], "mode": "damage"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["buff_installed"] is True
+
+    bu = await gm_ws.wait_for("buff_update")
+    buffs = bu["data"]["buffs"]
+    gs = next((b for b in buffs if b.get("key") == "gathered-swarm"), None)
+    assert gs is not None, buffs
+    eff = gs.get("effects") or {}
+    assert eff.get("weapon_hit_bonus_dice") == "1d6"
+    assert eff.get("weapon_hit_bonus_damage_type") == "force"
+    assert eff.get("weapon_hit_once_per_turn") is True
+    assert "weapon_hit_bonus_target_combatant_id" not in eff
+
+
+async def test_gs_move_mode_no_rider_buff(
+    gm_client, rowan_swarm,
+):
+    """The move modes don't install an on-hit rider (Phase 6 work)."""
+    rowan = rowan_swarm
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_gathered_swarm",
+        json={"character_id": rowan["id"], "mode": "move_target"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["buff_installed"] is False

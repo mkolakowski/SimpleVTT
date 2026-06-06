@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.398] - 2026-06-06 — "The Swarm Strikes" — Gathered Swarm damage mode installs a rider (automation Phase 2.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 2.2 — Gathered Swarm's damage mode (Swarmkeeper) now installs a `gathered-swarm` rider buff so its +1d6 force auto-applies on a hit.** First multi-mode endpoint where only one mode is an on-hit rider.
+**Description:** In the `damage` mode branch, `/use_gathered_swarm` now `_install_buff`s a 1-round (this-turn) non-target once-per-turn rider — `effects.weapon_hit_bonus_dice: "1d6"`, `weapon_hit_bonus_damage_type: "force"`, `weapon_hit_once_per_turn: True`, `weapon_hit_flag: "gathered_swarm"` — so the next weapon hit this turn auto-adds +1d6 force via `_compute_attack_auto_uplifts`. RAW is a per-turn choice, so the buff is intentionally short-lived (1 round; the player re-declares the mode each turn). The `move_target` / `move_self` modes are forced movement (Phase 6) and don't install a rider. `buff_installed` is added to the response (True only for the damage mode).
+
+### Changed
+- `/api/campaign/{cid}/use_gathered_swarm` damage mode now installs an on-hit rider buff (was announce-only); response gains `buff_installed`.
+
+### Added
+- `tests/harness/test_gathered_swarm.py::test_gs_damage_mode_installs_rider_buff` (asserts the rider effects via `buff_update`) + `::test_gs_move_mode_no_rider_buff` (move modes don't install a rider).
+
+### Notes
+- Third Phase-2.2 rider retrofit (after Slayer's Prey, Dreadful Strike). The three dice-rider retrofits now cover target-keyed (Slayer's Prey), persistent non-target (Dreadful Strike), and this-turn non-target (Gathered Swarm). Next: the flat + crit-range riders (Hexblade's Curse) at P2.3.
+- **Total harness count: 1824** (was 1822 in v2.99.397; +2 new tests).
+
+---
+
 ## [2.99.397] - 2026-06-06 — "The Feywild Scar" — Dreadful Strike installs a non-target rider (automation Phase 2.2)
 
 **Schema version:** 66
