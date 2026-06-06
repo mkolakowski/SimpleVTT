@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.380] - 2026-06-05 — "The Bonded Swarm" — Swarmkeeper Ranger Gathered Swarm (Lv 3+, TCE) — 🏹 Ranger conclave batch
+
+**Schema version:** 66
+**Commit summary:** **Ranger conclave subclass batch ship #5 — Swarmkeeper Lv 3+ Gathered Swarm (TCE).** Fourth Ranger conclave ship; opens Swarmkeeper. RAW TCE p.59: once per turn on a hit, call on your swarm of nature spirits — the target takes +1d6 force, OR is moved 15 ft horizontally, OR you are moved 5 ft without provoking opportunity attacks.
+**Description:** Adds `_pc_has_swarmkeeper` helper. One endpoint. `/use_gathered_swarm` — body `{character_id, mode?}` (mode damage default / move_target / move_self). Validates Swarmkeeper Ranger Lv 3+. No separate action cost (a rider on a hit). For `damage` the 1d6 force is rolled **server-side**; the move modes report the distance + subject. Broadcasts `feature_used` with `source: gathered-swarm`, `mode`, and the mode-specific fields. v1 announce-only — the on-hit application + forced movement are GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_gathered_swarm` endpoint.
+- `_pc_has_swarmkeeper` helper.
+- `tests/harness/test_gathered_swarm.py` — 4 tests.
+
+### Notes
+- **Ranger conclave batch progress:** Hunter (Colossus Slayer, wired earlier), Gloom Stalker, Beast Master, Monster Slayer, Swarmkeeper (this) all have first features. Remaining untouched: Horizon Walker (Planar Warrior), Fey Wanderer (Dreadful Strike).
+- **196 ships this session.**
+- **Total harness count: 1785** (was 1781 in v2.99.379; +4 new tests).
+
+---
+
 ## [2.99.379] - 2026-06-05 — "The Marked Quarry" — Monster Slayer Ranger Slayer's Prey (Lv 3+, XGE) — 🏹 Ranger conclave batch
 
 **Schema version:** 66

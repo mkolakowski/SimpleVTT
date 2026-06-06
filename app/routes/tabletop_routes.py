@@ -27478,6 +27478,30 @@ def _pc_has_monster_slayer(sheet: "dict | None", min_level: int) -> bool:
     return _ranger_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_swarmkeeper(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.380 — RAW Swarmkeeper (Ranger conclave, TCE p.59):
+    Gathered Swarm + Swarmkeeper Magic (Lv 3), Writhing Tide (Lv
+    7), Mighty Swarm (Lv 11), Swarming Dispersal (Lv 15).
+
+    Returns True when the PC is a Ranger with subclass slug
+    containing "swarm" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        has_ranger = any(
+            (entry.get("class") or "").strip().lower() == "ranger"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_ranger:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "swarm" not in subclass:
+        return False
+    return _ranger_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -53996,6 +54020,121 @@ async def use_slayers_prey(
         "range_ft": 60,
         "bonus_damage": bonus_damage,
         "bonus_damage_die": "1d6",
+        "ranger_level": ranger_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_gathered_swarm")
+async def use_gathered_swarm(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.380 — Phase G Ranger conclave subclass batch ship #4
+    (Swarmkeeper Lv 3+, TCE) of the v2.99.193 phased completion
+    plan. Gathered Swarm (Swarmkeeper Lv 3+, TCE p.59): once on
+    each of your turns when you hit a creature with an attack, you
+    can call on your swarm of nature spirits for one effect — the
+    target takes an extra 1d6 force damage; OR the target is moved
+    up to 15 ft horizontally; OR you are moved up to 5 ft
+    horizontally (without provoking opportunity attacks).
+
+    Body: ``{character_id, mode?}``. ``mode`` is damage (default),
+    move_target, or move_self. No separate action cost (a rider on
+    a hit). For ``damage`` the 1d6 force is rolled server-side. v1
+    announce-only — the on-hit application + forced movement are
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    mode = (body.get("mode") or "damage").strip().lower()
+    if mode not in ("damage", "move_target", "move_self"):
+        raise HTTPException(
+            400, "mode must be damage, move_target, or move_self")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_swarmkeeper(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "swarmkeeper ranger lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _ranger_level_from_sheet(sheet),
+        })
+
+    ranger_lv = _ranger_level_from_sheet(sheet)
+    result_fields = {"mode": mode}
+    if mode == "damage":
+        try:
+            roll = dice_mod.roll("1d6")
+            bonus_damage = int(roll.total)
+        except dice_mod.DiceParseError:
+            bonus_damage = 1
+        result_fields["bonus_damage"] = bonus_damage
+        result_fields["bonus_damage_die"] = "1d6"
+        result_fields["damage_type"] = "force"
+        effect_summary = f"the target takes +{bonus_damage} force (1d6)"
+    elif mode == "move_target":
+        result_fields["move_distance_ft"] = 15
+        result_fields["move_subject"] = "target"
+        effect_summary = "the target is moved up to 15 ft horizontally"
+    else:  # move_self
+        result_fields["move_distance_ft"] = 5
+        result_fields["move_subject"] = "self"
+        effect_summary = (
+            "you are moved up to 5 ft horizontally without "
+            "provoking opportunity attacks"
+        )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🦟 Gathered Swarm — {mode.replace('_', ' ')}"
+            ),
+            "feature_desc": (
+                f"{char.name}'s swarm of nature spirits assists "
+                f"the strike: {effect_summary}. (Swarmkeeper Ranger "
+                f"Lv 3+ TCE class feature; once per turn on a hit.)"
+            ),
+            "source": "gathered-swarm",
+            **result_fields,
+            "ranger_level": ranger_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "gathered-swarm",
+        **result_fields,
         "ranger_level": ranger_lv,
     }
 
