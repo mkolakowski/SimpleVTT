@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.417] - 2026-06-06 — "The Fiend's Vigor" — Dark One's Blessing applies temp HP (automation Phase 4.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 4.2 — Dark One's Blessing (The Fiend Warlock) now applies its temp HP to the warlock via `_grant_temp_hp` instead of announce-only.** First P4.2 retrofit.
+**Description:** `/use_dark_ones_blessing` computes its temp HP (CHA mod + warlock level, min 1) as before, then calls `_grant_temp_hp(db, campaign_id, {"char_id": char.id}, …)` to write it to the warlock's sheet (RAW non-stacking — the higher of existing vs new). The GM still decides when the on-kill trigger fires (invoking the endpoint is the trigger). Response gains `temp_hp_applied`.
+
+### Changed
+- `/api/campaign/{cid}/use_dark_ones_blessing` applies the temp HP to the warlock (was announce-only); response gains `temp_hp_applied`.
+
+### Added
+- `tests/harness/test_dark_ones_blessing.py::test_dob_applies_temp_hp` — long-rests (temp → 0), then asserts the grant lands via the `character_hp_update` broadcast (`hp.temp` + `temp_delta`).
+
+### Notes
+- Uses the P4.1 primitive unchanged. Next P4.2 retrofits: Touch of Death, Fighting Spirit, Inspiring Smite (multi-target), Spirit Totem (bear aura).
+- **Total harness count: 1842** (was 1841 in v2.99.416; +1 new test).
+
+---
+
 ## [2.99.416] - 2026-06-06 — "The Ablative Ward" — Temp-HP primitive + damage absorption (automation Phase 4.1)
 
 **Schema version:** 66

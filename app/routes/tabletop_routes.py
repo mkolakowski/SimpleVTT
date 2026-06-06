@@ -51041,9 +51041,13 @@ async def use_dark_ones_blessing(
     Charisma modifier + your warlock level (minimum of 1)."
 
     Body: ``{character_id}``. Costs no action (a reactive trigger
-    on a kill). Computes the temp-HP amount server-side and
-    broadcasts it. v1 announce-only — the kill trigger + temp-HP
-    application stay GM-tracked.
+    on a kill). Computes the temp-HP amount server-side.
+
+    v2.99.417 — Phase 4.2 of docs/plans/temp-hp-and-bonuses.md: the temp
+    HP (CHA mod + warlock level, min 1) is now **applied to the warlock**
+    via `_grant_temp_hp` (RAW non-stacking) instead of announce-only. The
+    GM still decides when the kill trigger fires (the endpoint is the
+    trigger). Response gains `temp_hp_applied`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -51113,12 +51117,19 @@ async def use_dark_ones_blessing(
         },
     })
 
+    # v2.99.417 — Phase 4.2: apply the temp HP to the warlock (self).
+    gr = await _grant_temp_hp(
+        db, campaign_id, {"char_id": char.id}, temp_hp,
+        source="dark-ones-blessing",
+    )
+
     return {
         "ok": True,
         "feature": "dark-ones-blessing",
         "temp_hp": temp_hp,
         "cha_mod": cha_mod,
         "warlock_level": warlock_lv,
+        "temp_hp_applied": gr["temp_after"] > 0,
     }
 
 

@@ -102,3 +102,35 @@ async def test_use_dob_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_dob_applies_temp_hp(
+    gm_client, gm_ws, roster,
+):
+    """v2.99.417 — Phase 4.2: Dark One's Blessing applies the temp HP to
+    the warlock's sheet via _grant_temp_hp.
+
+    Long-rest first (clears temp HP to a known 0), then assert the grant
+    lands via the character_hp_update broadcast (hp.temp == the rolled
+    amount + temp_delta).
+    """
+    magnus = roster["Magnus Hexbinder"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_dark_ones_blessing",
+        json={"character_id": magnus["id"]},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    temp = data["temp_hp"]
+    assert temp >= 1
+    assert data["temp_hp_applied"] is True
+
+    bu = await gm_ws.wait_for("character_hp_update")
+    assert bu["data"]["character_id"] == magnus["id"]
+    assert int(bu["data"]["hp"].get("temp") or 0) == temp
+    assert int(bu["data"].get("temp_delta") or 0) == temp
