@@ -107,9 +107,10 @@ Mage Armor / Haste / Defensive Duelist install a buff carrying
    non-stacking) + the temp-drain in `_apply_damage_to_combatant` (both
    branches). Proven by retrofitting Rally (applies temp HP to a target
    ally) + a deterministic /attack drain test.
-2. **P4.2 — retrofit temp-HP features (M).** Rally, Dark One's Blessing,
-   Touch of Death, Fighting Spirit, Inspiring Smite, Spirit Totem (bear):
-   call `_grant_temp_hp` on the target(s) instead of announce-only.
+2. **P4.2 — retrofit temp-HP features (M). ✅ shipped v2.99.416–.421.**
+   Rally (P4.1), Dark One's Blessing, Touch of Death, Fighting Spirit,
+   Inspiring Smite (multi-target), and Spirit Totem (bear aura) all call
+   `_grant_temp_hp` on the target(s) instead of announce-only.
 3. **P4.3 — +AC spell completion (S).** Mage Armor / Haste / Defensive
    Duelist install an `ac_bonus` buff; assert AC rises via `/attack`'s
    `target_ac`.

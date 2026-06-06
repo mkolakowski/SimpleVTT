@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.421] - 2026-06-06 — "The Bear's Aegis" — Spirit Totem (Bear) applies temp HP (automation Phase 4.2 complete)
+
+**Schema version:** 66
+**Commit summary:** **Phase 4.2 — the Bear Spirit Totem (Shepherd Druid) now grants its temp HP to the supplied aura allies via `_grant_temp_hp`. Completes P4.2 (all six temp-HP features auto-apply).**
+**Description:** `/use_spirit_totem` gains an optional `target_combatant_ids`. For the **bear** spirit, each supplied ally in the 30-ft aura now gains `5 + druid level` temp HP via `_grant_temp_hp` (RAW non-stacking) on summon; the response gains `targets_applied`. The ongoing aura re-grant (a creature first entering / starting its turn in the aura) stays GM-tracked pending the Phase 5 aura tick. The hawk / unicorn spirits + the aura itself stay announce-only.
+
+### Changed
+- `/api/campaign/{cid}/use_spirit_totem` (bear) applies temp HP to each supplied aura ally on summon (was announce-only); response gains `targets_applied`.
+
+### Added
+- `tests/harness/test_spirit_totem.py::test_st_bear_applies_temp_hp` — summons the Bear with two bare NPC allies and asserts each one's `temp_hp` == `5 + druid level` (10 at Lv 5).
+
+### Notes
+- **P4.2 complete** — Dark One's Blessing, Touch of Death, Fighting Spirit, Inspiring Smite, and Spirit Totem (Bear) all apply temp HP through the `_grant_temp_hp` primitive (Rally landed it in P4.1). Next: P4.3 (+AC spells: Mage Armor / Haste / Defensive Duelist) → P4.4 (buff-level save advantage).
+- **Total harness count: 1846** (was 1845 in v2.99.420; +1 new test).
+
+---
+
 ## [2.99.420] - 2026-06-06 — "The Shared Glory" — Inspiring Smite applies temp HP to all targets (automation Phase 4.2)
 
 **Schema version:** 66

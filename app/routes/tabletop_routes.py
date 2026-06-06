@@ -50176,12 +50176,19 @@ async def use_spirit_totem(
     within 60 ft. Spirit creates a 30-ft radius aura, persists
     1 min, once per short or long rest.
 
-    Body: ``{character_id, spirit?, override?}``. Spirit:
-    "bear" (default — 5+druid_lv temp HP), "hawk" (reaction
+    Body: ``{character_id, spirit?, target_combatant_ids?, override?}``.
+    Spirit: "bear" (default — 5+druid_lv temp HP), "hawk" (reaction
     → ally advantage on attack roll), or "unicorn" (heal-spell
     rider HP equal to druid level). Costs a bonus chip.
     Auto-bootstraps `spirit-totem` resource (max=1, reset=short).
-    v1 announce-only — aura effects are GM-tracked.
+
+    v2.99.421 — Phase 4.2 of docs/plans/temp-hp-and-bonuses.md: for the
+    **bear** spirit, when ``target_combatant_ids`` (the allies in the
+    30-ft aura) is supplied, each gains `5 + druid level` temp HP via
+    `_grant_temp_hp` (RAW non-stacking) on summon. The ongoing aura
+    re-grant (a creature first entering / starting its turn in the aura)
+    stays GM-tracked pending the Phase 5 aura tick. Hawk / unicorn
+    effects + the aura itself stay announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -50191,6 +50198,9 @@ async def use_spirit_totem(
     spirit = (body.get("spirit") or "bear").strip().lower()
     if spirit not in ("bear", "hawk", "unicorn"):
         spirit = "bear"
+    target_ids = body.get("target_combatant_ids") or []
+    if not isinstance(target_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -50327,6 +50337,21 @@ async def use_spirit_totem(
         },
     })
 
+    # v2.99.421 — Phase 4.2: the Bear spirit grants temp HP to the
+    # supplied aura allies on summon (RAW non-stacking). Hawk/unicorn
+    # don't grant temp HP; the ongoing aura re-grant is Phase 5.
+    targets_applied = 0
+    if spirit == "bear" and bear_temp_hp > 0:
+        for tcid in target_ids:
+            cb = _lookup_combatant(campaign_id, str(tcid).strip())
+            if cb is None:
+                continue
+            gr = await _grant_temp_hp(
+                db, campaign_id, cb, bear_temp_hp, source="spirit-totem",
+            )
+            if gr["temp_after"] > 0:
+                targets_applied += 1
+
     return {
         "ok": True,
         "feature": "spirit-totem",
@@ -50338,6 +50363,7 @@ async def use_spirit_totem(
         "uses_remaining": st_cur - 1,
         "max_uses": st_max,
         "druid_level": druid_lv,
+        "targets_applied": targets_applied,
     }
 
 
