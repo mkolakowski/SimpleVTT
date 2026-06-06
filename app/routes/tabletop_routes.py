@@ -27376,6 +27376,33 @@ def _pc_has_cavalier(sheet: "dict | None", min_level: int) -> bool:
     return _fighter_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_banneret(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.376 — RAW Banneret / Purple Dragon Knight (Fighter
+    martial archetype, SCAG p.128): Rallying Cry (Lv 3), Royal
+    Envoy (Lv 7), Inspiring Surge (Lv 10), Bulwark (Lv 18).
+    Closes the Fighter martial archetype sweep — Banneret was the
+    last untouched archetype.
+
+    Returns True when the PC is a Fighter with subclass slug
+    containing "banneret" or "purple dragon" + meets `min_level`
+    (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        has_fighter = any(
+            (entry.get("class") or "").strip().lower() == "fighter"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_fighter:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "banneret" not in subclass and "purple dragon" not in subclass:
+        return False
+    return _fighter_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -53434,6 +53461,103 @@ async def use_unwavering_mark(
         "feature": "unwavering-mark",
         "target_attack_disadvantage": True,
         "punish_bonus_damage": punish_bonus,
+        "fighter_level": fighter_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_rallying_cry")
+async def use_rallying_cry(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.376 — Phase G Fighter martial archetype sweep
+    (Banneret / Purple Dragon Knight Lv 3+, SCAG) of the v2.99.193
+    phased completion plan — CLOSES the Fighter sweep (Banneret was
+    the last untouched archetype). Rallying Cry (Banneret Lv 3+,
+    SCAG p.128): "When you use your Second Wind feature, you can
+    choose up to three creatures within 60 feet of you that are
+    allied with you. Each one regains hit points equal to your
+    fighter level, provided that the creature can see or hear
+    you."
+
+    Body: ``{character_id}``. No separate action cost (a rider on
+    Second Wind, which is itself a bonus action). Computes the
+    per-ally heal (fighter level) server-side. v1 announce-only —
+    the ally targeting + HP application are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_banneret(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "banneret fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    heal_per_ally = fighter_lv
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"📯 Rallying Cry — heal up to 3 allies {heal_per_ally} HP"
+            ),
+            "feature_desc": (
+                f"{char.name} sounds a rallying cry with their "
+                f"Second Wind: up to three allies within 60 ft who "
+                f"can see or hear {char.name} each regain "
+                f"{heal_per_ally} HP (fighter level). (Banneret / "
+                f"Purple Dragon Knight Fighter Lv 3+ SCAG class "
+                f"feature.)"
+            ),
+            "source": "rallying-cry",
+            "heal_per_ally": heal_per_ally,
+            "max_allies": 3,
+            "range_ft": 60,
+            "fighter_level": fighter_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "rallying-cry",
+        "heal_per_ally": heal_per_ally,
+        "max_allies": 3,
+        "range_ft": 60,
         "fighter_level": fighter_lv,
     }
 

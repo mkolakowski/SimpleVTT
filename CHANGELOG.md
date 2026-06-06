@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.376] - 2026-06-05 — "The Dragon's Banner" — Banneret Fighter Rallying Cry (Lv 3+, SCAG) — 🎉 Fighter archetype sweep CLOSE
+
+**Schema version:** 66
+**Commit summary:** **Fighter martial archetype sweep ship #7 — Banneret / Purple Dragon Knight Lv 3+ Rallying Cry (SCAG) — CLOSES the Fighter sweep (every in-print Fighter archetype now has a first-feature ship).** Banneret was the last untouched archetype. RAW SCAG p.128: when you use Second Wind, up to three allies within 60 ft who can see or hear you each regain HP = your fighter level.
+**Description:** Adds `_pc_has_banneret` helper (matches both "banneret" and "purple dragon"). One endpoint. `/use_rallying_cry` — body `{character_id}`. Validates Banneret Fighter Lv 3+. No separate action cost (a rider on Second Wind, itself a bonus action). Computes the per-ally heal (fighter level) **server-side**. Broadcasts `feature_used` with `source: rallying-cry`, `heal_per_ally`, `max_allies: 3`, `range_ft: 60`. v1 announce-only — the ally targeting + HP application are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_rallying_cry` endpoint.
+- `_pc_has_banneret` helper.
+- `tests/harness/test_rallying_cry.py` — 3 tests.
+
+### Notes
+- **🎉 Fighter martial archetype sweep ✅ CLOSED.** Every in-print Fighter archetype now has a Lv 3 first-feature: Champion (Improved Critical), Battle Master (Combat Superiority), Eldritch Knight (War Magic), Samurai (Fighting Spirit), Psi Warrior (Protective Field), Rune Knight (Giant's Might), Echo Knight (Manifest Echo), Arcane Archer (Arcane Shot), Cavalier (Unwavering Mark), Banneret (Rallying Cry — this ship).
+- **192 ships this session.**
+- **Total harness count: 1771** (was 1768 in v2.99.375; +3 new tests).
+
+---
+
 ## [2.99.375] - 2026-06-05 — "The Steadfast Mark" — Cavalier Fighter Unwavering Mark (Lv 3+, XGE) — ⚔️ Fighter archetype sweep
 
 **Schema version:** 66
