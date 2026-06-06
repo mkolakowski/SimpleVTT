@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.375] - 2026-06-05 — "The Steadfast Mark" — Cavalier Fighter Unwavering Mark (Lv 3+, XGE) — ⚔️ Fighter archetype sweep
+
+**Schema version:** 66
+**Commit summary:** **Fighter martial archetype sweep ship #6 — Cavalier Lv 3+ Unwavering Mark (XGE).** Sixth Fighter archetype sweep ship; opens Cavalier. RAW XGE p.30: when you hit a creature with a melee weapon attack, mark it until the end of your next turn — while within 5 ft it has disadvantage on attacks not aimed at you, and if it harms an ally you can make a bonus-action melee attack against it with advantage, dealing extra damage = half your fighter level.
+**Description:** Adds `_pc_has_cavalier` helper. One endpoint. `/use_unwavering_mark` — body `{character_id}`. Validates Cavalier Fighter Lv 3+. No separate action cost (the mark is a rider on a melee hit). Computes the punishing-attack bonus damage (half fighter level) **server-side**. Broadcasts `feature_used` with `source: unwavering-mark`, `target_attack_disadvantage: true`, `punish_bonus_damage`. v1 announce-only — the mark tracking, disadvantage, and punishing attack are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_unwavering_mark` endpoint.
+- `_pc_has_cavalier` helper.
+- `tests/harness/test_unwavering_mark.py` — 3 tests.
+
+### Notes
+- **Fighter archetype sweep progress:** Champion, Battle Master, Eldritch Knight (shipped earlier), Samurai, Psi Warrior, Rune Knight, Echo Knight, Arcane Archer, Cavalier (this) all have first features. Remaining untouched: Banneret / Purple Dragon Knight (Rallying Cry). One more ship closes the Fighter sweep.
+- **191 ships this session.**
+- **Total harness count: 1768** (was 1765 in v2.99.374; +3 new tests).
+
+---
+
 ## [2.99.374] - 2026-06-05 — "The Enchanted Quiver" — Arcane Archer Fighter Arcane Shot (Lv 3+, XGE) — ⚔️ Fighter archetype sweep
 
 **Schema version:** 66

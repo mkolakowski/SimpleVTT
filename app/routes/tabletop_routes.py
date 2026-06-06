@@ -27351,6 +27351,31 @@ def _pc_has_arcane_archer(sheet: "dict | None", min_level: int) -> bool:
     return _fighter_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_cavalier(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.375 — RAW Cavalier (Fighter martial archetype, XGE
+    p.30): Bonus Proficiency + Born to the Saddle + Unwavering
+    Mark (Lv 3), Warding Maneuver (Lv 7), Hold the Line (Lv 10),
+    Ferocious Charger (Lv 15), Vigilant Defender (Lv 18).
+
+    Returns True when the PC is a Fighter with subclass slug
+    containing "cavalier" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        has_fighter = any(
+            (entry.get("class") or "").strip().lower() == "fighter"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_fighter:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "cavalier" not in subclass:
+        return False
+    return _fighter_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -53307,6 +53332,108 @@ async def use_arcane_shot(
         "save": option["save"],
         "save_dc": save_dc,
         "effect": option["effect"],
+        "fighter_level": fighter_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_unwavering_mark")
+async def use_unwavering_mark(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.375 — Phase G Fighter martial archetype sweep
+    (Cavalier Lv 3+, XGE) of the v2.99.193 phased completion plan.
+    Unwavering Mark (Cavalier Lv 3+, XGE p.30): "When you hit a
+    creature with a melee weapon attack, you can mark the creature
+    until the end of your next turn. ... While it is within 5 feet
+    of you, a creature marked by you has disadvantage on any
+    attack roll that doesn't target you. ... if a creature marked
+    by you deals damage to anyone other than you, you can make a
+    special melee weapon attack against the marked creature as a
+    bonus action on your next turn ... with advantage, and if it
+    hits, the attack deals extra damage equal to half your fighter
+    level." Usable STR-modifier times per long rest for the
+    special attack.
+
+    Body: ``{character_id}``. No separate action cost (the mark is
+    a rider on a melee hit). Computes the punishing-attack bonus
+    damage (half fighter level) server-side. v1 announce-only —
+    the mark tracking, disadvantage, and punishing attack are
+    GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_cavalier(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "cavalier fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    punish_bonus = fighter_lv // 2
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🎯 Unwavering Mark — foe marked, +{punish_bonus} "
+                f"punish dmg"
+            ),
+            "feature_desc": (
+                f"{char.name} marks the struck foe until the end "
+                f"of {char.name}'s next turn: while within 5 ft it "
+                f"has disadvantage on attacks not aimed at "
+                f"{char.name}, and if it harms an ally, {char.name} "
+                f"can make a bonus-action melee attack against it "
+                f"with advantage, dealing +{punish_bonus} damage on "
+                f"a hit. (Cavalier Fighter Lv 3+ XGE class feature.)"
+            ),
+            "source": "unwavering-mark",
+            "target_attack_disadvantage": True,
+            "punish_bonus_damage": punish_bonus,
+            "fighter_level": fighter_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "unwavering-mark",
+        "target_attack_disadvantage": True,
+        "punish_bonus_damage": punish_bonus,
         "fighter_level": fighter_lv,
     }
 
