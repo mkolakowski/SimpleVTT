@@ -27428,6 +27428,31 @@ def _pc_has_gloom_stalker(sheet: "dict | None", min_level: int) -> bool:
     return _ranger_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_beast_master(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.378 — RAW Beast Master (Ranger conclave, PHB p.93):
+    Ranger's Companion (Lv 3), Exceptional Training (Lv 7),
+    Bestial Fury (Lv 11), Share Spells (Lv 15).
+
+    Returns True when the PC is a Ranger with subclass slug
+    containing "beast" + meets `min_level` (multiclass-aware). The
+    class check keeps it distinct from Barbarian Path of the Beast.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        has_ranger = any(
+            (entry.get("class") or "").strip().lower() == "ranger"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_ranger:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "beast" not in subclass:
+        return False
+    return _ranger_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -53697,6 +53722,134 @@ async def use_dread_ambusher(
         "speed_bonus_ft": 10,
         "ambush_damage": ambush_damage,
         "ambush_damage_die": "1d8",
+        "ranger_level": ranger_lv,
+    }
+
+
+_COMPANION_COMMANDS = {"attack", "dash", "disengage", "dodge", "help"}
+
+
+@router.post("/api/campaign/{campaign_id}/use_rangers_companion")
+async def use_rangers_companion(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.378 — Phase G Ranger conclave subclass batch ship #2
+    (Beast Master Lv 3+, PHB) of the v2.99.193 phased completion
+    plan. Ranger's Companion (Beast Master Lv 3+, PHB p.93): you
+    gain a beast companion (CR ≤ 1/4, ≤ Medium). Add your
+    proficiency bonus to its AC, attack rolls, damage rolls, and
+    proficient saves/skills; its HP maximum equals four times your
+    ranger level (or its normal max, whichever is higher). It acts
+    on your initiative; you can use your action to command it to
+    take the Attack, Dash, Disengage, Dodge, or Help action.
+
+    Body: ``{character_id, command?}``. ``command`` is attack
+    (default), dash, disengage, dodge, or help. Costs an action
+    chip (commanding the companion). Computes the companion HP
+    floor (4 × ranger level) + the PB bonus server-side. v1
+    announce-only — the companion token + its action resolution
+    are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+    command = (body.get("command") or "attack").strip().lower()
+    if command not in _COMPANION_COMMANDS:
+        raise HTTPException(
+            400,
+            "command must be attack, dash, disengage, dodge, or help",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_beast_master(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "beast master ranger lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _ranger_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "rangers-companion",
+            "label": "Ranger's Companion",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    ranger_lv = _ranger_level_from_sheet(sheet)
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, ranger_lv) - 1) // 4
+    companion_hp_floor = 4 * ranger_lv
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🐾 Ranger's Companion — command {command.title()}"
+            ),
+            "feature_desc": (
+                f"{char.name} commands their beast companion to "
+                f"take the {command.title()} action. The companion "
+                f"adds +{pb} (proficiency) to its AC, attacks, "
+                f"damage, and proficient saves/skills, with an HP "
+                f"floor of {companion_hp_floor} (4 × ranger level). "
+                f"(Beast Master Ranger Lv 3+ PHB class feature.)"
+            ),
+            "source": "rangers-companion",
+            "command": command,
+            "companion_hp_floor": companion_hp_floor,
+            "proficiency_bonus": pb,
+            "ranger_level": ranger_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "rangers-companion",
+        "command": command,
+        "companion_hp_floor": companion_hp_floor,
+        "proficiency_bonus": pb,
         "ranger_level": ranger_lv,
     }
 

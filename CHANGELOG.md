@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.378] - 2026-06-05 — "The Loyal Beast" — Beast Master Ranger Ranger's Companion (Lv 3+, PHB) — 🏹 Ranger conclave batch
+
+**Schema version:** 66
+**Commit summary:** **Ranger conclave subclass batch ship #2 — Beast Master Lv 3+ Ranger's Companion (PHB).** Second Ranger conclave ship; opens Beast Master. RAW PHB p.93: you gain a beast companion. Add your proficiency bonus to its AC, attacks, damage, and proficient saves/skills; its HP max equals four times your ranger level (or its normal max). Command it (Attack/Dash/Disengage/Dodge/Help) with your action.
+**Description:** Adds `_pc_has_beast_master` helper (class-gated so it stays distinct from Barbarian Path of the Beast) + a `_COMPANION_COMMANDS` set. One endpoint. `/use_rangers_companion` — body `{character_id, command?}` (command attack default / dash / disengage / dodge / help). Validates Beast Master Ranger Lv 3+ + action chip. Computes the companion HP floor (4 × ranger level) + the PB bonus **server-side**. Broadcasts `feature_used` with `source: rangers-companion`, `command`, `companion_hp_floor`, `proficiency_bonus`. v1 announce-only — the companion token + its action resolution are GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_rangers_companion` endpoint.
+- `_pc_has_beast_master` helper + `_COMPANION_COMMANDS` set.
+- `tests/harness/test_rangers_companion.py` — 4 tests.
+
+### Notes
+- **Ranger conclave batch progress:** Hunter (Colossus Slayer, wired earlier), Gloom Stalker (Dread Ambusher), Beast Master (this) all have first features. Remaining untouched: Horizon Walker (Detect Portal / Planar Warrior), Swarmkeeper (Gathered Swarm), Fey Wanderer (Dreadful Strike), Monster Slayer (Slayer's Prey / Hunter's Sense).
+- **194 ships this session.**
+- **Total harness count: 1778** (was 1774 in v2.99.377; +4 new tests).
+
+---
+
 ## [2.99.377] - 2026-06-05 — "The First Strike" — Gloom Stalker Ranger Dread Ambusher (Lv 3+, XGE) — 🏹 Ranger conclave batch OPEN
 
 **Schema version:** 66
