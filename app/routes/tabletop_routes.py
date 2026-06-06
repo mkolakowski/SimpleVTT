@@ -26906,6 +26906,30 @@ def _pc_has_way_of_mercy(sheet: "dict | None", min_level: int) -> bool:
     return _monk_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_way_of_sun_soul(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.359 — RAW Way of the Sun Soul (Monk subclass, XGE
+    p.35): Radiant Sun Bolt (Lv 3), Searing Arc Strike (Lv 6),
+    Searing Sunburst (Lv 11), Sun Shield (Lv 17).
+
+    Returns True when the PC is a Monk with subclass slug
+    containing "sun soul" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        has_monk = any(
+            (entry.get("class") or "").strip().lower() == "monk"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_monk:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "sun soul" not in subclass:
+        return False
+    return _monk_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -50876,6 +50900,146 @@ async def use_hands_of_healing(
         "wis_mod": wis_mod,
         "ki_spent": 1,
         "ki_remaining": ki_remaining,
+        "monk_level": monk_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_radiant_sun_bolt")
+async def use_radiant_sun_bolt(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.359 — Phase G Monk Ways subclass batch ship #5 (Way
+    of the Sun Soul Lv 3+, XGE) of the v2.99.193 phased completion
+    plan. Radiant Sun Bolt (Way of the Sun Soul Lv 3+, XGE p.35):
+    "You can hurl searing bolts of magical radiance. ... Make a
+    ranged spell attack against a target within 30 feet ... using
+    your Dexterity modifier for the attack roll. On a hit, the
+    target takes radiant damage equal to your Martial Arts die +
+    your Dexterity modifier."
+
+    Body: ``{character_id, override?}``. Costs an action chip (the
+    bolt is part of the Attack action). Computes the ranged-spell-
+    attack bonus (PB + DEX mod) and rolls the radiant damage
+    (Martial Arts die + DEX mod) server-side. v1 announce-only —
+    the attack roll resolution + target choice stay GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_way_of_sun_soul(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of the sun soul monk lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _monk_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "radiant-sun-bolt",
+            "label": "Radiant Sun Bolt",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    monk_lv = _monk_level_from_sheet(sheet)
+    ma_die = _martial_arts_die(monk_lv)
+    try:
+        dex_score = int((sheet.get("abilities") or {}).get("DEX", 10))
+    except (TypeError, ValueError):
+        dex_score = 10
+    dex_mod = (dex_score - 10) // 2
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, monk_lv) - 1) // 4
+    attack_bonus = pb + dex_mod
+    try:
+        result = dice_mod.roll(f"1d{ma_die}")
+        die_roll = int(result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        die_roll = 1
+        breakdown = ""
+    radiant_damage = max(1, die_roll + dex_mod)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"☀️ Radiant Sun Bolt — ranged atk {attack_bonus:+d}, "
+                f"{radiant_damage} radiant on hit"
+            ),
+            "feature_desc": (
+                f"{char.name} hurls a searing bolt of radiance: "
+                f"ranged spell attack {attack_bonus:+d} vs a target "
+                f"within 30 ft. On a hit, {radiant_damage} radiant "
+                f"(1d{ma_die} Martial Arts die {die_roll} + DEX mod "
+                f"{dex_mod:+d}). (Way of the Sun Soul Monk Lv 3+ "
+                f"XGE class feature; spend 1 ki for two more bolts "
+                f"as a bonus action.)"
+            ),
+            "source": "radiant-sun-bolt",
+            "range_ft": 30,
+            "attack_bonus": attack_bonus,
+            "radiant_damage": radiant_damage,
+            "martial_arts_die": f"1d{ma_die}",
+            "die_roll": die_roll,
+            "dex_mod": dex_mod,
+            "dice_breakdown": breakdown,
+            "monk_level": monk_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "radiant-sun-bolt",
+        "range_ft": 30,
+        "attack_bonus": attack_bonus,
+        "radiant_damage": radiant_damage,
+        "martial_arts_die": f"1d{ma_die}",
+        "die_roll": die_roll,
+        "dex_mod": dex_mod,
         "monk_level": monk_lv,
     }
 

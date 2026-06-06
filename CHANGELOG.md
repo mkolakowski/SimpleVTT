@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.359] - 2026-06-05 — "The Searing Bolt" — Way of the Sun Soul Monk Radiant Sun Bolt (Lv 3+, XGE) — 🥋 Monk Ways batch
+
+**Schema version:** 66
+**Commit summary:** **Monk Ways subclass batch ship #5 — Way of the Sun Soul Lv 3+ Radiant Sun Bolt (XGE).** Fourth Monk way ship; opens Way of the Sun Soul. RAW XGE p.35: a ranged spell attack (using DEX) against a target within 30 ft; on a hit, radiant damage = Martial Arts die + DEX modifier. (Spend 1 ki for two more bolts as a bonus action.)
+**Description:** Adds `_pc_has_way_of_sun_soul` helper. One endpoint. `/use_radiant_sun_bolt` — body `{character_id, override?}`. Validates Way of the Sun Soul Monk Lv 3+ + action chip (the bolt is part of the Attack action). Computes the ranged-spell-attack bonus (PB + DEX mod) and rolls the radiant damage (Martial Arts die + DEX mod) **server-side**. Broadcasts `feature_used` with `source: radiant-sun-bolt`, `attack_bonus`, `radiant_damage`, `martial_arts_die`, `range_ft: 30`. v1 announce-only — the attack roll resolution + target choice stay GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_radiant_sun_bolt` endpoint.
+- `_pc_has_way_of_sun_soul` helper.
+- `tests/harness/test_radiant_sun_bolt.py` — 3 tests.
+
+### Notes
+- **Monk Ways batch progress:** Open Hand (shipped earlier), Shadow, Kensei, Mercy, Sun Soul (this) all have first features. Remaining untouched: Four Elements (Elemental Attunement), Drunken Master (XGE), Astral Self (TCE), Long Death (SCAG).
+- **175 ships this session.**
+- **Total harness count: 1715** (was 1712 in v2.99.358; +3 new tests).
+
+---
+
 ## [2.99.358] - 2026-06-05 — "The Merciful Touch" — Way of Mercy Monk Hands of Healing (Lv 3+, TCE) — 🥋 Monk Ways batch
 
 **Schema version:** 66
