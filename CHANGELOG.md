@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.360] - 2026-06-05 — "The Staggering Step" — Way of the Drunken Master Monk Drunken Technique (Lv 3+, XGE) — 🥋 Monk Ways batch
+
+**Schema version:** 66
+**Commit summary:** **Monk Ways subclass batch ship #6 — Way of the Drunken Master Lv 3+ Drunken Technique (XGE).** Fifth Monk way ship; opens Way of the Drunken Master. RAW XGE p.33: whenever you use Flurry of Blows, you gain the benefit of the Disengage action and your walking speed increases by 10 ft until the end of the current turn.
+**Description:** Adds `_pc_has_way_of_drunken_master` helper. One endpoint. `/use_drunken_technique` — body `{character_id}`. Validates Way of the Drunken Master Monk Lv 3+. No additional action cost (an automatic rider on Flurry of Blows, which already spends the bonus action + 1 ki). Broadcasts `feature_used` with `source: drunken-technique`, `disengage: true`, `speed_bonus_ft: 10`. v1 announce-only — the Disengage benefit + speed boost are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_drunken_technique` endpoint.
+- `_pc_has_way_of_drunken_master` helper.
+- `tests/harness/test_drunken_technique.py` — 3 tests.
+
+### Notes
+- **Monk Ways batch progress:** Open Hand (shipped earlier), Shadow, Kensei, Mercy, Sun Soul, Drunken Master (this) all have first features. Remaining untouched: Four Elements (Elemental Attunement), Astral Self (TCE), Long Death (SCAG).
+- **176 ships this session.**
+- **Total harness count: 1718** (was 1715 in v2.99.359; +3 new tests).
+
+---
+
 ## [2.99.359] - 2026-06-05 — "The Searing Bolt" — Way of the Sun Soul Monk Radiant Sun Bolt (Lv 3+, XGE) — 🥋 Monk Ways batch
 
 **Schema version:** 66

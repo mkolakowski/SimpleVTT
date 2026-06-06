@@ -26930,6 +26930,30 @@ def _pc_has_way_of_sun_soul(sheet: "dict | None", min_level: int) -> bool:
     return _monk_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_way_of_drunken_master(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.360 — RAW Way of the Drunken Master (Monk subclass,
+    XGE p.33): Drunken Technique (Lv 3), Tipsy Sway (Lv 6),
+    Drunkard's Luck (Lv 11), Intoxicated Frenzy (Lv 17).
+
+    Returns True when the PC is a Monk with subclass slug
+    containing "drunken" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        has_monk = any(
+            (entry.get("class") or "").strip().lower() == "monk"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_monk:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "drunken" not in subclass:
+        return False
+    return _monk_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -51040,6 +51064,97 @@ async def use_radiant_sun_bolt(
         "martial_arts_die": f"1d{ma_die}",
         "die_roll": die_roll,
         "dex_mod": dex_mod,
+        "monk_level": monk_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_drunken_technique")
+async def use_drunken_technique(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.360 — Phase G Monk Ways subclass batch ship #6 (Way
+    of the Drunken Master Lv 3+, XGE) of the v2.99.193 phased
+    completion plan. Drunken Technique (Way of the Drunken Master
+    Lv 3+, XGE p.33): "Whenever you use Flurry of Blows, you gain
+    the benefit of the Disengage action, and your walking speed
+    increases by 10 feet until the end of the current turn."
+
+    Body: ``{character_id}``. No additional action cost — this is
+    an automatic rider on Flurry of Blows (which already spends the
+    bonus action + 1 ki). v1 announce-only — the Disengage benefit
+    + speed boost are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_way_of_drunken_master(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of the drunken master monk lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _monk_level_from_sheet(sheet),
+        })
+
+    monk_lv = _monk_level_from_sheet(sheet)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🍶 Drunken Technique — Disengage + 10 ft speed"
+            ),
+            "feature_desc": (
+                f"{char.name} weaves and staggers through the "
+                f"Flurry of Blows: gains the benefit of the "
+                f"Disengage action and +10 ft walking speed until "
+                f"the end of this turn. (Way of the Drunken Master "
+                f"Monk Lv 3+ XGE class feature; rider on Flurry of "
+                f"Blows.)"
+            ),
+            "source": "drunken-technique",
+            "disengage": True,
+            "speed_bonus_ft": 10,
+            "monk_level": monk_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "drunken-technique",
+        "disengage": True,
+        "speed_bonus_ft": 10,
         "monk_level": monk_lv,
     }
 
