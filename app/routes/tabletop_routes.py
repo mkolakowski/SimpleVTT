@@ -27233,6 +27233,46 @@ def _pc_has_samurai(sheet: "dict | None", min_level: int) -> bool:
     return _fighter_level_from_sheet(sheet) >= min_level
 
 
+def _psionic_energy_die(fighter_lv: int) -> int:
+    """v2.99.371 — RAW Psi Warrior Psionic Energy die size by
+    Fighter level (TCE p.40): d6 (Lv 3-4), d8 (Lv 5-10), d10 (Lv
+    11-16), d12 (Lv 17+). Returns the die face count."""
+    if fighter_lv >= 17:
+        return 12
+    if fighter_lv >= 11:
+        return 10
+    if fighter_lv >= 5:
+        return 8
+    return 6
+
+
+def _pc_has_psi_warrior(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.371 — RAW Psi Warrior (Fighter martial archetype, TCE
+    p.40): Psionic Power — Protective Field + Psionic Strike +
+    Telekinetic Movement (Lv 3), Telekinetic Adept (Lv 7),
+    Guarded Mind (Lv 10), Bulwark of Force (Lv 15), Telekinetic
+    Master (Lv 18).
+
+    Returns True when the PC is a Fighter with subclass slug
+    containing "psi" (e.g. "Psi Warrior") + meets `min_level`
+    (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        has_fighter = any(
+            (entry.get("class") or "").strip().lower() == "fighter"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_fighter:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "psi" not in subclass:
+        return False
+    return _fighter_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -52626,6 +52666,134 @@ async def use_fighting_spirit(
         "feature": "fighting-spirit",
         "advantage_on_weapon_attacks": True,
         "temp_hp": temp_hp,
+        "fighter_level": fighter_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_protective_field")
+async def use_protective_field(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.371 — Phase G Fighter martial archetype sweep (Psi
+    Warrior Lv 3+, TCE) of the v2.99.193 phased completion plan.
+    Protective Field (Psi Warrior Psionic Power, Lv 3+, TCE p.40):
+    "When you or another creature you can see within 30 feet of
+    you takes damage, you can use your reaction to expend one
+    Psionic Energy die, roll it, and reduce the damage by the
+    number rolled plus your Intelligence modifier (minimum
+    reduction of 1)."
+
+    Body: ``{character_id, override?}``. Costs a reaction. Rolls
+    the Psionic Energy die (size scales with Fighter level) + INT
+    mod server-side. v1 announce-only — the damage reduction
+    application + the Psionic Energy dice pool are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_psi_warrior(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "psi warrior fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "protective-field",
+            "label": "Protective Field",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    die_size = _psionic_energy_die(fighter_lv)
+    try:
+        int_score = int((sheet.get("abilities") or {}).get("INT", 10))
+    except (TypeError, ValueError):
+        int_score = 10
+    int_mod = (int_score - 10) // 2
+    try:
+        result = dice_mod.roll(f"1d{die_size}")
+        die_roll = int(result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        die_roll = 1
+        breakdown = ""
+    reduction = max(1, die_roll + int_mod)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🛡️ Protective Field — reduce damage by {reduction} "
+                f"(1d{die_size} {die_roll} {int_mod:+d})"
+            ),
+            "feature_desc": (
+                f"{char.name} weaves a telekinetic shield: as a "
+                f"reaction, reduce damage to a creature within 30 "
+                f"ft by {reduction} (1d{die_size} Psionic Energy "
+                f"die {die_roll} + INT mod {int_mod:+d}, min 1). "
+                f"(Psi Warrior Fighter Lv 3+ TCE class feature.)"
+            ),
+            "source": "protective-field",
+            "reduction": reduction,
+            "psionic_die": f"1d{die_size}",
+            "die_roll": die_roll,
+            "int_mod": int_mod,
+            "fighter_level": fighter_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "protective-field",
+        "reduction": reduction,
+        "psionic_die": f"1d{die_size}",
+        "die_roll": die_roll,
+        "int_mod": int_mod,
         "fighter_level": fighter_lv,
     }
 

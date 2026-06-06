@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.371] - 2026-06-05 — "The Telekinetic Shield" — Psi Warrior Fighter Protective Field (Lv 3+, TCE) — ⚔️ Fighter archetype sweep
+
+**Schema version:** 66
+**Commit summary:** **Fighter martial archetype sweep ship #2 — Psi Warrior Lv 3+ Protective Field (TCE).** Second Fighter archetype sweep ship; opens Psi Warrior. RAW TCE p.40 (a Psionic Power option): as a reaction, when you or a creature within 30 ft takes damage, expend a Psionic Energy die and reduce the damage by the roll + your INT modifier (min 1). The die scales with Fighter level (d6/d8/d10/d12).
+**Description:** Adds `_pc_has_psi_warrior` helper + a `_psionic_energy_die(fighter_lv)` helper. One endpoint. `/use_protective_field` — body `{character_id, override?}`. Validates Psi Warrior Fighter Lv 3+ + reaction chip. Rolls the Psionic Energy die + INT mod **server-side**. Broadcasts `feature_used` with `source: protective-field`, `reduction`, `psionic_die`, `die_roll`, `int_mod`. v1 announce-only — the damage reduction application + the Psionic Energy dice pool are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_protective_field` endpoint.
+- `_pc_has_psi_warrior` helper + `_psionic_energy_die` helper.
+- `tests/harness/test_protective_field.py` — 3 tests.
+
+### Notes
+- **Fighter archetype sweep progress:** Champion, Battle Master, Eldritch Knight (shipped earlier), Samurai (Fighting Spirit), Psi Warrior (this) all have first features. Remaining untouched: Cavalier (Unwavering Mark), Rune Knight (Giant's Might), Arcane Archer (Arcane Shot), Echo Knight (Manifest Echo), Banneret (Rallying Cry).
+- **187 ships this session.**
+- **Total harness count: 1755** (was 1752 in v2.99.370; +3 new tests).
+
+---
+
 ## [2.99.370] - 2026-06-05 — "The Iron Resolve" — Samurai Fighter Fighting Spirit (Lv 3+, XGE) — ⚔️ Fighter archetype sweep OPEN
 
 **Schema version:** 66
