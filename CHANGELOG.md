@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.368] - 2026-06-05 — "The Beast Within" — Path of the Beast Barbarian Form of the Beast (Lv 3+, TCE) — 🎉 Barbarian Paths batch CLOSE
+
+**Schema version:** 66
+**Commit summary:** **Barbarian Paths subclass batch ship #6 — Path of the Beast Lv 3+ Form of the Beast (TCE) — CLOSES the Barbarian Paths batch (all in-print Barbarian paths now have ≥1 first-feature ship).** Beast was the last untouched path. RAW TCE p.9: on entering rage, manifest a natural weapon — Bite (1d8 piercing + self-heal at low HP), Claws (1d6 slashing + an extra attack), or Tail (1d8 piercing, 10-ft reach, reaction AC).
+**Description:** Adds `_pc_has_path_of_beast` helper + a `_FORM_OF_THE_BEAST` map. One endpoint. `/use_form_of_the_beast` — body `{character_id, form?}` (form bite / claws default / tail). Validates Path of the Beast Barbarian Lv 3+. No separate action cost (manifested as part of entering rage). Broadcasts `feature_used` with `source: form-of-the-beast`, `form`, `damage_die`, `damage_type`, `reach_ft`, `special`. v1 announce-only — the natural-weapon attacks + special riders are GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_form_of_the_beast` endpoint.
+- `_pc_has_path_of_beast` helper + `_FORM_OF_THE_BEAST` map.
+- `tests/harness/test_form_of_the_beast.py` — 4 tests.
+
+### Notes
+- **🎉 Barbarian Paths subclass batch ✅ CLOSED.** Six Barbarian paths now have a Lv 3 first-feature shipped: Berserker (Frenzy, v2.99.226), Totem Warrior (Totem Spirit), Zealot (Divine Fury), Ancestral Guardian (Ancestral Protectors), Storm Herald (Storm Aura), Beast (Form of the Beast — this ship).
+- **184 ships this session.**
+- **Total harness count: 1746** (was 1742 in v2.99.367; +4 new tests).
+
+---
+
 ## [2.99.367] - 2026-06-05 — "The Roaming Storm" — Path of the Storm Herald Barbarian Storm Aura (Lv 3+, XGE) — 🪓 Barbarian Paths batch
 
 **Schema version:** 66

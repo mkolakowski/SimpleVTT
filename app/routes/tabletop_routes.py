@@ -27664,6 +27664,31 @@ def _pc_has_storm_herald(sheet: "dict | None", min_level: int) -> bool:
     return _barbarian_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_path_of_beast(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.368 — RAW Path of the Beast (Barbarian, TCE p.9):
+    Form of the Beast (Lv 3), Bestial Soul (Lv 6), Infectious Fury
+    (Lv 10), Call the Hunt (Lv 14). Closes the Barbarian Paths
+    subclass batch — Beast was the last untouched path.
+
+    Returns True when the PC is a Barbarian with subclass slug
+    containing "beast" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "barbarian":
+        has_barb = any(
+            (entry.get("class") or "").strip().lower() == "barbarian"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_barb:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "beast" not in subclass:
+        return False
+    return _barbarian_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_evocation_school(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.225 — RAW School of Evocation features (Wizard,
     PHB p.117): Evocation Savant + Sculpt Spells (Lv 2),
@@ -52205,6 +52230,134 @@ async def use_storm_aura(
         "ok": True,
         "feature": "storm-aura",
         **effect,
+        "barbarian_level": barb_lv,
+    }
+
+
+_FORM_OF_THE_BEAST = {
+    "bite": {
+        "damage_die": "1d8", "damage_type": "piercing", "reach_ft": 5,
+        "special": (
+            "Once per turn when you damage a creature with the bite, "
+            "regain HP equal to your proficiency bonus — provided you "
+            "have less than half your hit points."
+        ),
+    },
+    "claws": {
+        "damage_die": "1d6", "damage_type": "slashing", "reach_ft": 5,
+        "special": (
+            "When you attack with the claws using the Attack action, "
+            "you can make one additional claw attack as part of that "
+            "action."
+        ),
+    },
+    "tail": {
+        "damage_die": "1d8", "damage_type": "piercing", "reach_ft": 10,
+        "special": (
+            "Reaction: when a creature you can see within 10 ft hits "
+            "you with an attack, add 1d8 to your AC against it — "
+            "possibly causing the attack to miss."
+        ),
+    },
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_form_of_the_beast")
+async def use_form_of_the_beast(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.368 — Phase G Barbarian Paths subclass batch ship #5
+    (Path of the Beast Lv 3+, TCE) of the v2.99.193 phased
+    completion plan — CLOSES the Barbarian Paths batch (Beast was
+    the last untouched path). Form of the Beast (Path of the Beast
+    Lv 3+, TCE p.9): when you enter your rage, manifest a natural
+    weapon as part of the bonus action — Bite (1d8 piercing,
+    self-heal), Claws (1d6 slashing, extra attack), or Tail (1d8
+    piercing, 10-ft reach, reaction AC). Lasts until your rage
+    ends.
+
+    Body: ``{character_id, form?}``. ``form`` is bite, claws
+    (default), or tail. No separate action cost (manifested as
+    part of entering rage). v1 announce-only — the natural-weapon
+    attacks + special riders are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    form = (body.get("form") or "claws").strip().lower()
+    if form not in _FORM_OF_THE_BEAST:
+        raise HTTPException(400, "form must be bite, claws, or tail")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Barbarian character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_path_of_beast(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "path of the beast barbarian lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _barbarian_level_from_sheet(sheet),
+        })
+
+    barb_lv = _barbarian_level_from_sheet(sheet)
+    form_data = _FORM_OF_THE_BEAST[form]
+    form_icon = {"bite": "🦷", "claws": "🐾", "tail": "🦎"}[form]
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"{form_icon} Form of the Beast — {form.title()} "
+                f"({form_data['damage_die']} {form_data['damage_type']})"
+            ),
+            "feature_desc": (
+                f"{char.name} manifests a {form} as a natural "
+                f"weapon while raging: {form_data['damage_die']} "
+                f"{form_data['damage_type']}, reach "
+                f"{form_data['reach_ft']} ft. {form_data['special']} "
+                f"(Path of the Beast Barbarian Lv 3+ TCE class "
+                f"feature.)"
+            ),
+            "source": "form-of-the-beast",
+            "form": form,
+            **form_data,
+            "barbarian_level": barb_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "form-of-the-beast",
+        "form": form,
+        **form_data,
         "barbarian_level": barb_lv,
     }
 
