@@ -21555,6 +21555,49 @@ def _attacker_crit_threshold(sheet: dict) -> int:
     return 20
 
 
+def _attacker_crit_range_from_buffs(
+    campaign_id: int, attacker_char_id: int, target_combatant_id: "str | None",
+) -> int:
+    """v2.99.399 — Phase 2.3: lowest natural-crit threshold granted by an
+    on-hit rider buff carrying ``effects.weapon_hit_crit_range`` (e.g.
+    Hexblade's Curse = 19 vs the cursed target). A buff keyed to a target
+    only lowers the threshold against that target; a target-less buff
+    applies to any target. Returns 20 when no such buff applies. The
+    /attack crit check takes ``min`` of this and ``_attacker_crit_threshold``.
+    """
+    if not target_combatant_id:
+        return 20
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return 20
+    best = 20
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != attacker_char_id:
+            continue
+        for b in c.get("buffs") or []:
+            if not isinstance(b, dict):
+                continue
+            eff = b.get("effects")
+            if not isinstance(eff, dict):
+                continue
+            cr = eff.get("weapon_hit_crit_range")
+            if cr is None:
+                continue
+            tgt = eff.get("weapon_hit_bonus_target_combatant_id")
+            if tgt is not None:
+                if isinstance(tgt, list):
+                    if target_combatant_id not in tgt:
+                        continue
+                elif tgt != target_combatant_id:
+                    continue
+            try:
+                best = min(best, int(cr))
+            except (TypeError, ValueError):
+                pass
+        break
+    return best
+
+
 def _barbarian_level_from_sheet(sheet: dict) -> int:
     """Barbarian-level helper (mirrors `_fighter_level_from_sheet`).
     v2.19.0: added for Rage damage scaling — +2 Lv 1-8, +3 Lv 9-15, +4
@@ -50534,17 +50577,25 @@ async def use_hexblades_curse(
     + your Charisma modifier (minimum of 1)." Once per short or
     long rest.
 
-    Body: ``{character_id, override?}``. Costs a bonus chip.
-    Computes the PB damage bonus + the on-death heal server-side.
-    v1 announce-only — the target choice, the +PB/crit-19 attack
-    riders, the on-death heal, and the once-per-rest limit stay
-    GM-tracked.
+    Body: ``{character_id, target_combatant_id?, override?}``. Costs a
+    bonus chip. The 1-per-short-or-long-rest budget is server-tracked
+    (v2.99.388).
+
+    v2.99.399 — Phase 2.3 of docs/plans/on-hit-riders.md: when a
+    ``target_combatant_id`` is supplied, the feature **installs a
+    `hexblades-curse` rider buff** keyed to that target —
+    `weapon_hit_bonus_flat: <PB>` (every hit vs the cursed target deals
+    +PB) and `weapon_hit_crit_range: 19` (crits on a 19–20 vs it) — so
+    both auto-apply through the `/attack` pipeline. The on-death heal +
+    the 1-minute / ends-on-death duration stay GM-tracked. Without a
+    target it stays announce-only (back-compat).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    target_combatant_id = body.get("target_combatant_id") or None
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -50614,6 +50665,36 @@ async def use_hexblades_curse(
         pb = 2 + (max(1, warlock_lv) - 1) // 4
     death_heal = max(1, warlock_lv + cha_mod)
 
+    # v2.99.399 — Phase 2.3: install the on-hit rider buff keyed to the
+    # cursed target. Every weapon hit vs it gains +PB damage
+    # (weapon_hit_bonus_flat, NOT once-per-turn) and crits on a 19-20
+    # (weapon_hit_crit_range). Re-cursing replaces the prior buff
+    # (same-key refresh). 1-minute duration ≈ 10 rounds; the
+    # ends-on-death and on-death-heal stay GM-tracked.
+    buff_installed = False
+    if target_combatant_id:
+        curse_buff = {
+            "key": "hexblades-curse",
+            "name": "Hexblade's Curse",
+            "icon": "🗡️",
+            "duration_rounds": 10,
+            "duration_max": 10,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "weapon_hit_bonus_flat": pb,
+                "weapon_hit_bonus_target_combatant_id": target_combatant_id,
+                "weapon_hit_crit_range": 19,
+            },
+            "desc": (
+                f"Every weapon hit vs the cursed target deals +{pb} "
+                f"damage and crits on a 19-20; on its death regain "
+                f"{death_heal} HP. (The Hexblade Lv 1+; 1 minute.)"
+            ),
+        }
+        buff_installed = await _install_buff(campaign_id, char.id, curse_buff)
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -50651,6 +50732,8 @@ async def use_hexblades_curse(
             "death_heal": death_heal,
             "uses_remaining": uses_remaining,
             "uses_max": uses_max,
+            "buff_installed": buff_installed,
+            "target_combatant_id": target_combatant_id,
             "warlock_level": warlock_lv,
         },
     })
@@ -50664,6 +50747,8 @@ async def use_hexblades_curse(
         "death_heal": death_heal,
         "uses_remaining": uses_remaining,
         "uses_max": uses_max,
+        "buff_installed": buff_installed,
+        "target_combatant_id": target_combatant_id,
         "warlock_level": warlock_lv,
     }
 
@@ -66930,6 +67015,13 @@ async def use_attack(
         )
         if _crit_m:
             _crit_threshold = _attacker_crit_threshold(sheet)
+            # v2.99.399 — Phase 2.3: an on-hit rider buff (Hexblade's
+            # Curse) can lower the crit range vs its target.
+            _crit_threshold = min(
+                _crit_threshold,
+                _attacker_crit_range_from_buffs(
+                    campaign_id, char.id, target_combatant_id),
+            )
             if int(_crit_m.group(1)) >= _crit_threshold:
                 is_crit = True
 

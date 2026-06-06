@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.399] - 2026-06-06 — "The Cursed Blade" — Hexblade's Curse flat rider + crit-range key (automation Phase 2.3)
+
+**Schema version:** 66
+**Commit summary:** **Phase 2.3 of [docs/plans/on-hit-riders.md](docs/plans/on-hit-riders.md) — Hexblade's Curse now installs a flat +PB on-hit rider and crits on a 19-20 vs the cursed target.** Adds the `weapon_hit_crit_range` substrate key (read at the `/attack` crit check) and exercises the flat-bonus key from P2.1 end-to-end.
+**Description:** New helper `_attacker_crit_range_from_buffs` walks the attacker's rider buffs for `effects.weapon_hit_crit_range` keyed to (or not keyed to) the swing's target; the `/attack` crit check takes `min` of it and `_attacker_crit_threshold`, so a 19 vs the cursed target now crits. `/use_hexblades_curse` gains an optional `target_combatant_id`; when supplied it `_install_buff`s a `hexblades-curse` rider — `weapon_hit_bonus_flat: <PB>` (every hit vs the cursed target, not once-per-turn) + `weapon_hit_bonus_target_combatant_id` + `weapon_hit_crit_range: 19` — so the +PB damage auto-applies through `_compute_attack_auto_uplifts` and the crit range lowers. 1-minute (10-round) duration; the on-death heal + ends-on-death stay GM-tracked. Without a target it stays announce-only.
+
+### Added
+- `weapon_hit_crit_range` rider effect key + `_attacker_crit_range_from_buffs` helper (read in the `/attack` crit determination).
+- `tests/harness/test_hexblades_curse.py::test_hc_installs_rider_and_flat_applies` — asserts the rider buff's flat/target/crit-range effects via `buff_update` AND that the +PB flat rider lands in the `/attack` `auto_uplifts` (deterministic — flat riders aren't stripped on a miss).
+
+### Changed
+- `/api/campaign/{cid}/use_hexblades_curse` installs a flat +PB / crit-19 rider buff when given a `target_combatant_id` (was announce-only); response gains `buff_installed` + `target_combatant_id`.
+
+### Notes
+- First flat-bonus + crit-range rider — completes the P2.3 substrate keys. Existing Champion Improved Critical (also a crit-threshold lowerer) composes via `min`. Next: P2.4 (Planar Warrior damage-type conversion), P2.5 (registry-ize Colossus Slayer / Divine Strike).
+- **Total harness count: 1825** (was 1824 in v2.99.398; +1 new test).
+
+---
+
 ## [2.99.398] - 2026-06-06 — "The Swarm Strikes" — Gathered Swarm damage mode installs a rider (automation Phase 2.2)
 
 **Schema version:** 66

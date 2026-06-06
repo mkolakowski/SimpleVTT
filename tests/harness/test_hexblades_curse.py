@@ -29,6 +29,16 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
+def _mkc(cid, char_id=None, name="X"):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": 50, "hp_max": 50,
+        "buffs": [], "speed_walk": 30,
+        "economy": {"action": False, "bonus": False, "reaction": False,
+                    "movement": 0},
+    }
+
+
 async def _patch_sheet(gm_client, char_id, fields, class_slug=None):
     body = dict(fields)
     if class_slug:
@@ -181,3 +191,56 @@ async def test_use_hc_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_hc_installs_rider_and_flat_applies(
+    gm_client, gm_ws, magnus_hexblade,
+):
+    """v2.99.399 — Hexblade's Curse installs a flat +PB rider + crit-19
+    keyed to the cursed target, and the +PB lands on a /attack.
+
+    The flat rider is NOT once-per-turn, so it isn't stripped on a miss
+    — the auto_uplift assertion is deterministic.
+    """
+    magnus = magnus_hexblade
+    magnus_cid = f"tok_hc_mag_{magnus['id']}"
+    dummy_cid = "tok_hc_dummy"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _mkc(magnus_cid, magnus["id"], name=magnus["name"]),
+            _mkc(dummy_cid, None, name="Dummy"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_hexblades_curse",
+        json={"character_id": magnus["id"],
+              "target_combatant_id": dummy_cid, "override": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["buff_installed"] is True
+
+    bu = await gm_ws.wait_for("buff_update")
+    hc = next((b for b in bu["data"]["buffs"]
+               if b.get("key") == "hexblades-curse"), None)
+    assert hc is not None, bu["data"]["buffs"]
+    eff = hc.get("effects") or {}
+    pb = eff.get("weapon_hit_bonus_flat")
+    assert pb >= 2  # proficiency bonus
+    assert eff.get("weapon_hit_bonus_target_combatant_id") == dummy_cid
+    assert eff.get("weapon_hit_crit_range") == 19
+
+    # Attack the cursed target — the flat +PB rider lands (flat riders
+    # aren't stripped on a miss, so this is deterministic).
+    a = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={"character_id": magnus["id"], "attack_index": 0,
+              "target_combatant_id": dummy_cid, "override": True},
+    )
+    assert a.status_code == 200, a.text
+    ups = [u for u in (a.json().get("auto_uplifts") or [])
+           if u.get("source") == "hexblades-curse"]
+    assert len(ups) == 1, a.json().get("auto_uplifts")
+    assert ups[0]["total"] == pb
+    assert ups[0]["expression"] == f"+{pb}"
