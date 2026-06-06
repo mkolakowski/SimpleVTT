@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.410] - 2026-06-06 — "The Beguiling Cube" — Fey Presence resolves its saves (automation Phase 3.4)
+
+**Schema version:** 66
+**Commit summary:** **Phase 3.4 — Fey Presence (Archfey Warlock) now resolves each picked target's WIS save and installs Charmed or Frightened (caster's choice) on a fail.** Second presence retrofit through the per-target resolver loop.
+**Description:** `/use_fey_presence` gains an optional `target_combatant_ids` list (the creatures the caster picks out of the 10-ft cube). When supplied, each target auto-resolves its WIS save via `_resolve_feature_save` (NPC inline / PC prompt) and, on a fail, gets Charmed or Frightened (per the existing `effect` param) until the end of the caster's next turn (≈ 2 rounds; not a repeated save). Without a target list it stays announce-only (back-compat — the GM picks the cube). The condition's `key` follows `effect` (`charmed` / `frightened`) so the install inherits the right immunity gates. Response gains a `feature_saves` list.
+
+### Changed
+- `/api/campaign/{cid}/use_fey_presence` auto-resolves the WIS save + installs Charmed/Frightened for each supplied target (was announce-only); response gains `feature_saves`.
+
+### Added
+- `tests/harness/test_fey_presence.py::test_fp_resolves_npc_save_installs_condition` — loops until a template bandit fails its WIS save and asserts the Frightened (Fey Presence) buff installs with NO repeated-save stamp (fixed duration).
+
+### Notes
+- Reuses the P3.1/P3.2 resolver + the P3.4 per-target loop. Remaining P3.4 features: Draconic Presence (CHA, concentration) + Champion Challenge (custom condition). Then P3.5 (targeted gaze).
+- **Total harness count: 1835** (was 1834 in v2.99.409; +1 new test).
+
+---
+
 ## [2.99.409] - 2026-06-06 — "The Conqueror's Glare" — Multi-target presence saves (automation Phase 3.4)
 
 **Schema version:** 66

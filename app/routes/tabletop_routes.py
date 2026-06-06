@@ -50942,11 +50942,17 @@ async def use_fey_presence(
     feature, you can't use it again until you finish a short or
     long rest."
 
-    Body: ``{character_id, effect?, override?}``. ``effect`` is
-    "charmed" (default) or "frightened". Costs an action chip.
-    Computes the warlock spell save DC server-side. v1
-    announce-only — the cube targets + WIS saves + once-per-rest
-    limit stay GM-tracked.
+    Body: ``{character_id, effect?, target_combatant_ids?, override?}``.
+    ``effect`` is "charmed" (default) or "frightened". Costs an action
+    chip. Computes the warlock spell save DC server-side.
+
+    v2.99.410 — Phase 3.4 of docs/plans/feature-saves.md: when
+    ``target_combatant_ids`` (the creatures the caster picks out of the
+    10-ft cube) is supplied, each target auto-resolves its WIS save via
+    `_resolve_feature_save` (NPC inline / PC prompt) and, on a fail, gets
+    Charmed or Frightened (per ``effect``) until the end of the caster's
+    next turn (≈ 2 rounds; no repeated save). Without a target list it
+    stays announce-only (the GM picks the cube + rolls).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -50956,6 +50962,9 @@ async def use_fey_presence(
     effect = (body.get("effect") or "charmed").strip().lower()
     if effect not in ("charmed", "frightened"):
         raise HTTPException(400, "effect must be 'charmed' or 'frightened'")
+    target_ids = body.get("target_combatant_ids") or []
+    if not isinstance(target_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -51042,6 +51051,47 @@ async def use_fey_presence(
         },
     })
 
+    # v2.99.410 — Phase 3.4: resolve each picked target's WIS save. On a
+    # fail → Charmed or Frightened (per `effect`) until end of the
+    # caster's next turn (≈ 2 rounds; not a repeated save).
+    _cond_name = "Charmed" if effect == "charmed" else "Frightened"
+    condition_buff = {
+        "key": effect,
+        "name": f"{_cond_name} (Fey Presence)",
+        "icon": "🧚",
+        "duration_rounds": 2,
+        "duration_max": 2,
+        "concentration": False,
+        "source_spell": "Fey Presence",
+        "effects": (
+            ["regards the caster as friendly",
+             "advantage on the caster's social interactions"]
+            if effect == "charmed" else
+            ["disadvantage on ability checks / attacks while the caster "
+             "is in sight",
+             "can't willingly move closer to the caster"]
+        ),
+    }
+    feature_saves: list[dict] = []
+    for tcid in target_ids:
+        cb = _lookup_combatant(campaign_id, str(tcid).strip())
+        if cb is None:
+            continue
+        sr = await _resolve_feature_save(
+            db, campaign_id,
+            caster_char_id=char.id, caster_char_name=char.name,
+            target_combatant=cb,
+            save_ability="WIS", dc=save_dc,
+            note_label=f"Fey Presence save (DC {save_dc})",
+            condition_buff=condition_buff,
+            repeated_save=False,
+            source="fey-presence",
+            campaign=campaign,
+            prompt_user=user,
+            feature_name="Fey Presence",
+        )
+        feature_saves.append(sr)
+
     return {
         "ok": True,
         "feature": "fey-presence",
@@ -51049,6 +51099,7 @@ async def use_fey_presence(
         "effect": effect,
         "cube_ft": 10,
         "warlock_level": warlock_lv,
+        "feature_saves": feature_saves,
     }
 
 

@@ -125,3 +125,69 @@ async def test_use_fp_invalid_effect(
               "override": True},
     )
     assert r.status_code == 400, r.text
+
+
+async def test_fp_resolves_npc_save_installs_condition(
+    gm_client, gm_ws, magnus_archfey,
+):
+    """v2.99.410 — Phase 3.4: with a target list, Fey Presence resolves
+    each NPC's WIS save and installs the chosen condition (frightened
+    here) on a fail. Fixed-duration → no repeated-save stamp.
+
+    No resource counter (rest-gated), so call repeatedly with override;
+    re-PUT the battle each iteration to reset the bandit. Loop until a
+    fail lands.
+    """
+    magnus = magnus_archfey
+    tmpl_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = tmpl_resp.json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    magnus_tok = f"tok_fp_magnus_{magnus['id']}"
+    bandit_tok = "tok_fp_bandit"
+
+    def _battle():
+        return {"combatants": [
+            {"id": magnus_tok, "char_id": magnus["id"], "name": magnus["name"],
+             "initiative": 12, "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": bandit_tok, "char_id": None,
+             "token_template_id": bandit["id"], "name": "Bandit",
+             "initiative": 8, "hp_current": 50, "hp_max": 50, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True}
+
+    installed = False
+    for _ in range(40):
+        await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/battle", json=_battle())
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_fey_presence",
+            json={"character_id": magnus["id"], "effect": "frightened",
+                  "target_combatant_ids": [bandit_tok], "override": True},
+        )
+        assert r.status_code == 200, r.text
+        fs = r.json()["feature_saves"]
+        assert len(fs) == 1, fs
+        assert fs[0]["resolved"] is True
+        assert fs[0]["save_ability"] == "WIS"
+        if fs[0]["condition_installed"]:
+            assert fs[0]["condition_key"] == "frightened"
+            installed = True
+            break
+    assert installed, "no failed bandit WIS save in 40 tries"
+
+    bu = await gm_ws.wait_for("battle_update")
+    cb = next((c for c in (bu["data"].get("combatants") or [])
+               if c.get("id") == bandit_tok), None)
+    assert cb is not None
+    fr = next((b for b in (cb.get("buffs") or [])
+               if (b or {}).get("key") == "frightened"), None)
+    assert fr is not None, cb.get("buffs")
+    assert fr.get("name") == "Frightened (Fey Presence)"
+    # Fixed-duration (until end of next turn) → NOT a repeated save.
+    assert not fr.get("repeated_save_ability")
