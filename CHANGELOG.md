@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.412] - 2026-06-06 — "The Sworn Foe" — Champion Challenge resolves its saves (automation Phase 3.4 complete)
+
+**Schema version:** 66
+**Commit summary:** **Phase 3.4 — Champion Challenge (Crown Paladin) now resolves each challenged creature's WIS save and installs a `challenged` marker on a fail. Completes P3.4 (all four presence/AoE-save features).**
+**Description:** `/use_champion_challenge` gains an optional `target_combatant_ids` list. When supplied, each target auto-resolves its WIS save via `_resolve_feature_save` (NPC inline / PC prompt) and, on a fail, gets a `challenged` marker buff (1 minute; "can't willingly move >30 ft from the paladin"). The movement tether itself stays GM-enforced (no positional-tether engine yet) — the buff is the marker for it. No repeated save (RAW: ends on the paladin's incapacitation or the target leaving range, not an end-of-turn re-save). Without a target list it stays announce-only. Response gains `feature_saves`.
+
+### Changed
+- `/api/campaign/{cid}/use_champion_challenge` auto-resolves each target's WIS save + installs the `challenged` marker (was announce-only); response gains `feature_saves`.
+
+### Added
+- `tests/harness/test_champion_challenge.py::test_cc_resolves_npc_saves_installs_challenged` — challenges several template bandits at once (fail near-certain; long-rest-refill backstop loop) and asserts the `challenged` marker installs with no repeated-save stamp.
+
+### Notes
+- **P3.4 complete** — Conquering / Fey / Draconic Presence + Champion Challenge all resolve through the per-target `_resolve_feature_save` loop. The last Phase 3 sub-step is P3.5 (targeted gaze: Hypnotic Gaze + Control Undead).
+- **Total harness count: 1837** (was 1836 in v2.99.411; +1 new test).
+
+---
+
 ## [2.99.411] - 2026-06-06 — "The Dragon's Awe" — Draconic Presence resolves its saves (automation Phase 3.4)
 
 **Schema version:** 66

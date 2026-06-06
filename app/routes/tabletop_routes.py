@@ -55728,17 +55728,27 @@ async def use_champion_challenge(
     Wisdom saving throw. On a failed save, a creature can't
     willingly move more than 30 feet away from you."
 
-    Body: ``{character_id, override?}``. Costs a bonus chip
-    (Channel Divinity). Computes the Paladin spell save DC (8 + PB
-    + CHA mod) server-side. v1 announce-only — the targeting +
-    saves + movement restriction + Channel Divinity uses are
-    GM-tracked.
+    Body: ``{character_id, target_combatant_ids?, override?}``. Costs a
+    bonus chip (Channel Divinity). Computes the Paladin spell save DC
+    (8 + PB + CHA mod) server-side.
+
+    v2.99.412 — Phase 3.4 of docs/plans/feature-saves.md: when
+    ``target_combatant_ids`` (the creatures within 30 ft the paladin
+    challenges) is supplied, each target auto-resolves its WIS save via
+    `_resolve_feature_save` (NPC inline / PC prompt) and, on a fail, gets
+    a `challenged` condition (can't willingly move >30 ft from the
+    paladin; 1 minute). The movement restriction itself stays GM-enforced
+    (no positional tether engine yet) — the buff is the marker. Without a
+    target list it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    target_ids = body.get("target_combatant_ids") or []
+    if not isinstance(target_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -55856,6 +55866,42 @@ async def use_champion_challenge(
         },
     })
 
+    # v2.99.412 — Phase 3.4: resolve each challenged target's WIS save.
+    # On a fail → a `challenged` marker buff (1 minute; the >30-ft tether
+    # is GM-enforced). No repeated save (RAW: ends on incapacitation /
+    # distance, not an end-of-turn re-save).
+    challenged_buff = {
+        "key": "challenged",
+        "name": "Challenged (Champion Challenge)",
+        "icon": "👑",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source_spell": "Champion Challenge",
+        "effects": [
+            "can't willingly move more than 30 ft from the paladin",
+        ],
+    }
+    feature_saves: list[dict] = []
+    for tcid in target_ids:
+        cb = _lookup_combatant(campaign_id, str(tcid).strip())
+        if cb is None:
+            continue
+        sr = await _resolve_feature_save(
+            db, campaign_id,
+            caster_char_id=char.id, caster_char_name=char.name,
+            target_combatant=cb,
+            save_ability="WIS", dc=save_dc,
+            note_label=f"Champion Challenge save (DC {save_dc})",
+            condition_buff=challenged_buff,
+            repeated_save=False,
+            source="champion-challenge",
+            campaign=campaign,
+            prompt_user=user,
+            feature_name="Champion Challenge",
+        )
+        feature_saves.append(sr)
+
     return {
         "ok": True,
         "feature": "champion-challenge",
@@ -55866,6 +55912,7 @@ async def use_champion_challenge(
         "cd_remaining": cd_remaining,
         "cd_max": cd_max,
         "paladin_level": paladin_lv,
+        "feature_saves": feature_saves,
     }
 
 

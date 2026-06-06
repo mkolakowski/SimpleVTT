@@ -165,11 +165,11 @@ first and tackle the PC roll-request extraction in P3.2.
    confirmed hit. Menacing Attack armed without a target installs a rider
    that adds the superiority die AND triggers the WIS save on the next
    hit. Trip Attack (→ Prone) is the natural follow-up using the same key.
-4. **P3.4 — presence AoE saves (M). 🟠 in progress — Conquering Presence
-   shipped v2.99.409.** Each target in the list resolves via the resolver
-   (looped); Conquering Presence stamps a repeated save (Frightened, 1
-   min). Fey / Draconic Presence + Champion Challenge follow the same
-   per-target-loop pattern (remaining).
+4. **P3.4 — presence AoE saves (M). ✅ shipped v2.99.409–.412.** All
+   four resolve via the per-target `_resolve_feature_save` loop:
+   Conquering Presence (Frightened, repeated save), Fey Presence (charm
+   /fear choice, fixed), Draconic Presence (CHA, charm/fear, repeated),
+   Champion Challenge (`challenged` marker, GM-enforced tether).
 5. **P3.5 — targeted gaze (S).** Retrofit Hypnotic Gaze + Control Undead
    (single target; budgets already tracked from Phase 1).
 

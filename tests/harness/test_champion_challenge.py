@@ -110,6 +110,81 @@ async def test_use_cc_out_of_channel_divinity(
     assert r2.json().get("error") == "out_of_uses"
 
 
+async def test_cc_resolves_npc_saves_installs_challenged(
+    gm_client, gm_ws, caelan_crown,
+):
+    """v2.99.412 — Phase 3.4: with a target list, Champion Challenge
+    resolves each creature's WIS save and installs a `challenged` marker
+    on a fail (the >30-ft tether is GM-enforced).
+
+    Multi-target → challenge several bandits in one call so a fail is
+    near-certain; a small long-rest-refill loop backstops the rare
+    all-pass. Asserts every target gets a resolved WIS save and the
+    installed `challenged` buff has no repeated-save stamp.
+    """
+    caelan = caelan_crown
+    tmpl_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = tmpl_resp.json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    caelan_tok = f"tok_cc_{caelan['id']}"
+    tok_ids = [f"tok_cc_bnd_{i}" for i in range(4)]
+
+    def _battle():
+        combs = [
+            {"id": caelan_tok, "char_id": caelan["id"], "name": caelan["name"],
+             "initiative": 12, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ]
+        for i, tid in enumerate(tok_ids):
+            combs.append(
+                {"id": tid, "char_id": None, "token_template_id": bandit["id"],
+                 "name": f"Bandit {i}", "initiative": 8 - i,
+                 "hp_current": 50, "hp_max": 50, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}})
+        return {"combatants": combs, "turn_index": 0, "round": 1,
+                "active": True}
+
+    installed_on = None
+    for _ in range(6):
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.put(f"/api/campaign/{CAMPAIGN_ID}/battle", json=_battle())
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_champion_challenge",
+            json={"character_id": caelan["id"],
+                  "target_combatant_ids": tok_ids, "override": True},
+        )
+        assert r.status_code == 200, r.text
+        fs = r.json()["feature_saves"]
+        assert len(fs) == len(tok_ids), fs
+        for s in fs:
+            assert s["resolved"] is True
+            assert s["save_ability"] == "WIS"
+        hit = next((s for s in fs if s["condition_installed"]), None)
+        if hit:
+            installed_on = hit["target_combatant_id"]
+            break
+    assert installed_on, "no failed bandit WIS save across 6 challenges"
+
+    bu = await gm_ws.wait_for("battle_update")
+    cb = next((c for c in (bu["data"].get("combatants") or [])
+               if c.get("id") == installed_on), None)
+    assert cb is not None
+    ch = next((b for b in (cb.get("buffs") or [])
+               if (b or {}).get("key") == "challenged"), None)
+    assert ch is not None, cb.get("buffs")
+    assert ch.get("name") == "Challenged (Champion Challenge)"
+    assert not ch.get("repeated_save_ability")  # no repeated save
+
+
 async def test_use_cc_wrong_subclass(
     gm_client, roster,
 ):
