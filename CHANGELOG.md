@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.388] - 2026-06-06 — "The Counted Curse" — Hexblade's Curse use-tracking (automation Phase 1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 1 retrofit — Hexblade's Curse (The Hexblade Warlock) is now server-tracked via the feature-use registry.** Second announce-only → tracked retrofit; exercises the registry's `reset="short"` (short-OR-long-rest) refill cadence.
+**Description:** Adds a `hexblades_curse_uses` entry to `_FEATURE_USES` (gate `_pc_has_hexblade_warlock`, max 1, reset `"short"`). `/use_hexblades_curse` now calls `_consume_feature_use`: decrements `sheet.hexblades_curse_uses`, returns 409 `out_of_uses` when depleted, reports `uses_remaining` / `uses_max`, and refills on a short OR long rest via the registry. The +PB damage / crit-19 / on-death-heal riders stay GM-tracked pending the Phase 2 on-hit rider primitive. The field is allowlisted for sheet-field PATCH.
+
+### Changed
+- `/api/campaign/{cid}/use_hexblades_curse` now server-tracks its 1-per-short-or-long-rest budget (was announce-only).
+
+### Added
+- `hexblades_curse_uses` registry entry + allowlisted sheet field.
+- `tests/harness/test_hexblades_curse.py::test_use_hc_out_of_uses` + `::test_hc_short_rest_refill` — exhaustion + short-rest-refill state assertions; happy test now asserts the 1→0 decrement.
+
+### Notes
+- Second Phase-1 retrofit (after Fighting Spirit in v2.99.387). Confirms the registry handles both long-only and short-or-long reset cadences. Remaining clean use-per-rest retrofits queued: Tentacle of the Deeps (PB/long), Giant's Might (PB/long), Arcane Shot (2/short-or-long).
+- **Total harness count: 1805** (was 1803 in v2.99.387; +2 new tests).
+
+---
+
 ## [2.99.387] - 2026-06-06 — "The Use Ledger" — Feature-use registry (full-feature-automation Phase 1)
 
 **Schema version:** 66
