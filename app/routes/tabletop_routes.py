@@ -6762,6 +6762,140 @@ async def _grant_temp_hp(
     return result
 
 
+async def _tick_auras(
+    db: Session,
+    campaign_id: int,
+    state: dict,
+    active_combatant: "dict | None",
+) -> list[dict]:
+    """v2.99.425 — Phase 5.1 of docs/plans/auras.md: on a turn advance,
+    apply any aura emitted by the **new active combatant** to the
+    creatures in its radius (owner-turn-start model).
+
+    An active aura is a buff on the emitter carrying
+    ``effects.aura = {radius_ft, affects, <one payload>}`` where the
+    payload is exactly one of ``temp_hp`` (int), ``heal`` (int), or
+    ``damage`` ({expr, type}). ``affects`` is ``allies`` / ``enemies`` /
+    ``others`` / ``all`` / ``self`` (faction via the PC-vs-NPC heuristic).
+
+    Range: ``_distance_ft_between_chars`` when both emitter and subject
+    are PCs on a grid; otherwise (NPC involved, or off-grid) every
+    in-init subject of the matching faction is affected — the documented
+    Aura of Protection fallback. Reuses ``_grant_temp_hp`` /
+    ``_apply_heal_to_combatant`` / ``_apply_damage_to_combatant``.
+
+    Returns a list of ``{subject_id, source, applied}`` records (for the
+    caller's broadcast / tests). Save-on-enter auras (Avenging Angel) are
+    Phase 5.4 and ignored here.
+    """
+    results: list[dict] = []
+    if not active_combatant:
+        return results
+    combs = state.get("combatants") or []
+    owner_cid = active_combatant.get("id")
+    owner_is_pc = bool(active_combatant.get("char_id"))
+    for b in active_combatant.get("buffs") or []:
+        if not isinstance(b, dict):
+            continue
+        eff = b.get("effects")
+        if not isinstance(eff, dict):
+            continue
+        aura = eff.get("aura")
+        if not isinstance(aura, dict):
+            continue
+        try:
+            radius = float(aura.get("radius_ft") or 0)
+        except (TypeError, ValueError):
+            radius = 0.0
+        affects = str(aura.get("affects") or "enemies").strip().lower()
+        source = str(aura.get("source") or b.get("key") or "aura")
+        label = str(aura.get("label") or b.get("name") or "Aura")
+        for c in combs:
+            if not isinstance(c, dict):
+                continue
+            is_self = c.get("id") == owner_cid
+            if affects == "self":
+                if not is_self:
+                    continue
+            else:
+                if is_self:
+                    continue
+                subj_is_pc = bool(c.get("char_id"))
+                if affects == "allies" and subj_is_pc != owner_is_pc:
+                    continue
+                if affects == "enemies" and subj_is_pc == owner_is_pc:
+                    continue
+                # "others" / "all" → no faction filter.
+            # Range gate (PC↔PC on a grid). None → in-init fallback.
+            if (radius > 0 and not is_self and owner_is_pc
+                    and c.get("char_id")):
+                dist = _distance_ft_between_chars(
+                    db, campaign_id,
+                    int(active_combatant["char_id"]), int(c["char_id"]),
+                )
+                if dist is not None and dist > radius:
+                    continue
+            applied = await _apply_aura_payload(
+                db, campaign_id, c, aura, source,
+            )
+            results.append({
+                "subject_id": c.get("id"), "source": source,
+                "applied": applied,
+            })
+    if results:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "source": (results[0]["source"]),
+                "label": label,
+                "feature_name": f"🌀 {label} — aura tick",
+                "subjects": len(results),
+            },
+        })
+    return results
+
+
+async def _apply_aura_payload(
+    db: Session, campaign_id: int, subject: dict, aura: dict, source: str,
+) -> bool:
+    """v2.99.425 — apply a single aura payload (temp_hp / heal / damage)
+    to one subject combatant via the reused HP helpers. Returns True when
+    something was applied."""
+    if "temp_hp" in aura:
+        try:
+            amt = int(aura.get("temp_hp") or 0)
+        except (TypeError, ValueError):
+            amt = 0
+        if amt > 0:
+            gr = await _grant_temp_hp(db, campaign_id, subject, amt, source=source)
+            return gr["temp_after"] > 0
+        return False
+    if "heal" in aura:
+        try:
+            amt = int(aura.get("heal") or 0)
+        except (TypeError, ValueError):
+            amt = 0
+        if amt > 0:
+            hr = await _apply_heal_to_combatant(db, campaign_id, subject, amt)
+            return int(hr.get("applied") or 0) > 0
+        return False
+    if "damage" in aura:
+        dmg = aura.get("damage") or {}
+        expr = str(dmg.get("expr") or "0")
+        dtype = str(dmg.get("type") or "")
+        try:
+            rolled = int(dice_mod.roll(expr).total)
+        except dice_mod.DiceParseError:
+            rolled = 0
+        if rolled > 0:
+            dr = await _apply_damage_to_combatant(
+                db, campaign_id, subject, rolled, dtype,
+            )
+            return int(dr.get("applied") or 0) >= 0
+        return False
+    return False
+
+
 def _mirror_buffs_to_sheet(
     db: Session, character_id: int, buffs: list[dict],
 ) -> None:
@@ -71407,6 +71541,12 @@ async def update_battle(
                         },
                     })
                 break  # one Heroism buff per character RAW
+
+        # v2.99.425 — Phase 5.1: aura tick. Apply any aura emitted by the
+        # new active combatant (owner-turn-start model) to the creatures
+        # in its radius. Runs for ANY active combatant (PC or NPC), so
+        # it's outside the PC-gated Heroism block above.
+        await _tick_auras(db, campaign_id, state, _active)
 
         # v2.97.62 — auto-fire repeated end-of-turn saves for the
         # PREVIOUS active combatant. RAW (Hold Person / Fear / etc.):

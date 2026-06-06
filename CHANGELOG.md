@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.425] - 2026-06-06 — "The Turning Wheel" — Aura tick substrate (automation Phase 5.1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 5.1 of [docs/plans/auras.md](docs/plans/auras.md) — new `_tick_auras` primitive, fired from the `/battle` turn-advance hook: on a turn advance it applies any aura the new active combatant emits to the creatures in its radius (owner-turn-start model).** Pure substrate — no feature behavior change yet.
+**Description:** An active aura is a buff on the emitter carrying `effects.aura = {radius_ft, affects, <one payload>}` where the payload is `temp_hp` (int), `heal` (int), or `damage` ({expr, type}). `_tick_auras(db, campaign_id, state, active_combatant)` walks the new active combatant's buffs for such auras and, for each in-init subject matching the `affects` faction (`allies`/`enemies`/`others`/`all`/`self`, via the PC-vs-NPC heuristic) and radius, applies the payload through `_apply_aura_payload` → the reused `_grant_temp_hp` / `_apply_heal_to_combatant` / `_apply_damage_to_combatant` helpers. Range uses `_distance_ft_between_chars` (PC↔PC on a grid); off-grid or NPC-involved falls back to "all in init" (the documented Aura of Protection fallback). It hooks into `update_battle`'s existing `_prev_turn != _new_turn` block (right after the Heroism start-of-turn re-grant), so it fires once per turn for any active combatant. Save-on-enter auras (Avenging Angel) are Phase 5.4.
+
+### Added
+- `_tick_auras` + `_apply_aura_payload` helpers; wired into the `PUT /battle` turn-advance hook.
+- `tests/harness/test_aura_tick.py` — a synthetic `temp_hp` aura buff installed via `PUT /battle`; advancing the turn to the emitter ticks +7 temp HP onto both NPC subjects (affects=all, self excluded), while an `affects=allies` aura from a PC emitter excludes the NPC subjects (faction filter).
+
+### Notes
+- First Phase-5 code. Next: P5.2 (Storm Aura installs a `storm-aura` aura buff), P5.3 (Spirit Totem bear ongoing re-grant), P5.4 (Paladin Lv 20 auras + save-on-enter).
+- **Total harness count: 1852** (was 1850 in v2.99.424; +2 new tests).
+
+---
+
 ## [2.99.424] - 2026-06-06 — "The Drawn Circle" — Aura tick design sub-plan (automation Phase 5)
 
 **Schema version:** 66

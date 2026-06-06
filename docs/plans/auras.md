@@ -122,11 +122,13 @@ Countercharm already make. A GM-supplied target list can override later.
 
 ## 4. Phased implementation
 
-1. **P5.1 — `_tick_auras` substrate (M).** The primitive + the
-   turn-advance hook + a combatant-distance helper (NPC-aware). Prove with
-   a synthetic aura buff (PUT /battle) on a combatant, advance the turn,
-   assert the effect (temp HP / damage) landed on the in-range subjects.
-   No feature behavior change yet.
+1. **P5.1 — `_tick_auras` substrate (M). ✅ shipped v2.99.425.** Built
+   `_tick_auras` + `_apply_aura_payload` (temp_hp / heal / damage),
+   wired into the `PUT /battle` turn-advance hook. Range uses
+   `_distance_ft_between_chars` (PC↔PC) with the off-grid/NPC "all-in-init"
+   fallback. Proven with a synthetic aura buff + a turn advance. (A
+   fully NPC-aware combatant-distance helper for on-grid NPC auras is a
+   follow-up — v1 uses the documented fallback.)
 2. **P5.2 — Storm Aura (M).** `use_storm_aura` installs a `storm-aura`
    aura buff (desert damage / tundra temp HP / sea single-target); the
    tick applies it each of the barbarian's turns.
