@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.379] - 2026-06-05 — "The Marked Quarry" — Monster Slayer Ranger Slayer's Prey (Lv 3+, XGE) — 🏹 Ranger conclave batch
+
+**Schema version:** 66
+**Commit summary:** **Ranger conclave subclass batch ship #3 — Monster Slayer Lv 3+ Slayer's Prey (XGE).** Third Ranger conclave ship; opens Monster Slayer. RAW XGE p.43: as a bonus action, designate a creature within 60 ft as your prey; the first weapon hit each turn deals +1d6 to it until you rest or mark a new target.
+**Description:** Adds `_pc_has_monster_slayer` helper. One endpoint. `/use_slayers_prey` — body `{character_id, override?}`. Validates Monster Slayer Ranger Lv 3+ + bonus chip. Rolls the 1d6 bonus damage **server-side**. Broadcasts `feature_used` with `source: slayers-prey`, `range_ft: 60`, `bonus_damage`, `bonus_damage_die: 1d6`. v1 announce-only — the target designation + once-per-turn on-hit application are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_slayers_prey` endpoint.
+- `_pc_has_monster_slayer` helper.
+- `tests/harness/test_slayers_prey.py` — 3 tests.
+
+### Notes
+- **Ranger conclave batch progress:** Hunter (Colossus Slayer, wired earlier), Gloom Stalker, Beast Master, Monster Slayer (this) all have first features. Remaining untouched: Horizon Walker (Planar Warrior), Swarmkeeper (Gathered Swarm), Fey Wanderer (Dreadful Strike).
+- **195 ships this session.**
+- **Total harness count: 1781** (was 1778 in v2.99.378; +3 new tests).
+
+---
+
 ## [2.99.378] - 2026-06-05 — "The Loyal Beast" — Beast Master Ranger Ranger's Companion (Lv 3+, PHB) — 🏹 Ranger conclave batch
 
 **Schema version:** 66

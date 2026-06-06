@@ -27453,6 +27453,31 @@ def _pc_has_beast_master(sheet: "dict | None", min_level: int) -> bool:
     return _ranger_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_monster_slayer(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.379 — RAW Monster Slayer (Ranger conclave, XGE p.43):
+    Hunter's Sense + Slayer's Prey (Lv 3), Supernatural Defense
+    (Lv 7), Magic-User's Nemesis (Lv 11), Slayer's Counter (Lv
+    15).
+
+    Returns True when the PC is a Ranger with subclass slug
+    containing "slayer" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        has_ranger = any(
+            (entry.get("class") or "").strip().lower() == "ranger"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_ranger:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "slayer" not in subclass:
+        return False
+    return _ranger_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -53850,6 +53875,127 @@ async def use_rangers_companion(
         "command": command,
         "companion_hp_floor": companion_hp_floor,
         "proficiency_bonus": pb,
+        "ranger_level": ranger_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_slayers_prey")
+async def use_slayers_prey(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.379 — Phase G Ranger conclave subclass batch ship #3
+    (Monster Slayer Lv 3+, XGE) of the v2.99.193 phased completion
+    plan. Slayer's Prey (Monster Slayer Lv 3+, XGE p.43): "As a
+    bonus action, you designate one creature you can see within 60
+    feet of you as the target of this feature. The first time each
+    turn that you hit that target with a weapon attack, it takes
+    an extra 1d6 damage from you. This benefit lasts until you
+    finish a short or long rest. It ends early if you designate a
+    different creature."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip. Rolls
+    the 1d6 bonus damage server-side (the per-turn rider). v1
+    announce-only — the target designation + once-per-turn on-hit
+    application are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_monster_slayer(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "monster slayer ranger lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _ranger_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "slayers-prey",
+            "label": "Slayer's Prey",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    ranger_lv = _ranger_level_from_sheet(sheet)
+    try:
+        result = dice_mod.roll("1d6")
+        bonus_damage = int(result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        bonus_damage = 1
+        breakdown = ""
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🎯 Slayer's Prey — marked, +{bonus_damage} on first "
+                f"hit/turn"
+            ),
+            "feature_desc": (
+                f"{char.name} marks a creature within 60 ft as "
+                f"their prey: the first weapon hit each turn deals "
+                f"+{bonus_damage} (1d6) damage to it until "
+                f"{char.name} finishes a short or long rest or "
+                f"marks a new target. (Monster Slayer Ranger Lv 3+ "
+                f"XGE class feature.)"
+            ),
+            "source": "slayers-prey",
+            "range_ft": 60,
+            "bonus_damage": bonus_damage,
+            "bonus_damage_die": "1d6",
+            "ranger_level": ranger_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "slayers-prey",
+        "range_ft": 60,
+        "bonus_damage": bonus_damage,
+        "bonus_damage_die": "1d6",
         "ranger_level": ranger_lv,
     }
 
