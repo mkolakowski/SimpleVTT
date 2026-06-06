@@ -6,15 +6,22 @@ RAW XGE p.43: as a bonus action, designate a creature within 60 ft
 as your prey; the first weapon hit each turn deals +1d6 to it until
 you rest or mark a new target.
 
-v1 announce-only — the target designation + once-per-turn on-hit
-application are GM-tracked. The 1d6 is rolled server-side. Bonus
-chip.
+v2.99.396 — Phase 2.2 of docs/plans/on-hit-riders.md: when a
+`target_combatant_id` is supplied, the feature now **installs a
+`slayers-prey` rider buff** keyed to the prey (weapon_hit_bonus_dice
+1d6, once_per_turn) so the first weapon hit each turn auto-applies
++1d6 via the /attack pipeline (the rider-application mechanism itself
+is covered by test_attack_rider_substrate.py). Without a target it
+stays announce-only. Bonus chip.
 
 Rowan Quickbow (Ranger, PATCHed to Monster Slayer Lv 5) is the demo
 fixture.
 
 Tests:
-  - Lv 5 happy: bonus damage 1d6 in [1,6], range 60.
+  - Lv 5 happy (no target): bonus damage 1d6, range 60, buff_installed False.
+  - With a target: installs the slayers-prey rider buff (effects
+    weapon_hit_bonus_dice 1d6, target-keyed, once-per-turn) — asserted
+    via the buff_update broadcast.
   - Wrong subclass (default Hunter) → 409.
   - Wrong class (Caelan paladin) → 409.
 """
@@ -22,6 +29,16 @@ import asyncio
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+
+
+def _mkc(cid, char_id=None, name="X"):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": 50, "hp_max": 50,
+        "buffs": [], "speed_walk": 30,
+        "economy": {"action": False, "bonus": False, "reaction": False,
+                    "movement": 0},
+    }
 
 
 async def _patch_sheet(gm_client, char_id, fields, class_slug=None):
@@ -111,3 +128,54 @@ async def test_use_sp_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_sp_no_target_announce_only(
+    gm_client, rowan_slayer,
+):
+    """Without a target_combatant_id the feature stays announce-only —
+    buff_installed is False (back-compat)."""
+    rowan = rowan_slayer
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_slayers_prey",
+        json={"character_id": rowan["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["buff_installed"] is False
+    assert data["bonus_damage_die"] == "1d6"
+
+
+async def test_sp_installs_rider_buff(
+    gm_client, gm_ws, rowan_slayer,
+):
+    """v2.99.396 — with a target, Slayer's Prey installs the on-hit rider
+    buff (weapon_hit_bonus_dice 1d6, target-keyed, once-per-turn). Verified
+    via the buff_update broadcast that _install_buff emits."""
+    rowan = rowan_slayer
+    rowan_cid = f"tok_sp_rw_{rowan['id']}"
+    dummy_cid = "tok_sp_dummy"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _mkc(rowan_cid, rowan["id"], name=rowan["name"]),
+            _mkc(dummy_cid, None, name="Dummy"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_slayers_prey",
+        json={"character_id": rowan["id"],
+              "target_combatant_id": dummy_cid, "override": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["buff_installed"] is True
+
+    bu = await gm_ws.wait_for("buff_update")
+    buffs = bu["data"]["buffs"]
+    sp = next((b for b in buffs if b.get("key") == "slayers-prey"), None)
+    assert sp is not None, buffs
+    eff = sp.get("effects") or {}
+    assert eff.get("weapon_hit_bonus_dice") == "1d6"
+    assert eff.get("weapon_hit_bonus_target_combatant_id") == dummy_cid
+    assert eff.get("weapon_hit_once_per_turn") is True

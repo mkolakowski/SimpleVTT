@@ -54212,16 +54212,24 @@ async def use_slayers_prey(
     finish a short or long rest. It ends early if you designate a
     different creature."
 
-    Body: ``{character_id, override?}``. Costs a bonus chip. Rolls
-    the 1d6 bonus damage server-side (the per-turn rider). v1
-    announce-only — the target designation + once-per-turn on-hit
-    application are GM-tracked.
+    Body: ``{character_id, target_combatant_id?, override?}``. Costs a
+    bonus chip.
+
+    v2.99.396 — Phase 2.2 of docs/plans/on-hit-riders.md: when a
+    ``target_combatant_id`` is supplied, the feature now **installs a
+    `slayers-prey` rider buff** keyed to that target
+    (`weapon_hit_bonus_dice: 1d6`, `weapon_hit_once_per_turn`), so the
+    first weapon hit each turn against the prey auto-applies +1d6 through
+    the `/attack` pipeline. Without a target it stays announce-only
+    (back-compat). The until-rest duration + re-mark-cancels are
+    GM-tracked (the buff drops on rest / re-install).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    target_combatant_id = body.get("target_combatant_id") or None
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -54269,6 +54277,36 @@ async def use_slayers_prey(
         bonus_damage = 1
         breakdown = ""
 
+    # v2.99.396 — Phase 2.2: install the on-hit rider buff keyed to the
+    # designated prey so the first weapon hit each turn auto-applies +1d6
+    # of the weapon's damage type via _compute_attack_auto_uplifts.
+    # Re-installing replaces the prior mark (RAW "ends if you designate a
+    # different creature") via _install_buff's same-key refresh.
+    buff_installed = False
+    if target_combatant_id:
+        prey_buff = {
+            "key": "slayers-prey",
+            "name": "Slayer's Prey",
+            "icon": "🎯",
+            "duration_rounds": 600,
+            "duration_max": 600,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "weapon_hit_bonus_dice": "1d6",
+                "weapon_hit_bonus_target_combatant_id": target_combatant_id,
+                "weapon_hit_once_per_turn": True,
+                "weapon_hit_flag": "slayers_prey",
+            },
+            "desc": (
+                "First weapon hit each turn against the marked prey "
+                "deals an extra 1d6 of the weapon's damage type. Lasts "
+                "until a short or long rest or until a new prey is marked."
+            ),
+        }
+        buff_installed = await _install_buff(campaign_id, char.id, prey_buff)
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -54302,6 +54340,8 @@ async def use_slayers_prey(
             "range_ft": 60,
             "bonus_damage": bonus_damage,
             "bonus_damage_die": "1d6",
+            "buff_installed": buff_installed,
+            "target_combatant_id": target_combatant_id,
             "ranger_level": ranger_lv,
         },
     })
@@ -54312,6 +54352,8 @@ async def use_slayers_prey(
         "range_ft": 60,
         "bonus_damage": bonus_damage,
         "bonus_damage_die": "1d6",
+        "buff_installed": buff_installed,
+        "target_combatant_id": target_combatant_id,
         "ranger_level": ranger_lv,
     }
 

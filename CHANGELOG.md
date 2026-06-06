@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.396] - 2026-06-06 — "The Marked Prey, Tracked" — Slayer's Prey installs an on-hit rider (automation Phase 2.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 2.2 of [docs/plans/on-hit-riders.md](docs/plans/on-hit-riders.md) — first end-to-end rider retrofit: Slayer's Prey (Monster Slayer) now installs a `slayers-prey` rider buff so its +1d6 auto-applies on a hit.** Uses the v2.99.395 substrate.
+**Description:** `/use_slayers_prey` gains an optional `target_combatant_id`. When supplied, it `_install_buff`s a `slayers-prey` buff on the ranger keyed to that target — `effects.weapon_hit_bonus_dice: "1d6"`, `weapon_hit_bonus_target_combatant_id`, `weapon_hit_once_per_turn: True`, `weapon_hit_flag: "slayers_prey"` — so the first weapon hit each turn against the prey auto-adds +1d6 of the weapon's damage type through `_compute_attack_auto_uplifts`, with the once-per-turn flag marked on a confirmed hit. Re-marking replaces the prior buff (same-key refresh = RAW "ends if you designate a different creature"). Without a target the feature stays announce-only (back-compat with the existing tests). The until-rest duration is approximated by a long buff duration that the rest/teardown drops.
+
+### Changed
+- `/api/campaign/{cid}/use_slayers_prey` now installs an on-hit rider buff when given a `target_combatant_id` (was announce-only); response gains `buff_installed` + `target_combatant_id`.
+
+### Added
+- `tests/harness/test_slayers_prey.py::test_sp_installs_rider_buff` (asserts the rider buff's effects via the `buff_update` broadcast) + `::test_sp_no_target_announce_only`.
+
+### Notes
+- First feature whose bonus damage now lands through the engine rather than being GM-applied. The rider-application + once-per-turn-gating mechanism is covered separately by `test_attack_rider_substrate.py` (deterministic synthetic-buff tests) — the firing itself can't be asserted via `/attack` deterministically because once-per-turn riders strip on a miss and hits aren't guaranteeable through the API. Next P2.x retrofits: Dreadful Strike, Gathered Swarm (dice), then Hexblade's Curse (flat + crit-range), Divine Fury, Kensei's Shot.
+- **Total harness count: 1821** (was 1819 in v2.99.395; +2 new tests).
+
+---
+
 ## [2.99.395] - 2026-06-06 — "The Rider's Rail" — On-hit rider substrate (automation Phase 2.1)
 
 **Schema version:** 66
