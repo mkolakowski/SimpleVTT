@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.390] - 2026-06-06 — "The Counted Quiver" — Arcane Shot use-tracking (automation Phase 1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 1 retrofit — Arcane Shot (Arcane Archer Fighter) is now server-tracked via the feature-use registry.** Fourth announce-only → tracked retrofit; first on an endpoint with **no action chip** (the shot is a rider on the attack).
+**Description:** Adds an `arcane_shot_uses` entry to `_FEATURE_USES` (gate `_pc_has_arcane_archer`, max 2, reset `"short"`). `/use_arcane_shot` now calls `_consume_feature_use` right after subclass validation (no economy gate to interleave with): decrements `sheet.arcane_shot_uses`, returns 409 `out_of_uses` when depleted, reports `uses_remaining` / `uses_max`, and refills on a short OR long rest. The attack/save resolution stays GM-tracked pending the Phase 2/3 primitives. The field is allowlisted for sheet-field PATCH.
+
+### Changed
+- `/api/campaign/{cid}/use_arcane_shot` now server-tracks its 2-per-short-or-long-rest budget (was announce-only).
+
+### Added
+- `arcane_shot_uses` registry entry + allowlisted sheet field.
+- `tests/harness/test_arcane_shot.py::test_use_as_out_of_uses` + `::test_as_short_rest_refill` — exhaustion + short-rest-refill assertions; happy test now asserts the 2→1 decrement.
+
+### Notes
+- Fourth Phase-1 retrofit (after Fighting Spirit, Hexblade's Curse, Giant's Might). Confirms the registry works on chip-less rider endpoints. Remaining clean use-per-rest retrofit queued: Tentacle of the Deeps (PB/long).
+- **Total harness count: 1809** (was 1807 in v2.99.389; +2 new tests).
+
+---
+
 ## [2.99.389] - 2026-06-06 — "The Counted Colossus" — Giant's Might use-tracking (automation Phase 1)
 
 **Schema version:** 66

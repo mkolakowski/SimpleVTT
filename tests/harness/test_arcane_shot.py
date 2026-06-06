@@ -8,16 +8,22 @@ Bursting, Enfeebling, Grasping, Piercing, Seeking, Shadow). Save
 DC = 8 + proficiency bonus + DEX modifier. 2 uses per short/long
 rest.
 
-v1 announce-only — the attack/save resolution + 2-uses-per-rest
-limit are GM-tracked. The bonus damage + save DC are computed
-server-side. No separate action cost (a rider on the attack).
+v2.99.390 — Phase 1 of docs/plans/full-feature-automation.md: the
+2-per-short-or-long-rest budget is now server-tracked via the
+feature-use registry (`sheet.arcane_shot_uses`): each use
+decrements, a depleted budget returns 409 `out_of_uses`, and the
+/rest hook refills it on either rest type. The attack/save
+resolution stays GM-tracked pending the Phase 2/3 primitives. The
+bonus damage + save DC are computed server-side; no action chip.
 
 Garrik Ironside (Fighter, PATCHed to Arcane Archer Lv 9) is the
 demo fixture.
 
 Tests:
-  - Lv 9 happy (default bursting): 2d6 force, save DC computed.
+  - Lv 9 happy (default bursting): 2d6 force, save DC, uses 2→1.
   - Lv 9 happy (banishing): no damage dice, CHA save.
+  - Exhausted budget (arcane_shot_uses=0) → 409 out_of_uses.
+  - Short-rest refill: exhaust → /rest short → refills to 2.
   - Wrong subclass (default Champion) → 409.
   - Invalid arrow → 400.
 """
@@ -48,11 +54,12 @@ def _as_broadcasts(gm_ws, character_id):
 
 @pytest_asyncio.fixture
 async def garrik_arcane_archer(gm_client, roster):
-    """PATCH Garrik to Arcane Archer; restore to Champion on teardown."""
+    """PATCH Garrik to Arcane Archer + seed the 2-use budget; restore to
+    Champion on teardown."""
     garrik = roster["Garrik Ironside"]
     await _patch_sheet(
         gm_client, garrik["id"],
-        {"subclass": "Arcane Archer"},
+        {"subclass": "Arcane Archer", "arcane_shot_uses": 2},
         class_slug="fighter",
     )
     try:
@@ -83,11 +90,74 @@ async def test_use_as_happy_bursting(
     assert data["damage_type"] == "force"
     assert 2 <= data["bonus_damage"] <= 12
     assert data["save_dc"] >= 8
+    assert data["uses_max"] == 2
+    assert data["uses_remaining"] == 1
     assert data["fighter_level"] == 9
     await asyncio.sleep(0.3)
     feats = _as_broadcasts(gm_ws, garrik["id"])
     assert feats
-    assert feats[-1]["data"]["arrow"] == "bursting"
+    assert feats[-1]["data"]["uses_remaining"] == 1
+
+
+async def test_use_as_out_of_uses(
+    gm_client, roster,
+):
+    """Arcane Archer with an exhausted budget (0 uses) → 409."""
+    garrik = roster["Garrik Ironside"]
+    await _patch_sheet(
+        gm_client, garrik["id"],
+        {"subclass": "Arcane Archer", "arcane_shot_uses": 0},
+        class_slug="fighter",
+    )
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_arcane_shot",
+            json={"character_id": garrik["id"]},
+        )
+        assert r.status_code == 409, r.text
+        data = r.json()
+        assert data.get("error") == "out_of_uses"
+        assert data.get("uses_remaining") == 0
+    finally:
+        await _patch_sheet(
+            gm_client, garrik["id"],
+            {"subclass": "Champion"},
+            class_slug="fighter",
+        )
+
+
+async def test_as_short_rest_refill(
+    gm_client, roster,
+):
+    """Exhausted Arcane Shot refills to 2 on a SHORT rest — via the
+    feature-use registry."""
+    garrik = roster["Garrik Ironside"]
+    await _patch_sheet(
+        gm_client, garrik["id"],
+        {"subclass": "Arcane Archer", "arcane_shot_uses": 0},
+        class_slug="fighter",
+    )
+    try:
+        url = f"/api/campaign/{CAMPAIGN_ID}/use_arcane_shot"
+        rest_url = (
+            f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest"
+        )
+        r0 = await gm_client.post(url, json={"character_id": garrik["id"]})
+        assert r0.status_code == 409, r0.text
+
+        sr = await gm_client.post(rest_url, json={"type": "short"})
+        assert sr.status_code == 200, sr.text
+        r1 = await gm_client.post(url, json={"character_id": garrik["id"]})
+        assert r1.status_code == 200, r1.text
+        data = r1.json()
+        assert data["uses_max"] == 2
+        assert data["uses_remaining"] == 1  # refilled to 2, spent 1
+    finally:
+        await _patch_sheet(
+            gm_client, garrik["id"],
+            {"subclass": "Champion"},
+            class_slug="fighter",
+        )
 
 
 async def test_use_as_happy_banishing(

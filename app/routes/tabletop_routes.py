@@ -53581,6 +53581,26 @@ async def use_arcane_shot(
             "got_level": _fighter_level_from_sheet(sheet),
         })
 
+    # v2.99.390 — Phase 1: server-tracked 2-per-short-or-long-rest budget
+    # via the feature-use registry. Refilled by /rest on either rest
+    # type. (The bonus damage / save resolution stay GM-tracked pending
+    # the Phase 2/3 primitives.)
+    spent = _consume_feature_use(sheet, "arcane_shot_uses")
+    if spent is None:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Arcane Shot",
+            "char_name": char.name,
+            "source": "arcane-shot",
+            "uses_remaining": 0,
+            "uses_max": _feature_use_max(sheet, "arcane_shot_uses") or 2,
+        })
+    uses_remaining, uses_max = spent
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
     fighter_lv = _fighter_level_from_sheet(sheet)
     pb = int(sheet.get("proficiency_bonus") or 0)
     if pb <= 0:
@@ -53646,6 +53666,8 @@ async def use_arcane_shot(
             "save": option["save"],
             "save_dc": save_dc,
             "effect": option["effect"],
+            "uses_remaining": uses_remaining,
+            "uses_max": uses_max,
             "fighter_level": fighter_lv,
         },
     })
@@ -53660,6 +53682,8 @@ async def use_arcane_shot(
         "save": option["save"],
         "save_dc": save_dc,
         "effect": option["effect"],
+        "uses_remaining": uses_remaining,
+        "uses_max": uses_max,
         "fighter_level": fighter_lv,
     }
 
@@ -64659,6 +64683,10 @@ _FEATURE_USES: "list[dict]" = [
      "min_level": 3,
      "max_fn": lambda s: _sheet_pb(s, _fighter_level_from_sheet(s)),
      "reset": "long"},
+    # Arcane Archer Fighter — Arcane Shot (2/short OR long rest).
+    # v2.99.390 retrofit.
+    {"field": "arcane_shot_uses", "gate": _pc_has_arcane_archer,
+     "min_level": 3, "max_fn": lambda s: 2, "reset": "short"},
 ]
 
 
@@ -71918,6 +71946,10 @@ _SHEET_PATCH_KEYS = {
     # /use_giants_might + the /rest long-rest refill (feature-use
     # registry). Allowlisted for seed/exhaust in tests.
     "giants_might_uses",
+    # v2.99.390 — arcane_shot_uses (int 0..2). Read by /use_arcane_shot
+    # + the /rest short-OR-long-rest refill (feature-use registry).
+    # Allowlisted for seed/exhaust in tests.
+    "arcane_shot_uses",
     # v2.99.238 — knowledge_blessings (dict {skills, languages}).
     # Read by /select_knowledge_blessings (Knowledge Domain Cleric
     # Lv 1+). Allowlisted so the test can reset to {} between
