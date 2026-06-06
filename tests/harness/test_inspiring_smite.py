@@ -226,3 +226,56 @@ async def test_use_is_wrong_subclass(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_is_applies_temp_hp_to_targets(
+    gm_client, gm_ws, caelan_glory_with_party,
+):
+    """v2.99.420 — Phase 4.2: Inspiring Smite applies each target's
+    allocated temp HP via _grant_temp_hp.
+
+    Re-PUT the battle with Caelan + two bare NPC allies (NPC temp path),
+    distribute among them, and assert each NPC's temp_hp == its
+    allocation (read from battle_update).
+    """
+    caelan, _, _ = caelan_glory_with_party
+    caelan_tok = f"tok_is_caelan_{caelan['id']}"
+    tok_a, tok_b = "tok_is_a", "tok_is_b"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": caelan_tok, "char_id": caelan["id"], "name": caelan["name"],
+             "initiative": 12, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": tok_a, "char_id": None, "name": "Ally A",
+             "initiative": 8, "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": tok_b, "char_id": None, "name": "Ally B",
+             "initiative": 6, "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_inspiring_smite",
+        json={"character_id": caelan["id"],
+              "target_combatant_ids": [tok_a, tok_b], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["targets_applied"] == 2
+    allocs = {a["target_combatant_id"]: a for a in data["allocations"]}
+    assert allocs[tok_a]["applied"] is True
+    assert allocs[tok_b]["applied"] is True
+
+    # Two grants → two battle_updates; read the latest cumulative state.
+    await asyncio.sleep(0.3)
+    bus = gm_ws.buffered("battle_update")
+    assert bus
+    combs = {c.get("id"): c for c in (bus[-1]["data"].get("combatants") or [])}
+    # Each NPC's volatile temp pool equals its allocation.
+    assert int(combs[tok_a].get("temp_hp") or 0) == allocs[tok_a]["temp_hp"]
+    assert int(combs[tok_b].get("temp_hp") or 0) == allocs[tok_b]["temp_hp"]

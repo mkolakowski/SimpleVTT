@@ -59777,11 +59777,12 @@ async def use_inspiring_smite(
     target list + each target in active battle + Phase 4 bonus
     chip. Decrements CD counter, rolls 2d8 + paladin level for
     total temp HP, divides evenly among the chosen targets
-    (remainder goes to the first targets), marks chip,
-    broadcasts. v1 ships the announce + per-target allocation;
-    the actual temp-HP application on each target's sheet is
-    filed (would walk the targets and call `_apply_hp_change`
-    with `temp` semantics).
+    (remainder goes to the first targets), marks chip, broadcasts.
+
+    v2.99.420 — Phase 4.2 of docs/plans/temp-hp-and-bonuses.md: each
+    target's allocated temp HP is now **applied** via `_grant_temp_hp`
+    (RAW non-stacking) instead of announce-only; each allocation gains an
+    `applied` flag and the response a `targets_applied` count.
 
     RAW the "after Divine Smite" prerequisite is GM-tracked in
     v1 — the endpoint doesn't gate on a recent Smite.
@@ -59949,6 +59950,21 @@ async def use_inspiring_smite(
         },
     })
 
+    # v2.99.420 — Phase 4.2: apply each allocation's temp HP to its
+    # target (RAW non-stacking). Mark each allocation with `applied`.
+    targets_applied = 0
+    for a in allocations:
+        cb = _lookup_combatant(campaign_id, a["target_combatant_id"])
+        if cb is None or int(a["temp_hp"]) <= 0:
+            a["applied"] = False
+            continue
+        gr = await _grant_temp_hp(
+            db, campaign_id, cb, int(a["temp_hp"]), source="inspiring-smite",
+        )
+        a["applied"] = gr["temp_after"] > 0
+        if a["applied"]:
+            targets_applied += 1
+
     return {
         "ok": True,
         "feature": "inspiring-smite",
@@ -59958,6 +59974,7 @@ async def use_inspiring_smite(
         "allocations": allocations,
         "uses_remaining": cd_cur - 1,
         "over_budget": was_used,
+        "targets_applied": targets_applied,
     }
 
 

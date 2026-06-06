@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.420] - 2026-06-06 — "The Shared Glory" — Inspiring Smite applies temp HP to all targets (automation Phase 4.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 4.2 — Inspiring Smite (Glory Paladin) now applies each target's allocated temp HP via `_grant_temp_hp` instead of announce-only.** First multi-target temp-HP retrofit.
+**Description:** `/use_inspiring_smite` rolls 2d8 + Paladin level and divides it among the chosen targets (remainder to the first) as before, then loops the allocations and applies each share to its target via `_grant_temp_hp` (RAW non-stacking). Each allocation gains an `applied` flag; the response gains a `targets_applied` count. NPC targets get the volatile `combatant.temp_hp` pool; PC targets persist to `sheet.hp.temp`.
+
+### Changed
+- `/api/campaign/{cid}/use_inspiring_smite` applies each allocation's temp HP to its target (was announce-only); allocations gain `applied`, response gains `targets_applied`.
+
+### Added
+- `tests/harness/test_inspiring_smite.py::test_is_applies_temp_hp_to_targets` — distributes among two bare NPC allies and asserts each one's `temp_hp` equals its allocation (via `battle_update`).
+
+### Notes
+- Fourth P4.2 retrofit (first multi-target). Last temp-HP feature: Spirit Totem (bear aura).
+- **Total harness count: 1845** (was 1844 in v2.99.419; +1 new test).
+
+---
+
 ## [2.99.419] - 2026-06-06 — "The Steeled Resolve" — Fighting Spirit applies temp HP (automation Phase 4.2)
 
 **Schema version:** 66
