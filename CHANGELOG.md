@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.401] - 2026-06-06 — "The Rider's Ledger" — Feature-flag riders registry-ized (automation Phase 2.5)
+
+**Schema version:** 66
+**Commit summary:** **Phase 2.5 of [docs/plans/on-hit-riders.md](docs/plans/on-hit-riders.md) — fold the hardcoded Colossus Slayer + Divine Strike weapon-hit blocks into a single data-driven `_ATTACK_RIDERS` table.** Pure refactor — no behavior change; closes the on-hit-riders sub-plan.
+**Description:** Replaces blocks 3 and 4 of `_compute_attack_auto_uplifts` (two ~40-line hardcoded `if` blocks for the once-per-turn, vs-target, feature-flag riders) with one loop over a module-level `_ATTACK_RIDERS` list. Each entry carries `gate(sheet)` (has the feature at the right class/level/subclass), an optional `condition(target)` (Colossus Slayer's "target below max HP"), `dice(sheet)` (level-scaled — Divine Strike +1d8 / +2d8 at Lv 14+), `damage_type(sheet, weapon_type)` (the domain flavor map, or the weapon's type for War Domain / Colossus Slayer), and the `flag` economy key. The `_DIVINE_STRIKE_BY_DOMAIN` map + a new `_cleric_domain_slug` helper move to module level. The `/attack` hit-handler is untouched — it still strips these riders by `source` on a miss and marks the once-per-turn flag (`_mark_colossus_slayer_used` / `_mark_divine_strike_used`) on a confirmed hit.
+
+### Changed
+- `_compute_attack_auto_uplifts` reads Colossus Slayer + Divine Strike from the new `_ATTACK_RIDERS` table instead of two hardcoded blocks (behavior-identical).
+- `_DIVINE_STRIKE_BY_DOMAIN` + `_cleric_domain_slug` promoted to module scope.
+
+### Notes
+- Refactor-only (no endpoint or broadcast-shape change) — exempt from a new harness test per the CLAUDE.md harness rule. Regression-guarded by the existing `test_divine_strike.py` + Colossus Slayer / attack-uplift suites, all green.
+- **Closes the on-hit-riders sub-plan (P2.1 → P2.5).** Future activated riders (Divine Fury, Kensei's Shot, Genie's Wrath) install a buff via the P2.1 substrate; future passive once-per-turn riders add a row to `_ATTACK_RIDERS`.
+- **Total harness count: 1827** (unchanged — refactor-only).
+
+---
+
 ## [2.99.400] - 2026-06-06 — "The Force Mark" — Planar Warrior damage-type conversion (automation Phase 2.4)
 
 **Schema version:** 66

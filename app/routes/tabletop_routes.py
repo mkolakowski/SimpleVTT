@@ -21736,6 +21736,88 @@ def _hunter_level_from_sheet(sheet: dict) -> int:
     return 0
 
 
+# v2.99.94 — Divine Strike damage type by Cleric domain. None marks
+# "use the weapon's damage type" (War Domain: "any weapon you wield is
+# charged with divine energy"). Twilight gets the same radiant flavor as
+# Life (TCoE p.34); Order is psychic (XGE p.39); the rest are RAW canon.
+# Domains WITHOUT Divine Strike (Light / Knowledge / Grave / Arcana /
+# Peace) are absent and fall through with no uplift.
+_DIVINE_STRIKE_BY_DOMAIN = {
+    "life":     "radiant",
+    "tempest":  "thunder",
+    "trickery": "poison",
+    "war":      None,        # uses weapon's damage type
+    "death":    "necrotic",
+    "nature":   "fire",      # DM choice of cold/fire/lightning; v1 picks fire
+    "forge":    "fire",
+    "twilight": "radiant",
+    "order":    "psychic",
+}
+
+
+def _cleric_domain_slug(sheet: dict) -> str:
+    """Bare domain slug for Divine Strike lookup ("life domain" → "life")."""
+    return (sheet.get("subclass") or "").strip().lower().replace(
+        " domain", "").strip()
+
+
+# v2.99.401 — Phase 2.5 of docs/plans/on-hit-riders.md: the passive,
+# once-per-turn, feature-flag weapon-hit riders (Colossus Slayer, Divine
+# Strike) as a data-driven table instead of two hardcoded blocks in
+# _compute_attack_auto_uplifts. Each entry is read on every /attack with
+# a target:
+#   - ``gate(sheet)``       → True when the attacker has the feature at
+#                             the right class/level/subclass.
+#   - ``condition(target)`` → optional extra per-target gate (Colossus
+#                             Slayer needs the target below max HP);
+#                             absent/None means "any target".
+#   - ``dice(sheet)``       → the bonus-die expression (may scale by level).
+#   - ``damage_type(sheet, weapon_type)`` → the uplift's damage type.
+#   - ``flag``              → the ``economy.<flag>`` once-per-turn key;
+#                             set after a confirmed hit by the matching
+#                             _mark_*_used helper and cleared on turn
+#                             advance. The /attack hit-handler still
+#                             strips these by ``source`` on a miss and
+#                             marks them on a hit (unchanged behavior).
+_ATTACK_RIDERS = [
+    {
+        "source": "colossus-slayer",
+        "label": "Colossus Slayer",
+        "flag": "colossus_slayer_used",
+        "gate": lambda sheet: (
+            _hunter_level_from_sheet(sheet) >= 3
+            and any((cf or {}).get("key") == "colossus-slayer"
+                    for cf in (sheet.get("class_features") or []))
+        ),
+        # "below max HP" — strict less-than; ignore unknown maxes.
+        "condition": lambda target: (
+            int(target.get("hp_max") or 0) > 0
+            and int(target.get("hp_current") or 0) < int(target.get("hp_max") or 0)
+        ),
+        "dice": lambda sheet: "1d6",
+        "damage_type": lambda sheet, wt: wt or "piercing",
+    },
+    {
+        "source": "divine-strike",
+        "label": "Divine Strike",
+        "flag": "divine_strike_used",
+        "gate": lambda sheet: (
+            _cleric_level_from_sheet(sheet) >= 8
+            and _cleric_domain_slug(sheet) in _DIVINE_STRIKE_BY_DOMAIN
+        ),
+        "condition": None,
+        # +1d8 at Lv 8-13, +2d8 at Lv 14+.
+        "dice": lambda sheet: (
+            "2d8" if _cleric_level_from_sheet(sheet) >= 14 else "1d8"
+        ),
+        "damage_type": lambda sheet, wt: (
+            _DIVINE_STRIKE_BY_DOMAIN.get(_cleric_domain_slug(sheet))
+            or (wt or "bludgeoning")
+        ),
+    },
+]
+
+
 def _compute_attack_auto_uplifts(
     *,
     campaign_id: int,
@@ -21879,99 +21961,40 @@ def _compute_attack_auto_uplifts(
                 uplift["once_per_turn_flag"] = flag
             uplifts.append(uplift)
 
-    # 3. Colossus Slayer (Ranger Hunter's Prey at Lv 3+).
-    #    Once per turn: +1d6 vs target whose current HP < max HP. Uses
-    #    the same damage type as the weapon. Tracked via
-    #    ``combatant.economy.colossus_slayer_used`` flag — reset at
-    #    turn start by the GM-side nextTurn handler (alongside action
-    #    chips).
-    hunter_lv = _hunter_level_from_sheet(attacker_sheet)
-    has_cs_feature = False
-    if hunter_lv >= 3:
-        for cf in (attacker_sheet.get("class_features") or []):
-            if (cf or {}).get("key") == "colossus-slayer":
-                has_cs_feature = True
-                break
-    if has_cs_feature and target_combatant is not None:
-        # "Below max HP" — strict less-than.
-        cur = int(target_combatant.get("hp_current") or 0)
-        mx = int(target_combatant.get("hp_max") or 0)
-        already_used = bool(
-            (attacker_combatant or {}).get("economy", {}).get("colossus_slayer_used")
-        )
-        if mx > 0 and cur < mx and not already_used:
+    # 3. Data-driven feature-flag riders (Colossus Slayer, Divine
+    #    Strike). v2.99.401 — Phase 2.5: these passive, once-per-turn,
+    #    vs-target riders are now a single loop over the module-level
+    #    ``_ATTACK_RIDERS`` table instead of two hardcoded blocks.
+    #    Behavior is unchanged — each fires once per turn (gated on the
+    #    attacker's ``economy.<flag>``), with an optional per-target
+    #    condition (Colossus Slayer needs the target below max HP). The
+    #    /attack hit-handler still strips these by ``source`` on a miss
+    #    and marks the flag (via _mark_colossus_slayer_used /
+    #    _mark_divine_strike_used) on a confirmed hit.
+    if target_combatant is not None:
+        attacker_econ = (attacker_combatant or {}).get("economy") or {}
+        for spec in _ATTACK_RIDERS:
+            if not spec["gate"](attacker_sheet):
+                continue
+            cond = spec.get("condition")
+            if cond is not None and not cond(target_combatant):
+                continue
+            if attacker_econ.get(spec["flag"]):
+                continue
+            dice = spec["dice"](attacker_sheet)
             try:
-                r = dice_mod.roll("1d6")
-                uplifts.append({
-                    "label": "Colossus Slayer",
-                    "expression": "1d6",
-                    "total": r.total,
-                    "breakdown": r.breakdown,
-                    "damage_type": attack_damage_type or "piercing",
-                    "source": "colossus-slayer",
-                })
+                r = dice_mod.roll(dice)
             except dice_mod.DiceParseError:
-                pass
-
-    # 4. v2.60.0 — Divine Strike (Cleric Life Domain Lv 8+). Once
-    #    per turn: +1d8 of the domain's flavor damage type on weapon
-    #    hits (Lv 8-13) / +2d8 (Lv 14+). Tracked via
-    #    ``combatant.economy.divine_strike_used`` flag — reset at turn
-    #    start by the GM-side nextTurn handler alongside action chips
-    #    + the Colossus Slayer flag.
-    #
-    #    v2.60.0 shipped Life Domain only (radiant); v2.99.94 extends
-    #    to the seven other Divine-Strike-bearing domains via a
-    #    subclass→damage_type map. War Domain uses the WEAPON's
-    #    damage type (per RAW: "any weapon you wield is charged with
-    #    divine energy"); other domains use a fixed flavor type.
-    #    Domains that DON'T have Divine Strike (Light / Knowledge /
-    #    Grave / Arcana / Peace / Order — they have Potent
-    #    Spellcasting or a different Lv 8 feature) are absent from
-    #    the map and fall through with no uplift.
-    cleric_lv = _cleric_level_from_sheet(attacker_sheet)
-    if cleric_lv >= 8 and target_combatant is not None:
-        subclass_raw = (attacker_sheet.get("subclass") or "").strip().lower()
-        subclass_slug = subclass_raw.replace(" domain", "").strip()
-        # v2.99.94 — Divine Strike damage type by domain. None marks
-        # "use the weapon's damage type" (War Domain). Twilight gets
-        # the same radiant flavor as Life (TCoE p.34); the other six
-        # are RAW canon.
-        _DIVINE_STRIKE_BY_DOMAIN = {
-            "life":     "radiant",
-            "tempest":  "thunder",
-            "trickery": "poison",
-            "war":      None,        # uses weapon's damage type
-            "death":    "necrotic",
-            "nature":   "fire",      # DM choice of cold/fire/lightning; v1 picks fire
-            "forge":    "fire",
-            "twilight": "radiant",
-            # v2.99.278 — Order Domain (XGE p.39): Lv 8 Divine
-            # Strike deals psychic damage RAW.
-            "order":    "psychic",
-        }
-        if subclass_slug in _DIVINE_STRIKE_BY_DOMAIN:
-            already_used = bool(
-                (attacker_combatant or {}).get("economy", {}).get("divine_strike_used")
-            )
-            if not already_used:
-                ds_dice = "2d8" if cleric_lv >= 14 else "1d8"
-                ds_dmg_type = (
-                    _DIVINE_STRIKE_BY_DOMAIN[subclass_slug]
-                    or (attack_damage_type or "bludgeoning")
-                )
-                try:
-                    r = dice_mod.roll(ds_dice)
-                    uplifts.append({
-                        "label": "Divine Strike",
-                        "expression": ds_dice,
-                        "total": r.total,
-                        "breakdown": r.breakdown,
-                        "damage_type": ds_dmg_type,
-                        "source": "divine-strike",
-                    })
-                except dice_mod.DiceParseError:
-                    pass
+                continue
+            uplifts.append({
+                "label": spec["label"],
+                "expression": dice,
+                "total": r.total,
+                "breakdown": r.breakdown,
+                "damage_type": spec["damage_type"](
+                    attacker_sheet, attack_damage_type),
+                "source": spec["source"],
+            })
 
     # 5. v2.99.97 — Lifedrinker (Warlock Lv 12+ + Pact of the Blade
     #    invocation, PHB p.111). +CHA necrotic on every pact-weapon

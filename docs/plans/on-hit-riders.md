@@ -1,6 +1,6 @@
 # On-hit damage riders — Phase 2 sub-plan
 
-**Status:** ⚪ proposed (planning only)
+**Status:** ✅ shipped (P2.1 → P2.5 complete, v2.99.395–.401)
 **Parent:** [full-feature-automation.md](full-feature-automation.md) Phase 2.
 **Goal:** Make the ~40 announce-only "on a hit, deal extra Xd_ / +N
 [type]" subclass features **auto-apply their damage through the attack
@@ -113,8 +113,11 @@ so the hardcoded blocks become one data-driven loop. Lower priority than
    (re-types the hit's damage to force) + an extra +Nd8 force; the new
    `_attacker_convert_type_from_buffs` helper applies the conversion on a
    confirmed `/attack` hit.
-5. **P2.5 — registry-ize the feature-flag riders (S).** Fold Colossus
-   Slayer + Divine Strike into `_ATTACK_RIDERS`; no behavior change.
+5. **P2.5 — registry-ize the feature-flag riders (S). ✅ shipped
+   v2.99.401.** Colossus Slayer + Divine Strike now read from a
+   data-driven `_ATTACK_RIDERS` table (`gate` / `condition` / `dice` /
+   `damage_type` / `flag`) instead of two hardcoded blocks; no behavior
+   change. **Completes this sub-plan.**
 
 ---
 
