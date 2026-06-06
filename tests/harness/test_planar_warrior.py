@@ -6,22 +6,43 @@ RAW XGE p.42: as a bonus action, mark a creature within 30 ft; the
 next weapon hit this turn deals all its damage as force, plus an
 extra 1d8 force (2d8 at Lv 11).
 
-v1 announce-only — the damage-type conversion + on-hit application
-are GM-tracked. The extra force damage is rolled server-side. Bonus
-chip.
+v2.99.400 — Phase 2.4 of docs/plans/on-hit-riders.md: when a
+``target_combatant_id`` is supplied, the feature installs a
+`planar-warrior` rider buff that auto-applies through the /attack
+pipeline — `weapon_hit_bonus_dice: "{1|2}d8"` + force type (the extra
+force damage) and the new `weapon_hit_convert_type: "force"` key
+(re-types the whole hit's damage to force), gated
+`weapon_hit_once_per_turn` and 1-round so it fires exactly once this
+turn (RAW). Without a target it stays announce-only.
 
 Rowan Quickbow (Ranger, PATCHed to Horizon Walker Lv 5) is the demo
-fixture (1d8 below Lv 11).
+fixture (1d8 below Lv 11). His Longbow (attack_index 0) is piercing,
+so the conversion to force is observable.
 
 Tests:
   - Lv 5 happy: +1d8 force in [1,8], range 30, converts to force.
   - Wrong subclass (default Hunter) → 409.
   - Wrong class (Caelan paladin) → 409.
+  - v2.99.400: with a target, installs the rider buff + the /attack
+    converts the Longbow's piercing damage to force and lands +1d8.
 """
 import asyncio
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+
+
+def _mkc(cid, char_id=None, name="X", ac=None):
+    c = {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": 50, "hp_max": 50,
+        "buffs": [], "speed_walk": 30,
+        "economy": {"action": False, "bonus": False, "reaction": False,
+                    "movement": 0},
+    }
+    if ac is not None:
+        c["ac"] = ac
+    return c
 
 
 async def _patch_sheet(gm_client, char_id, fields, class_slug=None):
@@ -112,3 +133,77 @@ async def test_use_pw_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_pw_installs_rider_and_converts(
+    gm_client, gm_ws, rowan_horizon,
+):
+    """v2.99.400 — Phase 2.4: with a target, Planar Warrior installs the
+    rider buff (force conversion + extra 1d8 force) and a /attack vs the
+    marked target re-types the Longbow's piercing damage to force and
+    lands the +1d8 force uplift.
+
+    AC 1 on the dummy guarantees the hit, so the once-per-turn rider
+    fires deterministically (not stripped on a miss).
+    """
+    rowan = rowan_horizon
+    rowan_cid = f"tok_pw_rowan_{rowan['id']}"
+    dummy_cid = "tok_pw_dummy"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _mkc(rowan_cid, rowan["id"], name=rowan["name"]),
+            _mkc(dummy_cid, None, name="Dummy", ac=1),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_planar_warrior",
+        json={"character_id": rowan["id"],
+              "target_combatant_id": dummy_cid, "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["buff_installed"] is True
+    assert data["target_combatant_id"] == dummy_cid
+
+    bu = await gm_ws.wait_for("buff_update")
+    pw = next((b for b in bu["data"]["buffs"]
+               if b.get("key") == "planar-warrior"), None)
+    assert pw is not None, bu["data"]["buffs"]
+    eff = pw.get("effects") or {}
+    assert eff.get("weapon_hit_convert_type") == "force"
+    assert eff.get("weapon_hit_bonus_dice") == "1d8"  # Lv 5 → 1d8
+    assert eff.get("weapon_hit_bonus_damage_type") == "force"
+    assert eff.get("weapon_hit_bonus_target_combatant_id") == dummy_cid
+    assert eff.get("weapon_hit_once_per_turn") is True
+    assert eff.get("weapon_hit_flag") == "planar_warrior"
+
+    # Attack the marked target with the (piercing) Longbow. The
+    # conversion + once-per-turn rider only fire on a confirmed hit, and
+    # misses neither convert nor burn the rider — so retry until a swing
+    # connects (Rowan is +7 vs the dummy's default AC 10). The buff is
+    # 1-round, so it survives every same-turn swing until the first hit.
+    hit_ad = None
+    for _ in range(12):
+        a = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": rowan["id"], "attack_index": 0,
+                  "target_combatant_id": dummy_cid, "override": True},
+        )
+        assert a.status_code == 200, a.text
+        ad = a.json()
+        if ad["hit"]:
+            hit_ad = ad
+            break
+    assert hit_ad is not None, "expected at least one hit in 12 swings"
+
+    # The whole hit's damage is re-typed from piercing to force.
+    assert hit_ad["damage_type"] == "force", hit_ad
+    # ...and the extra +1d8 force rider lands as a force uplift.
+    ups = [u for u in (hit_ad.get("auto_uplifts") or [])
+           if u.get("source") == "planar-warrior"]
+    assert len(ups) == 1, hit_ad.get("auto_uplifts")
+    assert ups[0]["expression"] == "1d8"
+    assert ups[0]["damage_type"] == "force"
+    assert 1 <= ups[0]["total"] <= 8

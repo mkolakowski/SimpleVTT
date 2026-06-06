@@ -21598,6 +21598,59 @@ def _attacker_crit_range_from_buffs(
     return best
 
 
+def _attacker_convert_type_from_buffs(
+    campaign_id: int, attacker_char_id: int, target_combatant_id: "str | None",
+) -> "str | None":
+    """v2.99.400 — Phase 2.4: damage-type conversion granted by an on-hit
+    rider buff carrying ``effects.weapon_hit_convert_type`` (e.g. Planar
+    Warrior re-types ALL the attack's damage to force). A buff keyed to a
+    target only converts the swing against that target; a target-less buff
+    converts any hit. Once-per-turn riders (``weapon_hit_once_per_turn`` +
+    an optional ``weapon_hit_flag``) skip when the attacker's
+    ``economy.<flag>_used`` is set — mirroring the gating in block 2 of
+    _compute_attack_auto_uplifts so the conversion and its companion dice
+    rider fire (and stop firing) together. Returns the lowercased convert
+    type string, or None when no such buff applies. Read at the /attack
+    damage step on a confirmed hit, BEFORE the once-per-turn flag is
+    marked.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    attacker = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == attacker_char_id:
+            attacker = c
+            break
+    if attacker is None:
+        return None
+    econ = attacker.get("economy") or {}
+    for b in attacker.get("buffs") or []:
+        if not isinstance(b, dict):
+            continue
+        eff = b.get("effects")
+        if not isinstance(eff, dict):
+            continue
+        conv = eff.get("weapon_hit_convert_type")
+        if not conv:
+            continue
+        tgt = eff.get("weapon_hit_bonus_target_combatant_id")
+        if tgt is not None:
+            if not target_combatant_id:
+                continue
+            if isinstance(tgt, list):
+                if target_combatant_id not in tgt:
+                    continue
+            elif tgt != target_combatant_id:
+                continue
+        opt = bool(eff.get("weapon_hit_once_per_turn"))
+        flag = (eff.get("weapon_hit_flag") or b.get("key") or "").strip()
+        if opt and flag and econ.get(f"{flag}_used"):
+            continue
+        return str(conv).strip().lower()
+    return None
+
+
 def _barbarian_level_from_sheet(sheet: dict) -> int:
     """Barbarian-level helper (mirrors `_fighter_level_from_sheet`).
     v2.19.0: added for Rage damage scaling — +2 Lv 1-8, +3 Lv 9-15, +4
@@ -54732,16 +54785,26 @@ async def use_planar_warrior(
     extra 1d8 force damage from the attack." The extra damage
     rises to 2d8 at Lv 11.
 
-    Body: ``{character_id, override?}``. Costs a bonus chip. Rolls
-    the extra force damage server-side (1d8, or 2d8 at Lv 11+). v1
-    announce-only — the damage-type conversion + on-hit
-    application are GM-tracked.
+    Body: ``{character_id, target_combatant_id?, override?}``. Costs a
+    bonus chip. Rolls the extra force damage server-side (1d8, or 2d8
+    at Lv 11+).
+
+    v2.99.400 — Phase 2.4 of docs/plans/on-hit-riders.md: when a
+    ``target_combatant_id`` is supplied, the feature **installs a
+    `planar-warrior` rider buff** keyed to that target —
+    `weapon_hit_bonus_dice: "{1|2}d8"` + `weapon_hit_bonus_damage_type:
+    "force"` (the extra force damage) and `weapon_hit_convert_type:
+    "force"` (re-types the whole hit's damage to force), gated
+    `weapon_hit_once_per_turn` (next hit this turn only). The buff is
+    1-round so it drops at turn advance (RAW "on this turn"). Without a
+    target it stays announce-only (back-compat).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    target_combatant_id = body.get("target_combatant_id") or None
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -54790,6 +54853,40 @@ async def use_planar_warrior(
         force_damage = dice_count
         breakdown = ""
 
+    # v2.99.400 — Phase 2.4: install the on-hit rider buff keyed to the
+    # marked target. The next weapon hit this turn vs it auto-adds the
+    # extra {1|2}d8 force (weapon_hit_bonus_dice, re-rolled at /attack
+    # time) AND re-types the whole hit's damage to force
+    # (weapon_hit_convert_type). Once-per-turn + 1-round duration so it
+    # fires exactly once and drops at turn advance (RAW "on this turn").
+    # Without a target it stays announce-only (back-compat).
+    buff_installed = False
+    if target_combatant_id:
+        pw_buff = {
+            "key": "planar-warrior",
+            "name": "Planar Warrior",
+            "icon": "🌀",
+            "duration_rounds": 1,
+            "duration_max": 1,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "weapon_hit_bonus_dice": f"{dice_count}d8",
+                "weapon_hit_bonus_damage_type": "force",
+                "weapon_hit_bonus_target_combatant_id": target_combatant_id,
+                "weapon_hit_convert_type": "force",
+                "weapon_hit_once_per_turn": True,
+                "weapon_hit_flag": "planar_warrior",
+            },
+            "desc": (
+                f"The next weapon hit this turn vs the marked target "
+                f"deals all its damage as force, plus an extra "
+                f"{dice_count}d8 force. (Horizon Walker Ranger Lv 3+.)"
+            ),
+        }
+        buff_installed = await _install_buff(campaign_id, char.id, pw_buff)
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -54824,6 +54921,8 @@ async def use_planar_warrior(
             "force_damage_dice": f"{dice_count}d8",
             "converts_to_force": True,
             "ranger_level": ranger_lv,
+            "buff_installed": buff_installed,
+            "target_combatant_id": target_combatant_id,
         },
     })
 
@@ -54835,6 +54934,8 @@ async def use_planar_warrior(
         "force_damage_dice": f"{dice_count}d8",
         "converts_to_force": True,
         "ranger_level": ranger_lv,
+        "buff_installed": buff_installed,
+        "target_combatant_id": target_combatant_id,
     }
 
 
@@ -67229,6 +67330,19 @@ async def use_attack(
                 and not u.get("once_per_turn_flag")
             ]
         else:
+            # v2.99.400 — Phase 2.4: damage-type conversion (Planar
+            # Warrior). RAW "all damage dealt by the attack becomes
+            # force." Re-type the whole attack's damage on a confirmed
+            # hit so the base weapon damage + every uplift apply (and
+            # render) as the converted type. Computed BEFORE the
+            # once-per-turn flags are marked below, since the helper
+            # gates on the same `<flag>_used` economy flag the mark loop
+            # sets — call it after marking and it would see itself spent.
+            _conv_type = _attacker_convert_type_from_buffs(
+                campaign_id, char.id, target_combatant_id,
+            )
+            if _conv_type:
+                damage_type = _conv_type
             if any(u.get("source") == "colossus-slayer" for u in auto_uplifts):
                 await _mark_colossus_slayer_used(campaign_id, char.id)
             if any(u.get("source") == "divine-strike" for u in auto_uplifts):
@@ -67713,6 +67827,11 @@ async def use_attack(
         "attack_breakdown": attack_breakdown,
         "damage_total": damage_total,
         "damage_breakdown": damage_breakdown,
+        # v2.99.400 — echo the resolved damage type so the rolling
+        # player's local toast can render it without WS lag, and so a
+        # Phase-2.4 damage-type conversion (Planar Warrior re-types to
+        # force on a hit) is observable on the HTTP response.
+        "damage_type": damage_type,
         "bonus_damage_label": bonus_damage_label or "",
         "bonus_damage_total": bonus_damage_total,
         "bonus_damage_breakdown": bonus_damage_breakdown,

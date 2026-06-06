@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.400] - 2026-06-06 — "The Force Mark" — Planar Warrior damage-type conversion (automation Phase 2.4)
+
+**Schema version:** 66
+**Commit summary:** **Phase 2.4 of [docs/plans/on-hit-riders.md](docs/plans/on-hit-riders.md) — Planar Warrior now installs a `planar-warrior` on-hit rider that re-types the whole hit's damage to force and lands the extra +Nd8 force, via the new `weapon_hit_convert_type` substrate key.** First damage-type-conversion rider — completes the P2 substrate keys.
+**Description:** New helper `_attacker_convert_type_from_buffs` walks the attacker's rider buffs for `effects.weapon_hit_convert_type` keyed to (or not keyed to) the swing's target, honoring the same once-per-turn `economy.<flag>_used` gating as block 2 of `_compute_attack_auto_uplifts`. On a confirmed `/attack` hit (in the hit branch, **before** the once-per-turn flag is marked) the resolved `damage_type` is re-typed to the converted value, so the base weapon damage + every uplift apply and render as force (RAW "all damage dealt by the attack becomes force"). `/use_planar_warrior` gains an optional `target_combatant_id`; when supplied it `_install_buff`s a `planar-warrior` rider — `weapon_hit_bonus_dice: "{1|2}d8"` + `weapon_hit_bonus_damage_type: "force"` (the extra force damage), `weapon_hit_convert_type: "force"`, `weapon_hit_once_per_turn: True`, `weapon_hit_flag: "planar_warrior"`, target-keyed — 1-round so it drops at turn advance (RAW "on this turn"). Without a target it stays announce-only.
+
+### Added
+- `weapon_hit_convert_type` rider effect key + `_attacker_convert_type_from_buffs` helper (read at the `/attack` damage step on a confirmed hit).
+- `tests/harness/test_planar_warrior.py::test_pw_installs_rider_and_converts` — asserts the rider buff effects via `buff_update` AND that a `/attack` vs the marked target re-types the Longbow's piercing damage to force (broadcast `damage_type`) and lands the +1d8 force uplift (deterministic — AC 1 guarantees the hit).
+- `tests/harness/test_attack_rider_substrate.py::test_convert_type_retypes_hit_damage` — pure-substrate synthetic-buff test for the convert key alone.
+
+### Changed
+- `/api/campaign/{cid}/use_planar_warrior` installs a force-conversion + extra-force rider buff when given a `target_combatant_id` (was announce-only); response gains `buff_installed` + `target_combatant_id`.
+
+### Notes
+- Completes the P2.1 substrate keys (dice / flat / once-per-turn / crit-range / convert-type). Next: P2.5 (registry-ize Colossus Slayer / Divine Strike into a data-driven `_ATTACK_RIDERS` table; no behavior change).
+- **Total harness count: 1827** (was 1825 in v2.99.399; +2 new tests).
+
+---
+
 ## [2.99.399] - 2026-06-06 — "The Cursed Blade" — Hexblade's Curse flat rider + crit-range key (automation Phase 2.3)
 
 **Schema version:** 66

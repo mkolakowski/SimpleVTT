@@ -11,9 +11,14 @@ surface in the /attack response's `auto_uplifts`:
   - `weapon_hit_bonus_dice` + `weapon_hit_bonus_flat` combined.
   - `weapon_hit_once_per_turn` gating — pre-set economy flag suppresses
     the rider.
+  - v2.99.400 (Phase 2.4): `weapon_hit_convert_type` re-types the whole
+    hit's damage in the weapon_attack broadcast (asserted via gm_ws,
+    since the conversion lands on damage_type, not in auto_uplifts).
 
 Plain (non-once-per-turn) riders are NOT stripped on a miss, so these
 assertions are deterministic regardless of the random attack roll.
+AC 1 on the dummy guarantees the hit where a confirmed hit is needed
+(the conversion only applies on a hit).
 
 Pip Quickfingers (Rogue, Shortsword = attack_index 0, piercing) is the
 attacker; a synthetic NPC dummy is the target.
@@ -181,3 +186,39 @@ async def test_once_per_turn_flag_suppresses_rider(gm_client, pip_rested):
     assert resp.status_code == 200, resp.text
     ups = _uplift(resp.json(), "test-opt-rider")
     assert ups == [], "spent once-per-turn rider should not fire"
+
+
+async def test_convert_type_retypes_hit_damage(gm_client, pip_rested):
+    """v2.99.400 — Phase 2.4: a buff with weapon_hit_convert_type re-types
+    the whole hit's damage. Pip's Shortsword is piercing; the rider keyed
+    to the target converts it to force on a confirmed hit. The conversion
+    fires only on a hit, so retry until a swing connects (this rider is
+    NOT once-per-turn, so it converts every hit)."""
+    pip = pip_rested
+    pip_cid = f"tok_rs5_pip_{pip['id']}"
+    dummy_cid = "tok_rs5_dummy"
+    buff = {
+        "key": "test-convert-rider", "name": "Test Convert Rider",
+        "effects": {
+            "weapon_hit_convert_type": "force",
+            "weapon_hit_bonus_target_combatant_id": dummy_cid,
+        },
+    }
+    await _seed_battle(gm_client, [
+        _mkc(pip_cid, pip["id"], name=pip["name"], buffs=[buff]),
+        _mkc(dummy_cid, None, name="Dummy"),
+    ])
+    hit_data = None
+    for _ in range(12):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": pip["id"], "attack_index": 0,
+                  "target_combatant_id": dummy_cid, "override": True},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        if data["hit"]:
+            hit_data = data
+            break
+    assert hit_data is not None, "expected at least one hit in 12 swings"
+    assert hit_data["damage_type"] == "force", hit_data

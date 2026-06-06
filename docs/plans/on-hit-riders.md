@@ -108,8 +108,11 @@ so the hardcoded blocks become one data-driven loop. Lower priority than
    damage lands on a `/attack` against the marked target.
 3. **P2.3 — flat + once-per-turn riders (M).** Hexblade's Curse (+PB,
    crit-19), Divine Fury, Kensei's Shot, Genie's Wrath.
-4. **P2.4 — damage-type conversion (S).** Planar Warrior via
-   `weapon_hit_convert_type`.
+4. **P2.4 — damage-type conversion (S). ✅ shipped v2.99.400.** Planar
+   Warrior installs a `planar-warrior` rider with `weapon_hit_convert_type`
+   (re-types the hit's damage to force) + an extra +Nd8 force; the new
+   `_attacker_convert_type_from_buffs` helper applies the conversion on a
+   confirmed `/attack` hit.
 5. **P2.5 — registry-ize the feature-flag riders (S).** Fold Colossus
    Slayer + Divine Strike into `_ATTACK_RIDERS`; no behavior change.
 
