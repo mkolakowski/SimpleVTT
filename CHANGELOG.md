@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.369] - 2026-06-05 — "The Unseen Hand" — Arcane Trickster Rogue Mage Hand Legerdemain (Lv 3+, PHB) — 🗡️ Rogue archetype sweep
+
+**Schema version:** 66
+**Commit summary:** **Rogue archetype sweep — Arcane Trickster Lv 3+ Mage Hand Legerdemain (PHB).** Rounds out the Rogue archetypes; Arcane Trickster was the last untouched one. RAW PHB p.97: when you cast Mage Hand, make the spectral hand invisible and perform extra tasks — stow/retrieve objects from another's container, pick locks / disarm traps at range, all controlled as a bonus action, unnoticed on a Sleight of Hand check vs passive Perception.
+**Description:** Adds `_pc_has_arcane_trickster` helper. One endpoint. `/use_mage_hand_legerdemain` — body `{character_id}`. Validates Arcane Trickster Rogue Lv 3+. No action cost beyond the Mage Hand cast (controlled as a bonus action). Broadcasts `feature_used` with `source: mage-hand-legerdemain`, `range_ft: 30`, `invisible: true`, `tasks`. v1 announce-only — the hand's tasks + Stealth checks are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_mage_hand_legerdemain` endpoint.
+- `_pc_has_arcane_trickster` helper.
+- `tests/harness/test_mage_hand_legerdemain.py` — 3 tests.
+
+### Notes
+- **Rogue archetypes complete.** All seven Rogue archetypes now have a Lv 3 first-feature: Thief (Fast Hands / Supreme Sneak), Assassin (Assassinate), Soulknife (Psychic Blades), Scout, Swashbuckler (Fancy Footwork), Phantom, Arcane Trickster (Mage Hand Legerdemain — this ship). Pip Quickfingers (Rogue) is the demo fixture.
+- **Next: Fighter martial archetypes.** Champion (Improved Critical), Battle Master, Eldritch Knight already shipped; remaining untouched: Samurai, Cavalier, Psi Warrior, Rune Knight, Arcane Archer, Echo Knight, Banneret. Garrik Ironside (Fighter Champion Lv 9) is the demo fixture.
+- **185 ships this session.**
+- **Total harness count: 1749** (was 1746 in v2.99.368; +3 new tests).
+
+---
+
 ## [2.99.368] - 2026-06-05 — "The Beast Within" — Path of the Beast Barbarian Form of the Beast (Lv 3+, TCE) — 🎉 Barbarian Paths batch CLOSE
 
 **Schema version:** 66

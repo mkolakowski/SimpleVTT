@@ -27179,6 +27179,33 @@ def _pc_has_swashbuckler_subclass(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_arcane_trickster(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.369 — RAW Arcane Trickster (Rogue, PHB p.97):
+    Spellcasting + Mage Hand Legerdemain (Lv 3), Magical Ambush
+    (Lv 9), Versatile Trickster (Lv 13), Spell Thief (Lv 17).
+    Rounds out the Rogue archetype sweep — Arcane Trickster was
+    the last untouched Rogue archetype.
+
+    Returns True when the PC is a Rogue with subclass slug
+    containing "arcane trickster" + meets `min_level`
+    (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "rogue":
+        has_rogue = any(
+            (entry.get("class") or "").strip().lower() == "rogue"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_rogue:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "trickster" not in subclass:
+        return False
+    return _rogue_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -52359,6 +52386,109 @@ async def use_form_of_the_beast(
         "form": form,
         **form_data,
         "barbarian_level": barb_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_mage_hand_legerdemain")
+async def use_mage_hand_legerdemain(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.369 — Phase G Rogue archetype sweep (Arcane Trickster
+    Lv 3+, PHB) of the v2.99.193 phased completion plan — rounds
+    out the Rogue archetypes (Arcane Trickster was the last
+    untouched one). Mage Hand Legerdemain (Arcane Trickster Lv 3+,
+    PHB p.97): "When you cast Mage Hand, you can make the spectral
+    hand invisible, and you can perform the following additional
+    tasks with it: stow or retrieve an object in a container worn
+    or carried by another creature; use thieves' tools to pick
+    locks and disarm traps at range. You can perform one of these
+    tasks without being noticed if you beat a creature's passive
+    Perception with a Sleight of Hand check."
+
+    Body: ``{character_id}``. No action cost beyond the Mage Hand
+    cast itself (controlled as a bonus action). v1 announce-only —
+    the hand's tasks + Stealth checks are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Rogue character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_arcane_trickster(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "arcane trickster rogue lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _rogue_level_from_sheet(sheet),
+        })
+
+    rogue_lv = _rogue_level_from_sheet(sheet)
+    tasks = [
+        "stow or retrieve an object in another creature's container",
+        "pick locks and disarm traps at range (thieves' tools)",
+        "control the hand as a bonus action",
+    ]
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🖐️ Mage Hand Legerdemain — invisible hand (30 ft)"
+            ),
+            "feature_desc": (
+                f"{char.name} conjures an invisible spectral Mage "
+                f"Hand within 30 ft and works mischief: stow or "
+                f"retrieve objects from others, pick locks or "
+                f"disarm traps at range, all controlled as a bonus "
+                f"action — and unnoticed on a winning Sleight of "
+                f"Hand check vs passive Perception. (Arcane "
+                f"Trickster Rogue Lv 3+ PHB class feature.)"
+            ),
+            "source": "mage-hand-legerdemain",
+            "range_ft": 30,
+            "invisible": True,
+            "tasks": tasks,
+            "rogue_level": rogue_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "mage-hand-legerdemain",
+        "range_ft": 30,
+        "invisible": True,
+        "tasks": tasks,
+        "rogue_level": rogue_lv,
     }
 
 
