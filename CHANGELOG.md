@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.415] - 2026-06-06 — "The Ablative Ward, Charted" — Temp-HP + roll-bonus design sub-plan (automation Phase 4)
+
+**Schema version:** 66
+**Commit summary:** **New sub-plan — `docs/plans/temp-hp-and-bonuses.md` — the Phase 4 design for a `_grant_temp_hp` primitive (+ making damage spend temp HP before real HP) and finishing the filed roll-bonus read-sites (+AC spells, buff-level save advantage).** Planning + wiki-surfacing commit; no runtime code changed.
+**Description:** Grounds Phase 4 in the actual engine: temp HP already lives at `Character.sheet["hp"]["temp"]` (the Heroism spell hand-codes a non-stacking grant in `/cast_spell`), but no primitive extracts it and `_apply_damage_to_combatant` (`new_hp = max(0, hp_cur - applied)`, PC line 6112 / NPC line 6317) never drains temp HP first — so RAW "temp HP absorbs damage before real HP" doesn't hold. The AC read site (`_read_target_ac`) and bless/bane (attack + save) are already wired; race-keyed save advantage works but buff-level `save_advantage` is unread, and Mage Armor / Haste / Defensive Duelist don't yet install their `ac_bonus` buffs. Proposes `_grant_temp_hp(db, campaign_id, combatant, amount, …)` (PC sheet `hp.temp` / NPC `combatant.temp_hp`, non-stacking max) + a temp-drain in the damage hot path, then a 4-step sequence (P4.1 substrate → P4.2 retrofit Rally / Dark One's Blessing / Touch of Death / Fighting Spirit / Inspiring Smite / Spirit Totem → P4.3 +AC spells → P4.4 buff-level save advantage). Defines the test contract: a hit spends temp HP before `hp_current`.
+
+### Added
+- `docs/plans/temp-hp-and-bonuses.md` — Phase 4 design sub-plan (proposed).
+- Wiki surfacing: `_DOC_ALLOWLIST` slug `plan-temp-hp-and-bonuses`, the landing-page "Design plans" row, and the on-disk index row.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_temp_hp_and_bonuses_plan` + the new slug added to the `test_wiki_home_renders` assertion list.
+
+### Notes
+- Planning only — opens Phase 4 with a grounded design before touching the HP hot path. Implementation begins at P4.1 (the temp-HP primitive + damage-drain).
+- **Total harness count: 1840** (was 1839 in v2.99.414; +1 new wiki smoke test).
+
+---
+
 ## [2.99.414] - 2026-06-06 — "The Broken Oath's Thrall" — Control Undead resolves its save (Phase 3 COMPLETE)
 
 **Schema version:** 66
