@@ -27206,6 +27206,33 @@ def _pc_has_arcane_trickster(sheet: "dict | None", min_level: int) -> bool:
     return _rogue_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_samurai(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.370 — RAW Samurai (Fighter martial archetype, XGE
+    p.31): Fighting Spirit + Bonus Proficiency (Lv 3), Elegant
+    Courtier (Lv 7), Tireless Spirit (Lv 10), Rapid Strike (Lv
+    15), Strength before Death (Lv 18). Opens the Fighter martial
+    archetype sweep beyond Champion / Battle Master / Eldritch
+    Knight.
+
+    Returns True when the PC is a Fighter with subclass slug
+    containing "samurai" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        has_fighter = any(
+            (entry.get("class") or "").strip().lower() == "fighter"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_fighter:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "samurai" not in subclass:
+        return False
+    return _fighter_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -52489,6 +52516,117 @@ async def use_mage_hand_legerdemain(
         "invisible": True,
         "tasks": tasks,
         "rogue_level": rogue_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_fighting_spirit")
+async def use_fighting_spirit(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.370 — Phase G Fighter martial archetype sweep
+    (Samurai Lv 3+, XGE) of the v2.99.193 phased completion plan.
+    Fighting Spirit (Samurai Lv 3+, XGE p.31): "As a bonus action
+    on your turn, you can give yourself advantage on weapon attack
+    rolls until the end of the current turn. When you do so, you
+    also gain 5 temporary hit points. The number of temporary hit
+    points increases ... to 10 at 10th level and 15 at 15th
+    level. You can use this feature three times. You regain all
+    expended uses when you finish a long rest."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip.
+    Computes the temp-HP amount by Fighter level (5/10/15)
+    server-side. v1 announce-only — the advantage + temp-HP
+    application + 3-per-long-rest limit are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_samurai(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "samurai fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "fighting-spirit",
+            "label": "Fighting Spirit",
+            "strict": strict,
+        })
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    temp_hp = 15 if fighter_lv >= 15 else 10 if fighter_lv >= 10 else 5
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"⚔️ Fighting Spirit — advantage + {temp_hp} temp HP"
+            ),
+            "feature_desc": (
+                f"{char.name} steels their resolve: advantage on "
+                f"weapon attack rolls until the end of this turn "
+                f"and gains {temp_hp} temporary HP. Usable 3 times "
+                f"per long rest. (Samurai Fighter Lv 3+ XGE class "
+                f"feature.)"
+            ),
+            "source": "fighting-spirit",
+            "advantage_on_weapon_attacks": True,
+            "temp_hp": temp_hp,
+            "fighter_level": fighter_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "fighting-spirit",
+        "advantage_on_weapon_attacks": True,
+        "temp_hp": temp_hp,
+        "fighter_level": fighter_lv,
     }
 
 

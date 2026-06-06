@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.370] - 2026-06-05 — "The Iron Resolve" — Samurai Fighter Fighting Spirit (Lv 3+, XGE) — ⚔️ Fighter archetype sweep OPEN
+
+**Schema version:** 66
+**Commit summary:** **Fighter martial archetype sweep OPEN — Samurai Lv 3+ Fighting Spirit (XGE).** First new Fighter archetype beyond Champion / Battle Master / Eldritch Knight. RAW XGE p.31: as a bonus action, give yourself advantage on weapon attack rolls until the end of the turn and gain temp HP (5, rising to 10 at Lv 10 and 15 at Lv 15). 3 uses per long rest.
+**Description:** Adds `_pc_has_samurai` helper. One endpoint. `/use_fighting_spirit` — body `{character_id, override?}`. Validates Samurai Fighter Lv 3+ + bonus chip. Computes the temp-HP amount by Fighter level (5/10/15) **server-side**. Broadcasts `feature_used` with `source: fighting-spirit`, `advantage_on_weapon_attacks: true`, `temp_hp`. v1 announce-only — the advantage + temp-HP application + 3-per-long-rest limit are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_fighting_spirit` endpoint.
+- `_pc_has_samurai` helper.
+- `tests/harness/test_fighting_spirit.py` — 3 tests.
+
+### Notes
+- **Fighter martial archetype sweep OPEN.** Champion (Improved Critical), Battle Master, Eldritch Knight already shipped. Samurai is the first ship of the formal sweep. Garrik Ironside (Fighter Lv 9) is the demo fixture. Remaining untouched: Cavalier (Unwavering Mark), Psi Warrior (Protective Field), Rune Knight (Giant's Might), Arcane Archer (Arcane Shot), Echo Knight (Manifest Echo), Banneret/Purple Dragon Knight (Rallying Cry).
+- **186 ships this session.**
+- **Total harness count: 1752** (was 1749 in v2.99.369; +3 new tests).
+
+---
+
 ## [2.99.369] - 2026-06-05 — "The Unseen Hand" — Arcane Trickster Rogue Mage Hand Legerdemain (Lv 3+, PHB) — 🗡️ Rogue archetype sweep
 
 **Schema version:** 66
