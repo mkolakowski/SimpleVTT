@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.382] - 2026-06-05 — "The Planar Mark" — Horizon Walker Ranger Planar Warrior (Lv 3+, XGE) — 🎉 Ranger conclave batch CLOSE
+
+**Schema version:** 66
+**Commit summary:** **Ranger conclave subclass batch ship #7 — Horizon Walker Lv 3+ Planar Warrior (XGE) — CLOSES the Ranger conclave batch (every in-print Ranger conclave now has a first-feature ship).** Horizon Walker was the last untouched conclave. RAW XGE p.42: as a bonus action, mark a creature within 30 ft; the next weapon hit this turn deals all its damage as force, plus an extra 1d8 force (2d8 at Lv 11).
+**Description:** Adds `_pc_has_horizon_walker` helper. One endpoint. `/use_planar_warrior` — body `{character_id, override?}`. Validates Horizon Walker Ranger Lv 3+ + bonus chip. Rolls the extra force damage **server-side** (1d8, or 2d8 at Lv 11+). Broadcasts `feature_used` with `source: planar-warrior`, `range_ft: 30`, `force_damage`, `force_damage_dice`, `converts_to_force: true`. v1 announce-only — the damage-type conversion + on-hit application are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_planar_warrior` endpoint.
+- `_pc_has_horizon_walker` helper.
+- `tests/harness/test_planar_warrior.py` — 3 tests.
+
+### Notes
+- **🎉 Ranger conclave subclass batch ✅ CLOSED.** Every in-print Ranger conclave now has a Lv 3 first-feature: Hunter (Colossus Slayer), Gloom Stalker (Dread Ambusher), Beast Master (Ranger's Companion), Monster Slayer (Slayer's Prey), Swarmkeeper (Gathered Swarm), Fey Wanderer (Dreadful Strike), Horizon Walker (Planar Warrior — this ship).
+- **198 ships this session.**
+- **Total harness count: 1791** (was 1788 in v2.99.381; +3 new tests).
+
+---
+
 ## [2.99.381] - 2026-06-05 — "The Mind-Scarring Arrow" — Fey Wanderer Ranger Dreadful Strike (Lv 3+, TCE) — 🏹 Ranger conclave batch
 
 **Schema version:** 66
