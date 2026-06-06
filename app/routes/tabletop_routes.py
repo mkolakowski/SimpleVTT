@@ -51570,8 +51570,18 @@ async def use_kensei_shot(
     current turn."
 
     Body: ``{character_id, override?}``. Costs a bonus chip, no
-    ki. Rolls the 1d4 bonus damage server-side. v1 announce-only —
-    the actual on-hit damage application stays GM-tracked.
+    ki. Rolls the 1d4 bonus damage server-side.
+
+    v2.99.403 — Phase 2 of docs/plans/on-hit-riders.md: installs a
+    `kensei-shot` on-hit rider buff (non-target, NOT once-per-turn — it
+    benefits every qualifying hit this turn) so a weapon hit auto-adds
+    +1d4 of the weapon's type through the /attack pipeline:
+    `weapon_hit_bonus_dice: "1d4"`, no damage-type key (defaults to the
+    weapon's type), no target key, 1-round duration (drops at turn
+    advance, matching "until the end of this turn"). Simplification: the
+    substrate has no ranged/kensei-weapon filter, so the rider applies to
+    any weapon hit this turn, not strictly ranged kensei swings — the
+    RAW weapon restriction stays GM-tracked. `buff_installed` added.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -51625,6 +51635,30 @@ async def use_kensei_shot(
         bonus_damage = 1
         breakdown = ""
 
+    # v2.99.403 — install the this-turn, non-target rider so a weapon
+    # hit this turn auto-adds +1d4 of the weapon's type. NOT once-per-turn
+    # (RAW: every qualifying ranged hit this turn benefits); the 1d4 is
+    # re-rolled per hit at /attack time. No damage-type key → the uplift
+    # inherits the weapon's type. 1-round duration drops at turn advance.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "kensei-shot",
+        "name": "Kensei's Shot",
+        "icon": "🏹",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "weapon_hit_bonus_dice": "1d4",
+        },
+        "desc": (
+            "Ranged kensei weapon hits this turn deal +1d4 of the "
+            "weapon's type. (Way of the Kensei Monk Lv 3+.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -51656,6 +51690,7 @@ async def use_kensei_shot(
             "damage_dice": "1d4",
             "dice_breakdown": breakdown,
             "monk_level": monk_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -51665,6 +51700,7 @@ async def use_kensei_shot(
         "bonus_damage": bonus_damage,
         "damage_dice": "1d4",
         "monk_level": monk_lv,
+        "buff_installed": buff_installed,
     }
 
 

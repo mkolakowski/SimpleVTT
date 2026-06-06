@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.403] - 2026-06-06 — "The Steadied Bow" — Kensei's Shot installs a this-turn rider (automation Phase 2)
+
+**Schema version:** 66
+**Commit summary:** **Kensei's Shot (Way of the Kensei Monk) now installs a `kensei-shot` rider buff so its +1d4 (weapon's type) auto-applies on a weapon hit this turn** — the first *non*-once-per-turn activated rider (it benefits every qualifying hit this turn, like Hunter's Mark).
+**Description:** `/use_kensei_shot` now `_install_buff`s a non-target, NOT-once-per-turn `kensei-shot` rider on the monk — `weapon_hit_bonus_dice: "1d4"`, no damage-type key (so the uplift inherits the weapon's type, per RAW "1d4 damage of the weapon's type"), no target key, 1-round duration (drops at turn advance, matching "until the end of this turn"). A weapon hit this turn auto-adds +1d4 via `_compute_attack_auto_uplifts`; the 1d4 re-rolls per hit. **Simplification:** the substrate has no ranged/kensei-weapon filter, so the rider rides any weapon hit this turn rather than strictly ranged kensei swings — the RAW weapon restriction stays GM-tracked. `buff_installed` added to the response.
+
+### Changed
+- `/api/campaign/{cid}/use_kensei_shot` now installs an on-hit rider buff (was announce-only); response + broadcast gain `buff_installed`.
+
+### Added
+- `tests/harness/test_kensei_shot.py::test_ks_installs_rider_and_lands` — asserts the rider buff effects (no once-per-turn flag, no target key, no stored type) via `buff_update` AND that the +1d4 uplift (inheriting the weapon's bludgeoning type) lands deterministically on a `/attack` (not once-per-turn → not stripped on a miss).
+
+### Notes
+- First non-once-per-turn activated rider — proves the every-hit-this-turn path. The remaining announce-only riders (Genie's Wrath, …) follow the same install-a-buff shape.
+- **Total harness count: 1829** (was 1828 in v2.99.402; +1 new test).
+
+---
+
 ## [2.99.402] - 2026-06-06 — "The Zealot's Spark" — Divine Fury installs a non-target rider (automation Phase 2)
 
 **Schema version:** 66

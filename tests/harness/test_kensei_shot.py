@@ -23,6 +23,16 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
+def _mkc(cid, char_id=None, name="X"):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": 60, "hp_max": 60,
+        "buffs": [], "speed_walk": 30,
+        "economy": {"action": False, "bonus": False, "reaction": False,
+                    "movement": 0},
+    }
+
+
 async def _patch_sheet(gm_client, char_id, fields, class_slug=None):
     body = dict(fields)
     if class_slug:
@@ -109,3 +119,60 @@ async def test_use_ks_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_ks_installs_rider_and_lands(
+    gm_client, gm_ws, kael_kensei,
+):
+    """v2.99.403 — Kensei's Shot installs a this-turn, non-target rider
+    (+1d4 of the weapon's type), and the bonus lands on a /attack.
+
+    The rider is NOT once-per-turn, so it isn't stripped on a miss — the
+    auto_uplift assertion is deterministic (no retry loop needed). The
+    uplift inherits the weapon's damage type (no stored type key).
+    """
+    kael = kael_kensei
+    kael_cid = f"tok_ks_kael_{kael['id']}"
+    dummy_cid = "tok_ks_dummy"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _mkc(kael_cid, kael["id"], name=kael["name"]),
+            _mkc(dummy_cid, None, name="Dummy"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_kensei_shot",
+        json={"character_id": kael["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["buff_installed"] is True
+
+    bu = await gm_ws.wait_for("buff_update")
+    ks = next((b for b in bu["data"]["buffs"]
+               if b.get("key") == "kensei-shot"), None)
+    assert ks is not None, bu["data"]["buffs"]
+    eff = ks.get("effects") or {}
+    assert eff.get("weapon_hit_bonus_dice") == "1d4"
+    # Not once-per-turn, non-target: no flag, no stored target key.
+    assert "weapon_hit_once_per_turn" not in eff
+    assert "weapon_hit_bonus_target_combatant_id" not in eff
+    # No stored damage type → the uplift inherits the weapon's type.
+    assert "weapon_hit_bonus_damage_type" not in eff
+
+    # Attack the dummy with Kael's (bludgeoning) Unarmed Strike. The rider
+    # isn't once-per-turn, so its +1d4 uplift rides every swing — assert
+    # it deterministically (it inherits the weapon's bludgeoning type).
+    a = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={"character_id": kael["id"], "attack_index": 0,
+              "target_combatant_id": dummy_cid, "override": True},
+    )
+    assert a.status_code == 200, a.text
+    ups = [u for u in (a.json().get("auto_uplifts") or [])
+           if u.get("source") == "kensei-shot"]
+    assert len(ups) == 1, a.json().get("auto_uplifts")
+    assert ups[0]["expression"] == "1d4"
+    assert ups[0]["damage_type"] == "bludgeoning"  # weapon's type
+    assert 1 <= ups[0]["total"] <= 4
