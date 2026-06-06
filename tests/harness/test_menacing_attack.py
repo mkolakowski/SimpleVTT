@@ -203,3 +203,80 @@ async def test_ma_resolves_npc_save_installs_frightened(
         break
 
     assert landed, "no failed WIS save in 40 tries; Frightened didn't install"
+
+
+async def test_ma_resolves_pc_save_installs_frightened(
+    gm_client, roster, garrik_battle_master,
+):
+    """v2.99.407 — Phase 3.2: against a PC target, Menacing Attack prompts
+    the player via a roll-request and installs Frightened when they fail
+    on /respond — sharing the spell save-or-suck install path.
+
+    Loop until the PC fails the WIS save (DC 16). Assert: the endpoint
+    reports save_prompted with a prompt id; /respond installs the
+    `frightened` buff on a fail; and — because Menacing Attack passes
+    repeated_save=False — the installed buff carries NO repeated-save
+    stamp (it just expires, it isn't shrugged off at end of turn).
+    """
+    garrik = garrik_battle_master
+    pip = roster["Pip Quickfingers"]
+    await _patch_sheet(
+        gm_client, garrik["id"],
+        {"resources": [_superiority_dice_block(40, 40)]},
+    )
+
+    garrik_tok = f"tok_mapc_garrik_{garrik['id']}"
+    pip_tok = f"tok_mapc_pip_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": garrik_tok, "char_id": garrik["id"], "name": garrik["name"],
+             "initiative": 12, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": pip_tok, "char_id": pip["id"], "name": pip["name"],
+             "initiative": 8, "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+
+    landed = False
+    for _ in range(40):
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": pip["id"], "key": "frightened"},
+        )
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_menacing_attack",
+            json={"character_id": garrik["id"], "target_combatant_id": pip_tok},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["save_prompted"] is True, data
+        assert data["save_passed"] is None  # deferred to /respond
+        prompt_id = data["save_prompt_id"]
+        assert prompt_id
+
+        rr = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll_request/{prompt_id}/respond",
+            json={"character_id": pip["id"]},
+        )
+        assert rr.status_code == 200, rr.text
+        if rr.json().get("auto_buff_installed") == "Frightened (Menacing Attack)":
+            landed = True
+            break
+
+    assert landed, "no failed PC WIS save in 40 tries; Frightened didn't install"
+
+    buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    frightened = next(
+        (b for b in buffs if (b or {}).get("key") == "frightened"), None)
+    assert frightened is not None, buffs
+    assert frightened.get("name") == "Frightened (Menacing Attack)"
+    assert frightened.get("source_char_id") == garrik["id"]
+    # repeated_save=False → no end-of-turn re-save stamp (fixed duration).
+    assert not frightened.get("repeated_save_ability")
+    assert int(frightened.get("repeated_save_dc") or 0) == 0

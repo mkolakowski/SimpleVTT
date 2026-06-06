@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.407] - 2026-06-06 — "The Player's Reckoning" — Feature saves prompt PC targets (automation Phase 3.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 3.2 of [docs/plans/feature-saves.md](docs/plans/feature-saves.md) — `_resolve_feature_save` now handles PC targets via the roll-request flow, so a feature save prompts the owning player and installs its condition on `/respond` exactly like a spell save-or-suck.** Menacing Attack now auto-resolves against PCs too.
+**Description:** Extends `_resolve_feature_save` with a PC branch: for a target carrying a `char_id` (not a `token_template_id`) it builds a `RollRequest` (`base_expression="1d20"`, `stat_key="<ability>_save"`), broadcasts a presence-routed `roll_request` to the owning player, and stamps `_save_request_context[req.id]` with the **condition template** (`condition_buff`) + save/caster info + a `repeated_save` flag. The existing `/roll_request/{id}/respond` handler now prefers `ctx["condition_buff"]` over the `_SPELL_CONDITION_MAP` slug lookup, so a failed PC feature save installs the feature's condition through the same path that already handles the immunity gates (Aura of Devotion, Mindless Rage, PFE&G, Heroism), undo logging, and concentration anchoring. Repeated-save stamping is now gated for feature saves: a feature only stamps `repeated_save_ability/_dc` when it opts in (`repeated_save=True`) — Menacing Attack's fixed-duration Frightened must NOT re-save at end of turn. Spell save-or-suck (no `condition_buff` in ctx) keeps stamping unconditionally (unchanged). `/use_menacing_attack` now routes both NPC and PC targets through the resolver; response gains `save_prompted` + `save_prompt_id`.
+
+### Changed
+- `_resolve_feature_save` gains a PC roll-request path (params: `campaign`, `prompt_user`, `feature_name`, `cast_id`).
+- `/roll_request/{id}/respond` prefers `ctx["condition_buff"]` (feature saves) over the spell-slug condition map, and gates repeated-save stamping on the feature's opt-in.
+- `/api/campaign/{cid}/use_menacing_attack` resolves the WIS save vs a PC target via a prompt (was NPC-only in v2.99.406); response gains `save_prompted` + `save_prompt_id`.
+
+### Added
+- `tests/harness/test_menacing_attack.py::test_ma_resolves_pc_save_installs_frightened` — prompts a PC target, loops until they fail the WIS save on `/respond`, and asserts the `frightened` buff installs with NO repeated-save stamp (fixed-duration).
+
+### Notes
+- Spell-save regression net (`test_cast_spell_save.py`, `test_npc_archmage_hold_person.py`, `test_use_stunning_strike.py`) stays green — the `/respond` change is additive (falls back to the spell map when no `condition_buff` is present). Next: P3.3 on-hit save riders (Menacing/Trip fire on a confirmed hit).
+- **Total harness count: 1832** (was 1831 in v2.99.406; +1 new test).
+
+---
+
 ## [2.99.406] - 2026-06-06 — "The Frightened Quarry" — Feature-save resolver (NPC path) + Menacing Attack retrofit (automation Phase 3.1)
 
 **Schema version:** 66

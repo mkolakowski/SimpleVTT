@@ -14357,7 +14357,15 @@ async def respond_roll_request(
     ctx = _save_request_context.get(roll_req.id)
     if ctx and ctx.get("campaign_id") == campaign_id and roll_req.dc is not None:
         if result.total < roll_req.dc:
-            cond = _SPELL_CONDITION_MAP.get(ctx.get("spell_slug") or "")
+            # v2.99.407 — Phase 3.2: a class-feature save (Menacing
+            # Attack, …) stamps its own condition template into
+            # ``ctx["condition_buff"]`` (same shape as a
+            # ``_SPELL_CONDITION_MAP`` entry). Prefer it; fall back to the
+            # spell-slug map for /cast_spell + Stunning Strike casts. Every
+            # downstream gate/install reads the cond-shape, so feature
+            # saves inherit the immunity gates + undo plumbing for free.
+            cond = ctx.get("condition_buff") or _SPELL_CONDITION_MAP.get(
+                ctx.get("spell_slug") or "")
             tgt_char_id = ctx.get("target_character_id")
             if cond and tgt_char_id:
                 # v2.55.0 — Aura of Devotion (Paladin Oath of
@@ -14563,9 +14571,27 @@ async def respond_roll_request(
                     # concentration installs like Bardic Inspiration.
                     "_dependent_on_caster_concentration": bool(cond.get("concentration")),
                     "effects": list(cond.get("effects", [])),
-                    # v2.97.60 — repeated-save plumbing.
-                    "repeated_save_ability": str(ctx.get("save_ability") or "").upper()[:3],
-                    "repeated_save_dc": int(ctx.get("dc") or 0),
+                    # v2.97.60 — repeated-save plumbing. v2.99.407: a
+                    # feature save (ctx carries `condition_buff`) only
+                    # stamps the repeated-save context when it opts in via
+                    # `ctx["repeated_save"]` — Menacing Attack's Frightened
+                    # has a fixed duration and must NOT re-save (it would
+                    # let the target shrug it off at end of turn). Spell
+                    # save-or-suck (no `condition_buff`) keeps stamping
+                    # unconditionally — those conditions ARE repeated-save
+                    # by RAW (Hold Person, Fear, …).
+                    "repeated_save_ability": (
+                        str(ctx.get("save_ability") or "").upper()[:3]
+                        if (not ctx.get("condition_buff")
+                            or ctx.get("repeated_save"))
+                        else ""
+                    ),
+                    "repeated_save_dc": (
+                        int(ctx.get("dc") or 0)
+                        if (not ctx.get("condition_buff")
+                            or ctx.get("repeated_save"))
+                        else 0
+                    ),
                     "source_caster_creature_type": _caster_type_for_repeat or "",
                     # v2.97.65 — damage-trigger save plumbing. Copies
                     # the catalog's top-level ``save_on_damage`` flag
@@ -23922,32 +23948,40 @@ async def _resolve_feature_save(
     condition_buff: "dict | None" = None,
     repeated_save: bool = False,
     source: str = "",
+    campaign: "Campaign | None" = None,
+    prompt_user: "User | None" = None,
+    feature_name: str = "",
+    cast_id: "str | None" = None,
 ) -> dict:
-    """v2.99.406 — Phase 3.1 of docs/plans/feature-saves.md: resolve a
-    class-feature saving throw against an **NPC** target server-side, and
-    on a FAILED save install the supplied condition buff. Mirrors the
-    `/cast_spell` + Stunning Strike NPC save path (roll ``1d20`` + the
-    NPC's save modifier + any Bless/Bane suffix, broadcast the roll as a
-    ``roll`` event so chat-card correlation works, then install on a
-    fail).
+    """v2.99.406 (P3.1) / v2.99.407 (P3.2) of docs/plans/feature-saves.md:
+    resolve a class-feature saving throw and, on a FAILED save, install
+    the supplied condition. Two target paths, mirroring `/cast_spell`:
 
-    PC targets are NOT handled here — that needs the deferred
-    roll-request path (Phase 3.2). Callers must branch on target kind and
-    only call this for NPC combatants (those carrying a
-    ``token_template_id``); for any other target this returns
-    ``resolved=False`` and does nothing.
+    - **NPC target** (``token_template_id``): roll the save server-side
+      (``1d20`` + the monster's save modifier + any Bless/Bane suffix),
+      broadcast the roll as a ``roll`` event, and install the condition
+      immediately on a fail. Resolves inline.
+    - **PC target** (``char_id``, P3.2): build a ``RollRequest``, broadcast
+      a ``roll_request`` to the owning player (presence-aware routing),
+      and stamp ``_save_request_context`` with the condition template so
+      the existing ``/roll_request/{id}/respond`` handler installs it when
+      the PC fails — sharing the immunity gates + undo plumbing the spell
+      save-or-suck path already has. Requires ``campaign`` + ``prompt_user``;
+      returns ``prompted=True`` with the prompt id (resolution is deferred
+      to /respond, so ``passed`` stays None).
 
-    ``condition_buff`` is a fully-formed buff template the caller owns
-    (its ``key`` must match a condition the rest of the engine
-    understands — frightened / prone / charmed / …). When
-    ``repeated_save`` is True, the install stamps
-    ``repeated_save_ability`` + ``repeated_save_dc`` so the existing
-    end-of-turn / damage-triggered re-save can drop it on a later
-    success. The install is condition-immunity-gated inside
-    ``_install_buff_on_combatant_id``.
+    ``condition_buff`` is a condition template (``_SPELL_CONDITION_MAP``
+    shape: ``key/name/icon/duration_rounds/concentration/effects`` + an
+    optional ``save_on_damage``); its ``key`` must match a condition the
+    engine understands (frightened / prone / charmed / …). When
+    ``repeated_save`` is True the install stamps ``repeated_save_ability``
+    + ``repeated_save_dc`` so the end-of-turn / damage re-save can drop it
+    later; when False (Menacing Attack's fixed-duration Frightened) it
+    just expires. Installs are condition-immunity-gated.
 
     Returns ``{resolved, target_combatant_id, save_total, save_breakdown,
-    passed, save_dc, save_ability, condition_installed, condition_key}``.
+    passed, save_dc, save_ability, condition_installed, condition_key,
+    prompted, prompt_id}``.
     """
     result = {
         "resolved": False,
@@ -23959,9 +23993,73 @@ async def _resolve_feature_save(
         "save_ability": (save_ability or "").strip().upper()[:3],
         "condition_installed": False,
         "condition_key": "",
+        "prompted": False,
+        "prompt_id": 0,
     }
-    if not target_combatant or not target_combatant.get("token_template_id"):
-        return result  # PC / unknown target — caller handles (Phase 3.2)
+    if not target_combatant:
+        return result
+
+    # ---- PC target → roll-request (Phase 3.2). Deferred resolution on
+    # /roll_request/{id}/respond, which installs ctx["condition_buff"]. ----
+    if not target_combatant.get("token_template_id"):
+        tgt_char_id = target_combatant.get("char_id")
+        if not tgt_char_id or campaign is None or prompt_user is None:
+            return result  # can't prompt — caller stays announce-only
+        tgt_char = db.query(Character).filter(
+            Character.id == int(tgt_char_id),
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not tgt_char:
+            return result
+        req = RollRequest(
+            campaign_id=campaign_id,
+            created_by_user_id=prompt_user.id,
+            label=note_label,
+            base_expression="1d20",
+            stat_key=f"{result['save_ability'].lower()}_save",
+            dc=int(dc),
+            visibility=Visibility.PUBLIC,
+        )
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+        await hub.broadcast(campaign_id, {
+            "type": "roll_request",
+            "data": {
+                "id": req.id,
+                "label": req.label,
+                "stat_key": req.stat_key,
+                "base_expression": req.base_expression,
+                "dc": req.dc,
+                "visibility": req.visibility.value,
+                "created_by_name": prompt_user.display_name,
+                "created_by_user_id": prompt_user.id,
+                "target_user_ids": _resolve_pc_prompt_target_user_ids(
+                    db, campaign, tgt_char.owner_user_id,
+                ),
+                "target_user_names": [tgt_char.name],
+            },
+        })
+        _purge_save_request_context()
+        _save_request_context[req.id] = {
+            "ts": _time.time(),
+            "campaign_id": campaign_id,
+            "condition_buff": dict(condition_buff) if condition_buff else None,
+            "spell_slug": source,
+            "spell_name": feature_name or note_label,
+            "target_character_id": int(tgt_char_id),
+            "target_name": tgt_char.name,
+            "dc": int(dc),
+            "save_ability": result["save_ability"],
+            "caster_char_id": caster_char_id,
+            "caster_char_name": caster_char_name,
+            "repeated_save": bool(repeated_save),
+            "cast_id": cast_id,
+        }
+        result["resolved"] = True
+        result["prompted"] = True
+        result["prompt_id"] = req.id
+        return result
 
     tmpl = db.query(TokenTemplate).filter(
         TokenTemplate.id == int(target_combatant["token_template_id"]),
@@ -42751,15 +42849,19 @@ async def use_menacing_attack(
         },
     })
 
-    # v2.99.406 — Phase 3.1: auto-resolve the WIS save vs an NPC target
-    # and install Frightened (until end of the attacker's next turn ≈ 2
-    # rounds) on a fail. PC targets / no target stay announce-only.
+    # v2.99.406 (P3.1) / v2.99.407 (P3.2) — auto-resolve the WIS save and
+    # install Frightened (until end of the attacker's next turn ≈ 2 rounds)
+    # on a fail. NPC targets resolve server-side inline; PC targets are
+    # prompted via a roll-request and install on /respond. No target stays
+    # announce-only.
     save_resolved = False
     save_passed = None
     condition_installed = False
+    save_prompted = False
+    save_prompt_id = 0
     if target_combatant_id:
         target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
-        if target_combatant and target_combatant.get("token_template_id"):
+        if target_combatant:
             frightened_buff = {
                 "key": "frightened",
                 "name": "Frightened (Menacing Attack)",
@@ -42783,10 +42885,15 @@ async def use_menacing_attack(
                 condition_buff=frightened_buff,
                 repeated_save=False,
                 source="menacing-attack",
+                campaign=campaign,
+                prompt_user=user,
+                feature_name="Menacing Attack",
             )
             save_resolved = sr["resolved"]
             save_passed = sr["passed"]
             condition_installed = sr["condition_installed"]
+            save_prompted = sr["prompted"]
+            save_prompt_id = sr["prompt_id"]
 
     return {
         "ok": True,
@@ -42799,6 +42906,8 @@ async def use_menacing_attack(
         "save_resolved": save_resolved,
         "save_passed": save_passed,
         "condition_installed": condition_installed,
+        "save_prompted": save_prompted,
+        "save_prompt_id": save_prompt_id,
     }
 
 

@@ -150,9 +150,15 @@ first and tackle the PC roll-request extraction in P3.2.
    + `_feature_save_dc`, proven by retrofitting Menacing Attack (WIS save
    vs an NPC auto-installs Frightened on a fail). Save-for-half damage
    and the PC roll-request path are still pending (P3.2).
-2. **P3.2 — PC roll-request path (M).** Extend the resolver to prompt PC
-   targets via `_save_request_context` and resolve on `/respond`, sharing
-   the advantage stack with `/cast_spell`.
+2. **P3.2 — PC roll-request path (M). ✅ shipped v2.99.407.** The
+   resolver now prompts PC targets via a `RollRequest` + stamps
+   `_save_request_context["condition_buff"]`; `/respond` installs that
+   template (preferring it over the spell-slug map), inheriting the
+   immunity gates + undo plumbing. Menacing Attack resolves vs PCs too.
+   (The full advantage stack — Aura of Protection, race traits,
+   metamagic — is not yet shared; PC feature saves use the plain
+   `base_expression="1d20"` + stat-mod path, same as Stunning Strike
+   today. Sharing that stack with `/cast_spell` is a follow-up.)
 3. **P3.3 — on-hit save riders (S-M).** Retrofit Menacing Attack + Trip
    Attack: the maneuver's save fires on a confirmed hit (compose with the
    Phase 2 rider substrate).
