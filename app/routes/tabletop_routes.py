@@ -27325,6 +27325,32 @@ def _pc_has_echo_knight(sheet: "dict | None", min_level: int) -> bool:
     return _fighter_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_arcane_archer(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.374 — RAW Arcane Archer (Fighter martial archetype,
+    XGE p.28): Arcane Archer's Lore + Arcane Shot (Lv 3), Magic
+    Arrow + Curving Shot (Lv 7), Ever-Ready Shot (Lv 15).
+
+    Returns True when the PC is a Fighter with subclass slug
+    containing "arcane archer" + meets `min_level` (multiclass-
+    aware). Matches the full phrase so it stays distinct from the
+    Eldritch Knight / Arcane Trickster "arcane" slugs.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        has_fighter = any(
+            (entry.get("class") or "").strip().lower() == "fighter"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_fighter:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "arcane archer" not in subclass:
+        return False
+    return _fighter_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -53085,6 +53111,202 @@ async def use_manifest_echo(
         "echo_hp": 1,
         "manifest_range_ft": 15,
         "swap_range_ft": 30,
+        "fighter_level": fighter_lv,
+    }
+
+
+_ARCANE_SHOT_OPTIONS = {
+    "banishing": {
+        "dice": None, "damage_type": None, "save": "cha",
+        "effect": (
+            "the target is banished to a harmless demiplane until "
+            "the end of your next turn (CR ≤ 2 lingers longer)"
+        ),
+    },
+    "beguiling": {
+        "dice": "2d6", "damage_type": "psychic", "save": "wis",
+        "effect": (
+            "the target is charmed or frightened (your choice) by "
+            "an ally until the end of your next turn"
+        ),
+    },
+    "bursting": {
+        "dice": "2d6", "damage_type": "force", "save": None,
+        "effect": (
+            "force energy bursts: each creature within 10 ft of the "
+            "target also takes the force damage"
+        ),
+    },
+    "enfeebling": {
+        "dice": "2d6", "damage_type": "necrotic", "save": "con",
+        "effect": (
+            "the target deals only half damage with weapon attacks "
+            "until the end of your next turn"
+        ),
+    },
+    "grasping": {
+        "dice": "2d6", "damage_type": "poison", "save": "str",
+        "effect": (
+            "spectral brambles: speed reduced by 10 ft and 2d6 "
+            "poison on leaving the area; STR save to end"
+        ),
+    },
+    "piercing": {
+        "dice": "1d6", "damage_type": "piercing", "save": "dex",
+        "effect": (
+            "the arrow pierces a 30-ft line; each creature in it "
+            "makes a DEX save for half piercing damage"
+        ),
+    },
+    "seeking": {
+        "dice": "2d6", "damage_type": "force", "save": "dex",
+        "effect": (
+            "the arrow seeks the target around cover, finding it "
+            "unerringly; force damage on a failed DEX save"
+        ),
+    },
+    "shadow": {
+        "dice": "2d6", "damage_type": "psychic", "save": "wis",
+        "effect": (
+            "a shroud of darkness: the target is blinded until the "
+            "end of your next turn unless it succeeds a WIS save"
+        ),
+    },
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_arcane_shot")
+async def use_arcane_shot(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.374 — Phase G Fighter martial archetype sweep (Arcane
+    Archer Lv 3+, XGE) of the v2.99.193 phased completion plan.
+    Arcane Shot (Arcane Archer Lv 3+, XGE p.28): once per turn
+    when you fire an arrow as part of the Attack action, apply one
+    Arcane Shot option to it. Two uses, regained on a short or
+    long rest. Save DC = 8 + proficiency bonus + DEX modifier.
+
+    Body: ``{character_id, arrow?}``. ``arrow`` is one of
+    banishing / beguiling / bursting (default) / enfeebling /
+    grasping / piercing / seeking / shadow. No separate action
+    cost (a rider on the attack). Rolls the option's bonus damage
+    + computes the save DC server-side. v1 announce-only — the
+    attack/save resolution + 2-uses-per-rest limit are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    arrow = (body.get("arrow") or "bursting").strip().lower()
+    if arrow not in _ARCANE_SHOT_OPTIONS:
+        raise HTTPException(
+            400,
+            "arrow must be one of: " + ", ".join(sorted(_ARCANE_SHOT_OPTIONS)),
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_arcane_archer(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "arcane archer fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    if pb <= 0:
+        pb = 2 + (max(1, fighter_lv) - 1) // 4
+    try:
+        dex_score = int((sheet.get("abilities") or {}).get("DEX", 10))
+    except (TypeError, ValueError):
+        dex_score = 10
+    dex_mod = (dex_score - 10) // 2
+    save_dc = 8 + pb + dex_mod
+
+    option = _ARCANE_SHOT_OPTIONS[arrow]
+    bonus_damage = 0
+    breakdown = ""
+    if option["dice"]:
+        try:
+            result = dice_mod.roll(option["dice"])
+            bonus_damage = int(result.total)
+            breakdown = result.breakdown
+        except dice_mod.DiceParseError:
+            bonus_damage = 0
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    dmg_clause = (
+        f"+{bonus_damage} {option['damage_type']} ({option['dice']}) "
+        if option["dice"] else ""
+    )
+    save_clause = (
+        f"{option['save'].upper()} save DC {save_dc}: "
+        if option["save"] else ""
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🏹 Arcane Shot — {arrow.title()} Arrow "
+                f"{('+' + str(bonus_damage) + ' ' + option['damage_type']) if option['dice'] else ''}"
+            ),
+            "feature_desc": (
+                f"{char.name} looses a {arrow} arrow: {dmg_clause}"
+                f"{save_clause}{option['effect']}. (Arcane Archer "
+                f"Fighter Lv 3+ XGE class feature; 2 uses per short "
+                f"or long rest.)"
+            ),
+            "source": "arcane-shot",
+            "arrow": arrow,
+            "bonus_damage": bonus_damage,
+            "damage_dice": option["dice"],
+            "damage_type": option["damage_type"],
+            "save": option["save"],
+            "save_dc": save_dc,
+            "effect": option["effect"],
+            "fighter_level": fighter_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "arcane-shot",
+        "arrow": arrow,
+        "bonus_damage": bonus_damage,
+        "damage_dice": option["dice"],
+        "damage_type": option["damage_type"],
+        "save": option["save"],
+        "save_dc": save_dc,
+        "effect": option["effect"],
         "fighter_level": fighter_lv,
     }
 

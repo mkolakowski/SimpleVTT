@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.374] - 2026-06-05 — "The Enchanted Quiver" — Arcane Archer Fighter Arcane Shot (Lv 3+, XGE) — ⚔️ Fighter archetype sweep
+
+**Schema version:** 66
+**Commit summary:** **Fighter martial archetype sweep ship #5 — Arcane Archer Lv 3+ Arcane Shot (XGE).** Fifth Fighter archetype sweep ship; opens Arcane Archer. RAW XGE p.28: once per turn when you fire an arrow as part of the Attack action, apply one of eight Arcane Shot options (Banishing, Beguiling, Bursting, Enfeebling, Grasping, Piercing, Seeking, Shadow). Save DC = 8 + proficiency bonus + DEX modifier. 2 uses per short/long rest.
+**Description:** Adds `_pc_has_arcane_archer` helper (matches the full "arcane archer" phrase so it stays distinct from Eldritch Knight / Arcane Trickster) + an `_ARCANE_SHOT_OPTIONS` map of all eight arrows (bonus dice, damage type, save, effect). One endpoint. `/use_arcane_shot` — body `{character_id, arrow?}` (default bursting). Validates Arcane Archer Fighter Lv 3+. No separate action cost (a rider on the attack). Rolls the option's bonus damage + computes the save DC **server-side**. Broadcasts `feature_used` with `source: arcane-shot`, `arrow`, `bonus_damage`, `damage_dice`, `damage_type`, `save`, `save_dc`, `effect`. v1 announce-only — the attack/save resolution + 2-uses-per-rest limit are GM-tracked. One new harness test file with 4 tests.
+
+### Added
+- `/api/campaign/{cid}/use_arcane_shot` endpoint.
+- `_pc_has_arcane_archer` helper + `_ARCANE_SHOT_OPTIONS` map.
+- `tests/harness/test_arcane_shot.py` — 4 tests.
+
+### Notes
+- **Fighter archetype sweep progress:** Champion, Battle Master, Eldritch Knight (shipped earlier), Samurai, Psi Warrior, Rune Knight, Echo Knight, Arcane Archer (this) all have first features. Remaining untouched: Cavalier (Unwavering Mark), Banneret (Rallying Cry).
+- **190 ships this session.**
+- **Total harness count: 1765** (was 1761 in v2.99.373; +4 new tests).
+
+---
+
 ## [2.99.373] - 2026-06-05 — "The Spectral Twin" — Echo Knight Fighter Manifest Echo (Lv 3+, EGtW) — ⚔️ Fighter archetype sweep
 
 **Schema version:** 66
