@@ -128,3 +128,78 @@ async def test_use_ma_wrong_subclass(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_ma_resolves_npc_save_installs_frightened(
+    gm_client, gm_ws, garrik_battle_master,
+):
+    """v2.99.406 — Phase 3.1: against an NPC target, Menacing Attack
+    auto-resolves the WIS save server-side (_resolve_feature_save) and
+    installs Frightened on a fail.
+
+    NPC saves are random, so loop until a fail lands — Garrik's DC 16 vs
+    a Bandit's +0 WIS fails ~75% of swings. Seed a deep die pool up front
+    so each iteration is just one POST. Asserts both branches as they
+    occur: on a pass nothing installs; on a fail the `frightened` buff
+    lands on the dummy (verified via battle_update).
+    """
+    garrik = garrik_battle_master
+    await _patch_sheet(
+        gm_client, garrik["id"],
+        {"resources": [_superiority_dice_block(40, 40)]},
+    )
+    tmpl_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = tmpl_resp.json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+
+    garrik_tok = f"tok_ma_garrik_{garrik['id']}"
+    dummy_tok = "tok_ma_bandit"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": garrik_tok, "char_id": garrik["id"], "name": garrik["name"],
+             "initiative": 12, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": dummy_tok, "char_id": None,
+             "token_template_id": bandit["id"], "name": bandit["name"],
+             "initiative": 8, "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+
+    landed = False
+    for _ in range(40):
+        gm_ws.mark()
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_menacing_attack",
+            json={"character_id": garrik["id"],
+                  "target_combatant_id": dummy_tok},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["save_resolved"] is True, data
+        if data["save_passed"]:
+            assert data["condition_installed"] is False
+            continue
+        # Failed save → Frightened installs.
+        assert data["condition_installed"] is True
+        bu = await gm_ws.wait_for("battle_update")
+        dummy_cb = next(
+            (c for c in (bu["data"].get("combatants") or [])
+             if c.get("id") == dummy_tok), None)
+        assert dummy_cb is not None
+        frightened = next(
+            (b for b in (dummy_cb.get("buffs") or [])
+             if (b or {}).get("key") == "frightened"), None)
+        assert frightened is not None, dummy_cb.get("buffs")
+        assert frightened.get("source_char_id") == garrik["id"]
+        assert frightened.get("name") == "Frightened (Menacing Attack)"
+        landed = True
+        break
+
+    assert landed, "no failed WIS save in 40 tries; Frightened didn't install"

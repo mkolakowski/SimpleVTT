@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.406] - 2026-06-06 — "The Frightened Quarry" — Feature-save resolver (NPC path) + Menacing Attack retrofit (automation Phase 3.1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 3.1 of [docs/plans/feature-saves.md](docs/plans/feature-saves.md) — new `_resolve_feature_save` helper (NPC server-side path) + `_feature_save_dc`, proven by retrofitting Menacing Attack so its WIS save auto-resolves and installs Frightened on a fail.** First feature whose saving throw lands through the engine rather than being GM-tracked.
+**Description:** `_resolve_feature_save(db, campaign_id, *, caster, target_combatant, save_ability, dc, note_label, condition_buff, repeated_save, source)` rolls an **NPC** target's save server-side (`1d20` + the monster's save modifier + any Bless/Bane suffix), broadcasts it as a `roll` event for chat-card correlation, and on a FAILED save installs the caller-supplied condition buff via `_install_buff_on_combatant_id` (condition-immunity-gated), stamping `repeated_save_ability/_dc` when asked. Mirrors the `/cast_spell` + Stunning Strike NPC save path. PC targets are deferred to Phase 3.2 (the roll-request path); the helper returns `resolved=False` for non-NPC targets so callers branch. `_feature_save_dc(sheet, ability)` returns `8 + PB + the chosen ability's mod` (features key off a feature-specific ability, not the spellcasting one). Menacing Attack (`/use_menacing_attack`) gains an optional `target_combatant_id`: against an NPC it now auto-resolves the WIS save and installs a `frightened` buff (until end of the attacker's next turn ≈ 2 rounds) on a fail; without a target or against a PC it stays announce-only.
+
+### Added
+- `_resolve_feature_save` (NPC-path feature-save resolver) + `_feature_save_dc` helper.
+- `tests/harness/test_menacing_attack.py::test_ma_resolves_npc_save_installs_frightened` — loops until the NPC fails its WIS save (DC 16 vs a Bandit's +0 WIS) and asserts the `frightened` buff installs on the dummy (via `battle_update`) + that a passed save installs nothing.
+
+### Changed
+- `/api/campaign/{cid}/use_menacing_attack` auto-resolves the WIS save vs an NPC target and installs Frightened on a fail (was announce-only); response gains `save_resolved` / `save_passed` / `condition_installed`.
+
+### Notes
+- First Phase-3 step. Next: P3.2 (PC roll-request path so feature saves prompt PC targets exactly like spell saves), then P3.3 on-hit save riders (compose Menacing/Trip with the Phase 2 rider substrate so the save fires on a confirmed hit).
+- **Total harness count: 1831** (was 1830 in v2.99.405; +1 new test).
+
+---
+
 ## [2.99.405] - 2026-06-06 — "The Saving Throw, Charted" — Feature-saves design sub-plan (automation Phase 3)
 
 **Schema version:** 66

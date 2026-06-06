@@ -145,11 +145,11 @@ first and tackle the PC roll-request extraction in P3.2.
 
 ## 4. Phased implementation
 
-1. **P3.1 — extract the resolver (M).** Build `_resolve_feature_save`
-   covering the **NPC server-side** path end-to-end (roll → install /
-   damage), plus the feature-DC helper. Unit-cover with a synthetic
-   feature save against an NPC dummy asserting the installed condition
-   buff. No feature behavior change yet.
+1. **P3.1 — extract the resolver (M). ✅ shipped v2.99.406.** Built
+   `_resolve_feature_save` (NPC server-side path: roll → on-fail install)
+   + `_feature_save_dc`, proven by retrofitting Menacing Attack (WIS save
+   vs an NPC auto-installs Frightened on a fail). Save-for-half damage
+   and the PC roll-request path are still pending (P3.2).
 2. **P3.2 — PC roll-request path (M).** Extend the resolver to prompt PC
    targets via `_save_request_context` and resolve on `/respond`, sharing
    the advantage stack with `/cast_spell`.

@@ -23892,6 +23892,132 @@ def _compute_spell_save_dc_from_sheet(sheet: dict) -> int:
     return 8 + prof + mod
 
 
+def _feature_save_dc(sheet: dict, ability: str) -> int:
+    """v2.99.406 — Phase 3.1: a class-feature save DC = 8 + proficiency
+    bonus + the chosen ability's modifier. Unlike the spell DC (keyed to
+    the sheet's spellcasting ability), feature DCs key off a feature-
+    specific ability the caller passes — Battle Master maneuvers use
+    ``max(STR, DEX)`` (caller computes the winner), Paladin/Warlock
+    presence features use CHA, Enchantment Wizard uses INT, etc. Falls
+    back to the bare 8 + prof when the ability is unknown.
+    """
+    prof = int((sheet or {}).get("proficiency_bonus") or 2)
+    ab = (ability or "").strip().upper()[:3]
+    if ab not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+        return 8 + prof
+    score = int(((sheet or {}).get("abilities") or {}).get(ab, 10))
+    return 8 + prof + (score - 10) // 2
+
+
+async def _resolve_feature_save(
+    db: Session,
+    campaign_id: int,
+    *,
+    caster_char_id: int,
+    caster_char_name: str,
+    target_combatant: dict,
+    save_ability: str,
+    dc: int,
+    note_label: str,
+    condition_buff: "dict | None" = None,
+    repeated_save: bool = False,
+    source: str = "",
+) -> dict:
+    """v2.99.406 — Phase 3.1 of docs/plans/feature-saves.md: resolve a
+    class-feature saving throw against an **NPC** target server-side, and
+    on a FAILED save install the supplied condition buff. Mirrors the
+    `/cast_spell` + Stunning Strike NPC save path (roll ``1d20`` + the
+    NPC's save modifier + any Bless/Bane suffix, broadcast the roll as a
+    ``roll`` event so chat-card correlation works, then install on a
+    fail).
+
+    PC targets are NOT handled here — that needs the deferred
+    roll-request path (Phase 3.2). Callers must branch on target kind and
+    only call this for NPC combatants (those carrying a
+    ``token_template_id``); for any other target this returns
+    ``resolved=False`` and does nothing.
+
+    ``condition_buff`` is a fully-formed buff template the caller owns
+    (its ``key`` must match a condition the rest of the engine
+    understands — frightened / prone / charmed / …). When
+    ``repeated_save`` is True, the install stamps
+    ``repeated_save_ability`` + ``repeated_save_dc`` so the existing
+    end-of-turn / damage-triggered re-save can drop it on a later
+    success. The install is condition-immunity-gated inside
+    ``_install_buff_on_combatant_id``.
+
+    Returns ``{resolved, target_combatant_id, save_total, save_breakdown,
+    passed, save_dc, save_ability, condition_installed, condition_key}``.
+    """
+    result = {
+        "resolved": False,
+        "target_combatant_id": (target_combatant or {}).get("id") or "",
+        "save_total": 0,
+        "save_breakdown": "",
+        "passed": None,
+        "save_dc": int(dc),
+        "save_ability": (save_ability or "").strip().upper()[:3],
+        "condition_installed": False,
+        "condition_key": "",
+    }
+    if not target_combatant or not target_combatant.get("token_template_id"):
+        return result  # PC / unknown target — caller handles (Phase 3.2)
+
+    tmpl = db.query(TokenTemplate).filter(
+        TokenTemplate.id == int(target_combatant["token_template_id"]),
+    ).first()
+    if not tmpl:
+        return result
+
+    stat_key = f"{result['save_ability'].lower()}_save"
+    npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
+    npc_mod, _ = _resolve_stat_modifier(npc_sheet, "dnd5e", stat_key)
+    expr = f"1d20{npc_mod:+d}"
+    bb_suffix = _saver_bless_bane_save_suffix(campaign_id, None, target_combatant)
+    if bb_suffix:
+        expr = f"{expr}{bb_suffix}"
+    try:
+        _r = dice_mod.roll(expr)
+        result["save_total"] = int(_r.total)
+        result["save_breakdown"] = _r.breakdown
+    except dice_mod.DiceParseError:
+        result["save_total"] = 0
+        result["save_breakdown"] = ""
+    result["resolved"] = True
+    result["passed"] = result["save_total"] >= int(dc)
+
+    target_name = target_combatant.get("name") or "Target"
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": expr,
+            "total": result["save_total"],
+            "breakdown": result["save_breakdown"],
+            "note": note_label,
+            "user_name": target_name,
+            "char_name": target_name,
+            "visibility": Visibility.PUBLIC.value,
+            "dc": int(dc),
+        },
+    })
+
+    if result["passed"] is False and condition_buff:
+        buff = dict(condition_buff)
+        buff.setdefault("source_char_id", caster_char_id)
+        buff.setdefault("source_char_name", caster_char_name)
+        if repeated_save:
+            buff["repeated_save_ability"] = result["save_ability"]
+            buff["repeated_save_dc"] = int(dc)
+        installed = await _install_buff_on_combatant_id(
+            campaign_id, target_combatant.get("id"), buff,
+        )
+        result["condition_installed"] = bool(installed)
+        if installed:
+            result["condition_key"] = str(buff.get("key") or "")
+
+    return result
+
+
 def _make_paralyzed_buff(
     target_speed_walk: int,
     source_char_id: int | None,
@@ -42486,21 +42612,29 @@ async def use_menacing_attack(
     saving throw. On a failed save, it is frightened of you
     until the end of your next turn."
 
-    Body: ``{character_id, override?}``. Same shape as Trip
-    Attack (v2.99.233) / Disarming Attack (v2.99.252) but the
-    save ability is WIS (not max-of-STR-or-DEX) and the on-fail
+    Body: ``{character_id, target_combatant_id?, override?}``. Same
+    shape as Trip Attack (v2.99.233) / Disarming Attack (v2.99.252) but
+    the save ability is WIS (not max-of-STR-or-DEX) and the on-fail
     effect is Frightened until end of attacker's next turn.
 
     Validates Battle Master Lv 3+ + `superiority-dice` resource
     current >= 1. Decrements counter, rolls 1d<size>, computes
     DC = 8 + prof + max(STR, DEX) mod (Battle Master's DC
-    formula stays the same across maneuvers), broadcasts. v1
-    announce-only.
+    formula stays the same across maneuvers), broadcasts.
+
+    v2.99.406 — Phase 3.1 of docs/plans/feature-saves.md: when a
+    ``target_combatant_id`` resolving to an **NPC** is supplied, the WIS
+    save is now auto-resolved server-side via ``_resolve_feature_save``
+    and, on a fail, a `frightened` condition installs on the target
+    (until the end of the attacker's next turn ≈ 2 rounds). Without a
+    target — or against a PC target (deferred to Phase 3.2's roll-request
+    path) — it stays announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id") or None
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -42617,6 +42751,43 @@ async def use_menacing_attack(
         },
     })
 
+    # v2.99.406 — Phase 3.1: auto-resolve the WIS save vs an NPC target
+    # and install Frightened (until end of the attacker's next turn ≈ 2
+    # rounds) on a fail. PC targets / no target stay announce-only.
+    save_resolved = False
+    save_passed = None
+    condition_installed = False
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant and target_combatant.get("token_template_id"):
+            frightened_buff = {
+                "key": "frightened",
+                "name": "Frightened (Menacing Attack)",
+                "icon": "😱",
+                "duration_rounds": 2,
+                "duration_max": 2,
+                "concentration": False,
+                "source_spell": "Menacing Attack",
+                "effects": [
+                    "disadvantage on ability checks / attacks while the "
+                    "attacker is in sight",
+                    "can't willingly move closer to the attacker",
+                ],
+            }
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=char.id, caster_char_name=char.name,
+                target_combatant=target_combatant,
+                save_ability="WIS", dc=save_dc,
+                note_label=f"Menacing Attack save (DC {save_dc})",
+                condition_buff=frightened_buff,
+                repeated_save=False,
+                source="menacing-attack",
+            )
+            save_resolved = sr["resolved"]
+            save_passed = sr["passed"]
+            condition_installed = sr["condition_installed"]
+
     return {
         "ok": True,
         "feature": "menacing-attack",
@@ -42625,6 +42796,9 @@ async def use_menacing_attack(
         "save_dc": save_dc,
         "save_ability": "WIS",
         "dice_remaining": new_sd,
+        "save_resolved": save_resolved,
+        "save_passed": save_passed,
+        "condition_installed": condition_installed,
     }
 
 
