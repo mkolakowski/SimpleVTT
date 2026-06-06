@@ -1,6 +1,6 @@
 # Auras — Phase 5 sub-plan
 
-**Status:** ⚪ proposed (planning only)
+**Status:** ✅ shipped (P5.1 → P5.4 complete, v2.99.424–.429)
 **Parent:** [full-feature-automation.md](full-feature-automation.md) Phase 5 (P5 aura tick).
 **Goal:** Build a **per-turn aura tick** (`_tick_auras`) that, on a turn
 advance, applies an aura-emitter's effect to the creatures in its radius
@@ -139,9 +139,11 @@ Countercharm already make. A GM-supplied target list can override later.
    v2.99.427.** The bear installs a `spirit-totem-bear` aura buff
    (`temp_hp`, `affects: allies`, 30 ft) so the tick re-grants temp HP to
    allies each druid turn. Closes the P4.2 defer.
-4. **P5.4 — Paladin Lv 20 auras (S-M).** Elder Champion self-heal,
-   Avenging Angel frightened-on-enter (the subject-turn-start model +
-   `_resolve_feature_save`).
+4. **P5.4 — Paladin Lv 20 auras (S-M). ✅ shipped v2.99.428–.429.**
+   Elder Champion self-heal (owner-turn-start `affects: self` + `heal`,
+   v2.99.428) + Avenging Angel frightened-on-enter (the new
+   subject-turn-start save pass + `_resolve_feature_save`, v2.99.429).
+   **Completes Phase 5.**
 
 ---
 

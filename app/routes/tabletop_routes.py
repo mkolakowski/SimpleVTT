@@ -6767,10 +6767,20 @@ async def _tick_auras(
     campaign_id: int,
     state: dict,
     active_combatant: "dict | None",
+    *,
+    campaign: "Campaign | None" = None,
+    prompt_user: "User | None" = None,
 ) -> list[dict]:
     """v2.99.425 — Phase 5.1 of docs/plans/auras.md: on a turn advance,
     apply any aura emitted by the **new active combatant** to the
     creatures in its radius (owner-turn-start model).
+
+    v2.99.429 — Phase 5.4: also runs a subject-turn-start pass — when the
+    active combatant starts its turn inside ANOTHER combatant's aura that
+    carries ``aura.on == "subject_turn_start"`` + a ``save`` payload
+    (Avenging Angel: frightened-on-enter), it makes the save against that
+    emitter via ``_resolve_feature_save`` (needs ``campaign`` +
+    ``prompt_user`` for the PC-prompt path).
 
     An active aura is a buff on the emitter carrying
     ``effects.aura = {radius_ft, affects, <one payload>}`` where the
@@ -6842,13 +6852,79 @@ async def _tick_auras(
                 "subject_id": c.get("id"), "source": source,
                 "applied": applied,
             })
+
+    # v2.99.429 — Phase 5.4: subject-turn-start pass. When the active
+    # combatant starts its turn inside another combatant's save-aura
+    # (Avenging Angel: frightened-on-enter), it makes the save against
+    # that emitter. Needs campaign + prompt_user for the PC-prompt path.
+    if campaign is not None and prompt_user is not None:
+        for owner2 in combs:
+            if not isinstance(owner2, dict) or owner2.get("id") == owner_cid:
+                continue
+            o2_is_pc = bool(owner2.get("char_id"))
+            for b2 in owner2.get("buffs") or []:
+                if not isinstance(b2, dict):
+                    continue
+                eff2 = b2.get("effects")
+                if not isinstance(eff2, dict):
+                    continue
+                aura2 = eff2.get("aura")
+                if not isinstance(aura2, dict):
+                    continue
+                if aura2.get("on") != "subject_turn_start":
+                    continue
+                save = aura2.get("save")
+                if not isinstance(save, dict):
+                    continue
+                affects2 = str(aura2.get("affects") or "enemies").strip().lower()
+                subj_is_pc = bool(active_combatant.get("char_id"))
+                if affects2 == "allies" and subj_is_pc != o2_is_pc:
+                    continue
+                if affects2 == "enemies" and subj_is_pc == o2_is_pc:
+                    continue
+                try:
+                    radius2 = float(aura2.get("radius_ft") or 0)
+                except (TypeError, ValueError):
+                    radius2 = 0.0
+                if (radius2 > 0 and o2_is_pc
+                        and active_combatant.get("char_id")):
+                    dist = _distance_ft_between_chars(
+                        db, campaign_id,
+                        int(owner2["char_id"]),
+                        int(active_combatant["char_id"]),
+                    )
+                    if dist is not None and dist > radius2:
+                        continue
+                src2 = str(aura2.get("source") or b2.get("key") or "aura")
+                sr = await _resolve_feature_save(
+                    db, campaign_id,
+                    caster_char_id=int(owner2.get("char_id") or 0),
+                    caster_char_name=str(owner2.get("name") or ""),
+                    target_combatant=active_combatant,
+                    save_ability=str(save.get("ability") or "WIS"),
+                    dc=int(save.get("dc") or 10),
+                    note_label=str(
+                        save.get("label") or aura2.get("label") or "Aura save"),
+                    condition_buff=save.get("condition"),
+                    repeated_save=bool(save.get("repeated_save")),
+                    source=src2,
+                    campaign=campaign,
+                    prompt_user=prompt_user,
+                    feature_name=str(aura2.get("label") or "Aura"),
+                )
+                results.append({
+                    "subject_id": active_combatant.get("id"),
+                    "source": src2,
+                    "applied": bool(
+                        sr.get("condition_installed") or sr.get("prompted")),
+                })
+
     if results:
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
             "data": {
-                "source": (results[0]["source"]),
-                "label": label,
-                "feature_name": f"🌀 {label} — aura tick",
+                "source": results[0]["source"],
+                "feature_name": "🌀 Aura tick",
                 "subjects": len(results),
             },
         })
@@ -47576,8 +47652,15 @@ async def use_avenging_angel(
 
     Body: ``{character_id, override?}``. Costs an action chip.
     Auto-bootstraps an `avenging-angel` resource if missing.
-    v1 announce-only — wings/fly, aura, frightened install
-    GM-tracked. DC included in broadcast.
+
+    v2.99.429 — Phase 5.4 of docs/plans/auras.md: installs an
+    `avenging-angel` **subject-turn-start save aura** buff
+    (`effects.aura = {on: "subject_turn_start", affects: "enemies",
+    radius_ft: 30, save: {ability: "WIS", dc, condition: <frightened>}}`),
+    so the v2.99.425 aura tick makes each enemy that starts its turn in
+    the 30-ft aura roll a WIS save (NPC inline / PC prompt) or be
+    frightened. Wings / fly speed + the advantage-vs-frightened rider stay
+    GM-tracked. Response gains `buff_installed`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -47710,6 +47793,52 @@ async def use_avenging_angel(
         },
     })
 
+    # v2.99.429 — Phase 5.4: install a subject-turn-start save aura so the
+    # tick frightens enemies that start their turn within 30 ft.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "avenging-angel",
+        "name": "Avenging Angel",
+        "icon": "😇",
+        "duration_rounds": 100,  # 1 hour ≈ long; the tick fires each turn
+        "duration_max": 100,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "aura": {
+                "on": "subject_turn_start",
+                "radius_ft": 30,
+                "affects": "enemies",
+                "save": {
+                    "ability": "WIS",
+                    "dc": save_dc,
+                    "condition": {
+                        "key": "frightened",
+                        "name": "Frightened (Avenging Angel)",
+                        "icon": "😱",
+                        "duration_rounds": 10,
+                        "duration_max": 10,
+                        "concentration": False,
+                        "source_spell": "Avenging Angel",
+                        "effects": [
+                            "disadvantage on ability checks / attacks "
+                            "while the angel is in sight",
+                            "can't willingly move closer to the angel",
+                        ],
+                    },
+                    "label": "Avenging Angel",
+                },
+                "source": "avenging-angel",
+                "label": "Avenging Angel",
+            },
+        },
+        "desc": (
+            f"Enemies that start their turn within 30 ft make a WIS save "
+            f"(DC {save_dc}) or are frightened. (Vengeance Paladin Lv 20.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     return {
         "ok": True,
         "feature": "avenging-angel",
@@ -47720,6 +47849,7 @@ async def use_avenging_angel(
         "aura_radius_ft": 30,
         "save_dc": save_dc,
         "paladin_level": pal_lv,
+        "buff_installed": buff_installed,
     }
 
 
@@ -71662,7 +71792,10 @@ async def update_battle(
         # new active combatant (owner-turn-start model) to the creatures
         # in its radius. Runs for ANY active combatant (PC or NPC), so
         # it's outside the PC-gated Heroism block above.
-        await _tick_auras(db, campaign_id, state, _active)
+        await _tick_auras(
+            db, campaign_id, state, _active,
+            campaign=campaign, prompt_user=user,
+        )
 
         # v2.97.62 — auto-fire repeated end-of-turn saves for the
         # PREVIOUS active combatant. RAW (Hold Person / Fear / etc.):

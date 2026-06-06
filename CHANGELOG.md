@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.429] - 2026-06-06 — "The Wrathful Halo" — Avenging Angel frightful aura (Phase 5.4 — Phase 5 COMPLETE)
+
+**Schema version:** 66
+**Commit summary:** **Phase 5.4 of [docs/plans/auras.md](docs/plans/auras.md) — `_tick_auras` gains a subject-turn-start pass, and Avenging Angel (Vengeance Paladin Lv 20) installs a `subject_turn_start` save aura so an enemy that starts its turn within 30 ft makes a WIS save or is frightened.** Completes Phase 5.
+**Description:** `_tick_auras` now runs a second pass: when the active combatant starts its turn inside ANOTHER combatant's aura that carries `aura.on == "subject_turn_start"` + a `save` payload (`{ability, dc, condition}`), it resolves that save against the active combatant via `_resolve_feature_save` (NPC inline / PC prompt) — Phase 3's resolver reused. `_tick_auras` gains `campaign` + `prompt_user` params (threaded from `update_battle`) for the PC-prompt path. `/use_avenging_angel` installs an `avenging-angel` aura buff (`on: "subject_turn_start"`, `affects: "enemies"`, `radius_ft: 30`, `save: {WIS, DC 8+PB+CHA, condition: frightened}`). Wings/fly + the advantage-vs-frightened rider stay GM-tracked. Response gains `buff_installed`.
+
+### Added
+- `_tick_auras` subject-turn-start pass (save auras) + the `campaign`/`prompt_user` params.
+- `tests/harness/test_avenging_angel.py::test_aa_aura_frightens_enemy_on_its_turn` — activate the aura, assert its save payload, then advance to a bandit's turn until it fails the WIS save and Frightened installs.
+
+### Changed
+- `/api/campaign/{cid}/use_avenging_angel` installs the frightful save aura (was announce-only); response gains `buff_installed`.
+
+### Notes
+- **Phase 5 complete** — P5.1 the `_tick_auras` substrate, P5.2 Storm Aura (Desert), P5.3 Spirit Totem (Bear) ongoing re-grant, P5.4 the Paladin Lv 20 auras (Elder Champion self-heal + Avenging Angel frightful aura, owner- and subject-turn-start models). Next phase: P6 movement / P7 summons (own sub-plan).
+- **Total harness count: 1856** (was 1855 in v2.99.428; +1 new test).
+
+---
+
 ## [2.99.428] - 2026-06-06 — "The Ancient Form" — Elder Champion self-heal aura (automation Phase 5.4)
 
 **Schema version:** 66

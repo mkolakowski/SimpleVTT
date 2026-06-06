@@ -153,3 +153,95 @@ async def test_use_aa_long_rest_refills(
     assert r2.status_code == 200, r2.text
     data = r2.json()
     assert data["uses_remaining"] == 0
+
+
+async def test_aa_aura_frightens_enemy_on_its_turn(
+    gm_client, gm_ws, caelan_vengeance_lv20,
+):
+    """v2.99.429 — Phase 5.4: Avenging Angel installs a subject-turn-start
+    save aura, and the tick frightens an enemy that starts its turn in the
+    30-ft aura (WIS save vs DC 14, NPC inline).
+
+    Activate → assert the aura buff's save payload → loop: advance to the
+    bandit's turn until it fails the WIS save and Frightened installs.
+    """
+    caelan = caelan_vengeance_lv20
+    tmpl_resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = tmpl_resp.json()
+    bandit = next(
+        (t for t in templates if "bandit" in (t.get("name") or "").lower()),
+        templates[0],
+    )
+    caelan_tok = f"tok_aa_{caelan['id']}"
+    bandit_tok = "tok_aa_bandit"
+
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": caelan_tok, "char_id": caelan["id"], "name": caelan["name"],
+             "initiative": 20, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": bandit_tok, "char_id": None,
+             "token_template_id": bandit["id"], "name": "Bandit",
+             "initiative": 8, "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_avenging_angel",
+        json={"character_id": caelan["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["buff_installed"] is True
+
+    bu = await gm_ws.wait_for("buff_update")
+    aa = next((b for b in bu["data"]["buffs"]
+               if b.get("key") == "avenging-angel"), None)
+    assert aa is not None, bu["data"]["buffs"]
+    aura = (aa.get("effects") or {}).get("aura") or {}
+    assert aura.get("on") == "subject_turn_start"
+    assert aura.get("affects") == "enemies"
+    assert (aura.get("save") or {}).get("ability") == "WIS"
+    caelan_buffs = bu["data"]["buffs"]
+
+    def _combs(turn_index):
+        return [
+            {"id": caelan_tok, "char_id": caelan["id"], "name": caelan["name"],
+             "initiative": 20, "hp_current": 60, "hp_max": 60,
+             "buffs": caelan_buffs,
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": bandit_tok, "char_id": None,
+             "token_template_id": bandit["id"], "name": "Bandit",
+             "initiative": 8, "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ]
+
+    landed = False
+    for _ in range(40):
+        # Reset to Caelan's turn (bandit cleared), then advance to the
+        # bandit's turn so the subject-turn-start save fires on it.
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": _combs(0), "turn_index": 0, "round": 1,
+                  "active": True})
+        gm_ws.mark()
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": _combs(1), "turn_index": 1, "round": 1,
+                  "active": True})
+        await asyncio.sleep(0.25)
+        bus = gm_ws.buffered("battle_update")
+        latest = bus[-1] if bus else None
+        if latest:
+            band = next((c for c in (latest["data"].get("combatants") or [])
+                         if c.get("id") == bandit_tok), None)
+            if band and any((b or {}).get("key") == "frightened"
+                            for b in (band.get("buffs") or [])):
+                landed = True
+                break
+    assert landed, "no failed bandit WIS save in 40 turn-starts"

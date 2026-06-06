@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423); Phase 5 next.
+**Status:** 🟠 in progress — Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429); Phase 6 next.
 **Author:** drafted v2.99.386
 **Scope:** Turn every shipped class/subclass feature from "v1 announce-only"
 into a **server-applied, state-changing, harness-verified** mechanic — and
@@ -143,7 +143,7 @@ Apply temporary HP to a combatant (RAW: doesn't stack — take the higher),
 broadcast an HP/temp update. Unlocks Dark One's Blessing, Fighting Spirit,
 Touch of Death, Heroism's per-turn grant, Inspiring Smite, Bear totem-less, etc.
 
-### P5 — Aura tick (`_tick_auras`)
+### P5 — Aura tick (`_tick_auras`) ✅ shipped
 A per-turn hook (on turn start / combatant entering radius) that applies an
 aura buff's effect to creatures in range: damage (Storm Aura desert, Spirit
 Totem), heal/temp-HP (tundra, Aura of the Sentinel), or buff (Wolf totem,
@@ -210,9 +210,12 @@ Shipped via the [temp-hp-and-bonuses.md](temp-hp-and-bonuses.md) sub-plan
 (`_grant_temp_hp` + damage absorption → 6 temp-HP retrofits → +AC spells →
 buff-level save advantage).
 
-### Phase 5 — P5 auras (L, ~6 commits, own sub-plan)
+### Phase 5 — P5 auras (L, ~6 commits, own sub-plan) ✅ shipped (v2.99.424–.429)
 Aura tick + radius picker; retrofit Storm Aura, Spirit Totem, the Paladin Lv 7
 auras (Protection already done — fold the rest in), Aura of the Sentinel, etc.
+Shipped via the [auras.md](auras.md) sub-plan (`_tick_auras` owner- +
+subject-turn-start passes → Storm Aura Desert, Spirit Totem Bear re-grant,
+Elder Champion self-heal, Avenging Angel frightful aura).
 
 ### Phase 6 — P6 movement / P7 summons (L, ~8 commits, own sub-plan)
 Forced-move + speed buffs, then the summon-token primitive (the heaviest — real
