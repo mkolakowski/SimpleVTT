@@ -27502,6 +27502,32 @@ def _pc_has_swarmkeeper(sheet: "dict | None", min_level: int) -> bool:
     return _ranger_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_fey_wanderer(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.381 — RAW Fey Wanderer (Ranger conclave, TCE p.60):
+    Dreadful Strike + Otherworldly Glamour + Fey Wanderer Magic
+    (Lv 3), Beguiling Twist (Lv 7), Fey Reinforcements (Lv 11),
+    Misty Wanderer (Lv 15).
+
+    Returns True when the PC is a Ranger with subclass slug
+    containing "fey" + meets `min_level` (multiclass-aware). The
+    class check keeps it distinct from the Warlock Archfey patron.
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "ranger":
+        has_ranger = any(
+            (entry.get("class") or "").strip().lower() == "ranger"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_ranger:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "fey" not in subclass:
+        return False
+    return _ranger_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_assassin_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.306 — RAW Assassin features (Rogue, PHB p.97):
     Bonus Proficiencies + Assassinate (Lv 3), Infiltration
@@ -54135,6 +54161,104 @@ async def use_gathered_swarm(
         "ok": True,
         "feature": "gathered-swarm",
         **result_fields,
+        "ranger_level": ranger_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_dreadful_strike")
+async def use_dreadful_strike(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.381 — Phase G Ranger conclave subclass batch ship #5
+    (Fey Wanderer Lv 3+, TCE) of the v2.99.193 phased completion
+    plan. Dreadful Strike (Fey Wanderer Lv 3+, TCE p.60): "When
+    you hit a creature with a weapon attack, you can deal an extra
+    1d4 psychic damage to that creature, which can take this extra
+    damage only once per turn." The die grows to 1d6 at Lv 11.
+
+    Body: ``{character_id}``. No separate action cost (a rider on a
+    weapon hit). Rolls the psychic damage server-side (1d4, or 1d6
+    at Lv 11+). v1 announce-only — the on-hit application + once-
+    per-turn limit are GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_fey_wanderer(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "fey wanderer ranger lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _ranger_level_from_sheet(sheet),
+        })
+
+    ranger_lv = _ranger_level_from_sheet(sheet)
+    die_size = 6 if ranger_lv >= 11 else 4
+    try:
+        result = dice_mod.roll(f"1d{die_size}")
+        psychic_damage = int(result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        psychic_damage = 1
+        breakdown = ""
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🃏 Dreadful Strike — +{psychic_damage} psychic "
+                f"(1d{die_size})"
+            ),
+            "feature_desc": (
+                f"{char.name} scars a foe's mind with feywild "
+                f"dread: +{psychic_damage} psychic (1d{die_size}) "
+                f"on the weapon hit, once per turn. (Fey Wanderer "
+                f"Ranger Lv 3+ TCE class feature.)"
+            ),
+            "source": "dreadful-strike",
+            "psychic_damage": psychic_damage,
+            "damage_die": f"1d{die_size}",
+            "ranger_level": ranger_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "dreadful-strike",
+        "psychic_damage": psychic_damage,
+        "damage_die": f"1d{die_size}",
         "ranger_level": ranger_lv,
     }
 

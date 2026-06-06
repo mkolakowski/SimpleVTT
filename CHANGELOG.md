@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.381] - 2026-06-05 — "The Mind-Scarring Arrow" — Fey Wanderer Ranger Dreadful Strike (Lv 3+, TCE) — 🏹 Ranger conclave batch
+
+**Schema version:** 66
+**Commit summary:** **Ranger conclave subclass batch ship #6 — Fey Wanderer Lv 3+ Dreadful Strike (TCE).** Fifth Ranger conclave ship; opens Fey Wanderer. RAW TCE p.60: when you hit a creature with a weapon attack, deal +1d4 psychic (once per turn); the die grows to 1d6 at Lv 11.
+**Description:** Adds `_pc_has_fey_wanderer` helper (class-gated so it stays distinct from the Warlock Archfey patron). One endpoint. `/use_dreadful_strike` — body `{character_id}`. Validates Fey Wanderer Ranger Lv 3+. No separate action cost (a rider on a weapon hit). Rolls the psychic damage **server-side** (1d4, or 1d6 at Lv 11+). Broadcasts `feature_used` with `source: dreadful-strike`, `psychic_damage`, `damage_die`. v1 announce-only — the on-hit application + once-per-turn limit are GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_dreadful_strike` endpoint.
+- `_pc_has_fey_wanderer` helper.
+- `tests/harness/test_dreadful_strike.py` — 3 tests.
+
+### Notes
+- **Ranger conclave batch progress:** Hunter (Colossus Slayer, wired earlier), Gloom Stalker, Beast Master, Monster Slayer, Swarmkeeper, Fey Wanderer (this) all have first features. Remaining untouched: Horizon Walker (Planar Warrior). One more ship closes the batch.
+- **197 ships this session.**
+- **Total harness count: 1788** (was 1785 in v2.99.380; +3 new tests).
+
+---
+
 ## [2.99.380] - 2026-06-05 — "The Bonded Swarm" — Swarmkeeper Ranger Gathered Swarm (Lv 3+, TCE) — 🏹 Ranger conclave batch
 
 **Schema version:** 66
