@@ -229,3 +229,63 @@ async def test_st_bear_applies_temp_hp(
     combs = {c.get("id"): c for c in (bus[-1]["data"].get("combatants") or [])}
     assert int(combs[tok_a].get("temp_hp") or 0) == bear
     assert int(combs[tok_b].get("temp_hp") or 0) == bear
+
+
+async def test_st_bear_aura_regrants_each_turn(
+    gm_client, gm_ws, roster, mira_shepherd,
+):
+    """v2.99.427 — Phase 5.3: the Bear spirit installs an aura buff so the
+    tick re-grants temp HP to allies in the aura at the start of the
+    druid's turn (ongoing re-grant, not just on summon).
+
+    No summon target list → the only grant comes from the aura tick. Mira
+    (druid, PC) + Pip (PC ally) in init; advance to Mira's turn → Pip
+    gains 10 temp HP (5 + druid level 5) via _grant_temp_hp.
+    """
+    mira = mira_shepherd
+    pip = roster["Pip Quickfingers"]  # PC ally (clean_pcs cleared temp → 0)
+    mira_tok = f"tok_str_mira_{mira['id']}"
+    pip_tok = f"tok_str_pip_{pip['id']}"
+
+    def _battle(mira_buffs, turn_index):
+        return {"combatants": [
+            {"id": mira_tok, "char_id": mira["id"], "name": mira["name"],
+             "initiative": 20, "hp_current": 40, "hp_max": 40,
+             "buffs": mira_buffs,
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": pip_tok, "char_id": pip["id"], "name": pip["name"],
+             "initiative": 10, "hp_current": 47, "hp_max": 47, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": turn_index, "round": 1, "active": True}
+
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle", json=_battle([], 1))
+    # Summon the Bear with NO target list → installs the aura buff only.
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_spirit_totem",
+        json={"character_id": mira["id"], "spirit": "bear", "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["aura_installed"] is True
+    assert data["targets_applied"] == 0  # no summon grant
+    bear = data["bear_temp_hp"]
+    assert bear == 10
+
+    bu = await gm_ws.wait_for("buff_update")
+    mira_buffs = bu["data"]["buffs"]
+    assert any(b.get("key") == "spirit-totem-bear" for b in mira_buffs)
+
+    # Advance to Mira's turn (index 0) carrying the aura buff → tick
+    # re-grants temp HP to the ally Pip.
+    gm_ws.mark()
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json=_battle(mira_buffs, 0) | {"round": 2},
+    )
+    hp = await gm_ws.wait_for("character_hp_update")
+    assert hp["data"]["character_id"] == pip["id"]
+    assert int(hp["data"]["hp"].get("temp") or 0) == bear

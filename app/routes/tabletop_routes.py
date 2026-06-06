@@ -50403,10 +50403,13 @@ async def use_spirit_totem(
     v2.99.421 — Phase 4.2 of docs/plans/temp-hp-and-bonuses.md: for the
     **bear** spirit, when ``target_combatant_ids`` (the allies in the
     30-ft aura) is supplied, each gains `5 + druid level` temp HP via
-    `_grant_temp_hp` (RAW non-stacking) on summon. The ongoing aura
-    re-grant (a creature first entering / starting its turn in the aura)
-    stays GM-tracked pending the Phase 5 aura tick. Hawk / unicorn
-    effects + the aura itself stay announce-only.
+    `_grant_temp_hp` (RAW non-stacking) on summon.
+
+    v2.99.427 — Phase 5.3 of docs/plans/auras.md: the bear spirit now
+    also installs a `spirit-totem-bear` aura buff so the v2.99.425 tick
+    re-grants the temp HP to allies in the 30-ft aura at the start of each
+    of the druid's turns (the ongoing re-grant the P4.2 summon-only path
+    deferred). Hawk / unicorn effects stay announce-only.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -50570,6 +50573,41 @@ async def use_spirit_totem(
             if gr["temp_after"] > 0:
                 targets_applied += 1
 
+    # v2.99.427 — Phase 5.3 of docs/plans/auras.md: the Bear spirit now
+    # also installs a `spirit-totem-bear` AURA buff on the druid so the
+    # v2.99.425 tick re-grants the temp HP to allies in the 30-ft aura at
+    # the start of each of the druid's turns (closes the P4.2 ongoing-
+    # re-grant defer). The summon grant above covers turn 0; the aura
+    # maintains it (non-stacking). 10-round duration ≈ the 1-minute totem.
+    # (v1 covers allies; the druid's own ongoing temp HP is via the summon
+    # target list — RAW "you and your allies".)
+    aura_installed = False
+    if spirit == "bear" and bear_temp_hp > 0:
+        aura_installed = await _install_buff(campaign_id, char.id, {
+            "key": "spirit-totem-bear",
+            "name": "Spirit Totem (Bear)",
+            "icon": "🐻",
+            "duration_rounds": 10,
+            "duration_max": 10,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "aura": {
+                    "radius_ft": 30,
+                    "affects": "allies",
+                    "temp_hp": bear_temp_hp,
+                    "source": "spirit-totem-bear",
+                    "label": "Spirit Totem (Bear)",
+                },
+            },
+            "desc": (
+                f"Allies within the 30-ft aura gain {bear_temp_hp} temp "
+                f"HP at the start of your turn. (Shepherd Druid Lv 2+.)"
+            ),
+        })
+        if aura_installed:
+            _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     return {
         "ok": True,
         "feature": "spirit-totem",
@@ -50582,6 +50620,7 @@ async def use_spirit_totem(
         "max_uses": st_max,
         "druid_level": druid_lv,
         "targets_applied": targets_applied,
+        "aura_installed": aura_installed,
     }
 
 

@@ -135,8 +135,10 @@ Countercharm already make. A GM-supplied target list can override later.
    save) + Tundra (one chosen creature temp HP) are single-target
    *choices*, not auto-tick-all — they stay announce-only (a per-turn
    single-target endpoint could automate them later).
-3. **P5.3 — Spirit Totem bear ongoing re-grant (S).** Install the aura
-   buff so the bear's temp HP re-grants each turn (closes the P4.2 defer).
+3. **P5.3 — Spirit Totem bear ongoing re-grant (S). ✅ shipped
+   v2.99.427.** The bear installs a `spirit-totem-bear` aura buff
+   (`temp_hp`, `affects: allies`, 30 ft) so the tick re-grants temp HP to
+   allies each druid turn. Closes the P4.2 defer.
 4. **P5.4 — Paladin Lv 20 auras (S-M).** Elder Champion self-heal,
    Avenging Angel frightened-on-enter (the subject-turn-start model +
    `_resolve_feature_save`).

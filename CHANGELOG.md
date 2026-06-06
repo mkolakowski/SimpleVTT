@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.427] - 2026-06-06 — "The Bear Walks With You" — Spirit Totem (Bear) ongoing re-grant (automation Phase 5.3)
+
+**Schema version:** 66
+**Commit summary:** **Phase 5.3 of [docs/plans/auras.md](docs/plans/auras.md) — the Bear Spirit Totem now installs a `spirit-totem-bear` aura buff so the v2.99.425 tick re-grants its temp HP to allies in the 30-ft aura at the start of each of the druid's turns** — closing the P4.2 ongoing-re-grant defer.
+**Description:** `/use_spirit_totem` (bear) now `_install_buff`s a `spirit-totem-bear` buff carrying `effects.aura = {radius_ft: 30, affects: "allies", temp_hp: <5+druid lv>}` on the druid, in addition to the P4.2 summon grant to the supplied target list. `_tick_auras` then re-tops each ally's temp HP (non-stacking) each round the totem persists (10-round duration ≈ 1 minute). Response gains `aura_installed`. v1 covers allies in range; the druid's own ongoing temp HP rides the summon target list (RAW "you and your allies").
+
+### Changed
+- `/api/campaign/{cid}/use_spirit_totem` (bear) installs an ongoing aura buff (was summon-grant-only); response gains `aura_installed`.
+
+### Added
+- `tests/harness/test_spirit_totem.py::test_st_bear_aura_regrants_each_turn` — summon the bear with NO target list (so the only grant is the tick), advance to the druid's turn, and assert the PC ally gains 10 temp HP via `character_hp_update`.
+
+### Notes
+- Second aura-feature retrofit; reuses the P5.1 tick. Next: P5.4 (Paladin Lv 20 auras — Elder Champion self-heal + Avenging Angel frightened-on-enter, the subject-turn-start model + `_resolve_feature_save`).
+- **Total harness count: 1854** (was 1853 in v2.99.426; +1 new test).
+
+---
+
 ## [2.99.426] - 2026-06-06 — "The Desert Wind" — Storm Aura (Desert) auto-ticks fire (automation Phase 5.2)
 
 **Schema version:** 66
