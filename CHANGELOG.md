@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.361] - 2026-06-05 — "The Spectral Arms" — Way of the Astral Self Monk Arms of the Astral Self (Lv 3+, TCE) — 🥋 Monk Ways batch
+
+**Schema version:** 66
+**Commit summary:** **Monk Ways subclass batch ship #7 — Way of the Astral Self Lv 3+ Arms of the Astral Self (TCE).** Sixth Monk way ship; opens Way of the Astral Self. RAW TCE p.50: bonus action + 1 ki to summon spectral arms for 10 min — unarmed strikes reach 5 ft farther and deal force damage = Martial Arts die + WIS mod; can use WIS in place of STR for checks/saves.
+**Description:** Adds `_pc_has_way_of_astral_self` helper. One endpoint. `/use_arms_of_the_astral_self` — body `{character_id, override?}`. Validates Way of the Astral Self Monk Lv 3+, the `ki` resource has ≥ 1, and the bonus chip. Spends 1 ki, reports the +5 ft reach + the per-hit damage formula (Martial Arts die + WIS mod) **server-side**. Broadcasts `resource_update` + `feature_used` with `source: arms-of-the-astral-self`, `reach_bonus_ft: 5`, `melee_damage_die`, `wis_mod`, `duration_minutes: 10`, `ki_remaining`. v1 announce-only — the actual attacks + WIS-for-STR substitution stay GM-tracked. One new harness test file with 3 tests.
+
+### Added
+- `/api/campaign/{cid}/use_arms_of_the_astral_self` endpoint.
+- `_pc_has_way_of_astral_self` helper.
+- `tests/harness/test_arms_of_the_astral_self.py` — 3 tests.
+
+### Notes
+- **Monk Ways batch progress:** Open Hand (shipped earlier), Shadow, Kensei, Mercy, Sun Soul, Drunken Master, Astral Self (this) all have first features. Remaining untouched: Four Elements (Elemental Attunement), Long Death (SCAG).
+- **177 ships this session.**
+- **Total harness count: 1721** (was 1718 in v2.99.360; +3 new tests).
+
+---
+
 ## [2.99.360] - 2026-06-05 — "The Staggering Step" — Way of the Drunken Master Monk Drunken Technique (Lv 3+, XGE) — 🥋 Monk Ways batch
 
 **Schema version:** 66

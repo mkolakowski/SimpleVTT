@@ -26954,6 +26954,31 @@ def _pc_has_way_of_drunken_master(sheet: "dict | None", min_level: int) -> bool:
     return _monk_level_from_sheet(sheet) >= min_level
 
 
+def _pc_has_way_of_astral_self(sheet: "dict | None", min_level: int) -> bool:
+    """v2.99.361 — RAW Way of the Astral Self (Monk subclass, TCE
+    p.50): Arms of the Astral Self (Lv 3), Visage of the Astral
+    Self (Lv 6), Body of the Astral Self (Lv 11), Awakened Astral
+    Self (Lv 17).
+
+    Returns True when the PC is a Monk with subclass slug
+    containing "astral" + meets `min_level` (multiclass-aware).
+    """
+    if not sheet:
+        return False
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        has_monk = any(
+            (entry.get("class") or "").strip().lower() == "monk"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_monk:
+            return False
+    subclass = (sheet.get("subclass") or "").strip().lower()
+    if "astral" not in subclass:
+        return False
+    return _monk_level_from_sheet(sheet) >= min_level
+
+
 def _pc_has_phantom_subclass(sheet: "dict | None", min_level: int) -> bool:
     """v2.99.312 — RAW Phantom features (Rogue, TCE p.61):
     Whispers of the Dead + Wails from the Grave (Lv 3),
@@ -51155,6 +51180,168 @@ async def use_drunken_technique(
         "feature": "drunken-technique",
         "disengage": True,
         "speed_bonus_ft": 10,
+        "monk_level": monk_lv,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_arms_of_the_astral_self")
+async def use_arms_of_the_astral_self(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.361 — Phase G Monk Ways subclass batch ship #7 (Way
+    of the Astral Self Lv 3+, TCE) of the v2.99.193 phased
+    completion plan. Arms of the Astral Self (Way of the Astral
+    Self Lv 3+, TCE p.50): "As a bonus action, you can spend 1 ki
+    point to summon the arms of your astral self ... For 10
+    minutes ... you can use your Wisdom modifier in place of your
+    Strength ... your unarmed strikes [via the arms] reach 5 feet
+    farther ... deal force damage equal to your Martial Arts die +
+    your Wisdom modifier."
+
+    Body: ``{character_id, override?}``. Costs a bonus chip +
+    1 ki. Reports the +5 ft reach + the per-hit damage formula
+    (Martial Arts die + WIS mod). v1 announce-only — the actual
+    attacks + WIS-for-STR substitution stay GM-tracked.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    override = bool(body.get("override"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_way_of_astral_self(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "way of the astral self monk lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _monk_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    ki_row = None
+    ki_idx = -1
+    for i, r in enumerate(resources):
+        if not isinstance(r, dict):
+            continue
+        if (r.get("key") or "").strip().lower() == "ki":
+            ki_row = dict(r); ki_idx = i; break
+    if ki_row is None:
+        raise HTTPException(404, "No Ki resource on this sheet")
+    ki_cur = int(ki_row.get("current") or 0)
+    if ki_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_ki",
+            "available": ki_cur,
+            "required": 1,
+            "label": "Arms of the Astral Self",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "arms-of-the-astral-self",
+            "label": "Arms of the Astral Self",
+            "strict": strict,
+        })
+
+    ki_remaining = ki_cur - 1
+    ki_row["current"] = ki_remaining
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    monk_lv = _monk_level_from_sheet(sheet)
+    ma_die = _martial_arts_die(monk_lv)
+    try:
+        wis_score = int((sheet.get("abilities") or {}).get("WIS", 10))
+    except (TypeError, ValueError):
+        wis_score = 10
+    wis_mod = (wis_score - 10) // 2
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "ki",
+            "current": ki_remaining,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"👐 Arms of the Astral Self — +5 ft reach, "
+                f"1d{ma_die}{wis_mod:+d} force"
+            ),
+            "feature_desc": (
+                f"{char.name} summons spectral arms for 10 min "
+                f"(spent 1 ki, {ki_remaining} left): unarmed "
+                f"strikes reach 5 ft farther and deal force damage "
+                f"= 1d{ma_die} + WIS mod {wis_mod:+d}; can use WIS "
+                f"in place of STR for checks/saves. (Way of the "
+                f"Astral Self Monk Lv 3+ TCE class feature.)"
+            ),
+            "source": "arms-of-the-astral-self",
+            "reach_bonus_ft": 5,
+            "melee_damage_die": f"1d{ma_die}",
+            "wis_mod": wis_mod,
+            "duration_minutes": 10,
+            "ki_spent": 1,
+            "ki_remaining": ki_remaining,
+            "monk_level": monk_lv,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "arms-of-the-astral-self",
+        "reach_bonus_ft": 5,
+        "melee_damage_die": f"1d{ma_die}",
+        "wis_mod": wis_mod,
+        "duration_minutes": 10,
+        "ki_spent": 1,
+        "ki_remaining": ki_remaining,
         "monk_level": monk_lv,
     }
 
