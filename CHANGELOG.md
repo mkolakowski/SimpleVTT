@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.424] - 2026-06-06 — "The Drawn Circle" — Aura tick design sub-plan (automation Phase 5)
+
+**Schema version:** 66
+**Commit summary:** **New sub-plan — `docs/plans/auras.md` — the Phase 5 design for a per-turn `_tick_auras` hook that applies an aura emitter's effect (damage / temp HP / heal / save-or-condition) to the creatures in its radius each round.** Planning + wiki-surfacing commit; no runtime code changed.
+**Description:** Grounds Phase 5 in the actual engine: turn advancement is client-driven (the GM PUTs a new `turn_index`) but `update_battle` (line 71072) already fires a server-side turn-advance hook block (`_prev_turn != _new_turn`, line 71350) where Heroism's start-of-turn temp-HP re-grant + the end-of-turn repeated-save auto-fire live — so `_tick_auras` hooks there. Distance is real: `_distance_ft_between_chars` (line 2485) + the Aura of Protection precedent (`_aura_of_protection_bonus`, ≈ 29473) with its "off-grid → assume in range" fallback. The tick reuses `_grant_temp_hp` / `_apply_damage_to_combatant` / `_apply_heal_to_combatant` / `_install_buff_on_combatant_id` / `_resolve_feature_save`. Proposes representing an active aura as a buff on the emitter carrying an `effects.aura` schema (`radius_ft`, `affects`, one of `damage`/`temp_hp`/`heal`/`save`) consumed each owner-turn, and sequences a 4-step implementation (P5.1 substrate → P5.2 Storm Aura → P5.3 Spirit Totem bear ongoing re-grant → P5.4 Paladin Lv 20 auras). Defines the test contract: advance the turn, assert the in-range subject changed and the out-of-range one didn't.
+
+### Added
+- `docs/plans/auras.md` — Phase 5 design sub-plan (proposed).
+- Wiki surfacing: `_DOC_ALLOWLIST` slug `plan-auras`, the landing-page "Design plans" row, and the on-disk index row.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_auras_plan` + the new slug added to the `test_wiki_home_renders` assertion list.
+
+### Notes
+- Planning only — opens Phase 5 with a grounded design before touching the turn-advance hot path. Implementation begins at P5.1 (the `_tick_auras` primitive + the turn-advance hook).
+- **Total harness count: 1850** (was 1849 in v2.99.423; +1 new wiki smoke test).
+
+---
+
 ## [2.99.423] - 2026-06-06 — "The Steadfast Ward" — Buff-level save advantage (Phase 4.4 — Phase 4 COMPLETE)
 
 **Schema version:** 66
