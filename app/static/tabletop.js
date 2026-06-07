@@ -3669,6 +3669,121 @@
         document.body.appendChild(backdrop);
     }
 
+    /* v2.100.0 — GM over-range advisory modal. Mirrors the OA
+     * pre-move modal shape (glass card, amber accent) but warns the
+     * GM that a single drag moves a token further than its base
+     * walking speed. Advisory only: "Move anyway" commits, "Cancel"
+     * snaps the token back. Shown only to the GM, only during an
+     * active battle, and only for tokens that are NOT the active
+     * combatant (the active combatant's per-turn movement budget is
+     * handled by showMovementOverrunModal, which respects Dash +
+     * cumulative economy.movement). This fills the off-turn /
+     * NPC-side reposition gap where no movement prompt fired. */
+    function _showGmOverRangeModal({
+        tokenLabel, distanceFt, speedFt, onMove, onCancel,
+    }) {
+        const backdrop = document.createElement('div');
+        backdrop.setAttribute('style', [
+            'position:fixed', 'inset:0',
+            'background:rgba(0,0,0,0.45)',
+            'z-index:2147483600',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'padding:16px',
+            'animation:reactionPopIn 180ms ease-out',
+        ].join(';'));
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-label', 'Token moved past its speed');
+
+        const card = document.createElement('div');
+        card.setAttribute('style', [
+            'background:#1f2433',
+            'background:color-mix(in srgb, var(--bg, #1f2433) 88%, transparent)',
+            'backdrop-filter:blur(8px)',
+            '-webkit-backdrop-filter:blur(8px)',
+            'border:1px solid var(--border, rgba(255,255,255,0.18))',
+            'border-left:4px solid #ffb74d',
+            'border-radius:10px',
+            'padding:18px 20px',
+            'color:var(--fg, #fff)',
+            'font-size:13px',
+            'max-width:420px', 'width:100%',
+            'box-shadow:0 10px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,183,77,0.18)',
+        ].join(';'));
+
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:14px; font-weight:600; margin-bottom:6px;';
+        header.textContent = '⚠ Moving past speed';
+        card.appendChild(header);
+
+        const summary = document.createElement('p');
+        summary.style.cssText = 'margin:0 0 14px 0; font-size:12px; opacity:0.85; line-height:1.4;';
+        const _dist = (distanceFt > 0)
+            ? ((distanceFt % 1 === 0) ? distanceFt.toFixed(0) : distanceFt.toFixed(1))
+            : '?';
+        const _speed = (speedFt > 0)
+            ? ((speedFt % 1 === 0) ? speedFt.toFixed(0) : speedFt.toFixed(1))
+            : '?';
+        summary.textContent = (
+            (tokenLabel || 'This token') + ' would move ~' + _dist
+            + ' ft in one step — more than its ' + _speed
+            + ' ft speed. Move it anyway?'
+        );
+        card.appendChild(summary);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:8px; justify-content:flex-end; margin-top:6px;';
+
+        function _btn(label, style, onClick) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.setAttribute('style', [
+                'min-height:44px', 'padding:6px 14px',
+                'border-radius:6px', 'cursor:pointer', 'font-size:13px',
+                'border:1px solid var(--border, rgba(255,255,255,0.22))',
+            ].join(';') + ';' + style);
+            b.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                backdrop.remove();
+                onClick();
+            });
+            return b;
+        }
+        // Cancel = safer default (don't over-extend); Move anyway =
+        // the deliberate GM override.
+        btnRow.appendChild(_btn(
+            '✋ Cancel',
+            'background:rgba(255,255,255,0.04); color:var(--fg);',
+            onCancel,
+        ));
+        btnRow.appendChild(_btn(
+            '➡ Move anyway',
+            'background:#ffb74d; color:#1f2433; font-weight:600; border-color:#e09a2a;',
+            onMove,
+        ));
+        card.appendChild(btnRow);
+
+        // Click outside / Escape → Cancel (snap back).
+        backdrop.addEventListener('click', (ev) => {
+            if (ev.target === backdrop) {
+                backdrop.remove();
+                onCancel();
+            }
+        });
+        function _onKey(ev) {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                document.removeEventListener('keydown', _onKey);
+                backdrop.remove();
+                onCancel();
+            }
+        }
+        document.addEventListener('keydown', _onKey);
+
+        backdrop.appendChild(card);
+        document.body.appendChild(backdrop);
+    }
+
     /* v2.8.3: pre-commit gate for token drags. Computes the distance the
      * proposed move would add, looks up whether the dragger owns the
      * active combatant, and — if the move would push them past their
@@ -3732,6 +3847,9 @@
         // /token/move POST will 409 below.
         let _oaTriggers = [];
         let _previewDistanceFt = 0;
+        // v2.100.0 — over-range advisory fields from the same preview.
+        let _overRange = false;
+        let _tokenSpeedFt = 0;
         try {
             const previewResp = await fetch(
                 `/api/campaign/${CAMPAIGN_ID}/token/${tokenId}/preview_move`,
@@ -3746,8 +3864,13 @@
                 if (data && data.would_trigger_oa) {
                     _oaTriggers = Array.isArray(data.triggers)
                         ? data.triggers : [];
-                    _previewDistanceFt = Number(data.distance_ft) || 0;
                 }
+                // v2.100.0 — distance is now read unconditionally (the
+                // OA branch used to be the only reader) so the GM
+                // over-range modal can report it even on non-OA moves.
+                _previewDistanceFt = Number(data && data.distance_ft) || 0;
+                _overRange = !!(data && data.over_range);
+                _tokenSpeedFt = Number(data && data.token_speed_ft) || 0;
             }
         } catch (_) {
             // Preview failed — fall through. The 409 gate on /move
@@ -3766,9 +3889,14 @@
         let _projectedDistance = _previewDistanceFt;
         let _projectedOverrun = false;
         let _needsDash = false;
+        // v2.100.0 — the active combatant regardless of whether it
+        // matches the dragged token. Truthy iff a battle is live; the
+        // GM over-range advisory only fires during combat.
+        let _anyActive = null;
         if (typeof window._getActiveCombatant === 'function') {
             const _active = window._getActiveCombatant();
             if (_active) {
+                _anyActive = _active;
                 const _matches = (
                     (_active.source_token_id != null
                      && _active.source_token_id === tokenId)
@@ -3862,6 +3990,28 @@
             } else {
                 _openOaModal();
             }
+            return;
+        }
+
+        // v2.100.0 — GM over-range advisory. When the GM repositions
+        // a token that is NOT the active combatant (an off-turn drag
+        // or an NPC-side piece) further than its base walking speed in
+        // a single step DURING an active battle, surface a confirm
+        // popup. Pre-v2.100.0 these drags committed silently because
+        // the overrun gate below only scopes to the active combatant.
+        // Advisory only — "Move anyway" commits, "Cancel" snaps back —
+        // since the GM is the rules arbiter and may move pieces
+        // narratively. The active combatant's per-turn budget is left
+        // to showMovementOverrunModal (which honors Dash + cumulative
+        // movement), so we explicitly skip when the token IS active.
+        if (ME && ME.isGm && _overRange && !_activeForDash && _anyActive) {
+            _showGmOverRangeModal({
+                tokenLabel: token.label || 'Token',
+                distanceFt: _previewDistanceFt,
+                speedFt: _tokenSpeedFt,
+                onMove: () => postMove(),
+                onCancel: snapBack,
+            });
             return;
         }
 

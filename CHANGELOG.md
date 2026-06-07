@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.100.0] - 2026-06-07 — "A Step Too Far" — GM over-range movement popup
+
+**Schema version:** 66
+**Commit summary:** **The GM now gets a confirm popup when repositioning a non-active token further than its base walking speed in a single drag during combat. `preview_move` gained `token_speed_ft` + `over_range`; the GM client surfaces an advisory "Move anyway / Cancel" modal off the same preview call already made before every move.**
+**Description:** Closes the P2 "GM does not get movement popup when moving tokens past range." The v2.99.99 over-speed gate only fires for the *active combatant* (it tracks cumulative `economy.movement` vs the per-turn cap), so a GM dragging an off-turn PC or an NPC-side piece past its speed committed silently with no warning. The `preview_move` endpoint — which the client already hits before each drag for the OA probe — now also resolves the token's base walking speed via `_resolve_combatant_speed_walk` (PC sheet → NPC template → 30 fallback) and returns `token_speed_ft` + `over_range` (single-step distance > speed). The client reads those fields and, **only for the GM, only during an active battle, and only when the token is NOT the active combatant**, opens a new `_showGmOverRangeModal` (glass card / amber accent, mirroring the OA modal). It's advisory by design — "Move anyway" commits, "Cancel" snaps the token back — because the GM is the rules arbiter and routinely repositions pieces narratively. The active combatant's per-turn budget remains the stricter `showMovementOverrunModal` path (Dash-aware, server-409-backed); the two never double-prompt.
+
+### Added
+- `app/static/tabletop.js` — `_showGmOverRangeModal(...)` advisory modal + the GM/active-battle/non-active-token gate in `_commitTokenMove`.
+- `tests/harness/test_opportunity_attack.py` — `test_preview_move_reports_over_range_beyond_speed` (far drag → `over_range: true`, token unmoved) + `test_preview_move_within_speed_not_over_range` (short drag → `over_range: false`).
+
+### Changed
+- `POST /api/campaign/{cid}/token/{tid}/preview_move` response now includes `token_speed_ft` (int) and `over_range` (bool). Additive — existing OA-probe consumers are unaffected.
+
+### Notes
+- Advisory only: no server-side block on GM over-range drags (the GM is the arbiter). The active-combatant budget gate (v2.99.99) is unchanged.
+- **Total harness count: 1939** (was 1937 in v2.99.470; +2 new tests).
+
+---
+
 ## [2.99.470] - 2026-06-07 — "Already Standing" — roll-log-collapse P2 traced to already-fixed (docs)
 
 **Schema version:** 66

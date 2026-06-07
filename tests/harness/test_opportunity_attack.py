@@ -1917,6 +1917,75 @@ async def test_preview_move_honors_same_team_filter(
         await _set_team(gm_client, tv_tok["id"], "neutral")
 
 
+# ── v2.100.0 — GM over-range advisory: preview_move speed fields ──
+
+
+async def test_preview_move_reports_over_range_beyond_speed(
+    gm_client, roster,
+):
+    """v2.100.0: preview_move returns token_speed_ft + over_range so
+    the GM client can warn when a single drag exceeds the token's
+    base walking speed. Read-only — the token must not move.
+    """
+    krieger = roster["Krieger Stonefist"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+    ])
+    # 350 = 5 cells on the 70-px grid, so placement snaps to itself.
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok
+    await asyncio.sleep(0.15)
+
+    # 70-px grid → 5 ft/cell. 350→1400 x = 1050 px = 15 cells →
+    # Chebyshev = 75 ft, comfortably beyond any normal walking speed
+    # (30–60 ft), so over_range must be True regardless of Krieger's
+    # exact projected speed.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/preview_move",
+        json={"x": 1400.0, "y": 350.0},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["token_speed_ft"] > 0, data
+    assert data["distance_ft"] > data["token_speed_ft"], data
+    assert data["over_range"] is True, data
+
+    # Preview is read-only — position unchanged.
+    kr_after = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_after and abs(kr_after["x"] - 350.0) < 0.01, (
+        f"preview must not move token; got {kr_after}"
+    )
+
+
+async def test_preview_move_within_speed_not_over_range(
+    gm_client, roster,
+):
+    """v2.100.0: a move shorter than the token's speed reports
+    over_range=False so the GM client suppresses the advisory.
+    """
+    krieger = roster["Krieger Stonefist"]
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok
+    await asyncio.sleep(0.15)
+
+    # 350→420 x = 70 px = 1 cell → 5 ft, well within any walking speed.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/preview_move",
+        json={"x": 420.0, "y": 350.0},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["token_speed_ft"] > 0, data
+    assert data["distance_ft"] <= data["token_speed_ft"], data
+    assert data["over_range"] is False, data
+
+
 async def test_token_patch_team_field_persists_and_broadcasts(
     gm_client, gm_ws, roster,
 ):

@@ -12762,10 +12762,29 @@ async def preview_move_token(
             # triggers found" so the move-side flow can proceed.
             oa_triggers = []
 
+    # v2.100.0 — over-range advisory. Resolve the token's base
+    # walking speed (PC sheet via char_id, NPC template via
+    # token_template_id, else 30) so the GM client can warn when a
+    # single drag moves a token further than its speed. Advisory
+    # only — the /token/move endpoint does NOT block GM over-range
+    # drags (the GM is the rules arbiter). This is distinct from
+    # the v2.99.99 active-combatant per-turn budget gate, which
+    # tracks cumulative economy.movement and can hard-409.
+    token_speed_ft = _resolve_combatant_speed_walk(
+        db, campaign_id,
+        {
+            "char_id": token.character_id,
+            "token_template_id": token.token_template_id,
+        },
+    )
+    over_range = distance_ft > token_speed_ft + 0.01
+
     return {
         "ok": True,
         "would_trigger_oa": bool(oa_triggers),
         "distance_ft": distance_ft,
+        "token_speed_ft": token_speed_ft,
+        "over_range": over_range,
         "triggers": [
             {
                 "watcher_combatant_id": t.get("watcher_combatant_id"),
