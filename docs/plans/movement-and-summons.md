@@ -122,8 +122,11 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    target 15 ft away on a fail.
 3. **P6.3 — more forced movers (S-M). 🟠 in progress.** Open Hand push
    ✅ shipped v2.99.434 (force-moves the target 15 ft on a failed STR
-   save). Remaining: Thorn Whip (pull), Thunderwave / Gust (push),
-   Repelling Blast.
+   save). Thorn Whip ✅ shipped v2.99.435 (new cantrip endpoint: melee
+   spell attack → pull 10 ft toward the caster on a hit; first
+   `_force_move(pull=True)` retrofit). Remaining: Thunderwave / Gust
+   (push). (Repelling Blast already has its own bespoke push from
+   v2.99.90 — a candidate to consolidate onto `_force_move` later.)
 4. **P7.1 — `_summon_companion` + a companion registry (L).** The
    primitive + a `/summon_companion` endpoint + a dismiss/teardown;
    retrofit Spiritual Weapon (the simplest — a floating weapon combatant

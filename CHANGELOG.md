@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.435] - 2026-06-06 — "The Grasping Vine" — Thorn Whip pulls the target (automation Phase 6.3)
+
+**Schema version:** 66
+**Commit summary:** **Phase 6.3 — new `POST /use_thorn_whip` endpoint (Druid/Artificer cantrip): rolls a melee spell attack server-side and, on a hit, deals scaling piercing damage and pulls the target's token 10 ft toward the caster via `_force_move(pull=True)`.** Third forced-move retrofit, and the first to exercise the `pull` path.
+**Description:** `/use_thorn_whip` (body `{character_id, target_combatant_id}`) gates on Druid/Artificer class, computes the spell attack bonus (prof + spellcasting mod), and rolls `1d20+bonus` vs the target's AC (`_read_target_ac`). On a hit it rolls piercing damage — 1d6 scaling to 2d6 (Lv 5) / 3d6 (Lv 11) / 4d6 (Lv 17), doubled dice on a crit — applies it via `_apply_damage_to_combatant`, and pulls the target's token 10 ft toward the caster (resolved from the active battle by `char_id`) via `_force_move(pull=True)`. Needs the target on a gridded map with a token (off-grid → hit + damage resolve but no pull); the Large-or-smaller size gate stays GM-tracked. Response carries `hit` / `crit` / `attack_total` / `target_ac` / `damage_rolled` / `damage_applied` / `pull_applied` / `pull_distance_ft` / `caster_level`.
+
+### Added
+- `POST /api/campaign/{cid}/use_thorn_whip` — Druid/Artificer Thorn Whip cantrip with server-side attack roll, scaling damage, and a 10 ft pull on a hit.
+- `tests/harness/test_use_thorn_whip.py` — Mira Greenleaf (demo Druid Lv 5) loops until she hits a bandit, then asserts `pull_applied` + 2d6 piercing + the bandit's token moved −140 px (2 cells toward Mira); plus 409 (wrong class), 400 (missing target), 404 (target not in battle).
+
+### Notes
+- Third `_force_move` retrofit (after Pushing Attack v2.99.433 + Open Hand push v2.99.434) and the first exercising `_force_move(pull=True)`. Remaining P6.3 mover: Thunderwave / Gust (push). Repelling Blast already has its own bespoke push (v2.99.90) — a later consolidation candidate.
+- **Total harness count: 1874** (was 1870 in v2.99.434; +4 new tests).
+
+---
+
 ## [2.99.434] - 2026-06-06 — "The Open Palm" — Open Hand push moves the target (automation Phase 6.3)
 
 **Schema version:** 66

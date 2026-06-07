@@ -43530,6 +43530,203 @@ async def use_pushing_attack(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_thorn_whip")
+async def use_thorn_whip(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.435 — Phase 6.3 of docs/plans/movement-and-summons.md:
+    Thorn Whip (Druid / Artificer cantrip, PHB p.282). "Make a melee
+    spell attack against the target. On a hit, the target takes 1d6
+    piercing damage, and if it is Large or smaller, you pull it up to
+    10 feet closer to you." Damage scales with character level: 2d6
+    (Lv 5), 3d6 (Lv 11), 4d6 (Lv 17).
+
+    Body: ``{character_id, target_combatant_id, override?}``.
+
+    The spell attack roll (1d20 + prof + spellcasting mod) is resolved
+    server-side vs the target's AC (`_read_target_ac`). On a hit the
+    piercing damage is applied via `_apply_damage_to_combatant` and the
+    target's token is **pulled 10 ft toward the caster** via
+    `_force_move(pull=True)`. Needs the target on a gridded map with a
+    token (off-grid → the hit + damage resolve but no pull). The
+    Large-or-smaller size gate stays GM-tracked. Third `_force_move`
+    retrofit, and the first to exercise the `pull` path.
+
+    Response: ``{ok, feature, hit, crit, attack_total, attack_breakdown,
+    target_ac, damage_rolled, damage_applied, damage_type, pull_applied,
+    pull_distance_ft, caster_level}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id") or None
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    # Gate: Thorn Whip is a Druid + Artificer cantrip. Allow single- or
+    # multiclass casters of either class.
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _allowed = {"druid", "artificer"}
+    if _cls not in _allowed and not any(c in _allowed for c in _classes):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": "druid or artificer",
+            "got_class": _cls,
+        })
+
+    target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+    if not target_combatant:
+        raise HTTPException(404, "Target not in battle")
+
+    # Caster's spell attack bonus = proficiency + spellcasting mod.
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    spc = (sheet.get("spellcasting_ability") or "").strip().upper()[:3]
+    if spc not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+        spc = "WIS"  # Druid default; Artificer is INT but WIS is a safe fallback
+    spc_mod = (int((sheet.get("abilities") or {}).get(spc, 10)) - 10) // 2
+    atk_bonus = prof + spc_mod
+
+    # Cantrip damage scaling by total character level.
+    caster_level = int(sheet.get("level") or 1)
+    if caster_level >= 17:
+        dmg_dice = "4d6"
+    elif caster_level >= 11:
+        dmg_dice = "3d6"
+    elif caster_level >= 5:
+        dmg_dice = "2d6"
+    else:
+        dmg_dice = "1d6"
+
+    target_ac = _read_target_ac(db, campaign_id, target_combatant)
+
+    # Roll the melee spell attack.
+    atk_expr = f"1d20{atk_bonus:+d}"
+    try:
+        _ar = dice_mod.roll(atk_expr)
+        attack_total, attack_breakdown = int(_ar.total), _ar.breakdown
+    except dice_mod.DiceParseError:
+        attack_total, attack_breakdown = 0, ""
+    _nat_match = _re.search(r"\[(\d+)\]", attack_breakdown)
+    nat = int(_nat_match.group(1)) if _nat_match else (attack_total - atk_bonus)
+    if nat == 20:
+        hit, crit = True, True
+    elif nat == 1:
+        hit, crit = False, False
+    else:
+        hit, crit = (attack_total >= target_ac), False
+
+    damage_rolled = 0
+    damage_applied = 0
+    damage_type = "piercing"
+    pull_applied = False
+    pull_distance_ft = 0.0
+    if hit:
+        roll_expr = _double_dice_for_crit(dmg_dice) if crit else dmg_dice
+        try:
+            _dr = dice_mod.roll(roll_expr)
+            damage_rolled = max(0, int(_dr.total))
+        except dice_mod.DiceParseError:
+            damage_rolled = 0
+        if damage_rolled > 0:
+            _res = await _apply_damage_to_combatant(
+                db, campaign_id, target_combatant, damage_rolled,
+                damage_type, is_crit=crit, is_attack=True,
+                is_magical=True, attacker_char_id=char.id,
+            )
+            damage_applied = int(_res.get("applied") or 0)
+        # Pull the target 10 ft toward the caster.
+        _state = hub.get_battle(campaign_id)
+        _caster_cb = next(
+            (c for c in (_state.get("combatants") or [])
+             if c.get("char_id") == char.id), None,
+        ) if _state else None
+        gr = await _force_move(
+            db, campaign_id, target_combatant, 10,
+            source_combatant=_caster_cb, pull=True,
+        )
+        pull_applied = gr["moved"]
+        pull_distance_ft = float(gr.get("distance_ft") or 0.0)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    _tname = target_combatant.get("name") or "Target"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌿 Thorn Whip — {'hit' if hit else 'miss'} "
+                f"({attack_total} vs AC {target_ac})"
+            ),
+            "feature_desc": (
+                f"{char.name} lashes {_tname} with a vine: "
+                + (
+                    f"{damage_applied} piercing ({dmg_dice})"
+                    + (" + pulled 10 ft closer" if pull_applied else "")
+                    if hit else "the attack misses."
+                )
+                + " (Thorn Whip cantrip.)"
+            ),
+            "source": "thorn-whip",
+            "hit": hit,
+            "crit": crit,
+            "attack_total": attack_total,
+            "target_ac": target_ac,
+            "damage_applied": damage_applied,
+            "damage_type": damage_type,
+            "pull_applied": pull_applied,
+            "pull_max_ft": 10,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "thorn-whip",
+        "hit": hit,
+        "crit": crit,
+        "attack_total": attack_total,
+        "attack_breakdown": attack_breakdown,
+        "target_ac": target_ac,
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
+        "damage_type": damage_type,
+        "pull_applied": pull_applied,
+        "pull_distance_ft": pull_distance_ft,
+        "caster_level": caster_level,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_menacing_attack")
 async def use_menacing_attack(
     campaign_id: int,

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1870 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.434, 2026-06-06).
+**Total tests:** 1874 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.435, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1420,6 +1420,16 @@ v2.99.254 — Battle Master maneuver 4 of 16 — Pushing Attack (PHB p.74). Save
 | `test_use_pa_happy` | Lv 9 Garrik (d8) → `extra_damage` 1..8, `save_dc == 16`, `save_ability == "STR"`, `push_max_ft == 15`, dice 4 → 3, broadcast. |
 | `test_use_pa_out_of_dice` | `superiority-dice.current = 0` → 409 `out_of_uses`. |
 | `test_use_pa_wrong_subclass` | Default Garrik (Champion) → 409. |
+
+### `test_use_thorn_whip.py`
+v2.99.435 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Thorn Whip (Druid/Artificer cantrip, PHB p.282): melee spell attack → on a hit, piercing damage (1d6 scaling to 2d6/3d6/4d6) + **pull the target 10 ft toward the caster** via `_force_move(pull=True)`. Third forced-move retrofit and the first to exercise the `pull` path. Caster fixture: Mira Greenleaf (demo Druid Lv 5, WIS caster, +6 to hit).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_thorn_whip_pulls_target_on_hit` | Mira (placed above the bandit) loops until she hits; on the hit asserts `pull_applied` True, `pull_distance_ft == 10`, 2d6 piercing applied, and the bandit's NPC token moved −140 px (2 cells / 10 ft toward Mira). A miss applies no damage + moves nothing. NPC token created via `POST /tokens` (linked as `source_token_id`) + torn down. |
+| `test_thorn_whip_wrong_class` | Krieger (Barbarian) → 409 `wrong_class`. |
+| `test_thorn_whip_missing_target_400` | Missing `target_combatant_id` → 400. |
+| `test_thorn_whip_target_not_in_battle_404` | Unknown target combatant → 404. |
 
 ### `test_menacing_attack.py`
 v2.99.253 — Battle Master maneuver 3 of 16 — Menacing Attack (PHB p.74). Mirrors Trip/Disarming but save ability is WIS and on-fail is Frightened.
