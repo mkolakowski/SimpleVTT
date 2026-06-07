@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1884 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.437, 2026-06-06).
+**Total tests:** 1887 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.438, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1451,6 +1451,15 @@ v2.99.437 — Phase 7.1 of `docs/plans/movement-and-summons.md`. The summon prim
 | `test_dismiss_removes_combatant_and_token` | Dismiss → 200 `removed`, the `token_delete` broadcast fires, the token is gone from the map, and a second dismiss → 404. |
 | `test_summon_unknown_companion_400` | Unknown `companion_key` → 400 `unknown_companion`. |
 | `test_dismiss_unknown_404` | Dismiss an unknown combatant id → 404. |
+
+### `test_use_spiritual_weapon.py`
+v2.99.438 — Phase 7.1 of `docs/plans/movement-and-summons.md`. The first summon retrofit: `/use_spiritual_weapon` (Cleric L2) stands up the floating spectral-weapon combatant via `_summon_companion` (`spiritual-weapon` entry) and, when a `target_combatant_id` is supplied, makes the melee spell attack server-side (1d20 + prof + spellcasting mod vs AC) + applies 1d8 + mod force damage on a hit. Caster fixture: Brother Tavik Stonebrow (demo Cleric Lv 6, WIS 16 / prof +3 → +6 to hit).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_spiritual_weapon_summon_only` | No target → `attacked` False; the `spiritual-weapon` summon combatant appears (`is_summon`, 1 HP, `summoned_by` Tavik) with a token + `token_add` broadcast. Dismissed after. |
+| `test_spiritual_weapon_attacks_target` | Loop a fresh weapon each cast until Tavik hits a bandit → `damage_type == "force"`, `damage_rolled`/`damage_applied > 0`. Each cast's weapon is dismissed to avoid board accumulation. |
+| `test_spiritual_weapon_spell_not_known` | Krieger (Barbarian) → 409 `spell_not_known`. |
 
 ### `test_menacing_attack.py`
 v2.99.253 — Battle Master maneuver 3 of 16 — Menacing Attack (PHB p.74). Mirrors Trip/Disarming but save ability is WIS and on-fail is Frightened.

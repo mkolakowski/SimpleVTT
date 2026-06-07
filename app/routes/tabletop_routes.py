@@ -44216,6 +44216,187 @@ async def dismiss_companion(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_spiritual_weapon")
+async def use_spiritual_weapon(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.438 — Phase 7.1 of docs/plans/movement-and-summons.md: the
+    first summon retrofit. Spiritual Weapon (Cleric L2, PHB p.278):
+    "You create a floating, spectral weapon... you can make a melee spell
+    attack against a creature within 5 feet of the weapon. On a hit, the
+    target takes force damage equal to 1d8 + your spellcasting ability
+    modifier." Upcast: +1d8 per two slot levels above 2nd.
+
+    Body: ``{character_id, x?, y?, target_combatant_id?, slot_level?}``.
+    Stands up the floating-weapon combatant via `_summon_companion`
+    (`spiritual-weapon` registry entry) at ``(x, y)``, then — if a
+    ``target_combatant_id`` is supplied — makes the melee spell attack
+    server-side (1d20 + prof + spellcasting mod vs the target's AC) and,
+    on a hit, applies the force damage via `_apply_damage_to_combatant`.
+
+    Response: ``{ok, feature, combatant, token_id, attacked, hit, crit,
+    attack_total, target_ac, damage_rolled, damage_applied, damage_type,
+    slot_level}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    slot_level = int(body.get("slot_level") or 2)
+    if slot_level < 2:
+        slot_level = 2
+    target_combatant_id = body.get("target_combatant_id") or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_sw = any(
+        (s.get("_slug") == "spiritual-weapon")
+        or (str(s.get("name", "")).lower() == "spiritual weapon")
+        for s in spells
+    )
+    if not knows_sw:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "spiritual-weapon",
+        })
+
+    # Spellcasting mod (Cleric → WIS; reads either sheet field).
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    spc = (
+        sheet.get("spellcasting_ability")
+        or sheet.get("class_spellcasting") or ""
+    ).strip().upper()[:3]
+    if spc not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+        spc = "WIS"
+    spc_mod = (int((sheet.get("abilities") or {}).get(spc, 10)) - 10) // 2
+
+    # Stand up the floating weapon as a real combatant.
+    summon = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key="spiritual-weapon",
+        name="Spiritual Weapon",
+        x=float(body.get("x") or 0),
+        y=float(body.get("y") or 0),
+        initiative=int(body.get("initiative") or 0),
+    )
+
+    # Damage dice: 1d8 + 1d8 per two slot levels above 2nd.
+    extra_dice = max(0, (slot_level - 2) // 2)
+    n_dice = 1 + extra_dice
+    dmg_dice = f"{n_dice}d8"
+
+    attacked = False
+    hit = False
+    crit = False
+    attack_total = 0
+    target_ac = 0
+    damage_rolled = 0
+    damage_applied = 0
+    damage_type = "force"
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant:
+            attacked = True
+            atk_bonus = prof + spc_mod
+            target_ac = _read_target_ac(db, campaign_id, target_combatant)
+            atk_expr = f"1d20{atk_bonus:+d}"
+            try:
+                _ar = dice_mod.roll(atk_expr)
+                attack_total, _abd = int(_ar.total), _ar.breakdown
+            except dice_mod.DiceParseError:
+                attack_total, _abd = 0, ""
+            _nat_match = _re.search(r"\[(\d+)\]", _abd)
+            nat = int(_nat_match.group(1)) if _nat_match else (
+                attack_total - atk_bonus)
+            if nat == 20:
+                hit, crit = True, True
+            elif nat == 1:
+                hit, crit = False, False
+            else:
+                hit, crit = (attack_total >= target_ac), False
+            if hit:
+                roll_expr = _double_dice_for_crit(dmg_dice) if crit else dmg_dice
+                try:
+                    _dr = dice_mod.roll(roll_expr)
+                    damage_rolled = max(0, int(_dr.total) + spc_mod)
+                except dice_mod.DiceParseError:
+                    damage_rolled = max(0, spc_mod)
+                if damage_rolled > 0:
+                    _res = await _apply_damage_to_combatant(
+                        db, campaign_id, target_combatant, damage_rolled,
+                        damage_type, is_crit=crit, is_attack=True,
+                        is_magical=True, attacker_char_id=char.id,
+                    )
+                    damage_applied = int(_res.get("applied") or 0)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": (
+                f"🗡️ Spiritual Weapon"
+                + (f" — {'hit' if hit else 'miss'} ({damage_applied} force)"
+                   if attacked else "")
+            ),
+            "feature_desc": (
+                f"{char.name} conjures a floating spectral weapon "
+                f"({dmg_dice}+{spc_mod} force)"
+                + (
+                    f" and strikes for {damage_applied} force damage."
+                    if (attacked and hit) else
+                    (" — the attack misses." if attacked else ".")
+                )
+            ),
+            "source": "spiritual-weapon",
+            "slot_level": slot_level,
+            "combatant_id": (summon or {}).get("combatant", {}).get("id"),
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "spiritual-weapon",
+        "combatant": (summon or {}).get("combatant"),
+        "token_id": (summon or {}).get("token_id"),
+        "attacked": attacked,
+        "hit": hit,
+        "crit": crit,
+        "attack_total": attack_total,
+        "target_ac": target_ac,
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
+        "damage_type": damage_type,
+        "slot_level": slot_level,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_menacing_attack")
 async def use_menacing_attack(
     campaign_id: int,

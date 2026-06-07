@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.438] - 2026-06-06 — "The Spectral Blade" — Spiritual Weapon retrofit (automation Phase 7.1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 7.1 — new `POST /use_spiritual_weapon` endpoint (Cleric L2): stands up the floating spectral-weapon combatant via `_summon_companion` and makes the melee spell attack server-side (1d8 + spellcasting mod force on a hit).** First real retrofit onto the v2.99.437 summon primitive.
+**Description:** `/use_spiritual_weapon` (body `{character_id, x?, y?, target_combatant_id?, slot_level?}`) gates on the caster knowing Spiritual Weapon, summons the `spiritual-weapon` companion (a real combatant — its own token + init slot) at `(x, y)` via `_summon_companion`, and — when a `target_combatant_id` is supplied — rolls a melee spell attack (1d20 + prof + spellcasting mod vs `_read_target_ac`) and, on a hit, applies the force damage (1d8 + mod, +1d8 per two slot levels above 2nd, doubled dice on a crit) via `_apply_damage_to_combatant`. Composes the summon primitive with the same attack-roll shape Thorn Whip uses.
+
+### Added
+- `POST /api/campaign/{cid}/use_spiritual_weapon` — summons the floating weapon + optionally strikes a target. Response carries `combatant` / `token_id` / `attacked` / `hit` / `crit` / `attack_total` / `target_ac` / `damage_rolled` / `damage_applied` / `damage_type` / `slot_level`.
+- `tests/harness/test_use_spiritual_weapon.py` — Tavik (demo Cleric) summons the weapon with no target (asserts the summon combatant + token), loops a fresh weapon each cast until he hits a bandit (asserts force damage applied), plus 409 (spell not known). Each cast's weapon is dismissed so the board doesn't accumulate.
+
+### Notes
+- First retrofit onto the summon primitive (v2.99.437). Remaining P7.1 gap: a rest-teardown hook so summons drop on the owner's long rest. Then P7.2 — more summons (Find Familiar, Steel Defender, Ranger's Companion, Conjure Animals).
+- **Total harness count: 1887** (was 1884 in v2.99.437; +3 new tests).
+
+---
+
 ## [2.99.437] - 2026-06-06 — "The Conjured Ally" — summon-companion primitive (automation Phase 7.1)
 
 **Schema version:** 66

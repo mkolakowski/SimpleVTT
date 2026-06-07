@@ -137,9 +137,11 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    and `/dismiss_companion` endpoints. The summon is a real combatant
    (HP/AC ride on the combatant dict; `_read_target_ac` now honors a
    combatant-dict `ac`), so it reuses the damage/HP pipeline — proven by
-   a Thunderwave-damages-the-summon test. **Remaining:** retrofit
-   Spiritual Weapon (a `/use_spiritual_weapon` that calls the primitive
-   + the caster attacks with it) + a rest-teardown hook.
+   a Thunderwave-damages-the-summon test. ✅ Spiritual Weapon retrofit
+   shipped v2.99.438 (`/use_spiritual_weapon` summons the floating-weapon
+   combatant + makes the melee spell attack for 1d8+mod force on a hit;
+   first real summon retrofit). **Remaining:** a rest-teardown hook so
+   summons drop on the owner's long rest.
 5. **P7.2 — more summons (L, ongoing).** Find Familiar, Steel Defender,
    Ranger's Companion, Conjure Animals.
 
