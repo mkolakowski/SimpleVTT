@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.101.1] - 2026-06-07 — "Back in Sync" — realign the OA harness tests with shipped behavior
+
+**Schema version:** 67
+**Commit summary:** **Fixes 8 long-standing failures in `tests/harness/test_opportunity_attack.py` that had drifted from shipped server behavior across three features: the over-speed movement gate (v2.100.x), the per-attack OA picker demoting the generic `take-the-oa` to a fallback (v2.99.68), and the removal of the `oa-skipped` / `oa-attack-chosen` audit broadcasts (v2.99.75). Test-only — no server change.**
+**Description:** While verifying v2.101.0 I found 8 OA tests red on a clean `main` (confirmed identical at HEAD 2.100.6, so pre-existing — not the battle-persistence work). Three independent shipped behaviors had outrun the tests: (1) four path-cross / queue tests move the active combatant >30 ft but only passed `oa_confirmed`, so the v2.100.x over-speed gate returned 409 before the OA logic ran — fixed by also passing `over_speed_confirmed: true` (these tests exercise OA detection, not the speed cap). (2) `test_oa_prompt_includes_per_attack_picker_options` and `test_oa_chain_multi_npc_take_the_oa_path` assumed the generic `take-the-oa` key is always present, but v2.99.68 made it a fallback emitted only when no per-attack picker exists — fixed by asserting the picker replaces it for watchers with attacks, and by deriving the resolve key from the prompt's options. (3) `test_oa_use_reaction_skip_does_not_mark_reaction` and `..._marks_reaction_and_audits` asserted `feature_used` audit rows that v2.99.75 deliberately removed — fixed by dropping those assertions while keeping the reaction-slot invariants (skip leaves the slot open; a picker key marks it). All 35 tests in the file now pass.
+
+### Fixed
+- `tests/harness/test_opportunity_attack.py` — realigned 8 stale tests with shipped behavior (over-speed gate `over_speed_confirmed`, picker-key fallback semantics, removed OA audit broadcasts). 27 → 35 passing in-file.
+
+### Notes
+- Test-only commit. No endpoint, schema, or WS-shape change; the server behaviors the tests now assert were already shipped (v2.99.68 / v2.99.75 / v2.100.x).
+- **Total harness count: 1944** in `tests/harness/` (unchanged — assertions adjusted, no tests added or removed); **`tests/harness_ui/` 16** (unchanged).
+
+---
+
 ## [2.101.0] - 2026-06-07 — "Saved State" — persist the battle hub to the database
 
 **Schema version:** 67

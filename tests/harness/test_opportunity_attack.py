@@ -1198,7 +1198,8 @@ async def test_oa_fires_on_path_cross_when_both_endpoints_outside_reach(
     gm_ws.mark()
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 1050.0, "y": 350.0, "oa_confirmed": True},
+        json={"x": 1050.0, "y": 350.0, "oa_confirmed": True,
+              "over_speed_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -1246,7 +1247,8 @@ async def test_oa_skips_path_cross_when_path_misses_reach(
     await asyncio.sleep(0.15)
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 1050.0, "y": 350.0, "oa_confirmed": True},
+        json={"x": 1050.0, "y": 350.0, "oa_confirmed": True,
+              "over_speed_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -1388,7 +1390,8 @@ async def test_oa_parallel_prompts_when_watchers_have_different_owners(
 
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 800.0, "y": 800.0, "oa_confirmed": True},
+        json={"x": 800.0, "y": 800.0, "oa_confirmed": True,
+              "over_speed_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     await asyncio.sleep(0.2)
@@ -1463,7 +1466,8 @@ async def test_oa_serial_queue_emits_one_prompt_then_chains(
     # Trigger the move (oa_confirmed=true to bypass the v2.99.55 409).
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
-        json={"x": 800.0, "y": 800.0, "oa_confirmed": True},
+        json={"x": 800.0, "y": 800.0, "oa_confirmed": True,
+              "over_speed_confirmed": True},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -1556,9 +1560,13 @@ async def test_oa_prompt_includes_per_attack_picker_options(
     assert prompts, "expected reaction_prompt for Tavik"
     options = prompts[0]["data"].get("options") or []
     keys = [o.get("key") for o in options]
-    # Generic take-the-oa stays for back-compat.
-    assert "take-the-oa" in keys, (
-        f"generic take-the-oa option must remain; got {keys}"
+    # v2.99.68 — the generic ``take-the-oa`` is a FALLBACK only,
+    # emitted only when the per-attack picker is empty (no PC sheet
+    # attacks / NPC template actions). Tavik has sheet attacks, so the
+    # picker REPLACES the generic key here.
+    assert "take-the-oa" not in keys, (
+        f"generic take-the-oa should be replaced by the per-attack "
+        f"picker when the watcher has attacks; got {keys}"
     )
     # At least one picker option for Tavik's mace / weapon attacks.
     picker_keys = [k for k in keys if k and k.startswith("take-the-oa:")]
@@ -1585,9 +1593,14 @@ async def test_oa_use_reaction_skip_does_not_mark_reaction(
     gm_client, gm_ws, roster,
 ):
     """v2.99.56: POST /use_reaction with ``reaction_key=skip-oa``
-    resolves the prompt + emits the audit broadcast BUT does NOT
-    mark the watcher's reaction slot. The watcher can still react
-    to a later trigger this round.
+    resolves the prompt but does NOT mark the watcher's reaction
+    slot — the watcher can still react to a later trigger this
+    round.
+
+    v2.99.75 removed the "✋ OA skipped" audit broadcast ("no
+    message needed to show that an OA has been skipped"), so this
+    test no longer asserts a ``feature_used`` row — only that the
+    reaction slot stays unmarked.
     """
     krieger = roster["Krieger Stonefist"]
     tavik = roster["Brother Tavik Stonebrow"]
@@ -1624,14 +1637,9 @@ async def test_oa_use_reaction_skip_does_not_mark_reaction(
     assert resp.status_code == 200, resp.text
 
     await asyncio.sleep(0.2)
-    # Audit broadcast fires.
-    fu = [
-        m for m in gm_ws.buffered("feature_used")
-        if (m.get("data") or {}).get("source") == "oa-skipped"
-        and (m.get("data") or {}).get("character_id") == tavik["id"]
-    ]
-    assert fu, "expected feature_used(source=oa-skipped) audit broadcast"
     # Reaction slot NOT marked — no economy_update for Tavik's reaction.
+    # (v2.99.75 removed the oa-skipped audit broadcast; the slot-unmarked
+    # invariant is the behavior this test now guards.)
     econ = [
         m for m in gm_ws.buffered("economy_update")
         if (m.get("data") or {}).get("character_id") == tavik["id"]
@@ -1647,8 +1655,12 @@ async def test_oa_use_reaction_attack_picker_marks_reaction_and_audits(
     gm_client, gm_ws, roster,
 ):
     """v2.99.56: POST /use_reaction with ``reaction_key=take-the-oa:0``
-    marks the reaction slot AND emits a feature_used naming the
-    chosen attack (source=oa-attack-chosen).
+    (a per-attack picker key) marks the watcher's reaction slot.
+
+    v2.99.75 removed the per-attack ``oa-attack-chosen`` audit
+    broadcast — the v2.99.68 auto-chained /attack now lands the
+    weapon-attack chat card (marked ``is_oa: True``) instead — so
+    this test guards only the reaction-slot mark, not the audit row.
     """
     krieger = roster["Krieger Stonefist"]
     tavik = roster["Brother Tavik Stonebrow"]
@@ -1701,17 +1713,6 @@ async def test_oa_use_reaction_attack_picker_marks_reaction_and_audits(
         and (m.get("data") or {}).get("used") is True
     ]
     assert econ, "expected economy_update marking Tavik's reaction used"
-    # oa-attack-chosen audit broadcast.
-    fu = [
-        m for m in gm_ws.buffered("feature_used")
-        if (m.get("data") or {}).get("source") == "oa-attack-chosen"
-        and (m.get("data") or {}).get("character_id") == tavik["id"]
-    ]
-    assert fu, "expected feature_used(source=oa-attack-chosen) broadcast"
-    # The broadcast carries the attack name + index.
-    assert (fu[-1]["data"].get("attack_name") or "").strip(), (
-        f"oa-attack-chosen should carry attack_name; got {fu[-1]['data']}"
-    )
 
 
 # ── v2.99.55 — plan-movement-oa-flow Phase 4: oa_confirmed 409 gate ──
@@ -2265,14 +2266,22 @@ async def test_oa_chain_multi_npc_take_the_oa_path(
     head_data = oa_prompts[0]["data"]
     head_wcid = head_data.get("watcher_combatant_id")
 
-    # Resolve with take-the-oa (the generic key, not the picker
-    # variant — NPCs don't get the picker by default).
+    # Resolve by taking the OA. v2.99.68 gives multi-attack NPCs a
+    # per-attack picker (``take-the-oa:{idx}``) and demotes the
+    # generic ``take-the-oa`` to a fallback emitted only when no
+    # picker options exist — so pick the picker key when present,
+    # else the generic.
+    _head_keys = [o.get("key") for o in (head_data.get("options") or [])]
+    _take_key = next(
+        (k for k in _head_keys if k and k.startswith("take-the-oa:")),
+        "take-the-oa",
+    )
     gm_ws.mark()
     resp2 = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
         json={
             "prompt_id": head_data["prompt_id"],
-            "reaction_key": "take-the-oa",
+            "reaction_key": _take_key,
             "watcher_char_id": head_data.get("watcher_char_id"),
         },
     )
