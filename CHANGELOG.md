@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.461] - 2026-06-07 — "The Clean Room" — full-suite contention note (docs)
+
+**Schema version:** 66
+**Commit summary:** **Documented that the harness suite must be run against a fresh DB, not a long-lived shared container — a full serial run accumulates cross-test state pollution and surfaces ~150+ false failures that aren't code regressions.**
+**Description:** A full serial run of all ~1900 harness tests against a single shared, persistent Docker app + Postgres produced 178 failures — verified to be cross-test DB contention (PATCH-and-restore fixtures + lingering battle state), since the same tests pass after `docker compose restart app` (re-runs `reset_and_reseed`) and in smaller batches. Adds a prominent ⚠️ note to `docs/test-harness-coverage.md` so future sessions reseed + spot-check in isolation before assuming a regression, and points at CI (fresh container per push) as the authoritative full-suite gate.
+
+### Changed
+- `docs/test-harness-coverage.md` — added the "run against a FRESH DB" warning (the doc is already surfaced via `/wiki/doc/test-harness-coverage`).
+
+### Notes
+- Doc-only commit (no endpoint / no test). Closes out the v2.99.434–.460 automation session (27 feature commits; coverage ~60 → 187 / 239 tracked) after a full-suite verification confirmed the changes are regression-free.
+- **Total harness count: 1922** (unchanged — doc-only).
+
+---
+
 ## [2.99.460] - 2026-06-06 — "The Hunter's Mark of Twenty" — Foe Slayer damage rider (automation Phase 2 tail)
 
 **Schema version:** 66
