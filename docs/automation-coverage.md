@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.459
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.460
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -22,12 +22,12 @@ after a batch of retrofits and update the counts below. Treat the split as
 (archetype J — passive senses, language grants), and a few `tracked`-tagged ones
 only spend a resource without a downstream effect.
 
-## Summary (as of v2.99.459)
+## Summary (as of v2.99.460)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **186** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **51** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **187** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **50** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -155,6 +155,7 @@ or passive damage-boosters that already ride other code paths
 | `use_fey_presence` | ✅ tracked | C save-or-condition |
 | `use_fighting_spirit` | ✅ tracked | F temp-HP |
 | `use_flurry_of_blows` | ✅ tracked | D buff-install |
+| `use_foe_slayer` | ✅ tracked | D buff-install |
 | `use_font_of_magic_to_points` | ✅ tracked | A use/resource |
 | `use_font_of_magic_to_slot` | ✅ tracked | A use/resource |
 | `use_frenzy` | ✅ tracked | A use/resource |
@@ -292,7 +293,6 @@ or passive damage-boosters that already ride other code paths
 | `use_eyes_of_the_rune_keeper` | ⚪ announce-only | — |
 | `use_fancy_footwork` | ⚪ announce-only | — |
 | `use_flesh_to_stone_make_permanent` | ⚪ announce-only | — |
-| `use_foe_slayer` | ⚪ announce-only | — |
 | `use_form_of_the_beast` | ⚪ announce-only | — |
 | `use_improved_duplicity` | ⚪ announce-only | — |
 | `use_improved_minor_illusion` | ⚪ announce-only | — |

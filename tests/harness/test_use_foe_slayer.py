@@ -125,3 +125,67 @@ async def test_use_foe_slayer_level_gate(
     data = r.json()
     assert data.get("error") == "level_too_low"
     assert data.get("required") == 20
+
+
+def _mkc(cid, char_id, name="C"):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": 40, "hp_max": 40, "buffs": [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def test_foe_slayer_damage_installs_rider_and_lands(
+    gm_client, gm_ws, rowan_lv20,
+):
+    """v2.99.460 — Foe Slayer mode=damage installs a non-target,
+    once-per-turn flat rider (+WIS mod); the bonus lands on the first
+    /attack hit."""
+    rowan = rowan_lv20
+    r_cid = f"tok_fs_r_{rowan['id']}"
+    dummy_cid = "tok_fs_dummy"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _mkc(r_cid, rowan["id"], name=rowan["name"]),
+            _mkc(dummy_cid, None, name="Dummy"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_foe_slayer",
+        json={"character_id": rowan["id"], "mode": "damage"},
+    )
+    assert r.status_code == 200, r.text
+    rd = r.json()
+    assert rd["rider_installed"] is True
+    wis = rd["wis_mod"]
+    assert wis > 0
+
+    bu = await gm_ws.wait_for("buff_update")
+    fs = next((b for b in bu["data"]["buffs"]
+               if b.get("key") == "foe-slayer"), None)
+    assert fs is not None, bu["data"]["buffs"]
+    eff = fs.get("effects") or {}
+    assert eff.get("weapon_hit_bonus_flat") == wis
+    assert eff.get("weapon_hit_once_per_turn") is True
+    assert eff.get("weapon_hit_flag") == "foe_slayer"
+
+    hit_ad = None
+    for _ in range(12):
+        a = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": rowan["id"], "attack_index": 0,
+                  "target_combatant_id": dummy_cid, "override": True},
+        )
+        assert a.status_code == 200, a.text
+        ad = a.json()
+        if ad["hit"]:
+            hit_ad = ad
+            break
+    assert hit_ad is not None, "expected at least one hit in 12 swings"
+    ups = [u for u in (hit_ad.get("auto_uplifts") or [])
+           if u.get("source") == "foe-slayer"]
+    assert len(ups) == 1, hit_ad.get("auto_uplifts")
+    assert ups[0]["total"] == wis

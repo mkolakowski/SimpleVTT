@@ -39814,6 +39814,34 @@ async def use_foe_slayer(
     wis = int((sheet.get("abilities") or {}).get("WIS") or 10)
     wis_mod = (wis - 10) // 2
 
+    # v2.99.460 — Phase 2 on-hit-rider retrofit: mode="damage" installs a
+    # non-target, once-per-turn flat rider so the next hit this turn
+    # auto-adds +WIS mod of the weapon's damage type via the /attack
+    # pipeline (was announce-only). mode="attack" (a to-hit bonus) stays
+    # announce-only — modifying the attack roll is a separate follow-up.
+    rider_installed = False
+    if mode == "damage" and wis_mod > 0:
+        rider_installed = await _install_buff(campaign_id, char.id, {
+            "key": "foe-slayer",
+            "name": "Foe Slayer",
+            "icon": "🏹",
+            "duration_rounds": 10,
+            "duration_max": 10,
+            "concentration": False,
+            "source_char_id": char.id,
+            "effects": {
+                "weapon_hit_bonus_flat": wis_mod,
+                "weapon_hit_once_per_turn": True,
+                "weapon_hit_flag": "foe_slayer",
+            },
+            "desc": (
+                f"The next weapon hit this turn deals +{wis_mod} damage "
+                f"(WIS mod). (Ranger Lv 20 Foe Slayer.)"
+            ),
+        })
+        if rider_installed:
+            _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     # Broadcasts.
     membership = (
         db.query(CampaignMembership)
@@ -39847,6 +39875,7 @@ async def use_foe_slayer(
             "mode": mode,
             "wis_mod": wis_mod,
             "target": target,
+            "rider_installed": rider_installed,
         },
     })
 
@@ -39855,6 +39884,7 @@ async def use_foe_slayer(
         "feature": "foe-slayer",
         "mode": mode,
         "wis_mod": wis_mod,
+        "rider_installed": rider_installed,
     }
 
 

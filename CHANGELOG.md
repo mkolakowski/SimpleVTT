@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.460] - 2026-06-06 — "The Hunter's Mark of Twenty" — Foe Slayer damage rider (automation Phase 2 tail)
+
+**Schema version:** 66
+**Commit summary:** **Foe Slayer (Ranger Lv 20 capstone) `mode=damage` now installs a non-target, once-per-turn flat on-hit rider — the next weapon hit this turn auto-adds +WIS mod through the `/attack` pipeline (was announce-only).** Reuses the Genie's Wrath rider shape.
+**Description:** `/use_foe_slayer` with `mode=damage` installs a `foe-slayer` rider buff (`weapon_hit_bonus_flat: WIS mod`, `weapon_hit_once_per_turn: True`, `weapon_hit_flag: "foe_slayer"`, no target key, no explicit type → the weapon's damage type). `_compute_attack_auto_uplifts` reads it and adds the +WIS-mod uplift on a confirmed hit, once per turn. `mode=attack` (a to-hit bonus) stays announce-only — modifying the attack roll is a separate follow-up. Same shape as Genie's Wrath (v2.99.450) / Divine Fury. Response gains `rider_installed`.
+
+### Changed
+- `/api/campaign/{cid}/use_foe_slayer` `mode=damage` installs the on-hit rider (was announce-only); response gains `rider_installed`.
+- `docs/automation-coverage.md` refreshed: `use_foe_slayer` flips to tracked (**187 tracked / 50 announce-only of 239** now).
+
+### Added
+- `tests/harness/test_use_foe_slayer.py::test_foe_slayer_damage_installs_rider_and_lands` — installs the rider (asserts the `weapon_hit_*` effects), then swings until a hit and asserts the `foe-slayer` uplift fires with `total == WIS mod`.
+
+### Notes
+- On-hit-rider-tail burn-down. The remaining ~50 announce-only rows are increasingly archetype J (narration-only by design — e.g. `ascendant_step`, which the endpoint documents as narrative on a 2D map).
+- **Total harness count: 1922** (was 1921 in v2.99.459; +1 new test).
+
+---
+
 ## [2.99.459] - 2026-06-06 — "Riders on the Storm" — Stormborn installs a flight buff (automation movement tail)
 
 **Schema version:** 66
