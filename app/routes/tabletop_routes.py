@@ -8120,6 +8120,9 @@ async def campaign_settings_save(
     # v2.24.0 Phase T.2: auto-apply HP damage on attacks that hit. Off
     # by default — GM opts in via the campaign settings page.
     auto_apply_damage: bool = Form(False),
+    # v2.102.0: default movement-lock state for encounter loads. When on,
+    # each encounter load seeds the live ``movement_locked`` flag ON.
+    movement_lock_default: bool = Form(False),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -8140,6 +8143,10 @@ async def campaign_settings_save(
     campaign.strict_action_economy = strict_action_economy
     # v2.24.0 Phase T.2: auto-apply damage toggle
     campaign.auto_apply_damage = auto_apply_damage
+    # v2.102.0: movement-lock default (seeds movement_locked on each
+    # encounter load). The live movement_locked flag is toggled
+    # separately via POST /movement_lock, not from this form.
+    campaign.movement_lock_default = movement_lock_default
     # Default-encounter-on-session-start setting. Validate the encounter
     # belongs to this campaign before assigning; empty / invalid clears.
     de_raw = (default_encounter_id or "").strip()
@@ -10796,6 +10803,65 @@ def rolls_popout(
 
 # ----------- API: tokens -----------
 
+# v2.102.0 — movement-lock per-token grants. When the GM approves a
+# player's movement request (Phase 3), a one-shot grant is recorded
+# here keyed (campaign_id, user_id, token_id). The /token/move gate
+# consumes it to let that player make a SINGLE move while the table
+# stays locked for everyone else. Ephemeral (in-memory, cleared on
+# restart) with a 10-minute TTL so a stale grant doesn't linger across
+# a session. Mirrors the _heal_claims / _active_reaction_prompts shape.
+_movement_grants: dict[tuple[int, int, int], float] = {}
+_MOVEMENT_GRANT_TTL_S = 600  # 10 minutes
+
+
+def _grant_movement(campaign_id: int, user_id: int, token_id: int) -> None:
+    """Record a one-shot movement grant for (campaign, user, token)."""
+    _movement_grants[(int(campaign_id), int(user_id), int(token_id))] = (
+        _time.time() + _MOVEMENT_GRANT_TTL_S
+    )
+
+
+def _consume_movement_grant(
+    campaign_id: int, user_id: int, token_id: int,
+) -> bool:
+    """Consume a one-shot movement grant. Returns True if a live grant
+    existed (and removes it); False otherwise. An expired grant is
+    dropped and treated as absent."""
+    key = (int(campaign_id), int(user_id), int(token_id))
+    expires = _movement_grants.pop(key, None)
+    return expires is not None and expires >= _time.time()
+
+
+@router.post("/api/campaign/{campaign_id}/movement_lock")
+async def set_movement_lock(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.102.0 — GM toggles the live movement-lock state.
+
+    Body: ``{"locked": bool}``. GM-only. Persists
+    ``campaign.movement_locked`` and broadcasts ``movement_lock_update``
+    so every connected client updates its lock chrome (and the player
+    canvas starts/stops rejecting drags). Returns the new state.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    locked = bool(body.get("locked"))
+    campaign.movement_locked = locked
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "movement_lock_update",
+        "data": {"locked": locked},
+    })
+    return {"ok": True, "locked": locked}
+
+
 @router.post("/api/campaign/{campaign_id}/token/{token_id}/move")
 async def move_token(
     campaign_id: int,
@@ -10815,6 +10881,22 @@ async def move_token(
         raise HTTPException(404, "Token not found")
     if not _user_can_move_token(db, user, token, campaign):
         raise HTTPException(403, "You can't move that token")
+
+    # v2.102.0 — movement lock. When the GM has locked movement
+    # (``campaign.movement_locked``), non-GM token drags are rejected
+    # with a 409 ``movement_locked`` so the player can't reposition
+    # their piece until the GM unlocks OR approves a per-token request
+    # (Phase 3). GM drags pass through — the GM is the arbiter and the
+    # client shows them an advisory "move anyway?" confirm. A one-shot
+    # GM grant (issued by approving a player's movement request) is
+    # consumed here to let that player make a single move while the
+    # table stays locked for everyone else.
+    if bool(campaign.movement_locked) and not _user_is_gm(user, campaign, db):
+        if not _consume_movement_grant(campaign_id, int(user.id), int(token.id)):
+            return JSONResponse(status_code=409, content={
+                "error": "movement_locked",
+                "token_id": int(token.id),
+            })
 
     # v2.99.79 — initiative-turn enforcement. When a battle is active
     # in the realtime hub AND the dragger is a non-GM, the token they're
@@ -13958,6 +14040,23 @@ async def _perform_encounter_load(
                 {"type": "background_change",
                  "data": {"url": campaign.active_background_url}},
             )
+
+    # ── Movement lock seed (v2.102.0) ──
+    # Each encounter load resets the LIVE movement-lock state to the
+    # campaign's configured default, so a table that always plays with
+    # locked movement starts every encounter locked without the GM
+    # re-toggling, and a table that doesn't starts unlocked. Broadcast
+    # the resulting state so every client's lock chrome + player-drag
+    # gating matches the freshly-loaded scene. Only persist/broadcast
+    # when it actually changed to avoid a redundant write + message.
+    _seed_lock = bool(campaign.movement_lock_default)
+    if bool(campaign.movement_locked) != _seed_lock:
+        campaign.movement_locked = _seed_lock
+        db.commit()
+        await hub.broadcast(campaign_id, {
+            "type": "movement_lock_update",
+            "data": {"locked": _seed_lock},
+        })
 
     # ── Audio behaviour on load ──
     # Three-way decision when ``start_audio`` is true:

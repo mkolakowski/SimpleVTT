@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.102.0] - 2026-06-07 — "Hold Still" — movement lock (Phase 1: server core)
+
+**Schema version:** 68
+**Commit summary:** **Adds the server core for locking token movement: a GM-toggleable live `campaign.movement_locked` flag (set via `POST /api/campaign/{id}/movement_lock`, broadcast as `movement_lock_update`) plus a `movement_lock_default` campaign setting that seeds the live flag on every encounter load. When locked, non-GM `/token/move` drags return 409 `movement_locked`; GM drags pass through. Phase 1 of 3 — the client toggle/popups (Phase 2) and the player→GM request/approve flow (Phase 3) land next.**
+**Description:** First slice of the [TODO](TODO.md) "lock player and NPC movement" feature. The lock has two pieces of state on `Campaign`: `movement_locked` is the **live** state every `/token/move` consults, and `movement_lock_default` is the campaign setting (House Rules) that seeds `movement_locked` each time an encounter loads — so a table that always plays locked starts every scene locked without re-toggling. The GM flips the live state with `POST /movement_lock {locked}`, which persists the flag and broadcasts `movement_lock_update` so all clients stay in sync. The move gate sits *before* the v2.99.79 turn-enforcement and v2.99.99 over-speed gates: when `movement_locked` is true and the mover is a non-GM, the move is rejected with 409 `movement_locked` (the GM remains the arbiter and is never blocked). A one-shot per-token grant store (`_movement_grants`, keyed `(campaign, user, token)`, 10-min TTL) is wired into the gate now so Phase 3's GM-approval flow can let a single player move once while the table stays locked — the grant producer endpoint lands in Phase 3.
+
+### Added
+- `app/models.py` — `Campaign.movement_locked` (live) + `Campaign.movement_lock_default` (setting), both `Boolean NOT NULL DEFAULT FALSE`.
+- `app/routes/tabletop_routes.py` — `POST /api/campaign/{id}/movement_lock` (GM-only) sets the live flag + broadcasts `movement_lock_update`; the `/token/move` gate rejects non-GM drags with 409 `movement_locked` while locked; `_movement_grants` one-shot grant store + `_grant_movement` / `_consume_movement_grant` helpers.
+- `app/templates/campaign_settings.html` — "Lock movement by default" House Rules checkbox bound to `movement_lock_default`.
+- `tests/harness/test_movement_lock.py` — happy path (lock → broadcast + player 409 + GM passes + unlock restores) and a non-GM 403 error path.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_perform_encounter_load` seeds the live `movement_locked` from `movement_lock_default` on each load and broadcasts `movement_lock_update` when it changes; the campaign-settings save handler persists `movement_lock_default`.
+
+### Schema
+- **Schema v68:** `campaigns.movement_locked` + `campaigns.movement_lock_default` columns (both `BOOLEAN NOT NULL DEFAULT FALSE`).
+
+### Notes
+- Phase 1 of 3. No client surfacing yet — the GM toggle button + the player "locked" / GM "move anyway?" popups are Phase 2; the request/approve flow is Phase 3.
+- **Total harness count: 1946** in `tests/harness/` (1944 → 1946); **`tests/harness_ui/` 15** (unchanged).
+
+---
+
 ## [2.101.2] - 2026-06-07 — "Band-Aid Off" — retire the client-side hub-hydration push
 
 **Schema version:** 67

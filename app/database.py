@@ -743,6 +743,27 @@ def _apply_inline_migrations() -> None:
             ")"
         ))
 
+    # ---- Schema v68 (2.102.0): campaign movement lock ----
+    # Two booleans on campaigns:
+    #   - movement_locked        — LIVE state; /token/move rejects non-GM
+    #                              drags with 409 `movement_locked` when True.
+    #   - movement_lock_default  — campaign setting seeded onto
+    #                              movement_locked at encounter-load time.
+    # Both NOT NULL DEFAULT FALSE so existing campaigns keep the unlocked
+    # behavior until a GM opts in.
+    camp_cols_v68 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if camp_cols_v68 and "movement_locked" not in camp_cols_v68:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN movement_locked "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+        if camp_cols_v68 and "movement_lock_default" not in camp_cols_v68:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN movement_lock_default "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

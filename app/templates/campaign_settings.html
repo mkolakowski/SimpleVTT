@@ -201,6 +201,13 @@
                     <span class="muted" style="font-size:12px;display:block;">When on, weapon attacks that double-clicked a token as their target auto-resolve hit/miss against the target's AC and apply HP damage server-side (with Phase B resistance halving). Critical hits double the weapon's damage dice (RAW). Misses leave HP unchanged. Off by default — leave off for tables that prefer the GM to apply HP manually. Heals always auto-apply regardless (lower risk). The chat card surfaces an <strong>↶ Undo</strong> button next to each applied damage line for ~8 hours so misclicks can be reverted.</span>
                 </span>
             </label>
+            <label style="flex-direction:row;align-items:center;gap:10px;margin-top:10px;">
+                <input type="checkbox" name="movement_lock_default"
+                       {% if campaign.movement_lock_default %}checked{% endif %}>
+                <span><strong>Lock movement by default</strong>
+                    <span class="muted" style="font-size:12px;display:block;">When on, every encounter load starts with <strong>movement locked</strong> — players can't drag their tokens until the GM unlocks (or approves a per-token request). The GM can still drag any token (with an advisory "move anyway?" confirm) and can flip the lock live from the 🔒 button on the tabletop. Off by default — this only sets the starting state for each loaded encounter; the live lock is toggled separately during play.</span>
+                </span>
+            </label>
         </fieldset>
         <fieldset>
             <legend>🎵 Audio on session start</legend>

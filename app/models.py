@@ -249,6 +249,21 @@ class Campaign(Base):
     # unexpected HP changes; GMs opt in once they trust the flow.
     auto_apply_damage: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false")
+    # v2.102.0: movement lock. ``movement_locked`` is the LIVE state —
+    # when True, non-GM token drags are rejected by /token/move with a
+    # 409 ``movement_locked`` (the player must Request movement from the
+    # GM, who approves/denies). GM drags are allowed through (the GM is
+    # the arbiter); the client shows the GM an advisory "move anyway?"
+    # confirm. The GM flips the live state via POST /movement_lock,
+    # which broadcasts ``movement_lock_update`` so every client's lock
+    # chrome stays in sync. ``movement_lock_default`` is the campaign
+    # setting that seeds ``movement_locked`` each time an encounter is
+    # loaded — so a table that always plays with locked movement can
+    # default it ON without re-toggling every encounter.
+    movement_locked: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false")
+    movement_lock_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false")
     # GM-assigned color for the primary GM in the roll log
     gm_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Tint color for the GM Tools tab in the tabletop sidebar
