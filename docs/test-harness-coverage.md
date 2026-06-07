@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1897 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.442, 2026-06-06).
+**Total tests:** 1900 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.443, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1494,6 +1494,15 @@ v2.99.442 — Phase 7.2 of `docs/plans/movement-and-summons.md`. The fourth summ
 | `test_steel_defender_summon_only` | No target → `attacked` False; the construct has `defender_hp == 30`, `defender_ac == 15`, `is_summon`, `companion_key == "steel-defender"`, `summoned_by` the artificer. Dismissed after. |
 | `test_steel_defender_rends_target` | Loop a fresh defender each cast until the Rend hits a bandit → `damage_type == "force"`, `damage_rolled`/`damage_applied > 0`. Each defender dismissed. |
 | `test_steel_defender_wrong_subclass` | Default Thalindra (Evocation) → 409 `wrong_subclass_or_level`. |
+
+### `test_cast_conjure_animals.py`
+v2.99.443 — Phase 7.2 of `docs/plans/movement-and-summons.md`. The first *multi*-summon: `/cast_conjure_animals` (Druid/Ranger L3) stands up `count` (1–8) wolf combatants on their own grid cells via repeated `_summon_companion` calls. Gates on knowing Conjure Animals OR being a Druid / Ranger. Caster fixture: Mira Greenleaf (demo Druid).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_conjure_animals_eight_wolves` | The default → `count == 8`, 8 distinct summon combatants (all `is_summon`, `companion_key == "wolf"`, `summoned_by` Mira) + 8 tokens at x positions spaced 70 px apart from 700. All dismissed after. |
+| `test_conjure_animals_count_clamp` | `count=2` → exactly two wolves. |
+| `test_conjure_animals_cannot_cast` | Krieger (Barbarian) → 409 `cannot_cast`. |
 
 ### `test_menacing_attack.py`
 v2.99.253 — Battle Master maneuver 3 of 16 — Menacing Attack (PHB p.74). Mirrors Trip/Disarming but save ability is WIS and on-fail is Frightened.

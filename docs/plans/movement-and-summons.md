@@ -143,15 +143,18 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    first real summon retrofit). ✅ rest-teardown shipped v2.99.439
    (`_teardown_summons_for_owner` drops the owner's summons on a long
    rest — combatant + token; a short rest leaves them). **P7.1 done.**
-5. **P7.2 — more summons (L, ongoing). 🟠 in progress.** Find Familiar
+5. **P7.2 — more summons (L). ✅ done v2.99.443.** Find Familiar
    ✅ shipped v2.99.440 (`/cast_find_familiar` stands up the tiny
    non-combat `familiar` companion in a chosen animal form). Ranger's
    Companion ✅ shipped v2.99.441 (`/use_animal_companion`: Beast Master
    Lv 3+ beast with HP scaled to ranger level + AC 13 + prof + an
    optional bite attack). Steel Defender ✅ shipped v2.99.442
    (`/use_steel_defender`: Battle Smith Lv 3+ construct with HP = 2 + INT
-   mod + 5×level, AC 15 + a Force-Empowered Rend attack). Remaining:
-   Conjure Animals.
+   mod + 5×level, AC 15 + a Force-Empowered Rend attack). Conjure Animals
+   ✅ shipped v2.99.443 (`/cast_conjure_animals`: the first *multi*-summon
+   — stands up `count` (1–8) wolves on their own grid cells, dropped as a
+   pack by the long-rest teardown). **P7.2 done — Phases 6 + 7 of this
+   sub-plan are complete.**
 
 ---
 

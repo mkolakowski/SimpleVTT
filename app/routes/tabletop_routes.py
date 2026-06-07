@@ -44894,6 +44894,128 @@ async def use_steel_defender(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_conjure_animals")
+async def cast_conjure_animals(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.443 — Phase 7.2 of docs/plans/movement-and-summons.md: a
+    fifth summon retrofit — and the first *multi*-summon. Conjure Animals
+    (Druid / Ranger L3, PHB p.225): "You summon fey spirits that take the
+    form of beasts... one beast of CR 2, two of CR 1, four of CR 1/2, or
+    eight of CR 1/4." v1 stands up ``count`` identical beasts (wolves) as
+    real combatants, each on its own grid cell.
+
+    Body: ``{character_id, count?, x?, y?, spacing?, initiative?}``.
+    `count` is clamped to 1–8 (default 8). Each beast is summoned via
+    `_summon_companion` (the `wolf` registry entry) at ``x + i × spacing``
+    so the tokens don't stack. Gates on the caster knowing Conjure
+    Animals OR being a Druid / Ranger. All summons share the
+    `is_summon` + `summoned_by` tags, so the long-rest teardown drops the
+    whole pack.
+
+    Response: ``{ok, feature, count, combatants: [...], token_ids: [...]}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    try:
+        count = int(body.get("count") or 8)
+    except (TypeError, ValueError):
+        count = 8
+    count = max(1, min(8, count))
+    spacing = float(body.get("spacing") or 70)
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ca = any(
+        (s.get("_slug") == "conjure-animals")
+        or (str(s.get("name", "")).lower() == "conjure animals")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "ranger"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ca and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Conjure Animals, or druid/ranger",
+            "got_class": _cls,
+        })
+
+    base_x = float(body.get("x") or 0)
+    base_y = float(body.get("y") or 0)
+    initiative = int(body.get("initiative") or 0)
+    combatants = []
+    token_ids = []
+    for i in range(count):
+        res = await _summon_companion(
+            db, campaign_id,
+            owner_char_id=char.id,
+            companion_key="wolf",
+            name=f"Conjured Wolf {i + 1}",
+            x=base_x + i * spacing,
+            y=base_y,
+            initiative=initiative,
+        )
+        if res:
+            combatants.append(res["combatant"])
+            token_ids.append(res["token_id"])
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"🐾 Conjure Animals — {len(combatants)} wolves",
+            "feature_desc": (
+                f"{char.name} summons {len(combatants)} fey spirits in "
+                f"wolf form as combatants. (Conjure Animals, L3.)"
+            ),
+            "source": "conjure-animals",
+            "count": len(combatants),
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "conjure-animals",
+        "count": len(combatants),
+        "combatants": combatants,
+        "token_ids": token_ids,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_menacing_attack")
 async def use_menacing_attack(
     campaign_id: int,

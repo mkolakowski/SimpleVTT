@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.443] - 2026-06-06 — "The Wolf Pack" — Conjure Animals multi-summon (automation Phase 7.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 7.2 — new `POST /cast_conjure_animals` endpoint (Druid/Ranger L3): the first *multi*-summon — stands up `count` (1–8) wolf combatants on their own grid cells via repeated `_summon_companion` calls.** Completes P7.2 and the movement-and-summons plan.
+**Description:** `/cast_conjure_animals` (body `{character_id, count?, x?, y?, spacing?, initiative?}`) gates on the caster knowing Conjure Animals OR being a Druid / Ranger, then summons `count` (clamped 1–8, default 8) identical wolves — each via `_summon_companion` (the `wolf` registry entry) at `x + i × spacing` so the tokens don't stack. Every beast shares the `is_summon` + `summoned_by` tags, so the long-rest teardown (v2.99.439) drops the whole pack at once. Exercises the summon primitive in a loop — the multi-combatant case the plan's design called out.
+
+### Added
+- `POST /api/campaign/{cid}/cast_conjure_animals` → `{ok, feature, count, combatants, token_ids}`; 409 `cannot_cast` when the caster neither knows the spell nor is a druid/ranger.
+- `tests/harness/test_cast_conjure_animals.py` — Mira (demo Druid) conjures 8 wolves (asserts 8 distinct summon combatants + 8 spaced tokens), the count clamp (2 → 2), and 409 (Krieger can't).
+
+### Notes
+- **Completes Phase 7 of `docs/plans/movement-and-summons.md`** (P7.1 primitive + P7.2's five summon retrofits: Spiritual Weapon, Find Familiar, Ranger's Companion, Steel Defender, Conjure Animals). With Phase 6 (forced movement + speed buffs) done, the whole movement-and-summons sub-plan is complete.
+- **Total harness count: 1900** (was 1897 in v2.99.442; +3 new tests).
+
+---
+
 ## [2.99.442] - 2026-06-06 — "The Iron Hound" — Steel Defender retrofit (automation Phase 7.2)
 
 **Schema version:** 66
