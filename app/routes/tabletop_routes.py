@@ -42269,13 +42269,18 @@ async def use_riposte(
     you hit, you add the superiority die to the attack's damage
     roll."
 
-    Body: ``{character_id, override?}``. Reaction-chip gated.
-    Second defensive maneuver after Parry. The actual counter-
-    attack is rolled via the normal /attack path.
+    Body: ``{character_id, attack_index?, target_combatant_id?,
+    override?}``. Reaction-chip gated. Second defensive maneuver after
+    Parry. v2.99.455 — when a ``target_combatant_id`` is supplied, the
+    counter-attack is resolved server-side (roll vs AC + apply weapon
+    damage + the superiority die on a hit); otherwise it stays
+    announce-only (the GM rolls it via /attack).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     override = bool(body.get("override"))
+    target_combatant_id = body.get("target_combatant_id") or None
+    attack_index = int(body.get("attack_index") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
 
@@ -42351,6 +42356,66 @@ async def use_riposte(
     except Exception:
         extra = 1
 
+    # v2.99.455 — Phase 7: resolve the Riposte counter-attack server-side
+    # when given the attacker who missed. Roll the melee weapon attack vs
+    # their AC; on a hit apply the weapon damage + the superiority die.
+    attacked = False
+    hit = False
+    crit = False
+    attack_total = 0
+    target_ac = 0
+    damage_rolled = 0
+    damage_applied = 0
+    damage_type = ""
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if not target_combatant:
+            raise HTTPException(404, "Target not in battle")
+        attacks = list(sheet.get("attacks") or [])
+        if not (0 <= attack_index < len(attacks)):
+            raise HTTPException(400, "attack_index out of range")
+        weapon = attacks[attack_index] or {}
+        try:
+            atk_bonus = int(
+                str(weapon.get("attack_bonus") or "0").replace("+", "").strip()
+                or 0)
+        except (TypeError, ValueError):
+            atk_bonus = 0
+        dmg_expr = str(weapon.get("damage") or "1d4")
+        damage_type = str(weapon.get("damage_type") or "")
+        target_ac = _read_target_ac(db, campaign_id, target_combatant)
+        attacked = True
+        atk_roll_expr = f"1d20{atk_bonus:+d}"
+        try:
+            _ar = dice_mod.roll(atk_roll_expr)
+            attack_total, _abd = int(_ar.total), _ar.breakdown
+        except dice_mod.DiceParseError:
+            attack_total, _abd = 0, ""
+        _nat_m = _re.search(r"\[(\d+)\]", _abd)
+        nat = int(_nat_m.group(1)) if _nat_m else (attack_total - atk_bonus)
+        if nat == 20:
+            hit, crit = True, True
+        elif nat == 1:
+            hit, crit = False, False
+        else:
+            hit, crit = (attack_total >= target_ac), False
+        if hit:
+            w_expr = _double_dice_for_crit(dmg_expr) if crit else dmg_expr
+            try:
+                w_dmg = max(0, int(dice_mod.roll(w_expr).total))
+            except dice_mod.DiceParseError:
+                w_dmg = 0
+            # The superiority die (already rolled as `extra`) adds to the
+            # riposte's damage on a hit.
+            damage_rolled = w_dmg + int(extra)
+            if damage_rolled > 0:
+                _res = await _apply_damage_to_combatant(
+                    db, campaign_id, target_combatant, damage_rolled,
+                    damage_type, is_crit=crit, is_attack=True,
+                    attacker_char_id=char.id,
+                )
+                damage_applied = int(_res.get("applied") or 0)
+
     await _mark_battle_economy(campaign_id, char.id, "reaction")
     await hub.broadcast(campaign_id, {
         "type": "resource_update",
@@ -42394,6 +42459,9 @@ async def use_riposte(
             "dice_remaining": new_sd,
             "over_budget": was_used,
             "over_budget_slot": "reaction" if was_used else "",
+            "attacked": attacked,
+            "hit": hit,
+            "damage_applied": damage_applied,
         },
     })
 
@@ -42404,6 +42472,14 @@ async def use_riposte(
         "die_size": die_size,
         "dice_remaining": new_sd,
         "over_budget": was_used,
+        "attacked": attacked,
+        "hit": hit,
+        "crit": crit,
+        "attack_total": attack_total,
+        "target_ac": target_ac,
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
+        "damage_type": damage_type,
     }
 
 

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.455] - 2026-06-06 — "The Counterstroke" — Riposte resolves its counter-attack (automation Phase 7)
+
+**Schema version:** 66
+**Commit summary:** **Riposte (Battle Master Lv 3) now resolves its counter-attack server-side — rolls the melee weapon attack vs the missed attacker's AC and, on a hit, applies the weapon damage + the superiority die — instead of telling the GM to roll it via /attack.** Opens Phase 7 (reactions breadth).
+**Description:** `/use_riposte` already spent a superiority die + marked the reaction chip; it now also resolves the counter-attack when given `attack_index` + `target_combatant_id` (the attacker who missed). Parses `sheet.attacks[attack_index]`, rolls `1d20 + attack_bonus` vs `_read_target_ac` (nat 20 crit / nat 1 miss), and on a hit rolls the weapon damage (doubled dice on a crit) **plus the superiority die** (already rolled for the die-spend) and applies the total via `_apply_damage_to_combatant`. The legacy announce path (no target) is unchanged. The "triggered by a melee miss against you" gate stays GM/UI-tracked.
+
+### Changed
+- `/api/campaign/{cid}/use_riposte` resolves a real counter-attack when given a target (was announce-only for the attack); response gains `attacked` / `hit` / `crit` / `attack_total` / `target_ac` / `damage_rolled` / `damage_applied` / `damage_type`. (Audit was already tracked — it spends a die — so this deepens rather than flips the count.)
+
+### Added
+- `tests/harness/test_riposte.py` gains 2 tests: the counter-attack lands weapon + superiority-die damage (`damage_rolled > extra_damage_on_hit`), and a 404 for an unknown target.
+
+### Notes
+- Opens Phase 7 (reactions breadth) of `docs/plans/full-feature-automation.md`. Reuses the v2.99.451 server-resolved-attack shape. Next reactions: Protective Field (reduce damage), Chronal Shift (reroll).
+- **Total harness count: 1916** (was 1914 in v2.99.454; +2 new tests).
+
+---
+
 ## [2.99.454] - 2026-06-06 — "The Banner Raised" — Rallying Cry heals allies (automation buff/heal tail)
 
 **Schema version:** 66
