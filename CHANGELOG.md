@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.105.0] - 2026-06-07 — "Push Your Luck" — reroll framework (Phase 1: registry + Lucky)
+
+**Schema version:** 68
+**Commit summary:** **Adds a generic reroll framework: a registry of "spend a resource to reroll a d20" features resolved by a single `POST /use_reroll {character_id, roll_id, feature_key}` endpoint, and a `reroll_options` field on the `/roll` broadcast so the client knows which reroll button(s) to offer. Phase 1 registers the Lucky feat (any d20, keep the higher of old/new). The card button is Phase 2; folding the existing Indomitable / Diamond Soul rerolls into the registry is Phase 3.**
+**Description:** First slice of the [TODO](TODO.md) "framework that lets you use features like Luck by clicking a button inside the roll-log card." The registry `_REROLL_FEATURES` describes each reroll feature — `key`, `label`/`icon`, `resource_key`, `keep` (`"better"` = Lucky keeps the higher d20; `"new"` = must use the reroll, for the Phase 3 save features), `applies` (`"any"` vs `"save"`), and a `detect(char)→(eligible, remaining)` callable. `_compute_reroll_options(char, breakdown, stat_key, note)` returns the eligible features for a given roll (empty when there's no kept d20), and decorates every `/roll` broadcast. The generic `POST /use_reroll` endpoint (modeled on `/use_indomitable_reroll`) validates the feature is eligible + the roll belongs to the user (or GM) + has a d20, rerolls the same expression (advantage/disadvantage carry over), applies the keep rule, mutates the `DiceRoll`, decrements the resource, and broadcasts `roll` (with `reroll_feature`) + `feature_used` + `resource_update`. For Lucky's keep-better, the use is spent even when the original d20 wins (RAW: commit the point, then keep the higher) — the card total just stays put and the audit notes "kept original." Demo Fighter **Garrik Ironside** already carries the Lucky feat + 3 luck points, so the flow is exercisable end to end.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_REROLL_FEATURES` registry + `_reroll_feature` / `_roll_is_save` / `_compute_reroll_options` helpers; generic `POST /api/campaign/{id}/use_reroll` endpoint; `reroll_options` on the `/roll` broadcast.
+- `tests/harness/test_use_reroll.py` — Lucky keep-better happy path (reroll_options on the broadcast, decrement 3→2, the three follow-up broadcasts) + error paths (unknown feature 404, feature-not-available 409, no-d20 409).
+
+### Notes
+- Phase 1 of 3. No client button yet (Phase 2); the existing `/use_indomitable_reroll` + `/use_diamond_soul_reroll` endpoints are untouched and fold into the registry in Phase 3.
+- New `/roll` broadcast field `reroll_options` is additive (absent/empty for char-less or non-d20 rolls) — existing clients ignore it.
+- **Total harness count: 1955** in `tests/harness/` (1951 → 1955); **`tests/harness_ui/` 16** (unchanged).
+
+---
+
 ## [2.104.1] - 2026-06-07 — "Crossed Off" — mark the movement-lock TODO complete
 
 **Schema version:** 68

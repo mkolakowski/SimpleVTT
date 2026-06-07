@@ -3835,6 +3835,87 @@ def _pc_has_lucky_available(char) -> "tuple[bool, int]":
     return False, 0
 
 
+# v2.105.0 — reroll framework. A registry of "spend a resource to
+# reroll a d20" features, surfaced as button(s) on the roll-log card
+# and resolved by the generic POST /use_reroll endpoint. Each entry:
+#   key          — stable id (sent by the client + endpoint)
+#   label / icon — button + chat-card text
+#   resource_key — sheet.resources[].key to decrement on use
+#   keep         — "better" (Lucky: keep the higher of old/new d20) or
+#                  "new" (must use the new roll — Indomitable / Diamond
+#                  Soul, folded in during Phase 3)
+#   applies      — "any" (attack / check / save) or "save" (saves only)
+#   detect       — (char) -> (eligible: bool, remaining: int)
+#   desc         — short description for the feature_used audit card
+# Phase 1 (v2.105.0) registers the Lucky feat; the save-only entries
+# join in Phase 3 (they currently ship their own reroll endpoints).
+def _reroll_detect_lucky(char):
+    return _pc_has_lucky_available(char)
+
+
+_REROLL_FEATURES = [
+    {
+        "key": "lucky",
+        "label": "Lucky",
+        "icon": "🍀",
+        "resource_key": "lucky",
+        "keep": "better",
+        "applies": "any",
+        "detect": _reroll_detect_lucky,
+        "desc": "Roll a new d20 and keep the higher (Lucky feat, PHB p.167).",
+    },
+]
+
+
+def _reroll_feature(key):
+    """Look up a reroll-feature descriptor by key, or None."""
+    for f in _REROLL_FEATURES:
+        if f["key"] == key:
+            return f
+    return None
+
+
+def _roll_is_save(stat_key, note) -> bool:
+    """Best-effort: is this roll a saving throw? Gates save-only reroll
+    features (Indomitable / Diamond Soul). Conservative — only the
+    save-only entries consult it, so a false negative just hides those
+    buttons (Lucky, applies=any, is unaffected)."""
+    sk = (stat_key or "").lower()
+    if "save" in sk or "saving" in sk:
+        return True
+    n = (note or "").lower()
+    return "saving throw" in n
+
+
+def _compute_reroll_options(char, breakdown=None, stat_key=None, note=None):
+    """Reroll features ``char`` could spend on a roll with this
+    breakdown — used to decorate the /roll broadcast so the client can
+    render reroll button(s). Empty when char is None, the roll has no
+    kept d20 to reroll, or no feature is eligible."""
+    if char is None:
+        return []
+    if (breakdown is not None
+            and _extract_kept_d20_from_breakdown(breakdown) is None):
+        return []
+    is_save = _roll_is_save(stat_key, note)
+    out = []
+    for f in _REROLL_FEATURES:
+        if f["applies"] == "save" and not is_save:
+            continue
+        try:
+            eligible, remaining = f["detect"](char)
+        except Exception:  # noqa: BLE001
+            eligible, remaining = False, 0
+        if not eligible:
+            continue
+        out.append({
+            "key": f["key"], "label": f["label"], "icon": f["icon"],
+            "keep": f["keep"], "remaining": int(remaining),
+            "desc": f["desc"],
+        })
+    return out
+
+
 # v2.76.0 Phase 4c — War Caster feat. RAW (PHB p.170) third
 # benefit: "When a hostile creature's movement provokes an
 # opportunity attack from you, you can use your reaction to cast a
@@ -14916,6 +14997,15 @@ async def roll_dice(
                 "stat_key": stat_key_raw or None,
                 "stat_ability": stat_ability_raw or None,
                 "character_id": _char.id if _char else None,
+                # v2.105.0 — reroll framework. Which reroll feature(s)
+                # the rolling character could spend on THIS d20 (e.g.
+                # Lucky). The client renders a per-option button on the
+                # card, gated to the GM + roll owner. Empty/absent when
+                # the char has none, the roll has no d20, or it's a
+                # char-less roll.
+                "reroll_options": _compute_reroll_options(
+                    _char, rec.breakdown, stat_key_raw, rec.note,
+                ),
             },
         },
         recipient_filter=_filter,
@@ -36824,6 +36914,218 @@ async def use_action_surge(
         "ok": True,
         "remaining": as_cur - 1,
         "action_chip_refunded": True,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_reroll")
+async def use_reroll(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.105.0 — generic reroll framework. Spend a reroll feature
+    (registry: ``_REROLL_FEATURES``) to reroll a roll-log card's d20.
+
+    Body: ``{character_id, roll_id, feature_key}``.
+
+    Validates the feature is eligible for the character (``detect``),
+    the roll belongs to the user (or GM), and has a d20 to reroll.
+    Rerolls the SAME expression (advantage/disadvantage carry over),
+    then applies the feature's keep rule:
+      • ``keep="better"`` (Lucky) — keep the higher of the old / new
+        d20; if the original wins the total is unchanged but the use is
+        still spent (RAW: you commit the point, then keep the better).
+      • ``keep="new"`` (Indomitable / Diamond Soul, Phase 3) — must use
+        the new roll.
+    Mutates the DiceRoll, decrements the resource, and broadcasts
+    ``roll`` (with ``reroll_feature``) + ``feature_used`` +
+    ``resource_update``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    roll_id = int(body.get("roll_id") or 0)
+    feature_key = (body.get("feature_key") or "").strip().lower()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if roll_id <= 0:
+        raise HTTPException(400, "roll_id is required")
+    feature = _reroll_feature(feature_key)
+    if feature is None:
+        return JSONResponse(status_code=404, content={
+            "error": "unknown_feature", "feature_key": feature_key,
+        })
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    is_gm = _user_is_gm(user, campaign, db)
+    if not (is_gm or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    eligible, remaining = feature["detect"](char)
+    if not eligible or remaining <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses", "feature_key": feature_key,
+            "label": feature["label"],
+        })
+
+    rec = db.query(DiceRoll).filter(
+        DiceRoll.id == roll_id, DiceRoll.campaign_id == campaign_id,
+    ).first()
+    if not rec:
+        return JSONResponse(status_code=404, content={"error": "roll_not_found"})
+    if rec.user_id != user.id and not is_gm:
+        raise HTTPException(403, "Not your roll")
+
+    old_d20 = _extract_kept_d20_from_breakdown(rec.breakdown or "")
+    old_total = int(rec.total or 0)
+    old_breakdown = rec.breakdown or ""
+    if old_d20 is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_d20",
+            "msg": "Roll has no d20 component to reroll.",
+        })
+
+    try:
+        new_result = dice_mod.roll(rec.expression)
+    except dice_mod.DiceParseError:
+        return JSONResponse(status_code=409, content={
+            "error": "reroll_failed",
+            "msg": f"Could not reroll {rec.expression!r}.",
+        })
+    new_total = int(new_result.total or 0)
+    new_breakdown = new_result.breakdown or ""
+    new_d20 = _extract_kept_d20_from_breakdown(new_breakdown)
+
+    # Apply the keep rule. "better" keeps the higher d20 (Lucky); "new"
+    # always takes the reroll (Indomitable / Diamond Soul).
+    if feature["keep"] == "better":
+        took_new = (new_d20 is not None and old_d20 is not None
+                    and new_d20 > old_d20)
+    else:
+        took_new = True
+    kept_d20 = new_d20 if took_new else old_d20
+    if took_new:
+        rec.breakdown = new_breakdown
+        rec.total = new_total
+    final_total = int(rec.total or 0)
+    rec.note = (
+        (rec.note or "")
+        + f" | {feature['icon']} {feature['label']} reroll d20 "
+        + f"{old_d20} → {new_d20 if new_d20 is not None else '?'}"
+        + ("" if took_new else " (kept original)")
+    )[:200]
+
+    # Decrement the feature's resource.
+    resources = list((char.sheet or {}).get("resources") or [])
+    res_idx, res_row = -1, None
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == feature["resource_key"]:
+            res_row = dict(r); res_idx = i; break
+    if res_row is None:
+        return JSONResponse(status_code=404, content={
+            "error": "resource_missing", "label": feature["label"],
+        })
+    res_cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    new_cur = max(0, res_cur - 1)
+    res_row["current"] = new_cur
+    resources[res_idx] = res_row
+    sheet = dict(char.sheet or {})
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+    db.refresh(rec)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "id": rec.id,
+            "user_id": user.id,
+            "user_name": user.display_name,
+            "char_name": char.name,
+            "user_color": caster_color,
+            "expression": rec.expression,
+            "breakdown": rec.breakdown,
+            "total": rec.total,
+            "visibility": rec.visibility.value,
+            "note": rec.note,
+            "character_id": char.id,
+            "reroll_feature": feature_key,
+            "took_new": took_new,
+            "old_total": old_total,
+            "old_d20": old_d20,
+            "new_d20": new_d20,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"{feature['icon']} {feature['label']} reroll — d20 "
+                f"{old_d20} → {new_d20 if new_d20 is not None else '?'}"
+                + ("" if took_new else " (kept original)")
+            ),
+            "feature_desc": (
+                f"{char.name} used {feature['label']}: "
+                + (f"new total {final_total} (was {old_total})."
+                   if took_new else
+                   f"kept the original d20 {old_d20} "
+                   f"(reroll was {new_d20}).")
+            ),
+            "source": f"{feature_key}-reroll",
+            "roll_id": rec.id,
+            "old_d20": old_d20,
+            "new_d20": new_d20,
+            "old_total": old_total,
+            "new_total": final_total,
+            "remaining": new_cur,
+            "max": res_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": feature["resource_key"],
+            "current": new_cur,
+            "max": res_max,
+        },
+    })
+    return {
+        "ok": True,
+        "roll_id": rec.id,
+        "feature_key": feature_key,
+        "took_new": took_new,
+        "old_d20": old_d20,
+        "new_d20": new_d20,
+        "kept_d20": kept_d20,
+        "old_total": old_total,
+        "new_total": final_total,
+        "remaining": new_cur,
+        "max": res_max,
     }
 
 

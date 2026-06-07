@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1951 in `tests/harness/` + 16 in `tests/harness_ui/` (as of v2.104.0, 2026-06-07).
+**Total tests:** 1955 in `tests/harness/` + 16 in `tests/harness_ui/` (as of v2.105.0, 2026-06-07).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2257,6 +2257,16 @@ v2.102.0 — campaign movement lock (Phase 1 server core) + v2.104.0 Phase 3 req
 | `test_movement_request_unknown_token` | `movement_request` for a token not in this campaign → 404. |
 | `test_respond_movement_request_requires_gm` | Non-GM `respond` → 403 (GM gate fires before the request lookup). |
 | `test_respond_unknown_movement_request` | GM `respond` on an unknown/expired request id → 404. |
+
+### `test_use_reroll.py`
+v2.105.0 — generic reroll framework (Phase 1: Lucky feat). `POST /use_reroll` spends a reroll feature to reroll a roll-log card's d20; the `/roll` broadcast carries `reroll_options`. Uses demo Fighter Garrik Ironside (Lucky feat + 3 luck points).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_lucky_reroll_keeps_better_and_decrements` | A d20 rolled as Garrik broadcasts a `lucky` reroll_option (`remaining=3`, `keep="better"`); `POST /use_reroll {feature_key:"lucky"}` → 200, decrements 3→2, kept d20 ≥ original (swaps in only when the new d20 strictly beats it), and fires `roll(reroll_feature="lucky")` + `feature_used(source="lucky-reroll")` + `resource_update(key="lucky", current=2)`. |
+| `test_reroll_unknown_feature` | An unknown `feature_key` → 404 `unknown_feature` (checked before the roll lookup). |
+| `test_reroll_feature_not_available` | A character without the feature (Pip) → 409 `out_of_uses`. |
+| `test_reroll_no_d20` | A non-d20 roll (`2d6`) offers no reroll_option and `/use_reroll` → 409 `no_d20`. |
 
 ### `test_battle_put_npc_concentration_cascade.py`
 v2.99.185 — `/battle PUT` auto-fires `_drop_paired_concentration_buffs_npc` when an NPC's concentration buff is removed via the canonical battle-edit path. Closes the v2.99.179 filed item; completes the Polymorph mechanical chain for NPC casters via the routine UI path.
