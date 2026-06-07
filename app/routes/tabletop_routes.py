@@ -54428,6 +54428,34 @@ async def use_genies_wrath(
         pb = 2 + (max(1, warlock_lv) - 1) // 4
     bonus_damage = pb
 
+    # v2.99.450 — Phase 2 on-hit-rider retrofit (docs/plans/on-hit-riders.md):
+    # install a non-target, once-per-turn rider so the first hit each turn
+    # auto-adds +PB damage of the genie's element through the /attack
+    # pipeline (was announce-only). Flat-only (no dice) — Genie's Wrath is
+    # +proficiency bonus. 10-round duration ≈ a combat; RAW it's always-on.
+    rider_installed = await _install_buff(campaign_id, char.id, {
+        "key": "genies-wrath",
+        "name": "Genie's Wrath",
+        "icon": "🧞",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "weapon_hit_bonus_flat": bonus_damage,
+            "weapon_hit_bonus_damage_type": damage_type,
+            "weapon_hit_once_per_turn": True,
+            "weapon_hit_flag": "genies_wrath",
+        },
+        "desc": (
+            f"The first weapon hit each turn deals +{bonus_damage} "
+            f"{damage_type} damage ({genie_kind} genie). (The Genie "
+            f"Warlock Lv 1+.)"
+        ),
+    })
+    if rider_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -54461,6 +54489,7 @@ async def use_genies_wrath(
             "damage_type": damage_type,
             "bonus_damage": bonus_damage,
             "warlock_level": warlock_lv,
+            "rider_installed": rider_installed,
         },
     })
 
@@ -54471,6 +54500,7 @@ async def use_genies_wrath(
         "damage_type": damage_type,
         "bonus_damage": bonus_damage,
         "warlock_level": warlock_lv,
+        "rider_installed": rider_installed,
     }
 
 

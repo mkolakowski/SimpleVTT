@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.450] - 2026-06-06 — "The Vessel's Element" — Genie's Wrath on-hit rider (automation Phase 2 follow-up)
+
+**Schema version:** 66
+**Commit summary:** **Genie's Wrath (The Genie Warlock Lv 1) now installs a non-target, once-per-turn flat on-hit rider — the first weapon hit each turn auto-adds +PB damage of the patron's element through the `/attack` pipeline (was announce-only).** First burn-down of the audit's announce-only on-hit-rider tail.
+**Description:** `/use_genies_wrath` installs a `genies-wrath` rider buff carrying `weapon_hit_bonus_flat: <proficiency bonus>`, `weapon_hit_bonus_damage_type: <element>` (bludgeoning/thunder/fire/cold by genie kind), `weapon_hit_once_per_turn: True`, and `weapon_hit_flag: "genies_wrath"` — no target key, so it applies to the first creature hit each turn. `_compute_attack_auto_uplifts` (the v2.99.395 Phase-2 substrate) reads it and adds the uplift on a confirmed hit, with the once-per-turn flag stripped on a miss + marked on a hit + cleared on turn advance. Same activated-rider shape as Divine Fury / Kensei's Shot, but flat-only (no dice). Response + broadcast gain `rider_installed`.
+
+### Changed
+- `/api/campaign/{cid}/use_genies_wrath` installs the on-hit rider (was announce-only).
+- `docs/automation-coverage.md` refreshed: `use_genies_wrath` flips to tracked (**180 tracked / 57 announce-only of 239** now).
+
+### Added
+- `tests/harness/test_genies_wrath.py::test_gw_installs_rider_and_lands` — installs the rider (asserts the buff's `weapon_hit_*` effects), then swings until a hit and asserts the `genies-wrath` uplift fires with `total == PB` + `damage_type == "thunder"`.
+
+### Notes
+- First on-hit-rider-backlog burn-down. Remaining riders (`horde_breaker`, `dread_ambusher`, `assassinate`) follow the same install-a-rider shape.
+- **Total harness count: 1907** (was 1906 in v2.99.449; +1 new test).
+
+---
+
 ## [2.99.449] - 2026-06-06 — "The Quickened Step" — aura buff-payload + Aura of Alacrity (automation Phase 5 follow-up)
 
 **Schema version:** 66

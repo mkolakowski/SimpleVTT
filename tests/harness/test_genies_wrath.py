@@ -101,6 +101,74 @@ async def test_use_gw_happy_efreeti(
     assert data["damage_type"] == "fire"
 
 
+def _mkc(cid, char_id, name="C"):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": 40, "hp_max": 40, "buffs": [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def test_gw_installs_rider_and_lands(
+    gm_client, gm_ws, magnus_genie,
+):
+    """v2.99.450 — Phase 2 retrofit: Genie's Wrath installs a non-target,
+    once-per-turn flat rider (+PB of the genie's element), and the bonus
+    lands on the first /attack hit through the uplift pipeline.
+    """
+    magnus = magnus_genie
+    magnus_cid = f"tok_gw_magnus_{magnus['id']}"
+    dummy_cid = "tok_gw_dummy"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _mkc(magnus_cid, magnus["id"], name=magnus["name"]),
+            _mkc(dummy_cid, None, name="Dummy"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_genies_wrath",
+        json={"character_id": magnus["id"]},  # default djinni → thunder
+    )
+    assert r.status_code == 200, r.text
+    rd = r.json()
+    assert rd["rider_installed"] is True
+    pb = rd["bonus_damage"]
+
+    bu = await gm_ws.wait_for("buff_update")
+    gw = next((b for b in bu["data"]["buffs"]
+               if b.get("key") == "genies-wrath"), None)
+    assert gw is not None, bu["data"]["buffs"]
+    eff = gw.get("effects") or {}
+    assert eff.get("weapon_hit_bonus_flat") == pb
+    assert eff.get("weapon_hit_bonus_damage_type") == "thunder"
+    assert eff.get("weapon_hit_once_per_turn") is True
+    assert eff.get("weapon_hit_flag") == "genies_wrath"
+    assert "weapon_hit_bonus_target_combatant_id" not in eff
+
+    # First weapon hit this turn auto-adds +PB thunder.
+    hit_ad = None
+    for _ in range(12):
+        a = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": magnus["id"], "attack_index": 0,
+                  "target_combatant_id": dummy_cid, "override": True},
+        )
+        assert a.status_code == 200, a.text
+        ad = a.json()
+        if ad["hit"]:
+            hit_ad = ad
+            break
+    assert hit_ad is not None, "expected at least one hit in 12 swings"
+    ups = [u for u in (hit_ad.get("auto_uplifts") or [])
+           if u.get("source") == "genies-wrath"]
+    assert len(ups) == 1, hit_ad.get("auto_uplifts")
+    assert ups[0]["damage_type"] == "thunder"
+    assert ups[0]["total"] == pb
+
+
 async def test_use_gw_wrong_subclass(
     gm_client, roster,
 ):
