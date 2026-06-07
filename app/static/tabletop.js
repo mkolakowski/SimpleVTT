@@ -4071,7 +4071,18 @@
                 if (typeof window._dashCombatant === 'function') {
                     window._dashCombatant(_activeForDash);
                 }
-                postMove();
+                // v2.100.3 — pass over_speed_confirmed:true. The Dash
+                // bonus is applied to hub state asynchronously (via the
+                // /use_dash POST inside _dashCombatant), so relying on
+                // the server's effective-cap gate to "see" the dash
+                // before this /token/move lands is a race — under load
+                // the move could 409 over_speed_cap and silently fail
+                // to commit, which is exactly the "movement stops
+                // tracking after Dash" symptom. The user explicitly
+                // chose Dash, so bypassing the cap gate here is correct;
+                // the dash_bonus_ft still propagates (for the chip cap
+                // + subsequent moves) via the economy_update broadcast.
+                postMove(false, true);
             },
         });
     }

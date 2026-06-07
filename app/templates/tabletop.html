@@ -7786,17 +7786,43 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         if (msg.type === 'economy_update') {
             const data = msg.data || {};
             const cid = parseInt(data.character_id, 10);
+            const combId = data.combatant_id;
             const slot = data.slot;
-            if (!Number.isFinite(cid)) return;
-            if (slot !== 'action' && slot !== 'bonus' && slot !== 'reaction') return;
-            const combatant = (battle.combatants || []).find(c => c.char_id === cid);
+            // v2.100.3 — match by char_id (PC) OR combatant id (NPC).
+            // The Dash propagation broadcast (from /use_dash) carries
+            // combatant_id so NPC dashes reconcile too.
+            let combatant = null;
+            if (Number.isFinite(cid)) {
+                combatant = (battle.combatants || []).find(c => c.char_id === cid);
+            }
+            if (!combatant && combId != null) {
+                combatant = (battle.combatants || []).find(c => c.id === combId);
+            }
             if (!combatant) return;
             _ensureEconomy(combatant);
-            const next = !!data.used;
-            if (combatant.economy[slot] === next) return;
-            combatant.economy[slot] = next;
-            saveBattle();
-            renderBattle();
+            let changed = false;
+            // v2.100.3 — apply the Dash movement-cap bonus surgically
+            // so it survives the next wholesale battle_update. Sent as
+            // an ABSOLUTE value, so a plain set is idempotent (no
+            // double-count on replay). Applied BEFORE the slot toggle
+            // so an already-"action used" combatant still picks up the
+            // cap bump.
+            if (typeof data.dash_bonus_ft === 'number'
+                    && combatant.economy.dash_bonus_ft !== data.dash_bonus_ft) {
+                combatant.economy.dash_bonus_ft = data.dash_bonus_ft;
+                changed = true;
+            }
+            if (slot === 'action' || slot === 'bonus' || slot === 'reaction') {
+                const next = !!data.used;
+                if (combatant.economy[slot] !== next) {
+                    combatant.economy[slot] = next;
+                    changed = true;
+                }
+            }
+            if (changed) {
+                saveBattle();
+                renderBattle();
+            }
             return;
         }
         // v2.19.0 Phase C.1: buff_update — server installed / removed a

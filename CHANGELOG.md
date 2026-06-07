@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.100.3] - 2026-06-07 — "Second Wind" — Dash movement-cap bonus now survives the sync
+
+**Schema version:** 66
+**Commit summary:** **`/use_dash` is now authoritative for the Dash movement-cap bonus: it mutates the hub battle combatant (action slot + `dash_bonus_ft`) and broadcasts `economy_update` (carrying `dash_bonus_ft`) so every client reconciles surgically. Fixes "the distance meter doesn't track movement after Dash" — a player's Dash bonus used to be local-only and got wiped by the next `battle_update`.**
+**Description:** Reported: after a combatant Dashes, the init-tracker "Mov" chip and the canvas breadcrumb stop reflecting the dash-extended budget. Root cause: the client `_dashCombatant` helper mutated only the dasher's LOCAL `battle` dict and called `pushBattle()`, which is a no-op for non-GM clients (`if (!IS_GM) return`). So a player's `dash_bonus_ft` never reached the server, and the very next `battle_update` (the GM's `pushBattle` after processing the player's move) wholesale-replaced `battle = msg.data` and reverted the cap to base speed — the move number kept climbing but the cap dropped, so the chip read "over". The fix mirrors the existing `economy_update` pattern: `/use_dash` marks the action slot + sets `dash_bonus_ft` (absolute, for idempotency) on the hub combatant and broadcasts `economy_update` with the new `dash_bonus_ft`. Both the GM (which ignores `battle_update` but listens to `economy_update`) and players apply it surgically, so the bonus is durable. The client `economy_update` handler now also matches by `combatant_id` (so NPC dashes reconcile) and applies `dash_bonus_ft`. Separately, the movement-overrun modal's "Take Dash" now POSTs the move with `over_speed_confirmed:true` — the dash hub-mutation is async, so relying on the server cap gate to "see" the dash before the `/token/move` lands was a race that could 409 the move and make it silently fail to commit (the same "movement stops tracking" symptom).
+
+### Fixed
+- `app/routes/tabletop_routes.py` — `/use_dash` mutates hub `economy.action` + `economy.dash_bonus_ft` and broadcasts `economy_update` with `dash_bonus_ft`; response echoes `dash_bonus_ft`.
+- `app/templates/tabletop.html` — `economy_update` WS handler matches by `combatant_id` (NPCs) and applies `dash_bonus_ft` (absolute, idempotent) so the cap survives a wholesale `battle_update`.
+- `app/static/tabletop.js` — overrun modal "Take Dash" passes `over_speed_confirmed:true` to avoid the dash-vs-move 409 race.
+
+### Added
+- `tests/harness/test_use_dash.py` — 3 tests: propagation (economy_update carries `dash_bonus_ft` + action used), additive stacking (30 → 60), and not-in-battle (feature_used fires, no economy_update, `dash_bonus_ft: null`).
+
+### Notes
+- The `economy_update` broadcast shape gained an optional `dash_bonus_ft` field (additive; existing action/bonus/reaction consumers unaffected). `/use_dash` response gained `dash_bonus_ft`.
+- **Total harness count: 1942** (was 1939 in v2.100.0; +3 new tests).
+
+---
+
 ## [2.100.2] - 2026-06-07 — "Hold Position" — declining the required Dash cancels the move (no phantom OA)
 
 **Schema version:** 66

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1939 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.100.0, 2026-06-07).
+**Total tests:** 1942 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.100.3, 2026-06-07).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -444,6 +444,15 @@ Fighter Action Surge: refunds the action chip.
 | `test_action_surge_out_of_uses` | 409 when counter is empty. |
 | `test_action_surge_wrong_class` | Non-Fighter → 409. |
 | `test_action_surge_missing_character_id` | 400. |
+
+### `test_use_dash.py`
+v2.100.3 — `/use_dash` propagates the Dash movement-cap bonus to the authoritative hub state + broadcasts `economy_update` (carrying `dash_bonus_ft`) so the bonus survives a player's wholesale `battle_update` replace. Pip Quickfingers is the seeded fixture.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_dash_propagates_dash_bonus` | Dash a seeded combatant → `economy_update` carries `slot=action`, `used=True`, `dash_bonus_ft=30`; `feature_used(source=dash-action)` fires; response echoes `dash_bonus_ft=30`. |
+| `test_use_dash_stacks_additively` | A second Dash stacks the absolute bonus (30 → 60) rather than overwriting. |
+| `test_use_dash_not_in_battle_no_economy_update` | Error path: dashing a character absent from init still fires `feature_used` but broadcasts NO `economy_update` and returns `dash_bonus_ft: null`. |
 
 ### `test_h3_invocations.py`
 v2.99.250 — Phase H.3 batched 5-invocation breadth ship. Single `/use_invocation` endpoint backed by a 5-entry registry: Devil's Sight, Mask of Many Faces, Hex Warrior, Lifedrinker, Lance of Lethargy. Magnus Hexbinder (Warlock The Fiend Lv 5) is the fixture.

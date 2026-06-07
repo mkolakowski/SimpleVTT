@@ -11372,7 +11372,60 @@ async def use_dash(
             "grant_ft": grant_ft,
         },
     })
-    return {"ok": True, "grant_ft": grant_ft}
+
+    # v2.100.3 — propagate Dash to the authoritative hub battle state
+    # so the +grant_ft movement-cap bonus survives the GM's next
+    # battle_update (which players adopt via a wholesale `battle =
+    # msg.data` replace). Pre-v2.100.3 the client `_dashCombatant`
+    # helper only mutated the dasher's LOCAL battle dict + called
+    # `pushBattle()` — which is a no-op for non-GM clients
+    # (`if (!IS_GM) return`). So a player's Dash bonus lived only in
+    # their browser and got wiped the instant any battle_update
+    # arrived (e.g. the GM's pushBattle after processing the very
+    # move the player just made), silently reverting the Mov chip cap
+    # to base speed and making the dash-extended movement read as
+    # "over". Marking the action slot + dash_bonus_ft here (and
+    # broadcasting `economy_update`, which BOTH the GM and players
+    # apply surgically without a wholesale replace) makes the bonus
+    # authoritative and durable. dash_bonus_ft is sent as an ABSOLUTE
+    # value so the client set is idempotent under replay / reorder.
+    new_dash_bonus = None
+    state = hub.get_battle(campaign_id)
+    if state:
+        target = None
+        for c in state.get("combatants") or []:
+            if character_id is not None and c.get("char_id") == character_id:
+                target = c
+                break
+            if combatant_id is not None and c.get("id") == combatant_id:
+                target = c
+                break
+        if target is not None:
+            economy = target.get("economy")
+            if not isinstance(economy, dict):
+                economy = {
+                    "action": False, "bonus": False,
+                    "reaction": False, "movement": 0, "dash_bonus_ft": 0,
+                }
+                target["economy"] = economy
+            economy["action"] = True
+            prior = economy.get("dash_bonus_ft") or 0
+            prior_ft = float(prior) if isinstance(prior, (int, float)) else 0.0
+            new_dash_bonus = prior_ft + float(max(0, grant_ft))
+            economy["dash_bonus_ft"] = new_dash_bonus
+            hub.set_battle(campaign_id, state)
+            await hub.broadcast(campaign_id, {
+                "type": "economy_update",
+                "data": {
+                    "character_id": target.get("char_id"),
+                    "combatant_id": target.get("id"),
+                    "slot": "action",
+                    "used": True,
+                    "dash_bonus_ft": new_dash_bonus,
+                },
+            })
+
+    return {"ok": True, "grant_ft": grant_ft, "dash_bonus_ft": new_dash_bonus}
 
 
 @router.post("/api/campaign/{campaign_id}/use_eldritch_sight")
