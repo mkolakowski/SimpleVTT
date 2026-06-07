@@ -120,13 +120,16 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    endpoint. Tested directly (push 15 ft → token moves 3 cells). Pushing
    Attack (v2.99.433) rolls the STR save server-side + force-moves the
    target 15 ft away on a fail.
-3. **P6.3 — more forced movers (S-M). 🟠 in progress.** Open Hand push
-   ✅ shipped v2.99.434 (force-moves the target 15 ft on a failed STR
-   save). Thorn Whip ✅ shipped v2.99.435 (new cantrip endpoint: melee
-   spell attack → pull 10 ft toward the caster on a hit; first
-   `_force_move(pull=True)` retrofit). Remaining: Thunderwave / Gust
-   (push). (Repelling Blast already has its own bespoke push from
-   v2.99.90 — a candidate to consolidate onto `_force_move` later.)
+3. **P6.3 — more forced movers (S-M). ✅ substantially done.** Open Hand
+   push ✅ shipped v2.99.434 (force-moves the target 15 ft on a failed
+   STR save). Thorn Whip ✅ shipped v2.99.435 (new cantrip endpoint:
+   melee spell attack → pull 10 ft toward the caster on a hit; first
+   `_force_move(pull=True)` retrofit). Thunderwave ✅ shipped v2.99.436
+   (new L1 spell endpoint: multi-target CON save AoE → each failed save
+   takes 2d8 thunder + pushed 10 ft away; first *multi-target*
+   forced-move retrofit). Remaining nice-to-haves: Gust (push). Repelling
+   Blast already has its own bespoke push from v2.99.90 — a candidate to
+   consolidate onto `_force_move` later.
 4. **P7.1 — `_summon_companion` + a companion registry (L).** The
    primitive + a `/summon_companion` endpoint + a dismiss/teardown;
    retrofit Spiritual Weapon (the simplest — a floating weapon combatant

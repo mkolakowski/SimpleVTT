@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1874 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.435, 2026-06-06).
+**Total tests:** 1878 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.436, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1430,6 +1430,16 @@ v2.99.435 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Thorn Whip (Dru
 | `test_thorn_whip_wrong_class` | Krieger (Barbarian) → 409 `wrong_class`. |
 | `test_thorn_whip_missing_target_400` | Missing `target_combatant_id` → 400. |
 | `test_thorn_whip_target_not_in_battle_404` | Unknown target combatant → 404. |
+
+### `test_use_thunderwave.py`
+v2.99.436 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Thunderwave (Bard/Druid/Sorcerer/Wizard L1, PHB p.282): each creature in the cube makes a CON save vs the caster's spell save DC; a fail takes 2d8 thunder (rolled once for the area) + is **pushed 10 ft away** from the caster via `_force_move`, a success takes half + isn't pushed. First *multi-target* forced-move retrofit. Caster fixture: Lyra Sunstrider (demo Bard, knows Thunderwave, CHA 17 / prof +3 → DC 14).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_thunderwave_pushes_failed_targets` | Two bandits flank Lyra (one 10 ft above, one 10 ft below); loop until ≥1 fails its CON save, asserting per-target that a failed save → `pushed` True + token moved ±140 px (10 ft away from Lyra) and a passed save → not pushed + token unmoved. `save_dc == 14`, `any_pushed` set. Two NPC tokens created + torn down. |
+| `test_thunderwave_unknown_target_per_result_error` | Unknown combatant id → 200 with a per-result `error: not_in_battle` (not a top-level 404). |
+| `test_thunderwave_spell_not_known` | Krieger (Barbarian) → 409 `spell_not_known`. |
+| `test_thunderwave_missing_targets_400` | Empty `target_combatant_ids` → 400. |
 
 ### `test_menacing_attack.py`
 v2.99.253 — Battle Master maneuver 3 of 16 — Menacing Attack (PHB p.74). Mirrors Trip/Disarming but save ability is WIS and on-fail is Frightened.

@@ -43727,6 +43727,212 @@ async def use_thorn_whip(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_thunderwave")
+async def use_thunderwave(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.436 — Phase 6.3 of docs/plans/movement-and-summons.md:
+    Thunderwave (Bard/Druid/Sorcerer/Wizard L1, PHB p.282). "Each
+    creature in a 15-foot cube originating from you must make a
+    Constitution saving throw. On a failed save, a creature takes 2d8
+    thunder damage and is pushed 10 feet away from you. On a successful
+    save, a creature takes half as much damage and isn't pushed."
+
+    Body: ``{character_id, target_combatant_ids: [...], override?}``. The
+    affected creatures (those in the cube) are supplied by the caller —
+    same trust-the-caller convention as the other area features (the UI
+    selects who's in the template). v1 deals base 2d8 (no slot-level
+    upcast yet) and does **not** decrement a spell slot (announce-style,
+    consistent with the other forced-move retrofits).
+
+    For each target the CON save is rolled server-side vs the caster's
+    spell save DC (8 + prof + spellcasting mod). The damage is rolled
+    once (RAW: one roll for the whole area); a failed save takes full +
+    is **pushed 10 ft away** from the caster via `_force_move`, a
+    successful save takes half + isn't pushed. First multi-target
+    forced-move retrofit. Needs the target on a gridded map with a token
+    (off-grid → the save + damage resolve but no push).
+
+    Response: ``{ok, feature, save_dc, damage_rolled, results: [{
+    combatant_id, name, save_rolled, save_passed, damage_applied,
+    pushed}], any_pushed}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_ids = body.get("target_combatant_ids") or []
+    if not isinstance(target_ids, list) or not target_ids:
+        raise HTTPException(400, "target_combatant_ids (non-empty list) is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    # Gate: caster must know Thunderwave.
+    spells = list(sheet.get("spells") or [])
+    knows_tw = any(
+        (s.get("_slug") == "thunderwave")
+        or (str(s.get("name", "")).lower() == "thunderwave")
+        for s in spells
+    )
+    if not knows_tw:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "thunderwave",
+        })
+
+    # Spell save DC = 8 + proficiency + spellcasting mod.
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    spc = (
+        sheet.get("spellcasting_ability")
+        or sheet.get("class_spellcasting") or ""
+    ).strip().upper()[:3]
+    if spc not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+        spc = "CHA"
+    spc_mod = (int((sheet.get("abilities") or {}).get(spc, 10)) - 10) // 2
+    save_dc = 8 + prof + spc_mod
+
+    # Roll the area damage once (RAW: one roll for the whole cube).
+    try:
+        damage_rolled = max(0, int(dice_mod.roll("2d8").total))
+    except dice_mod.DiceParseError:
+        damage_rolled = 0
+    half_damage = damage_rolled // 2
+
+    _state = hub.get_battle(campaign_id)
+    caster_cb = next(
+        (c for c in (_state.get("combatants") or [])
+         if c.get("char_id") == char.id), None,
+    ) if _state else None
+
+    results = []
+    any_pushed = False
+    for tid in target_ids:
+        target_combatant = _lookup_combatant(campaign_id, tid)
+        if not target_combatant:
+            results.append({
+                "combatant_id": tid, "name": "", "save_rolled": None,
+                "save_passed": None, "damage_applied": 0, "pushed": False,
+                "error": "not_in_battle",
+            })
+            continue
+        # Target's CON save modifier (PC sheet or NPC template).
+        _tmod = None
+        if target_combatant.get("char_id"):
+            _tchar = db.query(Character).filter(
+                Character.id == int(target_combatant["char_id"]),
+            ).first()
+            if _tchar:
+                _tmod, _ = _resolve_stat_modifier(
+                    _tchar.sheet or {}, "dnd5e", "con_save")
+        elif target_combatant.get("token_template_id"):
+            _tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(target_combatant["token_template_id"]),
+            ).first()
+            if _tmpl:
+                _tmod, _ = _resolve_stat_modifier(
+                    _monster_template_to_sheet(_tmpl, campaign_id),
+                    "dnd5e", "con_save")
+        if _tmod is None:
+            _tmod = 0
+        _expr = f"1d20{_tmod:+d}"
+        try:
+            _r = dice_mod.roll(_expr)
+            _total, _bd = int(_r.total), _r.breakdown
+        except dice_mod.DiceParseError:
+            _total, _bd = 0, ""
+        save_passed = _total >= save_dc
+        _tname = target_combatant.get("name") or "Target"
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": _expr, "total": _total, "breakdown": _bd,
+                "note": f"Thunderwave save (DC {save_dc})",
+                "user_name": _tname, "char_name": _tname,
+                "visibility": Visibility.PUBLIC.value, "dc": save_dc,
+            },
+        })
+        this_damage = half_damage if save_passed else damage_rolled
+        applied = 0
+        if this_damage > 0:
+            _res = await _apply_damage_to_combatant(
+                db, campaign_id, target_combatant, this_damage,
+                "thunder", is_attack=False, is_magical=True,
+                attacker_char_id=char.id,
+            )
+            applied = int(_res.get("applied") or 0)
+        pushed = False
+        if not save_passed:
+            gr = await _force_move(
+                db, campaign_id, target_combatant, 10,
+                source_combatant=caster_cb,
+            )
+            pushed = gr["moved"]
+            any_pushed = any_pushed or pushed
+        results.append({
+            "combatant_id": tid, "name": _tname, "save_rolled": _total,
+            "save_passed": save_passed, "damage_applied": applied,
+            "pushed": pushed,
+        })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    _failed = sum(1 for r in results if r.get("save_passed") is False)
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🌩️ Thunderwave — 2d8 thunder, Con DC {save_dc}"
+            ),
+            "feature_desc": (
+                f"{char.name} unleashes a wave of thunderous force: "
+                f"{len(results)} creature(s) make a Con save DC {save_dc}; "
+                f"{_failed} failed (full {damage_rolled} thunder + pushed "
+                f"10 ft), the rest take half ({half_damage}). "
+                f"(Thunderwave, L1.)"
+            ),
+            "source": "thunderwave",
+            "save_dc": save_dc,
+            "save_ability": "CON",
+            "damage_rolled": damage_rolled,
+            "push_max_ft": 10,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "thunderwave",
+        "save_dc": save_dc,
+        "damage_rolled": damage_rolled,
+        "results": results,
+        "any_pushed": any_pushed,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_menacing_attack")
 async def use_menacing_attack(
     campaign_id: int,

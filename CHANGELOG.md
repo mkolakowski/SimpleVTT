@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.436] - 2026-06-06 — "The Rolling Thunder" — Thunderwave pushes the whole cube (automation Phase 6.3)
+
+**Schema version:** 66
+**Commit summary:** **Phase 6.3 — new `POST /use_thunderwave` endpoint (Bard/Druid/Sorcerer/Wizard L1): rolls a CON save for each supplied target and, on a fail, deals 2d8 thunder and pushes that target's token 10 ft away from the caster via `_force_move`.** First *multi-target* forced-move retrofit; closes the P6.3 push/pull set.
+**Description:** `/use_thunderwave` (body `{character_id, target_combatant_ids: [...]}`) gates on the caster knowing Thunderwave, computes the spell save DC (8 + prof + spellcasting mod — reads `spellcasting_ability` or `class_spellcasting`), and rolls 2d8 thunder once (RAW: one roll for the whole 15-ft cube). For each supplied target it rolls a CON save server-side (PC sheet or NPC template): a failed save takes the full damage + is pushed 10 ft directly away from the caster via `_force_move`, a passed save takes half + isn't pushed. The affected creatures are supplied by the caller (trust-the-caller — the UI selects who's in the cube). v1 deals base 2d8 (no slot-level upcast) and doesn't decrement a spell slot, consistent with the other forced-move retrofits. Needs each target on a gridded map with a token (off-grid → save + damage resolve but no push).
+
+### Added
+- `POST /api/campaign/{cid}/use_thunderwave` — multi-target Thunderwave with a per-target server-side CON save, half-on-success damage, and a 10 ft push on a fail. Response carries `save_dc`, `damage_rolled`, a per-target `results` array (`save_rolled` / `save_passed` / `damage_applied` / `pushed`), and `any_pushed`.
+- `tests/harness/test_use_thunderwave.py` — Lyra Sunstrider (demo Bard, DC 14) hits two bandits flanking her, loops until ≥1 fails its CON save, then asserts the failed one(s) were pushed ±140 px (10 ft away) and any that passed weren't moved; plus per-result `not_in_battle` for an unknown target, 409 (spell not known), and 400 (empty target list).
+
+### Notes
+- First *multi-target* `_force_move` retrofit. Completes the P6.3 push/pull set (Pushing Attack v2.99.433, Open Hand push v2.99.434, Thorn Whip pull v2.99.435, Thunderwave v2.99.436). Next up: Phase 7 — the `_summon_companion` primitive (Spiritual Weapon first).
+- **Total harness count: 1878** (was 1874 in v2.99.435; +4 new tests).
+
+---
+
 ## [2.99.435] - 2026-06-06 — "The Grasping Vine" — Thorn Whip pulls the target (automation Phase 6.3)
 
 **Schema version:** 66
