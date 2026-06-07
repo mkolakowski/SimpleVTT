@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.101.0] - 2026-06-07 — "Saved State" — persist the battle hub to the database
+
+**Schema version:** 67
+**Commit summary:** **The in-memory battle hub is now a write-through cache over a new `battles` table. `set_battle` persists the active initiative-tracker state per campaign; `get_battle` lazily rehydrates it on the first cache miss after a restart. A new `GET /api/campaign/{id}/battle` returns the persisted state over HTTP. This makes v2.100.6's client-side localStorage→hub push redundant — the server now self-heals its authoritative battle across a process bounce or the hourly demo reseed.**
+**Description:** Closes the root cause behind v2.100.6 ("Rehydrated"): the hub's battle map (`realtime.CampaignHub._battle`) was RAM-only and never persisted, so an app restart or the demo reseed silently emptied it and every server-side battle read (OA detection, the over-speed gate, reaction-prompt routing) found zero combatants and no-oped until the GM next mutated the battle. v2.100.6 worked around it client-side (the GM page re-pushed its localStorage battle on load); v2.101.0 fixes it at the source. The new `battles` table holds one JSON row per campaign keyed on `campaign_id`. `CampaignHub.set_battle` updates the in-memory cache (still the hot read path) and writes through to the row; `CampaignHub.get_battle` consults the cache first and, on a miss, hydrates once per campaign per process from the persisted row (a campaign with no battle is marked hydrated so reads don't re-query the DB on every token move). A DB hiccup is logged, never raised — the live process stays correct even if persistence fails. The new GET endpoint reads the row straight from the DB so any campaign viewer can fetch the current battle without opening a WebSocket; the PUT remains GM-only. The v2.100.6 localStorage push is retained as harmless belt-and-suspenders (it now re-writes state the hub already has).
+
+### Added
+- `app/models.py` — new `Battle` model / `battles` table (PK `campaign_id`, `state` JSON, `updated_at`).
+- `app/routes/tabletop_routes.py` — `GET /api/campaign/{campaign_id}/battle` returns `{"battle": <state|null>}` from the persisted row; viewer-readable.
+- `tests/harness/test_battle.py` — PUT→GET DB round-trip (+ connect-time `battle_update` replay) happy path and a non-GM PUT 403 error path.
+
+### Changed
+- `app/realtime.py` — `CampaignHub` is now a write-through cache: `set_battle` persists to the `battles` table, `get_battle` lazily rehydrates from it on a cache miss.
+
+### Schema
+- **Schema v67:** new `battles` table. Created by `Base.metadata.create_all` on both fresh and existing DBs; `_apply_inline_migrations` adds a belt-and-suspenders `CREATE TABLE IF NOT EXISTS` block that documents the bump.
+
+### Notes
+- v2.100.6's GM-load localStorage→hub push is now redundant but retained (low-risk; re-pushes already-correct state). A future commit may remove it and its Playwright test.
+- **Total harness count: 1944** in `tests/harness/` (1942 → 1944); **`tests/harness_ui/` 16** (unchanged).
+
+---
+
 ## [2.100.6] - 2026-06-07 — "Rehydrated" — GM load re-seeds the in-memory hub battle
 
 **Schema version:** 66

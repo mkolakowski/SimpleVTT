@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1942 in `tests/harness/` + 16 in `tests/harness_ui/` (as of v2.100.6, 2026-06-07).
+**Total tests:** 1944 in `tests/harness/` + 16 in `tests/harness_ui/` (as of v2.101.0, 2026-06-07).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2236,6 +2236,14 @@ Phase T.3e — concentration drop cascades to paired condition buffs.
 | `test_end_concentration_drops_caster_buff` | `/end_buff` on the caster's concentration removes it; paired NPC buff drop happens server-side via the cleanup helper. |
 | `test_concentration_break_emits_gm_only_log` | v2.39.0: failed CON save on damage emits a `roll`-type event with `visibility: "gm_only"` narrating "💔 NAME lost concentration on SPELL — dropped: …". |
 | `test_non_concentration_buff_removal_unaffected` | Removing Rage on Krieger (non-concentration) still works post-T.3e change. |
+
+### `test_battle.py`
+v2.101.0 — battle hub persistence + the new `GET /api/campaign/{id}/battle` endpoint. The hub is now a write-through cache over the `battles` table; the GET reads the persisted row from the DB.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_battle_put_persists_and_get_round_trips` | PUT a battle (Pip combatant, active, round 1) → 200 `{"ok": True}`; GET returns `{"battle": {...}}` from the DB with `active=True`, `round=1`, and the seeded combatant; a fresh WS connect replays the state as a `battle_update`. |
+| `test_battle_put_requires_gm` | A non-GM player's `PUT /battle` → 403 (the write gate the viewer-readable GET deliberately doesn't share). |
 
 ### `test_battle_put_npc_concentration_cascade.py`
 v2.99.185 — `/battle PUT` auto-fires `_drop_paired_concentration_buffs_npc` when an NPC's concentration buff is removed via the canonical battle-edit path. Closes the v2.99.179 filed item; completes the Polymorph mechanical chain for NPC casters via the routine UI path.

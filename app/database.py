@@ -723,6 +723,26 @@ def _apply_inline_migrations() -> None:
                     "WHERE sepia_texture = TRUE"
                 ))
 
+    # ---- Schema v67 (2.101.0): persist the battle hub ----
+    # New `battles` table — one row per campaign holding the active
+    # battle/initiative-tracker state as JSON, keyed on campaign_id.
+    # `Base.metadata.create_all` (run just before this function in
+    # init_db) already creates the table on both fresh and existing
+    # DBs, so this block is a belt-and-suspenders CREATE TABLE IF NOT
+    # EXISTS that also documents the schema bump. The in-memory hub
+    # (`realtime.CampaignHub`) write-through-persists here so the
+    # server's authoritative battle survives a restart / demo reseed.
+    # See app/models.py::Battle for the full rationale.
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS battles ("
+            "campaign_id INTEGER PRIMARY KEY REFERENCES campaigns(id) "
+            "ON DELETE CASCADE, "
+            "state JSON, "
+            "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")"
+        ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

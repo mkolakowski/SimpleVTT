@@ -35,12 +35,82 @@ class CampaignHub:
         self._identities: Dict[WebSocket, dict] = {}
         self._lock = asyncio.Lock()
         self._battle: Dict[int, dict] = {}
+        # v2.101.0 — campaigns whose battle has been hydrated from the
+        # `battles` DB table at least once this process. A campaign with
+        # NO persisted battle is still marked here after the first miss
+        # so `get_battle` doesn't re-query the DB on every battle read
+        # (it runs on every token move / OA check / turn advance).
+        self._db_hydrated: Set[int] = set()
 
     def get_battle(self, campaign_id: int) -> dict | None:
+        """Return the campaign's battle state, lazily rehydrating from
+        the `battles` table on the first cache miss per process.
+
+        The in-memory `_battle` map is the hot read path. After an app
+        restart or the demo reseed it's empty, so the first read for a
+        campaign falls through to the persisted row (the authoritative
+        store) and repopulates the cache. Subsequent reads stay in
+        memory. A campaign with no persisted battle is marked hydrated
+        so we don't hammer the DB on every battle read.
+        """
+        state = self._battle.get(campaign_id)
+        if state is not None:
+            return state
+        if campaign_id not in self._db_hydrated:
+            self._db_hydrated.add(campaign_id)
+            loaded = self._load_battle_from_db(campaign_id)
+            if loaded is not None:
+                self._battle[campaign_id] = loaded
+                return loaded
         return self._battle.get(campaign_id)
 
     def set_battle(self, campaign_id: int, state: dict) -> None:
+        """Update the in-memory cache and write through to the DB.
+
+        The cache is updated first (it's what every server-side battle
+        read consults), then the state is persisted to the `battles`
+        table so it survives a restart. A DB write failure is logged but
+        never raised — the in-memory hub stays correct for the live
+        process even if persistence hiccups.
+        """
         self._battle[campaign_id] = state
+        self._db_hydrated.add(campaign_id)
+        self._persist_battle_to_db(campaign_id, state)
+
+    @staticmethod
+    def _load_battle_from_db(campaign_id: int) -> dict | None:
+        """Read the persisted battle state for a campaign, or None."""
+        try:
+            from .database import SessionLocal
+            from .models import Battle
+            with SessionLocal() as db:
+                row = db.get(Battle, campaign_id)
+                if row is not None and isinstance(row.state, dict):
+                    return row.state
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "battle DB load failed for campaign %s: %s", campaign_id, e,
+            )
+        return None
+
+    @staticmethod
+    def _persist_battle_to_db(campaign_id: int, state: dict) -> None:
+        """Upsert the campaign's battle state into the `battles` table."""
+        try:
+            from .database import SessionLocal
+            from .models import Battle
+            with SessionLocal() as db:
+                row = db.get(Battle, campaign_id)
+                if row is None:
+                    db.add(Battle(campaign_id=campaign_id, state=state))
+                else:
+                    row.state = state
+                db.commit()
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "battle DB persist failed for campaign %s: %s",
+                campaign_id, e,
+            )
 
     def get_presence(self, campaign_id: int) -> list[dict]:
         """Return the deduped list of users currently connected to this

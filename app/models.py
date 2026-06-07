@@ -752,3 +752,35 @@ class ConcentrationEffect(Base):
     rounds_remaining: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Battle(Base):
+    """Persistent per-campaign battle / initiative-tracker state.
+
+    Exactly one row per campaign (the active battle), keyed on
+    ``campaign_id`` as the primary key so a write is a natural upsert.
+    The ``state`` JSON blob mirrors the in-memory ``CampaignHub._battle``
+    cache verbatim (``{"combatants": [...], "turn_index": N, "round": N,
+    "active": bool, ...}``).
+
+    Why this exists (v2.101.0): before this table the hub was RAM-only,
+    so an app restart or the hourly demo reseed silently emptied it and
+    every server-side battle read — opportunity-attack detection, the
+    over-speed movement gate, reaction-prompt routing — found zero
+    combatants and no-oped until the GM next mutated the battle. The
+    v2.100.6 GM-load localStorage→hub push was a client-side band-aid for
+    the same bug. With this row the hub becomes a write-through cache:
+    ``set_battle`` persists here, and ``get_battle`` lazily rehydrates
+    from here on a cache miss (i.e. after a restart), so the server's
+    authoritative battle state survives a process bounce. See
+    ``realtime.CampaignHub`` for the write-through/lazy-load contract.
+    """
+    __tablename__ = "battles"
+
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), primary_key=True,
+    )
+    state: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )

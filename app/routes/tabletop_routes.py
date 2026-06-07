@@ -36,6 +36,7 @@ from ..database import SessionLocal, get_db
 from ..game_systems import SYSTEMS, get_system, system_choices
 from ..models import (
     AudioPlayEvent,
+    Battle,
     Campaign,
     CampaignMembership,
     Character,
@@ -73984,6 +73985,30 @@ async def tick_concentration(
 
 
 # ----------- API: battle / initiative tracker -----------
+
+@router.get("/api/campaign/{campaign_id}/battle")
+async def get_battle(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.101.0 — return the persisted battle state for a campaign.
+
+    Reads the authoritative `battles` row directly from the DB (the
+    canonical store the hub write-through-persists to), so a client can
+    fetch the current initiative-tracker state over HTTP without opening
+    a WebSocket. Returns ``{"battle": <state-dict>}`` when a battle
+    exists, or ``{"battle": null}`` when none is persisted. Any campaign
+    viewer may read it (players see the init tracker too) — the PUT
+    remains GM-only.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    row = db.get(Battle, campaign_id)
+    state = row.state if (row is not None and isinstance(row.state, dict)) else None
+    return {"battle": state}
+
 
 @router.put("/api/campaign/{campaign_id}/battle")
 async def update_battle(
