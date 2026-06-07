@@ -121,10 +121,14 @@ Two additional buttons use slightly different padding and may need individual re
 - 🟡 **P2** — Feature: plan three ways that we can allow users to up-cast spells
     - IE, Magic missile at level 3
     - Note: will need an audit of spells to see how up-casting them will affect how the spell is handled
-- 🟡 **P2** — Feature: Framework that will allow then to use features like luck by clicking a button inside the roll log card they want to re-roll
-    - button to only be visible to GM and PC owner
-    - Add confirmation to confirm usage
-    - Should "grey out" if the PC/NPC does not have use of the feature and should not be visible if no features available
+- ✅ **DONE — v2.105.0–v2.107.0** — Feature: Framework that will allow then to use features like luck by clicking a button inside the roll log card they want to re-roll
+    - Phase 1 ✅ v2.105.0 ("Push Your Luck") — `_REROLL_FEATURES` registry + generic `POST /use_reroll` + `reroll_options` on the `/roll` broadcast; Lucky feat (any d20, keep-better).
+    - Phase 2 ✅ v2.106.0 ("One More Roll") — reroll button(s) on roll-log cards.
+    - Phase 3 ✅ v2.107.0 ("Three of a Kind") — folded Fighter Indomitable (Lv 9+) + Monk Diamond Soul (Lv 14+) into the registry (save-only, keep-new).
+    - ~~button to only be visible to GM and PC owner~~ ✓ (gated `ME.isGm || r.user_id === ME.id`)
+    - ~~Add confirmation to confirm usage~~ ✓ (native confirm on click)
+    - ~~grey out if no uses; hidden if no features available~~ ✓ (`remaining:0` → disabled/greyed; empty `reroll_options` → no button)
+    - Follow-up (filed): surface the button on server-rendered roll history (only live WS rolls carry it today) + on the `/roll_request/respond` save path; a `keep-better` "decline after seeing the reroll" variant (v1 commits the use, then keeps the better).
 - ✅ **LIKELY FIXED (v2.99.71) — verify in browser** — when roll log is on left, do not make disappear when gm requests roll and gm rolls for player
     - example: GM uses gm roller to push a INT Save with the DC of 20 for both demo characters, GM rolls as Pip, roll log collapses after the roll animation completes
     - **Investigation (v2.99.470):** traced end-to-end and found no remaining collapse path. When the GM rolls as Pip, `/roll_request/{id}/respond` broadcasts the `roll` with `user_id = GM` (the actor), so the client's `_focusRollLogIfLocal(GM)` calls `openPanel('roll-log-drawer', {auto: true})` → the `_auto && already-open` branch returns early (no-op). The only code that removes `.open` from a left panel is `openPanel`'s toggle-close branch, gated by `!_auto`; `roll_toast.js` does nothing to the drawer. This is exactly the class of bug v2.99.71 fixed (the pre-v2.99.71 non-`auto` `openPanel` collapsed an already-open left log on auto-focus). The reported repro predates that fix. **Action:** confirm in a live browser; reopen with a precise repro if it still collapses.

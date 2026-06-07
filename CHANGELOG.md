@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.107.1] - 2026-06-07 — "Filed Away" — mark the reroll-framework TODO complete
+
+**Schema version:** 68
+**Commit summary:** **Doc-only: marks the "reroll framework (features like Luck)" item in `TODO.md` ✅ DONE with per-phase notes (v2.105.0–v2.107.0) and files the remaining follow-ups (button on server-rendered history + the roll-request save path; a decline-after-seeing keep-better variant).**
+**Description:** Housekeeping after the reroll framework landed across v2.105.0 (registry + generic endpoint + Lucky), v2.106.0 (card button), and v2.107.0 (Indomitable + Diamond Soul). The `TODO.md` entry is flipped from 🟡 P2 to ✅ DONE, each sub-requirement struck through with the mechanism that satisfied it, and the known v1 limitations filed as follow-ups.
+
+### Changed
+- `TODO.md` — reroll-framework item marked done with phase notes + filed follow-ups.
+
+### Notes
+- Doc-only commit; `TODO.md` is a repo-root doc already surfaced via `/wiki`. No code, schema, or test change.
+- **Total harness count: 1957** in `tests/harness/` (unchanged); **`tests/harness_ui/` 18** (unchanged).
+
+---
+
 ## [2.107.0] - 2026-06-07 — "Three of a Kind" — reroll framework (Phase 3: Indomitable + Diamond Soul)
 
 **Schema version:** 68
