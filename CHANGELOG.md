@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.100.5] - 2026-06-07 — "Proof in the Pixels" — Playwright coverage for the movement modals
+
+**Schema version:** 66
+**Commit summary:** **New `tests/harness_ui/test_movement_dash_modals.py` drives real browser canvas drags to verify the v2.100.0 GM over-range advisory and the v2.100.2 Dash-modal button set — the pure client-side gating flows the HTTP+WS harness can't reach. Also fixes the pre-existing `test_left_click_drag_moves_token` whose world→screen math broke when v2.88.0 added the `stripH` canvas gutter.**
+**Description:** Closes the visual-modal verification gap left after v2.100.0–.3. Two Playwright tests: (1) a GM drags a non-active token ~30 ft past its speed during an active battle (watcher parked far so no OA) → asserts the "Moving past speed" advisory appears with Cancel / Move anyway and Cancel snaps the token back; (2) an over-cap move that provokes an OA → asserts the Dash modal shows exactly "Cancel move" + "Take Dash" (no "Skip Dash"), and Cancel makes no move and shows no OA modal. Staging required setting BOTH battle homes — the server hub (`PUT /battle`, read by the OA preview + over-speed gate) and the client closure (a synthetic `force_gm_sync` `vtt:ws-message`, since the GM page ignores real `battle_update`). Diagnosing the drag also surfaced that `test_left_click_drag_moves_token` had been silently broken since v2.88.0: its world→screen mapping divided by `canvas.width` (DPR-scaled) and omitted the `stripH` gutter, so the synthetic mousedown missed the token. Corrected to `scale = box/offsetWidth` + `(world + stripH)`.
+
+### Added
+- `tests/harness_ui/test_movement_dash_modals.py` — 2 Playwright tests (`test_gm_over_range_modal_appears_and_cancels`, `test_dash_modal_has_no_skip_button`).
+
+### Fixed
+- `tests/harness_ui/test_tabletop_canvas.py` — `test_left_click_drag_moves_token` world→screen math (offsetWidth scale + `stripH` offset) so the canvas drag lands on the token again.
+
+### Notes
+- Test-only commit. The `harness-ui` CI job (`.github/workflows/test-harness.yml`) runs the whole `tests/harness_ui/` suite, so these run in CI.
+- Pre-existing `harness_ui` failures observed but NOT addressed here (separate root causes): `test_right_click_drag_pans_canvas` (headless right-click pan reports 0 delta) and `test_visual_spell_card_pillification[expanded]` (snapshot pixel jitter — the conftest already flags visual snapshots as a local-only tool).
+- **Total harness count: 1942** in `tests/harness/` (unchanged); **`tests/harness_ui/` 13 → 15**.
+
+---
+
 ## [2.100.4] - 2026-06-07 — "Footnote Fix" — correct the stale Dash-modal docstring
 
 **Schema version:** 66

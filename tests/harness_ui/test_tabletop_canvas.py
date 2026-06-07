@@ -209,21 +209,30 @@ def test_left_click_drag_moves_token(gm_page: Page) -> None:
     box = canvas.bounding_box()
     assert box is not None
     grid_size = gm_page.evaluate("() => parseInt(document.getElementById('vtt-canvas').dataset.gridSize) || 50")
-    # The canvas's bounding-box dimensions ALREADY include the current
-    # transform's scale (Chromium reports getBoundingClientRect's box
-    # after transform). So the world→screen mapping is:
-    #   screen = bbox.start + (world / canvas_attr_size) * bbox_size
-    # The canvas's intrinsic size is read off ``el.width`` /
-    # ``el.height`` (the HTML attributes), independent of the
-    # CSS-transformed render size.
-    canvas_intrinsic = gm_page.evaluate(
-        "() => { const c = document.getElementById('vtt-canvas'); return {w: c.width, h: c.height}; }"
+    # World→screen mapping mirrors the canvas's own ``clientToCanvas``:
+    #   screen = box.start + (world + stripH) * scale
+    # Two gotchas the original math missed (and which silently broke
+    # this test once v2.88.0 landed + DPR ≠ 1):
+    #   1. scale = box_size / offsetWidth. ``canvas.width`` can't be
+    #      used as the divisor because it's DPR-scaled
+    #      (``canvas.width = (MAP_W + 2*stripH) * DPR``); offsetWidth is
+    #      the CSS layout width *before* the transform, so the ratio is
+    #      the true on-screen scale.
+    #   2. stripH — the v2.88.0 gutter the canvas is expanded by on
+    #      every side (``canvas.dataset.stripH``). Logical (0,0) sits at
+    #      canvas-local (stripH, stripH), so it must be added before
+    #      scaling or the mousedown misses the token entirely.
+    geo = gm_page.evaluate(
+        "() => { const c = document.getElementById('vtt-canvas');"
+        " return {offW: c.offsetWidth, offH: c.offsetHeight,"
+        " strip: parseInt(c.dataset.stripH || '0', 10)}; }"
     )
-    sx = box["width"] / canvas_intrinsic["w"]   # effective x-scale
-    sy = box["height"] / canvas_intrinsic["h"]  # effective y-scale
+    sx = box["width"] / geo["offW"]   # effective x-scale (CSS transform)
+    sy = box["height"] / geo["offH"]  # effective y-scale
+    strip = geo["strip"]
     cell_center_offset = grid_size / 2
-    start_x = box["x"] + (start_world_x + cell_center_offset) * sx
-    start_y = box["y"] + (start_world_y + cell_center_offset) * sy
+    start_x = box["x"] + (start_world_x + cell_center_offset + strip) * sx
+    start_y = box["y"] + (start_world_y + cell_center_offset + strip) * sy
     # Drag two grid cells right + one down in WORLD space, then map
     # the delta through the same scale so the screen-space move
     # matches.
