@@ -3701,7 +3701,7 @@
      * Mirrors the _showGmOverRangeModal glass-card recipe so the two
      * movement prompts read as a family. */
     function _showMovementLockedModal({
-        isGm, tokenLabel, onMove, onCancel,
+        isGm, tokenId, tokenLabel, onMove, onCancel,
     }) {
         const backdrop = document.createElement('div');
         backdrop.setAttribute('style', [
@@ -3782,9 +3782,15 @@
             _closeAction = onCancel;
         } else {
             btnRow.appendChild(_btn(
-                'OK',
+                'Dismiss',
                 'background:rgba(255,255,255,0.04); color:var(--fg);',
                 null,
+            ));
+            // v2.104.0 — ask the GM to unlock this one token.
+            btnRow.appendChild(_btn(
+                '🙋 Request to move',
+                'background:#6cb4ff; color:#1f2433; font-weight:600; border-color:#3f8fdc;',
+                () => _requestMovement(tokenId, tokenLabel),
             ));
             _closeAction = null;
         }
@@ -3806,6 +3812,129 @@
         }
         document.addEventListener('keydown', _onKey);
 
+        backdrop.appendChild(card);
+        document.body.appendChild(backdrop);
+    }
+
+    /* v2.104.0 — player asks the GM to unlock one token. POSTs the
+     * movement request; the GM gets a movement_request popup. On
+     * approve the requester gets movement_request_resolved (handled
+     * below) which adds the token to window._MOVEMENT_GRANTS so the
+     * next drag passes the lock gate. */
+    async function _requestMovement(tokenId, tokenLabel) {
+        if (tokenId == null) return;
+        try {
+            const r = await fetch(
+                `/api/campaign/${CAMPAIGN_ID}/movement_request`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token_id: tokenId }),
+                },
+            );
+            if (r.ok) {
+                showToast('🙋 Movement request sent to the GM.', 'info');
+            } else {
+                showToast('Could not send movement request.', 'error');
+            }
+        } catch (_) {
+            showToast('Could not send movement request.', 'error');
+        }
+    }
+
+    /* v2.104.0 — GM-side approve/deny popup for a player's movement
+     * request. Only GMs receive the movement_request broadcast, so
+     * this is shown whenever the handler fires. Approve issues the
+     * one-shot server grant; Deny just resolves the request. */
+    function _showMovementRequestModal(data) {
+        const backdrop = document.createElement('div');
+        backdrop.setAttribute('style', [
+            'position:fixed', 'inset:0',
+            'background:rgba(0,0,0,0.45)',
+            'z-index:2147483600',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'padding:16px',
+            'animation:reactionPopIn 180ms ease-out',
+        ].join(';'));
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-label', 'Movement request');
+
+        const card = document.createElement('div');
+        card.setAttribute('style', [
+            'background:#1f2433',
+            'background:color-mix(in srgb, var(--bg, #1f2433) 88%, transparent)',
+            'backdrop-filter:blur(8px)', '-webkit-backdrop-filter:blur(8px)',
+            'border:1px solid var(--border, rgba(255,255,255,0.18))',
+            'border-left:4px solid #6cb4ff',
+            'border-radius:10px', 'padding:18px 20px',
+            'color:var(--fg, #fff)', 'font-size:13px',
+            'max-width:420px', 'width:100%',
+            'box-shadow:0 10px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(108,180,255,0.18)',
+        ].join(';'));
+
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:14px; font-weight:600; margin-bottom:6px;';
+        header.textContent = '🙋 Movement request';
+        card.appendChild(header);
+
+        const summary = document.createElement('p');
+        summary.style.cssText = 'margin:0 0 14px 0; font-size:12px; opacity:0.85; line-height:1.4;';
+        summary.textContent = (
+            (data.requester_name || 'A player') + ' wants to move '
+            + (data.token_label || 'their token')
+            + ' while movement is locked. Allow this one move?'
+        );
+        card.appendChild(summary);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:8px; justify-content:flex-end; margin-top:6px;';
+        let _resolved = false;
+        const _respond = async (approved) => {
+            if (_resolved) return;
+            _resolved = true;
+            backdrop.remove();
+            try {
+                await fetch(
+                    `/api/campaign/${CAMPAIGN_ID}/movement_request/`
+                    + `${data.request_id}/respond`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ approved }),
+                    },
+                );
+            } catch (_) { /* the resolved broadcast won't fire; benign */ }
+        };
+        function _btn(label, style, onClick) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.setAttribute('style', [
+                'min-height:44px', 'padding:6px 14px', 'border-radius:6px',
+                'cursor:pointer', 'font-size:13px',
+                'border:1px solid var(--border, rgba(255,255,255,0.22))',
+            ].join(';') + ';' + style);
+            b.addEventListener('click', (ev) => { ev.preventDefault(); onClick(); });
+            return b;
+        }
+        btnRow.appendChild(_btn(
+            '✋ Deny',
+            'background:rgba(255,255,255,0.04); color:var(--fg);',
+            () => _respond(false),
+        ));
+        btnRow.appendChild(_btn(
+            '✓ Allow move',
+            'background:#6cb4ff; color:#1f2433; font-weight:600; border-color:#3f8fdc;',
+            () => _respond(true),
+        ));
+        card.appendChild(btnRow);
+
+        // A resolved broadcast (e.g. another GM tab answered) dismisses
+        // this popup; tracked by request_id so the handler can find it.
+        backdrop.dataset.movementRequestId = data.request_id;
+        backdrop.addEventListener('click', (ev) => {
+            if (ev.target === backdrop) { _resolved = true; backdrop.remove(); }
+        });
         backdrop.appendChild(card);
         document.body.appendChild(backdrop);
     }
@@ -3950,6 +4079,14 @@
     // Unlocked → straight through to _commitTokenMoveInner.
     async function _commitTokenMove(token, origX, origY, sx, sy) {
         if (window._MOVEMENT_LOCKED) {
+            // v2.104.0 — one-shot grant: a GM-approved movement request
+            // lets the player move THIS token once while the table
+            // stays locked. Consume the client grant + fall through;
+            // the server consumes its matching grant in the move gate.
+            if (window._MOVEMENT_GRANTS && window._MOVEMENT_GRANTS.has(token.id)) {
+                window._MOVEMENT_GRANTS.delete(token.id);
+                return _commitTokenMoveInner(token, origX, origY, sx, sy);
+            }
             const snapBack = () => {
                 token.x = origX; token.y = origY; render();
             };
@@ -3963,10 +4100,12 @@
                     onCancel: snapBack,
                 });
             } else {
-                // Player: undo the optimistic drag + explain.
+                // Player: undo the optimistic drag, explain, and offer
+                // to request movement from the GM (Phase 3).
                 snapBack();
                 _showMovementLockedModal({
                     isGm: false,
+                    tokenId: token.id,
                     tokenLabel: token.label || 'Token',
                 });
             }
@@ -4753,6 +4892,19 @@
                 // need it so the drag gate fires without a server
                 // round-trip); only the GM has the toggle button.
                 _onMovementLockUpdate(!!(msg.data && msg.data.locked));
+            } else if (msg.type === 'movement_request') {
+                // v2.104.0 — a player asked to move while locked. Only
+                // GMs receive this broadcast; show the approve/deny
+                // popup. Guard on isGm as belt-and-suspenders.
+                if (ME && ME.isGm && msg.data) {
+                    _showMovementRequestModal(msg.data);
+                }
+            } else if (msg.type === 'movement_request_resolved') {
+                // v2.104.0 — GM answered a movement request. Dismiss
+                // any open GM popup for this request, and — on the
+                // requester's own client — bank the one-shot grant (on
+                // approve) or toast the denial.
+                _onMovementRequestResolved(msg.data || {});
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
@@ -4777,6 +4929,36 @@
     function _onMovementLockUpdate(locked) {
         window._MOVEMENT_LOCKED = !!locked;
         _syncMovementLockBtn();
+    }
+    // v2.104.0 — client-side one-shot movement grants (token ids the
+    // GM approved while locked). The _commitTokenMove gate consumes a
+    // grant to let a single drag through.
+    window._MOVEMENT_GRANTS = window._MOVEMENT_GRANTS || new Set();
+    function _onMovementRequestResolved(data) {
+        const rid = data.request_id;
+        // Dismiss any open GM approve/deny popup for this request
+        // (e.g. a second GM tab already answered).
+        if (rid) {
+            document.querySelectorAll(
+                `[data-movement-request-id="${rid}"]`,
+            ).forEach((el) => el.remove());
+        }
+        // Only the requester banks the grant / sees the outcome toast.
+        if (!ME || ME.id !== data.requester_user_id) return;
+        if (data.approved) {
+            if (data.token_id != null) window._MOVEMENT_GRANTS.add(data.token_id);
+            showToast(
+                '✓ GM approved — you can move '
+                + (data.token_label || 'your token') + ' once now.',
+                'info',
+            );
+        } else {
+            showToast(
+                '✋ GM denied the move for '
+                + (data.token_label || 'your token') + '.',
+                'error',
+            );
+        }
     }
     (function _wireMovementLockBtn() {
         const btn = document.getElementById('movement-lock-btn');

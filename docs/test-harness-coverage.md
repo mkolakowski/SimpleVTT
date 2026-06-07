@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1946 in `tests/harness/` + 16 in `tests/harness_ui/` (as of v2.103.0, 2026-06-07).
+**Total tests:** 1951 in `tests/harness/` + 16 in `tests/harness_ui/` (as of v2.104.0, 2026-06-07).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2246,12 +2246,17 @@ v2.101.0 — battle hub persistence + the new `GET /api/campaign/{id}/battle` en
 | `test_battle_put_requires_gm` | A non-GM player's `PUT /battle` → 403 (the write gate the viewer-readable GET deliberately doesn't share). |
 
 ### `test_movement_lock.py`
-v2.102.0 — campaign movement lock (Phase 1 server core). GM toggles `campaign.movement_locked` via `POST /movement_lock`; non-GM `/token/move` drags are gated 409 while locked.
+v2.102.0 — campaign movement lock (Phase 1 server core) + v2.104.0 Phase 3 request/approve flow. GM toggles `campaign.movement_locked` via `POST /movement_lock`; non-GM `/token/move` drags are gated 409 while locked; players request a one-token unlock via `POST /movement_request`, the GM approves/denies via `/movement_request/{id}/respond`.
 
 | Test | What it asserts |
 |------|-----------------|
 | `test_movement_lock_blocks_player_gm_passes` | GM `POST /movement_lock {locked:true}` → 200 `{ok, locked:true}` + a `movement_lock_update(locked=true)` broadcast; alice's drag of Pip → 409 `movement_locked` (with `token_id`); the GM's drag of the same token → 200 (arbiter); unlocking restores alice's move to 200. Unlocks in a `finally` so a failure doesn't strand the campaign locked. |
 | `test_movement_lock_requires_gm` | A non-GM player's `POST /movement_lock` → 403. |
+| `test_movement_request_approve_grants_one_move` | While locked, alice `POST /movement_request {token_id}` → 200 `{ok, request_id}` + GM `movement_request` broadcast (request_id / token_id / character_id); GM `respond {approved:true}` → 200 + alice `movement_request_resolved(approved, requester_user_id)`; the one-shot grant lets her FIRST locked drag 200, the SECOND 409 `movement_locked`. |
+| `test_movement_request_deny_keeps_player_blocked` | GM `respond {approved:false}` → 200; alice's drag stays 409 (no grant issued). |
+| `test_movement_request_unknown_token` | `movement_request` for a token not in this campaign → 404. |
+| `test_respond_movement_request_requires_gm` | Non-GM `respond` → 403 (GM gate fires before the request lookup). |
+| `test_respond_unknown_movement_request` | GM `respond` on an unknown/expired request id → 404. |
 
 ### `test_battle_put_npc_concentration_cascade.py`
 v2.99.185 — `/battle PUT` auto-fires `_drop_paired_concentration_buffs_npc` when an NPC's concentration buff is removed via the canonical battle-edit path. Closes the v2.99.179 filed item; completes the Polymorph mechanical chain for NPC casters via the routine UI path.

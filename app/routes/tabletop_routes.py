@@ -10832,6 +10832,29 @@ def _consume_movement_grant(
     return expires is not None and expires >= _time.time()
 
 
+# v2.104.0 — movement requests (Phase 3). When a player drags a token
+# while movement is locked, they can ask the GM to unlock that one
+# token. The request is recorded here (ephemeral, in-memory, 10-min
+# TTL), broadcast to the GM(s) as ``movement_request``; the GM's
+# approve issues a one-shot ``_grant_movement`` for (campaign, player,
+# token) and broadcasts ``movement_request_resolved`` back to the
+# requester so their client lets a single drag through. Mirrors the
+# _active_reaction_prompts store shape.
+_movement_requests: dict[str, dict] = {}
+_MOVEMENT_REQUEST_TTL_S = 600  # 10 minutes
+
+
+def _purge_movement_requests() -> None:
+    """Drop expired / resolved movement requests so the store can't
+    grow unboundedly. Called on every read/write path."""
+    now = _time.time()
+    for rid in [
+        k for k, v in _movement_requests.items()
+        if v.get("resolved") or float(v.get("expires_at", 0)) <= now
+    ]:
+        _movement_requests.pop(rid, None)
+
+
 @router.post("/api/campaign/{campaign_id}/movement_lock")
 async def set_movement_lock(
     campaign_id: int,
@@ -10860,6 +10883,111 @@ async def set_movement_lock(
         "data": {"locked": locked},
     })
     return {"ok": True, "locked": locked}
+
+
+@router.post("/api/campaign/{campaign_id}/movement_request")
+async def create_movement_request(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.104.0 — a player asks the GM to unlock one token's movement.
+
+    Body: ``{"token_id": int}``. Any campaign member may ask. Records
+    an ephemeral request and broadcasts ``movement_request`` to the
+    GM(s) only. Returns ``{ok, request_id}``. The GM resolves it via
+    ``/movement_request/{rid}/respond``.
+    """
+    _purge_movement_requests()
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    body = await request.json()
+    token_id = body.get("token_id")
+    if token_id is None:
+        raise HTTPException(400, "token_id required")
+    token = db.query(Token).filter(Token.id == int(token_id)).first()
+    if not token or token.map.campaign_id != campaign_id:
+        raise HTTPException(404, "Token not found")
+    request_id = uuid.uuid4().hex[:12]
+    _movement_requests[request_id] = {
+        "campaign_id": campaign_id,
+        "requester_user_id": int(user.id),
+        "token_id": int(token.id),
+        "expires_at": _time.time() + _MOVEMENT_REQUEST_TTL_S,
+        "resolved": False,
+    }
+    await hub.broadcast(
+        campaign_id,
+        {
+            "type": "movement_request",
+            "data": {
+                "request_id": request_id,
+                "requester_user_id": int(user.id),
+                "requester_name": user.display_name,
+                "token_id": int(token.id),
+                "token_label": token.label or "Token",
+                "character_id": token.character_id,
+            },
+        },
+        recipient_filter=lambda ident: bool(ident.get("is_gm")),
+    )
+    return {"ok": True, "request_id": request_id}
+
+
+@router.post("/api/campaign/{campaign_id}/movement_request/{request_id}/respond")
+async def respond_movement_request(
+    campaign_id: int,
+    request_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.104.0 — GM approves or denies a movement request.
+
+    Body: ``{"approved": bool}``. GM-only. On approve, issues a
+    one-shot ``_grant_movement`` for (campaign, requester, token) so
+    the requester's next drag of that token passes the lock gate, then
+    broadcasts ``movement_request_resolved`` to the requester (and the
+    GM tabs, so a second GM's popup dismisses).
+    """
+    _purge_movement_requests()
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    entry = _movement_requests.get(request_id)
+    if not entry or entry.get("campaign_id") != campaign_id:
+        raise HTTPException(404, "Movement request not found or expired")
+    body = await request.json()
+    approved = bool(body.get("approved"))
+    entry["resolved"] = True
+    requester_user_id = int(entry["requester_user_id"])
+    token_id = int(entry["token_id"])
+    token = db.query(Token).filter(Token.id == token_id).first()
+    token_label = (token.label if token else None) or "Token"
+    if approved:
+        _grant_movement(campaign_id, requester_user_id, token_id)
+    await hub.broadcast(
+        campaign_id,
+        {
+            "type": "movement_request_resolved",
+            "data": {
+                "request_id": request_id,
+                "approved": approved,
+                "token_id": token_id,
+                "token_label": token_label,
+                "requester_user_id": requester_user_id,
+            },
+        },
+        recipient_filter=lambda ident: (
+            bool(ident.get("is_gm"))
+            or ident.get("user_id") == requester_user_id
+        ),
+    )
+    return {"ok": True, "approved": approved}
 
 
 @router.post("/api/campaign/{campaign_id}/token/{token_id}/move")

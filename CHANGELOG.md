@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.104.0] - 2026-06-07 — "Mother May I" — movement lock (Phase 3: request & approve)
+
+**Schema version:** 68
+**Commit summary:** **Completes the movement-lock feature: a locked-out player can click "🙋 Request to move" to ask the GM to free one token; the GM gets an approve/deny popup; an approval issues a one-shot grant (server + client) that lets exactly one drag of that token through while the table stays locked for everyone else. Adds `POST /movement_request` + `POST /movement_request/{id}/respond` and the `movement_request` / `movement_request_resolved` WS broadcasts.**
+**Description:** Phase 3 of 3 (Phase 1 = server core v2.102.0, Phase 2 = GM toggle + popups v2.103.0). The player's "🔒 Movement locked" modal now carries a **Request to move** button that POSTs `/movement_request {token_id}`; the server records an ephemeral request (`_movement_requests`, 10-min TTL) and broadcasts `movement_request` to the GM(s) only. The GM sees a glass-card approve/deny popup. **Allow** POSTs `/movement_request/{id}/respond {approved:true}`, which issues a one-shot `_grant_movement(campaign, requester, token)` and broadcasts `movement_request_resolved` to the requester (and GM tabs, so a second GM's popup dismisses). On the requester's client the approval banks the token id in `window._MOVEMENT_GRANTS`; their next drag of that token consumes the client grant and passes the gate, and the server consumes its matching grant in the `/token/move` lock check — so the grant is strictly single-use (the second drag 409s `movement_locked` again). **Deny** resolves the request with no grant; the player stays blocked. This wires the per-token grant store the Phase 1 gate has consulted since v2.102.0.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /api/campaign/{id}/movement_request` (member; broadcasts `movement_request` to GMs) + `POST /api/campaign/{id}/movement_request/{rid}/respond` (GM-only; issues the one-shot grant on approve, broadcasts `movement_request_resolved`); the `_movement_requests` ephemeral store + `_purge_movement_requests`.
+- `app/static/tabletop.js` — "🙋 Request to move" button on the player lock modal; `_requestMovement`; the GM `_showMovementRequestModal` approve/deny popup; `movement_request` / `movement_request_resolved` WS handlers (`_onMovementRequestResolved`); `window._MOVEMENT_GRANTS` one-shot client grants consumed by the `_commitTokenMove` gate.
+- `tests/harness/test_movement_lock.py` — Phase 3 coverage: approve → `movement_request` + `movement_request_resolved` broadcasts + one-shot grant (first move 200, second 409); deny keeps the player blocked; unknown-token 404; non-GM respond 403; unknown request id 404.
+
+### Notes
+- Phase 3 of 3 — the movement-lock feature from [TODO](TODO.md) is now complete (default setting, GM live toggle, player block + GM advisory confirm, request/approve flow).
+- Grant edge case (v1, documented): the server gate consumes the grant before the over-speed / OA gates, so if an approved move then 409s for over-speed or an OA, the grant is already spent — the player re-requests. Acceptable for v1.
+- **Total harness count: 1951** in `tests/harness/` (1946 → 1951); **`tests/harness_ui/` 16** (unchanged).
+
+---
+
 ## [2.103.0] - 2026-06-07 — "The Velvet Rope" — movement lock (Phase 2: GM toggle + popups)
 
 **Schema version:** 68
