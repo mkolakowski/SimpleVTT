@@ -25719,6 +25719,12 @@ async def _apply_repelling_blast_push(
     Returns a summary dict ``{from_x, from_y, to_x, to_y, distance_ft,
     target_name}`` on a successful push, or ``None`` when the gates
     fail (wrong attack, no invocation, no map, no token).
+
+    v2.99.444 — consolidated onto the shared `_force_move` primitive
+    (was a bespoke push predating it). The forced move now pushes 10 ft
+    along the caster→target axis via the same code path as Pushing
+    Attack / Thunderwave / Open Hand, and broadcasts `token_move` with
+    `forced: True`.
     """
     # Gate 1: attack must be Eldritch Blast.
     if not _attack_is_eldritch_blast(attack):
@@ -25730,88 +25736,23 @@ async def _apply_repelling_blast_push(
     # target — RAW the spell affects "a creature you can see").
     if not target_combatant:
         return None
-    if not campaign or not campaign.active_map_id:
-        return None
-    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
-    if not map_row or not map_row.grid_size_px:
-        return None
-    grid_size_px = int(map_row.grid_size_px)
-    # Find the caster's token on the active map.
-    caster_token = db.query(Token).filter(
-        Token.character_id == int(attacker_char_id),
-        Token.map_id == map_row.id,
-    ).first()
-    if caster_token is None:
-        return None
-    # Find the target's token: source_token_id → char_id → template+label.
-    target_token = None
-    _src = target_combatant.get("source_token_id")
-    if _src:
-        target_token = db.query(Token).filter(
-            Token.id == int(_src), Token.map_id == map_row.id,
-        ).first()
-    if target_token is None and target_combatant.get("char_id"):
-        target_token = db.query(Token).filter(
-            Token.character_id == int(target_combatant["char_id"]),
-            Token.map_id == map_row.id,
-        ).first()
-    if target_token is None and target_combatant.get("token_template_id") and target_combatant.get("name"):
-        target_token = db.query(Token).filter(
-            Token.token_template_id == int(target_combatant["token_template_id"]),
-            Token.label == target_combatant["name"],
-            Token.map_id == map_row.id,
-        ).first()
-    if target_token is None:
-        return None
-    # Push vector: from caster to target, normalized, scaled to 10 ft.
-    cx = float(caster_token.x or 0)
-    cy = float(caster_token.y or 0)
-    tx = float(target_token.x or 0)
-    ty = float(target_token.y or 0)
-    dx = tx - cx
-    dy = ty - cy
-    import math as _math
-    length = _math.sqrt(dx * dx + dy * dy)
-    if length <= 0.001:
-        # Target is on top of the caster — RAW indeterminate
-        # direction. v1: skip the push.
-        return None
-    # Normalize + scale by 10 ft (2 grid cells). Snap to nearest
-    # grid cell for a clean post-push position.
-    push_cells = 2  # 10 ft = 2 cells on a 5-ft grid
-    nx = dx / length
-    ny = dy / length
-    raw_new_x = tx + nx * (push_cells * grid_size_px)
-    raw_new_y = ty + ny * (push_cells * grid_size_px)
-    new_x = round(raw_new_x / grid_size_px) * grid_size_px
-    new_y = round(raw_new_y / grid_size_px) * grid_size_px
-    # Commit + broadcast.
-    from_x = tx
-    from_y = ty
-    target_token.x = new_x
-    target_token.y = new_y
-    db.commit()
-    # Distance in feet (Chebyshev-style for square grid).
-    distance_ft = _distance_ft_between_points(
-        grid_size_px,
-        (map_row.grid_type.value if map_row.grid_type else "square").lower(),
-        from_x, from_y, new_x, new_y,
+    # Resolve the attacker's combatant (source of the push axis) from the
+    # active battle by char_id.
+    _state = hub.get_battle(campaign_id)
+    attacker_combatant = next(
+        (c for c in (_state.get("combatants") or [])
+         if c.get("char_id") == int(attacker_char_id)), None,
+    ) if _state else None
+    gr = await _force_move(
+        db, campaign_id, target_combatant, 10,
+        source_combatant=attacker_combatant,
     )
-    await hub.broadcast(campaign_id, {
-        "type": "token_move",
-        "data": {
-            "id": target_token.id,
-            "x": new_x, "y": new_y,
-            "from_x": from_x, "from_y": from_y,
-            "distance_ft": distance_ft,
-            "character_id": target_token.character_id,
-            "token_template_id": target_token.token_template_id,
-        },
-    })
+    if not gr["moved"]:
+        return None
     return {
-        "from_x": from_x, "from_y": from_y,
-        "to_x": new_x, "to_y": new_y,
-        "distance_ft": distance_ft,
+        "from_x": gr["from_x"], "from_y": gr["from_y"],
+        "to_x": gr["to_x"], "to_y": gr["to_y"],
+        "distance_ft": gr["distance_ft"],
         "target_name": target_combatant.get("name") or "Target",
     }
 

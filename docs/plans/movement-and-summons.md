@@ -127,9 +127,10 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    `_force_move(pull=True)` retrofit). Thunderwave ✅ shipped v2.99.436
    (new L1 spell endpoint: multi-target CON save AoE → each failed save
    takes 2d8 thunder + pushed 10 ft away; first *multi-target*
-   forced-move retrofit). Remaining nice-to-haves: Gust (push). Repelling
-   Blast already has its own bespoke push from v2.99.90 — a candidate to
-   consolidate onto `_force_move` later.
+   forced-move retrofit). Repelling Blast ✅ consolidated onto
+   `_force_move` v2.99.444 (was a bespoke push predating the primitive —
+   now all forced movement runs through one code path). Remaining
+   nice-to-have: Gust (push 5 ft).
 4. **P7.1 — `_summon_companion` + a companion registry (L). 🟠 in
    progress.** ✅ shipped v2.99.437: the `_summon_companion` /
    `_dismiss_companion` primitives + a `_COMPANION_TEMPLATES` registry

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.444] - 2026-06-06 — "One Hand to Push Them All" — Repelling Blast consolidated onto _force_move (automation cleanup)
+
+**Schema version:** 66
+**Commit summary:** **Cleanup — `_apply_repelling_blast_push` (the v2.99.90 bespoke Eldritch Blast push that predated the forced-move primitive) now delegates to the shared `_force_move`, so every forced movement in the app runs through one code path.** Refactor; behavior preserved.
+**Description:** Repelling Blast (Warlock Eldritch Blast invocation) shipped its own ~80-line push implementation in v2.99.90, before `_force_move` existed (v2.99.432). This refactor replaces that bespoke vector math + token lookup + broadcast with a single `_force_move(db, cid, target_combatant, 10, source_combatant=attacker)` call (the attacker is resolved from the active battle by `char_id`), matching Pushing Attack / Open Hand / Thorn Whip / Thunderwave. The push still moves the target 10 ft along the caster→target axis and the caller's `feature_used` (source `repelling-blast`) broadcast is unchanged; the move now also carries `forced: True` on its `token_move` broadcast (additive). Two minor behavior shifts: the destination is no longer grid-snapped (consistent with every other forced mover — none snap), and target-token resolution now uses the primitive's `source_token_id` → `char_id` path (the old `token_template_id`+label fallback is dropped — combatants carry one or the other in practice).
+
+### Changed
+- `_apply_repelling_blast_push` delegates to `_force_move` (was a standalone push). ~80 lines removed.
+
+### Notes
+- Refactor-only (no new endpoint) — covered by the existing `tests/harness/test_repelling_blast.py` (Krieger pushed 10 ft east → x=560; non-Eldritch-Blast attacks don't push), which continues to pass against the consolidated path.
+- All forced movement (Pushing Attack, Open Hand, Thorn Whip, Thunderwave, Repelling Blast) now flows through `_force_move`. Last movement nice-to-have: Gust (push 5 ft).
+- **Total harness count: 1900** (unchanged — refactor-only).
+
+---
+
 ## [2.99.443] - 2026-06-06 — "The Wolf Pack" — Conjure Animals multi-summon (automation Phase 7.2)
 
 **Schema version:** 66
