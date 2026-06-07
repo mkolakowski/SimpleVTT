@@ -119,3 +119,29 @@ async def test_use_ps_level_gate(
             {"subclass": "Oath of Devotion", "level": 7},
             class_slug="paladin",
         )
+
+
+async def test_protective_spirit_heals_caster(
+    gm_client, caelan_redemption_lv15,
+):
+    """v2.99.458 — Protective Spirit restores the paladin's HP. Drop Caelan
+    to 10/100 (headroom) → applied == heal_amount (1d6 + 7). Restore after."""
+    caelan = caelan_redemption_lv15
+    await _patch_sheet(
+        gm_client, caelan["id"],
+        {"hp": {"current": 10, "max": 100, "temp": 0}},
+    )
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_protective_spirit",
+            json={"character_id": caelan["id"]},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert 8 <= data["heal_amount"] <= 13
+        assert data["applied"] == data["heal_amount"]  # full heal, headroom
+    finally:
+        await _patch_sheet(
+            gm_client, caelan["id"],
+            {"hp": {"current": 100, "max": 100, "temp": 0}},
+        )

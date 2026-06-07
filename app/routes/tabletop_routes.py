@@ -49423,6 +49423,15 @@ async def use_protective_spirit(
         breakdown = ""
     heal_amount = die_rolled + half_lv
 
+    # v2.99.458 — apply the self-heal (was announce-only). The paladin
+    # regains `heal_amount` HP via _apply_heal_to_combatant (PC path,
+    # capped at max). The "ended turn below half HP, not incapacitated"
+    # trigger stays GM-tracked — the caller fires this at end of turn.
+    _heal_res = await _apply_heal_to_combatant(
+        db, campaign_id, {"char_id": char.id, "name": char.name},
+        heal_amount)
+    applied = int(_heal_res.get("applied") or 0)
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -49456,6 +49465,7 @@ async def use_protective_spirit(
             "die_breakdown": breakdown,
             "half_paladin_level": half_lv,
             "paladin_level": pal_lv,
+            "applied": applied,
         },
     })
 
@@ -49466,6 +49476,7 @@ async def use_protective_spirit(
         "die_rolled": die_rolled,
         "half_paladin_level": half_lv,
         "paladin_level": pal_lv,
+        "applied": applied,
     }
 
 

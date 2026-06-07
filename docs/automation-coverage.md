@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.457
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.458
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -22,12 +22,12 @@ after a batch of retrofits and update the counts below. Treat the split as
 (archetype J — passive senses, language grants), and a few `tracked`-tagged ones
 only spend a resource without a downstream effect.
 
-## Summary (as of v2.99.457)
+## Summary (as of v2.99.458)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **184** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **53** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **185** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **52** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **On-hit / extra-attack:**
   `assassinate` (auto-crit rider). (`genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 + `dread_ambusher` ✅ v2.99.452 server-resolved extra attacks.)
 - **Buff / temp-HP (D/F):** `combat_inspiration`,
-  `blade_flourish`, `protective_spirit`, `supreme_healing` (`rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 self-heal).
+  `blade_flourish`, `supreme_healing` (`rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals).
 - **Movement (G):** `ascendant_step` (fly), `stormborn` (fly),
   `relentless_avenger`, `fancy_footwork`.
 
@@ -212,6 +212,7 @@ or passive damage-boosters that already ride other code paths
 | `use_precision_attack` | ✅ tracked | A use/resource |
 | `use_primeval_awareness` | ✅ tracked | A use/resource |
 | `use_protective_field` | ✅ tracked | heal |
+| `use_protective_spirit` | ✅ tracked | heal |
 | `use_psychic_blades` | ✅ tracked | A use/resource |
 | `use_pushing_attack` | ✅ tracked | G forced-move |
 | `use_radiant_sun_bolt` | ✅ tracked | A use/resource |
@@ -303,7 +304,6 @@ or passive damage-boosters that already ride other code paths
 | `use_mote_of_potential` | ⚪ announce-only | — |
 | `use_orders_wrath` | ⚪ announce-only | — |
 | `use_potent_spellcasting` | ⚪ announce-only | — |
-| `use_protective_spirit` | ⚪ announce-only | — |
 | `use_purity_of_spirit` | ⚪ announce-only | — |
 | `use_relentless_avenger` | ⚪ announce-only | — |
 | `use_saint_of_forge_and_fire` | ⚪ announce-only | — |

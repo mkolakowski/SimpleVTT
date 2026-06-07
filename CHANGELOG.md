@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.458] - 2026-06-06 — "The Mending Light" — Protective Spirit heals the paladin (automation buff/heal tail)
+
+**Schema version:** 66
+**Commit summary:** **Protective Spirit (Redemption Paladin Lv 15) now restores the paladin's HP server-side (1d6 + half level) via `_apply_heal_to_combatant`, instead of announcing the number for the GM to apply.**
+**Description:** `/use_protective_spirit` already rolled the heal (`1d6 + half paladin level`); it now applies it to the caster via `_apply_heal_to_combatant` (PC path, capped at max). The "ended your turn below half HP and aren't incapacitated" trigger stays GM-tracked. Response gains `applied`.
+
+### Changed
+- `/api/campaign/{cid}/use_protective_spirit` heals the paladin (was announce-only); response gains `applied`.
+- `docs/automation-coverage.md` refreshed: `use_protective_spirit` flips to tracked (**185 tracked / 52 announce-only of 239** now).
+
+### Added
+- `tests/harness/test_protective_spirit.py::test_protective_spirit_heals_caster` — drops Caelan to 10/100, ends his turn → `applied == heal_amount` (1d6 + 7). Restores HP after.
+
+### Notes
+- Buff/heal-tail burn-down (same self-heal shape as Grim Harvest v2.99.457).
+- **Total harness count: 1920** (was 1919 in v2.99.457; +1 new test).
+
+---
+
 ## [2.99.457] - 2026-06-06 — "The Reaper's Due" — Grim Harvest heals the caster (automation buff/heal tail)
 
 **Schema version:** 66
