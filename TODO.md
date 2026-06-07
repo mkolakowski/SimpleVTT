@@ -386,3 +386,20 @@ Filed by v2.55.0 when the user picked Indomitable as the next implementation tar
 
 ### Fighter Indomitable (Lv 9+) — IN PROGRESS as v2.56.0 "Iron Will"
 Garrik bump 7 → 9 (prof +3 → +4, HP +14, Second Wind 1d10+9). New `/use_indomitable` endpoint installs a single-use `indomitable-armed` self-buff; the save-roll construction hook reads the buff, swaps `1d20 → 2d20kh1`, and removes the buff from the combatant so the consumption is per-save (RAW: one specific reroll). RAW-bent v1: advantage on the next save rather than reroll-on-failure, since the post-roll reroll flow needs an undo-and-reapply path for installed conditions which is its own substantial commit. Filed for follow-up: the precise post-roll reroll with consequence-undo.
+
+---
+
+## Full Class-Feature Automation — remaining backlog
+
+🔥 **IN PROGRESS** — plan: [`docs/plans/full-feature-automation.md`](docs/plans/full-feature-automation.md); live audit: [`docs/automation-coverage.md`](docs/automation-coverage.md). **Phases 0–6 ✅ done** (feature-use registry, on-hit riders, feature saves, temp-HP + roll bonuses, auras, movement + summons + the Phase 0 audit). **Coverage: 182 tracked / 55 announce-only of 239** (was ~60/156 at baseline). The engine primitives all exist; what's left is routing the announce-only tail through them + the two unstarted phases.
+
+**Concrete next-session tasks** (each one PATCH-bump + harness test that asserts the *state change*, then refresh the audit doc's counts via the classifier):
+
+- 🟡 **P2 — Phase 7: reactions breadth.** New reaction kinds on the existing reactions framework ([`docs/plans/reactions-automation.md`](docs/plans/reactions-automation.md)): Riposte (attack after a miss), Protective Field (reduce damage), Chronal Shift (reroll), make Restore Balance a real adv/disadv-cancel reaction. ~5 commits.
+- 🟡 **P2 — Auras backlog (E).** `aura_of_warding` (resistance to *spell* damage — needs a "spell-damage resistance" concept the engine doesn't model yet, the bigger lift), `ancestral_protectors`, `unwavering_mark`, `scornful_rebuke` — fold into `_tick_auras` (the v2.99.448 `requires_condition` gate + v2.99.449 `buff` payload are the tools).
+- 🟡 **P2 — On-hit / attack-roll backlog (B).** `assassinate` (advantage + auto-crit vs surprised — a new attack-roll-modifier mechanic, distinct from the damage riders done). The flat/dice once-per-turn rider shape (Genie's Wrath v2.99.450) and the server-resolved extra attack (Horde Breaker v2.99.451 / Dread Ambusher v2.99.452) are already proven for the rest.
+- 🟢 **P3 — Buff / temp-HP tail (D/F).** `combat_inspiration`, `rallying_cry`, `blade_flourish`, `protective_spirit`, `grim_harvest`, `supreme_healing` — `_install_buff` / `_grant_temp_hp` retrofits.
+- 🟢 **P3 — Movement tail (G).** `ascendant_step` / `stormborn` (fly via a speed/fly buff), `relentless_avenger`, `fancy_footwork`.
+- 🟢 **P3 — Phase 8: higher-level subclass features (Lv 6/10/14/17/20).** Mostly composition on the now-built primitives; batch by class. The long tail.
+
+The remaining ~30 announce-only rows are **archetype J** (narration-only-by-design: passive senses, language grants, passive damage-boosters that already ride other paths) — leave as-is; see the audit doc's "Notable announce-only backlog" section for the full split.

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.453] - 2026-06-06 — "The Road Ahead" — automation backlog captured in TODO (docs)
+
+**Schema version:** 66
+**Commit summary:** **Captured the remaining full-class-feature-automation backlog as concrete, prioritized next-session tasks in `TODO.md` — a clean handoff after the v2.99.434–.452 burn-down.**
+**Description:** Adds a "Full Class-Feature Automation — remaining backlog" section to `TODO.md`'s Class Features area, pointing at the parent plan + the v2.99.447 audit doc. Records the current coverage (182 tracked / 55 announce-only of 239), notes that Phases 0–6 are done + the engine primitives all exist, and lists the concrete remaining tasks by archetype/priority: Phase 7 reactions breadth, the auras tail (Aura of Warding needs spell-damage-resistance modeling), `assassinate` (a new attack-roll-modifier mechanic), the buff/temp-HP + movement tails, and Phase 8 higher-level features. Flags the ~30 narration-only (archetype J) rows as leave-as-is.
+
+### Changed
+- `TODO.md` — new automation-backlog section (the doc is already surfaced via `/wiki/doc/todo`, so no wiki wiring needed).
+
+### Notes
+- Doc-only commit (no endpoint / no test). Closes out this session's automation push with a navigable next-session task list.
+- **Total harness count: 1912** (unchanged — doc-only).
+
+---
+
 ## [2.99.452] - 2026-06-06 — "Out of the Gloom" — Dread Ambusher resolves its extra attack (automation Phase 2 follow-up)
 
 **Schema version:** 66
