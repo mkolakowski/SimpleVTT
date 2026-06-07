@@ -7258,7 +7258,33 @@ async def _apply_aura_payload(
 ) -> bool:
     """v2.99.425 — apply a single aura payload (temp_hp / heal / damage)
     to one subject combatant via the reused HP helpers. Returns True when
-    something was applied."""
+    something was applied.
+
+    v2.99.449 — added the ``buff`` payload: install a buff
+    (``{key, name, icon?, effects, duration_rounds?}``) on the subject via
+    `_install_buff_on_combatant_id`, refreshed each tick so it persists
+    while the subject stays in the aura (Aura of Alacrity +10 ft speed,
+    Aura of Warding resistance, …). Short default duration so it falls off
+    a round or two after leaving the radius."""
+    if "buff" in aura:
+        spec = aura.get("buff") or {}
+        if isinstance(spec, dict) and spec.get("key"):
+            dur = int(spec.get("duration_rounds", 2) or 2)
+            buff = {
+                "key": str(spec["key"]),
+                "name": str(spec.get("name") or spec["key"]),
+                "icon": str(spec.get("icon", "✨")),
+                "duration_rounds": dur,
+                "duration_max": dur,
+                "concentration": False,
+                "source": source,
+                "effects": dict(spec.get("effects") or {}),
+            }
+            installed = await _install_buff_on_combatant_id(
+                campaign_id, subject.get("id"), buff,
+            )
+            return bool(installed)
+        return False
     if "temp_hp" in aura:
         try:
             amt = int(aura.get("temp_hp") or 0)
@@ -48732,6 +48758,43 @@ async def use_aura_of_alacrity(
     radius_ft = 10 if pal_lv >= 18 else 5
     speed_bonus_ft = 10
 
+    # v2.99.449 — Phase 5 follow-up: install a buff-payload aura so the
+    # turn-start tick grants allies in range a +10 ft speed buff (read by
+    # `effective_speed_walk` via `speed_bonus_ft`). Was announce-only. The
+    # buff re-applies each tick with a short duration so it falls off after
+    # leaving the aura. RAW the paladin's OWN +10 ft is a separate passive
+    # (the tick's "allies" filter excludes self) → stays GM-tracked.
+    aura_installed = await _install_buff(campaign_id, char.id, {
+        "key": "aura-of-alacrity",
+        "name": "Aura of Alacrity",
+        "icon": "⚡",
+        "duration_rounds": 100,
+        "duration_max": 100,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "aura": {
+                "radius_ft": radius_ft,
+                "affects": "allies",
+                "buff": {
+                    "key": "alacrity-speed",
+                    "name": "Alacrity (+10 ft speed)",
+                    "icon": "⚡",
+                    "duration_rounds": 2,
+                    "effects": {"speed_bonus_ft": speed_bonus_ft},
+                },
+                "source": "aura-of-alacrity",
+                "label": "Aura of Alacrity",
+            },
+        },
+        "desc": (
+            f"Allies who start their turn within {radius_ft} ft gain "
+            f"+{speed_bonus_ft} ft walking speed. (Glory Paladin Lv 7+.)"
+        ),
+    })
+    if aura_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -48765,6 +48828,7 @@ async def use_aura_of_alacrity(
             "radius_ft": radius_ft,
             "speed_bonus_ft": speed_bonus_ft,
             "paladin_level": pal_lv,
+            "aura_installed": aura_installed,
         },
     })
 
@@ -48774,6 +48838,7 @@ async def use_aura_of_alacrity(
         "radius_ft": radius_ft,
         "speed_bonus_ft": speed_bonus_ft,
         "paladin_level": pal_lv,
+        "aura_installed": aura_installed,
     }
 
 

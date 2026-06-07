@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.448
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.449
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -22,12 +22,12 @@ after a batch of retrofits and update the counts below. Treat the split as
 (archetype J — passive senses, language grants), and a few `tracked`-tagged ones
 only spend a resource without a downstream effect.
 
-## Summary (as of v2.99.448)
+## Summary (as of v2.99.449)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **178** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **59** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **179** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **58** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -69,9 +69,9 @@ or passive damage-boosters that already ride other code paths
 (`potent_spellcasting`, `empowered_evocation`, `sculpt_spells`, `foe_slayer`,
 `spell_bombardment`). The genuinely-automatable tail:
 
-- **Auras (E):** `aura_of_warding`, `aura_of_alacrity`, `ancestral_protectors`,
+- **Auras (E):** `aura_of_warding`, `ancestral_protectors`,
   `unwavering_mark`, `scornful_rebuke` — fold into `_tick_auras`
-  (`aura_of_conquest` ✅ done v2.99.448 via a `requires_condition` gate).
+  (`aura_of_conquest` ✅ v2.99.448 condition gate; `aura_of_alacrity` ✅ v2.99.449 buff-payload).
 - **On-hit / extra-attack:** `genies_wrath` (B rider), `horde_breaker`,
   `dread_ambusher` (extra attack), `assassinate` (auto-crit rider).
 - **Buff / temp-HP (D/F):** `combat_inspiration`, `rallying_cry`,
@@ -108,6 +108,7 @@ or passive damage-boosters that already ride other code paths
 | `use_arcane_shot` | ✅ tracked | A use/resource |
 | `use_arcane_ward` | ✅ tracked | A use/resource |
 | `use_arms_of_the_astral_self` | ✅ tracked | A use/resource |
+| `use_aura_of_alacrity` | ✅ tracked | D buff-install |
 | `use_aura_of_conquest` | ✅ tracked | D buff-install, E aura |
 | `use_aura_of_the_guardian` | ✅ tracked | A use/resource |
 | `use_avenging_angel` | ✅ tracked | D buff-install |
@@ -266,7 +267,6 @@ or passive damage-boosters that already ride other code paths
 | `use_arcane_mastery` | ⚪ announce-only | — |
 | `use_ascendant_step` | ⚪ announce-only | — |
 | `use_assassinate` | ⚪ announce-only | — |
-| `use_aura_of_alacrity` | ⚪ announce-only | — |
 | `use_aura_of_warding` | ⚪ announce-only | — |
 | `use_avatar_of_battle` | ⚪ announce-only | — |
 | `use_awakened_mind` | ⚪ announce-only | — |

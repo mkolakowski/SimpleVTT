@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.449] - 2026-06-06 — "The Quickened Step" — aura buff-payload + Aura of Alacrity (automation Phase 5 follow-up)
+
+**Schema version:** 66
+**Commit summary:** **New aura `buff` payload type — `_apply_aura_payload` can now install a buff on each subject in range each tick — and Aura of Alacrity (Glory Paladin Lv 7) uses it to grant allies +10 ft speed (was announce-only).** Extends the aura primitive beyond temp_hp/heal/damage.
+**Description:** `_apply_aura_payload` gains a `buff` branch: an aura carrying `aura.buff = {key, name, icon?, effects, duration_rounds?}` installs that buff on each in-range subject via `_install_buff_on_combatant_id`, re-applied every tick with a short default duration so it falls off a round or two after the subject leaves the radius. `/use_aura_of_alacrity` installs an `aura-of-alacrity` aura (`affects: "allies"`) whose buff carries `effects.speed_bonus_ft: 10` — so on the paladin's turn start, allies in range gain the speed buff that `effective_speed_walk` already reads (the v2.99.431/.446 speed engine). The paladin's own +10 ft (the tick's "allies" filter excludes self) stays GM-tracked. Response + broadcast gain `aura_installed`.
+
+### Added
+- `buff` payload type in `_apply_aura_payload` (the aura primitive's fourth payload, after temp_hp/heal/damage).
+- `tests/harness/test_aura_of_alacrity.py::test_aoa_installs_aura_and_buffs_ally_speed` — activates the aura, advances the turn to the paladin, asserts an ally PC in range gained the `alacrity-speed` buff with `speed_bonus_ft == 10`.
+
+### Changed
+- `/api/campaign/{cid}/use_aura_of_alacrity` installs the buff aura (was announce-only).
+- `docs/automation-coverage.md` refreshed: `use_aura_of_alacrity` flips to tracked (**179 tracked / 58 announce-only of 239** now).
+
+### Notes
+- Second auras-backlog burn-down (after Aura of Conquest v2.99.448). The buff payload unlocks the remaining ally-buff auras (Aura of Warding resistance, etc.).
+- **Total harness count: 1906** (was 1905 in v2.99.448; +1 new test).
+
+---
+
 ## [2.99.448] - 2026-06-06 — "The Crown's Dread" — Aura of Conquest automated (automation Phase 5 follow-up)
 
 **Schema version:** 66
