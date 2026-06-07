@@ -136,13 +136,14 @@ Two additional buttons use slightly different padding and may need individual re
             - Spirit Guardians: aoe will need to be bound to player token and tokens on the same team should not be targeted
             - Moonbeam: after placement, is concentration, as long as there is duration and the caster has not lost concentration, display the moonbeam and allow the player to move it per the range in the spell, once per turn
     - AoE spells that are a single turn, like Fireball, leave a pulse to indicate the AoE to the players, should happen for a few seconds
-- 🟡 **P2** — Add feature to lock player and NPC movement
-    - add toggle in encounter
-    - add option in campaign settings to make the toggle default on or off in the encounter interface
-    - player and GM to get popup notifying that movement is locked
-        - Player can request from GM to allow movement
-            - GM can approve or deny
-        - GM popup will ask to confirm movement
+- ✅ **DONE — v2.102.0–v2.104.0** — Add feature to lock player and NPC movement
+    - Phase 1 ✅ v2.102.0 ("Hold Still") — server core: `Campaign.movement_locked` (live) + `movement_lock_default` (House Rules setting, seeds the live flag on each encounter load); `POST /movement_lock` GM toggle broadcasting `movement_lock_update`; `/token/move` gate (non-GM → 409 `movement_locked`, GM passes); one-shot `_movement_grants` store.
+    - Phase 2 ✅ v2.103.0 ("The Velvet Rope") — GM-only 🔒/🔓 toggle button in the canvas-tools cluster; `_commitTokenMove` lock gate (player snap-back + "movement is locked" notice / GM advisory "move anyway?" confirm).
+    - Phase 3 ✅ v2.104.0 ("Mother May I") — player "🙋 Request to move" → `POST /movement_request` → GM approve/deny popup → `POST /movement_request/{id}/respond` issues a one-shot grant + broadcasts `movement_request_resolved` so the player gets a single move while the table stays locked.
+    - ~~add toggle in encounter~~ ✓ (the live GM toggle on the tabletop, defaulted per encounter load from the campaign setting)
+    - ~~add option in campaign settings to make the toggle default on or off~~ ✓ (`movement_lock_default` House Rules checkbox)
+    - ~~player and GM get popup notifying that movement is locked~~ ✓ (player notice + GM advisory confirm)
+    - ~~Player can request from GM to allow movement; GM can approve or deny~~ ✓ (Phase 3)
 - 🟢 **P3** — Feature: More pills in the roll log for spells
     - Move spell type, range, action type and details to pills
         - details should be an expanding pill

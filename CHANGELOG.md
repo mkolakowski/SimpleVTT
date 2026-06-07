@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.104.1] - 2026-06-07 — "Crossed Off" — mark the movement-lock TODO complete
+
+**Schema version:** 68
+**Commit summary:** **Doc-only: marks the "lock player and NPC movement" item in `TODO.md` ✅ DONE with per-phase notes (v2.102.0–v2.104.0), now that all three phases have shipped.**
+**Description:** Housekeeping after the movement-lock feature landed across v2.102.0 (server core), v2.103.0 (GM toggle + popups), and v2.104.0 (request/approve). The `TODO.md` entry is flipped from 🟡 P2 to ✅ DONE and each sub-requirement is struck through with the version + mechanism that satisfied it, so the backlog reflects reality.
+
+### Changed
+- `TODO.md` — movement-lock item marked done with phase-by-phase notes.
+
+### Notes
+- Doc-only commit; `TODO.md` is a repo-root doc already surfaced via `/wiki`. No code, schema, or test change.
+- **Total harness count: 1951** in `tests/harness/` (unchanged); **`tests/harness_ui/` 16** (unchanged).
+
+---
+
 ## [2.104.0] - 2026-06-07 — "Mother May I" — movement lock (Phase 3: request & approve)
 
 **Schema version:** 68
