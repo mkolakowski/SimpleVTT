@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1869 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.433, 2026-06-06).
+**Total tests:** 1870 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.434, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -2060,6 +2060,7 @@ v2.49.57 — Monk subclass feature `POST /use_open_hand_technique` (Way of the O
 |------|-----------------|
 | `test_open_hand_prone_happy_path_npc` | Kael uses prone on a bandit; retry until DEX save fails; assert `auto_save_buff_installed=Prone`, `concentration=False` on the broadcast buff, `source_char_id=Kael`. |
 | `test_open_hand_push_npc` | Kael uses push on a bandit; assert `push_authorized` is the boolean inverse of `auto_save_passed`. No buff installed either way. |
+| `test_open_hand_push_moves_target_on_failed_save` | v2.99.434 — Phase 6.3. Kael (placed above the bandit) loops until the bandit fails its STR save, then asserts `push_applied` is True + the bandit's real NPC token moved +210 px (3 cells / 15 ft) via `_force_move`; a passed save moves nothing. NPC token created via `POST /tokens` (linked as `source_token_id`) + torn down at the end. |
 | `test_open_hand_no_reactions_npc` | Kael uses no_reactions on a bandit; assert `buff_installed=No Reactions (Open Hand)`, `reaction-denied` key on the bandit's buff list, `duration_rounds=1`, no `auto_save_prompted`. |
 | `test_open_hand_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
 | `test_open_hand_bad_mode` | Invalid `mode` string → 400. |

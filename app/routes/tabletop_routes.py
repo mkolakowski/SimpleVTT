@@ -37597,12 +37597,12 @@ async def use_open_hand_technique(
         Routes through the same save-or-suck pipeline as
         ``/use_stunning_strike`` — PC target gets a roll_request,
         NPC target gets a server-rolled save inline.
-      - ``push``: STR save vs the same DC. No buff to install — the
-        response carries ``push_authorized`` (True on save fail, False
-        on pass) so the GM UI can prompt to drag the token up to 15 ft
-        away. PC target gets the roll_request and the GM observes the
-        save result in the roll log; NPC target gets server-rolled
-        and the response carries the verdict immediately.
+      - ``push``: STR save vs the same DC. v2.99.434 — Phase 6.3 of
+        docs/plans/movement-and-summons.md: on a failed NPC-inline save
+        the target's token is now **pushed 15 ft away** from the monk via
+        `_force_move` (response gains `push_applied`); `push_authorized`
+        still surfaces the verdict. PC targets get the roll_request and
+        the push stays GM-tracked (the inline force-move is NPC-only v1).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -37805,6 +37805,7 @@ async def use_open_hand_technique(
     auto_save_breakdown = ""
     auto_save_buff_installed = ""
     push_authorized: Optional[bool] = None
+    push_applied = False  # v2.99.434 — Phase 6.3
 
     tgt_char = None
     if tgt_char_id:
@@ -37938,6 +37939,18 @@ async def use_open_hand_technique(
                         auto_save_buff_installed = cond["name"]
                 else:  # push
                     push_authorized = True
+                    # v2.99.434 — Phase 6.3: actually push the target's
+                    # token 15 ft away from the monk via _force_move.
+                    _oh_state = hub.get_battle(campaign_id)
+                    _oh_attacker = next(
+                        (c for c in (_oh_state.get("combatants") or [])
+                         if c.get("char_id") == char.id), None,
+                    ) if _oh_state else None
+                    _oh_push = await _force_move(
+                        db, campaign_id, target_combatant, 15,
+                        source_combatant=_oh_attacker,
+                    )
+                    push_applied = _oh_push["moved"]
             else:
                 if mode == "push":
                     push_authorized = False
@@ -37954,6 +37967,7 @@ async def use_open_hand_technique(
         "auto_save_breakdown": auto_save_breakdown,
         "auto_save_buff_installed": auto_save_buff_installed,
         "push_authorized": push_authorized,
+        "push_applied": push_applied,
     }
 
 

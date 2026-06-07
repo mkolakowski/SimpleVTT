@@ -120,8 +120,10 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    endpoint. Tested directly (push 15 ft → token moves 3 cells). Pushing
    Attack (v2.99.433) rolls the STR save server-side + force-moves the
    target 15 ft away on a fail.
-3. **P6.3 — more forced movers (S-M).** Open Hand push, Thorn Whip
-   (pull), Thunderwave / Gust (push), Repelling Blast.
+3. **P6.3 — more forced movers (S-M). 🟠 in progress.** Open Hand push
+   ✅ shipped v2.99.434 (force-moves the target 15 ft on a failed STR
+   save). Remaining: Thorn Whip (pull), Thunderwave / Gust (push),
+   Repelling Blast.
 4. **P7.1 — `_summon_companion` + a companion registry (L).** The
    primitive + a `/summon_companion` endpoint + a dismiss/teardown;
    retrofit Spiritual Weapon (the simplest — a floating weapon combatant

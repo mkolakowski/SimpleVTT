@@ -161,6 +161,94 @@ async def test_open_hand_push_npc(gm_client, kael_rested):
     assert body["auto_save_buff_installed"] == ""
 
 
+async def _token_y_by_id(gm_client, token_id):
+    resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
+    for t in resp.json()["tokens"]:
+        if t["id"] == token_id:
+            return float(t["y"])
+    return None
+
+
+async def test_open_hand_push_moves_target_on_failed_save(
+    gm_client, kael_rested,
+):
+    """v2.99.434 — Phase 6.3: on a failed STR save, Open Hand push moves
+    the bandit's token 15 ft away from Kael via _force_move.
+
+    Kael's token is placed directly above the bandit (same x) so the push
+    is straight down (+y). The save is server-rolled, so loop until the
+    bandit fails — then ``push_applied`` is True and the bandit's token
+    moved +210 px (3 cells / 15 ft on the 70-px grid). On a pass nothing
+    moves. The NPC token is created here + torn down at the end.
+    """
+    kael = kael_rested
+    bandit_tmpl = await _bandit_template(gm_client)
+
+    # Real NPC token for the bandit so _force_move can resolve + mutate it.
+    rt = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/tokens",
+        json={"token_template_id": bandit_tmpl["id"], "x": 700.0, "y": 700.0},
+    )
+    assert rt.status_code == 200, rt.text
+    bandit_tok_id = rt.json()["id"]
+
+    # Kael's token directly above the bandit → push direction is +y (down).
+    rp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/place-token",
+        json={"x": 700.0, "y": 560.0},
+    )
+    assert rp.status_code == 200, rp.text
+
+    bandit_cb = "tok_test_oht_pushmove"
+    try:
+        pushed = False
+        for _ in range(30):
+            # Re-seed each iteration: the bandit combatant links to the real
+            # token via source_token_id so _force_move resolves it.
+            await _seed_battle(gm_client, [
+                {"id": f"tok_test_{kael['id']}", "char_id": kael["id"],
+                 "name": kael["name"], "initiative": 10,
+                 "hp_current": 38, "hp_max": 38, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+                {"id": bandit_cb, "char_id": None,
+                 "token_template_id": bandit_tmpl["id"],
+                 "source_token_id": bandit_tok_id,
+                 "name": bandit_tmpl["name"], "initiative": 7,
+                 "hp_current": 11, "hp_max": 11, "buffs": [],
+                 "economy": {"action": False, "bonus": False,
+                             "reaction": False, "movement": 0}},
+            ])
+            before_y = await _token_y_by_id(gm_client, bandit_tok_id)
+            r = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/use_open_hand_technique",
+                json={
+                    "character_id": kael["id"],
+                    "target_combatant_id": bandit_cb,
+                    "mode": "push",
+                },
+            )
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert body["mode"] == "push"
+            assert body["auto_save_target_kind"] == "npc"
+            if body["auto_save_passed"] is False:
+                assert body["push_authorized"] is True
+                assert body["push_applied"] is True
+                after_y = await _token_y_by_id(gm_client, bandit_tok_id)
+                assert after_y == before_y + 210.0  # 15 ft / 3 cells
+                pushed = True
+                break
+            # On a pass: no push, token unmoved.
+            assert body["push_applied"] is False
+            assert await _token_y_by_id(gm_client, bandit_tok_id) == before_y
+        assert pushed, "no failed STR save in 30 attempts — flaky env?"
+    finally:
+        await gm_client.delete(
+            f"/api/campaign/{CAMPAIGN_ID}/tokens/{bandit_tok_id}"
+        )
+
+
 async def test_open_hand_no_reactions_npc(gm_client, gm_ws, kael_rested):
     """Kael uses Open Hand (no_reactions) on a bandit. No save —
     immediate install of ``reaction-denied`` buff + public roll-log

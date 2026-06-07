@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.434] - 2026-06-06 — "The Open Palm" — Open Hand push moves the target (automation Phase 6.3)
+
+**Schema version:** 66
+**Commit summary:** **Phase 6.3 — Monk Open Hand Technique's `push` mode now force-moves the target's token 15 ft away from the monk via `_force_move` (on a failed STR save), instead of only announcing `push_authorized`.** Second forced-move retrofit.
+**Description:** `/use_open_hand_technique` `mode=push` already rolled the STR save server-side for NPC targets. Now, on a failed save, it resolves the monk's combatant from the active battle (by `char_id`) and calls `_force_move` to push the target's token 15 ft directly away. Needs the target on a gridded map with a token (off-grid → the save resolves but no move). Response gains `push_applied`; `push_authorized` is retained for the PC-target prompt path + UI.
+
+### Changed
+- `/api/campaign/{cid}/use_open_hand_technique` `mode=push` pushes the target's token on a failed save (was announce-only); response gains `push_applied`.
+
+### Added
+- `tests/harness/test_use_open_hand_technique.py::test_open_hand_push_moves_target_on_failed_save` — Kael (placed above the bandit) loops until the bandit fails its STR save, then asserts `push_applied` + the bandit's NPC token moved +210 px (3 cells); a passed save moves nothing. Creates + tears down a real NPC token via `POST`/`DELETE /tokens`.
+
+### Notes
+- Second `_force_move` retrofit (after Pushing Attack v2.99.433). Next: Thorn Whip (pull), Thunderwave (push) — same shape (P6.3 ongoing).
+- **Total harness count: 1870** (was 1869 in v2.99.433; +1 new test).
+
+---
+
 ## [2.99.433] - 2026-06-06 — "The Driving Blow" — Pushing Attack moves the target (automation Phase 6.2)
 
 **Schema version:** 66
