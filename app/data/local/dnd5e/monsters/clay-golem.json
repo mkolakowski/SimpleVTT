@@ -79,7 +79,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+8"
+      "attack_bonus": "+8",
+      "save_dc": 15
     },
     {
       "id": "haste-recharge-5-6",

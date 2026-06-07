@@ -105,7 +105,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 13
     },
     {
       "id": "trampling-charge",
@@ -130,7 +131,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 16
     }
   ]
 }

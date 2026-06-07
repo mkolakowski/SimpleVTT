@@ -71,3 +71,49 @@ def test_bandit_captain_dagger_is_plus5():
         os.path.join(_MONSTER_DIR, "bandit-captain.json"), encoding="utf-8"))
     dagger = next(a for a in d["actions"] if a.get("name") == "Dagger")
     assert dagger["attack_bonus"] == "+5"
+
+
+# --- v2.99.466: save-DC invariants (parallel to attack_bonus) -------------
+# Save actions (breath weapons etc.) shipped with `save_dc` null too — the
+# DC lives in the desc ("DC 16 Dexterity saving throw"). v2.99.466 backfilled
+# it so the NPC save-action flow (/npc_cast_spell card + future strike
+# routing) shows the right DC.
+_SAVE_DC_RE = re.compile(r"DC\s*(\d+)\s+[A-Za-z]+\s+sav", re.IGNORECASE)
+
+
+def _save_dc_actions():
+    """Yield (slug, action, desc_dc) for actions whose desc names a save DC."""
+    for f in sorted(glob.glob(os.path.join(_MONSTER_DIR, "*.json"))):
+        try:
+            d = json.load(open(f, encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        for a in d.get("actions", []) or []:
+            if not isinstance(a, dict):
+                continue
+            m = _SAVE_DC_RE.search(str(a.get("desc") or ""))
+            if m:
+                yield d.get("slug") or os.path.basename(f), a, int(m.group(1))
+
+
+def test_save_dc_actions_have_save_dc():
+    """Every action whose desc states a 'DC N <ability> saving throw' has a
+    populated `save_dc` — the data gap that left NPC save actions unusable."""
+    missing = [
+        (slug, a.get("name"))
+        for slug, a, _dc in _save_dc_actions()
+        if a.get("save_dc") in (None, "", 0)
+    ]
+    assert not missing, (
+        f"{len(missing)} save action(s) missing save_dc: {missing[:15]}"
+    )
+
+
+def test_save_dc_matches_desc():
+    """The backfilled save_dc matches the DC stated in the desc."""
+    mismatches = [
+        (slug, a.get("name"), a.get("save_dc"), desc_dc)
+        for slug, a, desc_dc in _save_dc_actions()
+        if int(a.get("save_dc") or 0) != desc_dc
+    ]
+    assert not mismatches, f"save_dc ≠ desc DC: {mismatches[:15]}"

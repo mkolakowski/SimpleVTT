@@ -80,7 +80,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+9"
+      "attack_bonus": "+9",
+      "save_dc": 14
     },
     {
       "id": "tail",
@@ -131,7 +132,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 14
     },
     {
       "id": "amphibious",
@@ -181,7 +183,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 14
     },
     {
       "id": "probing-telepathy",

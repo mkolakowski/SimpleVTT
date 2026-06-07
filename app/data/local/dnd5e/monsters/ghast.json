@@ -80,7 +80,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+5"
+      "attack_bonus": "+5",
+      "save_dc": 10
     },
     {
       "id": "stench",
@@ -105,7 +106,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 10
     },
     {
       "id": "turn-defiance",

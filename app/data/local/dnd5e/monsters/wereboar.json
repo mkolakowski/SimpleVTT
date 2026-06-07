@@ -106,7 +106,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+5"
+      "attack_bonus": "+5",
+      "save_dc": 12
     },
     {
       "id": "shapechanger",
@@ -156,7 +157,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 13
     },
     {
       "id": "relentless-recharges-after-a-short-or-long-rest",

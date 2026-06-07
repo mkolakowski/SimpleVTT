@@ -158,7 +158,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 16
     },
     {
       "id": "poison-breath-recharge-5-6",
@@ -183,7 +184,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 18
     },
     {
       "id": "amphibious",
@@ -308,7 +310,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 19
     }
   ]
 }

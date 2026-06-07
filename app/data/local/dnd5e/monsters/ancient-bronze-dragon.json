@@ -158,7 +158,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 20
     },
     {
       "id": "breath-weapons-recharge-5-6",
@@ -183,7 +184,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 23
     },
     {
       "id": "change-shape",
@@ -333,7 +335,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 24
     }
   ]
 }

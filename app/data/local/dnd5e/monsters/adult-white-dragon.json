@@ -159,7 +159,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 14
     },
     {
       "id": "cold-breath-recharge-5-6",
@@ -184,7 +185,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 19
     },
     {
       "id": "ice-walk",
@@ -309,7 +311,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 19
     }
   ]
 }

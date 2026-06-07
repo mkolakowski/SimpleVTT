@@ -157,7 +157,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+19"
+      "attack_bonus": "+19",
+      "save_dc": 20
     },
     {
       "id": "frightful-presence",
@@ -182,7 +183,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 17
     },
     {
       "id": "swallow",
@@ -207,7 +209,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 20
     },
     {
       "id": "legendary-resistance-3-day",

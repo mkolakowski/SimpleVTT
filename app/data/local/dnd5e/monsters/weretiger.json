@@ -80,7 +80,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+5"
+      "attack_bonus": "+5",
+      "save_dc": 13
     },
     {
       "id": "claw-tiger-or-hybrid-form-only",
@@ -233,7 +234,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 14
     }
   ]
 }

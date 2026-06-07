@@ -105,7 +105,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+9"
+      "attack_bonus": "+9",
+      "save_dc": 17
     },
     {
       "id": "rock-catching",
@@ -130,7 +131,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 10
     },
     {
       "id": "stone-camouflage",

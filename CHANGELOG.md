@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.466] - 2026-06-07 — "By the Numbers" — monster save-DC backfill (save-only NPC actions, part 1)
+
+**Schema version:** 66
+**Commit summary:** **Backfilled the missing `save_dc` on 244 save-DC monster actions (breath weapons, etc.) across the SRD set, parsed from each action's `desc` ("DC N <ability> saving throw").** The data foundation for resolving save-only NPC actions.
+**Description:** Parallel to the v2.99.465 `attack_bonus` fix: save-DC actions shipped with `save_dc` null (the DC was only in the prose `desc`), so the NPC save-action card showed no/zero DC and the strike button had no DC to resolve against. A backfill script parsed "DC N <ability> saving throw" into the structured `save_dc` field for 244 actions across 161 files (`save_ability` was already populated). Part 1 of the "save-only NPC actions" TODO follow-up — the data prerequisite. Parts 2–3 (server-side save auto-resolution in `/npc_cast_spell` + routing save-only strike buttons there) follow.
+
+### Fixed
+- 244 SRD monster save-DC actions now carry `save_dc` (parsed from `desc`) → NPC save-action cards show the correct DC.
+
+### Added
+- `tests/harness/test_monster_attack_bonus_data.py` gains save-DC invariants: every desc-stated save-DC action has `save_dc`, and it matches the desc.
+
+### Notes
+- Part 1 of "save-only NPC actions". Next: `/npc_cast_spell` rolls each target's save + applies full/half damage server-side (it currently announces the DC for the GM — "filed for follow-up" per its docstring; reuse the Thunderwave per-target shape), then route save-only NPC strike buttons through it.
+- **Total harness count: 1931** (was 1929 in v2.99.465; +2 new tests).
+
+---
+
 ## [2.99.465] - 2026-06-07 — "To Hit, Restored" — NPC strike buttons fixed (P1 bug — monster attack_bonus backfill)
 
 **Schema version:** 66

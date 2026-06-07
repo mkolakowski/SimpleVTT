@@ -106,7 +106,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+13"
+      "attack_bonus": "+13",
+      "save_dc": 15
     },
     {
       "id": "flying-sword",
@@ -306,7 +307,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 23
     },
     {
       "id": "blinding-gaze-costs-3-actions",
@@ -331,7 +333,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 15
     }
   ]
 }

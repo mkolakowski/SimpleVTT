@@ -106,7 +106,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+8"
+      "attack_bonus": "+8",
+      "save_dc": 14
     },
     {
       "id": "devil-s-sight",

@@ -54,7 +54,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+4"
+      "attack_bonus": "+4",
+      "save_dc": 10
     },
     {
       "id": "scare-1-day",
@@ -79,7 +80,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 10
     },
     {
       "id": "invisibility",

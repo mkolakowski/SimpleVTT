@@ -80,7 +80,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 11
     },
     {
       "id": "variant-summon-mephits-1-day",
@@ -130,7 +131,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 11
     },
     {
       "id": "false-appearance",

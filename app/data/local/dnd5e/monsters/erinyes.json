@@ -106,7 +106,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+7"
+      "attack_bonus": "+7",
+      "save_dc": 14
     },
     {
       "id": "variant-rope-of-entanglement",

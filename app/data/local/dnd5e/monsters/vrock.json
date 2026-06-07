@@ -131,7 +131,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 14
     },
     {
       "id": "stunning-screech-1-day",
@@ -156,7 +157,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 14
     },
     {
       "id": "variant-summon-demon-1-day",

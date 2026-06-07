@@ -79,7 +79,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+5"
+      "attack_bonus": "+5",
+      "save_dc": 12
     },
     {
       "id": "glaive",
@@ -105,7 +106,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+5"
+      "attack_bonus": "+5",
+      "save_dc": 12
     },
     {
       "id": "devil-s-sight",

@@ -132,7 +132,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+13"
+      "attack_bonus": "+13",
+      "save_dc": 20
     },
     {
       "id": "steam-breath-recharge-5-6",
@@ -157,7 +158,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 18
     },
     {
       "id": "amphibious",

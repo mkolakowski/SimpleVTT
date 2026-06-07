@@ -56,7 +56,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+6"
+      "attack_bonus": "+6",
+      "save_dc": 14
     },
     {
       "id": "create-specter",

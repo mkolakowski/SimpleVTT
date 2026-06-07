@@ -79,7 +79,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+4"
+      "attack_bonus": "+4",
+      "save_dc": 12
     },
     {
       "id": "two-headed",

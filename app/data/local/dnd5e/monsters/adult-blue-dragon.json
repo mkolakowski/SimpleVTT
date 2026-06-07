@@ -158,7 +158,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 17
     },
     {
       "id": "lightning-breath-recharge-5-6",
@@ -183,7 +184,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 19
     },
     {
       "id": "legendary-resistance-3-day",
@@ -283,7 +285,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 20
     }
   ]
 }

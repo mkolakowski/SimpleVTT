@@ -54,7 +54,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+12"
+      "attack_bonus": "+12",
+      "save_dc": 18
     },
     {
       "id": "legendary-resistance-3-day",
@@ -230,7 +231,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 18
     },
     {
       "id": "disrupt-life-costs-3-actions",
@@ -255,7 +257,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 18
     }
   ]
 }

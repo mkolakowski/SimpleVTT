@@ -79,7 +79,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 13
     },
     {
       "id": "relentless-recharges-after-a-short-or-long-rest",

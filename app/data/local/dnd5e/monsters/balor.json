@@ -106,7 +106,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+14"
+      "attack_bonus": "+14",
+      "save_dc": 20
     },
     {
       "id": "teleport",
@@ -181,7 +182,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 20
     },
     {
       "id": "fire-aura",

@@ -79,7 +79,8 @@
         "size_ft": 0,
         "secondary_ft": 0
       },
-      "attack_bonus": "+9"
+      "attack_bonus": "+9",
+      "save_dc": 16
     },
     {
       "id": "dreadful-glare",
@@ -104,7 +105,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 16
     },
     {
       "id": "magic-resistance",
@@ -230,7 +232,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 16
     },
     {
       "id": "blasphemous-word-costs-2-actions",
@@ -255,7 +258,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "save_dc": 16
     },
     {
       "id": "channel-negative-energy-costs-2-actions",
