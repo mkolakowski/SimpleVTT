@@ -3689,6 +3689,127 @@
      * handled by showMovementOverrunModal, which respects Dash +
      * cumulative economy.movement). This fills the off-turn /
      * NPC-side reposition gap where no movement prompt fired. */
+    /* v2.102.0 — movement-lock modal. Two variants:
+     *   • GM (isGm:true) — advisory "movement is locked — move
+     *     anyway?" with Cancel / Move anyway. The GM is the arbiter;
+     *     the server lets their drag through, so onMove continues the
+     *     normal move flow and onCancel snaps the token back.
+     *   • Player (isGm:false) — informational "movement is locked"
+     *     notice with a single Dismiss button (the token is already
+     *     snapped back by the caller). Phase 3 adds a "Request to
+     *     move" action here.
+     * Mirrors the _showGmOverRangeModal glass-card recipe so the two
+     * movement prompts read as a family. */
+    function _showMovementLockedModal({
+        isGm, tokenLabel, onMove, onCancel,
+    }) {
+        const backdrop = document.createElement('div');
+        backdrop.setAttribute('style', [
+            'position:fixed', 'inset:0',
+            'background:rgba(0,0,0,0.45)',
+            'z-index:2147483600',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'padding:16px',
+            'animation:reactionPopIn 180ms ease-out',
+        ].join(';'));
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-label', 'Movement is locked');
+
+        const card = document.createElement('div');
+        card.setAttribute('style', [
+            'background:#1f2433',
+            'background:color-mix(in srgb, var(--bg, #1f2433) 88%, transparent)',
+            'backdrop-filter:blur(8px)',
+            '-webkit-backdrop-filter:blur(8px)',
+            'border:1px solid var(--border, rgba(255,255,255,0.18))',
+            'border-left:4px solid #ff8a80',
+            'border-radius:10px',
+            'padding:18px 20px',
+            'color:var(--fg, #fff)',
+            'font-size:13px',
+            'max-width:420px', 'width:100%',
+            'box-shadow:0 10px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,138,128,0.18)',
+        ].join(';'));
+
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:14px; font-weight:600; margin-bottom:6px;';
+        header.textContent = '🔒 Movement locked';
+        card.appendChild(header);
+
+        const summary = document.createElement('p');
+        summary.style.cssText = 'margin:0 0 14px 0; font-size:12px; opacity:0.85; line-height:1.4;';
+        summary.textContent = isGm
+            ? ((tokenLabel || 'This token') + ' — movement is locked for '
+               + 'players. Move it anyway? (You’re the GM; players '
+               + 'are still blocked.)')
+            : ('The GM has locked token movement. You can’t move '
+               + (tokenLabel || 'your token') + ' right now — ask the GM '
+               + 'to unlock movement.');
+        card.appendChild(summary);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:8px; justify-content:flex-end; margin-top:6px;';
+
+        function _btn(label, style, onClick) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.setAttribute('style', [
+                'min-height:44px', 'padding:6px 14px',
+                'border-radius:6px', 'cursor:pointer', 'font-size:13px',
+                'border:1px solid var(--border, rgba(255,255,255,0.22))',
+            ].join(';') + ';' + style);
+            b.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                backdrop.remove();
+                if (onClick) onClick();
+            });
+            return b;
+        }
+
+        let _closeAction;  // run on backdrop-click / Escape
+        if (isGm) {
+            btnRow.appendChild(_btn(
+                '✋ Cancel',
+                'background:rgba(255,255,255,0.04); color:var(--fg);',
+                onCancel,
+            ));
+            btnRow.appendChild(_btn(
+                '➡ Move anyway',
+                'background:#ff8a80; color:#1f2433; font-weight:600; border-color:#e0625a;',
+                onMove,
+            ));
+            _closeAction = onCancel;
+        } else {
+            btnRow.appendChild(_btn(
+                'OK',
+                'background:rgba(255,255,255,0.04); color:var(--fg);',
+                null,
+            ));
+            _closeAction = null;
+        }
+        card.appendChild(btnRow);
+
+        backdrop.addEventListener('click', (ev) => {
+            if (ev.target === backdrop) {
+                backdrop.remove();
+                if (_closeAction) _closeAction();
+            }
+        });
+        function _onKey(ev) {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                document.removeEventListener('keydown', _onKey);
+                backdrop.remove();
+                if (_closeAction) _closeAction();
+            }
+        }
+        document.addEventListener('keydown', _onKey);
+
+        backdrop.appendChild(card);
+        document.body.appendChild(backdrop);
+    }
+
     function _showGmOverRangeModal({
         tokenLabel, distanceFt, speedFt, onMove, onCancel,
     }) {
@@ -3815,7 +3936,46 @@
      * dragger sees a Continue/Stop modal first; OA-clear moves fall
      * through to the existing gate logic.
      */
+    // v2.102.0 — movement-lock gate. Runs BEFORE the OA / over-speed
+    // pre-move flow. When the GM has locked movement
+    // (window._MOVEMENT_LOCKED, kept fresh by the movement_lock_update
+    // WS handler):
+    //   • Player → snap the token back + show the "movement is locked"
+    //     notice. The server also 409s movement_locked as the backstop,
+    //     but gating client-side avoids the visual flicker of an
+    //     optimistic move that gets rejected.
+    //   • GM → show an advisory "movement is locked — move anyway?"
+    //     confirm; the GM is the arbiter and the server lets them
+    //     through. On confirm, fall through to the normal move flow.
+    // Unlocked → straight through to _commitTokenMoveInner.
     async function _commitTokenMove(token, origX, origY, sx, sy) {
+        if (window._MOVEMENT_LOCKED) {
+            const snapBack = () => {
+                token.x = origX; token.y = origY; render();
+            };
+            if (ME && ME.isGm) {
+                _showMovementLockedModal({
+                    isGm: true,
+                    tokenLabel: token.label || 'Token',
+                    onMove: () => _commitTokenMoveInner(
+                        token, origX, origY, sx, sy,
+                    ),
+                    onCancel: snapBack,
+                });
+            } else {
+                // Player: undo the optimistic drag + explain.
+                snapBack();
+                _showMovementLockedModal({
+                    isGm: false,
+                    tokenLabel: token.label || 'Token',
+                });
+            }
+            return;
+        }
+        return _commitTokenMoveInner(token, origX, origY, sx, sy);
+    }
+
+    async function _commitTokenMoveInner(token, origX, origY, sx, sy) {
         const tokenId = token.id;
         // v2.99.55 — plan-movement-oa-flow Phase 4. postMove now
         // accepts an opt-in oa_confirmed flag; the pre-flight preview
@@ -4586,11 +4746,67 @@
                 // our own broadcasts since we already render them
                 // locally; only foreign rulers populate _remoteRulers.
                 _onRulerBroadcast(msg.data);
+            } else if (msg.type === 'movement_lock_update') {
+                // v2.102.0 — live movement-lock toggle. Update the
+                // client flag the drag gate reads + the GM toggle
+                // button chrome. Everyone tracks the flag (players
+                // need it so the drag gate fires without a server
+                // round-trip); only the GM has the toggle button.
+                _onMovementLockUpdate(!!(msg.data && msg.data.locked));
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
     }
     connectWs();
+
+    // v2.102.0 — movement-lock toggle (GM-only button) + client state.
+    // window._MOVEMENT_LOCKED is seeded server-side in the template and
+    // kept fresh here by the movement_lock_update WS handler; the
+    // _commitTokenMove gate reads it. The button only exists for the
+    // GM (players never get the toggle in the DOM).
+    function _syncMovementLockBtn() {
+        const btn = document.getElementById('movement-lock-btn');
+        if (!btn) return;
+        const locked = !!window._MOVEMENT_LOCKED;
+        btn.setAttribute('aria-pressed', locked ? 'true' : 'false');
+        btn.textContent = locked ? '🔒 Locked' : '🔓 Unlocked';
+        btn.title = locked
+            ? 'Movement is LOCKED for players — click to unlock'
+            : 'Movement is unlocked — click to lock players out';
+    }
+    function _onMovementLockUpdate(locked) {
+        window._MOVEMENT_LOCKED = !!locked;
+        _syncMovementLockBtn();
+    }
+    (function _wireMovementLockBtn() {
+        const btn = document.getElementById('movement-lock-btn');
+        if (!btn) return;  // players have no toggle
+        _syncMovementLockBtn();
+        btn.addEventListener('click', async () => {
+            const next = !window._MOVEMENT_LOCKED;
+            btn.disabled = true;
+            try {
+                const r = await fetch(
+                    `/api/campaign/${CAMPAIGN_ID}/movement_lock`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ locked: next }),
+                    },
+                );
+                if (r.ok) {
+                    const data = await r.json();
+                    // Optimistic local sync; the WS broadcast also
+                    // arrives and is idempotent.
+                    _onMovementLockUpdate(!!data.locked);
+                }
+            } catch (_) {
+                // Network blip — leave state; the WS reconciles.
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    })();
 
     function _appendSaveResultToSpellCard(r) {
         // If this roll's note is a response to one of our spell-cast save

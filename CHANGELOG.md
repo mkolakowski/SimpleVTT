@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.103.0] - 2026-06-07 — "The Velvet Rope" — movement lock (Phase 2: GM toggle + popups)
+
+**Schema version:** 68
+**Commit summary:** **Surfaces the v2.102.0 movement lock in the tabletop UI: a GM-only 🔒/🔓 toggle button in the canvas-tools cluster flips the live lock via `POST /movement_lock`, and the drag path now gates client-side — a locked player's drag snaps back with a "movement is locked" notice, while a locked GM's drag shows an advisory "move anyway?" confirm. The `movement_lock_update` WS broadcast keeps every client's flag + the GM button in sync.**
+**Description:** Phase 2 of 3 for the [TODO](TODO.md) movement-lock feature (Phase 1 shipped the server core in v2.102.0). A new GM-only button (`#movement-lock-btn`) sits next to 📏 Ruler in the topbar's canvas-tools pill; its label/`aria-pressed` reflect `window._MOVEMENT_LOCKED` (seeded server-side from `campaign.movement_locked`, kept fresh by the `movement_lock_update` WS handler). Clicking it POSTs `/movement_lock {locked}` to flip the live state. `_commitTokenMove` gains a lock gate that runs before the OA / over-speed pre-move flow: when locked, a player's drag is snapped back and a glass-card "🔒 Movement locked" notice explains the block (the server's 409 `movement_locked` is the backstop, but gating client-side avoids the optimistic-move flicker); a GM's drag opens a "move anyway?" confirm (Cancel snaps back, Move anyway continues the normal flow — the server lets the GM through regardless). The modal mirrors the v2.100.0 `_showGmOverRangeModal` glass recipe so the movement prompts read as a family. No "Request to move" action yet — that's Phase 3's player→GM request/approve flow.
+
+### Added
+- `app/templates/tabletop.html` — GM-only `#movement-lock-btn` toggle in the canvas-tools cluster; `window._MOVEMENT_LOCKED` seeded from `campaign.movement_locked`.
+- `app/static/tabletop.js` — `_commitTokenMove` lock gate (player snap-back + notice / GM advisory confirm); `_showMovementLockedModal` (GM + player variants); `movement_lock_update` WS handler (`_onMovementLockUpdate`); GM toggle-button wiring (`_syncMovementLockBtn`).
+- `tests/harness_ui/test_movement_lock_ui.py` — 2 Playwright tests: the GM toggle round-trips the lock state (button label + aria-pressed + `window._MOVEMENT_LOCKED`) with no console errors, and the lock propagates to a player's open tab via the WS while players get no toggle button.
+
+### Notes
+- Phase 2 of 3. Client-only behavior change calling the existing `POST /movement_lock` + reading the existing `movement_lock_update` WS broadcast (both from v2.102.0) — no new HTTP endpoint or WS shape, so no new `tests/harness/` test; covered instead by the new Playwright UI test (the server gate is already covered by `tests/harness/test_movement_lock.py`). The player→GM request/approve flow is Phase 3.
+- **Total harness count: 1946** in `tests/harness/` (unchanged); **`tests/harness_ui/` 15 → 16**.
+
+---
+
 ## [2.102.0] - 2026-06-07 — "Hold Still" — movement lock (Phase 1: server core)
 
 **Schema version:** 68

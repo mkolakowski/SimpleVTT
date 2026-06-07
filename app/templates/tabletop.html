@@ -2082,6 +2082,21 @@
                 {% if not active_map %}aria-disabled="true" disabled{% endif %}>
             📏 Ruler
         </button>
+        {# v2.102.0 — GM-only movement-lock toggle. When pressed,
+           players can't drag their tokens (server 409 movement_locked +
+           client gate); the GM can still move with an advisory confirm.
+           Label + aria-pressed are synced by tabletop.js from the live
+           window._MOVEMENT_LOCKED flag (seeded below, kept fresh by the
+           movement_lock_update WS broadcast). #}
+        {% if is_gm %}
+        <button type="button"
+                id="movement-lock-btn"
+                class="canvas-tool-btn"
+                aria-pressed="{{ 'true' if campaign.movement_locked else 'false' }}"
+                title="Toggle player movement lock">
+            {% if campaign.movement_locked %}🔒 Locked{% else %}🔓 Unlocked{% endif %}
+        </button>
+        {% endif %}
     </div>
     <div class="drawer-tab-bar">
         <button class="drawer-tab-btn" data-target="roll-log-drawer">Roll Log</button>
@@ -4206,6 +4221,10 @@
 const CAMPAIGN_ID = {{ campaign.id }};
 const MAP_ID = {{ active_map.id if active_map else 'null' }};
 const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }}, animateGifs: {{ 'true' if user.animate_gifs else 'false' }}, zoomSpeed: {{ user.zoom_speed or 1.0 }}, reactionPromptMode: {{ (user.reaction_prompt_mode or 'popup')|tojson }} };
+// v2.102.0 — live movement-lock flag. Seeded from the campaign's
+// current state; tabletop.js's _commitTokenMove gate reads it and the
+// movement_lock_update WS handler keeps it fresh.
+window._MOVEMENT_LOCKED = {{ 'true' if campaign.movement_locked else 'false' }};
 const GAME_SYSTEM = {{ system.key|tojson }};
 const ROLLABLE_SHEET = {{ 'true' if system.rollable_sheet else 'false' }};
 const MEMBERS = [{% for m in members %}{"id":{{ m.id }},"name":{{ m.display_name|tojson }}}{% if not loop.last %},{% endif %}{% endfor %}];
