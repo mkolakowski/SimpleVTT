@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.440] - 2026-06-06 — "The Owl Familiar" — Find Familiar retrofit (automation Phase 7.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 7.2 — new `POST /cast_find_familiar` endpoint (Wizard L1 ritual): stands up the tiny non-combat `familiar` companion in a chosen animal form via `_summon_companion`.** Second summon retrofit; opens P7.2.
+**Description:** `/cast_find_familiar` (body `{character_id, form?, x?, y?, initiative?}`) gates on the caster knowing Find Familiar OR being a Wizard / Artificer, then summons the new `familiar` registry entry (AC 11, 1 HP, tiny) as a real combatant in the chosen `form` (owl / cat / raven / …, cosmetic, folded into the name). The familiar reuses the summon primitive's token + init slot + long-rest teardown for free; it's a non-combat companion (delivers touch spells + the Help action; no attack logic).
+
+### Added
+- `familiar` entry in `_COMPANION_TEMPLATES`.
+- `POST /api/campaign/{cid}/cast_find_familiar` → `{ok, feature, form, combatant, token_id}`; 409 `cannot_cast` when the caster neither knows the spell nor is a wizard/artificer.
+- `tests/harness/test_cast_find_familiar.py` — Thalindra (demo Wizard) conjures an owl familiar (asserts the summon combatant shape + `Familiar (owl)` token on the map), plus 409 (Krieger can't cast).
+
+### Notes
+- Second summon retrofit (after Spiritual Weapon v2.99.438), opening P7.2 of `docs/plans/movement-and-summons.md`. Remaining: Steel Defender, Ranger's Companion, Conjure Animals.
+- **Total harness count: 1891** (was 1889 in v2.99.439; +2 new tests).
+
+---
+
 ## [2.99.439] - 2026-06-06 — "The Morning After" — summons drop on a long rest (automation Phase 7.1)
 
 **Schema version:** 66

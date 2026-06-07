@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1889 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.439, 2026-06-06).
+**Total tests:** 1891 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.440, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1468,6 +1468,14 @@ v2.99.439 — Phase 7.1 of `docs/plans/movement-and-summons.md`. Closes the comp
 |------|-----------------|
 | `test_long_rest_drops_summons` | Lyra summons a Wolf, then long-rests → the combatant id is in `dismissed_summons`, the token is deleted from the map, and a follow-up manual dismiss → 404. |
 | `test_short_rest_keeps_summons` | After a refill long rest, Lyra summons a Wolf + short-rests → no `dismissed_summons` field and the token is still on the map (summon survives). |
+
+### `test_cast_find_familiar.py`
+v2.99.440 — Phase 7.2 of `docs/plans/movement-and-summons.md`. The second summon retrofit: `/cast_find_familiar` (Wizard L1 ritual) stands up the tiny non-combat `familiar` companion in a chosen animal form via `_summon_companion`. Gates on knowing Find Familiar OR being a Wizard / Artificer. Caster fixture: Thalindra Moonwhisper (demo Wizard).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_find_familiar_summons_companion` | Thalindra conjures an owl familiar → `is_summon`, `companion_key == "familiar"`, `name == "Familiar (owl)"`, `ac == 11`, 1 HP, `summoned_by` Thalindra; a `token_add` broadcast + the token (matching label) on the map. Dismissed after. |
+| `test_find_familiar_cannot_cast` | Krieger (Barbarian) → 409 `cannot_cast`. |
 
 ### `test_menacing_attack.py`
 v2.99.253 — Battle Master maneuver 3 of 16 — Menacing Attack (PHB p.74). Mirrors Trip/Disarming but save ability is WIS and on-fail is Frightened.

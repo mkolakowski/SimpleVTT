@@ -143,8 +143,10 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    first real summon retrofit). ✅ rest-teardown shipped v2.99.439
    (`_teardown_summons_for_owner` drops the owner's summons on a long
    rest — combatant + token; a short rest leaves them). **P7.1 done.**
-5. **P7.2 — more summons (L, ongoing).** Find Familiar, Steel Defender,
-   Ranger's Companion, Conjure Animals.
+5. **P7.2 — more summons (L, ongoing). 🟠 in progress.** Find Familiar
+   ✅ shipped v2.99.440 (`/cast_find_familiar` stands up the tiny
+   non-combat `familiar` companion in a chosen animal form). Remaining:
+   Steel Defender, Ranger's Companion, Conjure Animals.
 
 ---
 

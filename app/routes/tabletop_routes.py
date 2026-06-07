@@ -2673,6 +2673,8 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
     "flaming-sphere": {"name": "Flaming Sphere", "ac": 0, "hp": 1,
                        "speed_walk": 30, "size": 1, "team": "hero",
                        "color": "#e8772e"},
+    "familiar": {"name": "Familiar", "ac": 11, "hp": 1, "speed_walk": 5,
+                 "size": 1, "team": "hero", "color": "#b8a3d9"},
 }
 
 
@@ -44418,6 +44420,113 @@ async def use_spiritual_weapon(
         "damage_applied": damage_applied,
         "damage_type": damage_type,
         "slot_level": slot_level,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/cast_find_familiar")
+async def cast_find_familiar(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.440 — Phase 7.2 of docs/plans/movement-and-summons.md: a
+    second summon retrofit. Find Familiar (Wizard L1 ritual, PHB p.240):
+    "You gain the service of a familiar, a spirit that takes an animal
+    form you choose." The familiar is a tiny, non-combat companion (it
+    delivers touch spells + takes the Help action; it can't attack).
+
+    Body: ``{character_id, form?, x?, y?, initiative?}``. `form` is the
+    chosen animal (owl, cat, raven, …) — cosmetic, folded into the
+    combatant name. Gates on the caster knowing Find Familiar OR being a
+    Wizard / Artificer, then stands up the `familiar` companion via
+    `_summon_companion`.
+
+    Response: ``{ok, feature, form, combatant, token_id}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    form = (body.get("form") or "owl").strip()[:40] or "owl"
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_ff = any(
+        (s.get("_slug") == "find-familiar")
+        or (str(s.get("name", "")).lower() == "find familiar")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"wizard", "artificer"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_ff and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Find Familiar, or wizard/artificer",
+            "got_class": _cls,
+        })
+
+    summon = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key="familiar",
+        name=f"Familiar ({form})",
+        x=float(body.get("x") or 0),
+        y=float(body.get("y") or 0),
+        initiative=int(body.get("initiative") or 0),
+    )
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"🦉 Find Familiar — {form}",
+            "feature_desc": (
+                f"{char.name} conjures a familiar in {form} form as a "
+                f"combatant (it delivers touch spells + takes the Help "
+                f"action; it can't attack)."
+            ),
+            "source": "find-familiar",
+            "form": form,
+            "combatant_id": (summon or {}).get("combatant", {}).get("id"),
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "find-familiar",
+        "form": form,
+        "combatant": (summon or {}).get("combatant"),
+        "token_id": (summon or {}).get("token_id"),
     }
 
 
