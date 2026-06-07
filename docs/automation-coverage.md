@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.452
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.454
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -22,12 +22,12 @@ after a batch of retrofits and update the counts below. Treat the split as
 (archetype J — passive senses, language grants), and a few `tracked`-tagged ones
 only spend a resource without a downstream effect.
 
-## Summary (as of v2.99.452)
+## Summary (as of v2.99.454)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **182** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **55** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **183** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **54** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -74,8 +74,8 @@ or passive damage-boosters that already ride other code paths
   (`aura_of_conquest` ✅ v2.99.448 condition gate; `aura_of_alacrity` ✅ v2.99.449 buff-payload).
 - **On-hit / extra-attack:**
   `assassinate` (auto-crit rider). (`genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 + `dread_ambusher` ✅ v2.99.452 server-resolved extra attacks.)
-- **Buff / temp-HP (D/F):** `combat_inspiration`, `rallying_cry`,
-  `blade_flourish`, `protective_spirit`, `grim_harvest`, `supreme_healing`.
+- **Buff / temp-HP (D/F):** `combat_inspiration`,
+  `blade_flourish`, `protective_spirit`, `grim_harvest`, `supreme_healing` (`rallying_cry` ✅ v2.99.454 heals allies).
 - **Movement (G):** `ascendant_step` (fly), `stormborn` (fly),
   `relentless_avenger`, `fancy_footwork`.
 
@@ -97,7 +97,7 @@ or passive damage-boosters that already ride other code paths
 | `cast_polymorph` | ✅ tracked | A use/resource |
 | `cast_sleep` | ✅ tracked | D buff-install, D/E buff-install |
 | `cast_slow` | ✅ tracked | D buff-install, D/E buff-install |
-| `cast_spell` | ✅ tracked | D buff-install, D/E buff-install, damage, heal/damage |
+| `cast_spell` | ✅ tracked | D buff-install, D/E buff-install, damage, heal, heal/damage |
 | `cast_web` | ✅ tracked | D buff-install, D/E buff-install |
 | `use_abjure_enemy` | ✅ tracked | A use/resource |
 | `use_action_surge` | ✅ tracked | A use/resource |
@@ -127,7 +127,7 @@ or passive damage-boosters that already ride other code paths
 | `use_control_undead` | ✅ tracked | C save-or-condition |
 | `use_corona_of_light` | ✅ tracked | A use/resource |
 | `use_countercharm` | ✅ tracked | D buff-install |
-| `use_cutting_words` | ✅ tracked | B on-hit-rider, C save-or-condition, D buff-install, D/E buff-install, G forced-move, damage, heal/damage |
+| `use_cutting_words` | ✅ tracked | B on-hit-rider, C save-or-condition, D buff-install, D/E buff-install, G forced-move, damage, heal, heal/damage |
 | `use_dark_ones_blessing` | ✅ tracked | F temp-HP |
 | `use_diamond_soul_reroll` | ✅ tracked | A use/resource |
 | `use_disarming_attack` | ✅ tracked | A use/resource |
@@ -216,6 +216,7 @@ or passive damage-boosters that already ride other code paths
 | `use_radiant_sun_bolt` | ✅ tracked | A use/resource |
 | `use_rage` | ✅ tracked | D buff-install |
 | `use_rally` | ✅ tracked | F temp-HP |
+| `use_rallying_cry` | ✅ tracked | heal |
 | `use_rangers_companion` | ✅ tracked | A use/resource |
 | `use_reaction` | ✅ tracked | D buff-install, damage, heal/damage |
 | `use_rebuke_the_violent` | ✅ tracked | A use/resource |
@@ -304,7 +305,6 @@ or passive damage-boosters that already ride other code paths
 | `use_potent_spellcasting` | ⚪ announce-only | — |
 | `use_protective_spirit` | ⚪ announce-only | — |
 | `use_purity_of_spirit` | ⚪ announce-only | — |
-| `use_rallying_cry` | ⚪ announce-only | — |
 | `use_relentless_avenger` | ⚪ announce-only | — |
 | `use_saint_of_forge_and_fire` | ⚪ announce-only | — |
 | `use_scornful_rebuke` | ⚪ announce-only | — |

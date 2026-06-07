@@ -111,3 +111,68 @@ async def test_use_rc_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+def _npc(cid, name, hp_cur=10, hp_max=30):
+    return {
+        "id": cid, "char_id": None, "name": name,
+        "initiative": 5, "hp_current": hp_cur, "hp_max": hp_max, "buffs": [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def test_rallying_cry_heals_allies(
+    gm_client, garrik_banneret,
+):
+    """v2.99.454 — Rallying Cry heals the supplied allies by fighter
+    level (9). Two damaged allies (10/30) each regain 9 → applied 9."""
+    garrik = garrik_banneret
+    a1, a2 = "tok_rc_a1", "tok_rc_a2"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_rc_g_{garrik['id']}", "char_id": garrik["id"],
+             "name": garrik["name"], "initiative": 20,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            _npc(a1, "Ally One"),
+            _npc(a2, "Ally Two"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rallying_cry",
+        json={"character_id": garrik["id"],
+              "target_combatant_ids": [a1, a2]},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    healed = {h["combatant_id"]: h for h in data["healed"]}
+    assert healed[a1]["applied"] == 9  # fighter level
+    assert healed[a2]["applied"] == 9
+
+
+async def test_rallying_cry_caps_at_three_allies(
+    gm_client, garrik_banneret,
+):
+    """At most 3 allies are healed even if 4 ids are supplied."""
+    garrik = garrik_banneret
+    ids = ["tok_rc_b1", "tok_rc_b2", "tok_rc_b3", "tok_rc_b4"]
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_rc_g2_{garrik['id']}", "char_id": garrik["id"],
+             "name": garrik["name"], "initiative": 20,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ] + [_npc(i, f"Ally {i}") for i in ids],
+        "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rallying_cry",
+        json={"character_id": garrik["id"], "target_combatant_ids": ids},
+    )
+    assert r.status_code == 200, r.text
+    assert len(r.json()["healed"]) == 3  # capped

@@ -57294,6 +57294,9 @@ async def use_rallying_cry(
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
+    target_ids = body.get("target_combatant_ids") or []
+    if not isinstance(target_ids, list):
+        target_ids = []
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -57318,6 +57321,25 @@ async def use_rallying_cry(
 
     fighter_lv = _fighter_level_from_sheet(sheet)
     heal_per_ally = fighter_lv
+
+    # v2.99.454 — heal the supplied allies (up to 3) by fighter level
+    # via _apply_heal_to_combatant (was announce-only). The "within 60 ft /
+    # can see or hear / allied" gate stays GM-tracked — the caller picks
+    # the targets. Unknown ids yield a per-result error entry.
+    healed = []
+    for tid in target_ids[:3]:
+        tgt = _lookup_combatant(campaign_id, tid)
+        if not tgt:
+            healed.append({"combatant_id": tid, "applied": 0,
+                           "error": "not_in_battle"})
+            continue
+        hr = await _apply_heal_to_combatant(
+            db, campaign_id, tgt, heal_per_ally)
+        healed.append({
+            "combatant_id": tid, "name": tgt.get("name") or "",
+            "applied": int(hr.get("applied") or 0),
+            "revived": bool(hr.get("revived")),
+        })
 
     membership = (
         db.query(CampaignMembership)
@@ -57352,6 +57374,7 @@ async def use_rallying_cry(
             "max_allies": 3,
             "range_ft": 60,
             "fighter_level": fighter_lv,
+            "allies_healed": len([h for h in healed if h.get("applied", 0) > 0]),
         },
     })
 
@@ -57362,6 +57385,7 @@ async def use_rallying_cry(
         "max_allies": 3,
         "range_ft": 60,
         "fighter_level": fighter_lv,
+        "healed": healed,
     }
 
 

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.454] - 2026-06-06 — "The Banner Raised" — Rallying Cry heals allies (automation buff/heal tail)
+
+**Schema version:** 66
+**Commit summary:** **Rallying Cry (Banneret/Purple Dragon Knight Fighter Lv 3) now heals the supplied allies by fighter level via `_apply_heal_to_combatant` (up to 3), instead of announcing a "heal them yourself" card.** First buff/temp-HP-tail burn-down.
+**Description:** `/use_rallying_cry` gains `target_combatant_ids`. Each supplied ally (capped at 3) is healed by the fighter's level through `_apply_heal_to_combatant` — PCs route through the death-save state machine (a dying ally revives), NPCs get a direct hub-HP bump, both capped at max HP. The "within 60 ft / can see or hear / allied" gate stays GM-tracked (the caller picks the targets); unknown ids yield a per-result `not_in_battle` error. Response gains a `healed` array (`combatant_id` / `name` / `applied` / `revived`).
+
+### Changed
+- `/api/campaign/{cid}/use_rallying_cry` heals the supplied allies (was announce-only); response gains `healed`.
+- `docs/automation-coverage.md` refreshed: `use_rallying_cry` flips to tracked (**183 tracked / 54 announce-only of 239** now); the classifier gained `_apply_heal_to_combatant` as a heal marker.
+
+### Added
+- `tests/harness/test_rallying_cry.py` gains 2 tests: two damaged allies (10/30) each regain 9 (`applied == 9`), and the 3-ally cap (4 ids → 3 healed).
+
+### Notes
+- First retrofit off the buff/temp-HP backlog tail. Same heal shape would automate other "heal N allies" features.
+- **Total harness count: 1914** (was 1912 in v2.99.453; +2 new tests).
+
+---
+
 ## [2.99.453] - 2026-06-06 — "The Road Ahead" — automation backlog captured in TODO (docs)
 
 **Schema version:** 66
