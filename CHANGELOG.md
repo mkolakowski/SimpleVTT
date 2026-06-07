@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.451] - 2026-06-06 — "The Second Arrow" — Horde Breaker resolves a real extra attack (automation Phase 2 follow-up)
+
+**Schema version:** 66
+**Commit summary:** **Horde Breaker (Hunter Ranger Lv 3) now resolves its bonus weapon attack server-side — rolls vs the second target's AC and applies damage on a hit, once per turn — instead of announcing a "roll it yourself" card.** First server-resolved extra-attack retrofit.
+**Description:** `/use_horde_breaker` gains `attack_index` + `target_combatant_id`. When a target is supplied, it resolves the Horde Breaker bonus attack against that creature: parses the weapon from `sheet.attacks[attack_index]`, rolls `1d20 + attack_bonus` vs `_read_target_ac` (nat 20 crit / nat 1 miss), and on a hit rolls the weapon damage (doubled dice on a crit) and applies it via `_apply_damage_to_combatant`. A once-per-turn gate via the attacker's `economy.horde_breaker_used` flag (set with `_mark_attack_flag`, cleared on turn advance) returns 409 `already_used` on a second use the same turn. The legacy announce path (`target_name` only, no `target_combatant_id`) is unchanged. RAW "within 5 ft of the original target" stays GM-tracked.
+
+### Changed
+- `/api/campaign/{cid}/use_horde_breaker` resolves a real second attack when given a target (was announce-only); response gains `attacked` / `hit` / `crit` / `attack_total` / `target_ac` / `damage_rolled` / `damage_applied` / `damage_type`.
+- `docs/automation-coverage.md` refreshed: `use_horde_breaker` flips to tracked (**181 tracked / 56 announce-only of 239** now).
+
+### Added
+- `tests/harness/test_hunters_prey_picker.py` gains 3 tests: the second attack lands damage (loop-until-hit), the once-per-turn 409, and a 404 for an unknown target.
+
+### Notes
+- First server-resolved extra-attack retrofit. Same shape would automate Dread Ambusher's bonus attack. v1 doesn't re-apply on-hit riders to the bonus attack (a follow-up).
+- **Total harness count: 1910** (was 1907 in v2.99.450; +3 new tests).
+
+---
+
 ## [2.99.450] - 2026-06-06 — "The Vessel's Element" — Genie's Wrath on-hit rider (automation Phase 2 follow-up)
 
 **Schema version:** 66

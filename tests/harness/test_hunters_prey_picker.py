@@ -173,3 +173,99 @@ async def test_use_horde_breaker_happy_path(
     assert feats
     feat_data = feats[-1].get("data") or {}
     assert "Goblin #2" in (feat_data.get("feature_name") or "")
+
+
+def _mkc(cid, char_id, name="C", hp=30):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": hp, "hp_max": hp, "buffs": [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def test_horde_breaker_resolves_second_attack(
+    gm_client, rowan_clean_pick,
+):
+    """v2.99.451 — Phase 2 extra-attack retrofit: with a
+    target_combatant_id, Horde Breaker resolves the bonus Longbow attack
+    server-side (roll vs AC, apply damage on a hit). Loop re-seeding the
+    battle (which clears the once-per-turn flag) until a swing connects.
+    """
+    rowan = rowan_clean_pick
+    await _patch_sheet(gm_client, rowan["id"], {"hunters_prey": "horde-breaker"})
+    rowan_cid = f"tok_hb_rowan_{rowan['id']}"
+    dummy_cid = "tok_hb_dummy"
+
+    hit_data = None
+    for _ in range(12):
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": [
+                _mkc(rowan_cid, rowan["id"], name=rowan["name"]),
+                _mkc(dummy_cid, None, name="Dummy"),
+            ], "turn_index": 0, "round": 1, "active": True},
+        )
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_horde_breaker",
+            json={"character_id": rowan["id"], "attack_index": 0,
+                  "target_combatant_id": dummy_cid},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["attacked"] is True
+        assert data["target_ac"] > 0
+        if data["hit"]:
+            assert data["damage_type"] == "piercing"
+            assert data["damage_rolled"] > 0  # 1d8+4
+            assert data["damage_applied"] > 0
+            hit_data = data
+            break
+    assert hit_data is not None, "no hit in 12 Horde Breaker swings"
+
+
+async def test_horde_breaker_once_per_turn(
+    gm_client, rowan_clean_pick,
+):
+    """The second Horde Breaker attack in the same turn → 409
+    already_used (the once-per-turn economy flag)."""
+    rowan = rowan_clean_pick
+    await _patch_sheet(gm_client, rowan["id"], {"hunters_prey": "horde-breaker"})
+    rowan_cid = f"tok_hb2_rowan_{rowan['id']}"
+    dummy_cid = "tok_hb2_dummy"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _mkc(rowan_cid, rowan["id"], name=rowan["name"]),
+            _mkc(dummy_cid, None, name="Dummy"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r1 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_horde_breaker",
+        json={"character_id": rowan["id"], "attack_index": 0,
+              "target_combatant_id": dummy_cid},
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["attacked"] is True
+    # Second use this turn → blocked.
+    r2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_horde_breaker",
+        json={"character_id": rowan["id"], "attack_index": 0,
+              "target_combatant_id": dummy_cid},
+    )
+    assert r2.status_code == 409, r2.text
+    assert r2.json()["error"] == "already_used"
+
+
+async def test_horde_breaker_target_not_in_battle_404(
+    gm_client, rowan_clean_pick,
+):
+    """A target_combatant_id not in battle → 404."""
+    rowan = rowan_clean_pick
+    await _patch_sheet(gm_client, rowan["id"], {"hunters_prey": "horde-breaker"})
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_horde_breaker",
+        json={"character_id": rowan["id"], "attack_index": 0,
+              "target_combatant_id": "nope_not_in_battle"},
+    )
+    assert r.status_code == 404, r.text

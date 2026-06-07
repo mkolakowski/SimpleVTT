@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.450
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.451
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -22,12 +22,12 @@ after a batch of retrofits and update the counts below. Treat the split as
 (archetype J — passive senses, language grants), and a few `tracked`-tagged ones
 only spend a resource without a downstream effect.
 
-## Summary (as of v2.99.450)
+## Summary (as of v2.99.451)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **180** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **57** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **181** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **56** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -72,8 +72,8 @@ or passive damage-boosters that already ride other code paths
 - **Auras (E):** `aura_of_warding`, `ancestral_protectors`,
   `unwavering_mark`, `scornful_rebuke` — fold into `_tick_auras`
   (`aura_of_conquest` ✅ v2.99.448 condition gate; `aura_of_alacrity` ✅ v2.99.449 buff-payload).
-- **On-hit / extra-attack:** `horde_breaker`,
-  `dread_ambusher` (extra attack), `assassinate` (auto-crit rider). (`genies_wrath` ✅ v2.99.450 once-per-turn flat rider.)
+- **On-hit / extra-attack:**
+  `dread_ambusher` (extra attack), `assassinate` (auto-crit rider). (`genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 server-resolved second attack.)
 - **Buff / temp-HP (D/F):** `combat_inspiration`, `rallying_cry`,
   `blade_flourish`, `protective_spirit`, `grim_harvest`, `supreme_healing`.
 - **Movement (G):** `ascendant_step` (fly), `stormborn` (fly),
@@ -170,6 +170,7 @@ or passive damage-boosters that already ride other code paths
 | `use_hexblades_curse` | ✅ tracked | D buff-install |
 | `use_hide_in_plain_sight` | ✅ tracked | D buff-install |
 | `use_holy_nimbus` | ✅ tracked | D buff-install |
+| `use_horde_breaker` | ✅ tracked | damage |
 | `use_hypnotic_gaze` | ✅ tracked | C save-or-condition |
 | `use_improved_war_magic` | ✅ tracked | A use/resource |
 | `use_indomitable` | ✅ tracked | D buff-install |
@@ -290,7 +291,6 @@ or passive damage-boosters that already ride other code paths
 | `use_foe_slayer` | ⚪ announce-only | — |
 | `use_form_of_the_beast` | ⚪ announce-only | — |
 | `use_grim_harvest` | ⚪ announce-only | — |
-| `use_horde_breaker` | ⚪ announce-only | — |
 | `use_improved_duplicity` | ⚪ announce-only | — |
 | `use_improved_minor_illusion` | ⚪ announce-only | — |
 | `use_improved_reaper` | ⚪ announce-only | — |
