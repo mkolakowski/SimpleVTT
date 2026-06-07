@@ -342,3 +342,43 @@ async def test_npc_attack_player_forbidden(alice_client, gm_client, roster):
         },
     )
     assert resp.status_code == 403
+
+
+async def test_npc_cast_spell_save_action_applies_damage(
+    gm_client, auto_apply_on,
+):
+    """v2.99.467 — save-only NPC actions (breath weapons) resolve through
+    /npc_cast_spell: the server rolls the NPC target's save + applies
+    save-for-half damage. This is the endpoint the v2.99.467 save-strike
+    routing now drives. Deterministic: a 4d6 save spell always lands at
+    least half on a save (≥ 2), so damage_applied > 0 regardless of the
+    save roll.
+    """
+    caster_cid = "npc_breath_caster"
+    target_cid = "npc_breath_target"
+    await _seed_battle(gm_client, [
+        _mkc(caster_cid, hp_cur=60, hp_max=60, name="Behir", template_id=1),
+        _mkc(target_cid, hp_cur=40, hp_max=40, name="Victim", template_id=1),
+    ])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/npc_cast_spell",
+        json={
+            "combatant_id": caster_cid,
+            "spell_name": "Lightning Breath",
+            "spell_level": 0,
+            "save_ability": "DEX",
+            "save_dc": 16,
+            "damage": "4d6",
+            "damage_type": "lightning",
+            "attack_roll": False,
+            "target_combatant_id": target_cid,
+        },
+    )
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["is_save"] is True
+    assert d["auto_save_target_kind"] == "npc"
+    assert d["auto_save_rolled"] is not None
+    assert d["auto_save_passed"] is not None
+    # Save-for-half: full on a fail, half on a pass — always ≥ 1 of 4d6.
+    assert d["auto_save_damage_applied"] > 0

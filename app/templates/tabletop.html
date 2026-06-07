@@ -8030,7 +8030,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 ? (battle.combatants || [])[_attackerIdx] : null;
             const _attackerCombId = _attackerComb && _attackerComb.id
                 ? _attackerComb.id : '';
-            if (kind === 'attack' && typeof window.vttOpenMultiTargetPicker === 'function') {
+            // v2.99.467 — also open the picker for save-DC actions
+            // (breath weapons etc.) so they can route to /npc_cast_spell
+            // with a target, mirroring the attack-roll flow.
+            const _saveResolvable = (kind === 'save'
+                && action.save_ability && action.save_dc && action.damage);
+            if ((kind === 'attack' || _saveResolvable)
+                    && typeof window.vttOpenMultiTargetPicker === 'function') {
                 // Skip the picker if a target is already pre-selected
                 // via canvas double-click (same convention as the PC
                 // .mini-strike-btn path at line ~4438).
@@ -8131,6 +8137,35 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     // weapon_attack chat card; no extra /roll needed.
                     // Fall through to the per-combatant charge +
                     // economy block below.
+                } else if (_saveResolvable && _attackerCombId && _pickerTargetCombatantId) {
+                    // v2.99.467 — route save-DC NPC actions (breath
+                    // weapons etc.) through /npc_cast_spell, which rolls
+                    // the target's save server-side + applies save-for-
+                    // half damage (NPC target) or prompts a roll_request
+                    // (PC target). Was announce-only (a d0 /roll). The
+                    // save_dc data was backfilled in v2.99.466.
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/npc_cast_spell`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            combatant_id: _attackerCombId,
+                            spell_name: action.name || 'Save Action',
+                            spell_level: 0,
+                            spell_range: action.range || '',
+                            save_ability: action.save_ability || '',
+                            save_dc: action.save_dc || 0,
+                            damage: action.damage || '',
+                            damage_type: action.damage_type || '',
+                            target_combatant_id: _pickerTargetCombatantId,
+                        }),
+                    });
+                    if (!resp.ok) {
+                        const txt = await resp.text();
+                        (window.showToast || alert)(`NPC save action failed: ${txt}`, 'error');
+                        return;
+                    }
+                    // /npc_cast_spell broadcasts the spell_cast chat card;
+                    // fall through to the charge/economy block below.
                 } else {
                     let expression = '';
                     let note = '';

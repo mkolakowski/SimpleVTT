@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.467] - 2026-06-07 — "Breathe Fire" — save-only NPC actions route to /npc_cast_spell (save-only NPC actions, part 2)
+
+**Schema version:** 66
+**Commit summary:** **The GM init-tracker NPC strike button now routes save-DC actions (breath weapons, etc.) through `/npc_cast_spell` — which rolls each target's save server-side + applies save-for-half damage — instead of announcing a bare DC via a `d0` `/roll`.** Completes the "save-only NPC actions" follow-up.
+**Description:** With the `save_dc` data backfilled (v2.99.466) and `/npc_cast_spell`'s save auto-resolution already in place (v2.49.216/.217 — the docstring's "filed for follow-up" was stale), the only missing link was the client. The init-list strike handler's `kind === 'save'` branch was announce-only (rolled `d0` to show the DC). It now opens the target picker for save-DC actions and POSTs to `/npc_cast_spell` (with `save_ability` / `save_dc` / `damage` / `damage_type` / target) when the action is save-resolvable — so the server rolls the NPC target's save (or prompts a PC target's roll_request) and applies the damage, matching the PC AoE-save flow.
+
+### Changed
+- `app/templates/tabletop.html` — the init-tracker NPC strike handler routes save-DC actions to `/npc_cast_spell` (was a `d0` announce); the target picker now opens for save actions too.
+
+### Added
+- `tests/harness/test_npc_attack.py::test_npc_cast_spell_save_action_applies_damage` — an NPC fires a 4d6 DEX-save action at an NPC target (auto-apply on) → `auto_save_target_kind == "npc"`, the save resolves, and `auto_save_damage_applied > 0` (save-for-half always lands ≥ half). Verifies the endpoint contract the new routing drives.
+
+### Notes
+- Completes "save-only NPC actions" (data v2.99.466 + this routing). The button click itself isn't harness-testable (no browser), but the `/npc_cast_spell` save+damage contract it triggers is covered. Single-target via the picker for v1; the same handler can pass `aoe_target_combatant_ids` for true AoE breath weapons as a follow-up. The unified mini-sheet's NPC path (`.mini-strike-btn`, separate handler) could get the same save routing if it surfaces save actions — filed.
+- **Total harness count: 1932** (was 1931 in v2.99.466; +1 new test).
+
+---
+
 ## [2.99.466] - 2026-06-07 — "By the Numbers" — monster save-DC backfill (save-only NPC actions, part 1)
 
 **Schema version:** 66
