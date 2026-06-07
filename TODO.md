@@ -125,8 +125,9 @@ Two additional buttons use slightly different padding and may need individual re
     - button to only be visible to GM and PC owner
     - Add confirmation to confirm usage
     - Should "grey out" if the PC/NPC does not have use of the feature and should not be visible if no features available
-- 🟡 **P2** — when roll log is on left, do not make disappear when gm requests roll and gm rolls for player
+- ✅ **LIKELY FIXED (v2.99.71) — verify in browser** — when roll log is on left, do not make disappear when gm requests roll and gm rolls for player
     - example: GM uses gm roller to push a INT Save with the DC of 20 for both demo characters, GM rolls as Pip, roll log collapses after the roll animation completes
+    - **Investigation (v2.99.470):** traced end-to-end and found no remaining collapse path. When the GM rolls as Pip, `/roll_request/{id}/respond` broadcasts the `roll` with `user_id = GM` (the actor), so the client's `_focusRollLogIfLocal(GM)` calls `openPanel('roll-log-drawer', {auto: true})` → the `_auto && already-open` branch returns early (no-op). The only code that removes `.open` from a left panel is `openPanel`'s toggle-close branch, gated by `!_auto`; `roll_toast.js` does nothing to the drawer. This is exactly the class of bug v2.99.71 fixed (the pre-v2.99.71 non-`auto` `openPanel` collapsed an already-open left log on auto-focus). The reported repro predates that fix. **Action:** confirm in a live browser; reopen with a precise repro if it still collapses.
 - 🟡 **P2** — GM does not get movement popup when moving tokens past range
 - 🟡 **P2** — AoE updates
     - AoE spells that are concentration or have a duration, place a visual indicator of the spell

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.470] - 2026-06-07 — "Already Standing" — roll-log-collapse P2 traced to already-fixed (docs)
+
+**Schema version:** 66
+**Commit summary:** **Investigated the P2 "roll log on left collapses when the GM rolls for a player" and found no remaining collapse path — it's covered by the v2.99.71 `auto:true` guard. Updated TODO with the trace + a verify-in-browser note.**
+**Description:** Traced the GM-rolls-as-Pip flow end-to-end: `/roll_request/{id}/respond` broadcasts the `roll` with `user_id = GM` (the actor), so the client's `_focusRollLogIfLocal(GM)` calls `openPanel('roll-log-drawer', {auto: true})` — whose `_auto && already-open` early-return makes it a no-op on an open left-docked log. The only `.open`-removal on a left panel is `openPanel`'s toggle-close branch (gated by `!_auto`), and `roll_toast.js` does nothing to the drawer. So no code path collapses the left log on a roll; the reported repro predates v2.99.71's fix. Marked the TODO item likely-fixed pending a live-browser confirmation.
+
+### Changed
+- `TODO.md` — the roll-log-collapse P2 marked likely-fixed (v2.99.71) with the full trace + a verify-in-browser action (the doc is already surfaced via `/wiki/doc/todo`).
+
+### Notes
+- Doc-only commit (no endpoint / no test). No code change because the bug's only known trigger is already guarded; shipping a speculative no-op "fix" would be wrong. If it still reproduces live, reopen with a precise repro for a browser-driven dig.
+- **Total harness count: 1937** (unchanged — doc-only).
+
+---
+
 ## [2.99.469] - 2026-06-07 — "Imported, Not Broken" — parse combat fields for Open5e monsters
 
 **Schema version:** 66
