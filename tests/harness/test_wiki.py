@@ -38,6 +38,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-player-simulacrum" in resp.text
     # v2.49.103: spell-validation suite plan listed too.
     assert "/wiki/doc/plan-spell-validation-suite" in resp.text
+    # v2.107.2: spell up-casting plan listed too.
+    assert "/wiki/doc/plan-spell-upcasting" in resp.text
     # v2.49.118: Sorcery Points + Metamagic plan listed too.
     assert "/wiki/doc/plan-sorcery-points-and-metamagic" in resp.text
     # v2.49.119: Warlock Pact Boon plan listed too.
@@ -210,6 +212,19 @@ async def test_wiki_doc_serves_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     # The test-harness plan's H1 is "Autonomous click-through test harness — plan"
     assert "click-through" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_spell_upcasting_plan():
+    """v2.107.2: GET /wiki/doc/plan-spell-upcasting — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/spell-upcasting.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-spell-upcasting")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "up-casting" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

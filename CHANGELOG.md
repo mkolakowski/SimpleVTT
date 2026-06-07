@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.107.2] - 2026-06-07 — "Slot Machine" — spell up-casting design plan
+
+**Schema version:** 68
+**Commit summary:** **Adds the [`docs/plans/spell-upcasting.md`](docs/plans/spell-upcasting.md) design doc — an audit of how up-casting works today plus three distinct ways to let users up-cast a spell — and surfaces it through the wiki (allowlist + landing-page tables + per-slug smoke test). Design only; no behavior change.**
+**Description:** Closes the planning half of the [TODO](TODO.md) "plan three ways that we can allow users to up-cast spells" item. The audit's pivotal finding: `POST /cast_spell` **already accepts `slot_level`** and the *count*-scaling fields (`extra_targets_per_slot_above_base` / `extra_beams_per_slot_above_base`, e.g. Magic Missile / Scorching Ray) are wired — but there's **no slot-picker in the UI** and **dice up-scaling (Fireball +1d6/slot, Cure Wounds +1d8/slot) isn't automated** (the `upcast[]` array is empty on every SRD spell; the rule lives only in free-text `higher_level`). The doc buckets every up-castable spell (+targets / +damage dice / +healing dice / +duration-area / no-effect) and proposes three approaches: **(A)** a UI slot-picker over the existing `slot_level` plumbing (unlocks count-scaling + correct slot consumption immediately); **(B)** structured `*_per_slot` scaling data + a generic resolver (automates the +dice buckets, needs an SRD backfill); **(C)** a GM-adjudicated free-text fallback (surface `higher_level`, consume the slot, human applies the bonus — universal coverage). Recommended rollout: A + C together for a complete day-one experience, then B incrementally for the common +dice spells.
+
+### Added
+- `docs/plans/spell-upcasting.md` — the design plan + up-cast audit.
+- `app/routes/wiki_routes.py` — `plan-spell-upcasting` allowlist entry.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — "Design plans" table rows.
+- `tests/harness/test_wiki.py` — `test_wiki_doc_serves_spell_upcasting_plan` smoke test + the slug added to `test_wiki_home_renders`'s landing-page assertions.
+
+### Notes
+- Design-only commit; the only code is the wiki allowlist row + its smoke tests (per the "every doc surfaced through the wiki" rule). No casting behavior changed.
+- **Total harness count: 1959** in `tests/harness/` (1957 → 1959); **`tests/harness_ui/` 18** (unchanged).
+
+---
+
 ## [2.107.1] - 2026-06-07 — "Filed Away" — mark the reroll-framework TODO complete
 
 **Schema version:** 68
