@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.108.0] - 2026-06-07 — "Cast It Higher" — up-cast slot picker (Approach A + C)
+
+**Schema version:** 68
+**Commit summary:** **Implements the [spell-upcasting plan](docs/plans/spell-upcasting.md)'s recommended day-one slice on the character sheet: clicking Cast on a leveled spell now opens a slot-level picker (when a higher slot is free) showing the available levels + the spell's "at higher levels" rule text. The chosen slot rides the existing `slot_level` plumbing — count-scaling (extra Magic Missile darts / Scorching Ray beams) works end-to-end and the right slot is consumed. The `spell_cast` broadcast gains `spell_higher_level` so the rule text is available downstream.**
+**Description:** Approach A (UI slot-picker) + Approach C (show the up-cast rule) from the plan. The full character sheet's `.sp-cast` handler now, for a leveled spell, scans the `.ss-row` slot pips for the caster's class and — if a slot **above** the base level is free — opens `_promptUpcastLevel`, a glass-card modal listing each available level ("Lvl 1 (3)", "Lvl 2 (3)", …, base pre-highlighted) plus the spell's `higher_level` text (fetched via the cached `_fetchSpellDetail` when not already on the spell object). The chosen level is assigned to the existing `lvl` variable, so the optimistic slot decrement, the `slot_level` sent to `/cast_spell`, and the already-wired count-scaling all use it. One free slot (base only) skips the prompt; Cancel/Escape aborts the cast cleanly. Server-side, the only change is echoing `spell_higher_level` on the `spell_cast` broadcast (`slot_level` was already there since up-cast plumbing predates this) so the picker + future chat-card rendering can read the rule text.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `_promptUpcastLevel` slot-picker modal; the `.sp-cast` handler prompts for the slot level (when an up-cast slot is free) before casting and shows the `higher_level` rule.
+- `app/routes/tabletop_routes.py` — `spell_higher_level` on the `spell_cast` broadcast.
+- `tests/harness/test_cast_spell.py` — `test_upcast_echoes_slot_level_and_higher_level` (cast Magic Missile with an L2 slot → broadcast echoes `slot_level=2` + the `spell_higher_level` key).
+- `tests/harness_ui/test_upcast_picker_ui.py` — Playwright: the sheet's Cast button opens the picker with L1 + L2 options + the "At higher levels" text; choosing L2 casts cleanly with no console errors.
+
+### Changed
+- `docs/plans/spell-upcasting.md` + the wiki "Design plans" status rows — Approach A + C marked shipped (v2.108.0); B still proposed.
+
+### Notes
+- Scoped to the **full character sheet** cast surface (the primary player cast UI). The tabletop init-tracker mini-sheet cast path shares the same `slot_level` server plumbing but keeps its base-level cast for now — its picker is filed as a follow-up (the mini-sheet handler is the more delicate of the two).
+- Approach B (auto-scaling +dice for Fireball / Cure Wounds via structured `*_per_slot` data) remains the next phase; until then up-cast +dice spells consume the right slot and show the rule for manual application (Approach C).
+- **Total harness count: 1960** in `tests/harness/` (1959 → 1960); **`tests/harness_ui/` 18 → 19**.
+
+---
+
 ## [2.107.2] - 2026-06-07 — "Slot Machine" — spell up-casting design plan
 
 **Schema version:** 68

@@ -16,9 +16,9 @@ distinct ways** to let users up-cast, with a recommended phased rollout.
 | Phase | Subject | Status | Lands in |
 |-------|---------|--------|----------|
 | Audit | How up-casting works today | ✅ documented (this doc) | — |
-| A | UI slot-picker over the existing `slot_level` plumbing | ⚪ design only | TBD |
+| A | UI slot-picker over the existing `slot_level` plumbing | ✅ shipped (full sheet) · mini-sheet filed | v2.108.0 |
 | B | Structured `upcast` scaling data + a generic resolver | ⚪ design only | TBD |
-| C | GM-adjudicated free-text up-cast (always-available fallback) | ⚪ design only | TBD |
+| C | GM-adjudicated free-text up-cast (always-available fallback) | ✅ shipped (rule text in picker + broadcast) | v2.108.0 |
 
 ## What already works today (the audit)
 

@@ -46,6 +46,34 @@ async def test_cast_magic_missile(gm_client, gm_ws, roster):
     assert msg["data"]["spell_casting_time"] == "1 action"
 
 
+async def test_upcast_echoes_slot_level_and_higher_level(gm_client, gm_ws, roster):
+    """v2.108.0 — casting Magic Missile with an L2 slot (up-cast) echoes
+    slot_level=2 alongside spell_level=1 on the spell_cast broadcast,
+    plus the spell_higher_level key the slot-picker + cast card read
+    (Approach A slot plumbing + Approach C rule text)."""
+    thalindra = roster["Thalindra Moonwhisper"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": thalindra["id"],
+            "spell_index": 3,   # Magic Missile (L1)
+            "slot_level": 2,    # up-cast with an L2 slot
+            "class_slug": "wizard",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slot"]["level"] == 2, "the L2 slot should be spent"
+    msg = await gm_ws.wait_for("spell_cast")
+    d = msg["data"]
+    assert d["spell_name"] == "Magic Missile"
+    assert d["spell_level"] == 1
+    assert d["slot_level"] == 2, "broadcast must echo the up-cast slot level"
+    # Approach C: the up-cast rule text key is always present (may be
+    # empty if the stored spell carries no higher_level text).
+    assert "spell_higher_level" in d, "broadcast must carry spell_higher_level"
+
+
 async def test_cast_misty_step_bonus_action(gm_client, gm_ws, roster):
     thalindra = roster["Thalindra Moonwhisper"]
     resp = await gm_client.post(

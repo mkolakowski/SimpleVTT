@@ -16500,6 +16500,15 @@ async def cast_spell(
         "spell_aoe_targets": max(1, int(spell.get("aoe_targets") or 1)),
         "spell_attack_roll": bool(spell.get("attack_roll")),
         "spell_desc": spell.get("desc", "") or spell.get("description", ""),
+        # v2.108.0 — up-cast (Approach C). Echo the spell's "at higher
+        # levels" rule text so the cast card / slot-picker can show what
+        # casting above base level does. Top-level field (legacy shape)
+        # or the first action's higher_level (SRD action_schema shape).
+        "spell_higher_level": spell.get("higher_level", "") or next(
+            (a.get("higher_level") for a in (spell.get("actions") or [])
+             if a.get("higher_level")),
+            "",
+        ),
         # Structured action descriptors — present when the spell came from the
         # file-based local_content tier with an `actions: list[Action]` array.
         # Client's renderActionButtons consumes this directly; if empty the

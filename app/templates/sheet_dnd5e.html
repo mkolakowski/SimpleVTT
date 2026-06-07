@@ -2650,6 +2650,76 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         try { return localStorage.getItem(HIDE_UNPREP_KEY) === '1'; } catch { return false; }
     })();
 
+    // v2.108.0 — up-cast slot picker modal (Approach A + C). Resolves
+    // to the chosen slot level, or null on cancel. ``options`` is
+    // [{level, remaining}] (base level first); ``higherLevelText`` is
+    // the spell's "at higher levels" rule, shown so the player knows
+    // what up-casting does (Approach C).
+    function _promptUpcastLevel({ spellName, baseLevel, options, higherLevelText }) {
+        return new Promise((resolve) => {
+            const backdrop = document.createElement('div');
+            backdrop.setAttribute('style', [
+                'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.45)',
+                'z-index:2147483600', 'display:flex', 'align-items:center',
+                'justify-content:center', 'padding:16px',
+            ].join(';'));
+            backdrop.setAttribute('role', 'dialog');
+            backdrop.setAttribute('aria-label', 'Choose spell slot level');
+            const card = document.createElement('div');
+            card.setAttribute('style', [
+                'background:#1f2433',
+                'background:color-mix(in srgb, var(--bg, #1f2433) 92%, transparent)',
+                'border:1px solid var(--border, rgba(255,255,255,0.18))',
+                'border-left:4px solid #b9a3fb', 'border-radius:10px',
+                'padding:18px 20px', 'color:var(--fg, #fff)', 'font-size:13px',
+                'max-width:440px', 'width:100%',
+                'box-shadow:0 10px 36px rgba(0,0,0,0.55)',
+            ].join(';'));
+            const header = document.createElement('div');
+            header.style.cssText = 'font-size:14px; font-weight:600; margin-bottom:6px;';
+            header.textContent = `✨ Cast ${spellName} — choose slot`;
+            card.appendChild(header);
+            const sub = document.createElement('p');
+            sub.style.cssText = 'margin:0 0 10px 0; font-size:12px; opacity:0.85; line-height:1.4;';
+            sub.textContent = `Base level ${baseLevel}. Casting with a higher slot uses it up.`;
+            card.appendChild(sub);
+            if (higherLevelText) {
+                const hl = document.createElement('p');
+                hl.style.cssText = 'margin:0 0 12px 0; font-size:12px; line-height:1.4; padding:8px 10px; border-radius:6px; background:rgba(185,163,251,0.12); border:1px solid rgba(185,163,251,0.3);';
+                hl.textContent = `At higher levels: ${higherLevelText}`;
+                card.appendChild(hl);
+            }
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;';
+            function _close(val) { backdrop.remove(); document.removeEventListener('keydown', _onKey); resolve(val); }
+            (options || []).forEach((o) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = `Lvl ${o.level} (${o.remaining})`;
+                b.setAttribute('style', [
+                    'min-height:44px', 'padding:6px 14px', 'border-radius:6px',
+                    'cursor:pointer', 'font-size:13px', 'font-weight:600',
+                    'border:1px solid', (o.level === baseLevel ? '#b9a3fb' : 'var(--border, rgba(255,255,255,0.22))'),
+                    (o.level === baseLevel ? 'background:#b9a3fb;color:#1f2433' : 'background:rgba(255,255,255,0.04);color:var(--fg)'),
+                ].join(';'));
+                b.addEventListener('click', (ev) => { ev.preventDefault(); _close(o.level); });
+                row.appendChild(b);
+            });
+            card.appendChild(row);
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.textContent = '✋ Cancel';
+            cancel.setAttribute('style', 'min-height:44px;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid var(--border, rgba(255,255,255,0.22));background:transparent;color:var(--fg);');
+            cancel.addEventListener('click', (ev) => { ev.preventDefault(); _close(null); });
+            card.appendChild(cancel);
+            backdrop.addEventListener('click', (ev) => { if (ev.target === backdrop) _close(null); });
+            function _onKey(ev) { if (ev.key === 'Escape') { ev.preventDefault(); _close(null); } }
+            document.addEventListener('keydown', _onKey);
+            backdrop.appendChild(card);
+            document.body.appendChild(backdrop);
+        });
+    }
+
     function renderSpells() {
         if (!container) return;
 
@@ -2864,8 +2934,43 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const idx = parseInt(btn.dataset.idx, 10);
                 const s = spells[idx];
                 if (!s) return;
-                const lvl = parseInt(s.level, 10) || 0;
+                let lvl = parseInt(s.level, 10) || 0;
                 const spellClass = (s.class || _classVal() || '').toLowerCase();
+
+                // v2.108.0 — up-cast slot picker (Approach A + C). For a
+                // leveled spell, if the caster has a higher-level slot
+                // free, let them choose which slot to cast with. Reads
+                // the .ss-row slot pips for availability; the chosen
+                // level rides the existing slot_level plumbing (count
+                // scaling — extra darts/beams — already keys off it).
+                // The picker also shows the spell's "at higher levels"
+                // rule text (Approach C) so the player knows the effect.
+                if (lvl >= 1 && typeof _promptUpcastLevel === 'function') {
+                    const _opts = [];
+                    for (let L = lvl; L <= 9; L++) {
+                        const _row = spellClass
+                            ? document.querySelector(`.ss-row[data-cslug="${CSS.escape(spellClass)}"][data-lvl="${L}"]`)
+                            : document.querySelector(`.ss-row[data-lvl="${L}"]`);
+                        if (!_row) continue;
+                        const _total = parseInt(_row.dataset.total) || 0;
+                        const _used = parseInt(_row.dataset.used) || 0;
+                        if (_total - _used > 0) _opts.push({ level: L, remaining: _total - _used });
+                    }
+                    // Prompt only when there's a real choice (a free slot
+                    // ABOVE the base level). One option → cast as-is.
+                    if (_opts.length > 1) {
+                        let _higher = s.higher_level || '';
+                        if (!_higher) {
+                            try { const _d = await _fetchSpellDetail(s.name); _higher = (_d && _d.higher_level) || ''; } catch (_) {}
+                        }
+                        const _chosen = await _promptUpcastLevel({
+                            spellName: s.name || 'Spell', baseLevel: lvl,
+                            options: _opts, higherLevelText: _higher,
+                        });
+                        if (_chosen === null) return;  // cancelled
+                        lvl = _chosen;
+                    }
+                }
 
                 // Optimistically decrement the matching (class, level) slot pip
                 let slotRow = null, prevUsed = 0;
