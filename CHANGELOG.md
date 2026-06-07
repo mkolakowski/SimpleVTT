@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.100.6] - 2026-06-07 — "Rehydrated" — GM load re-seeds the in-memory hub battle
+
+**Schema version:** 66
+**Commit summary:** **The GM client now pushes its localStorage battle to the server hub once on page load. The hub's battle state is in-memory only, so after an app restart / demo reset it was empty until the GM next mutated the battle — silently disabling every server-side battle read (OA detection, the over-speed gate, reaction routing). Symptom: moving an NPC past a user-assigned PC fired no opportunity attack.**
+**Description:** Reported as "presence-aware OA logic not working — moved an NPC away from a user-assigned PC and the GM didn't get prompted to roll an OA." Diagnosed end-to-end: OA detection (`_check_opportunity_attack_triggers`) and presence-aware routing (`_resolve_watcher_user_ids`: owner-present → player, owner-absent → GM) both work correctly — but they read the in-memory hub battle (`realtime.Hub._battle`), which is never persisted to the DB. After any app restart or the hourly demo reset the hub is empty; the GM's browser still renders the init tracker from `localStorage`, but the server believes no battle exists, so `preview_move` / `move` find zero watchers and no OA fires (likewise the over-speed gate and reaction-prompt routing all no-op). Every `pushBattle()` call site was inside an event handler, so the hub stayed empty until the GM's first battle mutation. The fix adds a single hydrate-on-load: when the GM page boots with an active battle in `localStorage`, it pushes that authoritative state to the hub immediately. No-op for players (pushBattle gates on `IS_GM`) and when no battle is active.
+
+### Fixed
+- `app/templates/tabletop.html` — GM hydrates the hub battle from `localStorage` on load, so server-side battle reads work after a restart/reset without waiting for the first GM mutation.
+
+### Added
+- `tests/harness_ui/test_battle_hub_hydration.py` — empties the hub, loads the GM page with a `localStorage` battle, and asserts the OA preview (which reads the hub) surfaces the seeded PC watcher — proving the page load alone re-hydrated the hub.
+
+### Notes
+- Client-only behavior change calling the existing `PUT /battle` — no new endpoint or WS shape, so no `tests/harness/` test; covered by the new Playwright UI test (the `harness-ui` CI job runs it).
+- Explains the recurring "OA didn't fire" reports during this session: the repeated container rebuilds each cleared the in-memory hub.
+- **Total harness count: 1942** in `tests/harness/` (unchanged); **`tests/harness_ui/` 15 → 16**.
+
+---
+
 ## [2.100.5] - 2026-06-07 — "Proof in the Pixels" — Playwright coverage for the movement modals
 
 **Schema version:** 66
