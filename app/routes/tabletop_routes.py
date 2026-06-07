@@ -63769,8 +63769,13 @@ async def use_primeval_awareness(
         },
     })
 
+    # v2.99.464 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, "ranger", slot_level, used,
+        "Primeval Awareness")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "duration_min": duration_min,
         "creature_types": creature_types,
@@ -71211,6 +71216,7 @@ async def use_attack(
         sheet["spell_slots"] = all_slots
         slot_spent_class = cslug
         slot_spent_level = slot_level
+        _slot_spent_used_before = used  # v2.99.464 — for undo refund
 
     if bonus_damage_expr:
         # v2.24.0 Phase T.2: crit also doubles player-picked uplift
@@ -71248,6 +71254,20 @@ async def use_attack(
     # hit determination here — they're handled by T.3's save-spell
     # path (server rolls / prompts the target's save).
     attack_id = uuid.uuid4().hex[:12]
+    # v2.99.464 — log the slot-fueled uplift's spell-slot spend (Divine
+    # Smite, etc.) under the attack_id so the chat-card ↶ Undo refunds the
+    # slot, not just the damage. The HP-undo already keys off attack_id;
+    # this adds the spell_slot_spend entry to the same log.
+    if slot_spent_class:
+        _log_damage_entry(attack_id, {
+            "kind": "spell_slot_spend",
+            "campaign_id": campaign_id,
+            "character_id": char.id,
+            "class_slug": slot_spent_class,
+            "slot_level": int(slot_spent_level),
+            "used_before": int(_slot_spent_used_before),
+            "spell_name": bonus_damage_label or "Divine Smite",
+        })
     hit = None
     target_ac = None
     # v2.99.408 — Phase 3.3: results of any weapon_hit_save riders fired

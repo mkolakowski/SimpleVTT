@@ -147,3 +147,31 @@ async def test_use_primeval_awareness_no_slot(
     data = r.json()
     assert data.get("error") == "no_slot"
     assert data.get("level") == 1
+
+
+async def test_primeval_awareness_undo_refunds_slot(
+    gm_client, gm_ws, rowan_with_slots,
+):
+    """v2.99.464 — the chat-card ↶ Undo now refunds the Ranger slot
+    Primeval Awareness spent. Cast at L1 (used → 1) → the response carries
+    a `cast_id`; /undo_attack_damage with it broadcasts a
+    `spell_slot_update` with the ranger L1 slot's used back to 0."""
+    rowan = rowan_with_slots
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_primeval_awareness",
+        json={"character_id": rowan["id"], "slot_level": 1, "override": True},
+    )
+    assert r.status_code == 200, r.text
+    cast_id = r.json().get("cast_id")
+    assert cast_id, "cast response must carry a cast_id for undo"
+
+    gm_ws.mark()
+    u = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert u.status_code == 200, u.text
+    ssu = await gm_ws.wait_for("spell_slot_update", timeout=2.0)
+    assert ssu["data"]["class_slug"] == "ranger"
+    assert ssu["data"]["level"] == 1
+    assert ssu["data"]["used"] == 0  # slot refunded (1 → 0)

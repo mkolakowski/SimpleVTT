@@ -110,9 +110,9 @@ Two additional buttons use slightly different padding and may need individual re
             - when not editing, show these new fields as pills before the buttons (Phase 2)
             - when not editing do not show player assignment dropdown (Phase 2)
         - remove upload art from token management (Phase 2)
-- 🟠 **P1 (mostly done)** — Bug: Un-do button does not refund spell slot
-    - ✅ Fixed v2.99.462–.463 for all 10 dedicated `cast_*` endpoints (cast_sleep / cast_slow / cast_polymorph / cast_compulsion / cast_bestow_curse / cast_bane / cast_hold_person / cast_flesh_to_stone / cast_hold_monster / cast_web) — they now log a `spell_slot_spend` entry + return a `cast_id` so `/undo_attack_damage` refunds the slot. New `_log_spell_slot_spend` helper.
-    - **Remaining (audit follow-up):** `/attack` (Divine Smite spends a slot on a hit — has an `attack_id` but no `spell_slot_spend` log) and `/use_primeval_awareness` (Ranger, spends a slot). Same one-line fix; different return shapes. Then a broader sweep of feature/item resource consumes (the machinery already handles `resource_spend` / `inventory_consume` kinds — audit which `use_*` endpoints log them).
+- ✅ **DONE (spell slots) — v2.99.462–.464** — Bug: Un-do button does not refund spell slot
+    - ✅ All spell-slot consumers now refund on Undo: the 10 dedicated `cast_*` endpoints (cast_sleep / cast_slow / cast_polymorph / cast_compulsion / cast_bestow_curse / cast_bane / cast_hold_person / cast_flesh_to_stone / cast_hold_monster / cast_web) via the new `_log_spell_slot_spend` helper (v2.99.462–.463), plus `/attack` Divine Smite + `/use_primeval_awareness` (v2.99.464).
+    - **Remaining (lower-priority audit follow-up):** a coverage pass over feature/item resource consumes — the `/undo_attack_damage` machinery already handles `resource_spend` / `inventory_consume` kinds; audit which `use_*` endpoints actually log them on consume (most do, e.g. lay_on_hands / second_wind). Not a spell-slot issue.
 - 🔴 **P1** — Bug investigation: NPCs unable to use action buttons, IE strike button on Dagger for vex
     - Players seem to work as expected
 - 🟡 **P2** — Feature: plan three ways that we can allow users to up-cast spells

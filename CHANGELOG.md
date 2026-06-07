@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.464] - 2026-06-07 — "Smite Take-Back" — Undo refunds Divine Smite + Primeval Awareness slots (P1 bug fix, part 3)
+
+**Schema version:** 66
+**Commit summary:** **Bug fix (P1) — the last two slot-consumers now refund on Undo: `/attack`'s Divine Smite (slot-fueled bonus damage) logs its `spell_slot_spend` under the existing `attack_id`, and `/use_primeval_awareness` mints a `cast_id` + logs the spend.** Completes the spell-slot-undo audit.
+**Description:** Finishes the v2.99.462–.463 P1 fix. `/attack` already minted an `attack_id` (the HP-undo keys off it) but never logged the slot when `spend_spell_slot` was supplied (Divine Smite / any slot-fueled uplift) — so Undo refunded the damage but not the slot. It now logs a `spell_slot_spend` entry under that same `attack_id`. `/use_primeval_awareness` (Ranger, spends a slot for the sense) now calls `_log_spell_slot_spend` + returns the `cast_id`. With these, **every spell-slot-consuming endpoint refunds on Undo.**
+
+### Fixed
+- `/api/campaign/{cid}/attack` logs the `spend_spell_slot` (Divine Smite) spend under the attack's id → Undo refunds the slot + the damage.
+- `/api/campaign/{cid}/use_primeval_awareness` logs its slot spend + returns a `cast_id` → Undo refunds the ranger slot.
+
+### Added
+- `tests/harness/test_attack.py::test_attack_divine_smite_undo_refunds_slot` — smite at L1 → Undo → paladin L1 `used` back to 0.
+- `tests/harness/test_use_primeval_awareness.py::test_primeval_awareness_undo_refunds_slot` — cast → Undo → ranger L1 `used` back to 0.
+
+### Notes
+- **Completes the TODO P1 "Undo doesn't refund spell slot"** across all spell-slot consumers (10 dedicated casts in v2.99.462–.463 + these 2). The broader feature/item-resource-refund audit (the `resource_spend` / `inventory_consume` kinds) remains as a lower-priority follow-up in TODO — that machinery already exists and most `use_*` resource endpoints log it; it just needs a coverage pass.
+- **Total harness count: 1926** (was 1924 in v2.99.463; +2 new tests).
+
+---
+
 ## [2.99.463] - 2026-06-07 — "The Full Refund" — Undo refunds spell slots, all dedicated casts (P1 bug fix, part 2)
 
 **Schema version:** 66

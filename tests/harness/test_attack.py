@@ -243,3 +243,41 @@ async def test_attack_spend_slot_missing_class(gm_client, roster):
         },
     )
     assert resp.status_code == 400
+
+
+async def test_attack_divine_smite_undo_refunds_slot(gm_client, gm_ws, roster):
+    """v2.99.464 — the chat-card ↶ Undo now refunds the Divine Smite spell
+    slot, not just the damage. Caelan long-rests (paladin L1 → 4/0), swings
+    with a L1 smite (used → 1), then /undo_attack_damage with the attack id
+    → a spell_slot_update broadcasts the paladin L1 slot's used back to 0.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    refill = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+        json={"type": "long"},
+    )
+    assert refill.status_code == 200, refill.text
+
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={"character_id": caelan["id"], "attack_index": 0,
+              "bonus_damage": "2d8", "bonus_damage_label": "Divine Smite",
+              "spend_spell_slot": {"class_slug": "paladin", "level": 1},
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["slot_spent_class"] == "paladin"
+    assert data["slot_spent_level"] == 1
+    attack_id = data["id"]
+
+    gm_ws.mark()
+    u = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": attack_id},
+    )
+    assert u.status_code == 200, u.text
+    ssu = await gm_ws.wait_for("spell_slot_update", timeout=2.0)
+    assert ssu["data"]["class_slug"] == "paladin"
+    assert ssu["data"]["level"] == 1
+    assert ssu["data"]["used"] == 0  # smite slot refunded (1 → 0)
