@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429); Phase 6 next.
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) next. **Current coverage: 177 tracked / 60 announce-only of 239 feature endpoints** (was ~60/156 at baseline).
 **Author:** drafted v2.99.386
 **Scope:** Turn every shipped class/subclass feature from "v1 announce-only"
 into a **server-applied, state-changing, harness-verified** mechanic — and
@@ -177,11 +177,14 @@ d-dice at attack/save construction, buff-level **save advantage** (parallel to
 Each phase is independently shippable and unlocks a whole archetype. Earlier
 phases unlock the most downstream features.
 
-### Phase 0 — Automation audit doc (S, 1 commit)
-Generate `docs/automation-coverage.md`: every `use_*` feature endpoint tagged
-`tracked` / `announce-only` + its archetype(s) + target primitive. This is the
-backlog the rest of the plan burns down; keep it in sync like the harness
-coverage catalog. *(This plan + that audit are the two living docs.)*
+### Phase 0 — Automation audit doc (S, 1 commit) ✅ shipped v2.99.447
+Generated [`docs/automation-coverage.md`](../automation-coverage.md): every
+`use_*` / `cast_*` feature endpoint tagged `tracked` / `announce-only` + its
+detected archetype, machine-classified from the endpoint body's state-mutation
+markers so it can be regenerated. Current split: **177 tracked / 60
+announce-only / 2 mechanical of 239**. This is the backlog the rest of the plan
+burns down; keep it in sync like the harness coverage catalog. *(This plan +
+that audit are the two living docs.)*
 
 ### Phase 1 — P1 feature-use registry + retrofit (M, ~5 commits) ✅ shipped
 Build `_FEATURE_USES`; migrate the existing bespoke hooks; retrofit every

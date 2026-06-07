@@ -68,6 +68,7 @@ Reference docs at `docs/` that aren't operator/GM guides but are useful to contr
 |-----------|--------|----------|--------|
 | [Roll-log card layout](../roll-log-card-layout.md) | Markdown (semantic ref) | Contributors | ✅ shipped |
 | [Test harness coverage catalog](../test-harness-coverage.md) | Markdown (index) | Contributors | ✅ shipped · living |
+| [Automation coverage audit](../automation-coverage.md) | Markdown (index) | Contributors | ✅ shipped · living |
 | [Demo image-generation prompts](../demo/image-prompts.md) | Markdown (asset notes) | Contributors | ✅ shipped |
 
 ## Repo documentation

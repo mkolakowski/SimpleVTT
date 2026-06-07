@@ -33,6 +33,7 @@ COPY docs/encounters-plan.md /app/docs/encounters-plan.md
 COPY docs/multi-system-refactor.md /app/docs/multi-system-refactor.md
 COPY docs/roll-log-card-layout.md /app/docs/roll-log-card-layout.md
 COPY docs/test-harness-coverage.md /app/docs/test-harness-coverage.md
+COPY docs/automation-coverage.md /app/docs/automation-coverage.md
 
 # v2.49.9: repo-root docs surfaced through /wiki/doc/<slug>.
 COPY README.md /app/README.md

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.447] - 2026-06-06 — "The Honest Ledger" — automation-coverage audit doc (automation Phase 0)
+
+**Schema version:** 66
+**Commit summary:** **Phase 0 — new `docs/automation-coverage.md`: a machine-classified audit of all 239 `use_*`/`cast_*` feature endpoints, tagged tracked vs announce-only + archetype, surfaced through `/wiki`.** The long-deferred backlog tracker for the parent automation plan.
+**Description:** Every feature endpoint in `tabletop_routes.py` is classified by scanning its body for state-mutation markers (`_install_buff`, `_apply_damage_to_combatant`, `_grant_temp_hp`, `_force_move`, `_summon_companion`, `_resolve_feature_save`, `_tick_auras`, resource/economy decrements) — `tracked` when it applies an effect and/or spends a resource, `announce-only` when it only broadcasts a `feature_used` card. Current split: **177 tracked / 60 announce-only / 2 mechanical of 239** (up from ~60/156 at the v2.99.385 baseline — Phases 1–6 flipped ~117). The doc carries the phase status, the archetype legend, a curated "notable backlog candidates" list, and the full per-endpoint table; it's heuristic + regenerable so it stays in sync as retrofits land. Closes Phase 0 of `docs/plans/full-feature-automation.md`, whose stale "Phase 6 next" header is also refreshed (Phases 0–6 done, Phase 7 next).
+
+### Added
+- `docs/automation-coverage.md` (the audit doc) + its `/wiki/doc/automation-coverage` allowlist entry, the wiki.html + `docs/wiki/README.md` References-table rows, a `Dockerfile` COPY line (reference docs are baked individually, not as a dir), and `tests/harness/test_wiki.py::test_wiki_doc_serves_automation_coverage` + the landing-page assertion.
+
+### Changed
+- `docs/plans/full-feature-automation.md` header + Phase 0 section refreshed to reflect Phases 0–6 complete and the 177/60/239 coverage split.
+
+### Notes
+- Doc + wiki-surfacing commit. The engine-gap phases (P1–P6 primitives) are all shipped; the audit makes the remaining announce-only tail (much of it archetype J narration-only) explicit for Phase 7+.
+- **Total harness count: 1904** (was 1903 in v2.99.446; +1 new wiki-doc test).
+
+---
+
 ## [2.99.446] - 2026-06-06 — "The Honest Ruler" — client speed-buff mirror (automation Phase 6.1)
 
 **Schema version:** 66
