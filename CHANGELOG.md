@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.468] - 2026-06-07 — "The Whole Cone" — AoE breath weapons hit every target (save-only NPC actions, part 3)
+
+**Schema version:** 66
+**Commit summary:** **The NPC save-strike button now passes the full picked target list as `aoe_target_combatant_ids`, so AoE save actions (breath weapons) resolve a save + apply save-for-half damage to every creature in the area — not just one.**
+**Description:** v2.99.467 routed save-DC NPC actions to `/npc_cast_spell` but passed a single `target_combatant_id`. The init-tracker strike handler now keeps the full picked list (`_pickerTargetIds`, from the multi-select picker or the pre-targeted set) and includes it as `aoe_target_combatant_ids` when more than one creature is picked. `/npc_cast_spell`'s existing AoE loop (v2.49.217) then rolls each target's save independently and applies save-for-half damage. The single `target_combatant_id` stays the "primary" for the card's legacy fields.
+
+### Changed
+- `app/templates/tabletop.html` — the NPC save-strike handler sends `aoe_target_combatant_ids` (the full picked list) for multi-target breath weapons.
+
+### Added
+- `tests/harness/test_npc_attack.py::test_npc_cast_spell_aoe_save_applies_to_all` — an NPC fires a 6d6 DEX-save AoE at two NPC targets → both appear in `auto_save_targets` with `damage_applied > 0`.
+
+### Notes
+- Completes the save-only NPC actions arc (data v2.99.466 → single-target routing v2.99.467 → AoE v2.99.468). Remaining filed follow-ups: the unified mini-sheet `.mini-strike-btn` NPC path, and runtime `desc`-parse normalization for Open5e-API-imported monsters.
+- **Total harness count: 1933** (was 1932 in v2.99.467; +1 new test).
+
+---
+
 ## [2.99.467] - 2026-06-07 — "Breathe Fire" — save-only NPC actions route to /npc_cast_spell (save-only NPC actions, part 2)
 
 **Schema version:** 66

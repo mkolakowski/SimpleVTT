@@ -8022,6 +8022,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // context from the cast card.
             let _pickerTargetName = '';
             let _pickerTargetCombatantId = '';
+            // v2.99.468 — full picked list (for AoE save actions: breath
+            // weapons hit every picked creature, looped server-side).
+            let _pickerTargetIds = [];
             // Find the attacker's combatant row first (needed for
             // /npc_attack body even when no target is picked).
             const _attackerRow = btn.closest('.init-row, .init-entry');
@@ -8057,6 +8060,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     }
                     if (_picked.length > 0) {
                         _pickerTargetCombatantId = _picked[0];
+                        _pickerTargetIds = _picked.slice();  // v2.99.468 — AoE
                         const _tcomb = (battle.combatants || [])
                             .find(c => c.id === _pickerTargetCombatantId);
                         if (_tcomb && _tcomb.name) {
@@ -8069,6 +8073,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     const _t0 = _preTargets[0];
                     if (_t0 && _t0.combatant_id) _pickerTargetCombatantId = _t0.combatant_id;
                     if (_t0 && _t0.name) _pickerTargetName = _t0.name;
+                    // v2.99.468 — every pre-targeted creature for AoE saves.
+                    _pickerTargetIds = _preTargets
+                        .map(t => t && t.combatant_id).filter(Boolean);
                 }
             }
             try {
@@ -8157,6 +8164,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             damage: action.damage || '',
                             damage_type: action.damage_type || '',
                             target_combatant_id: _pickerTargetCombatantId,
+                            // v2.99.468 — AoE: every picked creature makes
+                            // its own save (server loops save-for-half over
+                            // the list). The single target_combatant_id
+                            // above stays the "primary" for the card.
+                            ...(_pickerTargetIds.length > 1
+                                ? { aoe_target_combatant_ids: _pickerTargetIds }
+                                : {}),
                         }),
                     });
                     if (!resp.ok) {

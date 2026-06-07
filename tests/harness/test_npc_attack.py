@@ -382,3 +382,43 @@ async def test_npc_cast_spell_save_action_applies_damage(
     assert d["auto_save_passed"] is not None
     # Save-for-half: full on a fail, half on a pass — always ≥ 1 of 4d6.
     assert d["auto_save_damage_applied"] > 0
+
+
+async def test_npc_cast_spell_aoe_save_applies_to_all(
+    gm_client, gm_ws, auto_apply_on,
+):
+    """v2.99.468 — AoE save-only NPC actions (breath weapons) hit every
+    picked creature: /npc_cast_spell loops the save-for-half damage over
+    `aoe_target_combatant_ids`. Two NPC targets → two resolved saves,
+    each taking damage (≥ half of 6d6 always lands). The per-target array
+    rides the `spell_cast` WS broadcast (not the HTTP response)."""
+    caster_cid = "npc_aoe_caster"
+    t1, t2 = "npc_aoe_t1", "npc_aoe_t2"
+    await _seed_battle(gm_client, [
+        _mkc(caster_cid, hp_cur=80, hp_max=80, name="Dragon", template_id=1),
+        _mkc(t1, hp_cur=40, hp_max=40, name="Victim A", template_id=1),
+        _mkc(t2, hp_cur=40, hp_max=40, name="Victim B", template_id=1),
+    ])
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/npc_cast_spell",
+        json={
+            "combatant_id": caster_cid,
+            "spell_name": "Fire Breath",
+            "spell_level": 0,
+            "save_ability": "DEX",
+            "save_dc": 16,
+            "damage": "6d6",
+            "damage_type": "fire",
+            "attack_roll": False,
+            "target_combatant_id": t1,
+            "aoe_target_combatant_ids": [t1, t2],
+        },
+    )
+    assert r.status_code == 200, r.text
+    msg = await gm_ws.wait_for("spell_cast", timeout=2.0)
+    targets = {t["combatant_id"]: t
+               for t in (msg["data"].get("auto_save_targets") or [])}
+    assert t1 in targets and t2 in targets, msg["data"].get("auto_save_targets")
+    assert targets[t1]["damage_applied"] > 0
+    assert targets[t2]["damage_applied"] > 0
