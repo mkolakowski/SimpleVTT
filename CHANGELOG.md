@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.109.0] - 2026-06-07 — "Higher Still" — up-cast slot picker on the mini-sheet
+
+**Schema version:** 68
+**Commit summary:** **Brings the v2.108.0 up-cast slot picker to the tabletop init-tracker mini-sheet (the in-combat cast surface) — closing the follow-up filed in v2.108.0. The GM's `.mini-cast-btn` now opens the same slot-level picker when the caster has a higher slot free, riding the existing `slot_level` plumbing.**
+**Description:** v2.108.0 shipped the picker on the full character sheet; this mirrors it onto the tabletop mini-sheet so up-casting works from the primary in-combat surface too. The `.mini-cast-btn` handler now, for a leveled spell, scans the caster's `.mini-slot-row` pips and — if a slot above the base level is free — opens `_promptUpcastLevel` (a tabletop-context copy of the sheet's modal) listing the available levels; the chosen level is assigned to the existing `lvl` variable so the optimistic mini-slot decrement, the `slot_level` posted to `/cast_spell`, and the wired count-scaling all use it. One free slot (base only) skips the prompt; Cancel/Escape aborts. The mini-sheet picker passes empty `higher_level` text for now (the init-tracker cast path fetches the SRD record later in the flow for AoE detection, not before the picker) — the full-sheet picker remains the surface that shows the rule text.
+
+### Added
+- `app/templates/tabletop.html` — `_promptUpcastLevel` modal (mini-sheet copy) + the `.mini-cast-btn` handler prompts for the slot level before casting when an up-cast slot is free.
+
+### Notes
+- Client-only — no server, schema, or WS-shape change (the `slot_level` plumbing + `spell_cast` echo shipped in v2.108.0). The picker logic is identical to the full-sheet flow already covered by `tests/harness_ui/test_upcast_picker_ui.py`; the GM-tabletop boot smoke in `test_movement_lock_ui.py` guards the inline-script parse. The init-tracker mini-sheet's own multi-target/AoE interplay is unchanged.
+- Closes the v2.108.0 "mini-sheet picker" follow-up. Approach B (auto-scaling +dice) remains the next phase.
+- **Total harness count: 1960** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.108.0] - 2026-06-07 — "Cast It Higher" — up-cast slot picker (Approach A + C)
 
 **Schema version:** 68
