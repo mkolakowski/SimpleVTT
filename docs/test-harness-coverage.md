@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1955 in `tests/harness/` + 18 in `tests/harness_ui/` (as of v2.106.0, 2026-06-07).
+**Total tests:** 1957 in `tests/harness/` + 18 in `tests/harness_ui/` (as of v2.107.0, 2026-06-07).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2267,6 +2267,8 @@ v2.105.0 — generic reroll framework (Phase 1: Lucky feat). `POST /use_reroll` 
 | `test_reroll_unknown_feature` | An unknown `feature_key` → 404 `unknown_feature` (checked before the roll lookup). |
 | `test_reroll_feature_not_available` | A character without the feature (Pip) → 409 `out_of_uses`. |
 | `test_reroll_no_d20` | A non-d20 roll (`2d6`) offers no reroll_option and `/use_reroll` → 409 `no_d20`. |
+| `test_save_offers_lucky_and_indomitable_and_indomitable_takes_new` | v2.107.0 — a Lv 9 Fighter's SAVE roll (`stat_key="wis_save"`) offers both `lucky` (any) and `indomitable` (save-only); `/use_reroll {feature_key:"indomitable"}` → `took_new=True` (keep="new") + resource decrements 1→0. |
+| `test_indomitable_hidden_on_non_save` | v2.107.0 — a non-save d20 for the same Fighter offers `lucky` but NOT the save-only `indomitable` (applies-gating). |
 
 ### `test_battle_put_npc_concentration_cascade.py`
 v2.99.185 — `/battle PUT` auto-fires `_drop_paired_concentration_buffs_npc` when an NPC's concentration buff is removed via the canonical battle-edit path. Closes the v2.99.179 filed item; completes the Polymorph mechanical chain for NPC casters via the routine UI path.

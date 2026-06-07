@@ -17,8 +17,28 @@ Tests:
     feature_used(lucky-reroll) + resource_update.
   - error: unknown feature_key → 404; a character without the feature →
     409 out_of_uses; a non-d20 roll → 409 no_d20 (and no reroll_options).
+
+v2.107.0 — Phase 3 folds the save-only reroll features into the same
+registry/endpoint:
+  - a SAVE roll for a Lv 9 Fighter offers both `lucky` (any) and
+    `indomitable` (save-only); `/use_reroll {feature_key:"indomitable"}`
+    takes the new d20 (keep="new") and decrements the resource.
+  - a non-save d20 offers `lucky` but NOT `indomitable` (applies-gating).
 """
+import pytest_asyncio
+
 from .conftest import CAMPAIGN_ID
+
+
+async def _patch_sheet(gm_client, char_id, fields, class_slug=None):
+    body = dict(fields)
+    if class_slug:
+        body["class_slug"] = class_slug
+    r = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json=body,
+    )
+    assert r.status_code == 200, r.text
 
 
 async def _roll(gm_client, gm_ws, expression, char_id, note="reroll test"):
@@ -119,3 +139,71 @@ async def test_reroll_no_d20(gm_client, gm_ws, roster):
     )
     assert r.status_code == 409, r.text
     assert r.json()["error"] == "no_d20"
+
+
+@pytest_asyncio.fixture
+async def garrik_lv9_indomitable(gm_client, roster):
+    """Garrik at Lv 9 with a full Indomitable resource; teardown
+    restores Lv 7 + clears the patched resources."""
+    garrik = roster["Garrik Ironside"]
+    await _patch_sheet(gm_client, garrik["id"], {"level": 9}, class_slug="fighter")
+    await _patch_sheet(gm_client, garrik["id"], {"resources": [
+        {"key": "indomitable", "label": "Indomitable",
+         "current": 1, "max": 1, "reset": "long"},
+    ]})
+    yield garrik
+    await _patch_sheet(gm_client, garrik["id"], {"level": 7}, class_slug="fighter")
+    await _patch_sheet(gm_client, garrik["id"], {"resources": []})
+
+
+async def test_save_offers_lucky_and_indomitable_and_indomitable_takes_new(
+    gm_client, gm_ws, garrik_lv9_indomitable,
+):
+    """A Lv 9 Fighter's SAVE roll offers both lucky (any) and
+    indomitable (save-only); the indomitable reroll keeps the new d20
+    (keep="new") and decrements the resource 1 → 0."""
+    garrik = garrik_lv9_indomitable
+    data = await _roll(
+        gm_client, gm_ws, "1d20+2", garrik["id"],
+    )
+    # Re-roll the save with an explicit stat_key so it reads as a save.
+    gm_ws.mark()
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={"expression": "1d20+2", "character_id": garrik["id"],
+              "stat_key": "wis_save", "note": "WIS saving throw"},
+    )
+    assert rr.status_code == 200, rr.text
+    msg = await gm_ws.wait_for("roll")
+    keys = {o["key"] for o in (msg["data"].get("reroll_options") or [])}
+    assert "lucky" in keys, f"save should still offer Lucky; got {keys}"
+    assert "indomitable" in keys, (
+        f"a Lv 9 Fighter's save should offer Indomitable; got {keys}"
+    )
+    roll_id = msg["data"]["id"]
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reroll",
+        json={"character_id": garrik["id"], "roll_id": roll_id,
+              "feature_key": "indomitable"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["feature_key"] == "indomitable"
+    assert body["took_new"] is True, "Indomitable must use the new roll"
+    assert body["remaining"] == 0, "indomitable should decrement 1 → 0"
+
+
+async def test_indomitable_hidden_on_non_save(
+    gm_client, gm_ws, garrik_lv9_indomitable,
+):
+    """A non-save d20 for the same Fighter offers Lucky but NOT the
+    save-only Indomitable (applies-gating)."""
+    garrik = garrik_lv9_indomitable
+    data = await _roll(gm_client, gm_ws, "1d20", garrik["id"], note="attack")
+    keys = {o["key"] for o in (data.get("reroll_options") or [])}
+    assert "lucky" in keys, f"expected Lucky on a plain d20; got {keys}"
+    assert "indomitable" not in keys, (
+        f"Indomitable is save-only and must not appear on a non-save "
+        f"roll; got {keys}"
+    )

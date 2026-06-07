@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.107.0] - 2026-06-07 — "Three of a Kind" — reroll framework (Phase 3: Indomitable + Diamond Soul)
+
+**Schema version:** 68
+**Commit summary:** **Folds the Fighter Indomitable (Lv 9+) and Monk Diamond Soul (Lv 14+) rerolls into the v2.105.0 reroll registry, so all three reroll features (Lucky + these two) surface on the same roll-log card button and resolve through the one generic `/use_reroll` endpoint. Both are save-only (`applies:"save"`) and keep the new roll (`keep:"new"`), gated by `_roll_is_save`.**
+**Description:** Phase 3 of 3 completes the [TODO](TODO.md) reroll framework. Two registry entries join Lucky: `indomitable` (detect = Fighter Lv 9+ via `_fighter_level_from_sheet` + `indomitable` resource, save-only, keep-new) and `diamond-soul` (detect = Monk Lv 14+ + `ki-points` resource, save-only, keep-new). `_compute_reroll_options` already gates `applies:"save"` entries with `_roll_is_save(stat_key, note)`, so a Fighter's **save** roll now offers both 🍀 Lucky and 🛡️ Indomitable buttons, while a non-save d20 offers only Lucky. The generic `/use_reroll` endpoint already handled `keep:"new"` + arbitrary `resource_key`, so no endpoint changes were needed — the two features ride the exact code path the Lucky tests exercise. The standalone `/use_indomitable_reroll` and `/use_diamond_soul_reroll` endpoints are left in place (untouched, their tests still green); the card button uses the unified `/use_reroll`.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_reroll_detect_indomitable` / `_reroll_detect_diamond_soul` + `_reroll_resource_current` helpers; `indomitable` + `diamond-soul` entries in `_REROLL_FEATURES`.
+- `tests/harness/test_use_reroll.py` — a Lv 9 Fighter's save offers both `lucky` + `indomitable` and the Indomitable reroll takes the new d20 + decrements 1→0; a non-save d20 offers Lucky but not the save-only Indomitable.
+
+### Notes
+- Phase 3 of 3 — the reroll framework is complete. Adding a future reroll feature is now one registry entry (+ a demo character that carries it).
+- Diamond Soul has no demo character (no Monk Lv 14) to harness-test directly, but it shares the generic `/use_reroll` code path proven by the Indomitable + Lucky tests; only its `detect` (level + ki) differs.
+- No new endpoint / schema / WS shape — registry-data + detection only. **Total harness count: 1957** in `tests/harness/` (1955 → 1957); **`tests/harness_ui/` 18** (unchanged).
+
+---
+
 ## [2.106.0] - 2026-06-07 — "One More Roll" — reroll framework (Phase 2: card button)
 
 **Schema version:** 68

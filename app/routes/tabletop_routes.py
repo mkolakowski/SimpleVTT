@@ -3877,6 +3877,37 @@ def _reroll_detect_lucky(char):
     return True, remaining
 
 
+def _reroll_resource_current(char, key) -> int:
+    """Current uses of a sheet resource by key (0 if missing)."""
+    for r in ((char.sheet or {}).get("resources") or []):
+        if isinstance(r, dict) and (r.get("key") or "").strip().lower() == key:
+            try:
+                return int(r.get("current") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _reroll_detect_indomitable(char):
+    """(has_feature, remaining) for Fighter Indomitable (Lv 9+). RAW:
+    reroll a failed save and use the new roll. Save-only."""
+    if not char or not char.sheet:
+        return False, 0
+    if _fighter_level_from_sheet(char.sheet or {}) < 9:
+        return False, 0
+    return True, _reroll_resource_current(char, "indomitable")
+
+
+def _reroll_detect_diamond_soul(char):
+    """(has_feature, remaining) for Monk Diamond Soul (Lv 14+). RAW:
+    spend 1 ki to reroll a failed save and use the new roll. Save-only."""
+    if not char or not char.sheet:
+        return False, 0
+    if _monk_level_from_sheet(char.sheet or {}) < 14:
+        return False, 0
+    return True, _reroll_resource_current(char, "ki-points")
+
+
 _REROLL_FEATURES = [
     {
         "key": "lucky",
@@ -3887,6 +3918,26 @@ _REROLL_FEATURES = [
         "applies": "any",
         "detect": _reroll_detect_lucky,
         "desc": "Roll a new d20 and keep the higher (Lucky feat, PHB p.167).",
+    },
+    {
+        "key": "indomitable",
+        "label": "Indomitable",
+        "icon": "🛡️",
+        "resource_key": "indomitable",
+        "keep": "new",
+        "applies": "save",
+        "detect": _reroll_detect_indomitable,
+        "desc": "Reroll a failed save and use the new roll (Fighter Lv 9+).",
+    },
+    {
+        "key": "diamond-soul",
+        "label": "Diamond Soul",
+        "icon": "💎",
+        "resource_key": "ki-points",
+        "keep": "new",
+        "applies": "save",
+        "detect": _reroll_detect_diamond_soul,
+        "desc": "Spend 1 ki to reroll a failed save (Monk Lv 14+).",
     },
 ]
 
