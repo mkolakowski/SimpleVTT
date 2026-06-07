@@ -50476,6 +50476,27 @@ async def use_stormborn(
     fly_speed_ft = walking_speed
     cleric_lv = _cleric_level_from_sheet(sheet)
 
+    # v2.99.459 — install a flight buff carrying the fly speed (was
+    # announce-only). On a 2D grid the buff records the flying capability
+    # (effects.fly_speed_ft) for the UI/GM; the outdoor-only gate stays
+    # GM-tracked. Long passive duration.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "stormborn-flight",
+        "name": "Stormborn (Flight)",
+        "icon": "⛈️",
+        "duration_rounds": 100,
+        "duration_max": 100,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {"fly_speed_ft": fly_speed_ft},
+        "desc": (
+            f"Flying speed {fly_speed_ft} ft (= walking speed), outdoors "
+            f"only. (Tempest Domain Cleric Lv 17+.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -50507,6 +50528,7 @@ async def use_stormborn(
             "fly_speed_ft": fly_speed_ft,
             "outdoor_only": True,
             "cleric_level": cleric_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -50517,6 +50539,7 @@ async def use_stormborn(
         "fly_speed_ft": fly_speed_ft,
         "outdoor_only": True,
         "cleric_level": cleric_lv,
+        "buff_installed": buff_installed,
     }
 
 

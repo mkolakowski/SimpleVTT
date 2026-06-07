@@ -117,3 +117,33 @@ async def test_use_sb_level_gate(
             {"subclass": "Life Domain", "level": 6},
             class_slug="cleric",
         )
+
+
+async def test_stormborn_installs_flight_buff(
+    gm_client, gm_ws, tavik_tempest_lv17,
+):
+    """v2.99.459 — Stormborn installs a `stormborn-flight` buff carrying
+    the fly speed (= walking speed 25) on the cleric."""
+    tavik = tavik_tempest_lv17
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_sb_{tavik['id']}", "char_id": tavik["id"],
+             "name": tavik["name"], "initiative": 10,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_stormborn",
+        json={"character_id": tavik["id"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["buff_installed"] is True
+    bu = await gm_ws.wait_for("buff_update")
+    sb = next((b for b in bu["data"]["buffs"]
+               if b.get("key") == "stormborn-flight"), None)
+    assert sb is not None, bu["data"]["buffs"]
+    assert (sb.get("effects") or {}).get("fly_speed_ft") == 25

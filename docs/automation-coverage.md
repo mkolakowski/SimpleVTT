@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.458
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.459
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -22,12 +22,12 @@ after a batch of retrofits and update the counts below. Treat the split as
 (archetype J — passive senses, language grants), and a few `tracked`-tagged ones
 only spend a resource without a downstream effect.
 
-## Summary (as of v2.99.458)
+## Summary (as of v2.99.459)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **185** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **52** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **186** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **51** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -76,8 +76,8 @@ or passive damage-boosters that already ride other code paths
   `assassinate` (auto-crit rider). (`genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 + `dread_ambusher` ✅ v2.99.452 server-resolved extra attacks.)
 - **Buff / temp-HP (D/F):** `combat_inspiration`,
   `blade_flourish`, `supreme_healing` (`rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals).
-- **Movement (G):** `ascendant_step` (fly), `stormborn` (fly),
-  `relentless_avenger`, `fancy_footwork`.
+- **Movement (G):** `ascendant_step` (fly),
+  `relentless_avenger`, `fancy_footwork` (`stormborn` ✅ v2.99.459 fly buff).
 
 ## Full classification
 
@@ -236,6 +236,7 @@ or passive damage-boosters that already ride other code paths
 | `use_step_of_the_wind` | ✅ tracked | D buff-install |
 | `use_stillness_of_mind` | ✅ tracked | A use/resource |
 | `use_storm_aura` | ✅ tracked | D buff-install |
+| `use_stormborn` | ✅ tracked | D buff-install |
 | `use_strength_of_the_grave` | ✅ tracked | A use/resource |
 | `use_stroke_of_luck` | ✅ tracked | A use/resource |
 | `use_stunning_strike` | ✅ tracked | D buff-install, D/E buff-install |
@@ -312,7 +313,6 @@ or passive damage-boosters that already ride other code paths
 | `use_silver_tongue` | ⚪ announce-only | — |
 | `use_spell_bombardment` | ⚪ announce-only | — |
 | `use_star_map` | ⚪ announce-only | — |
-| `use_stormborn` | ⚪ announce-only | — |
 | `use_supreme_healing` | ⚪ announce-only | — |
 | `use_totem_spirit` | ⚪ announce-only | — |
 | `use_unwavering_mark` | ⚪ announce-only | — |

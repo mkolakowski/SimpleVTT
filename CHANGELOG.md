@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.459] - 2026-06-06 — "Riders on the Storm" — Stormborn installs a flight buff (automation movement tail)
+
+**Schema version:** 66
+**Commit summary:** **Stormborn (Tempest Domain Cleric Lv 17) now installs a `stormborn-flight` buff carrying the fly speed (= walking speed), instead of only announcing the number.** First movement-tail (fly) burn-down.
+**Description:** `/use_stormborn` already computed the fly speed (= the cleric's walking speed); it now installs a `stormborn-flight` buff with `effects.fly_speed_ft` = that value via `_install_buff`. On the 2D grid the buff records the flying capability for the UI/GM (the canvas is flat, so vertical movement isn't enforced); the outdoor-only gate stays GM-tracked. Response gains `buff_installed`.
+
+### Changed
+- `/api/campaign/{cid}/use_stormborn` installs the flight buff (was announce-only); response gains `buff_installed`.
+- `docs/automation-coverage.md` refreshed: `use_stormborn` flips to tracked (**186 tracked / 51 announce-only of 239** now).
+
+### Added
+- `tests/harness/test_stormborn.py::test_stormborn_installs_flight_buff` — seeds a battle, activates Stormborn → the `stormborn-flight` buff lands on the cleric with `effects.fly_speed_ft == 25` (dwarf walking speed).
+
+### Notes
+- First movement-tail burn-down. Same fly-buff shape would automate the other fly features (`ascendant_step`).
+- **Total harness count: 1921** (was 1920 in v2.99.458; +1 new test).
+
+---
+
 ## [2.99.458] - 2026-06-06 — "The Mending Light" — Protective Spirit heals the paladin (automation buff/heal tail)
 
 **Schema version:** 66
