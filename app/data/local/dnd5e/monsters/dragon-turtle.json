@@ -79,7 +79,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+13"
     },
     {
       "id": "claw",
@@ -104,7 +105,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+13"
     },
     {
       "id": "tail",
@@ -129,7 +131,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+13"
     },
     {
       "id": "steam-breath-recharge-5-6",

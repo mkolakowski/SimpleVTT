@@ -79,7 +79,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+15"
     },
     {
       "id": "slaying-longbow",
@@ -104,7 +105,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+13"
     },
     {
       "id": "flying-sword",

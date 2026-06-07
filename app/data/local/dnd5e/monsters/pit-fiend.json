@@ -79,7 +79,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+14"
     },
     {
       "id": "claw",
@@ -104,7 +105,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+14"
     },
     {
       "id": "mace",
@@ -129,7 +131,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+14"
     },
     {
       "id": "tail",
@@ -154,7 +157,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+14"
     },
     {
       "id": "fear-aura",

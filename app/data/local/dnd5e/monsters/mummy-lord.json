@@ -78,7 +78,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+9"
     },
     {
       "id": "dreadful-glare",
@@ -178,7 +179,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+9"
     },
     {
       "id": "attack",

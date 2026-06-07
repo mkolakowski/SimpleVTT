@@ -54,7 +54,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+5"
     },
     {
       "id": "web-recharge-5-6",
@@ -79,7 +80,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+5"
     },
     {
       "id": "spider-climb",

@@ -78,7 +78,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+4"
     },
     {
       "id": "shortsword-humanoid-or-hybrid-form-only",
@@ -103,7 +104,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+4"
     },
     {
       "id": "hand-crossbow-humanoid-or-hybrid-form-only",
@@ -128,7 +130,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+4"
     },
     {
       "id": "shapechanger",

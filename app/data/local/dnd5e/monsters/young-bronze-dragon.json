@@ -80,7 +80,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+8"
     },
     {
       "id": "claw",
@@ -105,7 +106,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+8"
     },
     {
       "id": "breath-weapons-recharge-5-6",

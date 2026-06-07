@@ -55,7 +55,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+6"
     },
     {
       "id": "fire-breath-recharge-5-6",

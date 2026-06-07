@@ -79,7 +79,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+5"
     },
     {
       "id": "claw-tiger-or-hybrid-form-only",
@@ -104,7 +105,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+5"
     },
     {
       "id": "scimitar-humanoid-or-hybrid-form-only",
@@ -129,7 +131,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+5"
     },
     {
       "id": "longbow-humanoid-or-hybrid-form-only",
@@ -154,7 +157,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+4"
     },
     {
       "id": "shapechanger",

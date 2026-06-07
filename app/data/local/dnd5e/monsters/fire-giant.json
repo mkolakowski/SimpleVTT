@@ -78,7 +78,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+11"
     },
     {
       "id": "rock",
@@ -103,7 +104,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+11"
     }
   ]
 }

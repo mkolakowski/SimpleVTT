@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.465] - 2026-06-07 — "To Hit, Restored" — NPC strike buttons fixed (P1 bug — monster attack_bonus backfill)
+
+**Schema version:** 66
+**Commit summary:** **Bug fix (P1) — backfilled the missing `attack_bonus` on all 536 attack-roll actions across the 322 SRD monster JSONs, parsed from each action's `desc` ("+N to hit"). This is the root cause of "NPCs unable to use action buttons (Vex's Dagger Strike)".**
+**Description:** Every `attack_roll: true` action in `app/data/local/dnd5e/monsters/*.json` shipped with `attack_bonus` absent (null). The client's NPC-strike handler gates on `hasAttackRoll = bonus && damage`; with `bonus` empty, every monster's Strike fell through to the legacy `/roll` path instead of the (working, tested) `/npc_attack` endpoint — so the strike resolved no hit and no damage. The to-hit was always present in the action `desc` ("Melee Weapon Attack: **+5 to hit**, …"), so a backfill script parsed it into the structured `attack_bonus` field for all 536 actions (0 unparseable). The monster stat block resolves live from `local_content` at view time (the demo TokenTemplate is just a `monster_slug` pointer), so the fix reaches the client immediately — Vex's (Bandit Captain) Dagger + Scimitar now carry `+5` and the Strike button resolves through `/npc_attack` with hit math + auto-damage, same as PCs.
+
+### Fixed
+- All 536 SRD monster attack-roll actions now carry `attack_bonus` (parsed from `desc`) → NPC Strike buttons resolve via `/npc_attack` (was a no-op fall-through). 319 of 322 monster JSONs updated (3 have no attack-roll actions).
+
+### Added
+- `tests/harness/test_monster_attack_bonus_data.py` — data-invariant guards: every attack-roll action has an `attack_bonus`; each matches its `desc` to-hit; Vex's Dagger is `+5`. Fails CI if a future SRD rebuild drops the field.
+
+### Notes
+- Closes the TODO P1 "NPCs unable to use action buttons" for the cited case + every monster on the local SRD path. The attack-roll → `/npc_attack` client routing was already in place (v2.49.164 / v2.94.0); the blocker was purely the missing data. Remaining (lower-priority, filed): save-only NPC actions (breath weapons) → `/npc_cast_spell` from the strike button, and a runtime normalization for Open5e-API-imported monsters (so they don't re-introduce the gap).
+- **Total harness count: 1929** (was 1926 in v2.99.464; +3 new tests).
+
+---
+
 ## [2.99.464] - 2026-06-07 — "Smite Take-Back" — Undo refunds Divine Smite + Primeval Awareness slots (P1 bug fix, part 3)
 
 **Schema version:** 66

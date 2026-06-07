@@ -78,7 +78,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+9"
     },
     {
       "id": "fist",
@@ -103,7 +104,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+9"
     },
     {
       "id": "variant-summon-demon-1-day",

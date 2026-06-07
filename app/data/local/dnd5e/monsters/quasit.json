@@ -53,7 +53,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+4"
     },
     {
       "id": "scare-1-day",

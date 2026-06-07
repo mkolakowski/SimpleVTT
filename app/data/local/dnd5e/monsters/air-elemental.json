@@ -80,7 +80,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+8"
     },
     {
       "id": "whirlwind-recharge-4-6",

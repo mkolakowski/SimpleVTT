@@ -81,7 +81,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+11"
     },
     {
       "id": "claw",
@@ -106,7 +107,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+11"
     },
     {
       "id": "tail",
@@ -131,7 +133,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+11"
     },
     {
       "id": "frightful-presence",

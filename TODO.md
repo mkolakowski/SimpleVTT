@@ -113,8 +113,9 @@ Two additional buttons use slightly different padding and may need individual re
 - ✅ **DONE (spell slots) — v2.99.462–.464** — Bug: Un-do button does not refund spell slot
     - ✅ All spell-slot consumers now refund on Undo: the 10 dedicated `cast_*` endpoints (cast_sleep / cast_slow / cast_polymorph / cast_compulsion / cast_bestow_curse / cast_bane / cast_hold_person / cast_flesh_to_stone / cast_hold_monster / cast_web) via the new `_log_spell_slot_spend` helper (v2.99.462–.463), plus `/attack` Divine Smite + `/use_primeval_awareness` (v2.99.464).
     - **Remaining (lower-priority audit follow-up):** a coverage pass over feature/item resource consumes — the `/undo_attack_damage` machinery already handles `resource_spend` / `inventory_consume` kinds; audit which `use_*` endpoints actually log them on consume (most do, e.g. lay_on_hands / second_wind). Not a spell-slot issue.
-- 🔴 **P1** — Bug investigation: NPCs unable to use action buttons, IE strike button on Dagger for vex
-    - Players seem to work as expected
+- 🟢 **DONE (root cause) — v2.99.465** — Bug: NPCs unable to use action buttons, IE strike button on Dagger for Vex
+    - Root cause: every `attack_roll: true` action in the 322 SRD monster JSONs shipped with `attack_bonus` null, so the client strike gate (`hasAttackRoll = bonus && damage`) fell through to legacy `/roll` instead of `/npc_attack` → no hit/damage. Backfilled `attack_bonus` (parsed from each action's `desc` "+N to hit") across all 536 attack actions; the stat block resolves live from `local_content`, so the fix reaches the client immediately. The attack-roll → `/npc_attack` routing was already wired (v2.49.164 / v2.94.0) — only the data was missing.
+    - **Remaining (lower-priority follow-ups):** (1) save-only NPC actions (breath weapons) still fall through to `/roll` — route them through the existing `/npc_cast_spell` from the strike button; (2) add a runtime normalization (parse `desc` to-hit) for Open5e-API-imported monsters so an import without `attack_bonus` doesn't re-introduce the gap.
 - 🟡 **P2** — Feature: plan three ways that we can allow users to up-cast spells
     - IE, Magic missile at level 3
     - Note: will need an audit of spells to see how up-casting them will affect how the spell is handled

@@ -81,7 +81,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+7"
     },
     {
       "id": "claw",
@@ -106,7 +107,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+7"
     },
     {
       "id": "cold-breath-recharge-5-6",

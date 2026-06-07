@@ -78,7 +78,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+6"
     },
     {
       "id": "tail",
@@ -103,7 +104,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+6"
     },
     {
       "id": "hurl-flame",
@@ -128,7 +130,8 @@
         "shape": "",
         "size_ft": 0,
         "secondary_ft": 0
-      }
+      },
+      "attack_bonus": "+5"
     },
     {
       "id": "barbed-hide",
