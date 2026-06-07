@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1887 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.438, 2026-06-06).
+**Total tests:** 1889 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.439, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1460,6 +1460,14 @@ v2.99.438 — Phase 7.1 of `docs/plans/movement-and-summons.md`. The first summo
 | `test_spiritual_weapon_summon_only` | No target → `attacked` False; the `spiritual-weapon` summon combatant appears (`is_summon`, 1 HP, `summoned_by` Tavik) with a token + `token_add` broadcast. Dismissed after. |
 | `test_spiritual_weapon_attacks_target` | Loop a fresh weapon each cast until Tavik hits a bandit → `damage_type == "force"`, `damage_rolled`/`damage_applied > 0`. Each cast's weapon is dismissed to avoid board accumulation. |
 | `test_spiritual_weapon_spell_not_known` | Krieger (Barbarian) → 409 `spell_not_known`. |
+
+### `test_summon_rest_teardown.py`
+v2.99.439 — Phase 7.1 of `docs/plans/movement-and-summons.md`. Closes the companion-lifecycle-leak risk: a long rest drops the resting character's summons (`_teardown_summons_for_owner` — combatant + token), a short rest leaves them. Owner fixture: Lyra Sunstrider.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_long_rest_drops_summons` | Lyra summons a Wolf, then long-rests → the combatant id is in `dismissed_summons`, the token is deleted from the map, and a follow-up manual dismiss → 404. |
+| `test_short_rest_keeps_summons` | After a refill long rest, Lyra summons a Wolf + short-rests → no `dismissed_summons` field and the token is still on the map (summon survives). |
 
 ### `test_menacing_attack.py`
 v2.99.253 — Battle Master maneuver 3 of 16 — Menacing Attack (PHB p.74). Mirrors Trip/Disarming but save ability is WIS and on-fail is Frightened.

@@ -2797,6 +2797,30 @@ async def _dismiss_companion(
     return result
 
 
+async def _teardown_summons_for_owner(
+    db: Session, campaign_id: int, owner_char_id: int,
+) -> list:
+    """v2.99.439 — Phase 7.1: drop every summoned companion owned by
+    ``owner_char_id`` (the long-rest teardown — RAW most summons end on a
+    rest, and the plan's risks section flags un-torn-down companions as a
+    board leak). Each is removed via `_dismiss_companion` (combatant +
+    token + broadcasts). Returns the list of dismissed combatant ids.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return []
+    ids = [
+        c.get("id") for c in (state.get("combatants") or [])
+        if c.get("is_summon") and c.get("summoned_by") == int(owner_char_id)
+    ]
+    dismissed = []
+    for cid in ids:
+        res = await _dismiss_companion(db, campaign_id, cid)
+        if res["removed"]:
+            dismissed.append(cid)
+    return dismissed
+
+
 # v2.66.0 — F1 follow-up: Opportunity Attack trigger detection.
 # RAW (PHB p.195): "You can make an opportunity attack when a hostile
 # creature that you can see moves out of your reach. To make the
@@ -68056,7 +68080,16 @@ async def rest_character(
             except Exception:
                 pass
 
-        return {"ok": True, "type": "long", "hp": hp_result["hp"], "hit_dice": hd, "resources": refilled_resources}
+        # v2.99.439 — Phase 7.1: drop this character's summoned companions
+        # on a long rest (Spiritual Weapon, familiars, etc. don't survive a
+        # rest — and the leak guard keeps the board clean).
+        _dismissed_summons = await _teardown_summons_for_owner(
+            db, campaign_id, char.id,
+        )
+
+        return {"ok": True, "type": "long", "hp": hp_result["hp"],
+                "hit_dice": hd, "resources": refilled_resources,
+                "dismissed_summons": _dismissed_summons}
 
     # Short rest
     if hd_cur <= 0:

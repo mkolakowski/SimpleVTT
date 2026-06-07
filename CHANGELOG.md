@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.439] - 2026-06-06 — "The Morning After" — summons drop on a long rest (automation Phase 7.1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 7.1 — a long rest now tears down the resting character's summoned companions (`_teardown_summons_for_owner`): each summon's combatant + token are removed.** Closes the plan's companion-lifecycle-leak risk and completes P7.1.
+**Description:** `_teardown_summons_for_owner(db, cid, owner_char_id)` walks the battle state for combatants tagged `is_summon` + `summoned_by == owner`, dismisses each via `_dismiss_companion` (removes the combatant, deletes the token, broadcasts `token_delete` + `battle_update`), and returns the dismissed combatant ids. It's wired into the long-rest branch of `/character/{id}/rest`, which now returns `dismissed_summons`. A short rest leaves summons in place (RAW — most summons last "until the spell ends" but end on a long rest, and the teardown is the board-leak guard). This is a behavior change to an existing endpoint, not a new surface.
+
+### Changed
+- `POST /api/campaign/{cid}/character/{char_id}/rest` (type `long`) drops the character's summoned companions + returns `dismissed_summons`.
+
+### Added
+- `_teardown_summons_for_owner` helper.
+- `tests/harness/test_summon_rest_teardown.py` — a long rest drops Lyra's Wolf (combatant in `dismissed_summons`, token deleted, follow-up dismiss → 404); a short rest keeps it (no teardown field, token still on the map).
+
+### Notes
+- Completes P7.1 of `docs/plans/movement-and-summons.md` (primitive + Spiritual Weapon retrofit + lifecycle teardown). Next: P7.2 — more summons (Find Familiar, Steel Defender, Ranger's Companion, Conjure Animals) on the same primitive.
+- **Total harness count: 1889** (was 1887 in v2.99.438; +2 new tests).
+
+---
+
 ## [2.99.438] - 2026-06-06 — "The Spectral Blade" — Spiritual Weapon retrofit (automation Phase 7.1)
 
 **Schema version:** 66

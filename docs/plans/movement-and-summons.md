@@ -140,8 +140,9 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    a Thunderwave-damages-the-summon test. ✅ Spiritual Weapon retrofit
    shipped v2.99.438 (`/use_spiritual_weapon` summons the floating-weapon
    combatant + makes the melee spell attack for 1d8+mod force on a hit;
-   first real summon retrofit). **Remaining:** a rest-teardown hook so
-   summons drop on the owner's long rest.
+   first real summon retrofit). ✅ rest-teardown shipped v2.99.439
+   (`_teardown_summons_for_owner` drops the owner's summons on a long
+   rest — combatant + token; a short rest leaves them). **P7.1 done.**
 5. **P7.2 — more summons (L, ongoing).** Find Familiar, Steel Defender,
    Ranger's Companion, Conjure Animals.
 
