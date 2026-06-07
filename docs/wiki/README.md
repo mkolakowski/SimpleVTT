@@ -47,7 +47,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Player simulacrum](../plans/player-simulacrum.md) | Markdown (design) | Contributors | ⚪ design only · all phases unstarted |
 | [Reactions automation](../plans/reactions-automation.md) | Markdown (design) | Contributors | 🟠 Phases 1a + 1b + 2a-partial shipped (v2.67.0–v2.67.2); 2b-7 pending |
 | [Ruler & range enforcement](../plans/ruler-and-range.md) | Markdown (design) | Contributors | ✅ All phases shipped (1, 2, 3A–E) |
-| [Spell up-casting](../plans/spell-upcasting.md) | Markdown (design) | Contributors | 🟠 Approach A + C shipped (v2.108.0) · B proposed |
+| [Spell up-casting](../plans/spell-upcasting.md) | Markdown (design) | Contributors | ✅ Approaches A + B + C shipped (v2.108.0–v2.110.0) |
 | [Spell-validation test suite](../plans/spell-validation-suite.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
 | [Sorcery Points + Metamagic](../plans/sorcery-points-and-metamagic.md) | Markdown (design) | Contributors | 🟠 Phase 0 shipped (v2.49.120); 1-5 unstarted |
 | [Warlock Pact Boon](../plans/warlock-pact-boon.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |

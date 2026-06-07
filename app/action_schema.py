@@ -96,6 +96,15 @@ class Action(BaseModel):
     # above_base`` (which drives attack-roll multi-beam math); these
     # serve symmetric purposes for the two spell archetypes.
     extra_targets_per_slot_above_base: int = 0
+    # v2.110.0: slot-level upcast DICE scaling (Approach B of the
+    # spell-upcasting plan). When set, the cast resolver adds
+    # ``(slot_level - spell.level) ×`` this dice expression to the
+    # action's damage / healing — Fireball ``damage_per_slot: "1d6"``,
+    # Cure Wounds ``healing_per_slot: "1d8"``. MUST be declared here or
+    # Pydantic strips it during content parse (same gotcha the
+    # extra_beams_/extra_targets_per_slot_above_base comments flag).
+    damage_per_slot: str = ""
+    healing_per_slot: str = ""
     # v2.49.176: NPC actions can reference the shared spell catalog via
     # ``spell_slug`` (added v2.49.174). When set, the server's
     # _resolve_spell_slug_action helper merges the spell's catalog

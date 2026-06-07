@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.110.0] - 2026-06-07 — "Bigger Boom" — up-cast auto-scales damage & healing dice (Approach B)
+
+**Schema version:** 68
+**Commit summary:** **Implements the spell-upcasting plan's Approach B: up-casting now auto-grows a spell's damage / healing dice. The cast resolver reads a `damage_per_slot` / `healing_per_slot` rule off the spell's action, adds `(slot_level − base) ×` that to the dice (merging same-die terms), and applies it to the broadcast strings + the action entries the heal-roll and auto-damage path read. Backfilled the common +dice / +heal spells in the SRD content.**
+**Description:** Completes the up-cast feature (A + C shipped v2.108.0–v2.109.0). New `_scale_dice_for_upcast(base, per_slot, extra)` merges dice: `3d6` + 1×`1d6` → `4d6`, `8d6` + 2×`1d6` → `10d6`, `1d8` + 1×`1d8` → `2d8`; a different die size appends a term; a missing/unparseable rule is a no-op (the dice stay at base, never corrupted). In `cast_spell`, when `slot_level > spell_level`, the resolver scales `payload["spell_healing"]`, `payload["spell_damage"]`, and each `actions[]` damage/healing — copying the action dicts first so the shared `local_content` cache is never mutated, and replacing `spell["actions"]` so the heal-claim, the server-side auto-heal roll, and the auto-attack-damage loop all see the up-cast dice. The `damage_per_slot` / `healing_per_slot` fields were backfilled into the SRD JSON for Burning Hands (+1d6), Fireball (+1d6), Shatter (+1d8), Cure Wounds (+1d8), Healing Word (+1d4), and Mass Healing Word (+1d4); the spell is enriched from this content at cast time, so any caster's matching spell scales.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_scale_dice_for_upcast` helper + the up-cast dice-scaling block in `cast_spell` (scales healing / damage / action dice when casting above base level).
+- `app/data/local/dnd5e/spells/{burning-hands,fireball,shatter,cure-wounds,healing-word,mass-healing-word}.json` — `damage_per_slot` / `healing_per_slot` rules on the cast action.
+- `tests/harness/test_cast_spell.py` — Burning Hands at L2 → action damage `4d6`; Cure Wounds at L2 → broadcast healing `2d8`; base-level cast stays `3d6` (no-op sanity).
+
+### Changed
+- `docs/plans/spell-upcasting.md` + the wiki "Design plans" status — Approach B marked shipped; the up-cast feature is now complete (A + B + C).
+
+### Notes
+- Spells without a `*_per_slot` rule (the long tail) still up-cast correctly — they consume the chosen slot and show the `higher_level` rule for manual application (Approach C). The backfill can extend to more spells incrementally.
+- **Total harness count: 1963** in `tests/harness/` (1960 → 1963); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.109.0] - 2026-06-07 — "Higher Still" — up-cast slot picker on the mini-sheet
 
 **Schema version:** 68

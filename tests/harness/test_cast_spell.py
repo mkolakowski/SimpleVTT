@@ -74,6 +74,77 @@ async def test_upcast_echoes_slot_level_and_higher_level(gm_client, gm_ws, roste
     assert "spell_higher_level" in d, "broadcast must carry spell_higher_level"
 
 
+async def test_upcast_scales_damage_dice(gm_client, gm_ws, roster):
+    """v2.110.0 — Approach B: Burning Hands (3d6 base, +1d6/slot) cast
+    with an L2 slot scales the action damage to 4d6 on the spell_cast
+    broadcast (the data the chat card + auto-damage path read)."""
+    zara = roster["Zara Emberfire"]  # Tiefling Sorcerer 5
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": 8,   # Burning Hands (L1)
+            "slot_level": 2,    # up-cast → +1d6
+            "class_slug": "sorcerer",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    msg = await gm_ws.wait_for("spell_cast")
+    d = msg["data"]
+    assert d["spell_name"] == "Burning Hands"
+    assert d["slot_level"] == 2
+    dmgs = [a.get("damage") for a in (d.get("actions") or []) if a.get("damage")]
+    assert "4d6" in dmgs, (
+        f"Burning Hands at L2 should scale 3d6 → 4d6; got {dmgs}"
+    )
+
+
+async def test_upcast_scales_healing_dice(gm_client, gm_ws, roster):
+    """v2.110.0 — Cure Wounds (1d8 base, +1d8/slot) cast with an L2
+    slot scales the broadcast healing to 2d8 (the heal-claim + auto-
+    heal roll both read this string)."""
+    tavik = roster["Brother Tavik Stonebrow"]  # Cleric, Life Domain
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": 4,   # Cure Wounds (L1)
+            "slot_level": 2,    # up-cast → +1d8
+            "class_slug": "cleric",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    msg = await gm_ws.wait_for("spell_cast")
+    d = msg["data"]
+    assert d["spell_name"] == "Cure Wounds"
+    assert d["slot_level"] == 2
+    assert d["spell_healing"] == "2d8", (
+        f"Cure Wounds at L2 should scale 1d8 → 2d8; got {d['spell_healing']}"
+    )
+
+
+async def test_upcast_base_level_leaves_dice_unscaled(gm_client, gm_ws, roster):
+    """Sanity: casting Burning Hands at its base L1 leaves 3d6 (the
+    scaler is a no-op when slot_level == spell_level)."""
+    zara = roster["Zara Emberfire"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": 8,
+            "slot_level": 1,
+            "class_slug": "sorcerer",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    msg = await gm_ws.wait_for("spell_cast")
+    dmgs = [a.get("damage") for a in (msg["data"].get("actions") or []) if a.get("damage")]
+    assert "3d6" in dmgs, f"base-level cast must stay 3d6; got {dmgs}"
+
+
 async def test_cast_misty_step_bonus_action(gm_client, gm_ws, roster):
     thalindra = roster["Thalindra Moonwhisper"]
     resp = await gm_client.post(

@@ -38,6 +38,7 @@
       "attack_roll": false,
       "save_ability": "",
       "healing": "1d8",
+      "healing_per_slot": "1d8",
       "aoe_targets": 1,
       "reroll_trigger": "",
       "transform_picker": "",

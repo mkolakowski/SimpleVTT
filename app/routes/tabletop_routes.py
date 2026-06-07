@@ -3950,6 +3950,30 @@ def _reroll_feature(key):
     return None
 
 
+def _scale_dice_for_upcast(base_expr, per_slot_expr, extra_levels):
+    """v2.110.0 — add ``extra_levels`` × ``per_slot_expr`` dice to
+    ``base_expr``, merging same-die terms.
+
+    '3d6' + 1×'1d6' → '4d6'; '1d8' + 1×'1d8' → '2d8'; '8d6' + 2×'1d6'
+    → '10d6'. A different die size appends a new term ('1d10' + '1d6'
+    → '1d10 + 1d6'). Returns ``base_expr`` unchanged when inputs are
+    missing or unparseable (so a bad per-slot value can never corrupt
+    the cast)."""
+    base = (base_expr or "").strip()
+    per = (per_slot_expr or "").strip()
+    if not base or not per or (extra_levels or 0) <= 0:
+        return base
+    m_per = _re.match(r"^(\d+)d(\d+)$", per)
+    if not m_per:
+        return base
+    add_n = int(m_per.group(1)) * int(extra_levels)
+    per_die = int(m_per.group(2))
+    m_base = _re.match(r"^(\d+)d(\d+)(.*)$", base)
+    if m_base and int(m_base.group(2)) == per_die:
+        return f"{int(m_base.group(1)) + add_n}d{per_die}{m_base.group(3)}"
+    return f"{base} + {add_n}d{per_die}"
+
+
 def _roll_is_save(stat_key, note) -> bool:
     """Best-effort: is this roll a saving throw? Gates save-only reroll
     features (Indomitable / Diamond Soul). Conservative — only the
@@ -16557,6 +16581,43 @@ async def cast_spell(
     from ..content.range_parser import max_range_ft, parse_range_ft
     _parsed_range = max_range_ft(parse_range_ft(spell.get("range") or ""))
     payload["range_ft"] = int(_parsed_range) if _parsed_range else 0
+
+    # v2.110.0 — up-cast dice scaling (Approach B). When casting above
+    # the spell's base level, grow the damage / healing dice by the
+    # per-slot rule carried on the spell (top-level) or its actions
+    # (canonical SRD location): Fireball +1d6/slot, Cure Wounds
+    # +1d8/slot, etc. Scale the broadcast strings AND the action
+    # entries — the latter is the authoritative source the heal-claim,
+    # the auto-heal roll below, and the auto-attack-damage loop all
+    # read. Copy the action dicts before mutating so the shared
+    # local_content cache is never corrupted. A missing/unparseable
+    # per-slot value is a no-op (the dice stay at base).
+    _upcast_extra = max(0, int(slot_level) - int(spell_level))
+    if _upcast_extra > 0:
+        _dmg_per_top = spell.get("damage_per_slot") or ""
+        _heal_per_top = spell.get("healing_per_slot") or ""
+        _scaled_actions = []
+        for _a in (spell.get("actions") or []):
+            _a2 = dict(_a)
+            _dp = _a2.get("damage_per_slot") or _dmg_per_top
+            _hp = _a2.get("healing_per_slot") or _heal_per_top
+            if _a2.get("damage") and _dp:
+                _a2["damage"] = _scale_dice_for_upcast(_a2["damage"], _dp, _upcast_extra)
+            if _a2.get("healing") and _hp:
+                _a2["healing"] = _scale_dice_for_upcast(_a2["healing"], _hp, _upcast_extra)
+            _scaled_actions.append(_a2)
+        spell["actions"] = _scaled_actions
+        payload["actions"] = _scaled_actions
+        _heal_per = _heal_per_top or next(
+            (a.get("healing_per_slot") for a in _scaled_actions if a.get("healing_per_slot")), "")
+        _dmg_per = _dmg_per_top or next(
+            (a.get("damage_per_slot") for a in _scaled_actions if a.get("damage_per_slot")), "")
+        if payload.get("spell_healing") and _heal_per:
+            payload["spell_healing"] = _scale_dice_for_upcast(
+                payload["spell_healing"], _heal_per, _upcast_extra)
+        if payload.get("spell_damage") and _dmg_per:
+            payload["spell_damage"] = _scale_dice_for_upcast(
+                payload["spell_damage"], _dmg_per, _upcast_extra)
 
     # Register heal claims so /apply_healing can validate and roll server-side
     if payload["spell_healing"]:
