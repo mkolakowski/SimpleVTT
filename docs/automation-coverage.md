@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.451
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.452
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -22,12 +22,12 @@ after a batch of retrofits and update the counts below. Treat the split as
 (archetype J — passive senses, language grants), and a few `tracked`-tagged ones
 only spend a resource without a downstream effect.
 
-## Summary (as of v2.99.451)
+## Summary (as of v2.99.452)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **181** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **56** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **182** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **55** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -73,7 +73,7 @@ or passive damage-boosters that already ride other code paths
   `unwavering_mark`, `scornful_rebuke` — fold into `_tick_auras`
   (`aura_of_conquest` ✅ v2.99.448 condition gate; `aura_of_alacrity` ✅ v2.99.449 buff-payload).
 - **On-hit / extra-attack:**
-  `dread_ambusher` (extra attack), `assassinate` (auto-crit rider). (`genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 server-resolved second attack.)
+  `assassinate` (auto-crit rider). (`genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 + `dread_ambusher` ✅ v2.99.452 server-resolved extra attacks.)
 - **Buff / temp-HP (D/F):** `combat_inspiration`, `rallying_cry`,
   `blade_flourish`, `protective_spirit`, `grim_harvest`, `supreme_healing`.
 - **Movement (G):** `ascendant_step` (fly), `stormborn` (fly),
@@ -136,6 +136,7 @@ or passive damage-boosters that already ride other code paths
 | `use_divine_intervention` | ✅ tracked | A use/resource |
 | `use_draconic_presence` | ✅ tracked | C save-or-condition |
 | `use_draconic_wings` | ✅ tracked | D buff-install |
+| `use_dread_ambusher` | ✅ tracked | damage |
 | `use_dreadful_strike` | ✅ tracked | D buff-install |
 | `use_elder_champion` | ✅ tracked | D buff-install |
 | `use_eldritch_master` | ✅ tracked | A use/resource |
@@ -279,7 +280,6 @@ or passive damage-boosters that already ride other code paths
 | `use_combat_inspiration` | ⚪ announce-only | — |
 | `use_dash` | ⚪ announce-only | — |
 | `use_devils_sight` | ⚪ announce-only | — |
-| `use_dread_ambusher` | ⚪ announce-only | — |
 | `use_drunken_technique` | ⚪ announce-only | — |
 | `use_eldritch_sight` | ⚪ announce-only | — |
 | `use_emissary_of_redemption` | ⚪ announce-only | — |

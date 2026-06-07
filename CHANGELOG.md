@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.452] - 2026-06-06 — "Out of the Gloom" — Dread Ambusher resolves its extra attack (automation Phase 2 follow-up)
+
+**Schema version:** 66
+**Commit summary:** **Dread Ambusher (Gloom Stalker Ranger Lv 3) now resolves its bonus weapon attack server-side — rolls vs AC and, on a hit, applies the weapon damage + the extra 1d8 (weapon's type), once per turn.** Reuses the v2.99.451 extra-attack shape.
+**Description:** `/use_dread_ambusher` gains `attack_index` + `target_combatant_id`. When a target is supplied, it resolves the bonus attack against that creature (same path as Horde Breaker: parse `sheet.attacks[attack_index]`, roll `1d20 + attack_bonus` vs `_read_target_ac`, nat 20 crit / nat 1 miss) and, on a hit, rolls the weapon damage **plus the Dread Ambusher +1d8** (both the weapon's damage type, dice doubled on a crit) and applies the combined total via `_apply_damage_to_combatant`. A once-per-turn gate via `economy.dread_ambusher_used` returns 409 `already_used`. The legacy announce path (no `target_combatant_id`) — the WIS initiative bonus + speed boost — is unchanged and stays GM-tracked. RAW "first turn of combat only" stays GM-tracked.
+
+### Changed
+- `/api/campaign/{cid}/use_dread_ambusher` resolves a real bonus attack + the +1d8 when given a target (was announce-only); response gains `attacked` / `hit` / `crit` / `attack_total` / `target_ac` / `damage_rolled` / `damage_applied` / `ambush_bonus` / `damage_type`.
+- `docs/automation-coverage.md` refreshed: `use_dread_ambusher` flips to tracked (**182 tracked / 55 announce-only of 239** now).
+
+### Added
+- `tests/harness/test_dread_ambusher.py` gains 2 tests: the bonus attack lands weapon + 1d8 damage (loop-until-hit, asserts `ambush_bonus` + `damage_rolled > ambush_bonus`), and the once-per-turn 409.
+
+### Notes
+- Second extra-attack retrofit, reusing the v2.99.451 mechanic. Both Hunter Horde Breaker + Gloom Stalker Dread Ambusher now resolve their bonus attacks server-side.
+- **Total harness count: 1912** (was 1910 in v2.99.451; +2 new tests).
+
+---
+
 ## [2.99.451] - 2026-06-06 — "The Second Arrow" — Horde Breaker resolves a real extra attack (automation Phase 2 follow-up)
 
 **Schema version:** 66

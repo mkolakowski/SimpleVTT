@@ -112,3 +112,82 @@ async def test_use_da_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+def _mkc(cid, char_id, name="C", hp=40):
+    return {
+        "id": cid, "char_id": char_id, "name": name,
+        "initiative": 10, "hp_current": hp, "hp_max": hp, "buffs": [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def test_dread_ambusher_resolves_bonus_attack(
+    gm_client, rowan_gloom,
+):
+    """v2.99.452 — Phase 2 extra-attack retrofit: with a
+    target_combatant_id, Dread Ambusher resolves the bonus Longbow attack
+    server-side + the +1d8 ambush damage on a hit. Loop re-seeding the
+    battle (clears the once-per-turn flag) until a swing connects.
+    """
+    rowan = rowan_gloom
+    rowan_cid = f"tok_da_rowan_{rowan['id']}"
+    dummy_cid = "tok_da_dummy"
+    hit_data = None
+    for _ in range(12):
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": [
+                _mkc(rowan_cid, rowan["id"], name=rowan["name"]),
+                _mkc(dummy_cid, None, name="Dummy"),
+            ], "turn_index": 0, "round": 1, "active": True},
+        )
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_dread_ambusher",
+            json={"character_id": rowan["id"], "attack_index": 0,
+                  "target_combatant_id": dummy_cid},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["attacked"] is True
+        assert data["target_ac"] > 0
+        if data["hit"]:
+            assert data["damage_type"] == "piercing"
+            assert 1 <= data["ambush_bonus"] <= 16  # 1d8 (2d8 on a crit)
+            assert data["damage_rolled"] > data["ambush_bonus"]  # weapon + 1d8
+            assert data["damage_applied"] > 0
+            hit_data = data
+            break
+    assert hit_data is not None, "no hit in 12 Dread Ambusher swings"
+
+
+async def test_dread_ambusher_once_per_turn(
+    gm_client, rowan_gloom,
+):
+    """The second Dread Ambusher attack in the same turn → 409
+    already_used."""
+    rowan = rowan_gloom
+    rowan_cid = f"tok_da2_rowan_{rowan['id']}"
+    dummy_cid = "tok_da2_dummy"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _mkc(rowan_cid, rowan["id"], name=rowan["name"]),
+            _mkc(dummy_cid, None, name="Dummy"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r1 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_dread_ambusher",
+        json={"character_id": rowan["id"], "attack_index": 0,
+              "target_combatant_id": dummy_cid},
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["attacked"] is True
+    r2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_dread_ambusher",
+        json={"character_id": rowan["id"], "attack_index": 0,
+              "target_combatant_id": dummy_cid},
+    )
+    assert r2.status_code == 409, r2.text
+    assert r2.json()["error"] == "already_used"

@@ -57393,6 +57393,8 @@ async def use_dread_ambusher(
     char_id = int(body.get("character_id") or 0)
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id") or None
+    attack_index = int(body.get("attack_index") or 0)
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -57430,6 +57432,84 @@ async def use_dread_ambusher(
         ambush_damage = 1
         breakdown = ""
 
+    # v2.99.452 — Phase 2 extra-attack retrofit (mirrors Horde Breaker
+    # v2.99.451): when a `target_combatant_id` is supplied, resolve the
+    # Dread Ambusher bonus weapon attack server-side + the +1d8 on a hit,
+    # once per turn. RAW "first turn of combat only" stays GM-tracked.
+    attacked = False
+    hit = False
+    crit = False
+    attack_total = 0
+    target_ac = 0
+    damage_rolled = 0
+    damage_applied = 0
+    ambush_bonus = 0
+    damage_type = ""
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if not target_combatant:
+            raise HTTPException(404, "Target not in battle")
+        _state = hub.get_battle(campaign_id)
+        _atk_cb = next(
+            (c for c in (_state.get("combatants") or [])
+             if c.get("char_id") == char.id), None,
+        ) if _state else None
+        if _atk_cb and bool((_atk_cb.get("economy") or {}).get(
+                "dread_ambusher_used")):
+            return JSONResponse(status_code=409, content={
+                "error": "already_used", "feature": "dread-ambusher",
+            })
+        attacks = list(sheet.get("attacks") or [])
+        if not (0 <= attack_index < len(attacks)):
+            raise HTTPException(400, "attack_index out of range")
+        weapon = attacks[attack_index] or {}
+        try:
+            atk_bonus = int(
+                str(weapon.get("attack_bonus") or "0").replace("+", "").strip()
+                or 0)
+        except (TypeError, ValueError):
+            atk_bonus = 0
+        dmg_expr = str(weapon.get("damage") or "1d4")
+        damage_type = str(weapon.get("damage_type") or "")
+        target_ac = _read_target_ac(db, campaign_id, target_combatant)
+        attacked = True
+        atk_roll_expr = f"1d20{atk_bonus:+d}"
+        try:
+            _ar = dice_mod.roll(atk_roll_expr)
+            attack_total, _abd = int(_ar.total), _ar.breakdown
+        except dice_mod.DiceParseError:
+            attack_total, _abd = 0, ""
+        _nat_m = _re.search(r"\[(\d+)\]", _abd)
+        nat = int(_nat_m.group(1)) if _nat_m else (attack_total - atk_bonus)
+        if nat == 20:
+            hit, crit = True, True
+        elif nat == 1:
+            hit, crit = False, False
+        else:
+            hit, crit = (attack_total >= target_ac), False
+        if hit:
+            # Weapon damage + the Dread Ambusher +1d8 (both the weapon's
+            # type); dice double on a crit.
+            w_expr = _double_dice_for_crit(dmg_expr) if crit else dmg_expr
+            a_expr = "2d8" if crit else "1d8"
+            try:
+                w_dmg = max(0, int(dice_mod.roll(w_expr).total))
+            except dice_mod.DiceParseError:
+                w_dmg = 0
+            try:
+                ambush_bonus = max(0, int(dice_mod.roll(a_expr).total))
+            except dice_mod.DiceParseError:
+                ambush_bonus = 0
+            damage_rolled = w_dmg + ambush_bonus
+            if damage_rolled > 0:
+                _res = await _apply_damage_to_combatant(
+                    db, campaign_id, target_combatant, damage_rolled,
+                    damage_type, is_crit=crit, is_attack=True,
+                    attacker_char_id=char.id,
+                )
+                damage_applied = int(_res.get("applied") or 0)
+        await _mark_attack_flag(campaign_id, char.id, "dread_ambusher")
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -57465,6 +57545,9 @@ async def use_dread_ambusher(
             "ambush_damage": ambush_damage,
             "ambush_damage_die": "1d8",
             "ranger_level": ranger_lv,
+            "attacked": attacked,
+            "hit": hit,
+            "damage_applied": damage_applied,
         },
     })
 
@@ -57476,6 +57559,15 @@ async def use_dread_ambusher(
         "ambush_damage": ambush_damage,
         "ambush_damage_die": "1d8",
         "ranger_level": ranger_lv,
+        "attacked": attacked,
+        "hit": hit,
+        "crit": crit,
+        "attack_total": attack_total,
+        "target_ac": target_ac,
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
+        "ambush_bonus": ambush_bonus,
+        "damage_type": damage_type,
     }
 
 
