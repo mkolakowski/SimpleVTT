@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.100.4] - 2026-06-07 — "Footnote Fix" — correct the stale Dash-modal docstring
+
+**Schema version:** 66
+**Commit summary:** **Updated the `_showPreMoveDashModal` header comment, which still described the pre-v2.100.2 "Take Dash / Skip Dash / Cancel" three-button layout. Found during live verification of the v2.100.1–.3 Dash flows.**
+**Description:** Pure comment fix — no behavior change. The docstring now states the modal appears only when the move both provokes an OA and exceeds the remaining movement (v2.100.1 gate), and that it has two buttons (Take Dash / Cancel move), with declining == cancel == no move == no OA (v2.100.2). Caught while grepping the deployed bundle during verification; the only "Skip Dash" strings left in the served JS were comments, and this one was inaccurate.
+
+### Fixed
+- `app/static/tabletop.js` — corrected the stale `_showPreMoveDashModal` docstring to match the v2.100.1/.2 behavior.
+
+### Notes
+- Comment-only change — no endpoint / WS / behavior change, so no harness test.
+- **Total harness count: 1942** (unchanged).
+
+---
+
 ## [2.100.3] - 2026-06-07 — "Second Wind" — Dash movement-cap bonus now survives the sync
 
 **Schema version:** 66

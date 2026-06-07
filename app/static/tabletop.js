@@ -3423,14 +3423,15 @@
     });
 
     /* v2.99.69 — pre-move Dash modal. Shown BEFORE the v2.99.55 OA
-     * modal when the planned move would provoke an OA. The Dash
-     * decision is independent of the OA: Dash extends movement but
+     * modal when the planned move both PROVOKES an OA and exceeds the
+     * combatant's remaining movement (the v2.100.1 gate is
+     * `_projectedOverrun && !action`). Dash extends movement but
      * doesn't prevent the OA (RAW: Disengage prevents OA — not
-     * surfaced yet; filed for follow-up). Buttons: Take Dash /
-     * Skip Dash / Cancel. After the decision the OA modal chains
-     * automatically. Cancel snaps the token back without showing
-     * either downstream prompt.
-     */
+     * surfaced yet; filed for follow-up). Buttons (v2.100.2): Take
+     * Dash / Cancel move only — there is no "Skip Dash" path because
+     * the move is over-cap and can't be made without Dashing, so
+     * declining == Cancel == no move == no OA. Take Dash chains to the
+     * OA modal automatically; Cancel snaps the token back. */
     function _showPreMoveDashModal({
         tokenLabel, triggers, distanceFt, onChoice, onCancel,
     }) {
