@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1891 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.440, 2026-06-06).
+**Total tests:** 1894 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.441, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1476,6 +1476,15 @@ v2.99.440 — Phase 7.2 of `docs/plans/movement-and-summons.md`. The second summ
 |------|-----------------|
 | `test_find_familiar_summons_companion` | Thalindra conjures an owl familiar → `is_summon`, `companion_key == "familiar"`, `name == "Familiar (owl)"`, `ac == 11`, 1 HP, `summoned_by` Thalindra; a `token_add` broadcast + the token (matching label) on the map. Dismissed after. |
 | `test_find_familiar_cannot_cast` | Krieger (Barbarian) → 409 `cannot_cast`. |
+
+### `test_use_animal_companion.py`
+v2.99.441 — Phase 7.2 of `docs/plans/movement-and-summons.md`. The third summon retrofit: `/use_animal_companion` (Beast Master Ranger Lv 3+) stands up the beast companion (HP = max(beast HP, 4 × ranger level), AC = 13 + prof) via `_summon_companion` and, when a `target_combatant_id` is supplied, makes the beast's bite (2d4 + STR-mod piercing on a hit). The demo Ranger (Rowan Quickbow) is a Hunter, so the happy paths PATCH his subclass to Beast Master then restore.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_animal_companion_summon_only` | No target → `attacked` False; the beast combatant has `companion_hp == 20` (max(11, 4×5)), `companion_ac == 16` (13 + prof 3), `is_summon`, `companion_key == "beast-companion"`, `summoned_by` Rowan. Dismissed after. |
+| `test_animal_companion_bites_target` | Loop a fresh companion each cast until the bite hits a bandit → `damage_type == "piercing"`, `damage_rolled`/`damage_applied > 0`. Each companion dismissed. |
+| `test_animal_companion_wrong_subclass` | Default Rowan (Hunter) → 409 `wrong_subclass_or_level`. |
 
 ### `test_menacing_attack.py`
 v2.99.253 — Battle Master maneuver 3 of 16 — Menacing Attack (PHB p.74). Mirrors Trip/Disarming but save ability is WIS and on-fail is Frightened.

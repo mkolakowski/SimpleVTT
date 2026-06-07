@@ -145,8 +145,10 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    rest — combatant + token; a short rest leaves them). **P7.1 done.**
 5. **P7.2 — more summons (L, ongoing). 🟠 in progress.** Find Familiar
    ✅ shipped v2.99.440 (`/cast_find_familiar` stands up the tiny
-   non-combat `familiar` companion in a chosen animal form). Remaining:
-   Steel Defender, Ranger's Companion, Conjure Animals.
+   non-combat `familiar` companion in a chosen animal form). Ranger's
+   Companion ✅ shipped v2.99.441 (`/use_animal_companion`: Beast Master
+   Lv 3+ beast with HP scaled to ranger level + AC 13 + prof + an
+   optional bite attack). Remaining: Steel Defender, Conjure Animals.
 
 ---
 

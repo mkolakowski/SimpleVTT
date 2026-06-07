@@ -2675,6 +2675,9 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
                        "color": "#e8772e"},
     "familiar": {"name": "Familiar", "ac": 11, "hp": 1, "speed_walk": 5,
                  "size": 1, "team": "hero", "color": "#b8a3d9"},
+    "beast-companion": {"name": "Beast Companion", "ac": 13, "hp": 11,
+                        "speed_walk": 40, "size": 1, "team": "hero",
+                        "color": "#8a6d3b"},
 }
 
 
@@ -2688,6 +2691,8 @@ async def _summon_companion(
     x: float = 0.0,
     y: float = 0.0,
     initiative: int = 0,
+    hp: "int | None" = None,
+    ac: "int | None" = None,
 ) -> "dict | None":
     """v2.99.437 — Phase 7.1: stand up a summoned companion as a REAL
     combatant. Creates an NPC ``Token`` on the active map (broadcast
@@ -2697,6 +2702,10 @@ async def _summon_companion(
     ``force_gm_sync``), and tags it ``is_summon`` + ``summoned_by`` for
     teardown. The companion reuses the existing damage / HP pipeline +
     `_force_move` for free.
+
+    ``hp`` / ``ac`` override the registry stat block when supplied
+    (v2.99.441 — Ranger's Companion scales HP with ranger level + adds
+    the proficiency bonus to AC).
 
     Off-grid (no active map) → the combatant is still added but with no
     token (``token_id`` None — announce-style fallback). Returns
@@ -2728,7 +2737,8 @@ async def _summon_companion(
             "type": "token_add", "data": _token_dict(t),
         })
 
-    hp = int(entry["hp"])
+    hp_val = int(hp) if hp is not None else int(entry["hp"])
+    ac_val = int(ac) if ac is not None else int(entry.get("ac", 10))
     combatant = {
         "id": (f"summon_{token_id}" if token_id
                else f"summon_{owner_char_id}_{disp_name}"),
@@ -2737,9 +2747,9 @@ async def _summon_companion(
         "token_template_id": None,
         "source_token_id": token_id,
         "initiative": int(initiative or 0),
-        "hp_current": hp,
-        "hp_max": hp,
-        "ac": int(entry.get("ac", 10)),
+        "hp_current": hp_val,
+        "hp_max": hp_val,
+        "ac": ac_val,
         "speed_walk": int(entry.get("speed_walk", 30)),
         "team": entry.get("team", "hero"),
         "buffs": [],
@@ -44527,6 +44537,177 @@ async def cast_find_familiar(
         "form": form,
         "combatant": (summon or {}).get("combatant"),
         "token_id": (summon or {}).get("token_id"),
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_animal_companion")
+async def use_animal_companion(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.441 — Phase 7.2 of docs/plans/movement-and-summons.md: a
+    third summon retrofit. Ranger's Companion (Beast Master conclave,
+    Ranger Lv 3, PHB p.93): the ranger bonds with a beast that fights at
+    its side. RAW the companion's HP = ``max(beast HP, 4 × ranger level)``
+    and it adds the ranger's proficiency bonus to its AC, attack, and
+    damage.
+
+    Body: ``{character_id, target_combatant_id?, x?, y?, initiative?}``.
+    Stands up the `beast-companion` combatant (HP scaled to the ranger's
+    level, AC = 13 + prof) via `_summon_companion`, then — if a
+    ``target_combatant_id`` is supplied — makes the beast's bite attack
+    server-side (1d20 + prof + the beast's STR mod vs the target's AC) and
+    applies 2d4 + STR-mod piercing on a hit.
+
+    Response: ``{ok, feature, combatant, token_id, ranger_level,
+    companion_hp, companion_ac, attacked, hit, crit, attack_total,
+    target_ac, damage_rolled, damage_applied, damage_type}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id") or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Ranger character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_beast_master(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "beast master ranger lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _ranger_level_from_sheet(sheet),
+        })
+
+    ranger_level = _ranger_level_from_sheet(sheet)
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    # Wolf-style beast profile (the canonical Beast Master starter).
+    beast_str_mod = 1  # Wolf STR 12.
+    companion_hp = max(11, 4 * ranger_level)
+    companion_ac = 13 + prof
+
+    summon = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key="beast-companion",
+        name=f"{char.name}'s Wolf",
+        x=float(body.get("x") or 0),
+        y=float(body.get("y") or 0),
+        initiative=int(body.get("initiative") or 0),
+        hp=companion_hp,
+        ac=companion_ac,
+    )
+
+    attacked = False
+    hit = False
+    crit = False
+    attack_total = 0
+    target_ac = 0
+    damage_rolled = 0
+    damage_applied = 0
+    damage_type = "piercing"
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant:
+            attacked = True
+            atk_bonus = prof + beast_str_mod  # beast adds ranger's prof
+            target_ac = _read_target_ac(db, campaign_id, target_combatant)
+            atk_expr = f"1d20{atk_bonus:+d}"
+            try:
+                _ar = dice_mod.roll(atk_expr)
+                attack_total, _abd = int(_ar.total), _ar.breakdown
+            except dice_mod.DiceParseError:
+                attack_total, _abd = 0, ""
+            _nat_match = _re.search(r"\[(\d+)\]", _abd)
+            nat = int(_nat_match.group(1)) if _nat_match else (
+                attack_total - atk_bonus)
+            if nat == 20:
+                hit, crit = True, True
+            elif nat == 1:
+                hit, crit = False, False
+            else:
+                hit, crit = (attack_total >= target_ac), False
+            if hit:
+                dmg_dice = "2d4"
+                roll_expr = _double_dice_for_crit(dmg_dice) if crit else dmg_dice
+                try:
+                    _dr = dice_mod.roll(roll_expr)
+                    damage_rolled = max(0, int(_dr.total) + beast_str_mod)
+                except dice_mod.DiceParseError:
+                    damage_rolled = max(0, beast_str_mod)
+                if damage_rolled > 0:
+                    _res = await _apply_damage_to_combatant(
+                        db, campaign_id, target_combatant, damage_rolled,
+                        damage_type, is_crit=crit, is_attack=True,
+                        attacker_char_id=char.id,
+                    )
+                    damage_applied = int(_res.get("applied") or 0)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": (
+                f"🐺 Ranger's Companion"
+                + (f" — {'bite hits' if hit else 'bite misses'} "
+                   f"({damage_applied})" if attacked else "")
+            ),
+            "feature_desc": (
+                f"{char.name} commands their beast companion "
+                f"(AC {companion_ac}, {companion_hp} HP)"
+                + (
+                    f"; it bites for {damage_applied} piercing."
+                    if (attacked and hit) else
+                    (" — the bite misses." if attacked else ".")
+                )
+            ),
+            "source": "animal-companion",
+            "ranger_level": ranger_level,
+            "combatant_id": (summon or {}).get("combatant", {}).get("id"),
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "animal-companion",
+        "combatant": (summon or {}).get("combatant"),
+        "token_id": (summon or {}).get("token_id"),
+        "ranger_level": ranger_level,
+        "companion_hp": companion_hp,
+        "companion_ac": companion_ac,
+        "attacked": attacked,
+        "hit": hit,
+        "crit": crit,
+        "attack_total": attack_total,
+        "target_ac": target_ac,
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
+        "damage_type": damage_type,
     }
 
 

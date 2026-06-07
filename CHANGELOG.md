@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.441] - 2026-06-06 — "The Loyal Hound" — Ranger's Companion retrofit (automation Phase 7.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 7.2 — new `POST /use_animal_companion` endpoint (Beast Master Ranger Lv 3+): stands up the beast companion (HP scaled to ranger level, AC 13 + prof) via `_summon_companion` and makes an optional bite attack (2d4 + STR-mod piercing).** Third summon retrofit.
+**Description:** `/use_animal_companion` (body `{character_id, target_combatant_id?, x?, y?, initiative?}`) gates on Beast Master Ranger Lv 3+ (`_pc_has_beast_master`), then summons the new `beast-companion` registry entry with HP = `max(11, 4 × ranger level)` and AC = `13 + proficiency` (the RAW Ranger's Companion bonuses). When a `target_combatant_id` is supplied it rolls the beast's bite (1d20 + prof + the beast's STR mod vs `_read_target_ac`) and applies 2d4 + STR-mod piercing on a hit. `_summon_companion` gains optional `hp` / `ac` overrides so the companion can scale past its registry defaults.
+
+### Added
+- `beast-companion` entry in `_COMPANION_TEMPLATES`; `hp` / `ac` override params on `_summon_companion`.
+- `POST /api/campaign/{cid}/use_animal_companion` → `{ok, feature, combatant, token_id, ranger_level, companion_hp, companion_ac, attacked, hit, crit, attack_total, target_ac, damage_rolled, damage_applied, damage_type}`; 409 `wrong_subclass_or_level` for non-Beast-Master rangers.
+- `tests/harness/test_use_animal_companion.py` — Rowan (PATCHed to Beast Master) summons the beast (asserts HP 20 / AC 16 scaling), loops until the bite hits a bandit (piercing damage applied), plus 409 (Hunter Rowan can't).
+
+### Notes
+- Third summon retrofit (after Spiritual Weapon v2.99.438 + Find Familiar v2.99.440). Remaining P7.2: Steel Defender, Conjure Animals.
+- **Total harness count: 1894** (was 1891 in v2.99.440; +3 new tests).
+
+---
+
 ## [2.99.440] - 2026-06-06 — "The Owl Familiar" — Find Familiar retrofit (automation Phase 7.2)
 
 **Schema version:** 66
