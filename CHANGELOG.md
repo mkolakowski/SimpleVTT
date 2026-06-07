@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.100.2] - 2026-06-07 — "Hold Position" — declining the required Dash cancels the move (no phantom OA)
+
+**Schema version:** 66
+**Commit summary:** **Removed the "Skip Dash" button from the pre-move Dash modal. Because that modal now only appears when the move is BEYOND the combatant's remaining movement (v2.100.1's `_projectedOverrun && !action` gate), "Skip Dash" used to route to the OA Continue/Stop modal and then commit an over-cap move WITHOUT the Dash that made it legal — so declining Dash still surfaced an Opportunity Attack prompt for a move the combatant had no movement to make. Now the only paths are "Take Dash" (extend movement → OA) or "Cancel move" (no move, no OA).**
+**Description:** Reported: "if dash is not chosen when a PC moves from an NPC, the OA prompt still appears — it should not, as no movement has been taken." Root cause: the Dash modal's three buttons (Cancel / Skip Dash / Take Dash) predate v2.100.1's gate narrowing. When the gate was `!action` (v2.99.77), "Skip Dash" made sense for within-cap moves. After v2.100.1 the modal only fires for over-cap moves, so "Skip Dash" became incoherent — you can't make an over-cap move without Dashing, yet the button walked the user into the OA prompt + an over-speed-confirmed commit anyway. Dropping the button makes the modal's logic match reality: Dash is mandatory to complete the move, so not Dashing == cancelling == no movement == no OA. The modal copy now says the move is "farther than the combatant can travel without Dashing." The OA modal for within-cap provoking moves is unaffected (those skip the Dash modal entirely and prompt OA directly).
+
+### Fixed
+- `app/static/tabletop.js` — `_showPreMoveDashModal` no longer renders a "Skip Dash" button; declining the (now-mandatory) Dash cancels the move with no OA prompt. Modal summary copy updated to match.
+
+### Notes
+- Client-only modal change — no HTTP endpoint or WS broadcast change, so no harness test.
+- Pairs with v2.100.1: together they make the Dash modal appear *only* when needed and behave correctly when declined.
+- **Total harness count: 1939** (unchanged).
+
+---
+
 ## [2.100.1] - 2026-06-07 — "No Need to Run" — Dash popup only when the move needs it
 
 **Schema version:** 66

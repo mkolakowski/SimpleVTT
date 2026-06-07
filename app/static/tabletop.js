@@ -3474,11 +3474,19 @@
             .map(t => t.watcher_name || 'a hostile')
             .filter((v, i, a) => a.indexOf(v) === i)
             .join(', ');
+        // v2.100.2 — this modal only appears when the move is BEYOND
+        // the combatant's remaining movement (the Dash gate is
+        // `_projectedOverrun && !action`). So the move literally can't
+        // be made without Dashing — copy + buttons reflect that: Take
+        // Dash to extend movement and make the move (the OA fires), or
+        // Cancel (no move, no OA). There is no "skip Dash but move
+        // anyway" path because there isn't the movement for it.
         summary.innerHTML = (
-            'This move' + distTxt + ' will provoke an Opportunity Attack '
-            + 'from <strong>' + (provokers || 'a hostile') + '</strong>. '
-            + 'Dash extends your turn movement so you can finish the escape; '
-            + 'the OA will still fire either way.'
+            'This move' + distTxt + ' is farther than the combatant can '
+            + 'travel without Dashing, and it will provoke an Opportunity '
+            + 'Attack from <strong>' + (provokers || 'a hostile') + '</strong>. '
+            + 'Take Dash to extend your movement and make the move — the OA '
+            + 'will fire. Otherwise cancel.'
         );
         card.appendChild(summary);
 
@@ -3507,11 +3515,12 @@
             'background:rgba(255,255,255,0.04); color:var(--fg);',
             onCancel,
         ));
-        btnRow.appendChild(_btn(
-            'Skip Dash',
-            'background:rgba(255,255,255,0.06); color:var(--fg);',
-            () => onChoice(false),
-        ));
+        // v2.100.2 — removed the "Skip Dash" button. It used to route
+        // to the OA Continue/Stop modal and then commit an over-cap
+        // move WITHOUT the Dash that made it legal — so declining Dash
+        // still surfaced an OA prompt for a move the combatant had no
+        // movement to make. Now the only way forward is Take Dash;
+        // not Dashing == Cancel == no move == no OA.
         btnRow.appendChild(_btn(
             '🏃 Take Dash',
             'background:#66bb6a; color:#1f2433; font-weight:600; border-color:#43a047;',
