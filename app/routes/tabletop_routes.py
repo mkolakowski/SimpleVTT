@@ -44957,6 +44957,171 @@ async def cast_conjure_animals(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/cast_gust")
+async def cast_gust(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.445 — Phase 6.3 of docs/plans/movement-and-summons.md: the
+    last forced-mover nice-to-have. Gust (Druid/Sorcerer/Wizard cantrip,
+    Tasha's p.106): "One Medium or smaller creature that you choose must
+    succeed on a Strength saving throw or be pushed up to 5 feet away
+    from you."
+
+    Body: ``{character_id, target_combatant_id}``. Gates on the caster
+    knowing Gust OR being a Druid / Sorcerer / Wizard, rolls the target's
+    STR save server-side (PC sheet or NPC template) vs the spell save DC,
+    and on a fail pushes the target's token 5 ft away via `_force_move`.
+    The Medium-or-smaller size gate stays GM-tracked.
+
+    Response: ``{ok, feature, save_dc, save_resolved, save_passed,
+    push_applied}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id") or None
+    if not target_combatant_id:
+        raise HTTPException(400, "target_combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    knows_gust = any(
+        (s.get("_slug") == "gust")
+        or (str(s.get("name", "")).lower() == "gust")
+        for s in spells
+    )
+    _cls = (sheet.get("class") or "").strip().lower()
+    _classes = [
+        (e.get("class") or "").strip().lower()
+        for e in (sheet.get("classes") or [])
+    ]
+    _caster_classes = {"druid", "sorcerer", "wizard"}
+    is_caster = _cls in _caster_classes or any(
+        c in _caster_classes for c in _classes)
+    if not knows_gust and not is_caster:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_cast",
+            "expected": "knows Gust, or druid/sorcerer/wizard",
+            "got_class": _cls,
+        })
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    spc = (
+        sheet.get("spellcasting_ability")
+        or sheet.get("class_spellcasting") or ""
+    ).strip().upper()[:3]
+    if spc not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+        spc = "INT"
+    spc_mod = (int((sheet.get("abilities") or {}).get(spc, 10)) - 10) // 2
+    save_dc = 8 + prof + spc_mod
+
+    save_resolved = False
+    save_passed = None
+    push_applied = False
+    target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+    if target_combatant:
+        _tmod = None
+        if target_combatant.get("char_id"):
+            _tchar = db.query(Character).filter(
+                Character.id == int(target_combatant["char_id"]),
+            ).first()
+            if _tchar:
+                _tmod, _ = _resolve_stat_modifier(
+                    _tchar.sheet or {}, "dnd5e", "str_save")
+        elif target_combatant.get("token_template_id"):
+            _tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(target_combatant["token_template_id"]),
+            ).first()
+            if _tmpl:
+                _tmod, _ = _resolve_stat_modifier(
+                    _monster_template_to_sheet(_tmpl, campaign_id),
+                    "dnd5e", "str_save")
+        if _tmod is None:
+            _tmod = 0
+        _expr = f"1d20{_tmod:+d}"
+        try:
+            _r = dice_mod.roll(_expr)
+            _total, _bd = int(_r.total), _r.breakdown
+        except dice_mod.DiceParseError:
+            _total, _bd = 0, ""
+        save_resolved = True
+        save_passed = _total >= save_dc
+        _tname = target_combatant.get("name") or "Target"
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": _expr, "total": _total, "breakdown": _bd,
+                "note": f"Gust save (DC {save_dc})",
+                "user_name": _tname, "char_name": _tname,
+                "visibility": Visibility.PUBLIC.value, "dc": save_dc,
+            },
+        })
+        if not save_passed:
+            _state = hub.get_battle(campaign_id)
+            _caster_cb = next(
+                (c for c in (_state.get("combatants") or [])
+                 if c.get("char_id") == char.id), None,
+            ) if _state else None
+            gr = await _force_move(
+                db, campaign_id, target_combatant, 5,
+                source_combatant=_caster_cb,
+            )
+            push_applied = gr["moved"]
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": f"💨 Gust — Str DC {save_dc} or push 5 ft",
+            "feature_desc": (
+                f"{char.name} compels the air: the target (Medium or "
+                f"smaller) makes a Str save DC {save_dc} or is pushed "
+                f"5 ft away. (Gust cantrip.)"
+            ),
+            "source": "gust",
+            "save_dc": save_dc,
+            "save_ability": "STR",
+            "push_max_ft": 5,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "gust",
+        "save_dc": save_dc,
+        "save_resolved": save_resolved,
+        "save_passed": save_passed,
+        "push_applied": push_applied,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_menacing_attack")
 async def use_menacing_attack(
     campaign_id: int,

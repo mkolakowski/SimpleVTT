@@ -129,8 +129,9 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    takes 2d8 thunder + pushed 10 ft away; first *multi-target*
    forced-move retrofit). Repelling Blast ✅ consolidated onto
    `_force_move` v2.99.444 (was a bespoke push predating the primitive —
-   now all forced movement runs through one code path). Remaining
-   nice-to-have: Gust (push 5 ft).
+   now all forced movement runs through one code path). Gust ✅ shipped
+   v2.99.445 (`/cast_gust`: STR save or pushed 5 ft away). **P6.3 fully
+   done — every push/pull feature runs on `_force_move`.**
 4. **P7.1 — `_summon_companion` + a companion registry (L). 🟠 in
    progress.** ✅ shipped v2.99.437: the `_summon_companion` /
    `_dismiss_companion` primitives + a `_COMPANION_TEMPLATES` registry

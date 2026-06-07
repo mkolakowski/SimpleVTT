@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1900 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.443, 2026-06-06).
+**Total tests:** 1903 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.445, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1503,6 +1503,15 @@ v2.99.443 — Phase 7.2 of `docs/plans/movement-and-summons.md`. The first *mult
 | `test_conjure_animals_eight_wolves` | The default → `count == 8`, 8 distinct summon combatants (all `is_summon`, `companion_key == "wolf"`, `summoned_by` Mira) + 8 tokens at x positions spaced 70 px apart from 700. All dismissed after. |
 | `test_conjure_animals_count_clamp` | `count=2` → exactly two wolves. |
 | `test_conjure_animals_cannot_cast` | Krieger (Barbarian) → 409 `cannot_cast`. |
+
+### `test_cast_gust.py`
+v2.99.445 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Gust (Druid/Sorcerer/Wizard cantrip, Tasha's p.106): the target makes a STR save vs the spell save DC or is pushed 5 ft away via `_force_move`. The last forced-mover. Caster fixture: Thalindra Moonwhisper (demo Wizard).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_gust_pushes_target_on_failed_save` | Thalindra (above the bandit) loops until it fails its STR save → `push_applied` True + the bandit's NPC token moved +70 px (5 ft / 1 cell away); a passed save moves nothing. NPC token created + torn down. |
+| `test_gust_cannot_cast` | Krieger (Barbarian) → 409 `cannot_cast`. |
+| `test_gust_missing_target_400` | Missing `target_combatant_id` → 400. |
 
 ### `test_menacing_attack.py`
 v2.99.253 — Battle Master maneuver 3 of 16 — Menacing Attack (PHB p.74). Mirrors Trip/Disarming but save ability is WIS and on-fail is Frightened.

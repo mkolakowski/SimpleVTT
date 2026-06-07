@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.445] - 2026-06-06 — "The Gathering Wind" — Gust cantrip (automation Phase 6.3)
+
+**Schema version:** 66
+**Commit summary:** **Phase 6.3 — new `POST /cast_gust` endpoint (Druid/Sorcerer/Wizard cantrip): rolls the target's STR save server-side and, on a fail, pushes it 5 ft away via `_force_move`.** The last forced-mover — every push/pull feature now runs on the primitive.
+**Description:** `/cast_gust` (body `{character_id, target_combatant_id}`) gates on the caster knowing Gust OR being a Druid / Sorcerer / Wizard, computes the spell save DC (8 + prof + spellcasting mod), rolls the target's STR save (PC sheet or NPC template), and on a fail pushes the target's token 5 ft away from the caster via `_force_move`. Mirrors the Open Hand push / Pushing Attack shape at 5 ft. Needs the target on a gridded map with a token (off-grid → the save resolves but no move); the Medium-or-smaller size gate stays GM-tracked.
+
+### Added
+- `POST /api/campaign/{cid}/cast_gust` → `{ok, feature, save_dc, save_resolved, save_passed, push_applied}`; 409 `cannot_cast` (not a druid/sorcerer/wizard) + 400 (missing target).
+- `tests/harness/test_cast_gust.py` — Thalindra (demo Wizard) loops until a bandit fails its STR save, then asserts `push_applied` + the token moved +70 px (5 ft); plus 409 + 400.
+
+### Notes
+- Completes the P6.3 push/pull set's last nice-to-have. Every forced-movement feature — Pushing Attack, Open Hand push, Thorn Whip pull, Thunderwave, Repelling Blast, Gust — now flows through the single `_force_move` primitive.
+- **Total harness count: 1903** (was 1900 in v2.99.444; +3 new tests).
+
+---
+
 ## [2.99.444] - 2026-06-06 — "One Hand to Push Them All" — Repelling Blast consolidated onto _force_move (automation cleanup)
 
 **Schema version:** 66
