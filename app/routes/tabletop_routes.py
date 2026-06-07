@@ -74768,7 +74768,19 @@ def _creature_full(m: dict) -> dict:
             name = (a.get("name") or "").strip()
             desc = (a.get("desc") or "").strip()
             if name or desc:
-                actions.append({"name": name, "desc": desc})
+                # v2.99.469 — derive structured combat fields from the
+                # prose desc so imported Open5e monsters' Strike buttons
+                # resolve via /npc_attack + /npc_cast_spell (same as the
+                # backfilled local SRD set). Existing structured fields on
+                # the source action win over the parsed ones.
+                from ..content.monster_action_parse import (
+                    parse_monster_action_combat as _parse_monster_action_combat,
+                )
+                parsed = _parse_monster_action_combat(desc)
+                for k, v in parsed.items():
+                    if a.get(k) not in (None, "", 0, False):
+                        parsed[k] = a.get(k)
+                actions.append({"name": name, "desc": desc, **parsed})
     speed_raw = m.get("speed", {})
     speed = {}
     if isinstance(speed_raw, dict):

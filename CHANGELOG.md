@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.469] - 2026-06-07 — "Imported, Not Broken" — parse combat fields for Open5e monsters
+
+**Schema version:** 66
+**Commit summary:** **New `app/content/monster_action_parse.py` leaf helper derives a monster action's structured combat fields (attack_roll / attack_bonus / damage / damage_type / save_ability / save_dc) from its SRD-style prose `desc`; `_creature_full` (the Open5e creature-detail projection) now applies it.** Stops API-imported monsters from re-introducing the NPC-strike data gap.
+**Description:** The local SRD monster JSONs carry the structured combat fields (backfilled v2.99.465/.466), but Open5e's API serves action payloads as prose only — and `_creature_full` previously stripped imported actions to `{name, desc}`, dropping every attack/save field. A monster imported live from Open5e would therefore re-break NPC Strike buttons (attack-roll → fell through to `/roll`; save → announce-only). The new leaf parser extracts the fields from the desc ("+5 to hit", "DC 21 Dexterity saving throw", "(18d6) fire damage"), and `_creature_full` merges them into each action (source structured fields win when present). Extracted as a leaf module (no FastAPI import) so it's unit-testable on the host, mirroring `effective_speed.py`.
+
+### Added
+- `app/content/monster_action_parse.py` — `parse_monster_action_combat(desc)`.
+- `tests/harness/test_monster_action_desc_parser.py` — 4 unit tests: melee attack, save breath weapon, no-combat-prose, ranged-no-flat-mod.
+
+### Changed
+- `_creature_full` projects parsed combat fields onto Open5e creature actions.
+
+### Notes
+- Closes the last filed follow-up of the NPC-strike P1 (Open5e-import normalization). The local SRD path (the demo) was already fixed by the v2.99.465/.466 backfills; this covers live API imports.
+- **Total harness count: 1937** (was 1933 in v2.99.468; +4 new tests).
+
+---
+
 ## [2.99.468] - 2026-06-07 — "The Whole Cone" — AoE breath weapons hit every target (save-only NPC actions, part 3)
 
 **Schema version:** 66
