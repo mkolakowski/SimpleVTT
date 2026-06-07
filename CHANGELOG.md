@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.463] - 2026-06-07 — "The Full Refund" — Undo refunds spell slots, all dedicated casts (P1 bug fix, part 2)
+
+**Schema version:** 66
+**Commit summary:** **Bug fix (P1) — applied the v2.99.462 `_log_spell_slot_spend` wiring to the remaining 9 dedicated `cast_*` endpoints, so the chat-card ↶ Undo now refunds the spell slot for every one of them.**
+**Description:** Completes the P1 fix started in v2.99.462. The other 9 leveled-spell endpoints — `cast_sleep`, `cast_slow`, `cast_polymorph`, `cast_compulsion`, `cast_bestow_curse`, `cast_bane`, `cast_flesh_to_stone`, `cast_hold_monster`, `cast_web` — now call `_log_spell_slot_spend` (mint a `cast_id` + log a `spell_slot_spend` entry) at their success return and surface the `cast_id`, so `/undo_attack_damage` refunds the slot. Applied as a single atomic edit against the exact 6-line success-return pattern those 9 endpoints share (verified to match precisely those 9 — the interleaved grapple / make-permanent returns have different shapes and were untouched).
+
+### Fixed
+- `cast_sleep` / `cast_slow` / `cast_polymorph` / `cast_compulsion` / `cast_bestow_curse` / `cast_bane` / `cast_flesh_to_stone` / `cast_hold_monster` / `cast_web` now log their slot spend + return a `cast_id` → the chat-card Undo refunds the slot.
+
+### Added
+- `tests/harness/test_cast_hold_monster.py::test_cast_hold_monster_undo_refunds_slot` — cast Hold Monster at L5 → `cast_id` → `/undo_attack_damage` → `spell_slot_update` shows the wizard L5 slot's `used` back to 0.
+
+### Notes
+- Completes the "Undo doesn't refund spell slot" P1 across all 10 dedicated `cast_*` endpoints (cast_hold_person in v2.99.462; the other 9 here). Remaining consumed-not-refunded follow-ups from the audit: `/attack` Divine Smite slot + `/use_primeval_awareness` (different shapes — filed in TODO).
+- Verified the 10 swept cast-endpoint test files (59 tests) green, including both undo-refund tests, with no regressions.
+- **Total harness count: 1924** (was 1923 in v2.99.462; +1 new test).
+
+---
+
 ## [2.99.462] - 2026-06-07 — "The Refunded Slot" — Undo refunds spell slots (P1 bug fix, part 1)
 
 **Schema version:** 66

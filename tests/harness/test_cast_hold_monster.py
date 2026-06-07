@@ -201,3 +201,42 @@ async def test_cast_hold_monster_rejects_cleric_class(gm_client, roster):
         },
     )
     assert resp.status_code == 400, resp.text
+
+
+async def test_cast_hold_monster_undo_refunds_slot(
+    gm_client, gm_ws, thalindra_with_hold_monster, roster,
+):
+    """v2.99.463 — the chat-card ↶ Undo now refunds the L5 slot Hold
+    Monster spent. Cast → the response carries a `cast_id`;
+    /undo_attack_damage with it broadcasts a `spell_slot_update` with the
+    wizard L5 slot's `used` back down by 1 (1 → 0)."""
+    thalindra = thalindra_with_hold_monster
+    krieger = roster["Krieger Stonefist"]
+    th_tok = f"tok_hmU_th_{thalindra['id']}"
+    kr_tok = f"tok_hmU_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        _mkc(th_tok, thalindra["id"], name=thalindra["name"], speed_walk=30),
+        _mkc(kr_tok, krieger["id"], name=krieger["name"], speed_walk=40),
+    ])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_hold_monster",
+        json={"character_id": thalindra["id"], "class_slug": "wizard",
+              "slot_level": 5, "target_combatant_ids": [kr_tok],
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    cast_id = data.get("cast_id")
+    assert cast_id, "cast response must carry a cast_id for undo"
+    used_after_cast = data["slot_used"]
+
+    gm_ws.mark()
+    u = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert u.status_code == 200, u.text
+    ssu = await gm_ws.wait_for("spell_slot_update", timeout=2.0)
+    assert ssu["data"]["class_slug"] == "wizard"
+    assert ssu["data"]["level"] == 5
+    assert ssu["data"]["used"] == used_after_cast - 1  # slot refunded

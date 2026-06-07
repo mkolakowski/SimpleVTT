@@ -64962,8 +64962,12 @@ async def cast_sleep(
         },
     })
 
+    # v2.99.463 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
@@ -65420,8 +65424,12 @@ async def cast_slow(
         },
     })
 
+    # v2.99.463 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
@@ -65778,8 +65786,12 @@ async def cast_polymorph(
         },
     })
 
+    # v2.99.463 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
@@ -66015,8 +66027,12 @@ async def cast_compulsion(
         },
     })
 
+    # v2.99.463 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
@@ -66240,8 +66256,12 @@ async def cast_bestow_curse(
         },
     })
 
+    # v2.99.463 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
@@ -66470,8 +66490,12 @@ async def cast_bane(
         },
     })
 
+    # v2.99.463 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
@@ -67425,8 +67449,12 @@ async def cast_flesh_to_stone(
         },
     })
 
+    # v2.99.463 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
@@ -67818,8 +67846,12 @@ async def cast_hold_monster(
         },
     })
 
+    # v2.99.463 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
@@ -68032,8 +68064,12 @@ async def cast_web(
         },
     })
 
+    # v2.99.463 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "spell")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,
