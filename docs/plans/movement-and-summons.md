@@ -111,8 +111,11 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
 
 1. **P6.1 — speed buffs (S). ✅ shipped v2.99.431.** `effective_speed_walk`
    now reads `speed_bonus_ft` (additive) + `speed_multiplier` (Haste ×2);
-   Haste + Longstrider install the keys. Unit-tested. (The client JS speed
-   mirror is a cosmetic follow-up — the server move-cap is authoritative.)
+   Haste + Longstrider install the keys. Unit-tested. ✅ Client JS speed
+   mirror shipped v2.99.446 (`_effectiveSpeedWalk` now applies
+   `(base + bonus) × mult − reduction`, so the canvas ruler / move-preview
+   / overrun gate show the Haste/Longstrider-buffed cap; the server
+   move-cap remains authoritative).
 2. **P6.2 — `_force_move` + endpoint (M). ✅ shipped v2.99.432
    (primitive + endpoint).** `_combatant_token` + `_force_move` (mutates
    the target token's `x/y` along the source→target axis, broadcasts

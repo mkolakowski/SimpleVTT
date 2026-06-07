@@ -2674,17 +2674,19 @@
         // standard reference, but the breadcrumb colors against the
         // post-Dash effective cap so a Dashed player sees green up to
         // their actual budget.
-        /* v2.99.98 — subtract the breadcrumb's speed_reduction_ft
-         * (sum of Lance of Lethargy + future Slow / web / etc.) so
-         * the red/green threshold honors active reduction effects.
-         * Falls back to 0 when the bc was built by a pre-v2.99.98
-         * client. */
-        const speedCap = Math.max(
-            0,
-            (Number(bc.speed_walk) || 30)
-                + (Number(bc.dash_bonus_ft) || 0)
-                - (Number(bc.speed_reduction_ft) || 0),
-        );
+        /* v2.99.98 — honor speed-reduction effects in the red/green
+         * threshold. v2.99.446 — Phase 6.1: prefer the breadcrumb's
+         * precomputed `effective_speed_walk` ((base + Σ bonus) × mult −
+         * Σ reduction) so Haste / Longstrider raise the cap too; fall
+         * back to the old base − reduction math for a stale bc. */
+        const _effWalk = (typeof bc.effective_speed_walk === 'number')
+            ? bc.effective_speed_walk
+            : Math.max(
+                0,
+                (Number(bc.speed_walk) || 30)
+                    - (Number(bc.speed_reduction_ft) || 0),
+            );
+        const speedCap = Math.max(0, _effWalk + (Number(bc.dash_bonus_ft) || 0));
         const half = gridSize / 2;
 
         // First pass: stroke every segment + arrowhead, tracking the

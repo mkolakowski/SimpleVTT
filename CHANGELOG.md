@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.446] - 2026-06-06 — "The Honest Ruler" — client speed-buff mirror (automation Phase 6.1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 6.1 follow-up — the client `_effectiveSpeedWalk` now mirrors the full server formula `(base + Σ speed_bonus_ft) × speed_multiplier − Σ speed_reduction_ft`, so the canvas ruler / move-preview / overrun gate show the Haste / Longstrider-buffed cap (they previously showed the un-buffed speed).** Client-only mirror; the server move-cap stays authoritative.
+**Description:** v2.99.431 added `speed_bonus_ft` + `speed_multiplier` to the server's `effective_speed_walk`, but the JS mirror in `tabletop.html` still computed `base − reduction` only — so a Hasted (×2) or Longstrider'd (+10) token's canvas ruler, drag move-preview, and movement-overrun modal all displayed the un-buffed cap even though the server allowed the longer move. This adds `_effectiveSpeedBonusFt` + `_effectiveSpeedMultiplier` JS helpers (mirrors of the server) and updates `_effectiveSpeedWalk` to `(base + bonus) × mult − reduction`. The movement breadcrumb now carries the precomputed `effective_speed_walk` and colors green/red against it.
+
+### Changed
+- `_effectiveSpeedWalk` (and the movement breadcrumb cap) in `app/templates/tabletop.html` / `app/static/tabletop.js` now apply the speed-bonus + multiplier terms, matching `app/content/effective_speed.py`.
+
+### Notes
+- Client-only behavior change (no endpoint) — exempt from the endpoint-harness rule. The mirrored formula is already validated server-side by `tests/harness/test_effective_speed_walk.py`. Completes the v2.99.431 P6.1 "client JS speed mirror" follow-up.
+- **Total harness count: 1903** (unchanged — client-only).
+
+---
+
 ## [2.99.445] - 2026-06-06 — "The Gathering Wind" — Gust cantrip (automation Phase 6.3)
 
 **Schema version:** 66

@@ -6231,17 +6231,60 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         return total;
     }
 
-    /* v2.99.98 — effective walking speed = base speed_walk minus
-     * the sum of speed-reduction effects, clamped to ≥ 0. Mirror of
-     * the server's `_effective_speed_walk` so display + future
-     * server-side movement-cap gates report the same value. */
+    /* v2.99.446 — Phase 6.1 client mirror: sum the active speed-BONUS
+     * effects (`effects.speed_bonus_ft`) on a combatant's buffs — the
+     * additive complement to `_effectiveSpeedReductionFt`. Longstrider
+     * (+10), Eagle Totem / Step of the Wind dash bonuses install this.
+     * Mirror of the server's `effective_speed_bonus_ft`. */
+    function _effectiveSpeedBonusFt(c) {
+        if (!c || !Array.isArray(c.buffs)) return 0;
+        let total = 0;
+        for (const b of c.buffs) {
+            if (!b || typeof b !== 'object') continue;
+            const effects = b.effects;
+            if (!effects || typeof effects !== 'object') continue;
+            const v = Number(effects.speed_bonus_ft);
+            if (Number.isFinite(v) && v > 0) total += v;
+        }
+        return total;
+    }
+
+    /* v2.99.446 — Phase 6.1 client mirror: the largest
+     * `effects.speed_multiplier` on a combatant's buffs (default 1).
+     * Haste doubles speed (`speed_multiplier: 2`); RAW these don't
+     * stack — take the max. Mirror of the server's
+     * `effective_speed_multiplier`. */
+    function _effectiveSpeedMultiplier(c) {
+        if (!c || !Array.isArray(c.buffs)) return 1;
+        let best = 1;
+        for (const b of c.buffs) {
+            if (!b || typeof b !== 'object') continue;
+            const effects = b.effects;
+            if (!effects || typeof effects !== 'object') continue;
+            const m = Number(effects.speed_multiplier);
+            if (Number.isFinite(m) && m > best) best = m;
+        }
+        return best;
+    }
+
+    /* v2.99.98 — effective walking speed. v2.99.446 — Phase 6.1: now
+     * mirrors the full server formula `(base + Σ speed_bonus_ft) ×
+     * speed_multiplier − Σ speed_reduction_ft`, clamped to ≥ 0 (was
+     * `base − reduction` only — the bonus + Haste ×2 terms were missing
+     * client-side, so a Hasted / Longstrider'd token's ruler showed the
+     * un-buffed cap). Mirror of the server's `effective_speed_walk` so
+     * the canvas move-preview + overrun gate report the same cap. */
     function _effectiveSpeedWalk(c) {
         if (!c) return 30;
         const base = Number(c.speed_walk) > 0 ? Number(c.speed_walk) : 30;
-        return Math.max(0, base - _effectiveSpeedReductionFt(c));
+        const bonus = _effectiveSpeedBonusFt(c);
+        const mult = _effectiveSpeedMultiplier(c);
+        return Math.max(0, (base + bonus) * mult - _effectiveSpeedReductionFt(c));
     }
     window._effectiveSpeedWalk = _effectiveSpeedWalk;
     window._effectiveSpeedReductionFt = _effectiveSpeedReductionFt;
+    window._effectiveSpeedBonusFt = _effectiveSpeedBonusFt;
+    window._effectiveSpeedMultiplier = _effectiveSpeedMultiplier;
 
     /* v2.99.67 — client-side speed_walk heal. Server-side v2.99.65
      * heals speed_walk on encounter Load, but the GM client carries
@@ -6326,6 +6369,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                  * Lethargy, future Slow / web / etc.) so the
                  * breadcrumb colors against the reduced cap. */
                 speed_reduction_ft: _effectiveSpeedReductionFt(active),
+                /* v2.99.446 — Phase 6.1: carry the full effective walk
+                 * (base + Σ bonus) × mult − Σ reduction so the breadcrumb
+                 * colors against the Haste / Longstrider-buffed cap, not
+                 * just the reduced one. */
+                effective_speed_walk: _effectiveSpeedWalk(active),
                 char_id: active.char_id,
             };
         }
