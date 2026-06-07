@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.462] - 2026-06-07 — "The Refunded Slot" — Undo refunds spell slots (P1 bug fix, part 1)
+
+**Schema version:** 66
+**Commit summary:** **Bug fix (P1) — the chat-card ↶ Undo button now refunds the spell slot for dedicated `cast_*` endpoints. Adds a reusable `_log_spell_slot_spend` helper + wires the first endpoint (`/cast_hold_person`).**
+**Description:** An audit (see notes) found **10 dedicated leveled-spell endpoints** — `cast_sleep`, `cast_slow`, `cast_polymorph`, `cast_compulsion`, `cast_bestow_curse`, `cast_bane`, `cast_hold_person`, `cast_flesh_to_stone`, `cast_hold_monster`, `cast_web` — that decrement a spell slot (`slot["used"] += 1`) but never mint a `cast_id` or log a `spell_slot_spend` entry into `_attack_damage_log`. So `/undo_attack_damage` had nothing to refund: the Undo button reverted HP/conditions but **not the slot**. (The generic `/cast_spell` + `/cast_hex` / `/cast_hunters_mark` already logged it; these dedicated endpoints didn't.) This commit adds the reusable `_log_spell_slot_spend(campaign_id, char_id, class_slug, slot_level, used_before, spell_name) -> cast_id` helper (replacing the ~5-line inline block) and wires `/cast_hold_person` to call it + return the `cast_id`. The remaining 9 follow in v2.99.463 (same one-liner).
+
+### Fixed
+- `/api/campaign/{cid}/cast_hold_person` now logs its slot spend + returns a `cast_id`, so the chat-card Undo refunds the L2 slot (was HP/condition-only).
+
+### Added
+- `_log_spell_slot_spend` reusable helper.
+- `tests/harness/test_cast_hold_person.py::test_cast_hold_person_undo_refunds_slot` — cast → `cast_id` in the response → `/undo_attack_damage` → `spell_slot_update` shows `used` decremented (slot refunded).
+
+### Notes
+- Part 1 of the TODO P1 "Undo doesn't refund spell slot" + the consumed-not-refunded audit. The audit (machine-mapped all 20 `slot["used"]` decrement sites) found exactly these 10 dedicated endpoints missing the log; `/attack` (Divine Smite slot) + `/use_primeval_awareness` are separate shapes filed for a follow-up. v2.99.463 sweeps the other 9 `cast_*` endpoints.
+- **Total harness count: 1923** (was 1922 in v2.99.461; +1 new test).
+
+---
+
 ## [2.99.461] - 2026-06-07 — "The Clean Room" — full-suite contention note (docs)
 
 **Schema version:** 66

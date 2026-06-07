@@ -6053,6 +6053,38 @@ def _log_damage_entry(cast_id: str | None, entry: dict) -> None:
     _attack_damage_log.setdefault(cast_id, []).append(entry)
 
 
+def _log_spell_slot_spend(
+    campaign_id: int,
+    char_id: int,
+    class_slug: str,
+    slot_level: int,
+    used_before: int,
+    spell_name: str,
+) -> str:
+    """v2.99.462 — mint a fresh ``cast_id`` and log a ``spell_slot_spend``
+    entry under it so the chat-card ↶ Undo button (`/undo_attack_damage`)
+    can refund the slot. The caller MUST surface the returned cast_id in
+    its JSON response (and ideally the broadcast) under ``cast_id`` so the
+    client has the undo handle.
+
+    Replaces the ~5-line inline block that `/cast_spell`, `/cast_hex`,
+    `/cast_hunters_mark` (etc.) each repeat; lets the dedicated
+    leveled-spell endpoints (cast_sleep / cast_hold_person / … ) become
+    refundable with one call after their slot decrement.
+    """
+    cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(cast_id, {
+        "kind": "spell_slot_spend",
+        "campaign_id": campaign_id,
+        "character_id": int(char_id),
+        "class_slug": class_slug,
+        "slot_level": int(slot_level),
+        "used_before": int(used_before),
+        "spell_name": spell_name,
+    })
+    return cast_id
+
+
 def _snapshot_target_buffs(
     db: Session, campaign_id: int, target_combatant: dict,
 ) -> "list[dict]":
@@ -67140,8 +67172,12 @@ async def cast_hold_person(
         },
     })
 
+    # v2.99.462 — log the slot spend so the chat-card ↶ Undo refunds it.
+    cast_id = _log_spell_slot_spend(
+        campaign_id, char.id, class_slug, slot_level, used, "Hold Person")
     return {
         "ok": True,
+        "cast_id": cast_id,
         "slot_level": slot_level,
         "slot_used": used + 1,
         "slot_total": total,

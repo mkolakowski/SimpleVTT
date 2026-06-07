@@ -178,3 +178,37 @@ async def test_cast_hold_person_rejects_invalid_class(gm_client, roster):
         },
     )
     assert resp.status_code == 400, resp.text
+
+
+async def test_cast_hold_person_undo_refunds_slot(
+    gm_client, gm_ws, tavik_and_krieger,
+):
+    """v2.99.462 — bug fix: the chat-card ↶ Undo now refunds the spell
+    slot a dedicated cast endpoint spent. Cast Hold Person (L2) → the
+    response carries a `cast_id`; POST /undo_attack_damage with it →
+    a `spell_slot_update` broadcasts the L2 cleric slot's `used` back
+    down by 1.
+    """
+    tavik, krieger, kr_tok = tavik_and_krieger
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_hold_person",
+        json={"character_id": tavik["id"], "class_slug": "cleric",
+              "slot_level": 2, "target_combatant_ids": [kr_tok],
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    cast_id = data.get("cast_id")
+    assert cast_id, "cast response must carry a cast_id for undo"
+    used_after_cast = data["slot_used"]
+
+    gm_ws.mark()
+    u = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert u.status_code == 200, u.text
+    ssu = await gm_ws.wait_for("spell_slot_update", timeout=2.0)
+    assert ssu["data"]["class_slug"] == "cleric"
+    assert ssu["data"]["level"] == 2
+    assert ssu["data"]["used"] == used_after_cast - 1  # slot refunded
