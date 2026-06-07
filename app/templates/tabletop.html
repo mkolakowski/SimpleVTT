@@ -6050,24 +6050,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         }, 150);
     }
 
-    // v2.100.6 — hydrate the in-memory hub battle from the GM's
-    // authoritative localStorage state on load. The hub's battle map
-    // (`realtime.Hub._battle`) is in-memory only — never persisted to
-    // the DB — so after an app restart or a demo reset it's EMPTY until
-    // the GM next MUTATES the battle (the only thing that fires
-    // pushBattle). Every server-side battle read goes through the hub:
-    // OA detection (`_check_opportunity_attack_triggers`), the
-    // over-speed gate, and reaction-prompt routing. An un-hydrated hub
-    // silently disabled all of them — the GM saw their init tracker
-    // (rendered from localStorage) but dragging an NPC past a PC fired
-    // NO opportunity attack because the server believed no battle
-    // existed. Push once on load when the GM has a live battle so the
-    // hub matches what the GM already sees. No-op for players
-    // (pushBattle gates on IS_GM) and when there's no active battle.
-    if (IS_GM && battle && battle.active
-            && Array.isArray(battle.combatants) && battle.combatants.length) {
-        pushBattle();
-    }
+    // v2.101.2 — the v2.100.6 GM-load localStorage→hub push was
+    // retired here. It existed because the hub's battle map was
+    // in-memory only and started EMPTY after a restart / demo reseed,
+    // silently disabling every server-side battle read (OA detection,
+    // the over-speed gate, reaction routing) until the GM next mutated
+    // the battle. v2.101.0 ("Saved State") made the hub a write-through
+    // cache over the `battles` table — `get_battle` now lazily
+    // rehydrates from the persisted row on the first read after a
+    // restart — so the server self-heals its authoritative battle
+    // without the client re-pushing it on load. The push was a no-op
+    // re-write of state the hub already holds, so it's gone.
 
     function _abi(score) { return Math.floor((Number(score || 10) - 10) / 2); }
 

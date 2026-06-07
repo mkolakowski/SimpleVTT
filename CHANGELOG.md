@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.101.2] - 2026-06-07 — "Band-Aid Off" — retire the client-side hub-hydration push
+
+**Schema version:** 67
+**Commit summary:** **Removes the v2.100.6 GM-load `localStorage`→hub push (and its Playwright test) now that v2.101.0 made the hub self-heal from the `battles` table. The push was a no-op re-write of state the hub already rehydrates from the DB on the first read after a restart.**
+**Description:** v2.100.6 shipped a client-side band-aid for the RAM-only hub: when the GM page loaded with an active battle in `localStorage`, it pushed that state to the server hub so server-side battle reads (OA detection, the over-speed gate, reaction routing) worked after a restart/reseed without waiting for the GM's first mutation. v2.101.0 ("Saved State") fixed the root cause — the hub is now a write-through cache over the `battles` table and `get_battle` lazily rehydrates from the persisted row on the first read after a bounce. The GM-load push therefore re-writes state the server already holds, so it's removed. Its Playwright test (`test_battle_hub_hydration.py`) is deleted too: it proved the push re-hydrated an emptied hub, a scenario that no longer exists (and which it simulated by PUTting an empty battle — which now also clears the persisted row, leaving nothing to rehydrate). The DB-self-heal path is covered server-side by the v2.101.0 `tests/harness/test_battle.py` round-trip.
+
+### Removed
+- `app/templates/tabletop.html` — the v2.100.6 `IS_GM`/`battle.active` localStorage→hub `pushBattle()` call on load (left an explanatory comment pointing at v2.101.0).
+- `tests/harness_ui/test_battle_hub_hydration.py` — the Playwright test for the retired push.
+
+### Notes
+- No endpoint, schema, or WS-shape change; `pushBattle()` itself stays (still called on battle mutations). Behavior-removal only.
+- **Total harness count: 1944** in `tests/harness/` (unchanged); **`tests/harness_ui/` 16 → 15**.
+
+---
+
 ## [2.101.1] - 2026-06-07 — "Back in Sync" — realign the OA harness tests with shipped behavior
 
 **Schema version:** 67
