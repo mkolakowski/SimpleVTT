@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.100.1] - 2026-06-07 — "No Need to Run" — Dash popup only when the move needs it
+
+**Schema version:** 66
+**Commit summary:** **Re-narrowed the pre-move Dash-modal gate to `overrun && !action`. The "Take the Dash action?" popup was firing on every OA-provoking move while the action slot was free — most visibly for NPCs (whose `economy.action` is usually unset), so a short NPC step away from a PC got the green Dash card instead of going straight to the OA Continue/Stop modal.**
+**Description:** v2.99.77 broadened the Dash gate from `_projectedOverrun && !action` (v2.99.72) to just `!action`, on the theory that players wanted a Dash offer before any provoking move. In practice that surfaced a spurious Dash prompt whenever the combatant still had movement budget to spare. Because an NPC combatant's `economy.action` is typically `undefined` (`!undefined → true`), every in-cap NPC move that provoked an OA showed "Take the Dash action?" — confusing, since there's nothing to extend when you're within your speed. Dash only matters when the move needs *more* movement than the remaining cap allows, so the gate is back to `_projectedOverrun && !_econ.action`. The OA modal is unaffected — it's gated on `_oaTriggers.length`, not on Dash, so within-cap provoking moves still get their OA Continue/Stop prompt; they just skip the pointless Dash offer. Over-cap + action-available still chains Dash → OA.
+
+### Fixed
+- `app/static/tabletop.js` — `_needsDash` gate restored to `_projectedOverrun && !_econ.action` so the Dash popup no longer fires for OA-provoking moves that stay within the combatant's movement cap (the NPC-step-away case).
+
+### Notes
+- Client-only modal-gating fix — no HTTP endpoint or WS broadcast change, so no harness test (the contract surface is unchanged). The OA + over-speed server gates are untouched.
+- **Total harness count: 1939** (unchanged).
+
+---
+
 ## [2.100.0] - 2026-06-07 — "A Step Too Far" — GM over-range movement popup
 
 **Schema version:** 66

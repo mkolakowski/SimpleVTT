@@ -3928,23 +3928,27 @@
                         : (Number(_active.speed_walk) || 30);
                     const _cap = _speed + _dashBonus;
                     _projectedOverrun = (_used + _projectedDistance) > _cap + 0.001;
-                    // v2.99.77 — broaden the Dash-modal gate. Show
-                    // the sequential Dash → OA flow whenever the
-                    // dragger IS the active combatant AND the action
-                    // slot is still available (regardless of whether
-                    // the current move alone exceeds the cap). The
-                    // v2.99.72 gate (`overrun && !action`) was too
-                    // narrow — players reported the modal "not
-                    // working" because their first OA-provoking drag
-                    // of the turn typically stayed within the cap,
-                    // so they jumped straight to the bare OA prompt
-                    // with no Dash option. Showing Dash for every
-                    // OA-provoking move on YOUR turn matches the
-                    // user's mental model ("offer me Dash before I
-                    // commit a move that's going to provoke");
-                    // unavailable action still hides it (no double-
-                    // spend of the action slot).
-                    _needsDash = !_econ.action;
+                    // v2.100.1 — re-narrow the Dash-modal gate to
+                    // `overrun && !action`. v2.99.77 had broadened it
+                    // to `!action` (offer Dash on EVERY OA-provoking
+                    // move while the action slot is free), but that
+                    // surfaced a spurious "Take the Dash action?"
+                    // popup whenever a combatant still had movement
+                    // budget to spare — most visibly for NPCs, whose
+                    // combatant `economy.action` is typically unset
+                    // (`!undefined` → true), so every short NPC step
+                    // away from a PC got the green Dash card instead
+                    // of going straight to the OA Continue/Stop modal.
+                    // Dash only matters when the move needs MORE
+                    // movement than the remaining cap allows; within
+                    // the cap there's nothing to extend. The OA modal
+                    // itself still fires for every OA-provoking move
+                    // (it's gated on `_oaTriggers.length`, not on
+                    // Dash), so within-cap provoking moves keep their
+                    // OA prompt — they just skip the pointless Dash
+                    // offer. Over-cap + action-available still chains
+                    // Dash → OA as before.
+                    _needsDash = _projectedOverrun && !_econ.action;
                 }
             }
         }
