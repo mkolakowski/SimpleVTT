@@ -113,3 +113,56 @@ async def test_use_pf_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+def _npc(cid, name, hp_cur=1, hp_max=30):
+    return {
+        "id": cid, "char_id": None, "name": name,
+        "initiative": 5, "hp_current": hp_cur, "hp_max": hp_max, "buffs": [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+async def test_protective_field_restores_reduction(
+    gm_client, garrik_psi,
+):
+    """v2.99.456 — Phase 7: Protective Field reduces the damage a shielded
+    creature took by restoring `reduction` HP. The ally is at 1/30 (plenty
+    of headroom) so the applied heal equals the full reduction."""
+    garrik = garrik_psi
+    ally = "tok_pf_ally"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": f"tok_pf_g_{garrik['id']}", "char_id": garrik["id"],
+             "name": garrik["name"], "initiative": 20,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            _npc(ally, "Wounded Ally"),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_protective_field",
+        json={"character_id": garrik["id"], "target_combatant_id": ally,
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["protected"] is True
+    assert data["applied"] == data["reduction"]  # full reduction restored
+    assert data["applied"] >= 1
+
+
+async def test_protective_field_target_not_in_battle_404(
+    gm_client, garrik_psi,
+):
+    """A target_combatant_id not in battle → 404."""
+    garrik = garrik_psi
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_protective_field",
+        json={"character_id": garrik["id"],
+              "target_combatant_id": "nope_not_in_battle", "override": True},
+    )
+    assert r.status_code == 404, r.text

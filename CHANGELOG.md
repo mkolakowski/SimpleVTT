@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.456] - 2026-06-06 — "The Telekinetic Shield" — Protective Field applies its damage reduction (automation Phase 7)
+
+**Schema version:** 66
+**Commit summary:** **Protective Field (Psi Warrior Fighter Lv 3) now applies its damage reduction server-side — restores `Psionic die + INT mod` HP to the shielded creature (the damage it just took, reduced) — instead of announcing the number for the GM to subtract.** Second Phase 7 reaction.
+**Description:** `/use_protective_field` already spent the reaction + rolled the reduction (`max(1, 1dN + INT mod)`); it now applies it when given a `target_combatant_id` by restoring `reduction` HP to that creature via `_apply_heal_to_combatant` (capped at max — so the net effect is the damage just taken minus the reduction). PCs route through the death-save machine, NPCs get a direct hub-HP bump. The legacy announce path (no target) is unchanged. The "a creature within 30 ft took damage" trigger stays GM/UI-tracked.
+
+### Changed
+- `/api/campaign/{cid}/use_protective_field` restores the reduction to the shielded creature (was announce-only); response gains `protected` / `applied`. (Audit was already tracked — it marks the reaction — so this deepens rather than flips the count.)
+
+### Added
+- `tests/harness/test_protective_field.py` gains 2 tests: a wounded ally (1/30) regains the full `reduction` (`applied == reduction`), and a 404 for an unknown target.
+
+### Notes
+- Second Phase 7 reaction (after Riposte v2.99.455). Reuses the v2.99.454 heal shape. Next: Chronal Shift (reroll).
+- **Total harness count: 1918** (was 1916 in v2.99.455; +2 new tests).
+
+---
+
 ## [2.99.455] - 2026-06-06 — "The Counterstroke" — Riposte resolves its counter-attack (automation Phase 7)
 
 **Schema version:** 66

@@ -56657,6 +56657,7 @@ async def use_protective_field(
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    target_combatant_id = body.get("target_combatant_id") or None
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -56711,6 +56712,22 @@ async def use_protective_field(
         breakdown = ""
     reduction = max(1, die_roll + int_mod)
 
+    # v2.99.456 — Phase 7: apply the damage reduction by restoring
+    # `reduction` HP to the protected creature (it just took the damage;
+    # reducing it = healing that much back, capped at max). Was
+    # announce-only. The "took damage within 30 ft" trigger stays
+    # GM/UI-tracked — the caller names who's being shielded.
+    protected = False
+    applied = 0
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if not target_combatant:
+            raise HTTPException(404, "Target not in battle")
+        protected = True
+        hr = await _apply_heal_to_combatant(
+            db, campaign_id, target_combatant, reduction)
+        applied = int(hr.get("applied") or 0)
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -56745,6 +56762,8 @@ async def use_protective_field(
             "die_roll": die_roll,
             "int_mod": int_mod,
             "fighter_level": fighter_lv,
+            "protected": protected,
+            "applied": applied,
         },
     })
 
@@ -56756,6 +56775,8 @@ async def use_protective_field(
         "die_roll": die_roll,
         "int_mod": int_mod,
         "fighter_level": fighter_lv,
+        "protected": protected,
+        "applied": applied,
     }
 
 
