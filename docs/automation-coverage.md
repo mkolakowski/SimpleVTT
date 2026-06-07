@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.448
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -17,24 +17,23 @@ This table is **heuristic + machine-generated** — an endpoint is tagged
 resource/economy decrement (`_mark_battle_economy`, `resource_update`,
 `flag_modified(char…)`, a spell-slot `used` bump). `announce-only` = only a
 `feature_used` broadcast with no state mutation detected. Re-run the classifier
-(the script lives in the v2.99.447 commit message / `docs/` history) after a
-batch of retrofits and update the counts below. Treat the split as **±a few**:
-a few `announce-only`-tagged features are *narration-only by design* (archetype
-J — passive senses, language grants), and a few `tracked`-tagged ones only spend
-a resource without a downstream effect.
+after a batch of retrofits and update the counts below. Treat the split as
+**±a few**: a few `announce-only`-tagged features are *narration-only by design*
+(archetype J — passive senses, language grants), and a few `tracked`-tagged ones
+only spend a resource without a downstream effect.
 
-## Summary (as of v2.99.447)
+## Summary (as of v2.99.448)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **177** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **60** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **178** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **59** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
 At the plan's baseline (v2.99.385) the split was **~60 tracked / ~156
 announce-only**. Phases 1–6 (feature-use registry, on-hit riders, feature
-saves, temp-HP + roll bonuses, auras, movement + summons) flipped **~117**
+saves, temp-HP + roll bonuses, auras, movement + summons) flipped **~118**
 endpoints to tracked — the engine-gap work is done; what's left is the
 announce-only tail below (much of it archetype J, narration-only-OK).
 
@@ -47,7 +46,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P2 — on-hit rider registry (`_ATTACK_RIDERS`) | +Xd riders | ✅ v2.99.395–.403 |
 | P3 — feature save resolver (`_resolve_feature_save`) | save-or-condition | ✅ v2.99.405–.414 |
 | P4 — temp-HP + roll-bonus (`_grant_temp_hp`) | +tempHP/+AC/+save | ✅ v2.99.415–.423 |
-| P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 |
+| P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
 | P8 — higher-level subclass features | composition on primitives | ⚪ mostly unshipped |
@@ -63,16 +62,16 @@ for the archetype → primitive mapping.
 
 ## Notable announce-only backlog (candidates for automation)
 
-Most of the 60 announce-only rows are **archetype J** (narration /
+Most of the 59 announce-only rows are **archetype J** (narration /
 passive senses: `beast_speech`, `devils_sight`, `eldritch_sight`,
 `mask_of_many_faces`, `eyes_of_the_rune_keeper`, `improved_minor_illusion`, …)
 or passive damage-boosters that already ride other code paths
 (`potent_spellcasting`, `empowered_evocation`, `sculpt_spells`, `foe_slayer`,
 `spell_bombardment`). The genuinely-automatable tail:
 
-- **Auras (E):** `aura_of_conquest`, `aura_of_warding`, `aura_of_alacrity`,
-  `ancestral_protectors`, `unwavering_mark`, `scornful_rebuke` — fold into
-  `_tick_auras`.
+- **Auras (E):** `aura_of_warding`, `aura_of_alacrity`, `ancestral_protectors`,
+  `unwavering_mark`, `scornful_rebuke` — fold into `_tick_auras`
+  (`aura_of_conquest` ✅ done v2.99.448 via a `requires_condition` gate).
 - **On-hit / extra-attack:** `genies_wrath` (B rider), `horde_breaker`,
   `dread_ambusher` (extra attack), `assassinate` (auto-crit rider).
 - **Buff / temp-HP (D/F):** `combat_inspiration`, `rallying_cry`,
@@ -109,6 +108,7 @@ or passive damage-boosters that already ride other code paths
 | `use_arcane_shot` | ✅ tracked | A use/resource |
 | `use_arcane_ward` | ✅ tracked | A use/resource |
 | `use_arms_of_the_astral_self` | ✅ tracked | A use/resource |
+| `use_aura_of_conquest` | ✅ tracked | D buff-install, E aura |
 | `use_aura_of_the_guardian` | ✅ tracked | A use/resource |
 | `use_avenging_angel` | ✅ tracked | D buff-install |
 | `use_balm_of_the_summer_court` | ✅ tracked | A use/resource |
@@ -267,7 +267,6 @@ or passive damage-boosters that already ride other code paths
 | `use_ascendant_step` | ⚪ announce-only | — |
 | `use_assassinate` | ⚪ announce-only | — |
 | `use_aura_of_alacrity` | ⚪ announce-only | — |
-| `use_aura_of_conquest` | ⚪ announce-only | — |
 | `use_aura_of_warding` | ⚪ announce-only | — |
 | `use_avatar_of_battle` | ⚪ announce-only | — |
 | `use_awakened_mind` | ⚪ announce-only | — |

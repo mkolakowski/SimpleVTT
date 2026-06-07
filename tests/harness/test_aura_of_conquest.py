@@ -50,7 +50,7 @@ async def caelan_conquest_lv7(gm_client, roster):
     caelan = roster["Sir Caelan Lightbringer"]
     await _patch_sheet(
         gm_client, caelan["id"],
-        {"subclass": "Oath of Conquest"},
+        {"subclass": "Oath of Conquest", "level": 7},
         class_slug="paladin",
     )
     try:
@@ -78,6 +78,9 @@ async def test_use_aoc_happy_lv7(
     assert data["radius_ft"] == 10
     assert data["psychic_damage"] == 3  # 7 // 2
     assert data["paladin_level"] == 7
+    # v2.99.448 — aura_installed is in the response; it only lands True
+    # with an active battle (see the tick test). No battle here → False.
+    assert "aura_installed" in data
     await asyncio.sleep(0.3)
     feats = _aoc_broadcasts(gm_ws, caelan["id"])
     assert feats
@@ -100,6 +103,90 @@ async def test_use_aoc_lv18_radius_upgrade(
     data = r.json()
     assert data["radius_ft"] == 30
     assert data["psychic_damage"] == 9  # 18 // 2
+
+
+def _npc(cid, name, hp=30, buffs=None):
+    return {
+        "id": cid, "char_id": None, "name": name,
+        "initiative": 5, "hp_current": hp, "hp_max": hp,
+        "buffs": list(buffs or []),
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+    }
+
+
+_FRIGHTENED_BUFF = {
+    "key": "frightened", "name": "Frightened", "icon": "😱",
+    "duration_rounds": 10, "concentration": False, "effects": {},
+}
+
+
+async def test_aoc_installs_aura_and_ticks_frightened_only(
+    gm_client, gm_ws, caelan_conquest_lv7,
+):
+    """v2.99.448 — Phase 5 follow-up: Aura of Conquest installs a
+    condition-gated damage aura. The turn-start tick deals 3 psychic
+    (Lv 7 → 7//2) to a FRIGHTENED enemy in range, but leaves a
+    non-frightened enemy untouched (the `requires_condition` gate).
+    """
+    caelan = caelan_conquest_lv7
+    caelan_tok = f"tok_aoc_caelan_{caelan['id']}"
+    npc_scared, npc_brave = "tok_aoc_scared", "tok_aoc_brave"
+
+    # Seed mid-combat on an NPC's turn so activating doesn't tick yet.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": caelan_tok, "char_id": caelan["id"], "name": caelan["name"],
+             "initiative": 20, "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            _npc(npc_scared, "Scared Bandit", buffs=[dict(_FRIGHTENED_BUFF)]),
+            _npc(npc_brave, "Brave Bandit"),
+        ], "turn_index": 1, "round": 1, "active": True},
+    )
+
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_aura_of_conquest",
+        json={"character_id": caelan["id"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["aura_installed"] is True
+
+    bu = await gm_ws.wait_for("buff_update")
+    aoc = next((b for b in bu["data"]["buffs"]
+                if b.get("key") == "aura-of-conquest"), None)
+    assert aoc is not None, bu["data"]["buffs"]
+    aura = (aoc.get("effects") or {}).get("aura") or {}
+    assert aura.get("affects") == "enemies"
+    assert aura.get("requires_condition") == "frightened"
+    assert (aura.get("damage") or {}).get("type") == "psychic"
+    assert (aura.get("damage") or {}).get("expr") == "3"
+    caelan_buffs = bu["data"]["buffs"]
+
+    # Advance the turn to Caelan (index 0), carrying his aura buff, so the
+    # tick fires against the frightened enemy only.
+    gm_ws.mark()
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": caelan_tok, "char_id": caelan["id"], "name": caelan["name"],
+             "initiative": 20, "hp_current": 60, "hp_max": 60,
+             "buffs": caelan_buffs,
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            _npc(npc_scared, "Scared Bandit", buffs=[dict(_FRIGHTENED_BUFF)]),
+            _npc(npc_brave, "Brave Bandit"),
+        ], "turn_index": 0, "round": 2, "active": True},
+    )
+    await asyncio.sleep(0.3)
+    bus = gm_ws.buffered("battle_update")
+    assert bus
+    combs = {c.get("id"): c for c in (bus[-1]["data"].get("combatants") or [])}
+    # Frightened enemy took 3 psychic (30 → 27); brave enemy untouched.
+    assert int(combs[npc_scared].get("hp_current") or 0) == 27
+    assert int(combs[npc_brave].get("hp_current") or 0) == 30
 
 
 async def test_use_aoc_wrong_subclass(

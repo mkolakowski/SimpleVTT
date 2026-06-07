@@ -7154,6 +7154,19 @@ async def _tick_auras(
                 )
                 if dist is not None and dist > radius:
                     continue
+            # v2.99.448 — Phase 5 follow-up: a condition-gated aura only
+            # affects subjects carrying a given condition buff (Aura of
+            # Conquest: frightened creatures only). v1 checks the
+            # condition key on any source (the RAW "frightened of YOU"
+            # nuance is a GM-tracked simplification).
+            req_cond = aura.get("requires_condition")
+            if req_cond and not is_self:
+                has_cond = any(
+                    isinstance(bb, dict) and bb.get("key") == req_cond
+                    for bb in (c.get("buffs") or [])
+                )
+                if not has_cond:
+                    continue
             applied = await _apply_aura_payload(
                 db, campaign_id, c, aura, source,
             )
@@ -48285,6 +48298,38 @@ async def use_aura_of_conquest(
     psychic_damage = pal_lv // 2
     radius_ft = 30 if pal_lv >= 18 else 10
 
+    # v2.99.448 — Phase 5 follow-up: install a condition-gated damage aura
+    # so the turn-start tick (`_tick_auras`) deals the psychic damage to
+    # frightened enemies in range (was announce-only). `requires_condition:
+    # "frightened"` scopes the damage to frightened creatures; the
+    # speed-to-0 rider stays GM-tracked. Long passive duration.
+    aura_installed = await _install_buff(campaign_id, char.id, {
+        "key": "aura-of-conquest",
+        "name": "Aura of Conquest",
+        "icon": "👑",
+        "duration_rounds": 100,
+        "duration_max": 100,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "aura": {
+                "radius_ft": radius_ft,
+                "affects": "enemies",
+                "requires_condition": "frightened",
+                "damage": {"expr": str(psychic_damage), "type": "psychic"},
+                "source": "aura-of-conquest",
+                "label": "Aura of Conquest",
+            },
+        },
+        "desc": (
+            f"Frightened enemies within {radius_ft} ft take "
+            f"{psychic_damage} psychic damage at the start of their turn "
+            f"+ have speed 0. (Conquest Paladin Lv 7+.)"
+        ),
+    })
+    if aura_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -48318,6 +48363,7 @@ async def use_aura_of_conquest(
             "radius_ft": radius_ft,
             "psychic_damage": psychic_damage,
             "paladin_level": pal_lv,
+            "aura_installed": aura_installed,
         },
     })
 
@@ -48327,6 +48373,7 @@ async def use_aura_of_conquest(
         "radius_ft": radius_ft,
         "psychic_damage": psychic_damage,
         "paladin_level": pal_lv,
+        "aura_installed": aura_installed,
     }
 
 

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.448] - 2026-06-06 — "The Crown's Dread" — Aura of Conquest automated (automation Phase 5 follow-up)
+
+**Schema version:** 66
+**Commit summary:** **Aura of Conquest (Conquest Paladin Lv 7) now installs a condition-gated damage aura — the turn-start tick deals its psychic damage to frightened enemies in range (was announce-only).** First burn-down of the audit's announce-only aura backlog.
+**Description:** `/use_aura_of_conquest` now installs an `aura-of-conquest` buff carrying `effects.aura` with a psychic `damage` payload (½ paladin level), `affects: "enemies"`, and a new `requires_condition: "frightened"` gate. `_tick_auras` gains that gate — a condition-scoped aura only applies to subjects carrying the named condition buff — so on the paladin's turn start the aura deals `floor(level/2)` psychic to **frightened** enemies in range and leaves non-frightened creatures untouched (the RAW "frightened of you" + speed-to-0 nuances stay GM-tracked). Response + broadcast gain `aura_installed`.
+
+### Changed
+- `/api/campaign/{cid}/use_aura_of_conquest` installs the damage aura (was announce-only); `_tick_auras` honors a `requires_condition` gate.
+- `docs/automation-coverage.md` refreshed: `use_aura_of_conquest` flips to tracked (**178 tracked / 59 announce-only of 239** now).
+
+### Added
+- `tests/harness/test_aura_of_conquest.py::test_aoc_installs_aura_and_ticks_frightened_only` — activates the aura, advances the turn to the paladin, asserts the frightened enemy took 3 psychic (Lv 7 → 30→27) and the non-frightened enemy was untouched (the condition gate).
+
+### Notes
+- First retrofit off the v2.99.447 audit's announce-only aura tail. The `requires_condition` gate generalizes to other condition-scoped auras.
+- **Total harness count: 1905** (was 1904 in v2.99.447; +1 new test).
+
+---
+
 ## [2.99.447] - 2026-06-06 — "The Honest Ledger" — automation-coverage audit doc (automation Phase 0)
 
 **Schema version:** 66
