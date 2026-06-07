@@ -60551,6 +60551,16 @@ async def use_grim_harvest(
     multiplier = 3 if is_necromancy else 2
     heal_amount = multiplier * spell_level
 
+    # v2.99.457 — apply the self-heal (was announce-only). The caster
+    # regains `heal_amount` HP via _apply_heal_to_combatant (PC path →
+    # death-save machine, capped at max). The "killed a creature with a
+    # Lv 1+ spell, once per turn, not construct/undead" trigger stays
+    # GM-tracked — the caller fires this after the kill.
+    _heal_res = await _apply_heal_to_combatant(
+        db, campaign_id, {"char_id": char.id, "name": char.name},
+        heal_amount)
+    applied = int(_heal_res.get("applied") or 0)
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -60587,6 +60597,7 @@ async def use_grim_harvest(
             "is_necromancy": is_necromancy,
             "heal_amount": heal_amount,
             "wizard_level": wizard_lv,
+            "applied": applied,
         },
     })
 
@@ -60597,6 +60608,7 @@ async def use_grim_harvest(
         "is_necromancy": is_necromancy,
         "heal_amount": heal_amount,
         "wizard_level": wizard_lv,
+        "applied": applied,
     }
 
 

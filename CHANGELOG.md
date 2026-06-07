@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.457] - 2026-06-06 — "The Reaper's Due" — Grim Harvest heals the caster (automation buff/heal tail)
+
+**Schema version:** 66
+**Commit summary:** **Grim Harvest (Necromancy Wizard Lv 2) now restores the caster's HP server-side (2× / 3× spell level) via `_apply_heal_to_combatant`, instead of announcing the number for the GM to apply.**
+**Description:** `/use_grim_harvest` already computed `heal_amount = (2 or 3) × spell level`; it now applies it to the caster via `_apply_heal_to_combatant` (PC path → death-save machine, capped at max HP). The "killed a creature with a Lv 1+ spell, once per turn, not construct/undead" trigger stays GM-tracked — the player fires this after the kill. Response gains `applied`.
+
+### Changed
+- `/api/campaign/{cid}/use_grim_harvest` heals the caster (was announce-only); response gains `applied`.
+- `docs/automation-coverage.md` refreshed: `use_grim_harvest` flips to tracked (**184 tracked / 53 announce-only of 239** now).
+
+### Added
+- `tests/harness/test_grim_harvest.py::test_grim_harvest_heals_caster` — drops Thalindra to 10/60, reaps a Lv 3 spell → `applied == 6` (HP restored). Restores HP after.
+
+### Notes
+- Buff/heal-tail burn-down. Same self-heal shape as the other on-use heals.
+- **Total harness count: 1919** (was 1918 in v2.99.456; +1 new test).
+
+---
+
 ## [2.99.456] - 2026-06-06 — "The Telekinetic Shield" — Protective Field applies its damage reduction (automation Phase 7)
 
 **Schema version:** 66

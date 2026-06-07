@@ -148,3 +148,29 @@ async def test_use_gh_level_gate(
             {"subclass": "School of Evocation", "level": 7},
             class_slug="wizard",
         )
+
+
+async def test_grim_harvest_heals_caster(
+    gm_client, thalindra_necromancy,
+):
+    """v2.99.457 — Grim Harvest restores the caster's HP. Drop Thalindra
+    to 10/60 (headroom), reap a Lv 3 spell → +6 applied. Restore HP after."""
+    thal = thalindra_necromancy
+    await _patch_sheet(
+        gm_client, thal["id"],
+        {"hp": {"current": 10, "max": 60, "temp": 0}},
+    )
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_grim_harvest",
+            json={"character_id": thal["id"], "spell_level": 3},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["heal_amount"] == 6
+        assert data["applied"] == 6  # 10 → 16, plenty of headroom
+    finally:
+        await _patch_sheet(
+            gm_client, thal["id"],
+            {"hp": {"current": 60, "max": 60, "temp": 0}},
+        )

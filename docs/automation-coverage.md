@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.454
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.457
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -22,12 +22,12 @@ after a batch of retrofits and update the counts below. Treat the split as
 (archetype J — passive senses, language grants), and a few `tracked`-tagged ones
 only spend a resource without a downstream effect.
 
-## Summary (as of v2.99.454)
+## Summary (as of v2.99.457)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **183** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **54** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **184** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **53** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **On-hit / extra-attack:**
   `assassinate` (auto-crit rider). (`genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 + `dread_ambusher` ✅ v2.99.452 server-resolved extra attacks.)
 - **Buff / temp-HP (D/F):** `combat_inspiration`,
-  `blade_flourish`, `protective_spirit`, `grim_harvest`, `supreme_healing` (`rallying_cry` ✅ v2.99.454 heals allies).
+  `blade_flourish`, `protective_spirit`, `supreme_healing` (`rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 self-heal).
 - **Movement (G):** `ascendant_step` (fly), `stormborn` (fly),
   `relentless_avenger`, `fancy_footwork`.
 
@@ -165,6 +165,7 @@ or passive damage-boosters that already ride other code paths
 | `use_glorious_defense` | ✅ tracked | A use/resource |
 | `use_goading_attack` | ✅ tracked | A use/resource |
 | `use_grapple` | ✅ tracked | D buff-install, D/E buff-install |
+| `use_grim_harvest` | ✅ tracked | heal |
 | `use_halo_of_spores` | ✅ tracked | A use/resource |
 | `use_hands_of_healing` | ✅ tracked | A use/resource |
 | `use_healing_light` | ✅ tracked | A use/resource |
@@ -210,7 +211,7 @@ or passive damage-boosters that already ride other code paths
 | `use_portent` | ✅ tracked | A use/resource |
 | `use_precision_attack` | ✅ tracked | A use/resource |
 | `use_primeval_awareness` | ✅ tracked | A use/resource |
-| `use_protective_field` | ✅ tracked | A use/resource |
+| `use_protective_field` | ✅ tracked | heal |
 | `use_psychic_blades` | ✅ tracked | A use/resource |
 | `use_pushing_attack` | ✅ tracked | G forced-move |
 | `use_radiant_sun_bolt` | ✅ tracked | A use/resource |
@@ -222,7 +223,7 @@ or passive damage-boosters that already ride other code paths
 | `use_rebuke_the_violent` | ✅ tracked | A use/resource |
 | `use_reckless_attack` | ✅ tracked | D buff-install |
 | `use_restore_balance` | ✅ tracked | A use/resource |
-| `use_riposte` | ✅ tracked | A use/resource |
+| `use_riposte` | ✅ tracked | damage |
 | `use_second_wind` | ✅ tracked | heal/damage |
 | `use_shadow_arts` | ✅ tracked | A use/resource |
 | `use_skirmisher` | ✅ tracked | A use/resource |
@@ -291,7 +292,6 @@ or passive damage-boosters that already ride other code paths
 | `use_flesh_to_stone_make_permanent` | ⚪ announce-only | — |
 | `use_foe_slayer` | ⚪ announce-only | — |
 | `use_form_of_the_beast` | ⚪ announce-only | — |
-| `use_grim_harvest` | ⚪ announce-only | — |
 | `use_improved_duplicity` | ⚪ announce-only | — |
 | `use_improved_minor_illusion` | ⚪ announce-only | — |
 | `use_improved_reaper` | ⚪ announce-only | — |
