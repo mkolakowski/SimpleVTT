@@ -5175,6 +5175,25 @@
             ? `<img src="${escapeHTML(portrait)}" alt="">`
             : '🎲';
 
+        // v2.106.0 — reroll buttons. The server attaches `reroll_options`
+        // (e.g. Lucky) to the roll broadcast; render one button per
+        // option, but ONLY for the GM + the roller (the PC owner who
+        // rolled). A feature the char owns but is out of uses on comes
+        // back with `remaining:0` → render disabled (greyed). Hidden
+        // entirely when the char has no reroll feature (empty list).
+        const _canReroll = (ME.isGm || r.user_id === ME.id);
+        const _rerollOpts = (_canReroll && Array.isArray(r.reroll_options))
+            ? r.reroll_options : [];
+        const _rerollBtns = _rerollOpts.map((o) => {
+            const remaining = Number(o.remaining) || 0;
+            const dis = remaining <= 0;
+            return `<button type="button" class="result-pill reroll-btn"`
+                + ` data-feature="${escapeHTML(o.key)}"${dis ? ' disabled' : ''}`
+                + ` title="${escapeHTML(o.desc || '')}">`
+                + `${escapeHTML(o.icon || '🎲')} ${escapeHTML(o.label)}`
+                + ` reroll (${remaining})</button>`;
+        }).join('');
+
         const ul = document.getElementById('roll-list');
         const li = document.createElement('li');
         li.innerHTML = `
@@ -5193,14 +5212,71 @@
                         ${r.note ? `<div class="roll-card-note">${escapeHTML(r.note)}</div>` : ''}
                         <div class="result-pills">
                             <span class="result-pill">🎲 ${r.breakdown ? formatBreakdown(r.breakdown) : escapeHTML(r.expression || '')}</span>
+                            ${_rerollBtns}
                         </div>
                     </div>
                 </div>
             </div>`;
+        if (r.id != null) li.dataset.rollId = r.id;
+        if (r.character_id != null) li.dataset.characterId = r.character_id;
+        _wireRerollButtons(li, r);
         ul.appendChild(li);
         _scrollRollLogToBottom();
         // ``roll`` not persisted to localStorage — server pre-renders
         // rolls history via Jinja, so replay would double-render.
+    }
+
+    /* v2.106.0 — wire a roll card's reroll button(s). Each click
+     * confirms, POSTs /use_reroll, and on success toasts the outcome +
+     * disables the button (the spent use is reflected; the reroll's own
+     * roll broadcast appends the result card). Failure re-enables. */
+    function _wireRerollButtons(li, r) {
+        li.querySelectorAll('.reroll-btn').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                if (btn.disabled) return;
+                const feature = btn.dataset.feature;
+                const label = btn.textContent.trim();
+                if (!confirm(`Spend ${label}? This uses one charge.`)) return;
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(
+                        `/api/campaign/${CAMPAIGN_ID}/use_reroll`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                character_id: r.character_id,
+                                roll_id: r.id,
+                                feature_key: feature,
+                            }),
+                        },
+                    );
+                    if (resp.ok) {
+                        const d = await resp.json();
+                        const outcome = d.took_new
+                            ? `kept the reroll (d20 ${d.new_d20}, total ${d.new_total})`
+                            : `kept the original (d20 ${d.old_d20})`;
+                        showToast(
+                            `🎲 ${outcome} — ${d.remaining} use(s) left.`,
+                            'info',
+                        );
+                    } else {
+                        btn.disabled = false;
+                        let msg = 'Reroll failed.';
+                        try {
+                            const e = await resp.json();
+                            if (e && e.error === 'out_of_uses') {
+                                msg = 'No reroll uses left.';
+                            }
+                        } catch (_) { /* keep default */ }
+                        showToast(msg, 'error');
+                    }
+                } catch (_) {
+                    btn.disabled = false;
+                    showToast('Reroll failed.', 'error');
+                }
+            });
+        });
     }
 
     function appendRollRequest(req) {

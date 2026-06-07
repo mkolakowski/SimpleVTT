@@ -654,6 +654,18 @@
     button.result-pill.chip-prompt:hover {
         background: color-mix(in srgb, var(--accent) 18%, transparent);
     }
+    /* v2.106.0 — reroll buttons (Lucky etc.) on roll cards. Green tint
+       to read as a beneficial spend; disabled = out of uses (greyed). */
+    button.result-pill.reroll-btn {
+        border-color: var(--c-buff); color: var(--c-buff);
+    }
+    button.result-pill.reroll-btn:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--c-buff) 18%, transparent);
+    }
+    button.result-pill.reroll-btn:disabled {
+        opacity: 0.5; cursor: default;
+        border-color: var(--border); color: var(--fg-mute);
+    }
 
     /* v2.43.0: spell-cast / feature-used inline-meta styles. The
        spell-cast-name-row puts the spell name + school / casting time

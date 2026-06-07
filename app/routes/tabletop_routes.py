@@ -3850,7 +3850,31 @@ def _pc_has_lucky_available(char) -> "tuple[bool, int]":
 # Phase 1 (v2.105.0) registers the Lucky feat; the save-only entries
 # join in Phase 3 (they currently ship their own reroll endpoints).
 def _reroll_detect_lucky(char):
-    return _pc_has_lucky_available(char)
+    """(has_feature, remaining) for the Lucky feat. ``has_feature``
+    ignores remaining uses so the client can GREY the button at 0 uses
+    (vs hiding it entirely when the char has no such feat); the
+    /use_reroll endpoint enforces ``remaining > 0``."""
+    if not char or not char.sheet:
+        return False, 0
+    sheet = char.sheet or {}
+    has_feat = any(
+        isinstance(f, dict) and (
+            (f.get("slug") or "").strip().lower() == "lucky"
+            or (f.get("name") or "").strip().lower() == "lucky"
+        )
+        for f in (sheet.get("feats") or [])
+    )
+    if not has_feat:
+        return False, 0
+    remaining = 0
+    for r in (sheet.get("resources") or []):
+        if isinstance(r, dict) and (r.get("key") or "").strip().lower() == "lucky":
+            try:
+                remaining = int(r.get("current") or 0)
+            except (TypeError, ValueError):
+                remaining = 0
+            break
+    return True, remaining
 
 
 _REROLL_FEATURES = [

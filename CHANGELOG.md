@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.106.0] - 2026-06-07 — "One More Roll" — reroll framework (Phase 2: card button)
+
+**Schema version:** 68
+**Commit summary:** **Surfaces the v2.105.0 reroll framework on the roll-log card: each roll's `reroll_options` render as a button (e.g. "🍀 Lucky reroll (3)") shown only to the GM + the roller, greyed when out of uses and absent when the character has no reroll feature. Clicking confirms, POSTs `/use_reroll`, and disables the button; the reroll's outcome lands as a new card via the existing rebroadcast.**
+**Description:** Phase 2 of 3 (Phase 1 = registry + generic endpoint + Lucky, v2.105.0). `appendRoll` now reads `reroll_options` off the `roll` broadcast and renders a `button.result-pill.reroll-btn` per option inside the card's result-pills — gated to `ME.isGm || r.user_id === ME.id` (the GM + the player who rolled). Each button shows the feature icon/label + remaining uses; `remaining:0` renders disabled/greyed (the TODO's "grey out if no uses"), and an empty `reroll_options` list means no button at all ("hidden if no features"). Clicking pops a native confirm (the codebase's convention for spend actions), POSTs `/use_reroll {character_id, roll_id, feature_key}`, toasts the outcome (kept-the-reroll vs kept-the-original + uses left), and disables the button so the charge can't be double-spent; the server's `roll` rebroadcast appends the result card with the "🍀 Lucky reroll …" note. To support greying, the Lucky `detect` now reports feat-ownership independently of remaining uses (the endpoint still enforces `remaining > 0`).
+
+### Added
+- `app/static/tabletop.js` — reroll button rendering in `appendRoll` (gated to GM + roller; greyed at 0 uses) + `_wireRerollButtons` (confirm → POST `/use_reroll` → toast + disable); card `data-roll-id` / `data-character-id`.
+- `app/templates/tabletop.html` — `button.result-pill.reroll-btn` styling (green/buff tint, hover, disabled-greyed).
+- `tests/harness_ui/test_reroll_button_ui.py` — 2 Playwright tests: GM sees + uses the Lucky reroll button (appears, enabled at 3 uses, click disables it + a "Lucky reroll" result card lands); a character without the feat (Pip) shows no reroll button.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_reroll_detect_lucky` returns `(has_feature, remaining)` with `has_feature` independent of uses, so the client can grey the button at 0 uses rather than hiding it.
+
+### Notes
+- Phase 2 of 3. The button appears on rolls that arrive live via WS; server-side-rendered roll history (Jinja, on page load) doesn't carry the button — you reroll a roll you just made. Folding Indomitable + Diamond Soul into the registry (so they share this card button) is Phase 3.
+- Client-only surfacing of the v2.105.0 endpoint + the additive `_reroll_detect_lucky` tweak; covered by the new Playwright test. **Total harness count: 1955** in `tests/harness/` (unchanged); **`tests/harness_ui/` 16 → 18**.
+
+---
+
 ## [2.105.0] - 2026-06-07 — "Push Your Luck" — reroll framework (Phase 1: registry + Lucky)
 
 **Schema version:** 68
