@@ -2678,6 +2678,9 @@ _COMPANION_TEMPLATES: dict[str, dict] = {
     "beast-companion": {"name": "Beast Companion", "ac": 13, "hp": 11,
                         "speed_walk": 40, "size": 1, "team": "hero",
                         "color": "#8a6d3b"},
+    "steel-defender": {"name": "Steel Defender", "ac": 15, "hp": 2,
+                       "speed_walk": 40, "size": 1, "team": "hero",
+                       "color": "#6b7280"},
 }
 
 
@@ -44700,6 +44703,186 @@ async def use_animal_companion(
         "ranger_level": ranger_level,
         "companion_hp": companion_hp,
         "companion_ac": companion_ac,
+        "attacked": attacked,
+        "hit": hit,
+        "crit": crit,
+        "attack_total": attack_total,
+        "target_ac": target_ac,
+        "damage_rolled": damage_rolled,
+        "damage_applied": damage_applied,
+        "damage_type": damage_type,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_steel_defender")
+async def use_steel_defender(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.442 — Phase 7.2 of docs/plans/movement-and-summons.md: a
+    fourth summon retrofit. Steel Defender (Battle Smith Artificer Lv 3,
+    Tasha's p.63): a construct companion. RAW its HP = ``2 + INT mod +
+    5 × artificer level``, AC 15, and its Force-Empowered Rend attack is
+    ``+ prof + INT`` to hit for ``1d8 + prof`` force damage.
+
+    Body: ``{character_id, target_combatant_id?, x?, y?, initiative?}``.
+    Stands up the `steel-defender` combatant (HP scaled, AC 15) via
+    `_summon_companion`, then — if a ``target_combatant_id`` is supplied —
+    makes the Rend attack server-side and applies the force damage on a
+    hit.
+
+    Response: ``{ok, feature, combatant, token_id, artificer_level,
+    defender_hp, defender_ac, attacked, hit, crit, attack_total,
+    target_ac, damage_rolled, damage_applied, damage_type}``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    target_combatant_id = body.get("target_combatant_id") or None
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Artificer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    # Gate: Battle Smith subclass (unambiguously Artificer) + Lv 3+.
+    _subclass = (sheet.get("subclass") or "").strip().lower()
+    # Artificer class level if present, else the overall sheet level (so a
+    # single-class Battle Smith reads correctly either way).
+    _art_level = 0
+    if (sheet.get("class") or "").strip().lower() == "artificer":
+        _art_level = int(sheet.get("level") or 0)
+    else:
+        for e in (sheet.get("classes") or []):
+            if (e.get("class") or "").strip().lower() == "artificer":
+                _art_level = int(e.get("level") or 0)
+                break
+        if _art_level == 0:
+            _art_level = int(sheet.get("level") or 0)
+    if "battle smith" not in _subclass or _art_level < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "battle smith artificer lv 3+",
+            "got_subclass": _subclass,
+            "got_level": _art_level,
+        })
+
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    int_mod = (int((sheet.get("abilities") or {}).get("INT", 10)) - 10) // 2
+    defender_hp = max(1, 2 + int_mod + 5 * _art_level)
+    defender_ac = 15
+
+    summon = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key="steel-defender",
+        name=f"{char.name}'s Steel Defender",
+        x=float(body.get("x") or 0),
+        y=float(body.get("y") or 0),
+        initiative=int(body.get("initiative") or 0),
+        hp=defender_hp,
+        ac=defender_ac,
+    )
+
+    attacked = False
+    hit = False
+    crit = False
+    attack_total = 0
+    target_ac = 0
+    damage_rolled = 0
+    damage_applied = 0
+    damage_type = "force"
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant:
+            attacked = True
+            atk_bonus = prof + int_mod  # Force-Empowered Rend
+            target_ac = _read_target_ac(db, campaign_id, target_combatant)
+            atk_expr = f"1d20{atk_bonus:+d}"
+            try:
+                _ar = dice_mod.roll(atk_expr)
+                attack_total, _abd = int(_ar.total), _ar.breakdown
+            except dice_mod.DiceParseError:
+                attack_total, _abd = 0, ""
+            _nat_match = _re.search(r"\[(\d+)\]", _abd)
+            nat = int(_nat_match.group(1)) if _nat_match else (
+                attack_total - atk_bonus)
+            if nat == 20:
+                hit, crit = True, True
+            elif nat == 1:
+                hit, crit = False, False
+            else:
+                hit, crit = (attack_total >= target_ac), False
+            if hit:
+                dmg_dice = "1d8"
+                roll_expr = _double_dice_for_crit(dmg_dice) if crit else dmg_dice
+                try:
+                    _dr = dice_mod.roll(roll_expr)
+                    damage_rolled = max(0, int(_dr.total) + prof)
+                except dice_mod.DiceParseError:
+                    damage_rolled = max(0, prof)
+                if damage_rolled > 0:
+                    _res = await _apply_damage_to_combatant(
+                        db, campaign_id, target_combatant, damage_rolled,
+                        damage_type, is_crit=crit, is_attack=True,
+                        is_magical=True, attacker_char_id=char.id,
+                    )
+                    damage_applied = int(_res.get("applied") or 0)
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color or player_color,
+            "feature_name": (
+                f"🛡️ Steel Defender"
+                + (f" — {'rend hits' if hit else 'rend misses'} "
+                   f"({damage_applied})" if attacked else "")
+            ),
+            "feature_desc": (
+                f"{char.name} commands their Steel Defender "
+                f"(AC {defender_ac}, {defender_hp} HP)"
+                + (
+                    f"; Force-Empowered Rend hits for {damage_applied} force."
+                    if (attacked and hit) else
+                    (" — the rend misses." if attacked else ".")
+                )
+            ),
+            "source": "steel-defender",
+            "artificer_level": _art_level,
+            "combatant_id": (summon or {}).get("combatant", {}).get("id"),
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "steel-defender",
+        "combatant": (summon or {}).get("combatant"),
+        "token_id": (summon or {}).get("token_id"),
+        "artificer_level": _art_level,
+        "defender_hp": defender_hp,
+        "defender_ac": defender_ac,
         "attacked": attacked,
         "hit": hit,
         "crit": crit,

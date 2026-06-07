@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.442] - 2026-06-06 — "The Iron Hound" — Steel Defender retrofit (automation Phase 7.2)
+
+**Schema version:** 66
+**Commit summary:** **Phase 7.2 — new `POST /use_steel_defender` endpoint (Battle Smith Artificer Lv 3+): stands up the construct companion (HP = 2 + INT mod + 5 × level, AC 15) via `_summon_companion` and makes its Force-Empowered Rend attack (1d8 + prof force).** Fourth summon retrofit.
+**Description:** `/use_steel_defender` (body `{character_id, target_combatant_id?, x?, y?, initiative?}`) gates on the Battle Smith subclass + Lv 3+ (the subclass is unambiguously Artificer), then summons the new `steel-defender` registry entry with HP = `2 + INT mod + 5 × artificer level` and AC 15. When a `target_combatant_id` is supplied it rolls the Force-Empowered Rend (1d20 + prof + INT vs `_read_target_ac`) and applies 1d8 + prof force damage on a hit. Same summon-plus-attack composition as Spiritual Weapon / Ranger's Companion.
+
+### Added
+- `steel-defender` entry in `_COMPANION_TEMPLATES`.
+- `POST /api/campaign/{cid}/use_steel_defender` → `{ok, feature, combatant, token_id, artificer_level, defender_hp, defender_ac, attacked, hit, crit, attack_total, target_ac, damage_rolled, damage_applied, damage_type}`; 409 `wrong_subclass_or_level` for non-Battle-Smith casters.
+- `tests/harness/test_use_steel_defender.py` — Thalindra (PATCHed to Battle Smith) summons the construct (asserts HP 30 / AC 15), loops until the Rend hits a bandit (force damage applied), plus 409 (Evocation Thalindra can't).
+
+### Notes
+- Fourth summon retrofit (after Spiritual Weapon v2.99.438, Find Familiar v2.99.440, Ranger's Companion v2.99.441). Remaining P7.2: Conjure Animals (a multi-combatant summon loop).
+- **Total harness count: 1897** (was 1894 in v2.99.441; +3 new tests).
+
+---
+
 ## [2.99.441] - 2026-06-06 — "The Loyal Hound" — Ranger's Companion retrofit (automation Phase 7.2)
 
 **Schema version:** 66

@@ -148,7 +148,10 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    non-combat `familiar` companion in a chosen animal form). Ranger's
    Companion ✅ shipped v2.99.441 (`/use_animal_companion`: Beast Master
    Lv 3+ beast with HP scaled to ranger level + AC 13 + prof + an
-   optional bite attack). Remaining: Steel Defender, Conjure Animals.
+   optional bite attack). Steel Defender ✅ shipped v2.99.442
+   (`/use_steel_defender`: Battle Smith Lv 3+ construct with HP = 2 + INT
+   mod + 5×level, AC 15 + a Force-Empowered Rend attack). Remaining:
+   Conjure Animals.
 
 ---
 
