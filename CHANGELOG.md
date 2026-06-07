@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.99.437] - 2026-06-06 — "The Conjured Ally" — summon-companion primitive (automation Phase 7.1)
+
+**Schema version:** 66
+**Commit summary:** **Phase 7.1 — new `_summon_companion` / `_dismiss_companion` primitives + a `_COMPANION_TEMPLATES` registry + `/summon_companion` and `/dismiss_companion` endpoints: stand up a summoned companion as a REAL combatant (its own token + init slot + HP/AC) that reuses the existing damage/HP pipeline.** The heaviest remaining movement-and-summons primitive.
+**Description:** `_summon_companion(db, cid, *, owner_char_id, companion_key, name, x, y, initiative)` creates an NPC `Token` on the active map (broadcast `token_add`), synthesizes a combatant dict from a registry stat block (HP + AC ride on the dict — no `TokenTemplate` row needed), appends it to the battle state with an init slot (broadcast `battle_update` with `force_gm_sync`), and tags it `is_summon` + `summoned_by` for teardown. `_dismiss_companion` reverses it (removes the combatant + deletes the token). `_read_target_ac` now honors a combatant-dict `ac`, so summons are attackable at their real AC. The companion reuses the existing damage/HP pipeline + `_force_move` for free — attacking, healing, or pushing it all work because it's a real combatant. `_COMPANION_TEMPLATES` ships `wolf` / `spiritual-weapon` / `flaming-sphere`; the per-spell retrofits pick the matching entry.
+
+### Added
+- `_summon_companion` + `_dismiss_companion` helpers + the `_COMPANION_TEMPLATES` registry.
+- `POST /api/campaign/{cid}/summon_companion` (body `{owner_character_id, companion_key, name?, x?, y?, initiative?}`) → `{ok, combatant, token_id, companion_key}`; 400 on unknown `companion_key`.
+- `POST /api/campaign/{cid}/dismiss_companion` (body `{combatant_id}`) → `{ok, removed, combatant_id, token_id}`; 404 when no matching summon is in the battle.
+- `tests/harness/test_summon_companion.py` — Lyra summons a Wolf (asserts combatant shape + `token_add`/`battle_update` broadcasts + the token on the map), proves it's a real combatant by Thunderwave-ing it for damage, dismisses it (asserts `token_delete` + removal + a second-dismiss 404), plus 400 (unknown companion) + 404 (dismiss unknown).
+
+### Changed
+- `_read_target_ac` honors a combatant-dict `ac` for NPC combatants without a `TokenTemplate` (summons).
+
+### Notes
+- The heaviest piece of `docs/plans/movement-and-summons.md` Phase 7. Next: retrofit Spiritual Weapon onto the primitive (a `/use_spiritual_weapon` that summons the floating-weapon combatant the caster attacks with) + a rest-teardown hook so summons don't leak across a long rest.
+- **Total harness count: 1884** (was 1878 in v2.99.436; +6 new tests).
+
+---
+
 ## [2.99.436] - 2026-06-06 — "The Rolling Thunder" — Thunderwave pushes the whole cube (automation Phase 6.3)
 
 **Schema version:** 66

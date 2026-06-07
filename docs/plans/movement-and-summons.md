@@ -130,11 +130,16 @@ _summon_companion(db, cid, *, owner_char_id, template, name, x, y,
    forced-move retrofit). Remaining nice-to-haves: Gust (push). Repelling
    Blast already has its own bespoke push from v2.99.90 — a candidate to
    consolidate onto `_force_move` later.
-4. **P7.1 — `_summon_companion` + a companion registry (L).** The
-   primitive + a `/summon_companion` endpoint + a dismiss/teardown;
-   retrofit Spiritual Weapon (the simplest — a floating weapon combatant
-   that the caster attacks with). Test: the summon appears as a combatant
-   + a Token.
+4. **P7.1 — `_summon_companion` + a companion registry (L). 🟠 in
+   progress.** ✅ shipped v2.99.437: the `_summon_companion` /
+   `_dismiss_companion` primitives + a `_COMPANION_TEMPLATES` registry
+   (wolf / spiritual-weapon / flaming-sphere) + the `/summon_companion`
+   and `/dismiss_companion` endpoints. The summon is a real combatant
+   (HP/AC ride on the combatant dict; `_read_target_ac` now honors a
+   combatant-dict `ac`), so it reuses the damage/HP pipeline — proven by
+   a Thunderwave-damages-the-summon test. **Remaining:** retrofit
+   Spiritual Weapon (a `/use_spiritual_weapon` that calls the primitive
+   + the caster attacks with it) + a rest-teardown hook.
 5. **P7.2 — more summons (L, ongoing).** Find Familiar, Steel Defender,
    Ranger's Companion, Conjure Animals.
 

@@ -2658,6 +2658,145 @@ async def _force_move(
     return result
 
 
+# v2.99.437 — Phase 7.1 of docs/plans/movement-and-summons.md: a small
+# registry of summonable companion stat blocks. Each entry carries
+# enough to stand up a REAL combatant — its own token + init slot + HP +
+# AC — that reuses the existing damage / HP pipeline for free. Keyed by a
+# stable slug; the per-spell retrofits (Spiritual Weapon, Find Familiar,
+# …) pick the entry that matches the summon.
+_COMPANION_TEMPLATES: dict[str, dict] = {
+    "wolf": {"name": "Wolf", "ac": 13, "hp": 11, "speed_walk": 40,
+             "size": 1, "team": "hero", "color": "#7a8a99"},
+    "spiritual-weapon": {"name": "Spiritual Weapon", "ac": 0, "hp": 1,
+                         "speed_walk": 0, "size": 1, "team": "hero",
+                         "color": "#d9c46a"},
+    "flaming-sphere": {"name": "Flaming Sphere", "ac": 0, "hp": 1,
+                       "speed_walk": 30, "size": 1, "team": "hero",
+                       "color": "#e8772e"},
+}
+
+
+async def _summon_companion(
+    db: Session,
+    campaign_id: int,
+    *,
+    owner_char_id: int,
+    companion_key: str,
+    name: "str | None" = None,
+    x: float = 0.0,
+    y: float = 0.0,
+    initiative: int = 0,
+) -> "dict | None":
+    """v2.99.437 — Phase 7.1: stand up a summoned companion as a REAL
+    combatant. Creates an NPC ``Token`` on the active map (broadcast
+    ``token_add``), synthesizes a combatant dict from the registry stat
+    block (HP + AC ride on the dict — no ``TokenTemplate`` row), appends
+    it to the battle state (init slot, broadcast ``battle_update`` with
+    ``force_gm_sync``), and tags it ``is_summon`` + ``summoned_by`` for
+    teardown. The companion reuses the existing damage / HP pipeline +
+    `_force_move` for free.
+
+    Off-grid (no active map) → the combatant is still added but with no
+    token (``token_id`` None — announce-style fallback). Returns
+    ``{combatant, token_id, companion_key}`` or None for an unknown key.
+    """
+    entry = _COMPANION_TEMPLATES.get((companion_key or "").strip().lower())
+    if not entry:
+        return None
+    disp_name = (name or entry["name"])[:120]
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    token_id = None
+    if campaign and campaign.active_map_id:
+        t = Token(
+            map_id=campaign.active_map_id,
+            character_id=None,
+            token_template_id=None,
+            label=disp_name,
+            color=entry.get("color", "#888888"),
+            image_url=entry.get("image_url"),
+            x=float(x or 0), y=float(y or 0),
+            size=int(entry.get("size", 1)),
+        )
+        db.add(t)
+        db.commit()
+        db.refresh(t)
+        token_id = t.id
+        await hub.broadcast(campaign_id, {
+            "type": "token_add", "data": _token_dict(t),
+        })
+
+    hp = int(entry["hp"])
+    combatant = {
+        "id": (f"summon_{token_id}" if token_id
+               else f"summon_{owner_char_id}_{disp_name}"),
+        "char_id": None,
+        "name": disp_name,
+        "token_template_id": None,
+        "source_token_id": token_id,
+        "initiative": int(initiative or 0),
+        "hp_current": hp,
+        "hp_max": hp,
+        "ac": int(entry.get("ac", 10)),
+        "speed_walk": int(entry.get("speed_walk", 30)),
+        "team": entry.get("team", "hero"),
+        "buffs": [],
+        "economy": {"action": False, "bonus": False,
+                    "reaction": False, "movement": 0},
+        "is_summon": True,
+        "summoned_by": int(owner_char_id),
+        "companion_key": (companion_key or "").strip().lower(),
+    }
+    state = hub.get_battle(campaign_id) or {
+        "combatants": [], "turn_index": 0, "round": 1, "active": False,
+    }
+    state.setdefault("combatants", []).append(combatant)
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update", "data": state, "force_gm_sync": True,
+    })
+    return {"combatant": combatant, "token_id": token_id,
+            "companion_key": combatant["companion_key"]}
+
+
+async def _dismiss_companion(
+    db: Session, campaign_id: int, combatant_id: str,
+) -> dict:
+    """v2.99.437 — Phase 7.1: teardown for a summoned companion. Removes
+    the combatant from the battle state (broadcast ``battle_update``) and
+    deletes its ``Token`` (broadcast ``token_delete``). Returns
+    ``{removed, combatant_id, token_id}``; ``removed`` is False when no
+    matching summon is in the battle.
+    """
+    result = {"removed": False, "combatant_id": combatant_id, "token_id": None}
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return result
+    combatants = state.get("combatants") or []
+    target = next(
+        (c for c in combatants
+         if c.get("id") == combatant_id and c.get("is_summon")), None,
+    )
+    if not target:
+        return result
+    token_id = target.get("source_token_id")
+    state["combatants"] = [c for c in combatants if c.get("id") != combatant_id]
+    hub.set_battle(campaign_id, state)
+    if token_id:
+        tok = db.query(Token).filter(Token.id == int(token_id)).first()
+        if tok:
+            db.delete(tok)
+            db.commit()
+        await hub.broadcast(campaign_id, {
+            "type": "token_delete", "data": {"id": int(token_id)},
+        })
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update", "data": state, "force_gm_sync": True,
+    })
+    result.update(removed=True, token_id=token_id)
+    return result
+
+
 # v2.66.0 — F1 follow-up: Opportunity Attack trigger detection.
 # RAW (PHB p.195): "You can make an opportunity attack when a hostile
 # creature that you can see moves out of your reach. To make the
@@ -5454,6 +5593,14 @@ def _read_target_ac(
                     base_ac = int(ac) if ac is not None else 10
                 except (TypeError, ValueError):
                     base_ac = 10
+        elif combatant.get("ac") is not None:
+            # v2.99.437 — Phase 7.1: summoned companions (no TokenTemplate
+            # row) carry their AC directly on the combatant dict. Honor it
+            # so summons are attackable at their real AC.
+            try:
+                base_ac = int(combatant.get("ac"))
+            except (TypeError, ValueError):
+                base_ac = 10
     # v2.97.39 — sum ``effects.ac_bonus`` across the target's active
     # buffs. PC buffs come from the hub via _get_buffs; NPC buffs
     # ride directly on the combatant dict (no char_id-backed buff
@@ -43930,6 +44077,142 @@ async def use_thunderwave(
         "damage_rolled": damage_rolled,
         "results": results,
         "any_pushed": any_pushed,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/summon_companion")
+async def summon_companion(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.437 — Phase 7.1 of docs/plans/movement-and-summons.md: the
+    summon primitive's HTTP wrapper. Stands up a summoned companion as a
+    real combatant (its own token + init slot + HP/AC) via
+    `_summon_companion`.
+
+    Body: ``{owner_character_id, companion_key, name?, x?, y?,
+    initiative?}``. `companion_key` selects a stat block from
+    `_COMPANION_TEMPLATES` (e.g. ``wolf``, ``spiritual-weapon``). The
+    companion reuses the existing damage/HP pipeline, so attacking or
+    healing it works for free; pair every summon with `/dismiss_companion`
+    (or the rest teardown — filed) so the board doesn't leak combatants.
+
+    Response: ``{ok, combatant, token_id, companion_key}``.
+    """
+    body = await request.json()
+    owner_char_id = int(body.get("owner_character_id") or 0)
+    if owner_char_id <= 0:
+        raise HTTPException(400, "owner_character_id is required")
+    companion_key = (body.get("companion_key") or "").strip().lower()
+    if not companion_key:
+        raise HTTPException(400, "companion_key is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    owner = db.query(Character).filter(
+        Character.id == owner_char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not owner:
+        raise HTTPException(404, "Owner character not found")
+    if not (_user_is_gm(user, campaign, db) or owner.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    if companion_key not in _COMPANION_TEMPLATES:
+        return JSONResponse(status_code=400, content={
+            "error": "unknown_companion",
+            "companion_key": companion_key,
+            "known": sorted(_COMPANION_TEMPLATES.keys()),
+        })
+
+    res = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=owner_char_id,
+        companion_key=companion_key,
+        name=(body.get("name") or None),
+        x=float(body.get("x") or 0),
+        y=float(body.get("y") or 0),
+        initiative=int(body.get("initiative") or 0),
+    )
+    if res is None:
+        return JSONResponse(status_code=400, content={
+            "error": "unknown_companion", "companion_key": companion_key,
+        })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": owner.id,
+            "character_name": owner.name,
+            "user_color": owner.color or player_color,
+            "feature_name": (
+                f"✨ Summon — {res['combatant']['name']}"
+            ),
+            "feature_desc": (
+                f"{owner.name} summons {res['combatant']['name']} "
+                f"(AC {res['combatant']['ac']}, "
+                f"{res['combatant']['hp_max']} HP) as a combatant."
+            ),
+            "source": "summon-companion",
+            "companion_key": companion_key,
+            "combatant_id": res["combatant"]["id"],
+        },
+    })
+
+    return {
+        "ok": True,
+        "combatant": res["combatant"],
+        "token_id": res["token_id"],
+        "companion_key": res["companion_key"],
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/dismiss_companion")
+async def dismiss_companion(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.99.437 — Phase 7.1: teardown a summoned companion (removes the
+    combatant from the battle + deletes its token). Body:
+    ``{combatant_id}``. 404 when no matching summon is in the battle.
+
+    Response: ``{ok, removed, combatant_id, token_id}``.
+    """
+    body = await request.json()
+    combatant_id = (body.get("combatant_id") or "").strip()
+    if not combatant_id:
+        raise HTTPException(400, "combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        # Only the GM (or the owner via the summon UI) tears down; v1
+        # gates on GM for the explicit endpoint.
+        raise HTTPException(403, "GM only")
+
+    res = await _dismiss_companion(db, campaign_id, combatant_id)
+    if not res["removed"]:
+        raise HTTPException(404, "No matching summon in battle")
+    return {
+        "ok": True,
+        "removed": True,
+        "combatant_id": res["combatant_id"],
+        "token_id": res["token_id"],
     }
 
 

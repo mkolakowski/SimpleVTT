@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1878 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.436, 2026-06-06).
+**Total tests:** 1884 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.99.437, 2026-06-06).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -1440,6 +1440,17 @@ v2.99.436 — Phase 6.3 of `docs/plans/movement-and-summons.md`. Thunderwave (Ba
 | `test_thunderwave_unknown_target_per_result_error` | Unknown combatant id → 200 with a per-result `error: not_in_battle` (not a top-level 404). |
 | `test_thunderwave_spell_not_known` | Krieger (Barbarian) → 409 `spell_not_known`. |
 | `test_thunderwave_missing_targets_400` | Empty `target_combatant_ids` → 400. |
+
+### `test_summon_companion.py`
+v2.99.437 — Phase 7.1 of `docs/plans/movement-and-summons.md`. The summon primitive: `_summon_companion` stands up a summoned companion as a REAL combatant (NPC token + init slot + HP/AC on the combatant dict, no TokenTemplate row) so it reuses the existing damage/HP pipeline; `POST /summon_companion` wraps it and `POST /dismiss_companion` tears it down. `_read_target_ac` now honors a combatant-dict `ac`. Owner fixture: Lyra Sunstrider (demo Bard, knows Thunderwave for the deterministic damage proof).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_summon_creates_combatant_and_token` | Lyra summons a Wolf → 200 with `is_summon`, `hp_max == 11`, `ac == 13`, `summoned_by == Lyra`, `source_token_id == token_id`, `initiative == 12`; a `token_add` + `battle_update` broadcast fire; the token (label "Wolf") is on the map. |
+| `test_summon_is_real_combatant_takes_damage` | Lyra casts Thunderwave at her own Wolf → the per-target result shows `damage_applied > 0` (≥ half on any save → deterministic), proving the summon flows through `_apply_damage_to_combatant`. |
+| `test_dismiss_removes_combatant_and_token` | Dismiss → 200 `removed`, the `token_delete` broadcast fires, the token is gone from the map, and a second dismiss → 404. |
+| `test_summon_unknown_companion_400` | Unknown `companion_key` → 400 `unknown_companion`. |
+| `test_dismiss_unknown_404` | Dismiss an unknown combatant id → 404. |
 
 ### `test_menacing_attack.py`
 v2.99.253 — Battle Master maneuver 3 of 16 — Menacing Attack (PHB p.74). Mirrors Trip/Disarming but save ability is WIS and on-fail is Frightened.
