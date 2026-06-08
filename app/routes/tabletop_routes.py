@@ -19398,6 +19398,29 @@ async def place_aoe(
         }
         _concentration_aoes.setdefault(campaign_id, []).append(marker)
         await _broadcast_concentration_aoes(campaign_id)
+    else:
+        # v2.111.0 — instantaneous AoE pulse. A non-concentration AoE
+        # (Fireball, Burning Hands, Shatter, …) leaves a brief on-canvas
+        # flash so the table sees where it landed; the client fades it
+        # out over ~2 s. Concentration AoEs get the persistent marker
+        # above instead. Carries the caster's char_id so the client can
+        # anchor cone/line pulses at the caster's token (mirroring the
+        # marker render); sphere/cube use center_x/center_y directly.
+        _pulse_area = ctx.get("area") or {}
+        _pulse_shape = (_pulse_area.get("shape") or "").strip()
+        if _pulse_shape:
+            await hub.broadcast(campaign_id, {
+                "type": "aoe_pulse",
+                "data": {
+                    "shape": _pulse_shape,
+                    "size_ft": int(_pulse_area.get("size_ft") or 0),
+                    "secondary_ft": int(_pulse_area.get("secondary_ft") or 0),
+                    "center_x": center_x,
+                    "center_y": center_y,
+                    "caster_char_id": int(ctx.get("caster_char_id") or 0),
+                    "spell_name": ctx.get("spell_name") or "",
+                },
+            })
 
     # Broadcast the resolved AoE so every client's cast card mutates
     # in place: pending button → per-target pill row.

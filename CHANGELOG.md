@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.111.0] - 2026-06-07 — "Flash Point" — instantaneous AoE pulse
+
+**Schema version:** 68
+**Commit summary:** **Placing a non-concentration AoE (Fireball, Burning Hands, Shatter…) now flashes a brief on-canvas shape where it landed — a warm translucent burst that expands slightly and fades over ~2.2 s on every client. Concentration AoEs keep their persistent marker; this covers the [TODO](TODO.md)'s "instantaneous AoEs leave a pulse for a few seconds."**
+**Description:** Builds on the existing AoE infrastructure (the `_concentration_aoes` store + the canvas marker render that already draws token-anchored concentration shapes — so Spirit Guardians already follows its caster). `place_aoe` now, for a non-concentration AoE, broadcasts an `aoe_pulse` with the shape / size / secondary / center + the caster's char_id (so cone/line pulses anchor at the caster's token toward the placement point, mirroring the marker render). The client pushes each pulse onto `_aoePulses` with a start timestamp and runs a `requestAnimationFrame` loop (`_tickAoePulses`) that re-renders + prunes; the render layer draws the shape (sphere/cube/cone/line geometry reused from the picker) with `globalAlpha` fading from full to zero and a slight 12% expansion. Self-contained and additive — existing clients ignore the new message.
+
+### Added
+- `app/routes/tabletop_routes.py` — `place_aoe` broadcasts `aoe_pulse` for non-concentration AoEs (the `else` of the concentration-marker branch).
+- `app/static/tabletop.js` — `_aoePulses` + `_addAoePulse` / `_tickAoePulses` (rAF fade loop), the pulse render layer, and the `aoe_pulse` WS handler.
+- `tests/harness/test_cast_spell_aoe.py` — `test_place_aoe_non_concentration_broadcasts_pulse` (Fireball place → `aoe_pulse` broadcast with shape `sphere`, size 20, a center).
+
+### Fixed
+- `tests/harness/test_cast_spell_aoe.py` — `FIREBALL_INDEX` was a stale `7`; Thalindra's demo spell list had drifted so index 7 became **Web** (a concentration cube), silently breaking `test_aoe_cast_without_targets_lands_pending_then_place_aoe_resolves` (sphere/damage asserts). Corrected to `10` (the real Fireball index), un-breaking that test.
+
+### Notes
+- The TODO's other AoE items: Spirit Guardians' token-binding already works (the marker render is self-anchored); the same-team-not-targeted concern is a targeting matter (separate). Movable Moonbeam (drag a concentration AoE once per turn) remains a filed follow-up.
+- **Total harness count: 1964** in `tests/harness/` (1963 → 1964); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.110.0] - 2026-06-07 — "Bigger Boom" — up-cast auto-scales damage & healing dice (Approach B)
 
 **Schema version:** 68

@@ -476,6 +476,27 @@
     // distinguish from the bright-orange picker preview.
     let _concentrationAoes = [];
 
+    // v2.111.0 — transient instantaneous-AoE pulses (Fireball flash).
+    // Each entry is the aoe_pulse broadcast data + a ``start`` ts; the
+    // render loop fades them out and _tickAoePulses prunes expired ones.
+    let _aoePulses = [];
+    let _aoePulseRaf = null;
+    function _tickAoePulses() {
+        const now = (window.performance && performance.now)
+            ? performance.now() : Date.now();
+        _aoePulses = _aoePulses.filter(p => (now - p.start) < 2200);
+        render();
+        _aoePulseRaf = _aoePulses.length
+            ? requestAnimationFrame(_tickAoePulses) : null;
+    }
+    function _addAoePulse(d) {
+        if (!d || !d.shape) return;
+        const now = (window.performance && performance.now)
+            ? performance.now() : Date.now();
+        _aoePulses.push(Object.assign({}, d, { start: now }));
+        if (!_aoePulseRaf) _aoePulseRaf = requestAnimationFrame(_tickAoePulses);
+    }
+
     // v2.44.1 Phase T.5b → v2.45.0 Phase T.6: AoE placement picker.
     // The sheet's ``.sp-cast`` handler calls ``window._openAoePicker(
     // {shape, size_ft, name, char_id})`` for spells whose action
@@ -2210,6 +2231,63 @@
                     ctx.fillStyle = '#5eead4';
                     ctx.fillText(label, cx, ly);
                 }
+                ctx.restore();
+            }
+        }
+
+        // v2.111.0 — instantaneous AoE pulse. A non-concentration AoE
+        // (Fireball / Burning Hands / Shatter) flashes a warm shape
+        // that expands slightly + fades over ~2.2 s so the table sees
+        // where it landed. Shapes reuse the picker/marker geometry;
+        // cone/line anchor at the caster's token (carried on the
+        // pulse) toward the placement point. The fade is driven by
+        // _tickAoePulses (rAF) which re-renders + prunes expired ones.
+        if (_aoePulses.length) {
+            const _PULSE_MS = 2200;
+            const _pnow = (window.performance && performance.now)
+                ? performance.now() : Date.now();
+            for (const p of _aoePulses) {
+                const frac = Math.max(0, Math.min(1, (_pnow - p.start) / _PULSE_MS));
+                const lenPx = (p.size_ft / 5) * gridSize * (1 + 0.12 * frac);
+                let ox = p.center_x, oy = p.center_y;
+                if ((p.shape === 'cone' || p.shape === 'line') && p.caster_char_id) {
+                    const t = tokens.find(t => t.character_id === p.caster_char_id);
+                    if (t) { ox = t.x + gridSize / 2; oy = t.y + gridSize / 2; }
+                }
+                ctx.save();
+                ctx.globalAlpha = 1 - frac;
+                ctx.fillStyle = 'rgba(251,146,60,0.30)';   // warm flash
+                ctx.strokeStyle = '#fb923c';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                if (p.shape === 'cube' || p.shape === 'self_cube') {
+                    const half = lenPx / 2;
+                    ctx.rect(p.center_x - half, p.center_y - half, lenPx, lenPx);
+                } else if (p.shape === 'cone') {
+                    const adx = p.center_x - ox, ady = p.center_y - oy;
+                    const amag = Math.hypot(adx, ady) || 1;
+                    const ax = adx / amag, ay = ady / amag, px = -ay, py = ax;
+                    const tipX = ox + ax * lenPx, tipY = oy + ay * lenPx, halfW = lenPx / 2;
+                    ctx.moveTo(ox, oy);
+                    ctx.lineTo(tipX + px * halfW, tipY + py * halfW);
+                    ctx.lineTo(tipX - px * halfW, tipY - py * halfW);
+                    ctx.closePath();
+                } else if (p.shape === 'line') {
+                    const adx = p.center_x - ox, ady = p.center_y - oy;
+                    const amag = Math.hypot(adx, ady) || 1;
+                    const ax = adx / amag, ay = ady / amag, px = -ay, py = ax;
+                    const halfW = ((p.secondary_ft || 5) / 5) * gridSize / 2;
+                    const fx = ox + ax * lenPx, fy = oy + ay * lenPx;
+                    ctx.moveTo(ox + px * halfW, oy + py * halfW);
+                    ctx.lineTo(fx + px * halfW, fy + py * halfW);
+                    ctx.lineTo(fx - px * halfW, fy - py * halfW);
+                    ctx.lineTo(ox - px * halfW, oy - py * halfW);
+                    ctx.closePath();
+                } else {  // sphere / self_sphere / fallback
+                    ctx.arc(p.center_x, p.center_y, lenPx, 0, Math.PI * 2);
+                }
+                ctx.fill();
+                ctx.stroke();
                 ctx.restore();
             }
         }
@@ -4850,6 +4928,9 @@
                 _concentrationAoes = (msg.data && Array.isArray(msg.data.markers))
                     ? msg.data.markers : [];
                 try { render(); } catch (_) {}
+            } else if (msg.type === 'aoe_pulse') {
+                // v2.111.0 — instantaneous AoE flash (Fireball etc.).
+                try { _addAoePulse(msg.data || {}); } catch (_) {}
             } else if (msg.type === 'feature_used') {
                 _appendFeatureUsed(msg.data);
                 _focusRollLogIfLocal(msg.data && msg.data.user_id);

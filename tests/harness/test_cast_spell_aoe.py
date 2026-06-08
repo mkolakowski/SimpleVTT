@@ -20,9 +20,13 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
-FIREBALL_INDEX = 7  # Demo Thalindra's spell list (app/demo_seed.py): 0 Fire Bolt,
-                    # 1 Mage Hand, 2 Prestidigitation, 3 Magic Missile, 4 Shield,
-                    # 5 Misty Step, 6 Scorching Ray, 7 Fireball, 8 Counterspell.
+FIREBALL_INDEX = 10  # Demo Thalindra's spell list (app/demo_seed.py):
+                     # 0 Fire Bolt, 1 Mage Hand, 2 Prestidigitation,
+                     # 3 Magic Missile, 4 Shield, 5 Misty Step,
+                     # 6 Scorching Ray, 7 Web, 8 Hold Monster,
+                     # 9 Flesh to Stone, 10 Fireball. (Was 7 — the seed
+                     # drifted and 7 became Web, a concentration cube,
+                     # silently breaking the sphere/damage asserts.)
 
 
 @pytest_asyncio.fixture
@@ -365,6 +369,47 @@ async def test_aoe_pc_response_applies_damage_and_broadcasts_update(
         f"{upd_data['damage_applied']}, HP delta is "
         f"{pc_hp_before - pc_hp_after}"
     )
+
+
+async def test_place_aoe_non_concentration_broadcasts_pulse(
+    gm_client, gm_ws, roster, thalindra_rested,
+):
+    """v2.111.0 — placing a non-concentration AoE (Fireball, a sphere)
+    broadcasts an `aoe_pulse` so every client flashes the shape where
+    it landed. Asserts the broadcast carries the shape + size + a
+    center; concentration AoEs get the persistent marker instead."""
+    thal = thalindra_rested
+    tmpl = await _bandit_tmpl(gm_client)
+    await _seed_battle(gm_client, [
+        {"id": f"tok_pulse_{thal['id']}", "char_id": thal["id"],
+         "name": thal["name"], "initiative": 10, "hp_current": 24, "hp_max": 24,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": "tok_pulse_b1", "char_id": None, "token_template_id": tmpl["id"],
+         "name": "Pulse Bandit", "initiative": 7, "hp_current": 50, "hp_max": 50,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    cast_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={"character_id": thal["id"], "spell_index": FIREBALL_INDEX,
+              "slot_level": 3, "class_slug": "wizard", "override": True},
+    )
+    assert cast_resp.status_code == 200, cast_resp.text
+    cast_id = cast_resp.json()["id"]
+
+    gm_ws.mark()
+    place_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
+        json={"cast_id": cast_id, "target_combatant_ids": ["tok_pulse_b1"]},
+    )
+    assert place_resp.status_code == 200, place_resp.text
+
+    pulse = await gm_ws.wait_for("aoe_pulse", timeout=3.0)
+    d = pulse["data"]
+    assert d["shape"] == "sphere", f"Fireball is a sphere; got {d['shape']}"
+    assert d["size_ft"] == 20
+    assert "center_x" in d and "center_y" in d
 
 
 async def test_aoe_cast_without_targets_lands_pending_then_place_aoe_resolves(
