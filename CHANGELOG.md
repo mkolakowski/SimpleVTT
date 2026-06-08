@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.114.1] - 2026-06-07 — "Honest Backlog" — mark already-shipped P3 polish items done
+
+**Schema version:** 68
+**Commit summary:** **Doc-only: three P3 polish items in `TODO.md` were already shipped but still listed as open — the centered glass title pill (v2.91.0), the removal of the `tt-topbar-badge` / `tt-topbar-gm` badges (v2.91.0), and the Dice Roller's glass treatment (v2.97.10). Marked them ✅ DONE so the backlog reflects reality.**
+**Description:** Verified against the codebase while scanning for the next polish task: `.tt-title-pill` is the centered glass title; `tt-topbar-badge`/`tt-topbar-gm` no longer appear in any template or stylesheet; and the Dice Roller card carries the shared `color-mix` + `backdrop-filter: blur(16px) saturate(160%)` glass recipe. The three TODO bullets are flipped to DONE with the shipping version noted; the remaining P3 items (roll-log spell pills, topbar z-index layering, logout-button animation, roll-log restyle) stay open.
+
+### Changed
+- `TODO.md` — three already-shipped P3 items marked DONE with their shipping versions.
+
+### Notes
+- Doc-only commit; `TODO.md` is a repo-root doc already surfaced via `/wiki`. No code, schema, or test change.
+- **Total harness count: 1970** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.114.0] - 2026-06-07 — "Bigger Boom, More Spells" — up-cast scaling for 8 more spells
 
 **Schema version:** 68

@@ -152,11 +152,11 @@ Two additional buttons use slightly different padding and may need individual re
     - Move spell type, range, action type and details to pills
         - details should be an expanding pill
         - pills should be different color than damage pills
-- 🟢 **P3** — Move the Title of the campaign, to the center of the window and please place it in a "pill" that has the "glass effects"
-- 🟢 **P3** — Remove badge system tt-topbar-badge and "muted tt-topbar-gm" from the tt-topbar
+- ✅ **DONE — v2.91.0** — Move the Title of the campaign, to the center of the window and please place it in a "pill" that has the "glass effects" (the `.tt-title-pill` centered glass pill in the topbar).
+- ✅ **DONE — v2.91.0** — Remove badge system tt-topbar-badge and "muted tt-topbar-gm" from the tt-topbar (both removed in the v2.91.0 topbar rework; no longer present in the template).
 - 🟢 **P3** — Allow the map and roll log (when on the left) to move over the tt-topbar but not over the title of the campaign or the ruler, roll log, battle, characters, tools buttons
 - 🟢 **P3** — Change the logout button under tools > quick links to reverse how its animated (better for backgrounds)
-- 🟢 **P3** — Update the Dice roller to have the same glass effects
+- ✅ **DONE — v2.97.10** — Update the Dice roller to have the same glass effects (the Dice Roller card now uses the shared glass recipe: `color-mix` translucent `--bg` + `backdrop-filter: blur(16px) saturate(160%)`).
 - 🟢 **P3** — Update all of roll log to look like spells
 
 
