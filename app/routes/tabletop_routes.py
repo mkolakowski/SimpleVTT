@@ -63525,6 +63525,12 @@ async def use_restore_balance(
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
     override = bool(body.get("override"))
+    # v2.122.0 — target whose adv/disadv is cancelled. Defaults to the
+    # caster (RAW "you or a creature you can see within 60 ft").
+    try:
+        target_character_id = int(body.get("target_character_id") or 0)
+    except (TypeError, ValueError):
+        target_character_id = 0
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -63588,6 +63594,42 @@ async def use_restore_balance(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.122.0 — make the cancel REAL (was announce-only). The app
+    # tracks a creature's pending advantage/disadvantage in
+    # ``sheet.roll_state.value`` (applied to their next d20 via
+    # ``_apply_roll_state`` → 2d20kh1 / 2d20kl1). Restore Balance now
+    # clears that target's active roll_state so their next d20 rolls
+    # straight, and broadcasts ``character_roll_state`` so every client
+    # reflects the cancellation. Defaults to the caster when no target
+    # is given. Limitation (filed): a one-off manual ``2d20kh1`` typed
+    # into the roll box isn't intercepted, and the 60-ft range +
+    # pre-roll timing stay GM-adjudicated.
+    cancel_target_id = target_character_id or char.id
+    target_char = db.query(Character).filter(
+        Character.id == cancel_target_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    cancelled = False
+    previous_state = None
+    if target_char:
+        t_sheet = dict(target_char.sheet or {})
+        t_rs = dict(t_sheet.get("roll_state") or {})
+        previous_state = t_rs.get("value")
+        if previous_state in ("advantage", "disadvantage"):
+            t_rs["value"] = None
+            t_sheet["roll_state"] = t_rs
+            target_char.sheet = t_sheet
+            flag_modified(target_char, "sheet")
+            db.commit()
+            cancelled = True
+            await hub.broadcast(campaign_id, {
+                "type": "character_roll_state",
+                "data": {
+                    "character_id": target_char.id,
+                    "value": None,
+                },
+            })
+
     sorc_lv = _sorcerer_level_from_sheet(sheet)
 
     membership = (
@@ -63622,6 +63664,9 @@ async def use_restore_balance(
             "source": "restore-balance",
             "range_ft": 60,
             "cancels_adv_disadv": True,
+            "target_character_id": cancel_target_id,
+            "cancelled": cancelled,
+            "previous_roll_state": previous_state,
             "uses_remaining": uses_remaining,
             "uses_max": pb,
             "sorcerer_level": sorc_lv,
@@ -63633,6 +63678,9 @@ async def use_restore_balance(
         "feature": "restore-balance",
         "range_ft": 60,
         "cancels_adv_disadv": True,
+        "target_character_id": cancel_target_id,
+        "cancelled": cancelled,
+        "previous_roll_state": previous_state,
         "uses_remaining": uses_remaining,
         "uses_max": pb,
         "sorcerer_level": sorc_lv,

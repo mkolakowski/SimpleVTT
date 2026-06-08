@@ -141,6 +141,78 @@ async def test_use_rb_wrong_class(
     assert data.get("error") == "wrong_subclass_or_level"
 
 
+async def _set_roll_state(gm_client, char_id, value):
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/roll-state",
+        json={"value": value},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_rb_cancels_target_advantage(
+    gm_client, gm_ws, zara_clockwork, roster,
+):
+    """v2.122.0 — Restore Balance is now REAL (was announce-only): when
+    a target creature has an active advantage/disadvantage roll_state,
+    using it on them clears that state (next d20 rolls straight) +
+    broadcasts character_roll_state(value=None). Set Krieger to
+    advantage, then Zara (Clockwork Soul) Restore-Balances him."""
+    zara = zara_clockwork
+    krieger = roster["Krieger Stonefist"]
+    await _set_roll_state(gm_client, krieger["id"], "advantage")
+    try:
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_restore_balance",
+            json={
+                "character_id": zara["id"],
+                "target_character_id": krieger["id"],
+                "override": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["cancelled"] is True
+        assert data["previous_roll_state"] == "advantage"
+        assert data["target_character_id"] == krieger["id"]
+        await asyncio.sleep(0.3)
+        # character_roll_state broadcast cleared Krieger's adv.
+        crs = [
+            m for m in gm_ws.buffered("character_roll_state")
+            if (m.get("data") or {}).get("character_id") == krieger["id"]
+        ]
+        assert crs, "expected character_roll_state broadcast for Krieger"
+        assert crs[-1]["data"]["value"] is None
+        # feature_used echoes the cancellation.
+        feats = _rb_broadcasts(gm_ws, zara["id"])
+        assert feats and feats[-1]["data"]["cancelled"] is True
+    finally:
+        await _set_roll_state(gm_client, krieger["id"], None)
+
+
+async def test_rb_no_op_when_target_neutral(
+    gm_client, zara_clockwork, roster,
+):
+    """v2.122.0 — when the target has no active adv/disadv, Restore
+    Balance still spends the use (RAW it's the player's call) but
+    reports cancelled=False / previous_roll_state=None."""
+    zara = zara_clockwork
+    krieger = roster["Krieger Stonefist"]
+    await _set_roll_state(gm_client, krieger["id"], None)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_restore_balance",
+        json={
+            "character_id": zara["id"],
+            "target_character_id": krieger["id"],
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["cancelled"] is False
+    assert data["previous_roll_state"] is None
+
+
 async def test_rb_rest_refill_long_only(
     gm_client, roster,
 ):

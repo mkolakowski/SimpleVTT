@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1983 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.121.0, 2026-06-08).
+**Total tests:** 1985 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.122.0, 2026-06-08).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1098,6 +1098,19 @@ v2.99.337 — Chronurgy Magic Wizard (EGtW p.184) Chronal Shift Lv 2+ (G.1 Wizar
 | `test_use_cs_two_uses_then_out` | 1st → 1; 2nd → 0; 3rd → 409 `no_uses_left`. |
 | `test_use_cs_wrong_subclass` | Default Thalindra (Evocation) → 409. |
 | `test_use_cs_level_gate` | Chronurgy at Lv 1 → 409. |
+
+### `test_restore_balance.py`
+v2.99.342 — Clockwork Soul Sorcerer (TCE p.69) Restore Balance Lv 1+ (G.2 Sorcerer batch). Reaction: a seen creature within 60 ft about to roll a d20 with adv/disadv rolls without it. Uses = proficiency bonus per long rest (server-tracked on `sheet.restore_balance_uses`). v2.122.0 — the cancel is now REAL: clears the target's active `roll_state` + broadcasts `character_roll_state(value=None)`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_rb_happy_lv5` | PATCH Zara → Clockwork Soul → `range_ft == 60`, `cancels_adv_disadv == True`, uses 3 → 2, `sorcerer_level == 5`, broadcast (source `restore-balance`). |
+| `test_use_rb_out_of_uses` | `restore_balance_uses == 0` → 409 `out_of_uses`. |
+| `test_use_rb_wrong_subclass` | Default Zara (Draconic Bloodline) → 409. |
+| `test_use_rb_wrong_class` | Caelan (Paladin) → 409. |
+| `test_rb_cancels_target_advantage` | v2.122.0 — set Krieger to `advantage`, Zara Restore-Balances him with `target_character_id` → `cancelled=True`, `previous_roll_state="advantage"`, `character_roll_state(value=None)` broadcast, `feature_used(cancelled=True)`. Restores Krieger's roll_state in finally. |
+| `test_rb_no_op_when_target_neutral` | v2.122.0 — target with no active adv/disadv → 200 but `cancelled=False`, `previous_roll_state=None` (the use is still spent). |
+| `test_rb_rest_refill_long_only` | Exhausted → 409; SHORT rest does NOT refill; LONG rest refills to PB. |
 
 ### `test_adjust_density.py`
 v2.99.338 — Graviturgy Magic Wizard (EGtW p.185) Adjust Density Lv 2+ (G.1 Wizard batch CLOSE 13/13). Action + concentration up to 1 min: double or halve a willing creature's weight. Doubled → -10 ft speed + advantage on STR. Halved → +10 ft speed + disadvantage on STR. v1 announce-only.

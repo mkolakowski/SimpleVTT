@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.122.0] - 2026-06-08 — "Even the Odds" — Restore Balance actually cancels advantage/disadvantage
+
+**Schema version:** 69
+**Commit summary:** **Makes the Clockwork Soul Sorcerer's Restore Balance a REAL adv/disadv-cancel reaction instead of announce-only. The `/use_restore_balance` endpoint now accepts a `target_character_id` and, when that creature has an active advantage/disadvantage `roll_state`, clears it (their next d20 rolls straight) and broadcasts `character_roll_state(value=None)` so every client reflects the cancellation.**
+**Description:** Phase 7 ("reactions breadth") of the [full-feature-automation](docs/plans/full-feature-automation.md) backlog — the last original Phase 7 item. The app tracks a creature's pending advantage/disadvantage in `sheet.roll_state.value`, which `_apply_roll_state` turns into `2d20kh1` / `2d20kl1` on their next d20 (`/roll`, `/attack`, save responses). Restore Balance now reaches into that state for the named target (defaults to the caster) and neutralizes it, mirroring the v2.56.0 Indomitable "armed-state-read-by-the-roll-path" pattern but in the cancel direction. The use-budget tracking (v2.99.344) and reaction-economy gate are unchanged; this adds the actual mechanical effect on top.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/use_restore_balance` accepts `target_character_id` (defaults to self); clears the target's active `roll_state`, broadcasts `character_roll_state(value=None)`, and returns `cancelled` / `previous_roll_state` / `target_character_id` (also echoed on the `feature_used` broadcast).
+- `tests/harness/test_restore_balance.py` — `test_rb_cancels_target_advantage` (set Krieger to advantage → Zara Restore-Balances him → `cancelled=True`, `previous_roll_state="advantage"`, `character_roll_state(value=None)` broadcast) + `test_rb_no_op_when_target_neutral` (`cancelled=False` when the target had no adv/disadv).
+
+### Notes
+- Limitation (filed): a one-off **manual** `2d20kh1` typed into the roll box isn't intercepted — only the tracked `roll_state` is cleared. The 60-ft range + pre-roll timing remain GM-adjudicated. Surfacing Restore Balance as a proactive reaction prompt is also filed (no natural "about-to-roll-with-adv/disadv" trigger event exists yet).
+- This completes the original Phase 7 reaction list (Riposte, Protective Field, Chronal Shift, Restore Balance all now real).
+- **Total harness count: 1985** in `tests/harness/` (1983 → 1985); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.121.0] - 2026-06-08 — "Shield an Ally" — Protective Field reaches a damaged ally within 30 ft
 
 **Schema version:** 69
