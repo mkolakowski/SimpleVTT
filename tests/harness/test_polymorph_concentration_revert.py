@@ -60,28 +60,46 @@ async def _get_buffs(gm_client, char_id):
 
 @pytest_asyncio.fixture
 async def thalindra_with_l4_slot(gm_client, roster):
-    """PATCH a L4 slot for Thalindra so /cast_polymorph (which
-    decrements an L4 slot) can proceed. Restore in teardown.
+    """Thalindra set up to cast Polymorph: an L4 wizard slot + Polymorph
+    on her spell list.
+
+    v2.117.0 — restore-safe. Snapshots her original spells + spell_slots
+    via the sheet-json endpoint and restores them in teardown (a
+    try/finally yield), so a timeout or skip mid-test can't leave her
+    spell list corrupted (it used to PATCH spells to [Polymorph] in the
+    test body with no restore, which wiped Slow et al. for downstream
+    tests like test_concentration_on_damage_cascade).
     """
     thalindra = roster["Thalindra Moonwhisper"]
-    stock_slots = {
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-json",
+    )
+    orig = (snap.json() or {}).get("sheet") or {}
+    orig_spells = orig.get("spells") or []
+    orig_slots = orig.get("spell_slots") or {}
+    test_slots = {
         "1": {"total": 4, "used": 0},
         "2": {"total": 3, "used": 0},
         "3": {"total": 3, "used": 0},
         "4": {"total": 1, "used": 0},
     }
-    test_slots = dict(stock_slots, **{
-        "4": {"total": 1, "used": 0},
-    })
     await gm_client.patch(
         f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-fields",
-        json={"spell_slots": {"wizard": test_slots}},
+        json={
+            "spell_slots": {"wizard": test_slots},
+            "spells": [
+                {"name": "Polymorph", "level": 4, "_slug": "polymorph",
+                 "prepared": True, "casting_time": "1 action"},
+            ],
+        },
     )
-    yield thalindra
-    await gm_client.patch(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-fields",
-        json={"spell_slots": {"wizard": stock_slots}},
-    )
+    try:
+        yield thalindra
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-fields",
+            json={"spells": orig_spells, "spell_slots": orig_slots},
+        )
 
 
 async def test_polymorph_concentration_drop_reverts_target(
@@ -114,15 +132,10 @@ async def test_polymorph_concentration_drop_reverts_target(
                          "reaction": False, "movement": 0}},
         ], "turn_index": 0, "round": 1, "active": True},
     )
-    # Cast Polymorph (installs concentration-polymorph anchor on Thalindra).
-    # Thalindra needs Polymorph on her spell list — PATCH it in.
-    await gm_client.patch(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-fields",
-        json={"spells": [
-            {"name": "Polymorph", "level": 4, "_slug": "polymorph",
-             "prepared": True, "casting_time": "1 action"},
-        ]},
-    )
+    # Cast Polymorph (installs concentration-polymorph anchor on
+    # Thalindra). Polymorph is on her spell list via the
+    # thalindra_with_l4_slot fixture (which also restores her original
+    # spells in teardown — v2.117.0).
     cast = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_polymorph",
         json={

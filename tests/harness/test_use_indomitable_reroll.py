@@ -58,12 +58,18 @@ def _indomitable_reroll_broadcasts(gm_ws, character_id):
 @pytest_asyncio.fixture
 async def garrik_lv9_with_indomitable(gm_client, roster):
     """PATCH Garrik to Lv 9 + ensure the indomitable resource is
-    present + at full. Restore Lv 7 + empty resources in teardown.
-    Garrik defaults to Lv 7 (per v2.56.0 demo seed); v2.99.27
-    bumped him to Lv 9 in the wielding-polearm-master demo. This
-    test brings him up via PATCH for consistency across demos.
+    present + at full. v2.117.0 — restore-safe: snapshots his original
+    level + resources via the sheet-json endpoint and restores them in
+    teardown (was wiping resources to [], destroying his Lucky etc. for
+    downstream tests like the harness_ui reroll button).
     """
     garrik = roster["Garrik Ironside"]
+    _snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json",
+    )
+    _orig = (_snap.json() or {}).get("sheet") or {}
+    _orig_level = _orig.get("level")
+    _orig_resources = _orig.get("resources") or []
     await _patch_sheet(
         gm_client, garrik["id"], {"level": 9}, class_slug="fighter",
     )
@@ -76,13 +82,17 @@ async def garrik_lv9_with_indomitable(gm_client, roster):
     await _patch_sheet(
         gm_client, garrik["id"], {"resources": [ind_row]},
     )
-    yield garrik
-    await _patch_sheet(
-        gm_client, garrik["id"], {"level": 7}, class_slug="fighter",
-    )
-    await _patch_sheet(
-        gm_client, garrik["id"], {"resources": []},
-    )
+    try:
+        yield garrik
+    finally:
+        if _orig_level is not None:
+            await _patch_sheet(
+                gm_client, garrik["id"], {"level": _orig_level},
+                class_slug="fighter",
+            )
+        await _patch_sheet(
+            gm_client, garrik["id"], {"resources": _orig_resources},
+        )
 
 
 async def test_indomitable_reroll_happy_path(
@@ -156,15 +166,30 @@ async def test_indomitable_reroll_happy_path(
 async def test_indomitable_reroll_level_gate(
     gm_client, roster,
 ):
-    """Control: Garrik at Lv 7 (default) → 409 level_too_low."""
+    """Control: a Fighter below Lv 9 → 409 level_too_low. Patches Garrik
+    down to Lv 7 itself (restore-safe) rather than relying on demo state
+    or fixture-teardown leakage — demo Garrik is actually Lv 9, so the
+    old "Lv 7 default" assumption only held when another fixture had
+    left him patched down."""
     garrik = roster["Garrik Ironside"]
-    r = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/use_indomitable_reroll",
-        json={"character_id": garrik["id"], "roll_id": 1},
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json",
     )
-    assert r.status_code == 409, r.text
-    data = r.json()
-    assert data.get("error") == "level_too_low"
+    orig_level = ((snap.json() or {}).get("sheet") or {}).get("level")
+    await _patch_sheet(gm_client, garrik["id"], {"level": 7}, class_slug="fighter")
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_indomitable_reroll",
+            json={"character_id": garrik["id"], "roll_id": 1},
+        )
+        assert r.status_code == 409, r.text
+        assert r.json().get("error") == "level_too_low"
+    finally:
+        if orig_level is not None:
+            await _patch_sheet(
+                gm_client, garrik["id"], {"level": orig_level},
+                class_slug="fighter",
+            )
 
 
 async def test_indomitable_reroll_requires_roll_id(
@@ -182,8 +207,21 @@ async def test_indomitable_reroll_requires_roll_id(
 async def test_indomitable_reroll_out_of_uses(
     gm_client, roster,
 ):
-    """Gate: Garrik Lv 9 but indomitable current=0 → 409 out_of_uses."""
+    """Gate: Garrik Lv 9 but indomitable current=0 → 409 out_of_uses.
+
+    v2.117.1 — restore-safe: snapshots Garrik's original level +
+    resources via the sheet-json endpoint and restores them in
+    teardown. The old teardown hardcoded `level: 7` / `resources: []`,
+    which wiped his Lucky points and left him at Lv 7 — poisoning every
+    downstream test (and the harness_ui reroll button) that expects the
+    demo's full Lv 9 Garrik with 3 luck points."""
     garrik = roster["Garrik Ironside"]
+    _snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json",
+    )
+    _orig = (_snap.json() or {}).get("sheet") or {}
+    _orig_level = _orig.get("level")
+    _orig_resources = _orig.get("resources") or []
     await _patch_sheet(
         gm_client, garrik["id"], {"level": 9}, class_slug="fighter",
     )
@@ -204,10 +242,11 @@ async def test_indomitable_reroll_out_of_uses(
         data = r.json()
         assert data.get("error") == "out_of_uses"
     finally:
+        if _orig_level is not None:
+            await _patch_sheet(
+                gm_client, garrik["id"], {"level": _orig_level},
+                class_slug="fighter",
+            )
         await _patch_sheet(
-            gm_client, garrik["id"], {"level": 7},
-            class_slug="fighter",
-        )
-        await _patch_sheet(
-            gm_client, garrik["id"], {"resources": []},
+            gm_client, garrik["id"], {"resources": _orig_resources},
         )

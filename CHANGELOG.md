@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.117.1] - 2026-06-08 — "Leave No Trace" — restore-safe sheet-mutating test fixtures
+
+**Schema version:** 69
+**Commit summary:** **Makes the three harness fixtures that patch a shared demo PC's sheet restore-safe, using the v2.117.0 `sheet-json` endpoint to snapshot the originals and a try/finally yield to always restore them. Fixes the cross-test corruption where a fixture wiped a PC's resources/spells and silently broke unrelated downstream tests.**
+**Description:** Resolves the two filed test-isolation hazards. The Garrik resource fixtures (`garrik_lv9_indomitable` in `test_use_reroll.py`, `garrik_lv9_with_indomitable` in `test_use_indomitable_reroll.py`) used to set `resources` to a test value and reset to `[]` in teardown — destroying his Lucky/Second Wind/Action Surge for downstream tests (which broke the harness_ui reroll-button test). The Polymorph test patched Thalindra's spells to `[Polymorph]` in the test body with no restore, so a timeout/skip mid-test left her without Slow (breaking `test_concentration_on_damage_cascade`). All three now `GET .../sheet-json` to snapshot the original field(s), patch, and restore in a `finally` (which runs even on skip/timeout/failure). The Polymorph spell-patch also moved from the test body into its fixture so the restore is guaranteed.
+
+### Fixed
+- `tests/harness/test_use_reroll.py`, `tests/harness/test_use_indomitable_reroll.py` — Garrik fixtures snapshot + restore his original level/resources (was wiping to `[]`).
+- `tests/harness/test_use_indomitable_reroll.py` — `test_indomitable_reroll_out_of_uses` was the last Garrik offender: its teardown hardcoded `level: 7` / `resources: []`, wiping his Lucky points and dropping him to Lv 7. Now snapshots + restores like the fixtures.
+- `tests/harness/test_polymorph_concentration_revert.py` — `thalindra_with_l4_slot` snapshots + restores her spells + spell_slots; the Polymorph spell-patch moved into the fixture (guaranteed teardown).
+
+### Notes
+- Test-only change; relies on the v2.117.0 `sheet-json` read endpoint. Closes both filed fixture-isolation tasks.
+- **Total harness count: 1975** in `tests/harness/` (unchanged — fixture fixes, no test count change); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.117.0] - 2026-06-07 — "Sheet, Plainly" — read-only JSON character-sheet endpoint
 
 **Schema version:** 69

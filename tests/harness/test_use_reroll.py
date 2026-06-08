@@ -182,17 +182,31 @@ async def test_reroll_no_d20(gm_client, gm_ws, roster):
 
 @pytest_asyncio.fixture
 async def garrik_lv9_indomitable(gm_client, roster):
-    """Garrik at Lv 9 with a full Indomitable resource; teardown
-    restores Lv 7 + clears the patched resources."""
+    """Garrik at Lv 9 with a full Indomitable resource. v2.117.0 —
+    restore-safe: snapshots his original level + resources via the
+    sheet-json endpoint and restores them in teardown (was wiping
+    resources to [], destroying his Lucky etc. for downstream tests)."""
     garrik = roster["Garrik Ironside"]
+    _snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json",
+    )
+    _orig = (_snap.json() or {}).get("sheet") or {}
+    _orig_level = _orig.get("level")
+    _orig_resources = _orig.get("resources") or []
     await _patch_sheet(gm_client, garrik["id"], {"level": 9}, class_slug="fighter")
     await _patch_sheet(gm_client, garrik["id"], {"resources": [
         {"key": "indomitable", "label": "Indomitable",
          "current": 1, "max": 1, "reset": "long"},
     ]})
-    yield garrik
-    await _patch_sheet(gm_client, garrik["id"], {"level": 7}, class_slug="fighter")
-    await _patch_sheet(gm_client, garrik["id"], {"resources": []})
+    try:
+        yield garrik
+    finally:
+        if _orig_level is not None:
+            await _patch_sheet(
+                gm_client, garrik["id"], {"level": _orig_level},
+                class_slug="fighter",
+            )
+        await _patch_sheet(gm_client, garrik["id"], {"resources": _orig_resources})
 
 
 async def test_save_offers_lucky_and_indomitable_and_indomitable_takes_new(
