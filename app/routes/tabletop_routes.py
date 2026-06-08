@@ -17010,11 +17010,22 @@ async def cast_spell(
     if _upcast_extra > 0:
         _dmg_per_top = spell.get("damage_per_slot") or ""
         _heal_per_top = spell.get("healing_per_slot") or ""
+        # v2.125.0 — last-resort fallback: parse the per-slot dice from the
+        # spell's free-text `higher_level` when no structured field is
+        # present (manual JSON ALWAYS wins; the parser is consulted only
+        # below the `or` chain). Conservative — only the unambiguous "+Nd
+        # for each slot level above" shape parses; and it only ever takes
+        # effect on an action that already has a base damage/healing expr,
+        # so HP-pool / instance / cantrip clauses never mis-scale a cast.
+        from ..content.spell_upcast_parse import parse_upcast_dice
+        _parsed = parse_upcast_dice(spell.get("higher_level"))
+        _parsed_dp = _parsed.get("damage_per_slot", "")
+        _parsed_hp = _parsed.get("healing_per_slot", "")
         _scaled_actions = []
         for _a in (spell.get("actions") or []):
             _a2 = dict(_a)
-            _dp = _a2.get("damage_per_slot") or _dmg_per_top
-            _hp = _a2.get("healing_per_slot") or _heal_per_top
+            _dp = _a2.get("damage_per_slot") or _dmg_per_top or _parsed_dp
+            _hp = _a2.get("healing_per_slot") or _heal_per_top or _parsed_hp
             if _a2.get("damage") and _dp:
                 _a2["damage"] = _scale_dice_for_upcast(_a2["damage"], _dp, _upcast_extra)
             if _a2.get("healing") and _hp:
@@ -17023,9 +17034,9 @@ async def cast_spell(
         spell["actions"] = _scaled_actions
         payload["actions"] = _scaled_actions
         _heal_per = _heal_per_top or next(
-            (a.get("healing_per_slot") for a in _scaled_actions if a.get("healing_per_slot")), "")
+            (a.get("healing_per_slot") for a in _scaled_actions if a.get("healing_per_slot")), "") or _parsed_hp
         _dmg_per = _dmg_per_top or next(
-            (a.get("damage_per_slot") for a in _scaled_actions if a.get("damage_per_slot")), "")
+            (a.get("damage_per_slot") for a in _scaled_actions if a.get("damage_per_slot")), "") or _parsed_dp
         if payload.get("spell_healing") and _heal_per:
             payload["spell_healing"] = _scale_dice_for_upcast(
                 payload["spell_healing"], _heal_per, _upcast_extra)

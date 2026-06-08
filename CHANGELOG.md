@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.125.0] - 2026-06-08 — "Read the Footnote" — parse up-cast dice from higher_level prose
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 of the spell-upcasting plan: a new leaf parser (`app/content/spell_upcast_parse.py`) extracts per-slot up-cast dice from a spell's free-text `higher_level` clause, and the `/cast_spell` resolver consults it as a last-resort fallback when no structured `damage_per_slot` / `healing_per_slot` field is present. Closes the long tail without a hand edit per spell — manual JSON still wins.**
+**Description:** The v2.123.0/.124.0 batches hand-annotated 18 spells; the remaining ~285 carry their up-cast rule only in prose. `parse_upcast_dice(higher_level)` returns `{"damage_per_slot": "Nd M"}` / `{"healing_per_slot": "Nd M"}` for the unambiguous "+Nd for each slot level above" shape, and `{}` (no scaling) for cantrip character-level scaling ("when you reach 5th level"), per-two-level scaling ("for every two slot levels"), instance scaling ("one more dart"), and flat bonuses. The resolver applies the parsed value only below the manual `or` chain AND only to an action that already has a base damage/healing expr — so HP-pool clauses (Sleep, Color Spray) and not-yet-modeled spells never mis-scale a cast. A full-corpus sweep found the parser newly covers 7 spells (and that 6 of them — Delayed Blast Fireball, Mass Cure Wounds, etc. — still need their *base* damage/healing modeled before the scaling bites; filed). Manual fields take precedence (e.g. Bigby's Hand keeps its hand-set 2d8 over the parser's 2d6).
+
+### Added
+- `app/content/spell_upcast_parse.py` — conservative `higher_level`-prose → per-slot-dice parser (leaf module, no framework deps).
+- `tests/harness/test_spell_upcast_parser.py` — 8 unit cases (damage / healing / multi-die parse; cantrip / per-two-level / instance / flat / empty rejected).
+- `tests/harness/test_cast_spell.py` — `test_upcast_scales_from_higher_level_prose` (Thunderwave, 2d8 base + NO structured field, cast at L2 → 3d8 via the parser fallback; restore-safe spell-list patch).
+
+### Changed
+- `app/routes/tabletop_routes.py` — the up-cast resolver falls back to `parse_upcast_dice(spell.higher_level)` when no structured per-slot field is present.
+- `docs/plans/spell-upcasting.md`, `app/templates/wiki.html`, `docs/wiki/README.md` — Phase 2 (prose parser) marked shipped.
+
+### Notes
+- The parser future-proofs the tail: when a spell's missing base damage/healing is later modeled, it auto-scales with no per-spell field edit. **Total harness count: 1997** in `tests/harness/` (1988 → 1997); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.124.0] - 2026-06-08 — "Wider Blast" — up-cast dice on 5 multi-type damage spells
 
 **Schema version:** 69

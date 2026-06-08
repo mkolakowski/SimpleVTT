@@ -61,6 +61,14 @@ almost no spells do:
 | `extra_targets_per_slot_above_base` (instances) | 1 (Magic Missile) | <1% |
 | `extra_beams_per_slot_above_base` (beams) | 1 (Scorching Ray) | <1% |
 
+**v2.125.0 — prose parser shipped.** `app/content/spell_upcast_parse.py`
+now derives per-slot dice from `higher_level` text as a resolver fallback
+(below manual fields), so the ~285 prose-only spells scale *automatically*
+the moment they carry a base damage/healing expr — no per-spell
+`damage_per_slot` edit needed. The remaining work is narrower: model the
+**missing base** damage/healing on the spells that lack it (Delayed Blast
+Fireball, Mass Cure Wounds, …), after which the parser covers them for free.
+
 So **Magic Missile at L3 already fires 4 darts** (its action carries
 `extra_targets_per_slot_above_base: 1`, wired at
 [`tabletop_routes.py:17461`](../../app/routes/tabletop_routes.py)) — the

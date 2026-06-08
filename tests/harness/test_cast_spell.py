@@ -227,6 +227,56 @@ async def test_upcast_scales_acid_arrow_multitype(gm_client, gm_ws, roster):
         )
 
 
+async def test_upcast_scales_from_higher_level_prose(gm_client, gm_ws, roster):
+    """v2.125.0 — Approach B parser: Thunderwave (2d8 base) carries NO
+    structured `damage_per_slot`, only the `higher_level` prose "+1d8 for
+    each slot level above 1st". The resolver's parser fallback derives
+    +1d8 and scales an L2 cast to 3d8. Restore-safely append Thunderwave
+    to Thalindra's spell list (she has no structured field on it), cast
+    up-cast, then restore."""
+    thalindra = roster["Thalindra Moonwhisper"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-json",
+    )
+    orig_spells = ((snap.json() or {}).get("sheet") or {}).get("spells") or []
+    idx = len(orig_spells)
+    new_spells = orig_spells + [{
+        "name": "Thunderwave", "_slug": "thunderwave", "level": 1,
+        "class": "wizard", "prepared": True, "casting_time": "1 action",
+    }]
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-fields",
+        json={"spells": new_spells},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": thalindra["id"],
+                "spell_index": idx,
+                "slot_level": 2,    # up-cast L1 → parser-derived +1d8
+                "class_slug": "wizard",
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        msg = await gm_ws.wait_for("spell_cast")
+        d = msg["data"]
+        assert d["spell_name"] == "Thunderwave"
+        assert d["slot_level"] == 2
+        dmgs = [a.get("damage") for a in (d.get("actions") or []) if a.get("damage")]
+        assert "3d8" in dmgs, (
+            f"Thunderwave at L2 should scale 2d8 → 3d8 via the higher_level "
+            f"parser (no structured field); got {dmgs}"
+        )
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-fields",
+            json={"spells": orig_spells},
+        )
+
+
 async def test_upcast_scales_healing_dice(gm_client, gm_ws, roster):
     """v2.110.0 — Cure Wounds (1d8 base, +1d8/slot) cast with an L2
     slot scales the broadcast healing to 2d8 (the heal-claim + auto-

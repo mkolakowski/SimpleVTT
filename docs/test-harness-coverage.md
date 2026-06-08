@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1988 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.124.0, 2026-06-08).
+**Total tests:** 1997 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.125.0, 2026-06-08).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -187,6 +187,29 @@ Basic `/cast_spell` happy paths + slot-consumption errors.
 | `test_cast_tavik_healing_word` | Tavik's bonus-action heal cast (long-rest pre-fixture). |
 | `test_cast_invalid_spell_index` | `spell_index=999` → 404. |
 | `test_cast_missing_fields` | Empty body → 400. |
+| `test_upcast_echoes_slot_level_and_higher_level` | Up-cast echoes `slot_level` + `higher_level` on the broadcast. |
+| `test_upcast_scales_damage_dice` | Burning Hands at L2 → 4d6 (v2.110.0 resolver). |
+| `test_upcast_scales_moonbeam_damage` | Moonbeam at L3 → 3d10. |
+| `test_upcast_scales_heat_metal_damage` | v2.123.0 — Mira casts Heat Metal at L3 → 3d8 (backfilled `damage_per_slot`). |
+| `test_upcast_scales_hellish_rebuke_damage` | v2.123.0 — Magnus casts Hellish Rebuke at L3 → 4d10. |
+| `test_upcast_scales_acid_arrow_multitype` | v2.124.0 — restore-safe spell-list patch → Acid Arrow at L3 → 5d4 (resolver reads the field from content by `_slug`). |
+| `test_upcast_scales_from_higher_level_prose` | v2.125.0 — Thunderwave (2d8, NO structured field) at L2 → 3d8 via the `parse_upcast_dice` fallback. Restore-safe spell-list patch. |
+| `test_upcast_scales_healing_dice` | Cure Wounds at L2 → 2d8 healing. |
+| `test_upcast_base_level_leaves_dice_unscaled` | Burning Hands at base L1 stays 3d6 (no-op). |
+
+### `test_spell_upcast_parser.py`
+v2.125.0 — pure-Python unit tests for `app/content/spell_upcast_parse.py::parse_upcast_dice`, the conservative `higher_level`-prose → per-slot-dice parser the `/cast_spell` resolver uses as a fallback below manual `damage_per_slot` / `healing_per_slot` fields.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_parses_per_slot_damage` | "+1d6 for each slot level above 3rd" → `{damage_per_slot: 1d6}`. |
+| `test_parses_per_slot_healing` | "the healing increases by 1d8 for each slot level above 1st" → `{healing_per_slot: 1d8}`. |
+| `test_parses_multi_die_term` | "+2d6 for each slot level above 7th" → `{damage_per_slot: 2d6}`. |
+| `test_ignores_cantrip_character_level_scaling` | "when you reach 5th level" → `{}` (no slot). |
+| `test_ignores_per_two_level_scaling` | "for every two slot levels" → `{}`. |
+| `test_ignores_instance_scaling` | "one more dart for each slot level" → `{}` (no dice term). |
+| `test_ignores_flat_bonus` | "increases by 5 for each slot level" → `{}`. |
+| `test_empty_or_missing` | `""` / `None` → `{}`. |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
