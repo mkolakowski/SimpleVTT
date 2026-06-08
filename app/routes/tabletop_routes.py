@@ -7052,6 +7052,18 @@ async def _apply_damage_to_combatant(
                 applied = damage_amount // 2
             else:
                 applied = damage_amount
+            # v2.138.0 — Ancestral Protectors Phase 2: the marked
+            # creature deals only half damage on any attack against a
+            # creature OTHER than the protector. Halves the post-
+            # resistance amount; v1 simplification stacks with existing
+            # resistance (deals 1/4 if target also has type resistance —
+            # filed for a follow-up to consolidate per RAW PHB p.197
+            # "multiple instances of resistance count as one").
+            if applied > 0 and _attacker_marked_by_ancestral_protectors_vs_other(
+                campaign_id, attacker_char_id, combatant.get("id"),
+            ):
+                applied = applied // 2
+                resistance_applied = True
         # v2.99.416 — Phase 4.1: temp HP absorbs damage before real HP
         # (RAW). Drain the sheet's temp pool first; the remainder
         # (`hp_damage`) hits real HP. `applied` stays the total damage
@@ -7295,6 +7307,14 @@ async def _apply_damage_to_combatant(
             applied = damage_amount // 2
         else:
             applied = damage_amount
+        # v2.138.0 — Ancestral Protectors Phase 2: same gate as the
+        # PC path. The marked creature (attacker) halves damage dealt
+        # to any target other than the protector — NPC target side.
+        if applied > 0 and _attacker_marked_by_ancestral_protectors_vs_other(
+            campaign_id, attacker_char_id, target.get("id"),
+        ):
+            applied = applied // 2
+            resistance_applied = True
     # v2.99.416 — Phase 4.1: NPC temp HP (volatile, on the combatant dict)
     # absorbs damage before real HP, mirroring the PC branch.
     temp_before = int(target.get("temp_hp") or 0)

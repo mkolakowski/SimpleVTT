@@ -309,3 +309,81 @@ async def test_ap_marked_pc_attacking_protector_no_disadvantage(
         f"AP mark must not fire when swinging at the protector; "
         f"roll_state_applied={label!r}"
     )
+
+
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    form = {
+        "name": "Demo Campaign", "description": "demo",
+        "game_system": "dnd5e", "gm_tab_color": "", "font_override": "",
+        "default_encounter_id": "", "hp_threshold_1": "", "hp_threshold_2": "",
+        "hp_threshold_3": "", "hp_threshold_4": "", "auto_play_playlist_id": "",
+        "auto_play_mode": "order", "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+        follow_redirects=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def auto_apply_on(gm_client):
+    await _set_auto_apply(gm_client, True)
+    yield
+    await _set_auto_apply(gm_client, False)
+
+
+async def test_ap_marked_pc_attacking_third_party_halves_damage(
+    gm_client, gm_ws, krieger_ancestral, roster, auto_apply_on,
+):
+    """v2.138.0 — Phase 2: when Pip (carrying the AP mark) hits Tavik
+    (the non-protector), the damage Tavik takes is halved. End-to-end:
+    Krieger raging hits Pip → mark installed → Pip swings at Tavik → on
+    a hit, `damage_applied == damage_total // 2` (and `damage_total`
+    on the broadcast stays the un-halved roll for chat-card display).
+    Retries until both Krieger's hit lands AND Pip's hit lands (each
+    independently flaky; bound to 5+5 attempts)."""
+    krieger = krieger_ancestral
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    pip_tok = f"tok_ap_pip_{pip['id']}"
+    tav_tok = f"tok_ap_tav_{tavik['id']}"
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/rest",
+        json={"type": "long"},
+    )
+    await _seed_three_pc_battle(gm_client, krieger, pip, tavik)
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rage",
+        json={"character_id": krieger["id"], "override": True},
+    )
+    assert rr.status_code == 200, rr.text
+    await _hit_pip_once(gm_client, gm_ws, krieger, pip_tok)
+    # Pip swings at Tavik — retry until a hit lands so we can assert
+    # the post-resistance damage_applied == damage_total // 2.
+    pip_hit = None
+    for _ in range(5):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": pip["id"],
+                  "attack_index": 0,
+                  "target_combatant_id": tav_tok,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        if d.get("hit") is True:
+            pip_hit = d
+            break
+    assert pip_hit is not None, (
+        "Pip missed Tavik on 5 swings; check fixtures"
+    )
+    # AP halving: damage_applied is half of the rolled damage_total.
+    # (Tavik isn't resistant to piercing; any halving here is from AP.)
+    dt = int(pip_hit.get("damage_total") or 0)
+    da = int(pip_hit.get("damage_applied") or 0)
+    assert da == dt // 2, (
+        f"AP Phase 2 should halve Tavik's damage_applied "
+        f"(damage_total={dt}, expected applied={dt // 2}, got {da})"
+    )

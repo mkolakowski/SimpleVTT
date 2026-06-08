@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.138.0] - 2026-06-08 — "Half Strength" — Ancestral Protectors Phase 2 (damage halving)
+
+**Schema version:** 69
+**Commit summary:** **Closes the Ancestral Protectors RAW chain. When the marked creature deals damage to a target other than the protector, `_apply_damage_to_combatant` halves the post-resistance damage. Reuses the v2.137.0 helper `_attacker_marked_by_ancestral_protectors_vs_other` (same gate semantics: attacker has the mark + new target's char_id != protector's char_id). Both PC and NPC damage paths covered. v1 simplification: stacks with existing type resistance — RAW PHB p.197 caps at one halving per source, filed for a follow-up.**
+**Description:** Phase 1 (v2.136.0) installed the mark on hit; Phase 1b (v2.137.0) wired the disadvantage gate; this commit wires the resistance half (RAW XGE p.9: "the creature deals only half damage with any attack that targets a creature other than you"). The damage path in `_apply_damage_to_combatant` already had `attacker_char_id` in the signature (used by Aura of Devotion v2.55.0 + Aura of Warding v2.133.0); the new check sits AFTER the existing immunity/vulnerability/resistance ladder and halves `applied` if the marked attacker is striking a non-protector. Both PC (~line 7055) and NPC (~line 7318) branches get the same treatment. The `resistance_applied` flag flips True when the AP halving fires so the broadcast still surfaces "resistance applied" for chat-card display, even though the source is the AP mark rather than a type-resistance buff. End-to-end test: Krieger raging hits Pip (lands the mark), Pip swings at Tavik with `auto_apply_damage` enabled, asserts `damage_applied == damage_total // 2` — Tavik isn't piercing-resistant so any halving here is from the AP mark.
+
+### Added
+- `tests/harness/test_ancestral_protectors.py` — `test_ap_marked_pc_attacking_third_party_halves_damage`: end-to-end Phase 2 test driving the install-then-halve chain with `auto_apply_damage` on. Asserts `damage_applied == damage_total // 2` on Pip's swing at Tavik.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_apply_damage_to_combatant` PC branch (~line 7055) and NPC branch (~line 7318) add an AP halving check after the existing immunity/vulnerability/resistance ladder. Flips `resistance_applied` True on halve so the broadcast surfaces it. Reuses `_attacker_marked_by_ancestral_protectors_vs_other` for the gate.
+- `docs/test-harness-coverage.md` — running total bumped 2023 → 2024.
+
+### Notes
+- Ancestral Protectors is now end-to-end RAW-correct (install + disadvantage gate + damage halving). The `/use_ancestral_protectors` announce endpoint (v2.99.366) stays in place as a passive declaration; all 3 mechanics fire automatically on hit/attack. v1 simplification flagged: the AP halving stacks with type resistance (Pip vs a fire-resistant target carrying the AP mark deals 1/4 damage to a fire target instead of 1/2 per RAW PHB p.197 "multiple instances of resistance count as one"); filed for a follow-up. **Total harness count: 2024** in `tests/harness/` (2023 → 2024); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.137.1] - 2026-06-08 — "Look It Up" — fix the AP Phase 1b helper that read an unbound `target_combatant`
 
 **Schema version:** 69
