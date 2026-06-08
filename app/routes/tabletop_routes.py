@@ -50293,6 +50293,48 @@ async def use_aura_of_warding(
     pal_lv = _paladin_level_from_sheet(sheet)
     radius_ft = 30 if pal_lv >= 18 else 10
 
+    # v2.134.0 — Phase 3: install the aura-emitting buff so `_tick_auras`
+    # walks the in-range allies on Caelan's turn start and re-installs a
+    # short-lived `resistance_spell_damage` buff on each. Mirrors Aura of
+    # Alacrity's shape (v2.99.449). RAW "you and friendly creatures": the
+    # `affects: "allies"` aura filter excludes self per `_tick_auras`, so
+    # ALSO install the resistance buff directly on the caster as a
+    # sibling so the emitter himself is covered.
+    aura_buff = {
+        "key": "aura-of-warding-emitter",
+        "name": "Aura of Warding (emitter)",
+        "icon": "🌿",
+        "duration_rounds": 100,
+        "duration_max": 100,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "aura": {
+                "radius_ft": radius_ft,
+                "affects": "allies",
+                "buff": {
+                    "key": "aura-of-warding-resist",
+                    "name": "🌿 Aura of Warding",
+                    "icon": "🌿",
+                    "duration_rounds": 2,
+                    "effects": {"resistance_spell_damage": True},
+                },
+                "source": "aura-of-warding",
+                "label": "Aura of Warding",
+            },
+            # Caster also gets the resistance directly (RAW "you and …").
+            "resistance_spell_damage": True,
+        },
+        "desc": (
+            f"{char.name} + allies within {radius_ft} ft have "
+            f"resistance to damage from spells. "
+            f"(Ancients Paladin Lv 7+.)"
+        ),
+    }
+    aura_installed = await _install_buff(campaign_id, char.id, aura_buff)
+    if aura_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -50325,6 +50367,7 @@ async def use_aura_of_warding(
             "source": "aura-of-warding",
             "radius_ft": radius_ft,
             "paladin_level": pal_lv,
+            "aura_installed": aura_installed,
         },
     })
 
@@ -50333,6 +50376,7 @@ async def use_aura_of_warding(
         "feature": "aura-of-warding",
         "radius_ft": radius_ft,
         "paladin_level": pal_lv,
+        "aura_installed": aura_installed,
     }
 
 

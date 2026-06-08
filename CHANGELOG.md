@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.134.0] - 2026-06-08 — "Ward Up" — Aura of Warding Phase 3 (endpoint installs the aura)
+
+**Schema version:** 69
+**Commit summary:** **Wires `use_aura_of_warding` to install the aura-emitting buff (was announce-only since v2.99.279). On the Ancients Paladin's turn-start, `_tick_auras` walks the in-range allies and re-installs `aura-of-warding-resist` (a short-lived buff carrying `effects.resistance_spell_damage: True`) on each. The emitter buff itself ALSO carries the resistance flag directly so the caster — excluded from `affects: "allies"` per the `_tick_auras` filter — is covered. RAW "you and friendly creatures" both halve spell damage end-to-end now that Phase 1+2's plumbing (v2.133.0) is in place.**
+**Description:** The audit at v2.128.1 flagged Aura of Warding as the "bigger lift" needing 3 phases. v2.133.0 ("Spell Tag") shipped Phase 1+2 — the `is_spell` plumbing through `_apply_damage_to_combatant` + the resistance gate on `effects.resistance_spell_damage` in both `_resistance_halve` (PC) and `_resistance_halve_npc` (NPC). This commit closes Phase 3: the endpoint installs the aura-emitting buff with `affects: "allies"` + a `buff` payload (mirrors Aura of Alacrity's v2.99.449 shape), so `_tick_auras` installs `aura-of-warding-resist` on each in-range ally each turn-start tick. The emitter buff additionally carries `effects.resistance_spell_damage: True` at the spell level so the caster — whom `_tick_auras` excludes from non-`"self"` affects filters — gets covered without needing a separate `_install_buff` call. The Lv 18 radius upgrade (10 → 30 ft) rides on the existing `pal_lv >= 18` check. Caelan's demo seed stays Devotion (existing Aura of Devotion tests + Aura of Protection wiring depend on it); the new test PATCHes him to Ancients per the v2.99.449 Aura of Alacrity precedent. Phase 4 (end-to-end test: tick fires + ally takes spell damage + half-applied) is deferred; this commit verifies the buff structure end-to-end via `buff_update`, which guarantees the data-shape contract `_tick_auras` reads.
+
+### Added
+- `tests/harness/test_aura_of_warding.py` — new test `test_aow_buff_grants_caster_self_resistance` asserting the emitter buff carries the resistance flag directly (caster path) + the aura payload's ally-side buff also carries it (Phase 4 contract). Existing `test_use_aow_happy_lv7` now also asserts `aura_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/use_aura_of_warding` installs an `aura-of-warding-emitter` buff via `_install_buff` (was announce-only). The buff carries `effects.aura = {radius_ft, affects: "allies", buff: {key: "aura-of-warding-resist", effects: {resistance_spell_damage: True}, …}}` AND `effects.resistance_spell_damage: True` at the spell level so the caster is covered too. Response payload + broadcast now carry `aura_installed: bool`.
+- `tests/harness/test_aura_of_warding.py` — header updated to describe the v2.134.0 wiring + v2.133.0 plumbing pairing; the Lv 7 happy test asserts the new `aura_installed` field.
+- `docs/test-harness-coverage.md` — running total bumped 2018 → 2019 (one new aura-of-warding test).
+
+### Notes
+- Phase 4 (deferred): end-to-end test that drives `_tick_auras` to install the ally-side buff + casts a spell at the ally + asserts halved damage. The Aura of Alacrity test (`test_aoa_installs_aura_and_buffs_ally_speed`) is the precedent shape; can be replicated once the spell-cast fixture pieces are in place. Phase 1.5 (deferred): thread `is_spell=True` at `place_aoe` + `npc_cast_spell` (5 sites). Both are filed for follow-up; this commit makes Aura of Warding visibly usable. **Total harness count: 2019** in `tests/harness/` (2018 → 2019); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.133.0] - 2026-06-08 — "Spell Tag" — Aura of Warding Phase 1+2 (is_spell plumbing + gate)
 
 **Schema version:** 69
