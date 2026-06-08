@@ -5403,6 +5403,50 @@ def _eligible_reactions(
                 "unavailable_reason": None,
             })
         return opts
+    # v2.121.0 Phase 7 — Protective Field, ALLY case. Fires from the
+    # `_emit_protective_field_ally_prompts` walker when a creature takes
+    # damage within 30 ft of a Psi Warrior. The watcher is the Psi
+    # Warrior; the protect-target is the damaged creature (carried in
+    # context). Reuses the v2.118.0 `use-protective-field` dispatch —
+    # it heals `params.target_combatant_id` back by the reduction.
+    if trigger_event == "ally_damaged_near":
+        if not watcher_char_id:
+            return []
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+        except Exception:
+            char = None
+        if not char or not char.sheet:
+            return []
+        if not _pc_has_psi_warrior(char.sheet, 3):
+            return []
+        pf_fighter_lv = _fighter_level_from_sheet(char.sheet)
+        pf_die = _psionic_energy_die(pf_fighter_lv)
+        try:
+            pf_int = int((char.sheet.get("abilities") or {}).get("INT", 10))
+        except (TypeError, ValueError):
+            pf_int = 10
+        pf_int_mod = (pf_int - 10) // 2
+        damaged_name = context.get("damaged_name") or "the ally"
+        return [{
+            "key": "use-protective-field",
+            "label": (
+                f"🛡️ Protective Field — reduce {damaged_name}'s damage "
+                f"by 1d{pf_die} {pf_int_mod:+d} (min 1, Psionic Energy die)"
+            ),
+            "kind": "class-feature",
+            "resource_cost": "Reaction + 1 Psionic Energy die",
+            "params": {
+                "die_size": pf_die,
+                "int_mod": pf_int_mod,
+                "fighter_level": pf_fighter_lv,
+                "target_combatant_id": context.get("damaged_combatant_id"),
+            },
+            "available": True,
+            "unavailable_reason": None,
+        }]
     # Phase 2+ extends this stub with class features, spells, feats,
     # and items per the plan doc catalog.
     return []
@@ -5734,6 +5778,110 @@ async def _emit_counterspell_prompts(
                     "spell_name": spell_name,
                     "spell_level": int(spell_level),
                     "spell_slug": slug_norm,
+                    "distance_ft": dist,
+                },
+            )
+            count += 1
+        except Exception:
+            pass
+    return count
+
+
+# v2.121.0 Phase 7 — Protective Field ally walker. After a creature
+# takes damage, walk every OTHER PC combatant who is a Psi Warrior
+# Lv 3+ within 30 ft of the damaged creature (with a free reaction) and
+# emit an `ally_damaged_near` prompt offering to shield that creature.
+# This is the RAW "or another creature you can see within 30 feet of
+# you" half of Protective Field — the v2.118.0 prompt only covered the
+# damaged creature reacting for itself. Returns the prompt count.
+async def _emit_protective_field_ally_prompts(
+    db: Session, campaign: "Campaign",
+    damaged_combatant: dict, applied: int, damage_type: str,
+) -> int:
+    state = hub.get_battle(int(campaign.id))
+    if not state:
+        return 0
+    combatants = state.get("combatants") or []
+    if not combatants:
+        return 0
+    if not campaign.active_map_id:
+        return 0
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        return 0
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    grid_size_px = int(map_row.grid_size_px)
+    # Locate the damaged creature's token.
+    dmg_token = None
+    dsrc = damaged_combatant.get("source_token_id")
+    if dsrc:
+        dmg_token = db.query(Token).filter(
+            Token.id == int(dsrc), Token.map_id == map_row.id,
+        ).first()
+    if dmg_token is None and damaged_combatant.get("char_id"):
+        dmg_token = db.query(Token).filter(
+            Token.character_id == int(damaged_combatant["char_id"]),
+            Token.map_id == map_row.id,
+        ).first()
+    if dmg_token is None:
+        return 0
+    dx, dy = float(dmg_token.x or 0), float(dmg_token.y or 0)
+    PROTECTIVE_FIELD_RANGE_FT = 30.0
+    dmg_name = damaged_combatant.get("name") or "an ally"
+    count = 0
+    for c in combatants:
+        if c.get("id") == damaged_combatant.get("id"):
+            continue
+        wchar_id = c.get("char_id")
+        if not wchar_id:
+            continue
+        economy = c.get("economy") or {}
+        if bool(economy.get("reaction")):
+            continue
+        try:
+            watcher = db.query(Character).filter(
+                Character.id == int(wchar_id),
+            ).first()
+        except Exception:
+            watcher = None
+        if not watcher or not watcher.sheet:
+            continue
+        if not _pc_has_psi_warrior(watcher.sheet, 3):
+            continue
+        wtok = None
+        wsrc = c.get("source_token_id")
+        if wsrc:
+            wtok = db.query(Token).filter(
+                Token.id == int(wsrc), Token.map_id == map_row.id,
+            ).first()
+        if wtok is None:
+            wtok = db.query(Token).filter(
+                Token.character_id == int(wchar_id),
+                Token.map_id == map_row.id,
+            ).first()
+        if wtok is None:
+            continue
+        dist = _distance_ft_between_points(
+            grid_size_px, grid_type,
+            float(wtok.x or 0), float(wtok.y or 0), dx, dy,
+        )
+        if dist > PROTECTIVE_FIELD_RANGE_FT:
+            continue
+        try:
+            await _emit_reaction_prompt(
+                db, campaign, c,
+                trigger_event="ally_damaged_near",
+                summary=(
+                    f"{dmg_name} took {applied} {damage_type or ''} damage "
+                    f"within 30 ft of {c.get('name') or 'you'}."
+                ),
+                context={
+                    "damaged_combatant_id": damaged_combatant.get("id"),
+                    "damaged_name": dmg_name,
+                    "damage_amount": applied,
+                    "damage_type": damage_type or "",
                     "distance_ft": dist,
                 },
             )
@@ -7050,6 +7198,20 @@ async def _apply_damage_to_combatant(
                             "attacker_name": attacker_name,
                             "attack_id": attack_id,
                         },
+                    )
+        except Exception:
+            pass
+        # v2.121.0 Phase 7 — Protective Field ALLY case. Walk for any
+        # Psi Warrior within 30 ft of this damaged PC and prompt them to
+        # shield it (the RAW "or another creature within 30 ft" half).
+        try:
+            if applied > 0:
+                campaign_row3 = db.query(Campaign).filter(
+                    Campaign.id == campaign_id,
+                ).first()
+                if campaign_row3:
+                    await _emit_protective_field_ally_prompts(
+                        db, campaign_row3, combatant, applied, damage_type or "",
                     )
         except Exception:
             pass

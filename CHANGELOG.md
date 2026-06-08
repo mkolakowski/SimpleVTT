@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.121.0] - 2026-06-08 — "Shield an Ally" — Protective Field reaches a damaged ally within 30 ft
+
+**Schema version:** 69
+**Commit summary:** **Closes the v2.118.0 filed follow-up: Protective Field now also prompts a Psi Warrior when a creature takes damage within 30 feet of them (the RAW "or another creature you can see within 30 feet of you" half), not just when the Psi Warrior is hit themselves. A new nearby-watcher walker (modeled on the Counterspell 60-ft walker) fans out an `ally_damaged_near` prompt to every in-range Psi Warrior with a free reaction.**
+**Description:** Phase 7 ("reactions breadth") of the [full-feature-automation](docs/plans/full-feature-automation.md) backlog. v2.118.0 wired Protective Field as a self-protection prompt (the damaged creature reacts, mirroring Hellish Rebuke / Absorb Elements). This commit adds the ally half: after a PC takes damage, `_emit_protective_field_ally_prompts` walks the battle for Psi Warriors (Lv 3+) whose token is within 30 ft of the damaged creature with a free reaction, and emits an `ally_damaged_near` prompt for each. The new `_eligible_reactions["ally_damaged_near"]` branch offers a `use-protective-field` option whose `target_combatant_id` is the **damaged ally** — reusing the v2.118.0 dispatch unchanged, which rolls the Psionic Energy die + INT mod and heals that target back by the reduction.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_emit_protective_field_ally_prompts` walker (30-ft range gate via `_distance_ft_between_points`, PC Psi Warrior watchers only); `_eligible_reactions["ally_damaged_near"]` branch; the PC damage path now calls the walker after the self-prompt.
+- `tests/harness/test_reaction_prompt.py` — `test_protective_field_ally_prompt_fires_for_nearby_psi_warrior` (Krieger hits Tavik one cell from Garrik → Garrik gets the ally prompt targeting Tavik) + `test_use_protective_field_heals_damaged_ally` (resolving it flips Garrik's reaction + heals Tavik back). Reuses the `garrik_psi_warrior` restore-safe fixture.
+
+### Notes
+- v1 fires the walker on the **PC** damage path (a Psi Warrior shielding a damaged PC ally). The NPC-damaged-ally case (shielding a damaged minion) is **filed** — same walker, called from the NPC damage branch. Range (30 ft) is now enforced positionally on the active map; off-map battles skip the walker (no token positions).
+- **Total harness count: 1983** in `tests/harness/` (1981 → 1983); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.120.0] - 2026-06-08 — "Rewind the Save" — Chronal Shift surfaces on any resolved save
 
 **Schema version:** 69

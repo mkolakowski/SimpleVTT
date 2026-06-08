@@ -1382,6 +1382,205 @@ async def test_use_protective_field_reduces_damage(
     assert int(last.get("applied") or 0) >= 1
 
 
+# ── v2.121.0 — Phase 7: Protective Field ALLY case (within 30 ft) ──
+
+
+async def test_protective_field_ally_prompt_fires_for_nearby_psi_warrior(
+    gm_client, gm_ws, garrik_psi_warrior, roster,
+):
+    """v2.121.0 — when a creature takes damage within 30 ft of a Psi
+    Warrior, the Psi Warrior gets an `ally_damaged_near` prompt to
+    shield it (the RAW "or another creature within 30 ft" half).
+    Garrik (patched Psi Warrior) is placed one cell from Tavik; Krieger
+    hits Tavik until damage lands → Garrik gets the ally prompt whose
+    target is Tavik's combatant.
+    """
+    garrik = garrik_psi_warrior
+    tavik = roster["Brother Tavik Stonebrow"]
+    krieger = roster["Krieger Stonefist"]
+
+    # Place Garrik one cell (≈5 ft) from Tavik, Krieger adjacent.
+    await _place_token(gm_client, garrik["id"], 300.0, 300.0)
+    await _place_token(gm_client, tavik["id"], 370.0, 300.0)
+    await _place_token(gm_client, krieger["id"], 440.0, 300.0)
+
+    tavik_cid = f"tok_pfa_{tavik['id']}"
+    krieg_cid = f"tok_pfa_kr_{krieger['id']}"
+    garrik_cid = f"tok_pfa_g_{garrik['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": krieg_cid, "char_id": krieger["id"],
+            "name": krieger["name"], "initiative": 14,
+            "hp_current": 75, "hp_max": 75, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+        {
+            "id": tavik_cid, "char_id": tavik["id"],
+            "name": tavik["name"], "initiative": 10,
+            "hp_current": 40, "hp_max": 40, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+        {
+            "id": garrik_cid, "char_id": garrik["id"],
+            "name": garrik["name"], "initiative": 8,
+            "hp_current": 80, "hp_max": 80, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": tavik_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "ally_damaged_near"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(ally_damaged_near) for Garrik; buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    options = prompts[0]["data"].get("options", []) or []
+    keys = [o.get("key") for o in options]
+    assert "use-protective-field" in keys, (
+        f"expected use-protective-field option; got {keys}"
+    )
+    pf_opt = next(o for o in options if o.get("key") == "use-protective-field")
+    params = pf_opt.get("params") or {}
+    # The protect target is the DAMAGED ALLY (Tavik), not Garrik.
+    assert params.get("target_combatant_id") == tavik_cid
+    assert int(params.get("die_size") or 0) == 8
+
+
+async def test_use_protective_field_heals_damaged_ally(
+    gm_client, gm_ws, garrik_psi_warrior, roster,
+):
+    """End-to-end: Krieger hits Tavik near Garrik (Psi Warrior) → ally
+    prompt fires → POST /use_reaction with use-protective-field →
+    Garrik's reaction flips + Tavik (the ally) heals back the reduction
+    via feature_used(source=protective-field, applied>=1).
+    """
+    garrik = garrik_psi_warrior
+    tavik = roster["Brother Tavik Stonebrow"]
+    krieger = roster["Krieger Stonefist"]
+    # Long rest Tavik so he's at full HP (room to heal back).
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/rest",
+        json={"type": "long"},
+    )
+
+    await _place_token(gm_client, garrik["id"], 300.0, 300.0)
+    await _place_token(gm_client, tavik["id"], 370.0, 300.0)
+    await _place_token(gm_client, krieger["id"], 440.0, 300.0)
+
+    tavik_cid = f"tok_pfa2_{tavik['id']}"
+    krieg_cid = f"tok_pfa2_kr_{krieger['id']}"
+    garrik_cid = f"tok_pfa2_g_{garrik['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": krieg_cid, "char_id": krieger["id"],
+            "name": krieger["name"], "initiative": 14,
+            "hp_current": 75, "hp_max": 75, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+        {
+            "id": tavik_cid, "char_id": tavik["id"],
+            "name": tavik["name"], "initiative": 10,
+            "hp_current": 40, "hp_max": 40, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+        {
+            "id": garrik_cid, "char_id": garrik["id"],
+            "name": garrik["name"], "initiative": 8,
+            "hp_current": 80, "hp_max": 80, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": tavik_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "ally_damaged_near"
+    ]
+    assert prompts, "expected ally_damaged_near prompt for Garrik"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "use-protective-field",
+            "watcher_char_id": garrik["id"],
+        },
+    )
+    assert use.status_code == 200, use.text
+
+    await asyncio.sleep(0.2)
+    # Garrik's reaction flips.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == garrik["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Garrik's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    # feature_used(source=protective-field) — Garrik shields, Tavik heals.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "protective-field"
+        and (m.get("data") or {}).get("character_id") == garrik["id"]
+    ]
+    assert fu, "expected feature_used(source=protective-field)"
+    last = fu[-1]["data"]
+    assert int(last.get("reduction") or 0) >= 1
+    assert int(last.get("applied") or 0) >= 1
+
+
 # ── v2.119.0 — Phase 7: Riposte (Battle Master) on a missed attack ──
 
 
