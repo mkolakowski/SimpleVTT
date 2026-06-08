@@ -41,40 +41,59 @@ The server is **further along than the UI**. Grounding references:
   have no slot to up-cast), but it's the proof that tiered scaling data + a
   resolver hook already exist.
 
-### What does NOT work today
+### What's sparse today (the real gap — measured 2026-06-08)
 
-- **No slot-picker in the UI.** The sheet cast button and the init-tracker
-  mini-sheet always cast at the spell's **base** level — `slot_level` is never
-  surfaced to the player ([`_tab_spells.html:130`](../../app/templates/_tab_spells.html)).
-  So even the already-automated count-scaling (extra darts/beams) is
-  unreachable from the client.
-- **Dice up-scaling is not automated.** The `UpcastEntry` schema exists
-  (`slot_level` / `damage` / `healing` / `extra_targets`,
-  [`action_schema.py:56`](../../app/action_schema.py)) but the `upcast: []`
-  array is **empty on every SRD spell**. Fireball (+1d6/slot), Cure Wounds
-  (+1d8/slot), etc. carry their up-cast rule **only in the free-text
-  `higher_level` string** — nothing parses it, so the dice never grow.
+The earlier draft of this section claimed "no slot-picker" and "dice
+up-scaling is not automated." **Both shipped since** (A in v2.108.0/.109.0,
+B in v2.110.0) — see the status snapshot above. The picker is live on the
+full sheet ([`sheet_dnd5e.html:2653`](../../app/templates/sheet_dnd5e.html))
+and the dice resolver runs in `/cast_spell`
+([`tabletop_routes.py:16999`](../../app/routes/tabletop_routes.py)) via
+`_scale_dice_for_upcast` reading `damage_per_slot` / `healing_per_slot`.
+
+The remaining gap is **not mechanism — it's data coverage.** All three
+scaling kinds work the moment a spell carries the structured field, but
+almost no spells do:
+
+| Structured up-cast field | Spells carrying it | of 319 |
+|--------------------------|--------------------|--------|
+| `damage_per_slot` / `healing_per_slot` (dice) | 14 | 4% |
+| `extra_targets_per_slot_above_base` (instances) | 1 (Magic Missile) | <1% |
+| `extra_beams_per_slot_above_base` (beams) | 1 (Scorching Ray) | <1% |
+
+So **Magic Missile at L3 already fires 4 darts** (its action carries
+`extra_targets_per_slot_above_base: 1`, wired at
+[`tabletop_routes.py:17461`](../../app/routes/tabletop_routes.py)) — the
+TODO's headline example is *already closed*. But Fireball, Cure Wounds,
+Burning Hands, Shatter, etc. only scale if/when their per-slot field is
+populated; the other ~300 spells carry their up-cast rule **only in the
+free-text `higher_level` string**, which nothing parses, so the dice /
+targets don't grow. The work that remains is the **backfill** (Approach
+B's data half) — optionally driven by a `higher_level`-prose parser.
 
 ### Up-cast behavior taxonomy (representative audit)
 
 Every up-castable spell falls into one of these buckets. The bucket decides
 which approach can automate it:
 
-| Bucket | Example spells | How it scales | Structured today? |
-|--------|----------------|---------------|-------------------|
-| **+N targets/projectiles** | Magic Missile, Scorching Ray, Eldritch Blast*, Hold Person/Monster | +1 dart / beam / target per slot above base | ✅ `extra_targets_per_slot_above_base` / `extra_beams_per_slot_above_base` |
-| **+dice damage** | Fireball, Burning Hands, Shatter, Scorching Ray (dmg/beam) | +Nd_X per slot above base | ❌ free-text `higher_level` only |
-| **+dice healing** | Cure Wounds, Healing Word, Mass Healing Word | +Nd8 per slot above base | ❌ free-text only |
-| **+duration / area / level-cap** | Spiritual Weapon, Spirit Guardians (no scale), Sleep (+2d8 HP pool), Sleep/Command targets | varies — extra HP dice, bigger area, higher CR cap | ❌ mostly free-text |
-| **No up-cast effect** | Bless, Bane, most utility | unchanged; the slot just buys a higher-level cast | n/a |
+| Bucket | Example spells | How it scales | Mechanism wired? | Data populated? |
+|--------|----------------|---------------|------------------|-----------------|
+| **+N targets/projectiles** | Magic Missile, Scorching Ray, Eldritch Blast*, Hold Person/Monster | +1 dart / beam / target per slot above base | ✅ `extra_targets_/extra_beams_per_slot_above_base` | ⚠️ 2 spells (Magic Missile, Scorching Ray) |
+| **+dice damage** | Fireball, Burning Hands, Shatter | +Nd_X per slot above base | ✅ `damage_per_slot` + `_scale_dice_for_upcast` | ⚠️ ~10 of the 14 annotated |
+| **+dice healing** | Cure Wounds, Healing Word, Mass Healing Word | +Nd8 per slot above base | ✅ `healing_per_slot` | ⚠️ ~4 of the 14 annotated |
+| **+duration / area / level-cap** | Sleep (+2d8 HP pool), Hold Person/Monster (targets), Polymorph (CR cap) | varies — extra HP dice, bigger area, higher CR cap | 🟠 per-endpoint bespoke math; no generic field | n/a |
+| **No up-cast effect** | Bless, Bane, most utility | unchanged; the slot just buys a higher-level cast | n/a | n/a |
 
 \* Eldritch Blast is a cantrip — scales by character level, not slot.
 
-**The pivotal finding:** structured data exists for the *count* bucket and is
-already wired; the *dice* buckets (the bulk of "feels broken" up-casts like
-Fireball) need either new structured data (Approach B) or human adjudication
-(Approach C). Approach A unlocks the count bucket immediately and is the
-prerequisite UI for B and C.
+**The pivotal finding:** every scaling *mechanism* now ships — the picker
+(A), the dice resolver (B), the count/beam resolver, and the free-text
+fallback (C). What's missing is **data**: only 16 of 319 spells carry any
+structured up-cast field, so ~300 spells consume the higher slot correctly
+but don't grow. The remaining work is therefore a **data backfill** (curated
++ a `higher_level` prose parser), not new engine code — plus generalizing the
+bespoke per-endpoint "+targets/HP-pool" math (Sleep, Hold Monster) onto a
+shared structured field so it stops being copy-pasted.
 
 ## The three approaches
 
@@ -170,20 +189,30 @@ common spells.
   `higher_level` rule on the chat card.
 - No spell is silently mis-scaled; the human applies what isn't automated.
 
-## Recommended rollout
+## Recommended rollout (revised 2026-06-08)
 
-1. **Approach A first** — unlocks the slot-picker (the missing UI) + the
-   already-automated count scaling, and consumes slots correctly for *every*
-   spell. Highest leverage, lowest risk.
-2. **Approach C alongside A** — show `higher_level` text so dice spells are
-   immediately usable (GM applies the bonus). A + C together is a complete,
-   honest up-cast experience with no per-spell data.
-3. **Approach B incrementally** — backfill `*_per_slot` for the common +dice /
-   +heal spells (Fireball, Cure Wounds, Burning Hands, Shatter, Healing Word…)
-   so the manual step from C disappears for the spells players up-cast most.
+Approaches A (picker), B (dice resolver), and C (free-text fallback) **all
+shipped** (v2.108.0–v2.110.0). What remains is closing the data gap so the
+shipped mechanisms actually fire on more than 16 spells:
 
-This staging means up-casting is *useful from day one* (A + C) and gets *more
-automated over time* (B), rather than blocking on a full SRD data backfill.
+1. **Backfill the common +dice / +heal spells** — hand-author
+   `damage_per_slot` / `healing_per_slot` on the ~40 most-up-cast spells
+   (Fireball, Burning Hands, Shatter, Cure Wounds, Healing Word, Mass
+   Healing Word, …). Each is a one-line JSON edit + a harness assertion
+   (e.g. Fireball at L5 → `10d6`). Highest leverage, lowest risk.
+2. **`higher_level`-prose parser** — `app/content/spell_upcast_parse.py`
+   (sibling to `monster_action_parse.py`) extracts `"+Nd M"` and
+   `"one more <thing> for each slot"` patterns into the structured fields
+   at resolve time, with manual JSON winning over the parser. Closes the
+   long tail without 300 hand edits. Gate low-confidence parses for review
+   (see the [spell-validation suite](spell-validation-suite.md)).
+3. **Generalize the bespoke +targets/HP-pool math** — migrate Sleep / Hold
+   Person / Hold Monster off their per-endpoint constants onto a shared
+   `upcast` param field so the rule lives in data, not code.
+
+C (the `higher_level` text shown in the picker) already makes every spell
+*honestly* up-castable today — the player applies what isn't yet automated.
+This staging just shrinks that manual step spell-by-spell.
 
 ## Open questions
 

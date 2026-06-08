@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.122.2] - 2026-06-08 — "Ground Truth" — reconcile the spell-upcasting plan with shipped reality
+
+**Schema version:** 69
+**Commit summary:** **Doc-only: the [spell-upcasting plan](docs/plans/spell-upcasting.md) had an internal contradiction — its status table marked Approaches A/B/C shipped while its body still said "no slot-picker" and "dice up-scaling is not automated." A fresh code audit confirms all three mechanisms ship (picker v2.108.0, dice resolver v2.110.0, count/beam resolver, free-text fallback). The real remaining gap is data coverage, now measured and documented.**
+**Description:** Reconciles the plan's "what works / doesn't" against the code. Measured findings: the picker is live (`sheet_dnd5e.html`), `_scale_dice_for_upcast` runs in `/cast_spell`, and **Magic Missile at L3 already fires 4 darts** (its action carries `extra_targets_per_slot_above_base: 1` — the TODO's headline example is already closed). The gap is purely data: only **16 of 319** spells carry any structured up-cast field (14 dice, 1 targets, 1 beams), so ~300 spells consume the higher slot but don't grow. Rewrote the audit, taxonomy ("mechanism wired?" vs "data populated?"), pivotal finding, and rollout to point the remaining work at a curated backfill + a `higher_level`-prose parser + generalizing the bespoke per-endpoint target/HP-pool math. Updated the wiki status (landing page + `docs/wiki/README.md`) from "✅ shipped" to "🟠 mechanisms shipped; data backfill remaining."
+
+### Changed
+- `docs/plans/spell-upcasting.md` — audit + taxonomy + pivotal finding + rollout reconciled with the shipped code and measured coverage (16/319).
+- `app/templates/wiki.html`, `docs/wiki/README.md` — Spell up-casting status → 🟠 partial (mechanisms shipped, data backfill remaining).
+
+### Notes
+- Doc-only; no code or schema change. The doc is already in `_DOC_ALLOWLIST` with a smoke test (`test_wiki_doc_serves_spell_upcasting_plan`); the H1 is unchanged so the assertion still holds.
+
+---
+
 ## [2.122.1] - 2026-06-08 — "Phase Closed" — mark the reactions-breadth backlog item done
 
 **Schema version:** 69
