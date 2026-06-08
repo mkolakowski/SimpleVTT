@@ -110,3 +110,78 @@ async def test_use_ap_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+def _pc(cid, c):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": 30, "hp_max": 30, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def test_ap_install_on_raging_hit(
+    gm_client, gm_ws, krieger_ancestral, roster,
+):
+    """v2.136.0 — Phase 1: when a raging Ancestral Guardian hits a
+    creature, install the `ancestral-protectors-mark` buff on the
+    target. End-to-end: PATCH Krieger to Ancestral Guardian, rest +
+    enter rage, seed battle with Krieger + Pip, POST /attack →
+    Greataxe hits Pip → battle_update broadcast shows Pip carrying
+    the mark buff with `effects.ancestral_protectors_protected_char_id`
+    pointing at Krieger's char_id. The disadvantage half (Phase 1b)
+    + resistance half (Phase 2) read this buff at attack/damage time."""
+    krieger = krieger_ancestral
+    pip = roster["Pip Quickfingers"]
+    krieger_tok = f"tok_ap_kri_{krieger['id']}"
+    pip_tok = f"tok_ap_pip_{pip['id']}"
+    # Long-rest Krieger so rage uses are available.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/rest",
+        json={"type": "long"},
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [_pc(krieger_tok, krieger), _pc(pip_tok, pip)],
+              "turn_index": 0, "round": 1, "active": True},
+    )
+    # Enter rage so the install gate passes.
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rage",
+        json={"character_id": krieger["id"], "override": True},
+    )
+    assert rr.status_code == 200, rr.text
+    # Now Krieger swings his Greataxe at Pip. Use +50 to guarantee hit.
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={"character_id": krieger["id"],
+              "attack_index": 0,
+              "target_combatant_id": pip_tok,
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    # The /attack broadcast should carry feature_used for ancestral-
+    # protectors (the install side-effect). Read the buffered
+    # battle_update broadcasts and confirm Pip has the mark.
+    await asyncio.sleep(0.3)
+    bus = gm_ws.buffered("battle_update")
+    assert bus, "no battle_update broadcast received after attack"
+    combs = {c.get("id"): c for c in (bus[-1]["data"].get("combatants") or [])}
+    pip_cb = combs.get(pip_tok)
+    assert pip_cb is not None, (
+        f"Pip's combatant missing; got ids={list(combs.keys())}"
+    )
+    mark_buff = next(
+        (b for b in (pip_cb.get("buffs") or [])
+         if b.get("key") == "ancestral-protectors-mark"),
+        None,
+    )
+    assert mark_buff is not None, (
+        f"mark buff missing from Pip after hit; got buffs="
+        f"{pip_cb.get('buffs')}"
+    )
+    effects = mark_buff.get("effects") or {}
+    assert int(effects.get(
+        "ancestral_protectors_protected_char_id") or 0) == int(krieger["id"]), (
+        f"mark buff should point at Krieger's char_id; got effects={effects}"
+    )

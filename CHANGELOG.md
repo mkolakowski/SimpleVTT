@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.136.0] - 2026-06-08 — "Spirit Mark" — Ancestral Protectors Phase 1 (install on hit)
+
+**Schema version:** 69
+**Commit summary:** **Wires the install side of Ancestral Protectors (Path of the Ancestral Guardian Barbarian Lv 3+, XGE p.9). When a raging Ancestral Guardian hits a creature with an attack, a 1-round `ancestral-protectors-mark` buff is installed on the target carrying `effects.ancestral_protectors_protected_char_id: <protector_char_id>`. Phase 1b (disadvantage gate when the marked creature attacks anyone other than the protector) and Phase 2 (resistance halving on the protector's allies) read this buff at attack/damage time — both filed for follow-ups; this commit makes the mark visible end-to-end.**
+**Description:** Mirrors Lance of Lethargy's (v2.99.92) on-hit-install pattern exactly: a new helper `_apply_ancestral_protectors_on_hit()` gates on `_pc_has_ancestral_guardian(sheet, 3)` + a rage-buff check on the attacker + a present target combatant, then installs the mark via `_install_buff_on_combatant_id` with `duration_rounds: 1`. The `/attack` post-hit block calls it immediately before Lance of Lethargy at line ~73220, broadcasts a `feature_used` event so the chat-card chrome can render "👻 Ancestral Protectors → Pip is marked", and falls through to the existing Lance/Repelling-Blast riders. v1 simplification: the buff installs on EVERY hit, not just the first per turn (multi-hit re-installs the same key — the same target gets refreshed but multi-target loses the strict RAW gate; filed for a follow-up commit). Krieger is PATCHed to Path of the Ancestral Guardian in the existing test fixture; the new end-to-end test long-rests Krieger, seeds a battle with Pip, enters rage via `/use_rage`, swings the Greataxe at Pip, and verifies the `battle_update` broadcast shows Pip with the mark buff + the protected-char-id payload.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_apply_ancestral_protectors_on_hit(campaign_id, attacker_char_id, attacker_name, attacker_sheet, target_combatant) -> dict | None` helper; called from `/attack`'s post-hit block (before Lance of Lethargy) when the attacker is a raging Ancestral Guardian Lv 3+.
+- `tests/harness/test_ancestral_protectors.py` — `test_ap_install_on_raging_hit`: long-rest Krieger, seed Krieger + Pip, enter rage, swing Greataxe at Pip → verify `battle_update` shows Pip carrying the `ancestral-protectors-mark` buff with `effects.ancestral_protectors_protected_char_id == krieger.id`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/attack` post-hit block (line ~73220) calls `_apply_ancestral_protectors_on_hit` + broadcasts a `feature_used` event before the existing Lance of Lethargy block.
+- `docs/test-harness-coverage.md` — running total bumped 2020 → 2021.
+
+### Notes
+- Phase 1b (disadvantage gate when the marked creature makes an attack against anyone other than the protector) requires extending the `/attack` adv/dis layering to read the attacker's `ancestral-protectors-mark` buff + compare the new `target_combatant_id` to `protected_char_id`. Phase 2 (resistance halving on the protector's allies when the marked creature deals damage to them) requires extending `_resistance_halve` / `_resistance_halve_npc` to read the ATTACKER's buffs (a new pattern alongside the existing TARGET-side check). Both filed as standalone slices — this commit makes the buff exist end-to-end so a future commit can read it without first solving the install gating. **Total harness count: 2021** in `tests/harness/` (2020 → 2021); **`tests/harness_ui/` 19** (unchanged). The v2.99.366 announce-only `/use_ancestral_protectors` endpoint stays in place — it's a passive declaration; the actual mechanic now fires automatically on hit.
+
+---
+
 ## [2.135.1] - 2026-06-08 — "Full Coverage" — Aura of Warding Phase 1.5 (thread is_spell at deferred sites)
 
 **Schema version:** 69

@@ -25982,6 +25982,73 @@ def _pc_lifedrinker_bonus(sheet: dict, attack: dict) -> int:
     return max(1, cha_mod)
 
 
+async def _apply_ancestral_protectors_on_hit(
+    campaign_id: int, attacker_char_id: int, attacker_name: str,
+    attacker_sheet: dict, target_combatant: dict | None,
+) -> dict | None:
+    """v2.136.0 — Ancestral Protectors (Ancestral Guardian Barbarian
+    Lv 3+, XGE p.9): "while you're raging, the first creature you hit
+    with an attack on your turn becomes the target of the warrior
+    spirits. Until the start of your next turn, that target has
+    disadvantage on any attack roll that isn't against you …"
+
+    Installs an `ancestral-protectors-mark` buff on the target carrying
+    `effects.ancestral_protectors_protected_char_id: int` (the
+    Barbarian's char_id) so a follow-up `/attack` from the marked
+    creature reads it via the attacker-buff adv/dis layering. Duration
+    1 round. v1 simplification: the buff installs on EVERY hit, not
+    just the first per turn (multi-hit re-installs the same key — same
+    target gets refreshed, multi-target loses the v1 strict RAW gate).
+    Returns a summary dict on install, None on gate miss.
+
+    Pairs with v2.99.366's announce-only `/use_ancestral_protectors`.
+    The mechanic is passive — automatic on hit; no endpoint call needed.
+    """
+    if not _pc_has_ancestral_guardian(attacker_sheet, 3):
+        return None
+    # Rage gate: any `rage` buff on the attacker's character.
+    raging = any(
+        isinstance(b, dict) and b.get("key") == "rage"
+        for b in _get_buffs(campaign_id, attacker_char_id)
+    )
+    if not raging:
+        return None
+    if not target_combatant:
+        return None
+    target_combatant_id = target_combatant.get("id")
+    if not target_combatant_id:
+        return None
+    buff = {
+        "key": "ancestral-protectors-mark",
+        "name": "👻 Marked by Ancestral Spirits",
+        "icon": "👻",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "ancestral_protectors_protected_char_id": int(attacker_char_id),
+        },
+        "desc": (
+            f"Disadvantage on attacks not against "
+            f"{attacker_name or 'the protector'}; "
+            f"the protector's allies take half damage from this "
+            f"creature. (Path of the Ancestral Guardian Lv 3+.)"
+        ),
+        "source": "ancestral-protectors",
+        "source_char_id": int(attacker_char_id) if attacker_char_id else None,
+    }
+    ok = await _install_buff_on_combatant_id(
+        campaign_id, str(target_combatant_id), buff,
+    )
+    if not ok:
+        return None
+    return {
+        "target_combatant_id": str(target_combatant_id),
+        "target_name": target_combatant.get("name") or "Target",
+        "protected_char_id": int(attacker_char_id),
+    }
+
+
 async def _apply_lance_of_lethargy(
     campaign_id: int, attacker_char_id: int, attacker_name: str,
     attacker_sheet: dict, attack: dict, target_combatant: dict | None,
@@ -73217,6 +73284,42 @@ async def use_attack(
         # layer is filed for a follow-up (the buff carries
         # effects.speed_reduction_ft so future readers can pick it
         # up). Skipped on dead targets.
+        # v2.136.0 — Ancestral Protectors install hook (Path of the
+        # Ancestral Guardian Barbarian Lv 3+, XGE p.9). When a raging
+        # Ancestral Guardian hits a target, install a 1-round mark
+        # buff on the target so subsequent attacks the marked creature
+        # makes pick up the disadvantage gate (Phase 1b) + the
+        # protector's allies the resistance gate (Phase 2).
+        if hit and not target_dead:
+            try:
+                ap_result = await _apply_ancestral_protectors_on_hit(
+                    campaign_id, char.id, char.name,
+                    sheet, target_combatant,
+                )
+                if ap_result is not None:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "feature_name": "👻 Ancestral Protectors",
+                            "feature_desc": (
+                                f"{ap_result['target_name']} is marked by "
+                                f"{char.name}'s warrior spirits until the "
+                                f"start of {char.name}'s next turn."
+                            ),
+                            "source": "ancestral-protectors",
+                            "target_combatant_id": ap_result["target_combatant_id"],
+                            "target_name": ap_result["target_name"],
+                            "protected_char_id": ap_result["protected_char_id"],
+                        },
+                    })
+            except Exception:
+                logging.exception(
+                    "Ancestral Protectors install failed for char_id=%s",
+                    char.id,
+                )
+
         if hit and not target_dead:
             try:
                 lol_result = await _apply_lance_of_lethargy(
