@@ -5196,6 +5196,39 @@ def _eligible_reactions(
                 "available": True,
                 "unavailable_reason": None,
             })
+        # v2.118.0 Phase 7 — Protective Field (Psi Warrior Fighter Lv
+        # 3+, TCE). When the watcher takes damage, offer to expend one
+        # Psionic Energy die to reduce it (= heal back die + INT mod,
+        # min 1). RAW also covers shielding an ally within 30 ft — that
+        # needs a nearby-watcher walker like Sentinel's (filed); v1
+        # surfaces SELF-protection, exactly mirroring the HR/AE
+        # damaged-creature-reacts model above. The /use_protective_field
+        # endpoint stays for the GM-driven ally case.
+        if _pc_has_psi_warrior(char.sheet, 3):
+            pf_fighter_lv = _fighter_level_from_sheet(char.sheet)
+            pf_die = _psionic_energy_die(pf_fighter_lv)
+            try:
+                pf_int = int((char.sheet.get("abilities") or {}).get("INT", 10))
+            except (TypeError, ValueError):
+                pf_int = 10
+            pf_int_mod = (pf_int - 10) // 2
+            opts.append({
+                "key": "use-protective-field",
+                "label": (
+                    f"🛡️ Protective Field — reduce damage by "
+                    f"1d{pf_die} {pf_int_mod:+d} (min 1, Psionic Energy die)"
+                ),
+                "kind": "class-feature",
+                "resource_cost": "Reaction + 1 Psionic Energy die",
+                "params": {
+                    "die_size": pf_die,
+                    "int_mod": pf_int_mod,
+                    "fighter_level": pf_fighter_lv,
+                    "target_combatant_id": context.get("watcher_combatant_id"),
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
         return opts
     # v2.72.0 Phase 3d — Silvery Barbs. Trigger fires from the
     # roll_request save-resolution path when a creature SUCCEEDS on
@@ -21665,6 +21698,85 @@ async def use_reaction(
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
                     "damage_type": damage_type,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "use-protective-field" and watcher_char_id:
+        # v2.118.0 Phase 7 — Protective Field. Roll the Psionic Energy
+        # die + INT mod (min 1), mark the reaction, and apply the
+        # reduction by healing the just-damaged watcher back that much
+        # (the combatant already took the hit; reducing it = restoring
+        # HP, capped at max — same model as the /use_protective_field
+        # endpoint's v2.99.456 resolution). Broadcasts feature_used so
+        # the roll log records the reduction. The Psionic Energy dice
+        # pool itself stays GM-tracked (no sheet resource row yet),
+        # matching the endpoint.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "use-protective-field"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            die_size = int(params.get("die_size") or 6)
+            int_mod = int(params.get("int_mod") or 0)
+            fighter_lv = int(params.get("fighter_level") or 3)
+            target_combatant_id = (
+                params.get("target_combatant_id")
+                or entry.get("watcher_combatant_id")
+            )
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char:
+                raise HTTPException(404, "watcher character not found")
+            try:
+                result = dice_mod.roll(f"1d{die_size}")
+                die_roll = int(result.total)
+            except dice_mod.DiceParseError:
+                die_roll = 1
+            reduction = max(1, die_roll + int_mod)
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            applied = 0
+            if target_combatant_id:
+                target_combatant = _lookup_combatant(
+                    campaign_id, str(target_combatant_id),
+                )
+                if target_combatant:
+                    hr = await _apply_heal_to_combatant(
+                        db, campaign_id, target_combatant, reduction,
+                    )
+                    applied = int(hr.get("applied") or 0)
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": (
+                        f"🛡️ Protective Field — reduce damage by "
+                        f"{reduction} (1d{die_size} {die_roll} {int_mod:+d})"
+                    ),
+                    "feature_desc": (
+                        f"Reaction. {watcher_char.name} weaves a "
+                        f"telekinetic shield, reducing the triggering "
+                        f"damage by {reduction} (1d{die_size} Psionic "
+                        f"Energy die {die_roll} + INT mod {int_mod:+d}, "
+                        f"min 1)."
+                    ),
+                    "source": "protective-field",
+                    "reaction_kind": "class-feature",
+                    "reduction": reduction,
+                    "psionic_die": f"1d{die_size}",
+                    "die_roll": die_roll,
+                    "int_mod": int_mod,
+                    "fighter_level": fighter_lv,
+                    "applied": applied,
                 },
             })
         except HTTPException:

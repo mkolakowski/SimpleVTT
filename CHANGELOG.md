@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.118.0] - 2026-06-08 — "Telekinetic Reflex" — Protective Field surfaces as a damage reaction prompt
+
+**Schema version:** 69
+**Commit summary:** **Wires the Psi Warrior's Protective Field into the proactive reaction-prompt framework: when a Psi Warrior (Fighter Lv 3+) takes damage with a free reaction, the `damage_taken` prompt now offers a one-click "reduce the damage" option that rolls the Psionic Energy die + INT mod and heals the reduction back — instead of the player having to find and call the standalone `/use_protective_field` endpoint.**
+**Description:** Phase 7 ("reactions breadth") of the [full-feature-automation](docs/plans/full-feature-automation.md) backlog, on the [reactions-automation](docs/plans/reactions-automation.md) framework. The `/use_protective_field` endpoint already does real damage reduction (v2.99.456), but it was only reachable by the GM/player manually invoking it — there was no proactive prompt. This commit adds a `use-protective-field` option to the `damage_taken` branch of `_eligible_reactions` (mirroring the Hellish Rebuke / Absorb Elements self-defense listeners — the damaged creature reacts) and a matching dispatch in `/use_reaction` that rolls the Psionic Energy die (size scales with Fighter level: d6/d8/d10/d12) + INT mod (min 1), marks the reaction, heals the just-damaged combatant back by the reduction, and broadcasts `feature_used(source=protective-field)`.
+
+### Added
+- `app/routes/tabletop_routes.py` — `use-protective-field` reaction option in `_eligible_reactions["damage_taken"]` (Psi Warrior Lv 3+ self-protection) + dispatch in `/use_reaction` (rolls the die, marks the reaction, heals back the reduction, broadcasts `feature_used`).
+- `tests/harness/test_reaction_prompt.py` — `garrik_psi_warrior` restore-safe fixture (snapshots subclass + level via `sheet-json`) + `test_protective_field_prompt_fires_on_pc_damage` (option surfaces with the right d8 die) + `test_use_protective_field_reduces_damage` (reaction flips, `feature_used` names the reduction, combatant heals back).
+
+### Notes
+- v1 surfaces **self-protection** (the damaged Psi Warrior reacts), exactly like the existing HR/AE `damage_taken` listeners. The RAW "shield an ally within 30 ft" case needs a nearby-watcher fan-out walker (like Sentinel's) — **filed**. The standalone `/use_protective_field` endpoint stays for the GM-driven ally case. The Psionic Energy dice pool itself remains GM-tracked (no sheet resource row yet), matching the endpoint.
+- **Total harness count: 1977** in `tests/harness/` (1975 → 1977); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.117.1] - 2026-06-08 — "Leave No Trace" — restore-safe sheet-mutating test fixtures
 
 **Schema version:** 69

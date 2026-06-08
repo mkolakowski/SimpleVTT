@@ -1138,6 +1138,227 @@ async def test_cast_hellish_rebuke_consumes_slot(
     assert last.get("damage_expr") == "4d10"
 
 
+# ── v2.118.0 — Phase 7: Protective Field (Psi Warrior) on damage ──
+
+
+async def _patch_sheet_pf(gm_client, char_id, fields, class_slug=None):
+    body = dict(fields)
+    if class_slug:
+        body["class_slug"] = class_slug
+    r = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json=body,
+    )
+    assert r.status_code == 200, r.text
+
+
+@pytest_asyncio.fixture
+async def garrik_psi_warrior(gm_client, roster):
+    """Garrik (Fighter) patched into the Psi Warrior archetype so the
+    damage_taken prompt surfaces Protective Field. Restore-safe
+    (v2.117.x discipline): snapshots his original subclass + level via
+    the sheet-json endpoint and restores them in teardown — never the
+    old `{"subclass": "Champion", "resources": []}` hardcoded reset
+    that wiped his Lucky points for downstream tests."""
+    garrik = roster["Garrik Ironside"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json",
+    )
+    orig = (snap.json() or {}).get("sheet") or {}
+    orig_subclass = orig.get("subclass")
+    orig_level = orig.get("level")
+    await _patch_sheet_pf(
+        gm_client, garrik["id"],
+        {"subclass": "Psi Warrior", "level": 9},
+        class_slug="fighter",
+    )
+    try:
+        yield garrik
+    finally:
+        restore = {}
+        if orig_subclass is not None:
+            restore["subclass"] = orig_subclass
+        if orig_level is not None:
+            restore["level"] = orig_level
+        if restore:
+            await _patch_sheet_pf(
+                gm_client, garrik["id"], restore, class_slug="fighter",
+            )
+
+
+async def test_protective_field_prompt_fires_on_pc_damage(
+    gm_client, gm_ws, garrik_psi_warrior, roster,
+):
+    """v2.118.0 — a Psi Warrior who takes damage with a free reaction
+    gets a `damage_taken` prompt carrying a `use-protective-field`
+    option (reduce the damage by a Psionic Energy die + INT mod).
+    Krieger swings on Garrik (patched Psi Warrior) until a hit lands.
+    """
+    garrik = garrik_psi_warrior
+    krieger = roster["Krieger Stonefist"]
+    # Long rest so Garrik starts at full HP (leaves room to heal back).
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+
+    garrik_cid = f"tok_pf_{garrik['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": garrik_cid,
+            "char_id": garrik["id"],
+            "name": garrik["name"],
+            "initiative": 10,
+            "hp_current": 80, "hp_max": 80,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": garrik_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "damage_taken"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(damage_taken) for Garrik; buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    options = prompts[0]["data"].get("options", []) or []
+    keys = [o.get("key") for o in options]
+    assert "use-protective-field" in keys, (
+        f"expected use-protective-field option; got {keys}"
+    )
+    pf_opt = next(
+        (o for o in options if o.get("key") == "use-protective-field"), {}
+    )
+    params = pf_opt.get("params") or {}
+    # Garrik Lv 9 Psi Warrior → d8 Psionic Energy die.
+    assert int(params.get("die_size") or 0) == 8
+    assert params.get("target_combatant_id") == garrik_cid
+
+
+async def test_use_protective_field_reduces_damage(
+    gm_client, gm_ws, garrik_psi_warrior, roster,
+):
+    """End-to-end: Krieger hits Garrik (Psi Warrior) → prompt fires →
+    POST /use_reaction with use-protective-field → reaction flips +
+    feature_used(source=protective-field) names the reduction + the
+    damaged combatant heals back by that much.
+    """
+    garrik = garrik_psi_warrior
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+
+    garrik_cid = f"tok_pf2_{garrik['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": garrik_cid,
+            "char_id": garrik["id"],
+            "name": garrik["name"],
+            "initiative": 10,
+            "hp_current": 80, "hp_max": 80,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": garrik_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "damage_taken"
+    ]
+    assert prompts, "expected damage_taken prompt for Garrik"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "use-protective-field",
+            "watcher_char_id": garrik["id"],
+        },
+    )
+    assert use.status_code == 200, use.text
+
+    await asyncio.sleep(0.2)
+    # economy_update: Garrik's reaction flips to used.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == garrik["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Garrik's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    # feature_used(source=protective-field) names the reduction.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "protective-field"
+        and (m.get("data") or {}).get("character_id") == garrik["id"]
+    ]
+    assert fu, "expected feature_used(source=protective-field)"
+    last = fu[-1]["data"]
+    assert int(last.get("reduction") or 0) >= 1
+    # 1d8 + INT mod, min 1.
+    assert last.get("psionic_die") == "1d8"
+    # The damaged combatant healed back by the reduction (Garrik was
+    # below max after the hit, so at least 1 HP is restored).
+    assert int(last.get("applied") or 0) >= 1
+
+
 # ── v2.80.0 — Uncanny Dodge vs Defensive Duelist interaction ──
 
 
