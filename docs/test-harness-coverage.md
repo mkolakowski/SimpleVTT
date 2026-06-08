@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2016 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.131.0, 2026-06-08).
+**Total tests:** 2018 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.132.0, 2026-06-08).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -165,6 +165,8 @@ Phase B damage-flow intercepts — Rage / Hunter's Mark / Colossus Slayer / resi
 | `test_resistance_halves_damage` | Krieger's slashing attack on a slashing-resistant NPC → halved. |
 | `test_resistance_does_not_halve_unrelated_type` | Different damage type → no halving. |
 | `test_attack_broadcast_includes_target_name` | Broadcast `target_name` populated when init-tracker combatant resolves. |
+| `test_assassinate_advantage_vs_target_who_hasnt_acted` | v2.132.0 — PATCH-swaps Pip's subclass to Assassin, seeds a battle with Tavik (default `has_acted: False`), attacks with `target_combatant_id=tavik_cid`; asserts `2d20kh1` in the breakdown + `roll_state_applied == "advantage_assassinate_hasnt_acted"`. |
+| `test_assassinate_advantage_gate_drops_after_target_acts` | v2.132.0 — Companion: after Tavik's turn starts (`turn_index=1`), his `has_acted` flips True via the turn-advance hook in PUT `/battle`; Pip's next attack does NOT get the Assassinate advantage. |
 
 ### `test_npc_resistance.py`
 v2.49.109 — closes the v2.49.107 damage-review finding that the NPC branch of `_apply_damage_to_combatant` silently no-op'd resistance. The new `_resistance_halve_npc` helper resolves resistances from (1) the combatant's TokenTemplate's `sheet.damage_resistances` list and (2) the combatant's own `buffs` list.

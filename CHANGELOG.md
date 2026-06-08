@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.132.0] - 2026-06-08 — "First Strike" — Assassinate advantage vs targets who haven't acted
+
+**Schema version:** 69
+**Commit summary:** **Wires the advantage half of Assassinate (Assassin Rogue Lv 3+, PHB p.97). Combatants now carry a `has_acted` flag that flips True the first time their turn starts (hooked in PUT `/battle`'s turn-advance block). `/attack`'s adv/dis layering reads the target's flag via a new `_target_hasnt_acted_yet` helper and layers in `assassinate_target_hasnt_acted` as an advantage source — gated to the Assassin subclass so non-Assassin attacks aren't accidentally elevated. Pairs with the v2.131.0 auto-crit half; Assassinate is now end-to-end automated.**
+**Description:** RAW Assassinate has two halves: (1) advantage on attack rolls against any creature that hasn't taken a turn in the combat yet, and (2) auto-crit on any hit against a surprised creature. v2.131.0 shipped half (2); this commit closes half (1). The state model is one boolean per combatant — `has_acted: False` by default; flipped True in the turn-advance block at PUT `/battle` (line ~76020) when the new active combatant changes. The helper `_target_hasnt_acted_yet(campaign_id, target_combatant_id)` reads the flag through `_lookup_combatant` and returns True only when the combatant exists in an active battle AND their flag is still False — defaulting False on missing combatant / inactive battle so the advantage source is silent rather than accidentally granted. The adv layering block at `/attack` (both the bonused and bonusless branches) ORs the new source in alongside `rage_advantage` and `target_grants_advantage`; `roll_state_applied` carries `"advantage_assassinate_hasnt_acted"` so chat cards can attribute the source. The Elusive (Rogue Lv 18+) suppressor and adv/dis cancellation already apply to the new source for free since they read `has_adv` after the chain. Known minor: `has_acted` persists if combat ends without resetting the battle dict — a fresh combat that re-uses the same combatant dicts in memory would carry the flag forward. Filed as a follow-up; in practice combats either reset state or rebuild combatants on init-roll, so the natural reset works.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_target_hasnt_acted_yet(campaign_id, target_combatant_id)` helper near `_lookup_combatant` (line ~2386).
+- `tests/harness/test_attack_buff_intercepts.py` — `test_assassinate_advantage_vs_target_who_hasnt_acted` (Pip → Assassin, attack Tavik with `target_combatant_id`; assert `2d20kh1` + `roll_state_applied == "advantage_assassinate_hasnt_acted"`) and `test_assassinate_advantage_gate_drops_after_target_acts` (after PUT-advance to Tavik's turn, his `has_acted` flips True; Pip's next attack does NOT get the bonus).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/attack` adv/dis layering at lines ~72646 (bonused branch) and ~72736 (bonusless branch) now ORs `assassinate_target_hasnt_acted` into `has_adv`; `adv_label` adds `"assassinate_hasnt_acted"`. Gated to `_pc_has_assassin_subclass(sheet, 3)` so non-Assassin attackers don't see the source fire.
+- `app/routes/tabletop_routes.py` — turn-advance block in PUT `/battle` (line ~76020) flips `_active["has_acted"] = True` on the newly active combatant. Applies to PCs and NPCs (no `char_id` gate — either can be an Assassinate target).
+- `docs/test-harness-coverage.md` — two new rows under `test_attack_buff_intercepts.py`; running total bumped 2016 → 2018.
+
+### Notes
+- Assassinate is now end-to-end: the v2.131.0 `target_surprised` body flag drives the auto-crit; this commit's `has_acted` flag drives the advantage. The v2.99.306 `/use_assassinate` announce endpoint stays as-is — it's a passive declaration that the feature applies; the actual mechanics now fire at attack-time without needing the announcer. **Total harness count: 2018** in `tests/harness/` (2016 → 2018); **`tests/harness_ui/` 19** (unchanged). Open follow-ups: a `has_acted` reset hook on combat-restart (currently relies on a fresh combatants array); a client-side surfacing of the advantage source so a Pip player sees "Assassinate (advantage)" on the chat card.
+
+---
+
 ## [2.131.0] - 2026-06-08 — "Surprise Attack" — Assassinate auto-crit vs surprised targets
 
 **Schema version:** 69

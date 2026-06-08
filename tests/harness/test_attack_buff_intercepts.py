@@ -414,3 +414,130 @@ async def test_resistance_does_not_halve_unrelated_type(gm_client, krieger_full)
     data = resp.json()
     assert data["resistance_applied"] is False
     assert data["hp"]["current"] == 45  # full 10 applied
+
+
+async def test_assassinate_advantage_vs_target_who_hasnt_acted(
+    gm_client, gm_ws, roster,
+):
+    """v2.132.0 — Assassin Rogue Lv 3+ advantage half of Assassinate:
+    "you have advantage on attack rolls against any creature that hasn't
+    taken a turn in the combat yet." Pip (PATCH-swapped to Assassin) is
+    seeded with Tavik as a combatant whose `has_acted` defaults False.
+    The attack carries `target_combatant_id=tavik_cid` so the gate
+    fires. Asserts 2d20kh1 in the breakdown + roll_state_applied =
+    "advantage_assassinate_hasnt_acted". Restores subclass on teardown.
+    Subclass-gated so a non-Assassin caller wouldn't see this fire."""
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-json",
+    )
+    sheet = (snap.json() or {}).get("sheet") or {}
+    orig_subclass = sheet.get("subclass") or ""
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+        json={"subclass": "Assassin"},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        pip_cid = f"tok_{pip['id']}"
+        tavik_cid = f"tok_{tavik['id']}"
+        await _seed_battle(gm_client, [
+            _mkc(pip_cid, pip["id"], name="Pip"),
+            _mkc(tavik_cid, tavik["id"], name="Tavik"),
+        ])
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": pip["id"],
+                "attack_index": 0,
+                "target_combatant_id": tavik_cid,
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert "2d20kh1" in (data.get("attack_breakdown") or ""), (
+            f"Assassinate advantage gate should produce 2d20kh1; got "
+            f"{data.get('attack_breakdown')!r}"
+        )
+        assert data.get("roll_state_applied") == "advantage_assassinate_hasnt_acted", (
+            f"roll_state_applied mismatch; got "
+            f"{data.get('roll_state_applied')!r}"
+        )
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+            json={"subclass": orig_subclass},
+        )
+
+
+async def test_assassinate_advantage_gate_drops_after_target_acts(
+    gm_client, gm_ws, roster,
+):
+    """v2.132.0 — Companion to the test above: once Tavik's turn comes
+    around (turn_index → 1, his slot), his `has_acted` flips True, and
+    Pip's subsequent attack DOES NOT get advantage from Assassinate.
+    Other adv sources (Rage, Reckless) are absent on Pip, so the d20
+    expression must be 1d20 (no kh1). RAW PHB p.97: the gate closes
+    once the target has taken any turn."""
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-json",
+    )
+    sheet = (snap.json() or {}).get("sheet") or {}
+    orig_subclass = sheet.get("subclass") or ""
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+        json={"subclass": "Assassin"},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        pip_cid = f"tok_{pip['id']}"
+        tavik_cid = f"tok_{tavik['id']}"
+        # Seed the battle with Pip first (turn_index=0), then advance to
+        # Tavik (turn_index=1) which flips his has_acted=True.
+        await _seed_battle(gm_client, [
+            _mkc(pip_cid, pip["id"], name="Pip"),
+            _mkc(tavik_cid, tavik["id"], name="Tavik"),
+        ])
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={
+                "combatants": [
+                    _mkc(pip_cid, pip["id"], name="Pip"),
+                    _mkc(tavik_cid, tavik["id"], name="Tavik"),
+                ],
+                "turn_index": 1,    # advances → Tavik's turn → has_acted=True
+                "round": 1,
+                "active": True,
+            },
+        )
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": pip["id"],
+                "attack_index": 0,
+                "target_combatant_id": tavik_cid,
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        # No advantage source should be active: no rage, no reckless,
+        # no assassinate-gate. The d20 expression stays 1d20 (no kh1/kl1).
+        breakdown = data.get("attack_breakdown") or ""
+        assert "2d20kh1" not in breakdown, (
+            f"After target has acted, Assassinate adv should be gone; "
+            f"got {breakdown!r}"
+        )
+        assert data.get("roll_state_applied") in (None, "", "normal"), (
+            f"roll_state_applied should be unset after gate closes; got "
+            f"{data.get('roll_state_applied')!r}"
+        )
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+            json={"subclass": orig_subclass},
+        )

@@ -2383,6 +2383,23 @@ def _lookup_combatant(campaign_id: int, combatant_id: str | None) -> dict | None
     return None
 
 
+def _target_hasnt_acted_yet(
+    campaign_id: int, target_combatant_id: "str | None",
+) -> bool:
+    """v2.132.0 — RAW Assassinate advantage gate (Assassin Rogue Lv 3+,
+    PHB p.97): "you have advantage on attack rolls against any creature
+    that hasn't taken a turn in the combat yet." Reads the target
+    combatant's `has_acted` flag, flipped True by the turn-advance hook
+    in PUT /battle the first time the target's turn starts. Defaults
+    False on missing combatant / inactive battle so the advantage source
+    is silent rather than accidentally granted to absent-target attacks.
+    """
+    target = _lookup_combatant(campaign_id, target_combatant_id)
+    if not target:
+        return False
+    return not bool(target.get("has_acted", False))
+
+
 # v2.49.73 — distance-on-grid primitive. Extracted from token_move
 # (line ~5040, formerly inline). Matches the JS _computeRulerDistanceFt
 # math exactly so server-side range checks and client-side ruler
@@ -72643,10 +72660,22 @@ async def use_attack(
         # Reckless Attack on the target — folds in alongside Rage as
         # an advantage source. The combined OR keeps the cancel
         # logic clean: any-advantage + any-disadvantage = straight.
-        has_adv = rage_advantage or target_grants_advantage
+        # v2.132.0 — Assassinate advantage half (Assassin Rogue Lv 3+,
+        # PHB p.97). Subclass-gated so a non-Assassin caller's swing at a
+        # target whose has_acted is False isn't accidentally granted
+        # advantage. Pairs with the v2.131.0 auto-crit half.
+        assassinate_target_hasnt_acted = (
+            _pc_has_assassin_subclass(sheet, 3)
+            and _target_hasnt_acted_yet(campaign_id, target_combatant_id)
+        )
+        has_adv = (
+            rage_advantage or target_grants_advantage
+            or assassinate_target_hasnt_acted
+        )
         adv_label = (
             "rage" if rage_advantage else
-            "reckless" if target_grants_advantage else ""
+            "reckless" if target_grants_advantage else
+            "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else ""
         )
         # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
         # attack roll has advantage against you while you aren't
@@ -72716,10 +72745,22 @@ async def use_attack(
         # buff dice/mod folded in.
         atk_expr += _buff_attack_suffix
         # Same Phase B adv/dis layering as the bonused branch above.
-        has_adv = rage_advantage or target_grants_advantage
+        # v2.132.0 — Assassinate advantage half (Assassin Rogue Lv 3+,
+        # PHB p.97). Subclass-gated so a non-Assassin caller's swing at a
+        # target whose has_acted is False isn't accidentally granted
+        # advantage. Pairs with the v2.131.0 auto-crit half.
+        assassinate_target_hasnt_acted = (
+            _pc_has_assassin_subclass(sheet, 3)
+            and _target_hasnt_acted_yet(campaign_id, target_combatant_id)
+        )
+        has_adv = (
+            rage_advantage or target_grants_advantage
+            or assassinate_target_hasnt_acted
+        )
         adv_label = (
             "rage" if rage_advantage else
-            "reckless" if target_grants_advantage else ""
+            "reckless" if target_grants_advantage else
+            "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else ""
         )
         # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
         # attack roll has advantage against you while you aren't
@@ -76017,6 +76058,15 @@ async def update_battle(
             ) else None
         except (TypeError, ValueError):
             _active = None
+        # v2.132.0 — flip the newly-active combatant's `has_acted` to True
+        # so Assassinate's "hasn't taken a turn yet" gate stops granting
+        # advantage to subsequent attacks on this target. RAW PHB p.97:
+        # "any creature that hasn't taken a turn in the combat yet" — once
+        # they've had a turn, the gate closes. Applies to both PCs and
+        # NPCs (no `char_id` gate), since either can be an Assassinate
+        # target.
+        if _active is not None:
+            _active["has_acted"] = True
         if _active and _active.get("char_id"):
             _active_buffs = _active.get("buffs") or []
             for _b in _active_buffs:
