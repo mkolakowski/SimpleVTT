@@ -79,6 +79,28 @@ def _resolved_broadcasts(gm_ws) -> list:
     return list(gm_ws.buffered("reaction_prompt_resolved"))
 
 
+def _oa_keys(options) -> list:
+    """v2.118.1 — every key that resolves an opportunity attack. The
+    v2.99.56+ attack picker yields one ``take-the-oa:{idx}`` key per
+    melee weapon/action and only falls back to the bare ``take-the-oa``
+    when the watcher has no pickable attacks. These OA tests predate
+    the picker and hardcoded the bare key; derive the real key(s) from
+    the prompt instead so they pass whether the watcher pickers or
+    falls back."""
+    return [
+        (o.get("key") or "")
+        for o in (options or [])
+        if (o.get("key") or "") == "take-the-oa"
+        or (o.get("key") or "").startswith("take-the-oa:")
+    ]
+
+
+def _first_oa_key(options) -> str:
+    keys = _oa_keys(options)
+    assert keys, f"expected an OA option (take-the-oa[:idx]); got {options}"
+    return keys[0]
+
+
 async def test_oa_exit_reach_emits_reaction_prompt(
     gm_client, gm_ws, roster,
 ):
@@ -124,9 +146,8 @@ async def test_oa_exit_reach_emits_reaction_prompt(
     )
     data = matching[0]["data"]
     assert isinstance(data.get("prompt_id"), str) and data["prompt_id"].startswith("rxn_")
-    keys = [o.get("key") for o in (data.get("options") or [])]
-    assert "take-the-oa" in keys, (
-        f"expected take-the-oa option; got options={data.get('options')}"
+    assert _oa_keys(data.get("options")), (
+        f"expected a take-the-oa[:idx] option; got options={data.get('options')}"
     )
     # target_user_ids should include the GM (NPC owners aren't tested
     # here — Tavik is owned by the GM in the demo).
@@ -175,20 +196,21 @@ async def test_use_reaction_marks_economy_and_resolves_prompt(
     ]
     assert prompts
     prompt_id = prompts[0]["data"]["prompt_id"]
+    oa_key = _first_oa_key(prompts[0]["data"].get("options"))
 
     gm_ws.mark()
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
         json={
             "prompt_id": prompt_id,
-            "reaction_key": "take-the-oa",
+            "reaction_key": oa_key,
             "watcher_char_id": tavik["id"],
         },
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["ok"] is True
-    assert data["reaction_key"] == "take-the-oa"
+    assert data["reaction_key"] == oa_key
     assert data["trigger_event"] == "creature_exits_reach"
 
     await asyncio.sleep(0.2)
@@ -242,12 +264,13 @@ async def test_use_reaction_replay_guard(
         if (m.get("data") or {}).get("watcher_char_id") == tavik["id"]
     ]
     prompt_id = prompts[0]["data"]["prompt_id"]
+    oa_key = _first_oa_key(prompts[0]["data"].get("options"))
 
     first = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
         json={
             "prompt_id": prompt_id,
-            "reaction_key": "take-the-oa",
+            "reaction_key": oa_key,
             "watcher_char_id": tavik["id"],
         },
     )
@@ -257,7 +280,7 @@ async def test_use_reaction_replay_guard(
         f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
         json={
             "prompt_id": prompt_id,
-            "reaction_key": "take-the-oa",
+            "reaction_key": oa_key,
             "watcher_char_id": tavik["id"],
         },
     )
@@ -1936,10 +1959,11 @@ async def test_war_caster_prompt_offers_cast_alongside_oa(
         == "creature_exits_reach"
     ]
     assert prompts, "expected creature_exits_reach prompt for Tavik"
-    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
-    assert "take-the-oa" in keys
+    options = prompts[0]["data"].get("options", [])
+    keys = [o.get("key") for o in options]
+    assert _oa_keys(options), f"expected a take-the-oa[:idx] option; got {keys}"
     assert "take-war-caster-cast" in keys, (
-        f"expected take-war-caster-cast option alongside take-the-oa; "
+        f"expected take-war-caster-cast option alongside the OA; "
         f"got {keys}"
     )
 
@@ -2917,6 +2941,7 @@ async def test_use_reaction_marks_npc_economy_via_combatant_id(
         f"{[(m.get('data') or {}).get('watcher_combatant_id') for m in _prompt_broadcasts(gm_ws)]}"
     )
     prompt_id = prompts[0]["data"]["prompt_id"]
+    oa_key = _first_oa_key(prompts[0]["data"].get("options"))
 
     gm_ws.mark()
     # GM resolves the NPC reaction. watcher_char_id intentionally
@@ -2925,7 +2950,7 @@ async def test_use_reaction_marks_npc_economy_via_combatant_id(
         f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
         json={
             "prompt_id": prompt_id,
-            "reaction_key": "take-the-oa",
+            "reaction_key": oa_key,
         },
     )
     assert resp.status_code == 200, resp.text

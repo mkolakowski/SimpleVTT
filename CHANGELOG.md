@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.118.1] - 2026-06-08 — "Pick Your Swing" — OA reaction tests follow the attack picker
+
+**Schema version:** 69
+**Commit summary:** **Updates five stale opportunity-attack reaction-prompt tests that hardcoded the pre-picker `take-the-oa` key. Since the v2.99.56+ attack picker yields one `take-the-oa:{idx}` key per melee weapon (and only falls back to the bare key when the watcher has no pickable attacks), these v2.67.0 tests broke once the demo watchers' sheets carried parseable melee attacks. They now derive the real OA key from the prompt options.**
+**Description:** Test-only fix (no endpoint or behavior change). The `creature_exits_reach` / NPC-OA tests in `test_reaction_prompt.py` asserted `"take-the-oa" in keys` and POSTed `reaction_key="take-the-oa"`, but the picker now surfaces `take-the-oa:0` / `take-the-oa:1` for any watcher with melee attacks (Tavik, the bandit NPC), so `/use_reaction` rejected the bare key with `400 unknown_reaction_key`. Two new helpers — `_oa_keys(options)` (every key matching `take-the-oa` or `take-the-oa:{idx}`) and `_first_oa_key(options)` — let the five tests assert/POST whichever key the prompt actually offers, picker or fallback. Surfaced while shipping v2.118.0 (the failures predate it — the diff there is isolated to the `damage_taken` path).
+
+### Fixed
+- `tests/harness/test_reaction_prompt.py` — `test_oa_exit_reach_emits_reaction_prompt`, `test_use_reaction_marks_economy_and_resolves_prompt`, `test_use_reaction_replay_guard`, `test_war_caster_prompt_offers_cast_alongside_oa`, `test_use_reaction_marks_npc_economy_via_combatant_id` now derive the OA key from the prompt's options via the new `_oa_keys` / `_first_oa_key` helpers instead of hardcoding the pre-picker `take-the-oa`.
+
+### Notes
+- No production code touched — purely realigns five tests with the v2.99.56 picker contract. **Total harness count: 1977** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.118.0] - 2026-06-08 — "Telekinetic Reflex" — Protective Field surfaces as a damage reaction prompt
 
 **Schema version:** 69
