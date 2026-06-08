@@ -118,9 +118,12 @@ Two additional buttons use slightly different padding and may need individual re
     - ✅ Save-only NPC actions (breath weapons) — fixed v2.99.466 (backfilled `save_dc` from desc) + v2.99.467 (init-tracker strike handler routes save-DC actions to `/npc_cast_spell`, which rolls the save + applies save-for-half damage). Single-target via the picker for v1.
     - ✅ AoE breath weapons (v2.99.468 — strike button passes `aoe_target_combatant_ids`); ✅ Open5e-import normalization (v2.99.469 — `app/content/monster_action_parse.py` parses combat fields from `desc`, applied in `_creature_full`).
     - **Remaining (low-priority):** the unified mini-sheet `.mini-strike-btn` NPC path could get the same save routing the init-tracker handler got (v2.99.467) if it surfaces save actions — the init-tracker path is the primary GM NPC-strike surface, so this is a nice-to-have.
-- 🟡 **P2** — Feature: plan three ways that we can allow users to up-cast spells
-    - IE, Magic missile at level 3
-    - Note: will need an audit of spells to see how up-casting them will affect how the spell is handled
+- ✅ **DONE — v2.108.0–v2.110.0 (mechanisms) + v2.125.0 (parser)** — Feature: plan three ways that we can allow users to up-cast spells
+    - Plan doc: [`docs/plans/spell-upcasting.md`](docs/plans/spell-upcasting.md) — audits today's surface and proposes three approaches (A: UI slot-picker; B: structured per-slot scaling data + generic resolver; C: GM-adjudicated `higher_level` text fallback).
+    - All three approaches shipped: A (full sheet + mini-sheet picker, v2.108.0/.109.0), B (`damage_per_slot` / `healing_per_slot` + `_scale_dice_for_upcast` resolver, v2.110.0), C (rule text in the picker + `spell_cast` broadcast, v2.108.0).
+    - v2.125.0 "Read the Footnote" added a `higher_level`-prose fallback (`app/content/spell_upcast_parse.py`) so ~285 prose-only spells auto-scale without a per-spell JSON edit.
+    - Shared upcast math now lives in one module: `parse_upcast_dice` (v2.125.0), `upcast_target_count` (v2.127.0), `upcast_pool_dice` (v2.128.0).
+    - **Remaining (lower-priority follow-up):** continue the spell-by-spell `damage_per_slot` / `healing_per_slot` backfill on the +dice/+heal tail the parser doesn't cover (per-two-level scaling, instance scaling, missing-base spells). Tracked inline in the plan doc's "Recommended rollout" section, not a top-priority backlog item.
 - ✅ **DONE — v2.105.0–v2.107.0** — Feature: Framework that will allow then to use features like luck by clicking a button inside the roll log card they want to re-roll
     - Phase 1 ✅ v2.105.0 ("Push Your Luck") — `_REROLL_FEATURES` registry + generic `POST /use_reroll` + `reroll_options` on the `/roll` broadcast; Lucky feat (any d20, keep-better).
     - Phase 2 ✅ v2.106.0 ("One More Roll") — reroll button(s) on roll-log cards.

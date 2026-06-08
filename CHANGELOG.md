@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.128.2] - 2026-06-08 — "Receipts" — close the stale "plan three ways to up-cast" TODO
+
+**Schema version:** 69
+**Commit summary:** **Doc-only: the [TODO](TODO.md) "plan three ways that we can allow users to up-cast spells" entry was filed before [`docs/plans/spell-upcasting.md`](docs/plans/spell-upcasting.md) was written and before Approaches A (slot-picker), B (structured `damage_per_slot` + resolver), and C (free-text `higher_level` fallback) all shipped in v2.108.0–v2.110.0 + v2.125.0. The entry now points at the plan doc and the shipped versions instead of asking for work that's already done.**
+**Description:** A fresh audit confirms every approach in the plan is live: the slot-picker on the full sheet (`sheet_dnd5e.html`) + mini-sheet, the `_scale_dice_for_upcast` resolver path in `/cast_spell`, the prose-fallback parser (`app/content/spell_upcast_parse.py`), and the three shared upcast helpers (`parse_upcast_dice` v2.125.0, `upcast_target_count` v2.127.0, `upcast_pool_dice` v2.128.0). What remains is incremental data backfill on the +dice / +heal tail that the parser doesn't yet auto-cover (per-two-level scaling, instance scaling, missing-base spells), which is already tracked in the plan's "Recommended rollout" section. Closing the TODO entry keeps the backlog honest so the next session doesn't re-plan a thing that's already in the book.
+
+### Changed
+- `TODO.md` — "plan three ways" entry marked DONE with pointers to the plan doc and the shipped versions; lower-priority follow-up (continued tail backfill) called out inline.
+
+### Notes
+- Doc-only; no code or schema change. `TODO.md` is already surfaced via `/wiki`. The plan doc itself was last refreshed v2.125.0 and is already in the `_DOC_ALLOWLIST` (`plan-spell-upcasting`). No harness change.
+
+---
+
 ## [2.128.1] - 2026-06-08 — "Right Tool" — correct the auras-backlog-E machinery map
 
 **Schema version:** 69
