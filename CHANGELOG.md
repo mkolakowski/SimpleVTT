@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.117.0] - 2026-06-07 — "Sheet, Plainly" — read-only JSON character-sheet endpoint
+
+**Schema version:** 69
+**Commit summary:** **Adds `GET /api/campaign/{id}/character/{id}/sheet-json` — a read-only JSON view of a character's (dnd5e-normalized) sheet, gated to the GM or the character's owner. The existing character GETs render HTML; this returns the raw sheet dict so tooling can read it without scraping the page.**
+**Description:** Small infrastructure addition that unblocks several things at once. The two filed test-fixture hazards (the polymorph + Garrik-resource fixtures that mutate a shared demo PC's sheet and can't currently restore it) need a way to snapshot the original sheet before patching — there was no JSON read path (only HTML). This endpoint provides it, so a fixture can `GET sheet-json` → snapshot → patch → restore in teardown. It also gives any future client the raw sheet directly, and is a prerequisite for cleanly testing class-feature work (e.g. reaction maneuvers) that needs to set up a sheet and verify it. Auth mirrors the `sheet-fields` PATCH (GM or owner); returns `{ok, character_id, name, template, sheet}`.
+
+### Added
+- `app/routes/tabletop_routes.py` — `GET /api/campaign/{id}/character/{id}/sheet-json` (GM/owner-gated, dnd5e-normalized sheet).
+- `tests/harness/test_sheet_json.py` — happy path (GM reads Garrik → sheet carries class + resources), 404 unknown character, 403 for a non-owner non-GM.
+
+### Notes
+- Read-only; no schema or WS change. Surfaces the sheet sensitive data only to the GM + owner, matching the PATCH gate.
+- **Total harness count: 1975** in `tests/harness/` (1972 → 1975); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.116.0] - 2026-06-07 — "Popped Out, Still Lucky" — reroll button in the rolls popout
 
 **Schema version:** 69

@@ -77565,6 +77565,41 @@ def _apply_sheet_patch(sheet: dict, body: dict) -> dict:
     return sheet
 
 
+@router.get("/api/campaign/{campaign_id}/character/{char_id}/sheet-json")
+async def get_character_sheet_json(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.117.0 — read a character's sheet as JSON. The existing
+    character GETs render HTML; this returns the raw (dnd5e-normalized)
+    sheet dict so tooling can read it without scraping the page —
+    notably restore-safe test fixtures that patch a field (resources /
+    spells / level) and need to snapshot the original first, plus any
+    future client that wants the sheet directly.
+
+    Gated to the GM or the character's owner (mirrors the sheet-fields
+    PATCH). Returns ``{ok, character_id, name, template, sheet}``.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not campaign or not char or char.campaign_id != campaign_id:
+        raise HTTPException(404, "Not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Forbidden")
+    sheet = dict(char.sheet or {})
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
+    return {
+        "ok": True,
+        "character_id": char.id,
+        "name": char.name,
+        "template": char.template,
+        "sheet": sheet,
+    }
+
+
 @router.patch("/api/campaign/{campaign_id}/character/{char_id}/sheet-fields")
 async def patch_sheet_fields(
     campaign_id: int,
