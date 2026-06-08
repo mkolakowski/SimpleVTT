@@ -30,6 +30,7 @@
       "cost": 1,
       "active_toggle": false,
       "damage": "3d10",
+      "damage_per_slot": "1d10",
       "damage_type": "necrotic",
       "damage_scaling": [],
       "attack_roll": true,

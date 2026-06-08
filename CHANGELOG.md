@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.114.0] - 2026-06-07 — "Bigger Boom, More Spells" — up-cast scaling for 8 more spells
+
+**Schema version:** 68
+**Commit summary:** **Extends the v2.110.0 up-cast dice-scaling (Approach B) to eight more common spells by backfilling their `damage_per_slot` rule in the SRD content: Moonbeam (+1d10), Guiding Bolt / Lightning Bolt / Flaming Sphere / Vampiric Touch (+1d6), Inflict Wounds (+1d10), Chromatic Orb-class +1d8 (Cone of Cold), and Spirit Guardians (+1d8). No code change — the cast resolver already scales any spell carrying the field.**
+**Description:** Data-only feature growth: each spell's first action now carries the per-slot rule that `_scale_dice_for_upcast` reads, so casting any of them above base level auto-grows the damage dice (Moonbeam at L3 → 3d10, Lightning Bolt at L4 → 9d6, etc.). The fields were validated against each SRD JSON's existing base damage. Spells without a clean single-action damage line (e.g. Mass Cure Wounds / Prayer of Healing, whose healing lives elsewhere) and ones with no shipped JSON (Chromatic Orb) were left for a follow-up.
+
+### Added
+- `app/data/local/dnd5e/spells/{moonbeam,guiding-bolt,lightning-bolt,flaming-sphere,vampiric-touch,inflict-wounds,cone-of-cold,spirit-guardians}.json` — `damage_per_slot` rules.
+- `tests/harness/test_cast_spell.py` — `test_upcast_scales_moonbeam_damage` (Mira, Druid 5, casts Moonbeam at L3 → action damage `3d10`).
+
+### Notes
+- Backfill only; the resolver + chat-card / auto-damage paths were already proven by the v2.110.0 Burning Hands / Cure Wounds tests. More spells (incl. healing ones with multi-action shapes, and Chromatic Orb once its JSON ships) can be added incrementally.
+- **Total harness count: 1970** in `tests/harness/` (1969 → 1970); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.113.2] - 2026-06-07 — "Don't Drop Your Own Spell" — concentration swap keeps the new anchor
 
 **Schema version:** 68
