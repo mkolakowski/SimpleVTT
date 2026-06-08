@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.126.0] - 2026-06-08 — "Fill the Blanks" — model the missing base damage/healing on 3 spells
+
+**Schema version:** 69
+**Commit summary:** **Models the previously-empty base damage/healing on Delayed Blast Fireball (12d6 fire), Mass Cure Wounds (3d8), and Prayer of Healing (2d8). These spells couldn't up-cast — the v2.125.0 parser had nothing to scale because their action `damage`/`healing` was blank. With the base modeled, the parser now auto-scales them on up-cast for free.**
+**Description:** Closes part of the filed base-data gap behind the up-cast parser. A corpus sweep had flagged several spells the parser *would* cover except their base damage/healing wasn't modeled on the action (the SRD content build left them blank). Verified each value against the spell's own `desc` text — Delayed Blast Fireball "12d6", Mass Cure Wounds "3d8 + mod", Prayer of Healing "2d8 + mod" — and populated the action's base field (the spellcasting-mod is added by the resolver, matching the Cure Wounds convention). HP-pool spells (Color Spray 6d10, Sleep 5d8) and the stored-effect Glyph of Warding were deliberately left blank — their "dice" aren't damage and would mis-model.
+
+### Added
+- `tests/harness/test_cast_spell.py` — `test_modeled_base_healing_then_parser_scales` (Prayer of Healing, now-modeled 2d8 base, cast at L3 → 3d8 via the parser; restore-safe spell-list patch).
+
+### Changed
+- `app/data/local/dnd5e/spells/*.json` — base `damage`/`healing` modeled on Delayed Blast Fireball (12d6 fire), Mass Cure Wounds (3d8), Prayer of Healing (2d8).
+
+### Notes
+- With the base + the v2.125.0 parser, all three now scale on up-cast with no per-spell `damage_per_slot` edit. **Total harness count: 1998** in `tests/harness/` (1997 → 1998); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.125.0] - 2026-06-08 — "Read the Footnote" — parse up-cast dice from higher_level prose
 
 **Schema version:** 69

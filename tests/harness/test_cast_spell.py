@@ -302,6 +302,54 @@ async def test_upcast_scales_healing_dice(gm_client, gm_ws, roster):
     )
 
 
+async def test_modeled_base_healing_then_parser_scales(gm_client, gm_ws, roster):
+    """v2.126.0 — Prayer of Healing's base healing (2d8) was unmodeled
+    (empty action `healing`), so the up-cast parser had nothing to grow.
+    Now that the base is modeled, casting it at L3 scales to 3d8 via the
+    v2.125.0 `higher_level` parser (+1d8/slot) — base data + parser
+    together. Restore-safely append it to Tavik's (Cleric) spell list."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-json",
+    )
+    orig_spells = ((snap.json() or {}).get("sheet") or {}).get("spells") or []
+    idx = len(orig_spells)
+    new_spells = orig_spells + [{
+        "name": "Prayer of Healing", "_slug": "prayer-of-healing", "level": 2,
+        "class": "cleric", "prepared": True, "casting_time": "10 minutes",
+    }]
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-fields",
+        json={"spells": new_spells},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": tavik["id"],
+                "spell_index": idx,
+                "slot_level": 3,    # up-cast L2 → parser-derived +1d8
+                "class_slug": "cleric",
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        msg = await gm_ws.wait_for("spell_cast")
+        d = msg["data"]
+        assert d["spell_name"] == "Prayer of Healing"
+        assert d["slot_level"] == 3
+        assert d["spell_healing"] == "3d8", (
+            f"Prayer of Healing at L3 should be 2d8 (now-modeled base) + 1d8 "
+            f"(parser) = 3d8; got {d.get('spell_healing')!r}"
+        )
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-fields",
+            json={"spells": orig_spells},
+        )
+
+
 async def test_upcast_base_level_leaves_dice_unscaled(gm_client, gm_ws, roster):
     """Sanity: casting Burning Hands at its base L1 leaves 3d6 (the
     scaler is a no-op when slot_level == spell_level)."""

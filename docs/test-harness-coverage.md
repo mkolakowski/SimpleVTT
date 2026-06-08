@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 1997 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.125.0, 2026-06-08).
+**Total tests:** 1998 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.126.0, 2026-06-08).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -194,6 +194,7 @@ Basic `/cast_spell` happy paths + slot-consumption errors.
 | `test_upcast_scales_hellish_rebuke_damage` | v2.123.0 — Magnus casts Hellish Rebuke at L3 → 4d10. |
 | `test_upcast_scales_acid_arrow_multitype` | v2.124.0 — restore-safe spell-list patch → Acid Arrow at L3 → 5d4 (resolver reads the field from content by `_slug`). |
 | `test_upcast_scales_from_higher_level_prose` | v2.125.0 — Thunderwave (2d8, NO structured field) at L2 → 3d8 via the `parse_upcast_dice` fallback. Restore-safe spell-list patch. |
+| `test_modeled_base_healing_then_parser_scales` | v2.126.0 — Prayer of Healing (base 2d8 now modeled) cast at L3 → `spell_healing == "3d8"` (base + parser +1d8). Restore-safe spell-list patch on Tavik. |
 | `test_upcast_scales_healing_dice` | Cure Wounds at L2 → 2d8 healing. |
 | `test_upcast_base_level_leaves_dice_unscaled` | Burning Hands at base L1 stays 3d6 (no-op). |
 
