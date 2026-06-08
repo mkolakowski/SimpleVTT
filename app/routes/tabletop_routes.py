@@ -720,7 +720,12 @@ async def _install_buff(
     # effects (Paralyzed via Hold Person, Frightened via Fear, …)
     # drop in lock-step.
     if is_concentration and replaced_concentration_keys:
-        await _drop_paired_concentration_buffs(campaign_id, character_id)
+        # v2.113.2 — except_key protects the buff we just installed (the
+        # new anchor) from the swap cascade; only the OLD concentration's
+        # paired conditions / bound summons / AoEs should drop.
+        await _drop_paired_concentration_buffs(
+            campaign_id, character_id, except_key=key,
+        )
     # v2.49.51: RAW PHB p.203 — "you also lose concentration on a
     # spell if you are incapacitated." Drop the target's pre-existing
     # OWN concentration anchors AND emit a 💀 log naming the cause.
@@ -1599,7 +1604,7 @@ async def _maybe_concentration_save(
 
 
 async def _drop_paired_concentration_buffs(
-    campaign_id: int, caster_char_id: int,
+    campaign_id: int, caster_char_id: int, except_key: "str | None" = None,
 ) -> list[dict]:
     """v2.38.0 Phase T.3e: when a caster's concentration drops (broke
     on damage, was replaced by a new concentration cast, or was ended
@@ -1634,9 +1639,20 @@ async def _drop_paired_concentration_buffs(
             # ``_dependent_on_caster_concentration: True`` marker on
             # the target buff at install time so the helper still
             # cascade-drops it when the caster's concentration ends.
-            if b.get("source_char_id") == caster_char_id and (
-                bool(b.get("concentration"))
-                or bool(b.get("_dependent_on_caster_concentration"))
+            # v2.113.2 — never drop the buff that TRIGGERED this cascade.
+            # When _install_buff swaps in a new concentration anchor it
+            # calls this with except_key=<new anchor key>; without the
+            # guard the cascade would remove the caster's own
+            # just-installed anchor too (it carries source_char_id ==
+            # caster + concentration), leaving the caster showing as not
+            # concentrating right after a swap.
+            if (
+                b.get("source_char_id") == caster_char_id
+                and (except_key is None or b.get("key") != except_key)
+                and (
+                    bool(b.get("concentration"))
+                    or bool(b.get("_dependent_on_caster_concentration"))
+                )
             ):
                 rec = dict(b)
                 rec["_dropped_from_combatant_id"] = c.get("id")
@@ -45306,36 +45322,6 @@ async def use_spiritual_weapon(
     _init_override = body.get("initiative")
     _summon_init = (int(_init_override)
                     if _init_override not in (None, "") else _caster_init)
-
-    # v2.113.1 — drop any pre-existing concentration FIRST (RAW one-at-
-    # a-time). Removing the caster's old concentration buff(s) via
-    # _remove_buff fires _drop_paired_concentration_buffs, which clears
-    # the OLD spell's AoEs / bound summons / paired conditions — and
-    # because the new weapon isn't spawned yet, that cascade can't
-    # dismiss it. Doing this explicitly (instead of leaning on
-    # _install_buff's concentration-swap) avoids the swap-cascade
-    # removing the brand-new Spiritual Weapon anchor we install next:
-    # the cascade drops every concentration buff sourced by the caster,
-    # which would include our own anchor if a prior one were still
-    # present at install time.
-    _pre_state = hub.get_battle(campaign_id) or {}
-    _pre_cb = next(
-        (c for c in (_pre_state.get("combatants") or [])
-         if c.get("char_id") == char.id), None,
-    )
-    if _pre_cb:
-        _old_conc_keys = [
-            (b or {}).get("key") for b in (_pre_cb.get("buffs") or [])
-            if (b or {}).get("concentration")
-            and (b or {}).get("source_char_id") == char.id
-            and (b or {}).get("key")
-            and (b or {}).get("key") != "concentration-spiritual-weapon"
-        ]
-        for _ok in _old_conc_keys:
-            try:
-                await _remove_buff(campaign_id, char.id, _ok)
-            except Exception:  # noqa: BLE001
-                pass
 
     # v2.113.0 — bind to the caster's concentration. House rule: this
     # VTT treats Spiritual Weapon as concentration so the weapon lives

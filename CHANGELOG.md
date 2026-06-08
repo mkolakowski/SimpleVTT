@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.113.2] - 2026-06-07 — "Don't Drop Your Own Spell" — concentration swap keeps the new anchor
+
+**Schema version:** 68
+**Commit summary:** **Fixes a latent bug in `_install_buff`'s concentration swap: when a new concentration buff replaced the caster's previous one, the cleanup cascade (`_drop_paired_concentration_buffs`) removed EVERY concentration buff sourced by the caster — including the just-installed anchor — so the caster ended up showing as NOT concentrating after a swap. Now the cascade takes an `except_key` and the swap passes the new anchor's key, so only the OLD spell's effects drop.**
+**Description:** Surfaced during the v2.113.0–.1 Spiritual Weapon work. `_install_buff` (v2.19.1/v2.38.0) enforces RAW one-concentration-at-a-time: installing a new concentration buff drops the caster's prior one and calls `_drop_paired_concentration_buffs(caster)` to drop that old spell's paired conditions / AoEs / bound summons. But that cascade matches on `source_char_id == caster AND concentration`, which also matched the caster's brand-new anchor when the anchor carried `source_char_id: caster` (Spiritual Weapon's anchor and `cast_spell`'s save-or-suck anchor both do; Hex/Hunter's Mark happened to dodge it by omitting `source_char_id`). The fix adds an `except_key` parameter to `_drop_paired_concentration_buffs` and passes `except_key=<new anchor key>` from the `_install_buff` swap site — a swap must never drop the buff that triggered it. This generalizes the v2.113.1 Spiritual-Weapon-specific "drop the prior concentration first" workaround, which is now removed: Spiritual Weapon installs its anchor before spawning the weapon and relies on the general fix.
+
+### Fixed
+- `app/routes/tabletop_routes.py` — `_drop_paired_concentration_buffs` gains `except_key`; the `_install_buff` concentration-swap call passes the new anchor's key so the swap can't remove it. Removed the v2.113.1 Spiritual-Weapon drop-first workaround (now covered by the general fix). Benefits every concentration spell whose anchor carries `source_char_id` (e.g. save-or-suck Hold Person / Fear cast while already concentrating).
+
+### Added
+- `tests/harness/test_concentration_swap.py` — casting Hex while concentrating on a prior spell swaps out the old anchor and keeps the new one.
+
+### Notes
+- A deeper edge remains filed: in `cast_spell`'s save-or-suck path the new spell's TARGET-side condition is installed before the caster anchor, so a swap cascade can still drop that just-installed condition (different key, `source_char_id == caster`). `except_key` protects the anchor (the visible symptom); the target-condition ordering is a separate follow-up.
+- **Total harness count: 1969** in `tests/harness/` (1968 → 1969); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.113.1] - 2026-06-07 — "One Thing at a Time" — Spiritual Weapon survives replacing prior concentration
 
 **Schema version:** 68
