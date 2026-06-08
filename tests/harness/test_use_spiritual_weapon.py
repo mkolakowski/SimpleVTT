@@ -52,6 +52,14 @@ async def _dismiss(gm_client, combatant_id):
     )
 
 
+async def _clear_concentration(gm_client, char_id):
+    # v2.113.0 — Spiritual Weapon now establishes concentration on the
+    # caster; clear it in teardown so the row + buff don't leak.
+    await gm_client.delete(
+        f"/api/campaign/{CAMPAIGN_ID}/concentration/{char_id}",
+    )
+
+
 async def test_spiritual_weapon_summon_only(gm_client, gm_ws, roster):
     """Tavik conjures the weapon with no target → a `spiritual-weapon`
     summon combatant + token appear; `attacked` is False."""
@@ -78,8 +86,61 @@ async def test_spiritual_weapon_summon_only(gm_client, gm_ws, roster):
 
         ta = await gm_ws.wait_for("token_add", timeout=2.0)
         assert ta["data"]["id"] == body["token_id"]
+        # v2.113.0 — casting now binds the weapon to concentration.
+        assert cb["concentration_bound"] is True
     finally:
         await _dismiss(gm_client, cb["id"])
+        await _clear_concentration(gm_client, tavik["id"])
+
+
+async def test_spiritual_weapon_concentration_lifecycle(gm_client, gm_ws, roster):
+    """v2.113.0 — the weapon joins initiative at the caster's value and
+    is bound to concentration: dropping the caster's concentration buff
+    (the × on the chip) dismisses the weapon's token + combatant."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    cb = _pc_cb(tavik)
+    cb["initiative"] = 15  # distinctive value to assert "after the caster"
+    await _seed_battle(gm_client, [cb])
+
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_spiritual_weapon",
+        json={"character_id": tavik["id"], "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    weapon = r.json()["combatant"]
+    token_id = r.json()["token_id"]
+    try:
+        assert weapon["initiative"] == 15, "weapon acts at the caster's initiative"
+        assert weapon["concentration_bound"] is True
+        # The caster shows concentrating.
+        cu = await gm_ws.wait_for("concentration_update", timeout=2.0)
+        assert cu["data"]["character_id"] == tavik["id"]
+        assert cu["data"]["spell_name"] == "Spiritual Weapon"
+        assert cu["data"]["ended"] is False
+        # The weapon is in the persisted battle.
+        got = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/battle")
+        combs = ((got.json() or {}).get("battle") or {}).get("combatants") or []
+        assert any(c.get("companion_key") == "spiritual-weapon" for c in combs)
+
+        # Drop the caster's concentration buff → the cascade dismisses it.
+        gm_ws.mark()
+        er = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": tavik["id"],
+                  "key": "concentration-spiritual-weapon"},
+        )
+        assert er.status_code == 200, er.text
+        td = await gm_ws.wait_for("token_delete", timeout=2.0)
+        assert td["data"]["id"] == token_id
+        got2 = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/battle")
+        combs2 = ((got2.json() or {}).get("battle") or {}).get("combatants") or []
+        assert not any(c.get("companion_key") == "spiritual-weapon" for c in combs2), (
+            "the weapon must be dismissed when the caster's concentration drops"
+        )
+    finally:
+        await _dismiss(gm_client, weapon["id"])
+        await _clear_concentration(gm_client, tavik["id"])
 
 
 async def test_spiritual_weapon_attacks_target(gm_client, roster):
@@ -120,6 +181,7 @@ async def test_spiritual_weapon_attacks_target(gm_client, roster):
                 break
         finally:
             await _dismiss(gm_client, weapon_id)
+    await _clear_concentration(gm_client, tavik["id"])
     assert hit_seen, "no hit in 30 casts — flaky env?"
 
 

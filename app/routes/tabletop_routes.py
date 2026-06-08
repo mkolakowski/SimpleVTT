@@ -1684,6 +1684,30 @@ async def _drop_paired_concentration_buffs(
             await _revert_polymorph_internal(
                 campaign_id, int(target_char_id),
             )
+
+    # v2.113.0 — concentration-bound summons (Spiritual Weapon). When
+    # the caster's concentration drops, dismiss any summon they stood
+    # up under it (token + combatant + broadcasts), mirroring the AoE-
+    # marker + polymorph cleanup above. Re-read the (post-buff-cleanup)
+    # state and use an own session since this helper isn't passed one.
+    _bound = [
+        c for c in ((hub.get_battle(campaign_id) or {}).get("combatants") or [])
+        if c.get("is_summon") and c.get("concentration_bound")
+        and c.get("summoned_by") == caster_char_id
+    ]
+    if _bound:
+        try:
+            from app.database import SessionLocal as _SumSessionLocal
+            with _SumSessionLocal() as _sum_db:
+                for _bc in _bound:
+                    try:
+                        await _dismiss_companion(
+                            _sum_db, campaign_id, _bc.get("id"),
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
+        except Exception:  # noqa: BLE001
+            pass
     return removed
 
 
@@ -2697,6 +2721,7 @@ async def _summon_companion(
     initiative: int = 0,
     hp: "int | None" = None,
     ac: "int | None" = None,
+    concentration_bound: bool = False,
 ) -> "dict | None":
     """v2.99.437 — Phase 7.1: stand up a summoned companion as a REAL
     combatant. Creates an NPC ``Token`` on the active map (broadcast
@@ -2762,6 +2787,9 @@ async def _summon_companion(
         "is_summon": True,
         "summoned_by": int(owner_char_id),
         "companion_key": (companion_key or "").strip().lower(),
+        # v2.113.0 — when True, the caster losing concentration dismisses
+        # this summon (the _drop_paired_concentration_buffs cascade).
+        "concentration_bound": bool(concentration_bound),
     }
     state = hub.get_battle(campaign_id) or {
         "combatants": [], "turn_index": 0, "round": 1, "active": False,
@@ -45262,7 +45290,25 @@ async def use_spiritual_weapon(
         spc = "WIS"
     spc_mod = (int((sheet.get("abilities") or {}).get(spc, 10)) - 10) // 2
 
-    # Stand up the floating weapon as a real combatant.
+    # v2.113.0 — place the weapon right after the caster in initiative
+    # (same value; appended after the caster's entry so the client's
+    # descending sort renders it next). An explicit body initiative
+    # still wins (GM override).
+    _sw_state = hub.get_battle(campaign_id) or {}
+    _caster_init = 0
+    for _c in (_sw_state.get("combatants") or []):
+        if _c.get("char_id") == char.id:
+            try:
+                _caster_init = int(_c.get("initiative") or 0)
+            except (TypeError, ValueError):
+                _caster_init = 0
+            break
+    _init_override = body.get("initiative")
+    _summon_init = (int(_init_override)
+                    if _init_override not in (None, "") else _caster_init)
+
+    # Stand up the floating weapon as a real combatant, bound to the
+    # caster's concentration so the cleanup cascade dismisses it.
     summon = await _summon_companion(
         db, campaign_id,
         owner_char_id=char.id,
@@ -45270,8 +45316,54 @@ async def use_spiritual_weapon(
         name="Spiritual Weapon",
         x=float(body.get("x") or 0),
         y=float(body.get("y") or 0),
-        initiative=int(body.get("initiative") or 0),
+        initiative=_summon_init,
+        concentration_bound=True,
     )
+
+    # v2.113.0 — bind to the caster's concentration. House rule: this
+    # VTT treats Spiritual Weapon as concentration so the weapon lives
+    # only while concentration holds. Install the concentration buff on
+    # the caster's combatant (init-tracker chip + the
+    # _drop_paired_concentration_buffs cascade that dismisses the
+    # weapon) AND record a ConcentrationEffect row so a failed CON save
+    # on damage breaks it too. v1: does NOT auto-drop a pre-existing
+    # concentration (one-at-a-time enforcement filed).
+    try:
+        await _install_buff(campaign_id, char.id, {
+            "key": "concentration-spiritual-weapon",
+            "name": "Concentrating: Spiritual Weapon",
+            "icon": "🗡️",
+            "concentration": True,
+            "source_char_id": char.id,
+            "duration_rounds": 10,
+            "duration_max": 10,
+        })
+    except Exception:  # noqa: BLE001
+        pass
+    _sw_eff = db.query(ConcentrationEffect).filter(
+        ConcentrationEffect.campaign_id == campaign_id,
+        ConcentrationEffect.character_id == char.id,
+    ).first()
+    if _sw_eff:
+        _sw_eff.spell_name = "Spiritual Weapon"
+        _sw_eff.rounds_remaining = 10
+        _sw_eff.notes = None
+    else:
+        db.add(ConcentrationEffect(
+            campaign_id=campaign_id, character_id=char.id,
+            spell_name="Spiritual Weapon", rounds_remaining=10, notes=None,
+        ))
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "concentration_update",
+        "data": {
+            "character_id": char.id,
+            "spell_name": "Spiritual Weapon",
+            "rounds_remaining": 10,
+            "notes": "",
+            "ended": False,
+        },
+    })
 
     # Damage dice: 1d8 + 1d8 per two slot levels above 2nd.
     extra_dice = max(0, (slot_level - 2) // 2)

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.113.0] - 2026-06-07 — "Spectral Tether" — Spiritual Weapon joins initiative + lives on concentration
+
+**Schema version:** 68
+**Commit summary:** **Casting Spiritual Weapon (`/use_spiritual_weapon`) now drops the spectral-weapon token into the initiative order at the caster's own initiative (acting right after them) and binds it to the caster's concentration — when concentration drops (the × on the chip, a failed CON save on damage, or a replacing concentration spell), the weapon's token + initiative entry are removed automatically.**
+**Description:** Per request, the existing `_summon_companion`-based Spiritual Weapon retrofit gains two behaviors. (1) **Initiative placement:** the summon now takes the caster's combatant initiative (was 0), so on the client's descending sort it renders immediately after the caster instead of at the bottom; an explicit `initiative` in the body still overrides. (2) **Concentration binding (house rule — RAW Spiritual Weapon isn't concentration):** the cast installs a `concentration-spiritual-weapon` buff on the caster's combatant (the init-tracker "Concentrating" chip + the trigger for the cleanup cascade) and records a `ConcentrationEffect` row (so a failed CON save on damage breaks it), and the summon combatant is tagged `concentration_bound: true`. The existing `_drop_paired_concentration_buffs` cascade — already fired on every concentration drop — now also dismisses the caster's concentration-bound summons (token_delete + battle_update), reusing `_dismiss_companion`. This generalizes to any future concentration-bound summon (e.g. Flaming Sphere).
+
+### Added
+- `app/routes/tabletop_routes.py` — `concentration_bound` param/field on `_summon_companion`; the concentration-drop cascade dismisses concentration-bound summons; `use_spiritual_weapon` places the weapon at the caster's initiative + establishes concentration (buff + `ConcentrationEffect` row + `concentration_update`).
+- `tests/harness/test_use_spiritual_weapon.py` — `test_spiritual_weapon_concentration_lifecycle` (weapon at the caster's initiative + `concentration_bound`; dropping the concentration buff removes the token + combatant). Existing tests assert the new `concentration_bound` flag and clear concentration in teardown.
+
+### Notes
+- v1 does NOT auto-drop a pre-existing concentration when Spiritual Weapon is cast (one-concentration-at-a-time enforcement is filed); the GM can manage overlaps. RAW once-per-turn weapon movement rides the v2.112.0 movable-AoE-style follow-ups.
+- **Total harness count: 1967** in `tests/harness/` (1966 → 1967); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.112.1] - 2026-06-07 — "Cleared the Board" — mark the AoE-updates TODO complete
 
 **Schema version:** 68
