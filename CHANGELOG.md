@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.139.0] - 2026-06-08 — "Held Glance" — Unwavering Mark Phase 1 (install on melee hit)
+
+**Schema version:** 69
+**Commit summary:** **Wires the install side of Unwavering Mark (Cavalier Fighter Lv 3+, XGE p.13). When a Cavalier hits a creature with a melee weapon attack, install a 1-round `unwavering-mark` buff on the target carrying `effects.unwavering_mark_cavalier_char_id: int`. Phase 1b (disadvantage when the marked creature attacks anyone within 5 ft of the Cavalier who isn't the Cavalier) + Phase 2 (bonus-action punish attack when the marked creature damages an ally) read this buff at /attack and /use_punish_attack time — both filed for follow-ups; this commit makes the mark visible end-to-end.**
+**Description:** Mirrors the Ancestral Protectors (v2.136.0) install pattern almost exactly: new helper `_apply_unwavering_mark_on_hit()` gates on `_pc_has_cavalier(sheet, 3)` + the existing `_attack_is_melee_weapon` heuristic + a present target combatant, then installs the mark via `_install_buff_on_combatant_id` with `duration_rounds: 1`. The /attack post-hit block calls it immediately after the AP install + before Lance of Lethargy. Differences from AP: no rage gate (UM fires on any Cavalier's melee weapon hit), uses the melee-weapon heuristic to skip ranged attacks (Longbow + Eldritch Blast don't install), and the buff carries the Cavalier's `cavalier_char_id` rather than `protected_char_id` so the Phase 1b reader can distinguish UM from AP cleanly. Garrik is PATCHed to Cavalier in the existing test fixture; the new end-to-end test long-rests him, seeds a battle with Pip, swings his Greatsword at Pip, and verifies the `battle_update` broadcast shows Pip with the UM buff + the `cavalier_char_id` payload. The v2.99.375 announce-only `/use_unwavering_mark` endpoint stays in place — it's a passive declaration; the actual mechanic now fires automatically on melee weapon hit. Retry-on-miss bound to 5 attempts to handle Greatsword swings missing AC.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_apply_unwavering_mark_on_hit(campaign_id, attacker_char_id, attacker_name, attacker_sheet, attack, target_combatant) -> dict | None` helper; called from `/attack`'s post-hit block (after AP, before Lance of Lethargy) when the attacker is a Cavalier Lv 3+ swinging a melee weapon.
+- `tests/harness/test_unwavering_mark.py` — `test_um_install_on_melee_hit`: long-rest Garrik, seed Garrik + Pip, swing Greatsword at Pip with retry-on-miss → verify `battle_update` shows Pip carrying `unwavering-mark` buff with `effects.unwavering_mark_cavalier_char_id == garrik.id`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/attack` post-hit block calls `_apply_unwavering_mark_on_hit` + broadcasts a `feature_used` event between the AP and Lance of Lethargy blocks.
+- `docs/test-harness-coverage.md` — running total bumped 2024 → 2025.
+
+### Notes
+- Phase 1b (disadvantage gate within 5 ft of the Cavalier on attacks against non-Cavalier targets) requires extending the `/attack` adv/dis layering to read the attacker's `unwavering-mark` buff + check `_distance_ft_between_chars` to confirm the 5-ft proximity to the marker. Phase 2 (bonus-action punish attack when the marked creature damages an ally) requires a new `/use_punish_attack` endpoint (a damage-up + advantage bonus-melee swing, mirroring the Riposte v2.119.0 shape). Both filed as standalone slices. **Total harness count: 2025** in `tests/harness/` (2024 → 2025); **`tests/harness_ui/` 19** (unchanged). The melee-weapon gate (`_attack_is_melee_weapon` v2.99.153) is shared with Improved Divine Smite — ranged attacks (Longbow, Eldritch Blast) correctly skip the mark.
+
+---
+
 ## [2.138.1] - 2026-06-08 — "Lucky Twenty" — accept the natural-20 crit in the dragonborn-ancestry-gate test
 
 **Schema version:** 69

@@ -111,3 +111,74 @@ async def test_use_um_wrong_class(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+def _pc(cid, c):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": 30, "hp_max": 30, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def test_um_install_on_melee_hit(
+    gm_client, gm_ws, garrik_cavalier, roster,
+):
+    """v2.139.0 — Phase 1: when a Cavalier Fighter Lv 3+ hits a
+    creature with a melee weapon attack, install the
+    `unwavering-mark` buff on the target. End-to-end: PATCH Garrik to
+    Cavalier, long-rest, seed battle with Garrik + Pip, swing
+    Greatsword at Pip → on a hit the buff lands on Pip carrying
+    `effects.unwavering_mark_cavalier_char_id == garrik.id`. Retry-
+    on-miss bound to 5 attempts."""
+    garrik = garrik_cavalier
+    pip = roster["Pip Quickfingers"]
+    garrik_tok = f"tok_um_g_{garrik['id']}"
+    pip_tok = f"tok_um_p_{pip['id']}"
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [_pc(garrik_tok, garrik), _pc(pip_tok, pip)],
+              "turn_index": 0, "round": 1, "active": True},
+    )
+    hit_resp = None
+    for _ in range(5):
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": garrik["id"],
+                  "attack_index": 0,
+                  "target_combatant_id": pip_tok,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit") is True:
+            hit_resp = r.json()
+            break
+    assert hit_resp is not None, (
+        "Garrik missed Pip on 5 swings; check fixtures"
+    )
+    await asyncio.sleep(0.3)
+    bus = gm_ws.buffered("battle_update")
+    assert bus, "no battle_update broadcast received after hit"
+    combs = {c.get("id"): c for c in (bus[-1]["data"].get("combatants") or [])}
+    pip_cb = combs.get(pip_tok)
+    assert pip_cb is not None, (
+        f"Pip's combatant missing; got ids={list(combs.keys())}"
+    )
+    mark_buff = next(
+        (b for b in (pip_cb.get("buffs") or [])
+         if b.get("key") == "unwavering-mark"),
+        None,
+    )
+    assert mark_buff is not None, (
+        f"UM buff missing from Pip after Garrik's hit; got buffs="
+        f"{pip_cb.get('buffs')}"
+    )
+    effects = mark_buff.get("effects") or {}
+    assert int(effects.get(
+        "unwavering_mark_cavalier_char_id") or 0) == int(garrik["id"]), (
+        f"UM buff should point at Garrik's char_id; got effects={effects}"
+    )

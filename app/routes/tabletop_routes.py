@@ -26053,6 +26053,68 @@ def _pc_lifedrinker_bonus(sheet: dict, attack: dict) -> int:
     return max(1, cha_mod)
 
 
+async def _apply_unwavering_mark_on_hit(
+    campaign_id: int, attacker_char_id: int, attacker_name: str,
+    attacker_sheet: dict, attack: dict, target_combatant: dict | None,
+) -> dict | None:
+    """v2.139.0 — Unwavering Mark (Cavalier Fighter Lv 3+, XGE p.13):
+    "when you hit a creature with a melee weapon attack, you can mark
+    the creature until the end of your next turn." Installs an
+    `unwavering-mark` buff on the target carrying
+    `effects.unwavering_mark_cavalier_char_id: int` (the Cavalier's
+    char_id). Phase 1b will read it at /attack adv layering to apply
+    disadvantage on attacks against non-Cavalier targets within 5 ft;
+    Phase 2 ships the bonus-action punish attack.
+
+    Mirrors `_apply_ancestral_protectors_on_hit` (v2.136.0) shape but
+    gates on the melee-weapon heuristic instead of rage. RAW says "you
+    can mark" — v1 always-marks; the optional-skip UI is filed for a
+    follow-up alongside the bonus-action punish flow. Returns a
+    summary dict on install, None on gate miss.
+
+    Pairs with v2.99.375's announce-only `/use_unwavering_mark`. Like
+    AP, the mechanic is automatic on hit; no endpoint call needed.
+    """
+    if not _pc_has_cavalier(attacker_sheet, 3):
+        return None
+    if not _attack_is_melee_weapon(attack):
+        return None
+    if not target_combatant:
+        return None
+    target_combatant_id = target_combatant.get("id")
+    if not target_combatant_id:
+        return None
+    buff = {
+        "key": "unwavering-mark",
+        "name": "🛡️ Unwavering Mark",
+        "icon": "🛡️",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "unwavering_mark_cavalier_char_id": int(attacker_char_id),
+        },
+        "desc": (
+            f"Marked by {attacker_name or 'the Cavalier'} until the "
+            f"end of their next turn. Within 5 ft of the Cavalier, "
+            f"disadvantage on attacks vs anyone else. "
+            f"(Cavalier Fighter Lv 3+.)"
+        ),
+        "source": "unwavering-mark",
+        "source_char_id": int(attacker_char_id) if attacker_char_id else None,
+    }
+    ok = await _install_buff_on_combatant_id(
+        campaign_id, str(target_combatant_id), buff,
+    )
+    if not ok:
+        return None
+    return {
+        "target_combatant_id": str(target_combatant_id),
+        "target_name": target_combatant.get("name") or "Target",
+        "cavalier_char_id": int(attacker_char_id),
+    }
+
+
 async def _apply_ancestral_protectors_on_hit(
     campaign_id: int, attacker_char_id: int, attacker_name: str,
     attacker_sheet: dict, target_combatant: dict | None,
@@ -73406,6 +73468,40 @@ async def use_attack(
             except Exception:
                 logging.exception(
                     "Ancestral Protectors install failed for char_id=%s",
+                    char.id,
+                )
+
+        # v2.139.0 — Unwavering Mark install hook (Cavalier Fighter Lv
+        # 3+, XGE p.13). On a melee weapon hit, install a 1-round mark
+        # buff on the target. Phase 1b will read it at adv layering;
+        # Phase 2 ships the bonus-action punish attack.
+        if hit and not target_dead:
+            try:
+                um_result = await _apply_unwavering_mark_on_hit(
+                    campaign_id, char.id, char.name,
+                    sheet, attack, target_combatant,
+                )
+                if um_result is not None:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "feature_name": "🛡️ Unwavering Mark",
+                            "feature_desc": (
+                                f"{um_result['target_name']} is marked by "
+                                f"{char.name} until the end of "
+                                f"{char.name}'s next turn."
+                            ),
+                            "source": "unwavering-mark",
+                            "target_combatant_id": um_result["target_combatant_id"],
+                            "target_name": um_result["target_name"],
+                            "cavalier_char_id": um_result["cavalier_char_id"],
+                        },
+                    })
+            except Exception:
+                logging.exception(
+                    "Unwavering Mark install failed for char_id=%s",
                     char.id,
                 )
 
