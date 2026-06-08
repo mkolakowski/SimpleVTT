@@ -96,3 +96,21 @@ def upcast_target_count(
     """
     extra = max(0, int(slot_level) - int(base_level)) * int(per_slot)
     return max(int(base_targets), int(base_targets) + extra)
+
+
+def upcast_pool_dice(
+    slot_level: int,
+    base_level: int,
+    *,
+    base_dice: int,
+    per_slot_dice: int,
+) -> int:
+    """v2.128.0 — RAW dice COUNT for an HP-pool up-cast: ``base_dice``
+    dice at ``base_level``, +``per_slot_dice`` per slot level above it.
+    The caller appends the die size (Sleep is d8). Was inlined in the
+    Sleep cast endpoint as ``5 + max(0, slot_level - 1) * 2``. Examples:
+      - Sleep (base L1, 5d8 +2d8/slot): L1→5, L2→7, L3→9.
+    Clamps below ``base_dice`` so a low slot_level never under-rolls.
+    """
+    extra = max(0, int(slot_level) - int(base_level)) * int(per_slot_dice)
+    return max(int(base_dice), int(base_dice) + extra)

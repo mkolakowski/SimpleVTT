@@ -66485,9 +66485,11 @@ async def cast_sleep(
     if _twin_target_2_sleep and _twin_target_2_sleep not in target_combatant_ids:
         target_combatant_ids = list(target_combatant_ids) + [_twin_target_2_sleep]
 
-    # Roll the HP pool: 5d8 + 2d8 per slot level above 1st.
-    extra_dice = max(0, slot_level - 1) * 2
-    pool_dice = 5 + extra_dice
+    # Roll the HP pool: 5d8 + 2d8 per slot level above 1st. v2.128.0 —
+    # shared helper (was inlined as `5 + max(0, slot_level - 1) * 2`).
+    from ..content.spell_upcast_parse import upcast_pool_dice
+    pool_dice = upcast_pool_dice(
+        slot_level, base_level=1, base_dice=5, per_slot_dice=2)
     pool_expr = f"{pool_dice}d8"
     try:
         pool_roll = dice_mod.roll(pool_expr)

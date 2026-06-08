@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2001 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.127.0, 2026-06-08).
+**Total tests:** 2003 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.128.0, 2026-06-08).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -214,6 +214,8 @@ v2.125.0 — pure-Python unit tests for `app/content/spell_upcast_parse.py::pars
 | `test_target_count_hold_person` | v2.127.0 — `upcast_target_count(slot, base_level=2)` → L2/L3/L4 = 1/2/3. |
 | `test_target_count_hold_monster` | v2.127.0 — `upcast_target_count(slot, base_level=5)` → L5/L6/L9 = 1/2/5. |
 | `test_target_count_clamps_and_params` | v2.127.0 — clamps below base level; custom `base_targets`/`per_slot` (Bless-style 3 +1/slot). |
+| `test_pool_dice_sleep` | v2.128.0 — `upcast_pool_dice(slot, base_level=1, base_dice=5, per_slot_dice=2)` → L1/L2/L3 = 5/7/9 (Sleep HP pool). |
+| `test_pool_dice_clamps_below_base` | v2.128.0 — slot below base never under-rolls the base dice count. |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.128.0] - 2026-06-08 — "Pool Party" — share the up-cast HP-pool dice math
+
+**Schema version:** 69
+**Commit summary:** **Finishes the Approach C refactor: extracts Sleep's "+2d8 HP pool per slot above 1st" up-cast math into a shared `upcast_pool_dice` helper, the last bespoke per-endpoint up-cast constant. Behavior identical (Sleep still 5d8 at L1, 7d8 at L2, 9d8 at L3).**
+**Description:** Companion to v2.127.0's `upcast_target_count`. Sleep's HP-pool dice count was inlined as `5 + max(0, slot_level - 1) * 2`; it now reads `upcast_pool_dice(slot_level, base_level=1, base_dice=5, per_slot_dice=2)` from the `spell_upcast_parse` module. The helper is generic over base level / base dice / per-slot dice so other pool spells (Color Spray's 6d10, etc.) can reuse it. The two up-cast helper modules now hold all three scaling shapes — dice (`parse_upcast_dice` / `_scale_dice_for_upcast`), target count (`upcast_target_count`), and HP pool (`upcast_pool_dice`) — so no cast endpoint hardcodes its own per-slot constant anymore.
+
+### Added
+- `app/content/spell_upcast_parse.py` — `upcast_pool_dice` helper.
+- `tests/harness/test_spell_upcast_parser.py` — 2 unit cases (Sleep pool counts; clamp below base).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/cast_sleep` calls `upcast_pool_dice` instead of the inline constant (identical results; the existing Sleep harness test still passes).
+
+### Notes
+- Pure refactor + unit tests; no behavior or schema change. **Total harness count: 2003** in `tests/harness/` (2001 → 2003); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.127.0] - 2026-06-08 — "Count Once" — share the up-cast target-count math
 
 **Schema version:** 69

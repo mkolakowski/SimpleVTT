@@ -10,7 +10,11 @@ resolver consults the parser ONLY when no structured field is present
 base damage/healing expr — these tests pin the conservative parse so a
 future phrasing change can't silently start mis-scaling casts.
 """
-from app.content.spell_upcast_parse import parse_upcast_dice, upcast_target_count
+from app.content.spell_upcast_parse import (
+    parse_upcast_dice,
+    upcast_target_count,
+    upcast_pool_dice,
+)
 
 
 def test_parses_per_slot_damage():
@@ -91,3 +95,15 @@ def test_target_count_clamps_and_params():
     # custom base_targets + per_slot (e.g. Bless: 3 + 1/slot above L1).
     assert upcast_target_count(1, base_level=1, base_targets=3) == 3
     assert upcast_target_count(3, base_level=1, base_targets=3) == 5
+
+
+def test_pool_dice_sleep():
+    # Sleep base L1, 5d8 +2d8/slot: L1→5, L2→7, L3→9 (replaces
+    # `5 + max(0, slot_level - 1) * 2`).
+    assert upcast_pool_dice(1, base_level=1, base_dice=5, per_slot_dice=2) == 5
+    assert upcast_pool_dice(2, base_level=1, base_dice=5, per_slot_dice=2) == 7
+    assert upcast_pool_dice(3, base_level=1, base_dice=5, per_slot_dice=2) == 9
+
+
+def test_pool_dice_clamps_below_base():
+    assert upcast_pool_dice(0, base_level=1, base_dice=5, per_slot_dice=2) == 5
