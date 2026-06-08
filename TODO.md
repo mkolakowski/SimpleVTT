@@ -134,12 +134,12 @@ Two additional buttons use slightly different padding and may need individual re
     - **Investigation (v2.99.470):** traced end-to-end and found no remaining collapse path. When the GM rolls as Pip, `/roll_request/{id}/respond` broadcasts the `roll` with `user_id = GM` (the actor), so the client's `_focusRollLogIfLocal(GM)` calls `openPanel('roll-log-drawer', {auto: true})` → the `_auto && already-open` branch returns early (no-op). The only code that removes `.open` from a left panel is `openPanel`'s toggle-close branch, gated by `!_auto`; `roll_toast.js` does nothing to the drawer. This is exactly the class of bug v2.99.71 fixed (the pre-v2.99.71 non-`auto` `openPanel` collapsed an already-open left log on auto-focus). The reported repro predates that fix. **Action:** confirm in a live browser; reopen with a precise repro if it still collapses.
 - ✅ **DONE — v2.100.0** — GM does not get movement popup when moving tokens past range
     - `preview_move` now returns `token_speed_ft` + `over_range`; the GM client shows an advisory `_showGmOverRangeModal` ("Move anyway / Cancel") when repositioning a **non-active** token further than its base walking speed in a single drag **during an active battle**. Advisory only (GM is the arbiter). The active combatant's per-turn budget is still handled by the stricter v2.99.99 overrun gate, so the two never double-prompt.
-- 🟡 **P2** — AoE updates
-    - AoE spells that are concentration or have a duration, place a visual indicator of the spell
-        - notable complications,
-            - Spirit Guardians: aoe will need to be bound to player token and tokens on the same team should not be targeted
-            - Moonbeam: after placement, is concentration, as long as there is duration and the caster has not lost concentration, display the moonbeam and allow the player to move it per the range in the spell, once per turn
-    - AoE spells that are a single turn, like Fireball, leave a pulse to indicate the AoE to the players, should happen for a few seconds
+- ✅ **DONE — v2.111.0–v2.112.0** — AoE updates
+    - ~~Concentration/duration AoEs place a persistent visual indicator~~ ✓ (the `_concentration_aoes` marker render — translucent dashed shape + label)
+    - ~~Spirit Guardians bound to the caster's token~~ ✓ (self-anchored markers resolve the caster's current token position each frame, so the shape follows them)
+    - ~~Moonbeam movable while concentration holds~~ ✓ v2.112.0 ("Walk the Beam") — `POST /move_aoe` + GM-only "↔ Move" control re-opens the picker to reposition; re-broadcasts to all clients
+    - ~~Fireball-style instantaneous AoEs leave a pulse for a few seconds~~ ✓ v2.111.0 ("Flash Point") — `aoe_pulse` broadcast + a warm shape that expands + fades over ~2.2 s
+    - Follow-ups (filed): Spirit Guardians "don't target same-team" is a targeting-exclusion concern (separate from the visual); RAW once-per-turn + 60-ft-range gate on the Moonbeam move (v1 is GM-adjudicated); a player-facing (non-GM) Move trigger (the `/move_aoe` endpoint already permits the caster).
 - ✅ **DONE — v2.102.0–v2.104.0** — Add feature to lock player and NPC movement
     - Phase 1 ✅ v2.102.0 ("Hold Still") — server core: `Campaign.movement_locked` (live) + `movement_lock_default` (House Rules setting, seeds the live flag on each encounter load); `POST /movement_lock` GM toggle broadcasting `movement_lock_update`; `/token/move` gate (non-GM → 409 `movement_locked`, GM passes); one-shot `_movement_grants` store.
     - Phase 2 ✅ v2.103.0 ("The Velvet Rope") — GM-only 🔒/🔓 toggle button in the canvas-tools cluster; `_commitTokenMove` lock gate (player snap-back + "movement is locked" notice / GM advisory "move anyway?" confirm).

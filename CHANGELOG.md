@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.112.1] - 2026-06-07 — "Cleared the Board" — mark the AoE-updates TODO complete
+
+**Schema version:** 68
+**Commit summary:** **Doc-only: marks the "AoE updates" item in `TODO.md` ✅ DONE with per-piece notes (v2.111.0–v2.112.0), and files the remaining edges (same-team targeting exclusion, once-per-turn/range gate, player-facing move trigger).**
+**Description:** Housekeeping after the AoE feature set landed: persistent concentration markers + Spirit Guardians token-binding (pre-existing), the Fireball pulse (v2.111.0), and movable Moonbeam (v2.112.0). The `TODO.md` entry is flipped to ✅ DONE with each sub-item struck through and the v1 limitations filed.
+
+### Changed
+- `TODO.md` — AoE-updates item marked done with per-piece notes + filed follow-ups.
+
+### Notes
+- Doc-only commit; `TODO.md` is a repo-root doc already surfaced via `/wiki`. No code, schema, or test change.
+- **Total harness count: 1966** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.112.0] - 2026-06-07 — "Walk the Beam" — reposition a placed concentration AoE (movable Moonbeam)
 
 **Schema version:** 68
