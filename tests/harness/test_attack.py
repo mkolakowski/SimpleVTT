@@ -281,3 +281,55 @@ async def test_attack_divine_smite_undo_refunds_slot(gm_client, gm_ws, roster):
     assert ssu["data"]["class_slug"] == "paladin"
     assert ssu["data"]["level"] == 1
     assert ssu["data"]["used"] == 0  # smite slot refunded (1 → 0)
+
+
+async def test_attack_assassinate_auto_crit_vs_surprised(gm_client, gm_ws, roster):
+    """v2.131.0 — Assassin Rogue Lv 3+ Assassinate: any hit against a
+    surprised creature is a critical hit. Pip is seeded as Thief, so the
+    test PATCH-swaps his subclass to "Assassin" (Lv 3 is already
+    satisfied), fires an attack with `target_surprised: true`, asserts
+    is_crit on the broadcast, then restores Thief. Subclass-gated so a
+    non-Assassin caller can't force the crit."""
+    pip = roster["Pip Quickfingers"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-json",
+    )
+    sheet = (snap.json() or {}).get("sheet") or {}
+    orig_subclass = sheet.get("subclass") or ""
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+        json={"subclass": "Assassin"},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        gm_ws.mark()
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": pip["id"],
+                "attack_index": 0,           # Shortsword
+                "target_surprised": True,
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        msg = await gm_ws.wait_for("weapon_attack")
+        d = msg["data"]
+        assert d["attack_name"] == "Shortsword"
+        assert d.get("is_crit") is True, (
+            f"Assassin Lv 3 + target_surprised=true should auto-crit; "
+            f"is_crit={d.get('is_crit')!r}"
+        )
+        # Crit doubles the weapon dice (RAW): Shortsword 1d6+3 → 2d6+3,
+        # so damage range becomes [5, 15] (vs [4, 9] non-crit).
+        assert 5 <= d["damage_total"] <= 15, (
+            f"crit-doubled damage out of expected 2d6+3 range; got "
+            f"{d['damage_total']}"
+        )
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+            json={"subclass": orig_subclass},
+        )
+
+

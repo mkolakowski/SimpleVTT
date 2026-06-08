@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.131.0] - 2026-06-08 — "Surprise Attack" — Assassinate auto-crit vs surprised targets
+
+**Schema version:** 69
+**Commit summary:** **Wires the auto-crit half of the Assassin Rogue Lv 3+ Assassinate feature (PHB p.97). `/attack` now accepts a `target_surprised: bool` body flag; when the attacker has the Assassin subclass at Rogue Lv 3+ AND the flag is true, the existing crit-detection block elevates the hit to a crit (which doubles the damage dice via `_double_dice_for_crit`). Subclass-gated so a non-Assassin caller setting the flag is silently ignored. The advantage-vs-not-yet-acted half of Assassinate is deferred — needs a `has_acted_in_combat` state flag on combatants, scoped as its own commit.**
+**Description:** The Assassinate feature has two RAW halves: (1) advantage on attack rolls against any creature that hasn't taken a turn in the combat yet, (2) auto-crit on any hit against a surprised creature. The v2.99.306 `/use_assassinate` endpoint exists as announce-only (broadcasts `feature_used` with `auto_crit_vs_surprised: True` but applies no mechanics). This commit lands the auto-crit half end-to-end: the client (or GM) opts in via `target_surprised: true` in the `/attack` body, and the crit-detection block at line ~72795 now elevates `is_crit` to True when the attacker passes `_pc_has_assassin_subclass(sheet, 3)` and the flag is set. The damage-roll-time pre-double-dice path picks up the crit naturally, so the `weapon_attack` broadcast carries `is_crit: true` and the doubled damage. The advantage half needs to know whether a target combatant has already acted at least once in the combat — that's a new state model (boolean on the combatant cleared on first turn-start) plus the adv/dis layering block in `/attack` — filed as a separate commit. RAW edge: "any HIT" — if the d20 misses the AC the damage isn't applied (existing miss handling), so a cosmetic "crit on miss" message is the only minor side-effect; the action's economy + damage application gates are unchanged. The new gate is silent on non-Assassin callers (no error / no log) so non-Rogue characters can't probe their way to auto-crits.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/attack` accepts `target_surprised: bool`; the crit-detection block elevates `is_crit = True` when the attacker is Assassin Rogue Lv 3+ and the flag is true. Uses the existing `_pc_has_assassin_subclass(sheet, 3)` helper (v2.99.306).
+- `tests/harness/test_attack.py` — `test_attack_assassinate_auto_crit_vs_surprised` PATCH-swaps Pip's subclass to "Assassin" (he's Lv 3 Thief by default), fires a Shortsword attack with `target_surprised: true`, asserts `is_crit: true` on the `weapon_attack` broadcast + the damage falls in the crit-doubled range [5,15] (vs [4,9] non-crit). Restores the original subclass on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md` — new row under `test_attack.py`; total bumped 2015 → 2016.
+
+### Notes
+- The advantage-vs-not-acted-yet half of Assassinate is deferred to a follow-up commit. It needs a `has_acted_in_combat` flag on combatants (cleared on first turn-start in a combat) plus a new `_target_hasnt_acted_yet()` helper consulted in the adv/dis layering block. That's a clean separate slice; this commit covers the auto-crit half which doesn't depend on the turn-tracker. The v2.99.306 `/use_assassinate` announcer endpoint stays as-is — it's a passive declaration; the actual mechanic now fires at attack-time via the body flag without needing the announcer to be called first. **Total harness count: 2016** in `tests/harness/` (2015 → 2016); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.130.0] - 2026-06-08 — "Flat Rate" — parse + scale flat-bonus up-cast spells (Heal, Aid prose)
 
 **Schema version:** 69

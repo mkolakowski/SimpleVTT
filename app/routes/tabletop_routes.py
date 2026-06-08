@@ -72271,6 +72271,13 @@ async def use_attack(
     attacker_cant_see_target = bool(
         body.get("attacker_cant_see_target")
     )
+    # v2.131.0 — Assassinate (Assassin Rogue Lv 3+, PHB p.97). "Any hit
+    # you score against a creature that is surprised is a critical hit."
+    # No surprise state model yet — the client (or GM) opts in via this
+    # one-shot body flag when the target is surprised at the start of
+    # combat. Gated to the Assassin subclass at the crit-detection block
+    # below so non-Assassin callers can't force auto-crits.
+    target_surprised = bool(body.get("target_surprised"))
 
     # v2.20.0 Phase B: optional target_combatant_id for buff-driven
     # uplifts that need to know the target (Hunter's Mark / Hex match,
@@ -72793,6 +72800,14 @@ async def use_attack(
             )
             if int(_crit_m.group(1)) >= _crit_threshold:
                 is_crit = True
+    # v2.131.0 — Assassinate auto-crit. Subclass-gated so a non-Assassin
+    # `target_surprised: true` body is silently ignored. The d20 threshold
+    # check above already ran; this elevates a non-crit hit to a crit,
+    # which doubles the damage dice below. RAW says "any HIT" — the existing
+    # post-roll hit/miss gate handles application-on-miss, so this stays
+    # damage-roll-time only.
+    if not is_save and target_surprised and _pc_has_assassin_subclass(sheet, 3):
+        is_crit = True
 
     # Pre-roll damage if a dice expression is provided. v2.24.0 Phase
     # T.2: on a crit, double the dice (not the flat modifier) — RAW
