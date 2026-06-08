@@ -19684,7 +19684,7 @@ async def place_aoe(
                         dr_result = await _apply_damage_to_combatant(
                             db, campaign_id, pc_combatant, proposed,
                             damage_type=damage_type,
-                            attack_id=cast_id,
+                            attack_id=cast_id, is_spell=True,
                         )
                         dmg_applied = int(dr_result.get("applied") or 0)
             auto_save_targets.append({
@@ -19794,7 +19794,7 @@ async def place_aoe(
                     dr_result = await _apply_damage_to_combatant(
                         db, campaign_id, extra, proposed,
                         damage_type=damage_type,
-                        attack_id=cast_id,
+                        attack_id=cast_id, is_spell=True,
                     )
                     dmg_applied = int(dr_result.get("applied") or 0)
         auto_save_targets.append({
@@ -74436,6 +74436,7 @@ async def use_npc_cast_spell(
             db, campaign_id, target_combatant,
             int(auto_attack_damage_rolled), damage_type,
             is_crit=is_crit, is_attack=True, attack_id=cast_id,
+            is_spell=True,
         )
         auto_attack_damage_applied = int(apply_result.get("applied") or 0)
         target_hp_after = apply_result.get("hp_after")
@@ -74712,6 +74713,7 @@ async def use_npc_cast_spell(
                     apply_result = await _apply_damage_to_combatant(
                         db, campaign_id, target_combatant, proposed,
                         damage_type=damage_type, attack_id=cast_id,
+                        is_spell=True,
                     )
                     auto_save_damage_applied = int(apply_result.get("applied") or 0)
 
@@ -74795,6 +74797,7 @@ async def use_npc_cast_spell(
                         _dr_result = await _apply_damage_to_combatant(
                             db, campaign_id, extra, proposed,
                             damage_type=damage_type, attack_id=cast_id,
+                            is_spell=True,
                         )
                         _dmg_applied = int(_dr_result.get("applied") or 0)
             auto_save_targets_payload.append({

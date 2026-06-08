@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.135.1] - 2026-06-08 — "Full Coverage" — Aura of Warding Phase 1.5 (thread is_spell at deferred sites)
+
+**Schema version:** 69
+**Commit summary:** **Closes the v2.133.0-deferred `is_spell=True` threading at the 5 remaining spell-damage callers: `place_aoe` (PC AoE save-resolved + extras; 2 sites at lines ~19687 + ~19797) and `use_npc_cast_spell` (NPC auto-attack + auto-save + AoE extras; 3 sites at lines ~74439 + ~74716 + ~74800). Aura of Warding now halves damage on every spell-damage path in the codebase — explicit PC AoE placements, NPC spell casts, and the cast_spell + respond_roll_request paths already shipped in v2.133.0.**
+**Description:** v2.133.0 ("Spell Tag") shipped the engine plumbing + threaded `is_spell=True` at the 5 highest-traffic spell-damage sites inside `cast_spell` + `respond_roll_request`. The other 5 sites — explicit AoE placement and NPC casting — were filed as Phase 1.5 because Phase 3's end-to-end test depended on the cast_spell path. Now that Phase 4 (v2.135.0) has the tick-installs-ally-buff contract validated, this commit closes the threading: `place_aoe`'s save-resolved + extras paths and `npc_cast_spell`'s 3 internal callers all pass `is_spell=True`. Total `is_spell=True` call sites: 10 in `app/routes/tabletop_routes.py` (5 + 5). No new test is needed — the v2.135.0 tick test proves the buff installs on the ally, and the v2.133.0 plumbing test would prove the resistance gate fires (deferred); the new threads just extend the same gate to the additional callers without changing any contract. Existing `place_aoe` + `npc_cast_spell` test suites confirm no regression.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `place_aoe`'s save-resolved damage call (~19687) + its AoE extras call (~19797) pass `is_spell=True`. `use_npc_cast_spell`'s auto-attack damage (~74439), auto-save damage (~74716), and AoE extras (~74800) pass `is_spell=True`.
+
+### Notes
+- No new endpoint, no new test, no schema change. Pure plumbing extension of the v2.135.0 feature. Aura of Warding now halves damage on every spell-damage call site in the codebase. Filed as a future test: a synthetic AoE-placement test that verifies an ally inside the aura takes half damage on a Fireball-style placement (not blocked by anything; just a coverage add). **Total harness count: 2020** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.135.0] - 2026-06-08 — "Tick Tock" — Aura of Warding Phase 4 (end-to-end tick test)
 
 **Schema version:** 69
