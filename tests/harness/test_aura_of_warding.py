@@ -38,6 +38,26 @@ async def _patch_sheet(gm_client, char_id, fields, class_slug=None):
     assert r.status_code == 200, r.text
 
 
+def _pc(cid, c):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": 30, "hp_max": 30, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def _seed_caelan_in_battle(gm_client, caelan):
+    """v2.134.0 — `_install_buff` requires an active battle + the
+    character to be in init. Seed a minimal battle with Caelan as the
+    sole combatant so the endpoint can install the aura buff."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [_pc(f"tok_aow_caelan_{caelan['id']}", caelan)],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
 def _aow_broadcasts(gm_ws, character_id):
     return [
         m for m in gm_ws.buffered("feature_used")
@@ -68,8 +88,10 @@ async def caelan_ancients_lv7(gm_client, roster):
 async def test_use_aow_happy_lv7(
     gm_client, gm_ws, caelan_ancients_lv7,
 ):
-    """Lv 7 Ancients → radius 10."""
+    """Lv 7 Ancients → radius 10. v2.134.0 — endpoint installs the
+    aura buff (requires an active battle + Caelan in init)."""
     caelan = caelan_ancients_lv7
+    await _seed_caelan_in_battle(gm_client, caelan)
     gm_ws.mark()
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_aura_of_warding",
@@ -79,7 +101,6 @@ async def test_use_aow_happy_lv7(
     data = r.json()
     assert data["radius_ft"] == 10
     assert data["paladin_level"] == 7
-    # v2.134.0 — endpoint now installs the aura buff (was announce-only).
     assert data["aura_installed"] is True
     await asyncio.sleep(0.3)
     feats = _aow_broadcasts(gm_ws, caelan["id"])
@@ -156,6 +177,7 @@ async def test_aow_buff_grants_caster_self_resistance(
     resistance flag + the aura's ally-side buff spec also carries it
     so a Phase 4 tick test can drive Pip's resistance install."""
     caelan = caelan_ancients_lv7
+    await _seed_caelan_in_battle(gm_client, caelan)
     gm_ws.mark()
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_aura_of_warding",

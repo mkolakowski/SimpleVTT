@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.134.1] - 2026-06-08 — "Roll Call" — seed Caelan in init so the AoW tests can install the buff
+
+**Schema version:** 69
+**Commit summary:** **Test-only follow-up to v2.134.0. `_install_buff` returns False when there's no active battle or the character isn't in init; the v2.134.0 happy-test + new buff-shape test asserted `aura_installed: True` and waited for a `buff_update` broadcast, both of which require the install to actually fire. PUT a minimal battle state with Caelan as the sole combatant before calling `/use_aura_of_warding` so the install succeeds.**
+**Description:** The Aura of Alacrity precedent flagged this with a comment ("aura_installed only lands True with an active battle") but the v2.134.0 tests didn't pick that up. Two tests failed against the live container: the Lv 7 happy path saw `aura_installed: False` and the buff-shape test timed out on `buff_update`. Added a small `_seed_caelan_in_battle` helper + a `_pc` builder mirroring the Aura of Alacrity test's shape; the Lv 7 happy and self-resistance tests now seed it before posting. The Lv 18, wrong-subclass, and level-gate tests don't read `aura_installed` so they continue to pass without seeding. All 5 tests in `tests/harness/test_aura_of_warding.py` now pass against 2.134.0's engine.
+
+### Changed
+- `tests/harness/test_aura_of_warding.py` — added `_pc` builder + `_seed_caelan_in_battle` helper; `test_use_aow_happy_lv7` and `test_aow_buff_grants_caster_self_resistance` seed the battle before calling the endpoint so `_install_buff` finds Caelan in init.
+
+### Notes
+- No code change to the endpoint or engine; v2.134.0's wiring is correct. **Total harness count: 2019** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.134.0] - 2026-06-08 — "Ward Up" — Aura of Warding Phase 3 (endpoint installs the aura)
 
 **Schema version:** 69
