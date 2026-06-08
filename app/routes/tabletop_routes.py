@@ -24494,6 +24494,46 @@ def _attacker_has_str_attack_advantage(
     return False
 
 
+def _attacker_marked_by_ancestral_protectors_vs_other(
+    campaign_id: int,
+    attacker_char_id: "int | None",
+    target_char_id: "int | None",
+) -> bool:
+    """v2.137.0 — Phase 1b of Ancestral Protectors (Ancestral Guardian
+    Barbarian Lv 3+, XGE p.9): the marked creature has disadvantage on
+    attack rolls "that isn't against you" (the protector). Reads the
+    attacker's combatant buffs (the mark lives on the COMBATANT,
+    installed at the /attack post-hit hook v2.136.0). Returns True
+    when the mark is present AND the new target's char_id != the
+    buff's `ancestral_protectors_protected_char_id`. Returns False on
+    NPC targets (no char_id) so the protection chain naturally favors
+    the marked creature when it swings at a non-PC; v1 simplification
+    since the demo's protector is always a PC.
+    """
+    if not attacker_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != attacker_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects") or {}
+            protected = effects.get("ancestral_protectors_protected_char_id")
+            if not protected:
+                continue
+            # If swinging at the protector, no disadvantage (RAW: "not
+            # against you").
+            if target_char_id is not None and int(target_char_id) == int(protected):
+                continue
+            return True
+        return False
+    return False
+
+
 def _target_grants_advantage_to_attackers(
     campaign_id: int, target_combatant_id: str | None,
 ) -> bool:
@@ -72838,14 +72878,24 @@ async def use_attack(
             attacker_cant_see_target
             and not _pc_has_feral_senses(char.sheet or {})
         )
+        # v2.137.0 — Ancestral Protectors Phase 1b: the marked creature
+        # has disadvantage on attack rolls vs anyone OTHER than the
+        # protector (the raging Ancestral Guardian Lv 3+ that struck
+        # them). Reads the attacker's combatant buffs for the mark
+        # installed at the v2.136.0 post-hit hook.
+        _ap_marked_vs_other = _attacker_marked_by_ancestral_protectors_vs_other(
+            campaign_id, char.id,
+            int((target_combatant or {}).get("char_id") or 0) or None,
+        )
         has_dis = (
             target_dodging or target_pfeag_blocks_type
-            or _attacker_cant_see
+            or _attacker_cant_see or _ap_marked_vs_other
         )
         dis_label = (
             "dodging" if target_dodging else
             "pfeag" if target_pfeag_blocks_type else
-            "cant_see" if _attacker_cant_see else ""
+            "cant_see" if _attacker_cant_see else
+            "ancestral_protectors_vs_other" if _ap_marked_vs_other else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -72923,14 +72973,24 @@ async def use_attack(
             attacker_cant_see_target
             and not _pc_has_feral_senses(char.sheet or {})
         )
+        # v2.137.0 — Ancestral Protectors Phase 1b: the marked creature
+        # has disadvantage on attack rolls vs anyone OTHER than the
+        # protector (the raging Ancestral Guardian Lv 3+ that struck
+        # them). Reads the attacker's combatant buffs for the mark
+        # installed at the v2.136.0 post-hit hook.
+        _ap_marked_vs_other = _attacker_marked_by_ancestral_protectors_vs_other(
+            campaign_id, char.id,
+            int((target_combatant or {}).get("char_id") or 0) or None,
+        )
         has_dis = (
             target_dodging or target_pfeag_blocks_type
-            or _attacker_cant_see
+            or _attacker_cant_see or _ap_marked_vs_other
         )
         dis_label = (
             "dodging" if target_dodging else
             "pfeag" if target_pfeag_blocks_type else
-            "cant_see" if _attacker_cant_see else ""
+            "cant_see" if _attacker_cant_see else
+            "ancestral_protectors_vs_other" if _ap_marked_vs_other else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"

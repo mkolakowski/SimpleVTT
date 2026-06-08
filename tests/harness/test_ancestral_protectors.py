@@ -195,3 +195,117 @@ async def test_ap_install_on_raging_hit(
         "ancestral_protectors_protected_char_id") or 0) == int(krieger["id"]), (
         f"mark buff should point at Krieger's char_id; got effects={effects}"
     )
+
+
+async def _seed_three_pc_battle(gm_client, krieger, pip, tavik):
+    """Krieger, Pip, Tavik in init for the Phase 1b disadvantage tests."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(f"tok_ap_kri_{krieger['id']}", krieger),
+            _pc(f"tok_ap_pip_{pip['id']}", pip),
+            _pc(f"tok_ap_tav_{tavik['id']}", tavik),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+
+
+async def _hit_pip_once(gm_client, gm_ws, krieger, pip_tok):
+    """Krieger swings until a hit lands. Returns the hit response or
+    raises if all 5 attempts miss."""
+    for _ in range(5):
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": krieger["id"],
+                  "attack_index": 0,
+                  "target_combatant_id": pip_tok,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit") is True:
+            return r.json()
+    raise AssertionError("Krieger missed Pip on 5 swings; check fixtures")
+
+
+async def test_ap_marked_pc_attacks_third_party_has_disadvantage(
+    gm_client, gm_ws, krieger_ancestral, roster,
+):
+    """v2.137.0 — Phase 1b: once Pip carries the AP mark (from
+    Krieger's raging hit), Pip's next attack against Tavik (a
+    non-protector) gets `disadvantage_ancestral_protectors_vs_other`
+    + 2d20kl1 in the breakdown. Three-PC battle so Pip can swing at
+    a target other than Krieger."""
+    krieger = krieger_ancestral
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    pip_tok = f"tok_ap_pip_{pip['id']}"
+    tav_tok = f"tok_ap_tav_{tavik['id']}"
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/rest",
+        json={"type": "long"},
+    )
+    await _seed_three_pc_battle(gm_client, krieger, pip, tavik)
+    # Activate rage + land the mark on Pip.
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rage",
+        json={"character_id": krieger["id"], "override": True},
+    )
+    assert rr.status_code == 200, rr.text
+    await _hit_pip_once(gm_client, gm_ws, krieger, pip_tok)
+    # Now Pip swings at Tavik — Phase 1b gate should fire.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={"character_id": pip["id"],
+              "attack_index": 0,
+              "target_combatant_id": tav_tok,
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "2d20kl1" in (data.get("attack_breakdown") or ""), (
+        f"AP mark should produce 2d20kl1 disadvantage; got "
+        f"{data.get('attack_breakdown')!r}"
+    )
+    assert data.get("roll_state_applied") == "disadvantage_ancestral_protectors_vs_other", (
+        f"roll_state_applied mismatch; got {data.get('roll_state_applied')!r}"
+    )
+
+
+async def test_ap_marked_pc_attacking_protector_no_disadvantage(
+    gm_client, gm_ws, krieger_ancestral, roster,
+):
+    """v2.137.0 — Phase 1b complement: when the marked creature (Pip)
+    swings AT the protector (Krieger), the gate is silent (RAW: "any
+    attack roll that ISN'T against you"). No `2d20kl1` from AP, no
+    `disadvantage_ancestral_protectors_vs_other` label."""
+    krieger = krieger_ancestral
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    kri_tok = f"tok_ap_kri_{krieger['id']}"
+    pip_tok = f"tok_ap_pip_{pip['id']}"
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/rest",
+        json={"type": "long"},
+    )
+    await _seed_three_pc_battle(gm_client, krieger, pip, tavik)
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rage",
+        json={"character_id": krieger["id"], "override": True},
+    )
+    assert rr.status_code == 200, rr.text
+    await _hit_pip_once(gm_client, gm_ws, krieger, pip_tok)
+    # Pip swings AT Krieger — should NOT get AP disadvantage.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={"character_id": pip["id"],
+              "attack_index": 0,
+              "target_combatant_id": kri_tok,
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    label = data.get("roll_state_applied") or ""
+    assert "ancestral_protectors_vs_other" not in label, (
+        f"AP mark must not fire when swinging at the protector; "
+        f"roll_state_applied={label!r}"
+    )

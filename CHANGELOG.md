@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.137.0] - 2026-06-08 — "Crossed Sights" — Ancestral Protectors Phase 1b (disadvantage gate)
+
+**Schema version:** 69
+**Commit summary:** **Wires the disadvantage half of Ancestral Protectors. When the marked creature (carrying the `ancestral-protectors-mark` buff installed in v2.136.0) attacks anyone whose char_id != the protector's, the `/attack` adv/dis layering folds in `_ap_marked_vs_other` as a disadvantage source. Both the bonused and bonusless branches read the new gate; `roll_state_applied` carries `"disadvantage_ancestral_protectors_vs_other"` for chat-card attribution. Swings AT the protector skip the gate per RAW ("any attack roll that isn't against you").**
+**Description:** RAW XGE p.9: "Until the start of your next turn, that target has disadvantage on any attack roll that isn't against you." Phase 1 (v2.136.0) installed the mark on hit; Phase 1b reads it. The new helper `_attacker_marked_by_ancestral_protectors_vs_other(campaign_id, attacker_char_id, target_char_id)` queries the active battle for the attacker's combatant dict, scans its `buffs` list for a buff carrying `effects.ancestral_protectors_protected_char_id`, and returns True when the new target's char_id != the buff's protected char_id. NPC targets (no char_id) currently short-circuit to False — v1 simplification since the demo's protector is always a PC; filed for a follow-up that grants disadvantage on any non-protector target including NPCs. The disadvantage / advantage cancellation logic is untouched: if Pip (marked) also has e.g. Rage advantage, the existing `has_adv and has_dis → canceled_*` branch turns the d20 into a straight roll. Pairs with v2.136.0; together the mark is now mechanically active end-to-end on the attack-roll surface. Phase 2 (resistance halving on the protector's allies when the marked creature deals damage) is filed.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_attacker_marked_by_ancestral_protectors_vs_other(campaign_id, attacker_char_id, target_char_id)` helper near `_target_grants_advantage_to_attackers` (line ~24497).
+- `tests/harness/test_ancestral_protectors.py` — `test_ap_marked_pc_attacks_third_party_has_disadvantage`: Krieger raging hits Pip (lands the mark), then Pip swings at Tavik → asserts `2d20kl1` + `roll_state_applied == "disadvantage_ancestral_protectors_vs_other"`. `test_ap_marked_pc_attacking_protector_no_disadvantage`: same setup but Pip swings AT Krieger → asserts the AP gate stays silent.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/attack` adv/dis layering (both bonused branch at line ~72841 and bonusless branch at line ~72926) folds `_ap_marked_vs_other` into `has_dis`; `dis_label` adds `"ancestral_protectors_vs_other"`.
+- `docs/test-harness-coverage.md` — running total bumped 2021 → 2023.
+
+### Notes
+- Phase 2 (resistance halving on the protector's allies when the marked creature deals damage to them) remains filed. It requires extending `_resistance_halve` / `_resistance_halve_npc` to read the ATTACKER's buffs (a new pattern alongside the existing TARGET-side check) and to gate on the new attack's target's char_id != the mark's `protected_char_id`. Filed as a clean separate slice. **Total harness count: 2023** in `tests/harness/` (2021 → 2023); **`tests/harness_ui/` 19** (unchanged). The `/use_ancestral_protectors` announce-only endpoint stays as-is — it's a passive declaration; both the install (v2.136.0) and the disadvantage gate (this commit) fire automatically at /attack time.
+
+---
+
 ## [2.136.1] - 2026-06-08 — "Try Again" — retry-on-miss in the Ancestral Protectors install test
 
 **Schema version:** 69
