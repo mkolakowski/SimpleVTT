@@ -68704,8 +68704,10 @@ async def cast_hold_person(
     if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
         raise HTTPException(400, "target_combatant_ids must be a non-empty list")
     # RAW: 1 humanoid at L2, +1 per upcast level. L2 → 1, L3 → 2,
-    # L4 → 3, etc. Cap targets at (slot_level - 1).
-    max_targets = max(1, slot_level - 1)
+    # L4 → 3, etc. v2.127.0 — shared helper (was inlined as
+    # `max(1, slot_level - 1)`).
+    from ..content.spell_upcast_parse import upcast_target_count
+    max_targets = upcast_target_count(slot_level, base_level=2)
     if len(target_combatant_ids) > max_targets:
         return JSONResponse(status_code=409, content={
             "error": "too_many_targets",
@@ -69355,8 +69357,10 @@ async def cast_hold_monster(
     if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
         raise HTTPException(400, "target_combatant_ids must be a non-empty list")
     # RAW: 1 creature at L5, +1 per upcast level. L5 → 1, L6 → 2,
-    # L7 → 3, L8 → 4, L9 → 5.
-    max_targets = max(1, slot_level - 4)
+    # L7 → 3, L8 → 4, L9 → 5. v2.127.0 — shared helper (was inlined as
+    # `max(1, slot_level - 4)`).
+    from ..content.spell_upcast_parse import upcast_target_count
+    max_targets = upcast_target_count(slot_level, base_level=5)
     if len(target_combatant_ids) > max_targets:
         return JSONResponse(status_code=409, content={
             "error": "too_many_targets",

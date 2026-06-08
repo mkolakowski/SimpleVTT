@@ -74,3 +74,25 @@ def parse_upcast_dice(higher_level: str | None) -> dict:
         "regains" in lead
     )
     return {"healing_per_slot" if is_heal else "damage_per_slot": dice}
+
+
+def upcast_target_count(
+    slot_level: int,
+    base_level: int,
+    *,
+    base_targets: int = 1,
+    per_slot: int = 1,
+) -> int:
+    """v2.127.0 — RAW max target count for a "+N targets per slot above
+    base" up-cast (Hold Person, Hold Monster, Bless, …). Was copy-pasted
+    as `max(1, slot_level - K)` across the dedicated cast endpoints; this
+    is the single tested expression.
+
+    ``base_targets`` creatures at ``base_level``, +``per_slot`` per slot
+    level above it. Clamps below ``base_targets`` (so a defensively-low
+    slot_level never returns 0). Examples:
+      - Hold Person (base L2, 1 +1/slot): L2→1, L3→2, L4→3.
+      - Hold Monster (base L5, 1 +1/slot): L5→1, L6→2, …, L9→5.
+    """
+    extra = max(0, int(slot_level) - int(base_level)) * int(per_slot)
+    return max(int(base_targets), int(base_targets) + extra)

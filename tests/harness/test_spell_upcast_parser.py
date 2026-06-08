@@ -10,7 +10,7 @@ resolver consults the parser ONLY when no structured field is present
 base damage/healing expr — these tests pin the conservative parse so a
 future phrasing change can't silently start mis-scaling casts.
 """
-from app.content.spell_upcast_parse import parse_upcast_dice
+from app.content.spell_upcast_parse import parse_upcast_dice, upcast_target_count
 
 
 def test_parses_per_slot_damage():
@@ -66,3 +66,28 @@ def test_ignores_flat_bonus():
 def test_empty_or_missing():
     assert parse_upcast_dice("") == {}
     assert parse_upcast_dice(None) == {}
+
+
+# ── v2.127.0 — upcast_target_count (Approach C: shared target-count math) ──
+
+
+def test_target_count_hold_person():
+    # base L2, 1 +1/slot: L2→1, L3→2, L4→3 (replaces max(1, slot_level-1)).
+    assert upcast_target_count(2, base_level=2) == 1
+    assert upcast_target_count(3, base_level=2) == 2
+    assert upcast_target_count(4, base_level=2) == 3
+
+
+def test_target_count_hold_monster():
+    # base L5, 1 +1/slot: L5→1, L6→2, L9→5 (replaces max(1, slot_level-4)).
+    assert upcast_target_count(5, base_level=5) == 1
+    assert upcast_target_count(6, base_level=5) == 2
+    assert upcast_target_count(9, base_level=5) == 5
+
+
+def test_target_count_clamps_and_params():
+    # below base level never returns < base_targets.
+    assert upcast_target_count(1, base_level=5) == 1
+    # custom base_targets + per_slot (e.g. Bless: 3 + 1/slot above L1).
+    assert upcast_target_count(1, base_level=1, base_targets=3) == 3
+    assert upcast_target_count(3, base_level=1, base_targets=3) == 5

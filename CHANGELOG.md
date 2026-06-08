@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.127.0] - 2026-06-08 — "Count Once" — share the up-cast target-count math
+
+**Schema version:** 69
+**Commit summary:** **Approach C (start): extracts the copy-pasted "+N targets per slot above base" up-cast math out of the Hold Person and Hold Monster cast endpoints into one tested helper, `upcast_target_count`. Behavior is identical — Hold Person still 1/+1 from L2, Hold Monster still 1/+1 from L5 — but the formula now lives in a single documented place instead of inline `max(1, slot_level - K)` constants.**
+**Description:** The spell-upcasting plan's Approach C calls for the dedicated cast endpoints to stop hardcoding their per-slot scaling. The dedicated endpoints don't load the spell-content dict, so a data-driven structured field would add a content-resolve per endpoint for no behavior change; the high-value, low-risk slice is removing the duplicated formula. `upcast_target_count(slot_level, base_level, base_targets=1, per_slot=1)` lives in the `spell_upcast_parse` helper module (alongside `parse_upcast_dice`) and is now called from both endpoints. The HP-pool shape (Sleep's +2d8/slot) is a different mechanic — filed for its own helper.
+
+### Added
+- `app/content/spell_upcast_parse.py` — `upcast_target_count` helper (the single target-count expression).
+- `tests/harness/test_spell_upcast_parser.py` — 3 unit cases (Hold Person counts, Hold Monster counts, clamp + custom base_targets/per_slot like Bless).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/cast_hold_person` + `/cast_hold_monster` call `upcast_target_count` instead of inline constants (identical results; existing Hold Person / Hold Monster harness tests still pass).
+
+### Notes
+- Pure refactor + unit tests; no behavior or schema change. **Total harness count: 2001** in `tests/harness/` (1998 → 2001); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.126.0] - 2026-06-08 — "Fill the Blanks" — model the missing base damage/healing on 3 spells
 
 **Schema version:** 69
