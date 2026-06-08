@@ -7878,6 +7878,24 @@ def campaign_view(
         .all()
     )
     visible_rolls = list(reversed([r for r in rolls if _filter_roll_for_user(r, user, campaign, db)]))
+    # v2.115.0 — reroll options for the server-rendered roll history, so
+    # the reroll button (Lucky etc.) shows on past rolls, not just live
+    # WS ones. Batch-load the rolling characters once, then compute per
+    # roll. Keyed by roll id; only rolls with a kept d20 + an eligible
+    # feature appear. The template gates the button to the GM + roller.
+    _roll_char_ids = {r.character_id for r in visible_rolls if r.character_id}
+    _roll_chars = {}
+    if _roll_char_ids:
+        for _rc in db.query(Character).filter(Character.id.in_(_roll_char_ids)).all():
+            _roll_chars[_rc.id] = _rc
+    roll_reroll_options: dict[int, list] = {}
+    for _r in visible_rolls:
+        _rc = _roll_chars.get(_r.character_id) if _r.character_id else None
+        if _rc is None:
+            continue
+        _opts = _compute_reroll_options(_rc, _r.breakdown, None, _r.note)
+        if _opts:
+            roll_reroll_options[_r.id] = _opts
     members = (
         db.query(User)
         .join(CampaignMembership, CampaignMembership.user_id == User.id)
@@ -8045,6 +8063,7 @@ def campaign_view(
             "characters": characters,
             "members": members,
             "rolls": visible_rolls,
+            "roll_reroll_options": roll_reroll_options,
             "settings": get_settings(),
             "system": get_system(campaign.game_system),
             "now_playing": now_playing,
@@ -15060,6 +15079,9 @@ async def roll_dice(
                 else ""
             )
         )[:200],
+        # v2.115.0 — persist the rolling character so the SSR roll
+        # history can render the reroll button for past rolls.
+        character_id=(_char.id if _char else None),
     )
     db.add(rec)
     db.commit()
@@ -15561,6 +15583,8 @@ async def respond_roll_request(
         total=result.total,
         visibility=roll_req.visibility,
         note=note,
+        # v2.115.0 — attribute the responding character for SSR reroll.
+        character_id=(char.id if char else None),
     )
     db.add(rec)
     db.commit()

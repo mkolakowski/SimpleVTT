@@ -440,6 +440,14 @@ class DiceRoll(Base):
         Enum(Visibility), default=Visibility.PUBLIC
     )
     note: Mapped[str] = mapped_column(String(200), default="")
+    # v2.115.0 — character this roll is attributed to (the rolling PC),
+    # when known. Persisted so the server-rendered roll history can
+    # surface the reroll button (Lucky etc.) for past rolls, not just
+    # the live WS-delivered ones. Nullable: char-less rolls (raw dice,
+    # monster rolls) leave it None. SET NULL if the character is deleted.
+    character_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("characters.id", ondelete="SET NULL"), nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     campaign: Mapped[Campaign] = relationship(back_populates="rolls")

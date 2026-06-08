@@ -764,6 +764,19 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v69 (2.115.0): dice_rolls.character_id ----
+    # Persist the rolling character on each roll so the server-rendered
+    # roll history can show the reroll button (Lucky etc.) for past
+    # rolls, not just live WS ones. Nullable FK → characters (SET NULL
+    # on delete); existing rows backfill to NULL (no reroll button).
+    roll_cols_v69 = _column_names("dice_rolls")
+    with engine.begin() as conn:
+        if roll_cols_v69 and "character_id" not in roll_cols_v69:
+            conn.execute(text(
+                "ALTER TABLE dice_rolls ADD COLUMN character_id INTEGER "
+                "REFERENCES characters(id) ON DELETE SET NULL"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

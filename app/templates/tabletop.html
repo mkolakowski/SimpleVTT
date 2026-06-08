@@ -2258,7 +2258,11 @@
             {% set badge_text = 'GM only' if r.visibility.value == 'gm_only' else ('GM + you' if r.visibility.value == 'gm_and_roller' else '') %}
             {% set ucolor = user_color_map.get(r.user_id, '') %}
             {% set uportrait = user_portrait_map.get(r.user_id, '') %}
-            <li>
+            {# v2.115.0 — reroll options for this past roll (Lucky etc.),
+               computed server-side; the data attrs let tabletop.js wire
+               the buttons on load (same handler as live WS cards). #}
+            {% set rr_opts = roll_reroll_options.get(r.id) %}
+            <li{% if rr_opts %} data-roll-id="{{ r.id }}" data-character-id="{{ r.character_id }}"{% endif %}>
                 <div class="roll-card {{ vis_class }}">
                     <div class="roll-card-total-col">
                         <span class="roll-card-total">{{ r.total }}</span>
@@ -2276,6 +2280,13 @@
                             {% if r.note %}<div class="roll-card-note">{{ r.note }}</div>{% endif %}
                             <div class="roll-card-expr">{{ r.expression }}</div>
                             <div class="roll-card-breakdown">{{ r.breakdown | bold_dice }}</div>
+                            {% if rr_opts and (is_gm or r.user_id == user.id) %}
+                            <div class="result-pills">
+                                {% for o in rr_opts %}
+                                <button type="button" class="result-pill reroll-btn" data-feature="{{ o.key }}"{% if o.remaining <= 0 %} disabled{% endif %} title="{{ o.desc }}">{{ o.icon }} {{ o.label }} reroll ({{ o.remaining }})</button>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

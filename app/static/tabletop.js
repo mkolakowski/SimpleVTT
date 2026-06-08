@@ -5055,6 +5055,19 @@
     }
     connectWs();
 
+    // v2.115.0 — wire reroll buttons on the server-rendered roll
+    // history (past rolls present at page load). Live WS rolls get
+    // wired in appendRoll; these pre-rendered cards carry data-roll-id
+    // / data-character-id so the same handler can attach. Reuses
+    // _wireRerollButtons with a minimal roll shape.
+    document.querySelectorAll('#roll-list li[data-roll-id]').forEach((li) => {
+        const rollId = parseInt(li.dataset.rollId, 10);
+        if (!rollId) return;
+        const charId = li.dataset.characterId
+            ? parseInt(li.dataset.characterId, 10) : null;
+        _wireRerollButtons(li, { id: rollId, character_id: charId });
+    });
+
     // v2.102.0 — movement-lock toggle (GM-only button) + client state.
     // window._MOVEMENT_LOCKED is seeded server-side in the template and
     // kept fresh here by the movement_lock_update WS handler; the

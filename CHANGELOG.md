@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.115.0] - 2026-06-07 — "Second Chance, Restored" — reroll button on server-rendered roll history
+
+**Schema version:** 69
+**Commit summary:** **The reroll button (Lucky etc.) now appears on the server-rendered roll history — past rolls present at page load, not just live WS-delivered ones. Closes the v2.106.0 follow-up. Requires persisting the rolling character on each roll: new `dice_rolls.character_id` column (schema v69).**
+**Description:** Before this, reroll buttons only attached to roll cards created live by `appendRoll` (WS) — a page reload dropped them, since the Jinja-rendered history had no character attribution to compute reroll options from. `DiceRoll` gains a nullable `character_id` (set at `/roll` and `/roll_request/{id}/respond` from the rolling PC). The tabletop route batch-loads those characters and computes `reroll_options` per visible roll; the template renders the reroll button(s) on each SSR card (gated to the GM + the roller) with `data-roll-id` / `data-character-id`, and `tabletop.js` wires them on load with the same `_wireRerollButtons` handler the live cards use. Char-less rolls (raw dice, monster rolls) carry no `character_id` → no button.
+
+### Added
+- `app/models.py` + `app/database.py` — `DiceRoll.character_id` (nullable FK → characters, SET NULL on delete) + schema-v69 migration.
+- `app/routes/tabletop_routes.py` — persist `character_id` on `/roll` + `/roll_request/respond`; compute `roll_reroll_options` (batch-loaded chars) for the SSR roll history.
+- `app/templates/tabletop.html` — render reroll button(s) on SSR roll cards (GM/roller-gated) with data attrs.
+- `app/static/tabletop.js` — wire the SSR reroll buttons on load via `_wireRerollButtons`.
+- `tests/harness/test_use_reroll.py` — `test_reroll_button_on_server_rendered_history` (roll a d20 as Garrik → the tabletop SSR HTML carries his "Lucky reroll" button).
+
+### Schema
+- **Schema v69:** `dice_rolls.character_id` (nullable; existing rows → NULL).
+
+### Notes
+- Save-only reroll features (Indomitable / Diamond Soul) need save-detection from `stat_key`, which isn't persisted on the roll — so they only surface on live WS cards for now; Lucky (any d20) shows on both. The `rolls_popout.html` view wasn't wired (a small follow-up).
+- **Total harness count: 1971** in `tests/harness/` (1970 → 1971); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.114.1] - 2026-06-07 — "Honest Backlog" — mark already-shipped P3 polish items done
 
 **Schema version:** 68

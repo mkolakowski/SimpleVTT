@@ -101,6 +101,28 @@ async def test_lucky_reroll_keeps_better_and_decrements(
     assert ru["data"]["current"] == 2
 
 
+async def test_reroll_button_on_server_rendered_history(gm_client, roster):
+    """v2.115.0 — a d20 rolled as a Lucky-feat character persists its
+    character_id, so the server-rendered roll history (page reload, not
+    just live WS) renders the reroll button."""
+    garrik = roster["Garrik Ironside"]
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={"expression": "1d20", "character_id": garrik["id"],
+              "note": "ssr-reroll-test"},
+    )
+    assert rr.status_code == 200, rr.text
+    page = await gm_client.get(f"/campaign/{CAMPAIGN_ID}")
+    assert page.status_code == 200, page.status_code
+    html = page.text
+    assert "reroll-btn" in html, (
+        "server-rendered roll history should carry reroll buttons"
+    )
+    assert "Lucky reroll" in html, (
+        "Garrik's d20 should offer a Lucky reroll in the SSR history"
+    )
+
+
 async def test_reroll_unknown_feature(gm_client, roster):
     """An unrecognized feature_key → 404 (checked before roll lookup)."""
     garrik = roster["Garrik Ironside"]
