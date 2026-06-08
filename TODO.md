@@ -406,7 +406,12 @@ Garrik bump 7 → 9 (prof +3 → +4, HP +14, Second Wind 1d10+9). New `/use_indo
 
 **Concrete next-session tasks** (each one PATCH-bump + harness test that asserts the *state change*, then refresh the audit doc's counts via the classifier):
 
-- 🟡 **P2 — Phase 7: reactions breadth.** New reaction kinds on the existing reactions framework ([`docs/plans/reactions-automation.md`](docs/plans/reactions-automation.md)): Riposte (attack after a miss), Protective Field (reduce damage), Chronal Shift (reroll), make Restore Balance a real adv/disadv-cancel reaction. ~5 commits.
+- ✅ **DONE — v2.118.0–v2.122.0 — Phase 7: reactions breadth.** New reaction kinds on the existing reactions framework ([`docs/plans/reactions-automation.md`](docs/plans/reactions-automation.md)):
+    - Protective Field (Psi Warrior) — self-prompt on `damage_taken` (v2.118.0) + ally-within-30-ft walker on `ally_damaged_near` (v2.121.0); rolls the Psionic Energy die + INT mod and heals the reduction back.
+    - Riposte (Battle Master) — new `attack_missed` trigger fired from `/attack` + `/npc_attack`; the prompt resolves the counter-attack server-side (v2.119.0).
+    - Chronal Shift (Chronurgy Wizard) — `save_resolved` prompt on ANY outcome; the emit now fires on pass OR fail and offers both Silvery Barbs (pass-only) and Chronal Shift (v2.120.0).
+    - Restore Balance (Clockwork Soul) — now a REAL adv/disadv cancel: clears the target's active `roll_state` + broadcasts `character_roll_state` (v2.122.0).
+    - **Filed follow-ups:** NPC-damaged-ally Protective Field (walker on the NPC damage branch); intercepting a one-off manual `2d20kh1` for Restore Balance; a proactive prompt for Restore Balance (needs an "about-to-roll-with-adv/disadv" trigger event); auto-application of the Chronal Shift / Silvery Barbs rerolls (v3 pending-roll state).
 - 🟡 **P2 — Auras backlog (E).** `aura_of_warding` (resistance to *spell* damage — needs a "spell-damage resistance" concept the engine doesn't model yet, the bigger lift), `ancestral_protectors`, `unwavering_mark`, `scornful_rebuke` — fold into `_tick_auras` (the v2.99.448 `requires_condition` gate + v2.99.449 `buff` payload are the tools).
 - 🟡 **P2 — On-hit / attack-roll backlog (B).** `assassinate` (advantage + auto-crit vs surprised — a new attack-roll-modifier mechanic, distinct from the damage riders done). The flat/dice once-per-turn rider shape (Genie's Wrath v2.99.450) and the server-resolved extra attack (Horde Breaker v2.99.451 / Dread Ambusher v2.99.452) are already proven for the rest.
 - 🟢 **P3 — Buff / temp-HP tail (D/F).** `combat_inspiration`, `rallying_cry`, `blade_flourish`, `protective_spirit`, `grim_harvest`, `supreme_healing` — `_install_buff` / `_grant_temp_hp` retrofits.

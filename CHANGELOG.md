@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.122.1] - 2026-06-08 — "Phase Closed" — mark the reactions-breadth backlog item done
+
+**Schema version:** 69
+**Commit summary:** **Doc-only: marks the Phase 7 "reactions breadth" backlog item in [`TODO.md`](TODO.md) as DONE (v2.118.0–v2.122.0), enumerating the four shipped reactions + the filed follow-ups, so the backlog reflects reality.**
+**Description:** Closeout for the six-commit Phase 7 sweep (Protective Field self + ally, Riposte, Chronal Shift, Restore Balance). The TODO entry was still tagged `🟡 P2`; this flips it to `✅ DONE` with the per-reaction version references and the remaining filed follow-ups (NPC-ally Protective Field, manual-2d20kh1 interception, a Restore Balance proactive prompt, and v3 auto-reroll application) so the next contributor sees the precise state.
+
+### Changed
+- `TODO.md` — Phase 7 reactions-breadth item marked done with shipped-version breakdown + filed follow-ups.
+
+### Notes
+- Doc-only; no code or schema change. `TODO.md` is already surfaced via `/wiki` (repo-root doc set), so no wiki-nav edit is required.
+
+---
+
 ## [2.122.0] - 2026-06-08 — "Even the Odds" — Restore Balance actually cancels advantage/disadvantage
 
 **Schema version:** 69
