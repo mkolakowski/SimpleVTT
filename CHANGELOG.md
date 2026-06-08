@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.123.0] - 2026-06-08 — "Bigger Boom" — backfill up-cast dice on 13 more damage spells
+
+**Schema version:** 69
+**Commit summary:** **Executes Phase 1 of the [spell-upcasting plan](docs/plans/spell-upcasting.md): hand-authors `damage_per_slot` on 13 leveled damage spells whose "At Higher Levels" clause adds dice, so casting them above their base level now grows the dice through the shipped v2.110.0 `_scale_dice_for_upcast` resolver. Annotated dice-scaling coverage goes from 14 → 27 spells (of 319).**
+**Description:** The up-cast dice mechanism has shipped since v2.110.0 but only 14 spells carried the per-slot field. This backfills the next batch of clean, single-damage-type leveled spells from their RAW per-slot values: Blight (+1d8), Disintegrate (+3d6), Hellish Rebuke (+1d10), Call Lightning (+1d10), Circle of Death (+2d6), Cloudkill (+1d8), Freezing Sphere (+1d6), Heat Metal (+1d8), Insect Plague (+1d10), Phantasmal Killer (+1d10), Branding Smite (+1d6), Arcane Hand / Bigby's Hand (+2d8), Wall of Fire (+1d8). The field lives on the damaging action (matching the Fireball convention); each edit is a one-key JSON round-trip (byte-identical formatting otherwise). Cantrips (which scale by character level, not slot) and multi-damage-type / per-two-level spells (Acid Arrow, Ice Storm, Flame Blade, …) are deliberately excluded — filed for the prose-parser phase.
+
+### Added
+- `tests/harness/test_cast_spell.py` — `test_upcast_scales_heat_metal_damage` (Mira casts Heat Metal at L3 → 3d8) + `test_upcast_scales_hellish_rebuke_damage` (Magnus casts Hellish Rebuke at L3 → 4d10).
+
+### Changed
+- `app/data/local/dnd5e/spells/*.json` — `damage_per_slot` added on the damaging action of 13 spells (see list above).
+- `docs/plans/spell-upcasting.md`, `app/templates/wiki.html`, `docs/wiki/README.md` — coverage figures updated (dice 14 → 27; total structured 16 → 29 of 319).
+
+### Notes
+- Pure content + test; no engine change (the v2.110.0 resolver does the scaling). **Total harness count: 1987** in `tests/harness/` (1985 → 1987); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.122.2] - 2026-06-08 — "Ground Truth" — reconcile the spell-upcasting plan with shipped reality
 
 **Schema version:** 69

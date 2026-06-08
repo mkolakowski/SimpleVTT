@@ -126,6 +126,58 @@ async def test_upcast_scales_moonbeam_damage(gm_client, gm_ws, roster):
     )
 
 
+async def test_upcast_scales_heat_metal_damage(gm_client, gm_ws, roster):
+    """v2.123.0 — Approach B backfill: Heat Metal (2d8 base, +1d8/slot)
+    cast with an L3 slot scales its action damage to 3d8 (Mira, Druid 5,
+    has Heat Metal at index 8 + L3 slots)."""
+    mira = roster["Mira Greenleaf"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": mira["id"],
+            "spell_index": 8,    # Heat Metal (L2)
+            "slot_level": 3,     # up-cast → +1d8
+            "class_slug": "druid",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    msg = await gm_ws.wait_for("spell_cast")
+    d = msg["data"]
+    assert d["spell_name"] == "Heat Metal"
+    assert d["slot_level"] == 3
+    dmgs = [a.get("damage") for a in (d.get("actions") or []) if a.get("damage")]
+    assert "3d8" in dmgs, (
+        f"Heat Metal at L3 should scale 2d8 → 3d8; got {dmgs}"
+    )
+
+
+async def test_upcast_scales_hellish_rebuke_damage(gm_client, gm_ws, roster):
+    """v2.123.0 — Approach B backfill: Hellish Rebuke (2d10 base,
+    +1d10/slot) cast with an L3 slot (base L1 → +2 levels) scales to
+    4d10 (Magnus, Warlock 5, has it at index 4 + L3 Pact slots)."""
+    magnus = roster["Magnus Hexbinder"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": magnus["id"],
+            "spell_index": 4,    # Hellish Rebuke (L1)
+            "slot_level": 3,     # up-cast +2 → 2d10 + 2d10 = 4d10
+            "class_slug": "warlock",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    msg = await gm_ws.wait_for("spell_cast")
+    d = msg["data"]
+    assert d["spell_name"] == "Hellish Rebuke"
+    assert d["slot_level"] == 3
+    dmgs = [a.get("damage") for a in (d.get("actions") or []) if a.get("damage")]
+    assert "4d10" in dmgs, (
+        f"Hellish Rebuke at L3 should scale 2d10 → 4d10; got {dmgs}"
+    )
+
+
 async def test_upcast_scales_healing_dice(gm_client, gm_ws, roster):
     """v2.110.0 — Cure Wounds (1d8 base, +1d8/slot) cast with an L2
     slot scales the broadcast healing to 2d8 (the heal-claim + auto-

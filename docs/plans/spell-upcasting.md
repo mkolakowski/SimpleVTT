@@ -57,7 +57,7 @@ almost no spells do:
 
 | Structured up-cast field | Spells carrying it | of 319 |
 |--------------------------|--------------------|--------|
-| `damage_per_slot` / `healing_per_slot` (dice) | 14 | 4% |
+| `damage_per_slot` / `healing_per_slot` (dice) | 27 (14 + the v2.123.0 backfill of 13) | 8% |
 | `extra_targets_per_slot_above_base` (instances) | 1 (Magic Missile) | <1% |
 | `extra_beams_per_slot_above_base` (beams) | 1 (Scorching Ray) | <1% |
 
@@ -88,7 +88,7 @@ which approach can automate it:
 
 **The pivotal finding:** every scaling *mechanism* now ships — the picker
 (A), the dice resolver (B), the count/beam resolver, and the free-text
-fallback (C). What's missing is **data**: only 16 of 319 spells carry any
+fallback (C). What's missing is **data**: only 29 of 319 spells carry any
 structured up-cast field, so ~300 spells consume the higher slot correctly
 but don't grow. The remaining work is therefore a **data backfill** (curated
 + a `higher_level` prose parser), not new engine code — plus generalizing the
