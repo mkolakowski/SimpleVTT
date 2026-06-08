@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.128.1] - 2026-06-08 — "Right Tool" — correct the auras-backlog-E machinery map
+
+**Schema version:** 69
+**Commit summary:** **Doc-only: corrects the [TODO](TODO.md) "Auras backlog (E)" entry. An audit found the four items do NOT fold into `_tick_auras` as the entry assumed — that helper is a turn-start emitter→subject model, and only `aura_of_warding` is even a radius aura. The entry now records the actual machinery each needs so the next session starts from an accurate map instead of a wrong turn.**
+**Description:** `_tick_auras` applies damage/heal/temp_hp/save payloads from the active combatant to creatures in its radius on turn start. `aura_of_warding` is a passive spell-damage *resistance* aura (needs an `is_spell` flag threaded through the damage pipeline — the flagged bigger lift); `ancestral_protectors` and `unwavering_mark` are *on-hit* riders (belong in the on-hit-rider framework); `scornful_rebuke` is *on-being-hit* retaliation (needs an on-damage-taken hook). The corrected entry spells out the concrete plan for each, including the multi-commit shape of the `aura_of_warding` lift.
+
+### Changed
+- `TODO.md` — Auras backlog (E) entry rewritten with the per-item machinery (on-hit / on-being-hit / damage-pipeline resistance) and the `aura_of_warding` implementation plan.
+
+### Notes
+- Doc-only; no code or schema change. `TODO.md` is already surfaced via `/wiki`. No new automation shipped — this prevents a future mis-scoped attempt.
+
+---
+
 ## [2.128.0] - 2026-06-08 — "Pool Party" — share the up-cast HP-pool dice math
 
 **Schema version:** 69
