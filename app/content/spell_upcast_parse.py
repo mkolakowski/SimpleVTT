@@ -17,16 +17,21 @@ fields always win — the resolver only consults the parser when the
 structured field is absent.
 
 **Deliberately conservative.** It returns a value ONLY for the
-unambiguous "+Nd M for each slot level above" shape. It returns ``{}``
-(no scaling) for:
+unambiguous "+Nd M for each slot level above" shape (per-1-slot) and
+the "+Nd M for every two slot levels above" shape (per-2-slot;
+v2.129.0 — Flame Blade, Spiritual Weapon). It returns ``{}`` (no
+scaling) for:
   - Cantrip character-level scaling ("when you reach 5th level") — no
     slot to up-cast; handled by ``damage_scaling`` elsewhere.
-  - Per-two-level scaling ("for every two slot levels") — not
-    representable by the per-level scaler.
   - Instance scaling ("one more dart/beam/target") — no dice term.
   - Flat bonuses ("increases by 10") — no dice term.
 A false negative just leaves a spell un-scaled (the v1 status quo); a
 false positive would mis-scale a cast, so the gates err toward silence.
+
+The per-2 case returns ``upcast_step: 2`` alongside the dice; the
+resolver divides ``(slot - base_level)`` by the step before scaling,
+so Flame Blade at L4 grows by one extra die and at L6 by two extra
+dice (RAW: "+1d6 for every two slot levels above 2nd").
 """
 from __future__ import annotations
 
@@ -45,14 +50,31 @@ _PER_SLOT = re.compile(
     re.IGNORECASE,
 )
 
-# Disqualifiers — if any appears, bail out (ambiguous / not per-level dice).
-_PER_TWO = re.compile(r"for\s+every\s+two\s+(?:spell\s+)?slot\s+levels?", re.I)
+# v2.129.0 — per-two-level slot scaling (Flame Blade / Spiritual Weapon):
+#   "... the damage increases by 1d6 for every two slot levels above 2nd"
+#   "... +1d8 for every two slot levels above the 2nd"
+# Captured separately from `_PER_SLOT` so the resolver can apply a step=2
+# divisor; otherwise the math undercounts the step.
+_PER_TWO_SLOT = re.compile(
+    _DICE + r"\s+for\s+every\s+two\s+(?:spell\s+)?slot\s+levels?\s+above",
+    re.IGNORECASE,
+)
+
+
+def _classify_heal_or_damage(text: str, dice_start: int) -> bool:
+    """True if the up-cast clause governs healing, False for damage.
+    Looks at the prose leading up to the dice term — "the healing
+    increases by 1d8 …" / "regains 2d8 hit points …"."""
+    lead = text[:dice_start].lower()
+    return ("healing" in lead) or ("hit points" in lead) or ("regains" in lead)
 
 
 def parse_upcast_dice(higher_level: str | None) -> dict:
-    """Return ``{"damage_per_slot": "Nd M"}`` or
-    ``{"healing_per_slot": "Nd M"}`` parsed from a spell's
-    ``higher_level`` text, or ``{}`` when nothing scales unambiguously.
+    """Return ``{"damage_per_slot": "Nd M"}`` /
+    ``{"healing_per_slot": "Nd M"}`` (per-1-slot) or the same pair plus
+    ``"upcast_step": 2`` (per-2-slot, v2.129.0), parsed from a spell's
+    ``higher_level`` text. Returns ``{}`` when nothing scales
+    unambiguously.
 
     Healing vs damage is decided by whether the word "healing" (or
     "hit points") governs the clause; otherwise it's treated as damage.
@@ -60,19 +82,19 @@ def parse_upcast_dice(higher_level: str | None) -> dict:
     text = (higher_level or "").strip()
     if not text:
         return {}
-    # Per-two-level scaling is not representable per-level — skip entirely.
-    if _PER_TWO.search(text):
-        return {}
+    # v2.129.0 — try per-two-slot first so the broader per-1 pattern
+    # doesn't accidentally swallow a "for every two slot levels" clause.
+    m2 = _PER_TWO_SLOT.search(text)
+    if m2:
+        dice = m2.group(1)
+        is_heal = _classify_heal_or_damage(text, m2.start())
+        key = "healing_per_slot" if is_heal else "damage_per_slot"
+        return {key: dice, "upcast_step": 2}
     m = _PER_SLOT.search(text)
     if not m:
         return {}
     dice = m.group(1)
-    # Look at the clause leading up to the dice term to classify heal vs
-    # damage. "the healing increases by 1d8 for each slot level above…"
-    lead = text[: m.start()].lower()
-    is_heal = ("healing" in lead) or ("hit points" in lead) or (
-        "regains" in lead
-    )
+    is_heal = _classify_heal_or_damage(text, m.start())
     return {"healing_per_slot" if is_heal else "damage_per_slot": dice}
 
 

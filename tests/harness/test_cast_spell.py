@@ -350,6 +350,107 @@ async def test_modeled_base_healing_then_parser_scales(gm_client, gm_ws, roster)
         )
 
 
+async def test_upcast_scales_per_two_slot_flame_blade(gm_client, gm_ws, roster):
+    """v2.129.0 — Flame Blade carries the per-two-slot up-cast clause in
+    its `higher_level` prose ("the damage increases by 1d6 for every two
+    slot levels above 2nd"). The v2.129.0 parser emits
+    `{damage_per_slot: 1d6, upcast_step: 2}`, and the resolver divides
+    `(slot - base)` by the step before scaling. Mira (Druid, base 3d6
+    at L2) cast at L4 grows by ONE die (extra=2, step=2, eff=1) → 4d6.
+    Restore-safe spell-list patch."""
+    mira = roster["Mira Greenleaf"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/sheet-json",
+    )
+    orig_spells = ((snap.json() or {}).get("sheet") or {}).get("spells") or []
+    idx = len(orig_spells)
+    new_spells = orig_spells + [{
+        "name": "Flame Blade", "_slug": "flame-blade", "level": 2,
+        "class": "druid", "prepared": True, "casting_time": "1 bonus action",
+    }]
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/sheet-fields",
+        json={"spells": new_spells},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": mira["id"],
+                "spell_index": idx,
+                "slot_level": 4,    # up-cast L2 → step=2, eff=1 → +1d6
+                "class_slug": "druid",
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        msg = await gm_ws.wait_for("spell_cast")
+        d = msg["data"]
+        assert d["spell_name"] == "Flame Blade"
+        assert d["slot_level"] == 4
+        dmgs = [a.get("damage") for a in (d.get("actions") or []) if a.get("damage")]
+        assert "4d6" in dmgs, (
+            f"Flame Blade at L4 (per-two step) should be 3d6 + 1d6 = 4d6; "
+            f"got {dmgs}"
+        )
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/sheet-fields",
+            json={"spells": orig_spells},
+        )
+
+
+async def test_upcast_scales_per_two_slot_spiritual_weapon(gm_client, gm_ws, roster):
+    """v2.129.0 — Spiritual Weapon carries the per-two-slot up-cast
+    clause ("the damage increases by 1d8 for every two slot levels
+    above the 2nd") AND its base damage (1d8 force) was modeled in the
+    same commit so the parser has something to grow. Tavik (Cleric)
+    cast at L4 → 2d8 (base 1d8 + 1d8 from eff_extra=1). Restore-safe
+    spell-list patch."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-json",
+    )
+    orig_spells = ((snap.json() or {}).get("sheet") or {}).get("spells") or []
+    idx = len(orig_spells)
+    new_spells = orig_spells + [{
+        "name": "Spiritual Weapon", "_slug": "spiritual-weapon", "level": 2,
+        "class": "cleric", "prepared": True, "casting_time": "1 bonus action",
+    }]
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-fields",
+        json={"spells": new_spells},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": tavik["id"],
+                "spell_index": idx,
+                "slot_level": 4,
+                "class_slug": "cleric",
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        msg = await gm_ws.wait_for("spell_cast")
+        d = msg["data"]
+        assert d["spell_name"] == "Spiritual Weapon"
+        assert d["slot_level"] == 4
+        dmgs = [a.get("damage") for a in (d.get("actions") or []) if a.get("damage")]
+        assert "2d8" in dmgs, (
+            f"Spiritual Weapon at L4 (per-two step) should be 1d8 + 1d8 = "
+            f"2d8; got {dmgs}"
+        )
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-fields",
+            json={"spells": orig_spells},
+        )
+
+
 async def test_upcast_base_level_leaves_dice_unscaled(gm_client, gm_ws, roster):
     """Sanity: casting Burning Hands at its base L1 leaves 3d6 (the
     scaler is a no-op when slot_level == spell_level)."""

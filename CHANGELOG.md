@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.129.0] - 2026-06-08 — "The Two-Step" — parse + scale per-two-slot up-cast spells
+
+**Schema version:** 69
+**Commit summary:** **Extends the v2.125.0 up-cast prose parser to handle "+Nd M for every two slot levels above K" — the shape Flame Blade and Spiritual Weapon use that the v2.125.0 parser deliberately skipped. The parser now emits `{damage_per_slot, upcast_step: 2}` for this clause; the resolver divides `(slot - base)` by the step before scaling, so Flame Blade at L4 grows to 4d6 (one extra die at extra=2, step=2) and at L6 to 5d6. Also fills Spiritual Weapon's previously-blank base damage (1d8 force) so the parser has something to grow.**
+**Description:** A v2.128.1 follow-up audit closed the "plan three ways to up-cast" TODO entry and noted the per-two-level scaling tail (Flame Blade + Spiritual Weapon) remained un-automated — the v2.125.0 parser's `_PER_TWO` regex was a defensive skip-and-return at line 64. This commit replaces the skip with a structured extractor: a sibling regex (`_PER_TWO_SLOT`) captures the dice term from the per-two clause, and the parser returns `{"damage_per_slot": "Nd M", "upcast_step": 2}`. The resolver block in `/cast_spell` now reads `upcast_step` from the spell-level field (manual override) or the parser dict (auto), divides `_upcast_extra` by it once per spell, and feeds the effective extra into all four `_scale_dice_for_upcast` calls. Manual JSON wins as before; default step is 1 (the v2.110.0 status quo). Spiritual Weapon's `damage` action field was blank ("missing base" sibling to v2.126.0's "Fill the Blanks"), so the same commit models its 1d8 force damage from the SRD desc — Tavik's L4 cast now correctly scales to 2d8.
+
+### Added
+- `app/content/spell_upcast_parse.py` — `_PER_TWO_SLOT` regex + `_classify_heal_or_damage` helper (shared with the per-1 path); `parse_upcast_dice` now emits `upcast_step: 2` for per-two clauses (alongside `damage_per_slot` / `healing_per_slot`).
+- `tests/harness/test_spell_upcast_parser.py` — `test_parses_per_two_level_damage` (Flame Blade phrasing), `test_parses_per_two_level_damage_spiritual_weapon` ("above the 2nd" variant), `test_parses_per_two_level_healing` (synthetic heal classifier).
+- `tests/harness/test_cast_spell.py` — `test_upcast_scales_per_two_slot_flame_blade` (Mira / Druid → L4 = 4d6), `test_upcast_scales_per_two_slot_spiritual_weapon` (Tavik / Cleric → L4 = 2d8). Restore-safe spell-list patches.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/cast_spell` reads `spell.upcast_step` or the parser's emitted step, divides `_upcast_extra` by it once per spell, and passes the effective extra to all four `_scale_dice_for_upcast` calls (actions[].damage, actions[].healing, payload.spell_damage, payload.spell_healing).
+- `app/data/local/dnd5e/spells/spiritual-weapon.json` — modeled the previously-blank action `damage: "1d8"` / `damage_type: "force"` from the SRD desc so the parser has a base to grow on up-cast.
+- `tests/harness/test_spell_upcast_parser.py` — replaced `test_ignores_per_two_level_scaling` with the three positive tests above.
+- `docs/test-harness-coverage.md` — new rows for the two cast-end-to-end tests + the three parser-unit tests; running total bumped to 2008.
+
+### Notes
+- Doc-only doc: parser docstring updated to record per-two as supported (was listed under "Deliberately conservative" skips). The plan doc at `docs/plans/spell-upcasting.md` already pointed at this as a follow-up. **Total harness count: 2008** in `tests/harness/` (2003 → 2008); **`tests/harness_ui/` 19** (unchanged). Manual JSON `upcast_step` always wins over the parser's auto-emitted value, so a future spell with bespoke per-N-slot scaling can be hand-authored without parser changes.
+
+---
+
 ## [2.128.2] - 2026-06-08 — "Receipts" — close the stale "plan three ways to up-cast" TODO
 
 **Schema version:** 69

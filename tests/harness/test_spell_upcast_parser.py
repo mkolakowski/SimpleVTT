@@ -44,12 +44,29 @@ def test_ignores_cantrip_character_level_scaling():
     ) == {}
 
 
-def test_ignores_per_two_level_scaling():
-    # Flame Blade et al. scale "for every two slot levels" — not
-    # representable by the per-level scaler, so the parser bails.
+def test_parses_per_two_level_damage():
+    # v2.129.0 — Flame Blade-style "+1d6 for every two slot levels above 2nd"
+    # now returns the dice + `upcast_step: 2` so the resolver can scale by
+    # `(slot_level - base) // 2`.
     assert parse_upcast_dice(
         "the damage increases by 1d6 for every two slot levels above 2nd"
-    ) == {}
+    ) == {"damage_per_slot": "1d6", "upcast_step": 2}
+
+
+def test_parses_per_two_level_damage_spiritual_weapon():
+    # Spiritual Weapon's prose includes "the 2nd" — the regex must accept
+    # the "above the 2nd" variant alongside "above 2nd".
+    assert parse_upcast_dice(
+        "the damage increases by 1d8 for every two slot levels above the 2nd"
+    ) == {"damage_per_slot": "1d8", "upcast_step": 2}
+
+
+def test_parses_per_two_level_healing():
+    # Synthetic: no SRD spell uses per-two healing, but the parser must
+    # classify heal/damage symmetrically with the per-1 path.
+    assert parse_upcast_dice(
+        "the healing increases by 1d6 for every two slot levels above 1st"
+    ) == {"healing_per_slot": "1d6", "upcast_step": 2}
 
 
 def test_ignores_instance_scaling():

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2003 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.128.0, 2026-06-08).
+**Total tests:** 2008 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.129.0, 2026-06-08).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -195,6 +195,8 @@ Basic `/cast_spell` happy paths + slot-consumption errors.
 | `test_upcast_scales_acid_arrow_multitype` | v2.124.0 — restore-safe spell-list patch → Acid Arrow at L3 → 5d4 (resolver reads the field from content by `_slug`). |
 | `test_upcast_scales_from_higher_level_prose` | v2.125.0 — Thunderwave (2d8, NO structured field) at L2 → 3d8 via the `parse_upcast_dice` fallback. Restore-safe spell-list patch. |
 | `test_modeled_base_healing_then_parser_scales` | v2.126.0 — Prayer of Healing (base 2d8 now modeled) cast at L3 → `spell_healing == "3d8"` (base + parser +1d8). Restore-safe spell-list patch on Tavik. |
+| `test_upcast_scales_per_two_slot_flame_blade` | v2.129.0 — Mira (Druid) casts Flame Blade at L4 → 4d6 (base 3d6 + 1d6 from `upcast_step=2`, eff_extra=1). Restore-safe spell-list patch. |
+| `test_upcast_scales_per_two_slot_spiritual_weapon` | v2.129.0 — Tavik (Cleric) casts Spiritual Weapon at L4 → 2d8 (base 1d8 just-modeled + 1d8 from `upcast_step=2`, eff_extra=1). Restore-safe spell-list patch. |
 | `test_upcast_scales_healing_dice` | Cure Wounds at L2 → 2d8 healing. |
 | `test_upcast_base_level_leaves_dice_unscaled` | Burning Hands at base L1 stays 3d6 (no-op). |
 
@@ -207,7 +209,9 @@ v2.125.0 — pure-Python unit tests for `app/content/spell_upcast_parse.py::pars
 | `test_parses_per_slot_healing` | "the healing increases by 1d8 for each slot level above 1st" → `{healing_per_slot: 1d8}`. |
 | `test_parses_multi_die_term` | "+2d6 for each slot level above 7th" → `{damage_per_slot: 2d6}`. |
 | `test_ignores_cantrip_character_level_scaling` | "when you reach 5th level" → `{}` (no slot). |
-| `test_ignores_per_two_level_scaling` | "for every two slot levels" → `{}`. |
+| `test_parses_per_two_level_damage` | v2.129.0 — "+1d6 for every two slot levels above 2nd" → `{damage_per_slot: 1d6, upcast_step: 2}`. |
+| `test_parses_per_two_level_damage_spiritual_weapon` | v2.129.0 — "above the 2nd" prose variant matches the same shape. |
+| `test_parses_per_two_level_healing` | v2.129.0 — heal/damage classifier still routes per-two clauses correctly. |
 | `test_ignores_instance_scaling` | "one more dart for each slot level" → `{}` (no dice term). |
 | `test_ignores_flat_bonus` | "increases by 5 for each slot level" → `{}`. |
 | `test_empty_or_missing` | `""` / `None` → `{}`. |

@@ -17021,15 +17021,22 @@ async def cast_spell(
         _parsed = parse_upcast_dice(spell.get("higher_level"))
         _parsed_dp = _parsed.get("damage_per_slot", "")
         _parsed_hp = _parsed.get("healing_per_slot", "")
+        # v2.129.0 — per-two-slot scaling (Flame Blade / Spiritual Weapon):
+        # spell-level `upcast_step` (manual override) wins over the parser's
+        # auto-derived step; both default to 1 (per-1-slot, the v2.110.0
+        # status quo). The step divides the extra slot levels, so a +1d6
+        # at L4 (extra=2, step=2) becomes one extra die, at L6 two, etc.
+        _step = int(spell.get("upcast_step") or _parsed.get("upcast_step") or 1)
+        _eff_extra = _upcast_extra // max(1, _step)
         _scaled_actions = []
         for _a in (spell.get("actions") or []):
             _a2 = dict(_a)
             _dp = _a2.get("damage_per_slot") or _dmg_per_top or _parsed_dp
             _hp = _a2.get("healing_per_slot") or _heal_per_top or _parsed_hp
             if _a2.get("damage") and _dp:
-                _a2["damage"] = _scale_dice_for_upcast(_a2["damage"], _dp, _upcast_extra)
+                _a2["damage"] = _scale_dice_for_upcast(_a2["damage"], _dp, _eff_extra)
             if _a2.get("healing") and _hp:
-                _a2["healing"] = _scale_dice_for_upcast(_a2["healing"], _hp, _upcast_extra)
+                _a2["healing"] = _scale_dice_for_upcast(_a2["healing"], _hp, _eff_extra)
             _scaled_actions.append(_a2)
         spell["actions"] = _scaled_actions
         payload["actions"] = _scaled_actions
@@ -17039,10 +17046,10 @@ async def cast_spell(
             (a.get("damage_per_slot") for a in _scaled_actions if a.get("damage_per_slot")), "") or _parsed_dp
         if payload.get("spell_healing") and _heal_per:
             payload["spell_healing"] = _scale_dice_for_upcast(
-                payload["spell_healing"], _heal_per, _upcast_extra)
+                payload["spell_healing"], _heal_per, _eff_extra)
         if payload.get("spell_damage") and _dmg_per:
             payload["spell_damage"] = _scale_dice_for_upcast(
-                payload["spell_damage"], _dmg_per, _upcast_extra)
+                payload["spell_damage"], _dmg_per, _eff_extra)
 
     # Register heal claims so /apply_healing can validate and roll server-side
     if payload["spell_healing"]:
