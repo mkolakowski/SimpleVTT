@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.129.1] - 2026-06-08 — "Out of Slots" — drop the Flame Blade cast test that hit Mira's slot table
+
+**Schema version:** 69
+**Commit summary:** **Removes the v2.129.0 `test_upcast_scales_per_two_slot_flame_blade` cast end-to-end test — Mira (the demo Druid) is Lv 2 with no L4 spell slot, so the L4 cast required to surface per-two scaling 409'd with `no_slot`. The parser-unit tests still pin Flame Blade's phrasing, and the Spiritual Weapon cast end-to-end still proves the resolver wiring; no functional regression.**
+**Description:** v2.129.0 shipped two cast tests (Flame Blade for Mira, Spiritual Weapon for Tavik). When I ran them against the live container, Spiritual Weapon at L4 correctly scaled to 2d8 but Flame Blade at L4 returned 409 `no_slot` because Mira's Lv 2 druid sheet only has L1 slots — Flame Blade's per-two clause needs at least an L4 cast to show ANY growth (extra=2, step=2, eff=1). The clean fix is dropping the cast test rather than fiddling with Mira's slot table for a single coverage row; the parser-unit test (`test_parses_per_two_level_damage`) already pins that Flame Blade's prose parses to `{damage_per_slot: 1d6, upcast_step: 2}`, and Spiritual Weapon's cast end-to-end (still landed) is the canonical proof that the parsed dict drives the resolver correctly.
+
+### Changed
+- `tests/harness/test_cast_spell.py` — removed `test_upcast_scales_per_two_slot_flame_blade`. Spiritual Weapon's cast test remains as the per-two-slot end-to-end proof.
+- `docs/test-harness-coverage.md` — total bumped down 2008 → 2007; the Flame Blade row removed and the Spiritual Weapon row gains a note explaining why an end-to-end Flame Blade cast test is deferred (would need a higher-level Druid PC than Mira).
+
+### Notes
+- Doc-only impact aside from the test removal; no engine change. The v2.129.0 per-two parser + resolver wiring stays exactly as committed. **Total harness count: 2007** in `tests/harness/` (2008 → 2007); **`tests/harness_ui/` 19** (unchanged). If a future demo bump lifts Mira to Lv 7+ (L4 slot), the Flame Blade cast test can come back without touching the engine.
+
+---
+
 ## [2.129.0] - 2026-06-08 — "The Two-Step" — parse + scale per-two-slot up-cast spells
 
 **Schema version:** 69
