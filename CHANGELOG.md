@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.120.0] - 2026-06-08 — "Rewind the Save" — Chronal Shift surfaces on any resolved save
+
+**Schema version:** 69
+**Commit summary:** **Wires the Chronurgy Wizard's Chronal Shift into the proactive reaction-prompt framework on the existing `save_resolved` trigger. Unlike Silvery Barbs (which only fires when the creature SUCCEEDS), Chronal Shift surfaces on ANY save outcome — pass or fail — so a Chronurgy Wizard within range can force the rolling creature to reroll regardless. Restructures the `save_resolved` branch to offer both reactions side-by-side.**
+**Description:** Phase 7 ("reactions breadth") of the [full-feature-automation](docs/plans/full-feature-automation.md) backlog, on the [reactions-automation](docs/plans/reactions-automation.md) framework. The `/use_chronal_shift` endpoint already tracked the 2/long-rest use budget (v2.99.337/.344); this commit makes it proactive. The `save_resolved` branch of `_eligible_reactions` (previously short-circuited to `[]` unless `context.passed`) now builds an option list: Silvery Barbs is appended only on a pass (unchanged RAW gate), and a new `use-chronal-shift` option is appended on any outcome when the watcher is a Chronurgy Wizard Lv 2+ with a use left. The `/use_reaction` dispatch decrements the `chronal-shift` resource (bootstrapping to the 2-use max if absent, matching the endpoint), marks the reaction, and broadcasts `resource_update` + `feature_used(source=chronal-shift)`. The reroll itself stays announce-only (state-tracker stance, same as Silvery Barbs).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_pc_has_chronal_shift_available` helper; `use-chronal-shift` option in the restructured `_eligible_reactions["save_resolved"]` branch (any outcome); `use-chronal-shift` dispatch in `/use_reaction`.
+- `tests/harness/test_reaction_prompt.py` — `thalindra_chronurgy` restore-safe fixture + `test_chronal_shift_prompt_fires_on_failed_save` (option surfaces on a FAILED save where Silvery Barbs does not) + `test_use_chronal_shift_decrements_uses` (reaction flips, use spent 2→1, `feature_used(source=chronal-shift)`).
+
+### Changed
+- `_eligible_reactions["save_resolved"]` no longer early-returns on a failed save — it now evaluates both Silvery Barbs (pass-only) and Chronal Shift (any outcome) and returns the combined option list. Behavior for the existing Silvery Barbs tests is unchanged (still pass-gated).
+
+### Notes
+- The reroll application remains GM-tracked (the rolling creature rerolls + takes the new roll); auto-reroll is filed for v3 alongside the Silvery Barbs auto-reroll. Range (30 ft) stays GM-adjudicated.
+- **Total harness count: 1981** in `tests/harness/` (1979 → 1981); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.119.0] - 2026-06-08 — "Riposte Reflex" — a missed attack now prompts the Battle Master to counter
 
 **Schema version:** 69

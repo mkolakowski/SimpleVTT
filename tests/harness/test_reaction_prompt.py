@@ -1604,6 +1604,213 @@ async def test_use_riposte_resolves_counter_attack(
     assert last.get("dice_remaining") == 3
 
 
+# ── v2.120.0 — Phase 7: Chronal Shift (Chronurgy Wizard) on a save ──
+
+
+@pytest_asyncio.fixture
+async def thalindra_chronurgy(gm_client, roster):
+    """Thalindra (Wizard) patched into the Chronurgy Magic subclass +
+    a full Chronal Shift use pool so a resolved save offers the reroll.
+    Restore-safe: snapshots subclass + resources via sheet-json and
+    restores in finally."""
+    thalindra = roster["Thalindra Moonwhisper"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/sheet-json",
+    )
+    orig = (snap.json() or {}).get("sheet") or {}
+    orig_subclass = orig.get("subclass")
+    orig_resources = orig.get("resources") or []
+    await _patch_sheet_pf(
+        gm_client, thalindra["id"],
+        {
+            "subclass": "Chronurgy Magic",
+            "resources": [{
+                "key": "chronal-shift", "label": "Chronal Shift",
+                "current": 2, "max": 2, "reset": "long",
+            }],
+        },
+        class_slug="wizard",
+    )
+    try:
+        yield thalindra
+    finally:
+        restore = {"resources": orig_resources}
+        if orig_subclass is not None:
+            restore["subclass"] = orig_subclass
+        await _patch_sheet_pf(
+            gm_client, thalindra["id"], restore, class_slug="wizard",
+        )
+
+
+async def test_chronal_shift_prompt_fires_on_failed_save(
+    gm_client, gm_ws, thalindra_chronurgy, roster,
+):
+    """v2.120.0 — Chronal Shift works on ANY save outcome (unlike
+    passed-gated Silvery Barbs). Krieger FAILS a DC 30 save → a
+    `save_resolved` prompt fires for Thalindra (Chronurgy Wizard) with
+    a `use-chronal-shift` option but NO `cast-silvery-barbs` option
+    (the save failed, so SB is ineligible).
+    """
+    thalindra = thalindra_chronurgy
+    krieger = roster["Krieger Stonefist"]
+
+    thal_cid = f"tok_cs_{thalindra['id']}"
+    krieg_cid = f"tok_cs_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": krieg_cid, "char_id": krieger["id"],
+            "name": krieger["name"], "initiative": 12,
+            "hp_current": 75, "hp_max": 75, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+        {
+            "id": thal_cid, "char_id": thalindra["id"],
+            "name": thalindra["name"], "initiative": 10,
+            "hp_current": 32, "hp_max": 32, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # DC 30 STR save — Krieger (Barbarian +7) cannot reach it, so the
+    # save fails (Silvery Barbs would be ineligible; Chronal Shift still
+    # applies).
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request",
+        json={
+            "label": "STR save", "base_expression": "1d20",
+            "stat_key": "str_save", "dc": 30, "visibility": "public",
+        },
+    )
+    assert rr.status_code == 200, rr.text
+    req_id = rr.json()["id"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request/{req_id}/respond",
+        json={"character_id": krieger["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "save_resolved"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(save_resolved) for Thalindra; buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    options = prompts[0]["data"].get("options", []) or []
+    keys = [o.get("key") for o in options]
+    assert "use-chronal-shift" in keys, (
+        f"expected use-chronal-shift option on a failed save; got {keys}"
+    )
+    assert "cast-silvery-barbs" not in keys, (
+        f"Silvery Barbs is passed-gated and must not appear on a failed "
+        f"save; got {keys}"
+    )
+    cs_opt = next(o for o in options if o.get("key") == "use-chronal-shift")
+    params = cs_opt.get("params") or {}
+    assert params.get("target_combatant_id") == krieg_cid
+    assert int(params.get("uses_before") or 0) == 2
+
+
+async def test_use_chronal_shift_decrements_uses(
+    gm_client, gm_ws, thalindra_chronurgy, roster,
+):
+    """End-to-end: Krieger fails a save → prompt fires → POST
+    /use_reaction with use-chronal-shift → reaction flips + a Chronal
+    Shift use is spent (resource_update 2 → 1) + feature_used(source=
+    chronal-shift) names the forced reroll.
+    """
+    thalindra = thalindra_chronurgy
+    krieger = roster["Krieger Stonefist"]
+
+    thal_cid = f"tok_cs2_{thalindra['id']}"
+    krieg_cid = f"tok_cs2_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": krieg_cid, "char_id": krieger["id"],
+            "name": krieger["name"], "initiative": 12,
+            "hp_current": 75, "hp_max": 75, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+        {
+            "id": thal_cid, "char_id": thalindra["id"],
+            "name": thalindra["name"], "initiative": 10,
+            "hp_current": 32, "hp_max": 32, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request",
+        json={
+            "label": "STR save", "base_expression": "1d20",
+            "stat_key": "str_save", "dc": 30, "visibility": "public",
+        },
+    )
+    assert rr.status_code == 200, rr.text
+    req_id = rr.json()["id"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request/{req_id}/respond",
+        json={"character_id": krieger["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "save_resolved"
+    ]
+    assert prompts, "expected save_resolved prompt for Thalindra"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "use-chronal-shift",
+            "watcher_char_id": thalindra["id"],
+        },
+    )
+    assert use.status_code == 200, use.text
+
+    await asyncio.sleep(0.2)
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Thalindra's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    rsc = [
+        m for m in gm_ws.buffered("resource_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+        and (m.get("data") or {}).get("key") == "chronal-shift"
+    ]
+    assert rsc, "expected resource_update for chronal-shift"
+    assert rsc[-1]["data"]["current"] == 1
+
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "chronal-shift"
+        and (m.get("data") or {}).get("character_id") == thalindra["id"]
+    ]
+    assert fu, "expected feature_used(source=chronal-shift)"
+    assert fu[-1]["data"].get("uses_remaining") == 1
+
+
 # ── v2.80.0 — Uncanny Dodge vs Defensive Duelist interaction ──
 
 

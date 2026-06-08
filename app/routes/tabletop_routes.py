@@ -4552,6 +4552,28 @@ def _pc_has_riposte_available(char) -> "tuple[bool, str, int]":
     return remaining >= 1, die_size, remaining
 
 
+# v2.120.0 Phase 7 — Chronal Shift (Chronurgy Magic Wizard Lv 2+, EGtW).
+# RAW: "When you or a creature you can see within 30 feet makes an
+# attack roll, ability check, or saving throw, you can use your reaction
+# to force a reroll; the creature must use the new roll. Twice per long
+# rest." Eligibility mirrors the /use_chronal_shift endpoint — Chronurgy
+# Wizard Lv 2+ with a `chronal-shift` use left (absent resource defaults
+# to the 2/long-rest max, matching the endpoint's auto-bootstrap).
+def _pc_has_chronal_shift_available(char) -> "tuple[bool, int]":
+    """Return ``(eligible, uses_remaining)`` for Chronal Shift."""
+    if not char or not char.sheet:
+        return False, 0
+    sheet = char.sheet or {}
+    if not _pc_has_chronurgy_wizard(sheet, 2):
+        return False, 0
+    remaining = 2
+    for r in (sheet.get("resources") or []):
+        if isinstance(r, dict) and (r.get("key") or "").strip().lower() == "chronal-shift":
+            remaining = int(r.get("current") or 0)
+            break
+    return remaining >= 1, remaining
+
+
 def _eligible_reactions(
     db: Session, campaign_id: int, watcher_char_id: int | None,
     trigger_event: str, context: dict,
@@ -5269,9 +5291,6 @@ def _eligible_reactions(
     if trigger_event == "save_resolved":
         if not watcher_char_id:
             return []
-        # Gate on context.passed == True per RAW.
-        if not context.get("passed"):
-            return []
         try:
             char = db.query(Character).filter(
                 Character.id == int(watcher_char_id),
@@ -5280,35 +5299,64 @@ def _eligible_reactions(
             char = None
         if not char or not char.sheet:
             return []
-        sb_elig, sb_class, sb_lv = _pc_has_silvery_barbs_available(char)
-        if not sb_elig:
-            return []
         target_name = context.get("roller_name") or "the creature"
         rolled = context.get("rolled")
         dc = context.get("dc")
         roll_hint = ""
         if isinstance(rolled, int) and isinstance(dc, int):
             roll_hint = f" (d20 total {rolled} vs DC {dc})"
-        return [{
-            "key": "cast-silvery-barbs",
-            "label": (
-                f"🌟 Cast Silvery Barbs on {target_name}{roll_hint} — "
-                f"force reroll, take the lower"
-            ),
-            "kind": "spell",
-            "resource_cost": f"Reaction + 1× L{sb_lv} slot",
-            "params": {
-                "slot_level": sb_lv,
-                "class_slug": sb_class,
-                "target_name": target_name,
-                "target_combatant_id": context.get("roller_combatant_id"),
-                "target_char_id": context.get("roller_char_id"),
-                "rolled": rolled,
-                "dc": dc,
-            },
-            "available": True,
-            "unavailable_reason": None,
-        }]
+        opts: list[dict] = []
+        # Silvery Barbs — RAW only when the creature SUCCEEDS on the
+        # save (force a reroll, take the lower). Gated on context.passed.
+        if context.get("passed"):
+            sb_elig, sb_class, sb_lv = _pc_has_silvery_barbs_available(char)
+            if sb_elig:
+                opts.append({
+                    "key": "cast-silvery-barbs",
+                    "label": (
+                        f"🌟 Cast Silvery Barbs on {target_name}{roll_hint} — "
+                        f"force reroll, take the lower"
+                    ),
+                    "kind": "spell",
+                    "resource_cost": f"Reaction + 1× L{sb_lv} slot",
+                    "params": {
+                        "slot_level": sb_lv,
+                        "class_slug": sb_class,
+                        "target_name": target_name,
+                        "target_combatant_id": context.get("roller_combatant_id"),
+                        "target_char_id": context.get("roller_char_id"),
+                        "rolled": rolled,
+                        "dc": dc,
+                    },
+                    "available": True,
+                    "unavailable_reason": None,
+                })
+        # v2.120.0 Phase 7 — Chronal Shift. Works on ANY save outcome
+        # (pass OR fail) — RAW forces a reroll regardless. A Chronurgy
+        # Wizard Lv 2+ within 30 ft with a use left can shift it.
+        cs_elig, cs_uses = _pc_has_chronal_shift_available(char)
+        if cs_elig:
+            opts.append({
+                "key": "use-chronal-shift",
+                "label": (
+                    f"⏳ Chronal Shift {target_name}'s save{roll_hint} — "
+                    f"force a reroll ({cs_uses}/{cs_uses} → "
+                    f"{max(0, cs_uses - 1)}) and use the new roll"
+                ),
+                "kind": "class-feature",
+                "resource_cost": "Reaction + 1 Chronal Shift use",
+                "params": {
+                    "target_name": target_name,
+                    "target_combatant_id": context.get("roller_combatant_id"),
+                    "target_char_id": context.get("roller_char_id"),
+                    "rolled": rolled,
+                    "dc": dc,
+                    "uses_before": cs_uses,
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+        return opts
     # v2.119.0 Phase 7 — Riposte (Battle Master Lv 3+). Fires from the
     # attack-resolution paths (`/attack`, `/npc_attack`) when an attack
     # MISSES the watcher. Surfaces one `use-riposte:{idx}` option per
@@ -15773,13 +15821,16 @@ async def respond_roll_request(
             _halfling_lucky_old_d20, _halfling_lucky_new_d20, _save_ab,
         )
 
-    # v2.72.0 Phase 3d — Silvery Barbs prompt. When a save resolves
-    # WITH PASS (creature succeeded), emit a save_resolved event to
-    # every PC who has SB prepared + a 1st+ slot + reaction unused
-    # (excluding the rolling character themselves — RAW: "creature
-    # you can see [other than self]"). The eligible_reactions branch
-    # surfaces the option only when context.passed=True.
-    if roll_req.dc is not None and result.total >= roll_req.dc:
+    # v2.72.0 Phase 3d — Silvery Barbs prompt. When a save resolves,
+    # emit a save_resolved event to every eligible PC watcher (except
+    # the rolling character — RAW: "creature you can see [other than
+    # self]"). v2.120.0 — fire on ANY outcome (was pass-only): Silvery
+    # Barbs still only shows on a PASS (gated in _eligible_reactions via
+    # context.passed) but Chronal Shift applies on pass OR fail, so the
+    # emit-site watcher filter is now "SB-eligible-on-a-pass OR
+    # Chronal-Shift-eligible" and `context.passed` carries the result.
+    if roll_req.dc is not None:
+        _save_passed = result.total >= roll_req.dc
         try:
             state = hub.get_battle(campaign_id)
             if state:
@@ -15814,17 +15865,22 @@ async def respond_roll_request(
                     if not watcher or not watcher.sheet:
                         continue
                     sb_elig, _cls, _slv = _pc_has_silvery_barbs_available(watcher)
-                    if not sb_elig:
+                    cs_elig, _cs_uses = _pc_has_chronal_shift_available(watcher)
+                    # Only emit when at least one reaction would surface:
+                    # SB needs a pass; Chronal Shift applies regardless.
+                    if not ((sb_elig and _save_passed) or cs_elig):
                         continue
                     await _emit_reaction_prompt(
                         db, campaign, c,
                         trigger_event="save_resolved",
                         summary=(
-                            f"{roller_name or 'Someone'} succeeded on save "
-                            f"(d20 total {result.total} vs DC {roll_req.dc})."
+                            f"{roller_name or 'Someone'} "
+                            f"{'succeeded on' if _save_passed else 'failed'} "
+                            f"a save (d20 total {result.total} vs DC "
+                            f"{roll_req.dc})."
                         ),
                         context={
-                            "passed": True,
+                            "passed": _save_passed,
                             "rolled": int(result.total),
                             "dc": int(roll_req.dc),
                             "roller_char_id": roller_char_id,
@@ -21999,6 +22055,90 @@ async def use_reaction(
                     "damage_rolled": damage_rolled,
                     "damage_applied": damage_applied,
                     "damage_type": damage_type,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "use-chronal-shift" and watcher_char_id:
+        # v2.120.0 Phase 7 — Chronal Shift. Decrement a chronal-shift
+        # use (bootstrap to the 2/long-rest max if the resource is
+        # absent, matching the /use_chronal_shift endpoint), mark the
+        # reaction, broadcast resource_update + feature_used. v1 is
+        # announce-only on the reroll itself (the rolling creature
+        # rerolls + takes the new roll) — same state-tracker stance as
+        # Silvery Barbs; auto-reroll application is filed for v3.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "use-chronal-shift"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            target_name = str(params.get("target_name") or "the creature")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            resources = list(sheet.get("resources") or [])
+            cs_idx, cs_cur, cs_max = -1, 2, 2
+            for i, r in enumerate(resources):
+                if isinstance(r, dict) and (r.get("key") or "").strip().lower() == "chronal-shift":
+                    cs_idx, cs_cur = i, int(r.get("current") or 0)
+                    cs_max = int(r.get("max") or 2)
+                    break
+            if cs_idx < 0:
+                resources.append({
+                    "key": "chronal-shift", "label": "Chronal Shift",
+                    "current": 2, "max": 2, "reset": "long",
+                })
+                cs_idx, cs_cur, cs_max = len(resources) - 1, 2, 2
+            if cs_cur < 1:
+                return JSONResponse(status_code=409, content={
+                    "error": "no_uses_left", "label": "Chronal Shift",
+                })
+            new_uses = cs_cur - 1
+            resources[cs_idx] = {**resources[cs_idx], "current": new_uses}
+            sheet["resources"] = resources
+            from sqlalchemy.orm.attributes import flag_modified
+            watcher_char.sheet = sheet
+            flag_modified(watcher_char, "sheet")
+            db.commit()
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "key": "chronal-shift",
+                    "current": new_uses, "max": cs_max,
+                },
+            })
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": (
+                        f"⏳ Chronal Shift — force {target_name} to reroll "
+                        f"({new_uses}/{cs_max} left)"
+                    ),
+                    "feature_desc": (
+                        f"Reaction. {watcher_char.name} bends a thread of "
+                        f"time: {target_name} must reroll the save and use "
+                        f"the new roll. (Chronurgy Magic Wizard Lv 2+ EGtW "
+                        f"class feature, 2/long rest.)"
+                    ),
+                    "source": "chronal-shift",
+                    "reaction_kind": "class-feature",
+                    "uses_remaining": new_uses,
+                    "uses_max": cs_max,
+                    "target_name": target_name,
                 },
             })
         except HTTPException:
