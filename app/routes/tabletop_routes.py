@@ -4018,6 +4018,27 @@ def _scale_dice_for_upcast(base_expr, per_slot_expr, extra_levels):
     return f"{base} + {add_n}d{per_die}"
 
 
+def _reroll_options_for_rolls(db, rolls):
+    """v2.116.0 — map ``roll.id -> reroll_options`` for the rolling
+    character across a list of DiceRolls, for the server-rendered roll
+    history (tabletop + rolls popout). Batch-loads the characters once;
+    only rolls with a kept d20 + an eligible feature appear."""
+    char_ids = {r.character_id for r in rolls if r.character_id}
+    chars = {}
+    if char_ids:
+        for c in db.query(Character).filter(Character.id.in_(char_ids)).all():
+            chars[c.id] = c
+    out: dict[int, list] = {}
+    for r in rolls:
+        c = chars.get(r.character_id) if r.character_id else None
+        if c is None:
+            continue
+        opts = _compute_reroll_options(c, r.breakdown, None, r.note)
+        if opts:
+            out[r.id] = opts
+    return out
+
+
 def _roll_is_save(stat_key, note) -> bool:
     """Best-effort: is this roll a saving throw? Gates save-only reroll
     features (Indomitable / Diamond Soul). Conservative — only the
@@ -11040,6 +11061,8 @@ def rolls_popout(
             "user_color_map": user_color_map,
             "user_portrait_map": user_portrait_map,
             "user_char_name_map": user_char_name_map,
+            # v2.116.0 — reroll buttons in the popout too.
+            "roll_reroll_options": _reroll_options_for_rolls(db, visible),
         },
     )
 

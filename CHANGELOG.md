@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.116.0] - 2026-06-07 — "Popped Out, Still Lucky" — reroll button in the rolls popout
+
+**Schema version:** 69
+**Commit summary:** **The reroll button (Lucky etc.) now also renders in the standalone rolls popout (`/campaign/{id}/rolls`), not just the main tabletop — so a GM running the roll log on a second monitor can reroll there too. Closes the v2.115.0 popout follow-up.**
+**Description:** Factors the per-roll reroll-option computation into a shared `_reroll_options_for_rolls(db, rolls)` helper (used by the popout; the tabletop route keeps its tested inline version) and wires it through the popout. The popout template renders the reroll button(s) on each card (GM/roller-gated) with `data-roll-id` / `data-character-id`; since the popout doesn't load `tabletop.js`, it gets a small self-contained handler in its own inline script (confirm → `POST /use_reroll` → disable on success; the rerolled result arrives as a fresh card via the popout's existing `roll` WS handler).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_reroll_options_for_rolls` helper; the rolls-popout route passes `roll_reroll_options`.
+- `app/templates/rolls_popout.html` — reroll button(s) on roll cards + a self-contained click handler.
+- `tests/harness/test_use_reroll.py` — `test_reroll_button_on_rolls_popout` (roll a d20 as Garrik → the popout HTML carries his "Lucky reroll" button).
+
+### Notes
+- Same save-detection caveat as v2.115.0 (Indomitable / Diamond Soul are WS-only on SSR surfaces). The reroll framework's server-rendered surfaces (tabletop + popout) are now consistent.
+- **Total harness count: 1972** in `tests/harness/` (1971 → 1972); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.115.0] - 2026-06-07 — "Second Chance, Restored" — reroll button on server-rendered roll history
 
 **Schema version:** 69

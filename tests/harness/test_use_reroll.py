@@ -123,6 +123,23 @@ async def test_reroll_button_on_server_rendered_history(gm_client, roster):
     )
 
 
+async def test_reroll_button_on_rolls_popout(gm_client, roster):
+    """v2.116.0 — the rolls popout (/campaign/{id}/rolls) also renders
+    the reroll button for a Lucky-feat character's past d20 roll."""
+    garrik = roster["Garrik Ironside"]
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={"expression": "1d20", "character_id": garrik["id"],
+              "note": "popout-reroll-test"},
+    )
+    assert rr.status_code == 200, rr.text
+    page = await gm_client.get(f"/campaign/{CAMPAIGN_ID}/rolls")
+    assert page.status_code == 200, page.status_code
+    html = page.text
+    assert "rr-btn" in html, "popout roll history should carry reroll buttons"
+    assert "Lucky reroll" in html
+
+
 async def test_reroll_unknown_feature(gm_client, roster):
     """An unrecognized feature_key → 404 (checked before roll lookup)."""
     garrik = roster["Garrik Ironside"]
