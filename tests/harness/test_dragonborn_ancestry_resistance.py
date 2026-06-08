@@ -242,11 +242,16 @@ async def test_non_dragonborn_ignores_ancestry_field(
         assert r.status_code == 200, r.text
         data = r.json()
         applied = data.get("damage_applied")
-        # No halving — Tavik (Hill Dwarf) takes full 20 fire damage.
-        # If applied isn't 20, surface the response for diagnosis.
-        assert applied == 20, (
+        # No halving — Tavik (Hill Dwarf) takes full damage. The
+        # +50 to-hit guarantees a hit but not a non-crit; a natural
+        # 20 doubles the 1d1 → 2d1 → damage_total 21 (vs the non-crit
+        # 20). v2.138.1 — accept both. The bug we're guarding against
+        # is the ancestry fallback halving the damage to ~10; either
+        # 20 or 21 proves the gate held.
+        assert applied in (20, 21), (
             f"v2.99.196: dragonborn_ancestry on a non-Dragonborn "
-            f"PC should not derive resistance; full response={data}"
+            f"PC should not derive resistance (expected full 20 or "
+            f"crit 21); full response={data}"
         )
     finally:
         await _patch_sheet(gm_client, tavik["id"], {

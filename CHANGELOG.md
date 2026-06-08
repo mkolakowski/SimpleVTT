@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.138.1] - 2026-06-08 — "Lucky Twenty" — accept the natural-20 crit in the dragonborn-ancestry-gate test
+
+**Schema version:** 69
+**Commit summary:** **Test-only follow-up. `test_non_dragonborn_ignores_ancestry_field` asserts a flat 20 damage from an NPC's "Flame" attack (damage `1d1+19`, attack_bonus `+50` to guarantee hit). The +50 guarantees the d20+50 beats AC, but doesn't guarantee non-crit — on a natural 20 the crit doubles the dice to `2d1+19` → damage_total 21. Flaked twice this session. Relax the assertion to `applied in (20, 21)`. The bug the test guards against — an incorrect ancestry-fallback halving — would surface as `applied ~= 10`, which neither value covers; the test still catches the real regression.**
+**Description:** Same flake pattern caught me three times in the session. The +50 to-hit on the synthetic NPC attack pushes the attack total over any AC even on a natural 1, but a natural 20 still rolls and crits. RAW crit doubles damage dice (PHB p.196), so `1d1+19` becomes `2d1+19` → damage_total 21 instead of 20. The non-Dragonborn gate's failure mode is "ancestry fallback halves the fire damage when it shouldn't" → `applied = 10` (halved from 20) or `10` (halved from 21, integer div). Either way far below the new accepted range. The two positive tests in this file (`test_bronze_ancestry_derives_lightning_resistance` + `test_red_ancestry_derives_fire_resistance`) already work under crit because halving 20 OR 21 both give 10 — no fix needed there.
+
+### Changed
+- `tests/harness/test_dragonborn_ancestry_resistance.py` — `test_non_dragonborn_ignores_ancestry_field` accepts `applied in (20, 21)` so a natural-20 crit (5% of swings) doesn't fail the test. Updated the assertion message to surface both values + the diagnosis.
+
+### Notes
+- No engine change. **Total harness count: 2024** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). Same fix could be applied to other +50-to-hit tests if they surface the same flake later; filed.
+
+---
+
 ## [2.138.0] - 2026-06-08 — "Half Strength" — Ancestral Protectors Phase 2 (damage halving)
 
 **Schema version:** 69
