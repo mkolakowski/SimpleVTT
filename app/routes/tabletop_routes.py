@@ -6910,6 +6910,7 @@ async def _apply_damage_to_combatant(
     is_attack: bool = False,
     attack_id: str | None = None,
     is_magical: bool = False,
+    is_spell: bool = False,
     attacker_char_id: int | None = None,
 ) -> dict:
     """Apply ``damage_amount`` damage to the target combatant. Two
@@ -7040,7 +7041,7 @@ async def _apply_damage_to_combatant(
                 damage_amount, damage_type, sheet,
             )
             _, resistance_applied = _resistance_halve(
-                damage_amount, damage_type, sheet,
+                damage_amount, damage_type, sheet, is_spell=is_spell,
             )
             if vulnerability_applied and resistance_applied:
                 # Cancel: damage taken normally.
@@ -7284,7 +7285,7 @@ async def _apply_damage_to_combatant(
         )
         _, resistance_applied = _resistance_halve_npc(
             damage_amount, damage_type, target, db,
-            is_magical=is_magical,
+            is_magical=is_magical, is_spell=is_spell,
         )
         if vulnerability_applied and resistance_applied:
             applied = damage_amount
@@ -16457,7 +16458,7 @@ async def respond_roll_request(
                         _dr_result = await _apply_damage_to_combatant(
                             db, campaign_id, _pc_combatant, proposed,
                             damage_type=_dmg_type,
-                            attack_id=_cast_id,
+                            attack_id=_cast_id, is_spell=True,
                         )
                         _dmg_applied = int(_dr_result.get("applied") or 0)
             await hub.broadcast(campaign_id, {
@@ -17695,6 +17696,7 @@ async def cast_spell(
                     agg_damage_rolled,
                     damage_type=auto_attack_damage_type,
                     is_attack=True, attack_id=cast_id,
+                    is_spell=True,
                 )
                 auto_attack_damage_applied = int(dmg_result.get("applied") or 0)
         payload["auto_attack_hit"] = auto_attack_hit
@@ -18253,7 +18255,7 @@ async def cast_spell(
                     dmg_result = await _apply_damage_to_combatant(
                         db, campaign_id, target_combatant, proposed,
                         damage_type=damage_type,
-                        attack_id=cast_id,
+                        attack_id=cast_id, is_spell=True,
                     )
                     auto_save_damage_applied = int(dmg_result.get("applied") or 0)
         payload["auto_save_damage_rolled"] = auto_save_damage_rolled
@@ -18605,7 +18607,7 @@ async def cast_spell(
                         _dr_result = await _apply_damage_to_combatant(
                             db, campaign_id, extra, proposed,
                             damage_type=damage_type,
-                            attack_id=cast_id,
+                            attack_id=cast_id, is_spell=True,
                         )
                         _dmg_applied = int(_dr_result.get("applied") or 0)
             auto_save_targets.append({
@@ -18797,6 +18799,7 @@ async def cast_spell(
                     _ah_result = await _apply_damage_to_combatant(
                         db, campaign_id, _ah_combatant, _ah_rolled,
                         damage_type=_ah_damage_type, attack_id=cast_id,
+                        is_spell=True,
                     )
                     _ah_applied = int(_ah_result.get("applied") or 0)
                 auto_hit_targets.append({
@@ -32683,6 +32686,7 @@ def _dragonborn_ancestry_resistance(sheet: "dict | None") -> str:
 
 def _resistance_halve(
     damage_amount: int, damage_type: str, target_sheet: dict,
+    *, is_spell: bool = False,
 ) -> tuple[int, bool]:
     """If the target's ``_buffs_active`` has resistance to
     ``damage_type``, return (halved, True). Otherwise (damage_amount,
@@ -32696,6 +32700,15 @@ def _resistance_halve(
     sheet root. PCs with a race trait granting permanent resistance
     populate this list at character creation; the same list is read
     by NPC paths via ``_resistance_halve_npc``.
+
+    v2.133.0 — ``is_spell`` kwarg threaded for Aura of Warding
+    (Ancients Paladin Lv 7+): when True AND the target carries a buff
+    whose ``effects.resistance_spell_damage`` is truthy, the damage
+    halves regardless of the type. Distinct from ``resistance_to``
+    (type list) so a spell-damage resistance can coexist with type-
+    specific resistance from other sources (Rage on bludgeoning +
+    Aura of Warding on a spell — both halve, but only one applies
+    per RAW per source; the helper returns on the first hit).
     """
     if damage_amount <= 0 or not damage_type:
         return damage_amount, False
@@ -32737,6 +32750,13 @@ def _resistance_halve(
         effects = b.get("effects")
         if not isinstance(effects, dict):
             continue
+        # v2.133.0 — Aura of Warding (Ancients Paladin Lv 7+): when the
+        # caller signals `is_spell=True`, halve damage on any buff that
+        # carries `resistance_spell_damage`. Checked before `resistance_to`
+        # so a spell-damage resistance fires even on a type the target
+        # doesn't otherwise resist.
+        if is_spell and effects.get("resistance_spell_damage"):
+            return damage_amount // 2, True
         resists = [str(r).strip().lower() for r in (effects.get("resistance_to") or [])]
         # v2.99.121 — "all" wildcard: Petrified (RAW PHB p.290) grants
         # "resistance to all damage". Any damage type halved when "all"
@@ -33012,7 +33032,7 @@ def _immunity_zero_npc(
 
 def _resistance_halve_npc(
     damage_amount: int, damage_type: str, combatant: dict, db: Session,
-    *, is_magical: bool = False,
+    *, is_magical: bool = False, is_spell: bool = False,
 ) -> tuple[int, bool]:
     """NPC-side resistance halving. Mirror of ``_resistance_halve``
     for non-PC combatants. The PC path reads ``_buffs_active`` off
@@ -33066,6 +33086,12 @@ def _resistance_halve_npc(
         effects = b.get("effects")
         if not isinstance(effects, dict):
             continue
+        # v2.133.0 — Aura of Warding NPC mirror: same flag, same
+        # behavior. Lets an NPC ally within an Ancients Paladin's
+        # 10-ft aura halve spell damage too once the aura installs
+        # the buff via Phase 3 wiring.
+        if is_spell and effects.get("resistance_spell_damage"):
+            return damage_amount // 2, True
         for r in (effects.get("resistance_to") or []):
             if isinstance(r, str) and _resistance_matches_damage(
                 r, damage_type_l, is_magical=is_magical,

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.133.0] - 2026-06-08 — "Spell Tag" — Aura of Warding Phase 1+2 (is_spell plumbing + gate)
+
+**Schema version:** 69
+**Commit summary:** **Engine groundwork for Aura of Warding (Ancients Paladin Lv 7+, PHB p.86): "you and friendly creatures within 10 feet of you have resistance to damage from spells." Threads an `is_spell: bool = False` kwarg through `_apply_damage_to_combatant` into both `_resistance_halve` (PC) and `_resistance_halve_npc` (NPC). When the caller signals `is_spell=True` AND the target carries a buff with `effects.resistance_spell_damage: True`, the resistance gate fires and halves the damage. Spell-damage callers in `cast_spell` and `respond_roll_request` (5 sites) now pass the flag. Phase 3 — wiring `use_aura_of_warding` to auto-install the buff via the aura framework + end-to-end test — is the next commit.**
+**Description:** The auras backlog (E) audit at v2.128.1 flagged Aura of Warding as the "bigger lift" because the damage pipeline doesn't know if a hit is spell-sourced. This commit closes that gap with the smallest plumbing pass: a single new kwarg on the central damage application path, two helper signatures broadened, and the `is_spell=True` flag passed at the 5 spell-damage call sites inside `cast_spell` + `respond_roll_request`. The resistance gate is checked BEFORE the existing `resistance_to` type-list scan so a `resistance_spell_damage` buff fires on any spell-sourced damage regardless of type. The NPC branch mirrors the PC path so an NPC ally inside the aura (Phase 3) gets the same halving. Sites deliberately deferred to Phase 1.5: `place_aoe` (lines ~19681, 19791) and `npc_cast_spell` (lines ~74365, 74642, 74725) — same pattern, but each adds a few lines of threading; rolled in once Phase 3's end-to-end test is wired so they all land with coverage. Pure plumbing — no observable behavior change without a manually-installed `resistance_spell_damage` buff (Phase 3 makes that automatic).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_apply_damage_to_combatant` accepts `is_spell: bool = False`; `_resistance_halve` (PC) and `_resistance_halve_npc` (NPC) accept the same kwarg and halve damage on a buff carrying `effects.resistance_spell_damage` when the flag is set.
+
+### Changed
+- `app/routes/tabletop_routes.py` — 5 spell-damage callers pass `is_spell=True`: `/cast_spell` auto-attack damage (line ~17694), auto-save damage (~18253), AoE-extra rider (~18607), AoE auto-hit (~18799), and `/roll_request/{id}/respond` save-damage path (~16458).
+
+### Notes
+- No new endpoint, no new harness test in this commit — the new contract is internal (a buff effect key). The existing cast_spell / npc_attack / dragonborn-ancestry resistance suites confirm no regression on the resistance pipeline. Phase 3 will land the end-to-end Aura of Warding test (Caelan as Ancients Lv 7+ aura emitter; ally inside 10 ft halves spell damage). Filed as Phase 1.5: thread `is_spell=True` at `place_aoe` (2 sites) + `npc_cast_spell` (3 sites) so NPC-cast spells and explicit-AoE placements also halve on the aura. **Total harness count: 2018** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.132.0] - 2026-06-08 — "First Strike" — Assassinate advantage vs targets who haven't acted
 
 **Schema version:** 69
