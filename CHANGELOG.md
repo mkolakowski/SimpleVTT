@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.124.0] - 2026-06-08 — "Wider Blast" — up-cast dice on 5 multi-type damage spells
+
+**Schema version:** 69
+**Commit summary:** **Continues the spell-upcasting backfill onto 5 multi-damage-type / multi-instance spells, annotating `damage_per_slot` on the single modeled damaging action so the v2.110.0 resolver scales the part RAW says scales. Annotated dice coverage 27 → 32 of 319.**
+**Description:** Picks up the trickier backfill candidates the v2.123.0 batch deferred: Acid Arrow (+1d4 — both instances scale, the initial 4d4 is modeled), Ice Storm (+1d8 — only the bludgeoning scales RAW, and only bludgeoning is modeled), Wall of Thorns (+1d8 — both types scale, piercing is modeled), Wall of Ice (+2d6 on-appear damage), and Flame Strike (+1d6 — fire-or-radiant choice, fire is modeled). Each spell models a single damaging action, so the annotation matches the modeled type exactly. No demo PC ships any of these (all high-level Wizard/Cleric spells), so the harness test restore-safely appends Acid Arrow to Thalindra's spell list, casts it up-cast, and restores the list — also confirming the resolver pulls the backfilled field from content by `_slug` even when the sheet entry is minimal.
+
+### Added
+- `tests/harness/test_cast_spell.py` — `test_upcast_scales_acid_arrow_multitype` (restore-safe spell-list patch → cast Acid Arrow at L3 → 5d4).
+
+### Changed
+- `app/data/local/dnd5e/spells/*.json` — `damage_per_slot` on Acid Arrow, Ice Storm, Wall of Thorns, Wall of Ice, Flame Strike.
+- `docs/plans/spell-upcasting.md`, `app/templates/wiki.html`, `docs/wiki/README.md` — coverage 27 → 32 dice (34 of 319 total structured).
+
+### Notes
+- Filed: the healing spells Mass Cure Wounds / Prayer of Healing can't be backfilled yet — their **base** healing dice aren't modeled on the action (empty `healing`), so there's nothing for the per-slot scaler to grow; they need a base-healing data fix first. Flame Blade (+1d6 per *two* levels) isn't representable by the per-level scaler — also filed.
+- Pure content + test; no engine change. **Total harness count: 1988** in `tests/harness/` (1987 → 1988); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.123.0] - 2026-06-08 — "Bigger Boom" — backfill up-cast dice on 13 more damage spells
 
 **Schema version:** 69

@@ -46,7 +46,8 @@
         "shape": "sphere",
         "size_ft": 20,
         "secondary_ft": 0
-      }
+      },
+      "damage_per_slot": "1d8"
     }
   ]
 }
