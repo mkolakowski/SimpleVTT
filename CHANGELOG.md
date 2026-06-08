@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.113.1] - 2026-06-07 — "One Thing at a Time" — Spiritual Weapon survives replacing prior concentration
+
+**Schema version:** 68
+**Commit summary:** **Fixes a v2.113.0 ordering bug AND lands one-concentration-at-a-time enforcement for Spiritual Weapon: the cast now establishes concentration BEFORE spawning the weapon, so `_install_buff`'s RAW concentration-swap (drop the old + run the cleanup cascade) clears the OLD spell's effects while the new weapon doesn't exist yet — instead of the cascade dismissing the brand-new weapon.**
+**Description:** v2.113.0 spawned the spectral weapon and *then* installed the concentration buff. But `_install_buff` (v2.19.1/v2.38.0) already enforces one concentration at a time — installing a new concentration buff drops the caster's previous one and fires `_drop_paired_concentration_buffs`, which (since v2.113.0) also dismisses the caster's concentration-bound summons. With the old ordering, casting Spiritual Weapon **while already concentrating** ran that cascade *after* the weapon existed, so the just-created weapon (it's `concentration_bound` + `summoned_by` self) got swept up and dismissed immediately. Reordering — establish concentration first, then summon — fixes it and gives correct RAW behavior for free: the prior concentration (and its AoEs / bound summons / paired conditions) is dropped, and the new weapon stands. The common case (not previously concentrating) was unaffected, which is why v2.113.0's tests passed.
+
+### Fixed
+- `app/routes/tabletop_routes.py` — `use_spiritual_weapon` now installs the concentration buff + records the `ConcentrationEffect` **before** `_summon_companion`, so the concentration-swap cascade can't dismiss the brand-new weapon. Closes the v2.113.0 "auto-drop a pre-existing concentration" follow-up (now handled by `_install_buff`'s swap).
+
+### Added
+- `tests/harness/test_use_spiritual_weapon.py` — `test_spiritual_weapon_replaces_prior_concentration_and_survives` (cast while concentrating on Spirit Guardians → old concentration replaced, the new weapon survives). Fails on the v2.113.0 ordering; passes now.
+
+### Notes
+- **Total harness count: 1968** in `tests/harness/` (1967 → 1968); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.113.0] - 2026-06-07 — "Spectral Tether" — Spiritual Weapon joins initiative + lives on concentration
 
 **Schema version:** 68

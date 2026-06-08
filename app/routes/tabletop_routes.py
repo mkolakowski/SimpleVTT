@@ -45307,18 +45307,35 @@ async def use_spiritual_weapon(
     _summon_init = (int(_init_override)
                     if _init_override not in (None, "") else _caster_init)
 
-    # Stand up the floating weapon as a real combatant, bound to the
-    # caster's concentration so the cleanup cascade dismisses it.
-    summon = await _summon_companion(
-        db, campaign_id,
-        owner_char_id=char.id,
-        companion_key="spiritual-weapon",
-        name="Spiritual Weapon",
-        x=float(body.get("x") or 0),
-        y=float(body.get("y") or 0),
-        initiative=_summon_init,
-        concentration_bound=True,
+    # v2.113.1 — drop any pre-existing concentration FIRST (RAW one-at-
+    # a-time). Removing the caster's old concentration buff(s) via
+    # _remove_buff fires _drop_paired_concentration_buffs, which clears
+    # the OLD spell's AoEs / bound summons / paired conditions — and
+    # because the new weapon isn't spawned yet, that cascade can't
+    # dismiss it. Doing this explicitly (instead of leaning on
+    # _install_buff's concentration-swap) avoids the swap-cascade
+    # removing the brand-new Spiritual Weapon anchor we install next:
+    # the cascade drops every concentration buff sourced by the caster,
+    # which would include our own anchor if a prior one were still
+    # present at install time.
+    _pre_state = hub.get_battle(campaign_id) or {}
+    _pre_cb = next(
+        (c for c in (_pre_state.get("combatants") or [])
+         if c.get("char_id") == char.id), None,
     )
+    if _pre_cb:
+        _old_conc_keys = [
+            (b or {}).get("key") for b in (_pre_cb.get("buffs") or [])
+            if (b or {}).get("concentration")
+            and (b or {}).get("source_char_id") == char.id
+            and (b or {}).get("key")
+            and (b or {}).get("key") != "concentration-spiritual-weapon"
+        ]
+        for _ok in _old_conc_keys:
+            try:
+                await _remove_buff(campaign_id, char.id, _ok)
+            except Exception:  # noqa: BLE001
+                pass
 
     # v2.113.0 — bind to the caster's concentration. House rule: this
     # VTT treats Spiritual Weapon as concentration so the weapon lives
@@ -45326,8 +45343,8 @@ async def use_spiritual_weapon(
     # the caster's combatant (init-tracker chip + the
     # _drop_paired_concentration_buffs cascade that dismisses the
     # weapon) AND record a ConcentrationEffect row so a failed CON save
-    # on damage breaks it too. v1: does NOT auto-drop a pre-existing
-    # concentration (one-at-a-time enforcement filed).
+    # on damage breaks it too. Established BEFORE spawning the weapon so
+    # the (now no-op) concentration handling can't sweep it up.
     try:
         await _install_buff(campaign_id, char.id, {
             "key": "concentration-spiritual-weapon",
@@ -45364,6 +45381,19 @@ async def use_spiritual_weapon(
             "ended": False,
         },
     })
+
+    # Now stand up the floating weapon as a real combatant, bound to the
+    # caster's (freshly-established) concentration.
+    summon = await _summon_companion(
+        db, campaign_id,
+        owner_char_id=char.id,
+        companion_key="spiritual-weapon",
+        name="Spiritual Weapon",
+        x=float(body.get("x") or 0),
+        y=float(body.get("y") or 0),
+        initiative=_summon_init,
+        concentration_bound=True,
+    )
 
     # Damage dice: 1d8 + 1d8 per two slot levels above 2nd.
     extra_dice = max(0, (slot_level - 2) // 2)

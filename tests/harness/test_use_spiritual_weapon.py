@@ -185,6 +185,49 @@ async def test_spiritual_weapon_attacks_target(gm_client, roster):
     assert hit_seen, "no hit in 30 casts — flaky env?"
 
 
+async def test_spiritual_weapon_replaces_prior_concentration_and_survives(
+    gm_client, roster,
+):
+    """v2.113.1 — casting Spiritual Weapon while already concentrating
+    drops the OLD concentration (RAW one-at-a-time) but the NEW weapon
+    survives. Regression for the v2.113.0 ordering bug where the
+    replace-concentration cascade fired AFTER the weapon spawned and
+    dismissed it (it's concentration_bound + summoned_by self)."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    cb = _pc_cb(tavik)
+    cb["initiative"] = 15
+    # Seed Tavik already concentrating on another spell.
+    cb["buffs"] = [{
+        "key": "concentration-spirit-guardians",
+        "name": "Concentrating: Spirit Guardians",
+        "concentration": True,
+        "source_char_id": tavik["id"],
+        "duration_rounds": 10,
+    }]
+    await _seed_battle(gm_client, [cb])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_spiritual_weapon",
+        json={"character_id": tavik["id"], "x": 700.0, "y": 700.0},
+    )
+    assert r.status_code == 200, r.text
+    weapon = r.json()["combatant"]
+    try:
+        got = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/battle")
+        combs = ((got.json() or {}).get("battle") or {}).get("combatants") or []
+        # The new weapon must NOT have been swept up by the swap cascade.
+        assert any(c.get("companion_key") == "spiritual-weapon" for c in combs), (
+            "the new Spiritual Weapon must survive replacing prior concentration"
+        )
+        # The old concentration was replaced by Spiritual Weapon's.
+        tavik_cb = next(c for c in combs if c.get("char_id") == tavik["id"])
+        keys = {(b or {}).get("key") for b in (tavik_cb.get("buffs") or [])}
+        assert "concentration-spirit-guardians" not in keys, "old concentration kept"
+        assert "concentration-spiritual-weapon" in keys
+    finally:
+        await _dismiss(gm_client, weapon["id"])
+        await _clear_concentration(gm_client, tavik["id"])
+
+
 async def test_spiritual_weapon_spell_not_known(gm_client, roster):
     """Krieger (Barbarian) → 409 spell_not_known."""
     krieger = roster["Krieger Stonefist"]
