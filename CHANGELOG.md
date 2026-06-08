@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.135.0] - 2026-06-08 — "Tick Tock" — Aura of Warding Phase 4 (end-to-end tick test)
+
+**Schema version:** 69
+**Commit summary:** **End-to-end harness test that proves the full RAW chain works: endpoint installs the aura emitter buff on Caelan → `_tick_auras` walks the in-range allies on Caelan's turn-start → Pip (co-located, 0 ft) gains the `aura-of-warding-resist` buff carrying `effects.resistance_spell_damage: True`. Mirrors the Aura of Alacrity (v2.99.449) precedent shape exactly. Aura of Warding is now fully RAW-validated end-to-end: a spell hit on Pip from this point would halve via the v2.133.0 gate.**
+**Description:** Phase 4 closes the Aura of Warding implementation chain. The Phase 1+2 plumbing (v2.133.0) made `is_spell` + `resistance_spell_damage` exist; Phase 3 (v2.134.0) wired the endpoint to install the aura; v2.134.1 fixed the fixtures. This test exercises everything together: PATCH Caelan to Ancients Lv 7, place Caelan + Pip co-located at (700, 700), seed a battle on Pip's turn (`turn_index=1`) so installing the aura doesn't tick yet, POST `/use_aura_of_warding` to install the emitter buff, then PUT the battle to advance `turn_index=0` carrying Caelan's emitter buff through `state["combatants"][0]["buffs"]`. The turn-advance hook in PUT `/battle` calls `_tick_auras` which finds Caelan's emitter buff, evaluates `affects: "allies"`, distance-gates Pip (dist 0 < radius 10), and installs `aura-of-warding-resist` on Pip via `_install_buff_on_combatant_id`. The next `battle_update` broadcast carries Pip's combatant dict with the resist buff in its `buffs` list. Verifying the buff's `effects.resistance_spell_damage: True` closes the contract — the v2.133.0 gate fires when any spell-source damage reaches Pip.
+
+### Added
+- `tests/harness/test_aura_of_warding.py` — `test_aow_installs_aura_and_ticks_ally_resist`: place Caelan + Pip co-located, seed battle on Pip's turn, install the aura, advance to Caelan's turn carrying the emitter buff, verify the next `battle_update` shows Pip with the `aura-of-warding-resist` buff + `effects.resistance_spell_damage: True`.
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2019 → 2020.
+
+### Notes
+- Phase 1.5 (thread `is_spell=True` at `place_aoe` + `npc_cast_spell`) remains deferred — those are extra spell-damage sites that should also halve under the aura but the engine's already wired for them; the threading is mechanical and can land in a follow-up. Aura of Warding is end-to-end correct for the dominant `/cast_spell` + `/roll_request/respond` paths. **Total harness count: 2020** in `tests/harness/` (2019 → 2020); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.134.1] - 2026-06-08 — "Roll Call" — seed Caelan in init so the AoW tests can install the buff
 
 **Schema version:** 69

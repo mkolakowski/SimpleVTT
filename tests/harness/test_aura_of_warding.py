@@ -207,3 +207,93 @@ async def test_aow_buff_grants_caster_self_resistance(
         f"aura's ally-side buff payload should carry "
         f"resistance_spell_damage; got {ally_effects}"
     )
+
+
+async def _place_token(gm_client, char_id, x, y):
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/place-token",
+        json={"x": float(x), "y": float(y)},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_aow_installs_aura_and_ticks_ally_resist(
+    gm_client, gm_ws, caelan_ancients_lv7, roster,
+):
+    """v2.134.2 — Phase 4 end-to-end: Aura of Warding installs a
+    buff-payload aura. On Caelan's turn start, an ALLY in range
+    (Pip, co-located) gains the `aura-of-warding-resist` buff
+    (effects.resistance_spell_damage=True). Validates the full RAW
+    chain: endpoint installs emitter buff → `_tick_auras` walks
+    in-range allies on turn-start → ally gets the resistance buff →
+    a spell hit on the ally would halve via the v2.133.0 gate.
+    Mirrors the Aura of Alacrity precedent
+    (test_aoa_installs_aura_and_buffs_ally_speed)."""
+    caelan = caelan_ancients_lv7
+    pip = roster["Pip Quickfingers"]
+    caelan_tok = f"tok_aow_caelan_{caelan['id']}"
+    pip_tok = f"tok_aow_pip_{pip['id']}"
+
+    # Co-locate tokens so the 10-ft aura range gate passes (dist 0).
+    await _place_token(gm_client, caelan["id"], 700.0, 700.0)
+    await _place_token(gm_client, pip["id"], 700.0, 700.0)
+
+    # Seed on Pip's turn so installing the aura doesn't tick for
+    # Caelan yet — we'll advance to Caelan deliberately below.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {**_pc(caelan_tok, caelan), "initiative": 20},
+            _pc(pip_tok, pip),
+        ], "turn_index": 1, "round": 1, "active": True},
+    )
+
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_aura_of_warding",
+        json={"character_id": caelan["id"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["aura_installed"] is True
+    bu = await gm_ws.wait_for("buff_update")
+    caelan_buffs = bu["data"]["buffs"]
+    assert any(
+        b.get("key") == "aura-of-warding-emitter" for b in caelan_buffs
+    ), f"emitter buff missing; got keys={[b.get('key') for b in caelan_buffs]}"
+
+    # Advance to Caelan (index 0) carrying his aura buff → the
+    # `_tick_auras` pass on his turn-start installs the resistance
+    # buff on Pip.
+    gm_ws.mark()
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {**_pc(caelan_tok, caelan), "initiative": 20,
+             "buffs": caelan_buffs},
+            _pc(pip_tok, pip),
+        ], "turn_index": 0, "round": 2, "active": True},
+    )
+    await asyncio.sleep(0.3)
+    bus = gm_ws.buffered("battle_update")
+    assert bus, "no battle_update broadcast received after turn advance"
+    combs = {c.get("id"): c for c in (bus[-1]["data"].get("combatants") or [])}
+    pip_cb = combs.get(pip_tok)
+    assert pip_cb is not None, (
+        f"Pip's combatant missing from battle_update; got "
+        f"ids={list(combs.keys())}"
+    )
+    resist_buff = next(
+        (b for b in (pip_cb.get("buffs") or [])
+         if b.get("key") == "aura-of-warding-resist"),
+        None,
+    )
+    assert resist_buff is not None, (
+        f"resist buff not installed on Pip after Caelan's turn-start "
+        f"tick; got Pip buffs={pip_cb.get('buffs')}"
+    )
+    assert (resist_buff.get("effects") or {}).get(
+        "resistance_spell_damage"
+    ) is True, (
+        f"tick-installed buff should carry resistance_spell_damage=True; "
+        f"got effects={resist_buff.get('effects')}"
+    )
