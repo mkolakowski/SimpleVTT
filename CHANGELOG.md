@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.112.0] - 2026-06-07 — "Walk the Beam" — reposition a placed concentration AoE (movable Moonbeam)
+
+**Schema version:** 68
+**Commit summary:** **A placed concentration AoE (Moonbeam, Web, Sleet Storm — anything not self-anchored) can now be repositioned: a new `POST /move_aoe` updates the marker's center + re-broadcasts it, and a GM-only "↔ Move" control re-opens the AoE picker to drop the shape at a new spot. Completes the [TODO](TODO.md) AoE feature set (Spirit Guardians token-binding + Fireball pulse already shipped).**
+**Description:** Closes the TODO's last AoE item ("Moonbeam: after placement, movable once per turn per range"). `POST /api/campaign/{id}/move_aoe {marker_id, center_x, center_y}` finds the marker in `_concentration_aoes`, rejects self-anchored shapes (Spirit Guardians follows its caster's token automatically — `409 not_movable`), authorizes the GM or the marker's caster, updates the center, and re-broadcasts `concentration_aoe_update` so every client redraws it. Client: a small GM-only floating "↔ Move <Spell>" control appears per movable marker; clicking it re-opens the proven `_openAoePicker` (no new canvas drag handler), and the placement click POSTs the new center to `/move_aoe`. RAW once-per-turn / 60-ft-range limits are left to the table to adjudicate in v1.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /api/campaign/{id}/move_aoe` (GM or caster; self-anchored → 409; updates marker center + re-broadcasts).
+- `app/static/tabletop.js` — `_renderAoeMoveControls` (GM-only floating Move buttons, reusing the AoE picker), wired to the `concentration_aoe_update` handler.
+- `tests/harness/test_cast_spell_aoe.py` — Web (a concentration cube) place → `/move_aoe` repositions the marker + re-broadcasts the new center; unknown marker → 404.
+
+### Notes
+- Reuses the click-to-place AoE picker for "move mode" so it doesn't touch the (fragile) canvas mousedown handler. Player self-move (a non-GM trigger) is a filed follow-up — the endpoint already permits the caster.
+- The AoE TODO is now complete: Spirit Guardians token-binding (pre-existing), Fireball pulse (v2.111.0), and movable Moonbeam (this).
+- **Total harness count: 1966** in `tests/harness/` (1964 → 1966); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.111.0] - 2026-06-07 — "Flash Point" — instantaneous AoE pulse
 
 **Schema version:** 68

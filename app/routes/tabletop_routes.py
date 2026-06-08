@@ -19445,6 +19445,57 @@ async def place_aoe(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/move_aoe")
+async def move_aoe(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.112.0 — reposition a placed concentration AoE (Moonbeam,
+    Sleet Storm, Web, …) while concentration holds.
+
+    Body: ``{marker_id, center_x, center_y}``. The GM or the marker's
+    caster may move it. Self-anchored shapes (Spirit Guardians) are
+    NOT movable — they track the caster's token automatically. Updates
+    the marker's center + re-broadcasts ``concentration_aoe_update`` so
+    every client redraws it at the new spot. RAW once-per-turn / range
+    limits are left to the table to adjudicate in v1 (filed)."""
+    body = await request.json()
+    marker_id = (body.get("marker_id") or "").strip()
+    if not marker_id:
+        raise HTTPException(400, "marker_id is required")
+    try:
+        cx = float(body.get("center_x"))
+        cy = float(body.get("center_y"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "center_x and center_y are required")
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    markers = _concentration_aoes.get(campaign_id) or []
+    marker = next((m for m in markers if m.get("id") == marker_id), None)
+    if marker is None:
+        return JSONResponse(status_code=404, content={"error": "marker_not_found"})
+    if marker.get("is_self_anchored"):
+        return JSONResponse(status_code=409, content={
+            "error": "not_movable",
+            "msg": "Self-anchored AoEs follow the caster's token.",
+        })
+    if not _user_is_gm(user, campaign, db):
+        _cc = marker.get("caster_char_id")
+        _char = db.query(Character).filter(
+            Character.id == int(_cc or 0),
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not _char or _char.owner_user_id != user.id:
+            raise HTTPException(403, "Not your AoE")
+    marker["center_x"] = cx
+    marker["center_y"] = cy
+    await _broadcast_concentration_aoes(campaign_id)
+    return {"ok": True, "marker_id": marker_id, "center_x": cx, "center_y": cy}
+
+
 # ----------- API: use class feature (Phase 3 action-economy) -----------
 
 @router.post("/api/campaign/{campaign_id}/use_feature")

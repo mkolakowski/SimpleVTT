@@ -497,6 +497,68 @@
         if (!_aoePulseRaf) _aoePulseRaf = requestAnimationFrame(_tickAoePulses);
     }
 
+    // v2.112.0 — GM-only "Move AoE" controls. A movable concentration
+    // AoE (Moonbeam / Web / Sleet Storm — anything not self-anchored)
+    // gets a small floating button that re-opens the AoE picker; on
+    // commit the new center is POSTed to /move_aoe, which re-broadcasts
+    // the marker. Self-anchored shapes (Spirit Guardians) are omitted —
+    // they track the caster's token automatically. v1 is GM-only; the
+    // /move_aoe endpoint also permits the caster, so a player-facing
+    // trigger is a clean follow-up. (Player self-move filed.)
+    function _renderAoeMoveControls() {
+        let host = document.getElementById('aoe-move-controls');
+        const movable = (ME && ME.isGm)
+            ? _concentrationAoes.filter(m => m && !m.is_self_anchored)
+            : [];
+        if (!movable.length) { if (host) host.remove(); return; }
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'aoe-move-controls';
+            host.setAttribute('style', [
+                'position:fixed', 'left:12px', 'bottom:64px',
+                'z-index:2147483000', 'display:flex',
+                'flex-direction:column', 'gap:6px', 'max-width:220px',
+            ].join(';'));
+            document.body.appendChild(host);
+        }
+        host.innerHTML = '';
+        for (const m of movable) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = `↔ Move ${m.spell_name || 'AoE'}`;
+            // Compact floating control (dense GM tool) — 32px min per the
+            // CLAUDE.md compact-panel exception.
+            b.setAttribute('style', [
+                'min-height:32px', 'padding:4px 10px', 'border-radius:6px',
+                'cursor:pointer', 'font-size:12px', 'font-weight:600',
+                'border:1px solid #5eead4', 'background:rgba(94,234,212,0.15)',
+                'color:#5eead4', 'text-align:left',
+            ].join(';'));
+            b.addEventListener('click', async () => {
+                if (typeof window._openAoePicker !== 'function') return;
+                const placed = await window._openAoePicker({
+                    shape: m.shape, size_ft: m.size_ft,
+                    secondary_ft: m.secondary_ft || 0,
+                    name: m.spell_name || 'AoE',
+                    char_id: m.caster_char_id || null,
+                });
+                if (!placed || !placed.center) return;  // cancelled
+                try {
+                    await fetch(`/api/campaign/${CAMPAIGN_ID}/move_aoe`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            marker_id: m.id,
+                            center_x: placed.center.x,
+                            center_y: placed.center.y,
+                        }),
+                    });
+                } catch (_) { /* WS reconciles on the broadcast */ }
+            });
+            host.appendChild(b);
+        }
+    }
+
     // v2.44.1 Phase T.5b → v2.45.0 Phase T.6: AoE placement picker.
     // The sheet's ``.sp-cast`` handler calls ``window._openAoePicker(
     // {shape, size_ft, name, char_id})`` for spells whose action
@@ -4928,6 +4990,7 @@
                 _concentrationAoes = (msg.data && Array.isArray(msg.data.markers))
                     ? msg.data.markers : [];
                 try { render(); } catch (_) {}
+                try { _renderAoeMoveControls(); } catch (_) {}
             } else if (msg.type === 'aoe_pulse') {
                 // v2.111.0 — instantaneous AoE flash (Fireball etc.).
                 try { _addAoePulse(msg.data || {}); } catch (_) {}

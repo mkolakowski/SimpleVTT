@@ -371,6 +371,73 @@ async def test_aoe_pc_response_applies_damage_and_broadcasts_update(
     )
 
 
+WEB_INDEX = 7  # Thalindra: index 7 is Web — an L2 concentration cube
+               # (NOT self-anchored), so its placed marker is movable.
+
+
+async def test_move_aoe_repositions_concentration_marker(
+    gm_client, gm_ws, roster, thalindra_rested,
+):
+    """v2.112.0 — a placed concentration AoE (Web, a cube) can be
+    repositioned via /move_aoe: the marker's center updates and a
+    fresh concentration_aoe_update broadcasts the new spot. Unknown
+    marker → 404."""
+    thal = thalindra_rested
+    tmpl = await _bandit_tmpl(gm_client)
+    await _seed_battle(gm_client, [
+        {"id": f"tok_mv_{thal['id']}", "char_id": thal["id"],
+         "name": thal["name"], "initiative": 10, "hp_current": 24, "hp_max": 24,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": "tok_mv_b1", "char_id": None, "token_template_id": tmpl["id"],
+         "name": "Web Bandit", "initiative": 7, "hp_current": 50, "hp_max": 50,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={"character_id": thal["id"], "spell_index": WEB_INDEX,
+              "slot_level": 2, "class_slug": "wizard", "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json()["id"]
+
+    gm_ws.mark()
+    place = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
+        json={"cast_id": cast_id, "target_combatant_ids": ["tok_mv_b1"]},
+    )
+    assert place.status_code == 200, place.text
+    upd = await gm_ws.wait_for("concentration_aoe_update", timeout=3.0)
+    web = next((m for m in upd["data"]["markers"]
+                if m.get("spell_name") == "Web"), None)
+    assert web is not None, f"Web marker should be placed; got {upd['data']}"
+    assert web["is_self_anchored"] is False
+    marker_id = web["id"]
+
+    gm_ws.mark()
+    mv = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/move_aoe",
+        json={"marker_id": marker_id, "center_x": 999.0, "center_y": 888.0},
+    )
+    assert mv.status_code == 200, mv.text
+    assert mv.json()["center_x"] == 999.0
+    upd2 = await gm_ws.wait_for("concentration_aoe_update", timeout=3.0)
+    web2 = next((m for m in upd2["data"]["markers"]
+                 if m.get("id") == marker_id), None)
+    assert web2 is not None
+    assert web2["center_x"] == 999.0 and web2["center_y"] == 888.0
+
+
+async def test_move_aoe_unknown_marker(gm_client):
+    """Moving a marker that doesn't exist → 404."""
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/move_aoe",
+        json={"marker_id": "nope12345678", "center_x": 1.0, "center_y": 1.0},
+    )
+    assert r.status_code == 404, r.text
+
+
 async def test_place_aoe_non_concentration_broadcasts_pulse(
     gm_client, gm_ws, roster, thalindra_rested,
 ):
