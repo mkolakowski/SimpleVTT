@@ -4018,6 +4018,8 @@ def _scale_dice_for_upcast(base_expr, per_slot_expr, extra_levels):
     return f"{base} + {add_n}d{per_die}"
 
 
+
+
 def _reroll_options_for_rolls(db, rolls):
     """v2.116.0 — map ``roll.id -> reroll_options`` for the rolling
     character across a list of DiceRolls, for the server-rendered roll
@@ -17017,10 +17019,21 @@ async def cast_spell(
         # for each slot level above" shape parses; and it only ever takes
         # effect on an action that already has a base damage/healing expr,
         # so HP-pool / instance / cantrip clauses never mis-scale a cast.
-        from ..content.spell_upcast_parse import parse_upcast_dice
+        from ..content.spell_upcast_parse import (
+            parse_upcast_dice,
+            scale_flat_for_upcast as _scale_flat_for_upcast,
+        )
         _parsed = parse_upcast_dice(spell.get("higher_level"))
         _parsed_dp = _parsed.get("damage_per_slot", "")
         _parsed_hp = _parsed.get("healing_per_slot", "")
+        # v2.130.0 — flat per-slot (Aid, False Life, Heal): integer N
+        # added per extra slot. Routes through `_scale_flat_for_upcast`
+        # instead of the dice scaler so a "+5 per slot" clause doesn't
+        # invent dice on a "70" base.
+        _flat_dmg_top = spell.get("flat_damage_per_slot") or 0
+        _flat_heal_top = spell.get("flat_healing_per_slot") or 0
+        _parsed_fd = _parsed.get("flat_damage_per_slot", 0)
+        _parsed_fh = _parsed.get("flat_healing_per_slot", 0)
         # v2.129.0 — per-two-slot scaling (Flame Blade / Spiritual Weapon):
         # spell-level `upcast_step` (manual override) wins over the parser's
         # auto-derived step; both default to 1 (per-1-slot, the v2.110.0
@@ -17033,10 +17046,16 @@ async def cast_spell(
             _a2 = dict(_a)
             _dp = _a2.get("damage_per_slot") or _dmg_per_top or _parsed_dp
             _hp = _a2.get("healing_per_slot") or _heal_per_top or _parsed_hp
+            _fd = _a2.get("flat_damage_per_slot") or _flat_dmg_top or _parsed_fd
+            _fh = _a2.get("flat_healing_per_slot") or _flat_heal_top or _parsed_fh
             if _a2.get("damage") and _dp:
                 _a2["damage"] = _scale_dice_for_upcast(_a2["damage"], _dp, _eff_extra)
             if _a2.get("healing") and _hp:
                 _a2["healing"] = _scale_dice_for_upcast(_a2["healing"], _hp, _eff_extra)
+            if _a2.get("damage") and _fd:
+                _a2["damage"] = _scale_flat_for_upcast(_a2["damage"], _fd, _eff_extra)
+            if _a2.get("healing") and _fh:
+                _a2["healing"] = _scale_flat_for_upcast(_a2["healing"], _fh, _eff_extra)
             _scaled_actions.append(_a2)
         spell["actions"] = _scaled_actions
         payload["actions"] = _scaled_actions
@@ -17044,12 +17063,22 @@ async def cast_spell(
             (a.get("healing_per_slot") for a in _scaled_actions if a.get("healing_per_slot")), "") or _parsed_hp
         _dmg_per = _dmg_per_top or next(
             (a.get("damage_per_slot") for a in _scaled_actions if a.get("damage_per_slot")), "") or _parsed_dp
+        _flat_heal_per = _flat_heal_top or next(
+            (a.get("flat_healing_per_slot") for a in _scaled_actions if a.get("flat_healing_per_slot")), 0) or _parsed_fh
+        _flat_dmg_per = _flat_dmg_top or next(
+            (a.get("flat_damage_per_slot") for a in _scaled_actions if a.get("flat_damage_per_slot")), 0) or _parsed_fd
         if payload.get("spell_healing") and _heal_per:
             payload["spell_healing"] = _scale_dice_for_upcast(
                 payload["spell_healing"], _heal_per, _eff_extra)
         if payload.get("spell_damage") and _dmg_per:
             payload["spell_damage"] = _scale_dice_for_upcast(
                 payload["spell_damage"], _dmg_per, _eff_extra)
+        if payload.get("spell_healing") and _flat_heal_per:
+            payload["spell_healing"] = _scale_flat_for_upcast(
+                payload["spell_healing"], _flat_heal_per, _eff_extra)
+        if payload.get("spell_damage") and _flat_dmg_per:
+            payload["spell_damage"] = _scale_flat_for_upcast(
+                payload["spell_damage"], _flat_dmg_per, _eff_extra)
 
     # Register heal claims so /apply_healing can validate and roll server-side
     if payload["spell_healing"]:

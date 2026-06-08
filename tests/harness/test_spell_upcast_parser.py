@@ -14,6 +14,7 @@ from app.content.spell_upcast_parse import (
     parse_upcast_dice,
     upcast_target_count,
     upcast_pool_dice,
+    scale_flat_for_upcast,
 )
 
 
@@ -77,11 +78,43 @@ def test_ignores_instance_scaling():
     ) == {}
 
 
-def test_ignores_flat_bonus():
+def test_parses_flat_healing_aid():
+    # v2.130.0 — Aid: "a target's hit points increase by an additional 5
+    # for each slot level above 2nd". "hit points" in the clause routes
+    # the bonus to flat_healing_per_slot.
     assert parse_upcast_dice(
-        "the target's hit point maximum increases by 5 for each slot "
-        "level above 2nd"
-    ) == {}
+        "a target's hit points increase by an additional 5 for each "
+        "slot level above 2nd"
+    ) == {"flat_healing_per_slot": 5}
+
+
+def test_parses_flat_healing_heal():
+    # v2.130.0 — Heal: "the amount of healing increases by 10 for each
+    # slot level above 6th". "healing" classifier → flat_healing_per_slot.
+    assert parse_upcast_dice(
+        "the amount of healing increases by 10 for each slot level above 6th"
+    ) == {"flat_healing_per_slot": 10}
+
+
+def test_parses_flat_healing_false_life():
+    # v2.130.0 — False Life: "you gain 5 additional temporary hit points
+    # for each slot level above 1st". The "hit points" AFTER the dice term
+    # still routes to healing because v2.130.0 classifier searches the
+    # full clause, not just the lead.
+    assert parse_upcast_dice(
+        "you gain 5 additional temporary hit points for each slot "
+        "level above 1st"
+    ) == {"flat_healing_per_slot": 5}
+
+
+def test_flat_does_not_match_dice_clause():
+    # Regression guard: "1d6 for each slot level above 3rd" must NOT
+    # surface as flat_damage_per_slot: 6 (the "6" inside the dice
+    # term). The dice-pattern regex fires first; the flat regex's
+    # `\b\d+\b` boundary excludes digits inside a dice term.
+    assert parse_upcast_dice(
+        "the damage increases by 1d6 for each slot level above 3rd"
+    ) == {"damage_per_slot": "1d6"}
 
 
 def test_empty_or_missing():
@@ -124,3 +157,32 @@ def test_pool_dice_sleep():
 
 def test_pool_dice_clamps_below_base():
     assert upcast_pool_dice(0, base_level=1, base_dice=5, per_slot_dice=2) == 5
+
+
+# ── v2.130.0 — scale_flat_for_upcast (Heal-style flat-bonus scaler) ──
+
+
+def test_flat_scaler_pure_flat_base():
+    # Heal: base "70", +10/slot, 1 extra slot → "80". 3 extras → "100".
+    assert scale_flat_for_upcast("70", 10, 1) == "80"
+    assert scale_flat_for_upcast("70", 10, 3) == "100"
+
+
+def test_flat_scaler_dice_plus_flat_base():
+    # False Life: base "1d4+4", +5/slot, 1 extra → "1d4+9" (bumps the +N).
+    assert scale_flat_for_upcast("1d4+4", 5, 1) == "1d4+9"
+    assert scale_flat_for_upcast("1d4+4", 5, 2) == "1d4+14"
+
+
+def test_flat_scaler_pure_dice_base():
+    # Pure dice base ("1d8" with no modifier) gets the flat appended as +N.
+    assert scale_flat_for_upcast("1d8", 5, 1) == "1d8+5"
+
+
+def test_flat_scaler_base_unchanged_on_no_op():
+    # extra_levels=0 → base unchanged. Defends low-slot casts.
+    assert scale_flat_for_upcast("70", 10, 0) == "70"
+    # Missing per-slot → base unchanged.
+    assert scale_flat_for_upcast("70", 0, 5) == "70"
+    # Unparseable base ("1d8+1d6") → no-op rather than corrupt.
+    assert scale_flat_for_upcast("1d8+1d6", 5, 1) == "1d8+1d6"

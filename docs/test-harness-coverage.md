@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2007 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.129.0, 2026-06-08).
+**Total tests:** 2015 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.130.0, 2026-06-08).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -219,6 +219,14 @@ v2.125.0 — pure-Python unit tests for `app/content/spell_upcast_parse.py::pars
 | `test_target_count_clamps_and_params` | v2.127.0 — clamps below base level; custom `base_targets`/`per_slot` (Bless-style 3 +1/slot). |
 | `test_pool_dice_sleep` | v2.128.0 — `upcast_pool_dice(slot, base_level=1, base_dice=5, per_slot_dice=2)` → L1/L2/L3 = 5/7/9 (Sleep HP pool). |
 | `test_pool_dice_clamps_below_base` | v2.128.0 — slot below base never under-rolls the base dice count. |
+| `test_parses_flat_healing_aid` | v2.130.0 — Aid's "+5 hit points for each slot level above 2nd" → `{flat_healing_per_slot: 5}`. |
+| `test_parses_flat_healing_heal` | v2.130.0 — Heal's "+10 healing per slot above 6th" → `{flat_healing_per_slot: 10}`. |
+| `test_parses_flat_healing_false_life` | v2.130.0 — False Life's "5 additional temporary hit points" (keyword AFTER the number) → `{flat_healing_per_slot: 5}` via the broadened classifier. |
+| `test_flat_does_not_match_dice_clause` | v2.130.0 — regression guard: a dice clause must not surface the dice-internal digit as a flat per-slot value. |
+| `test_flat_scaler_pure_flat_base` | v2.130.0 — `scale_flat_for_upcast("70", 10, 1)` → "80" (Heal at L7). |
+| `test_flat_scaler_dice_plus_flat_base` | v2.130.0 — `scale_flat_for_upcast("1d4+4", 5, 1)` → "1d4+9" (merges into the +N suffix; False Life at L2). |
+| `test_flat_scaler_pure_dice_base` | v2.130.0 — `scale_flat_for_upcast("1d8", 5, 1)` → "1d8+5" (appends +N to a pure dice base). |
+| `test_flat_scaler_base_unchanged_on_no_op` | v2.130.0 — extra_levels=0 / per_slot=0 / unparseable base each return the base unchanged. |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.

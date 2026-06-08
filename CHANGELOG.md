@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.130.0] - 2026-06-08 — "Flat Rate" — parse + scale flat-bonus up-cast spells (Heal, Aid prose)
+
+**Schema version:** 69
+**Commit summary:** **Extends the up-cast machinery to the third scaling shape: "+N for each slot level above K" where N is a constant integer rather than dice (Aid, False Life, Heal). The parser now emits `{flat_damage_per_slot, flat_healing_per_slot}` ints alongside the existing dice fields; a new `scale_flat_for_upcast` helper handles flat scaling on flat bases ("70" → "80"), dice+flat bases ("1d4+4" → "1d4+9"), and pure dice bases ("1d8" → "1d8+5"). Heal's previously-blank base healing modeled as "70" so the parser's `flat_healing_per_slot: 10` has something to grow. End-to-end cast test deferred — no demo PC has a L7+ slot for Heal.**
+**Description:** v2.129.0 covered dice up-cast (per-1 and per-2 slot steps); this commit closes the third pattern the SRD uses — a flat integer bonus per slot. The parser's `_PER_SLOT_FLAT` regex requires `\b\d+\b` (so a digit inside a dice term like "6" in "1d6" is NEVER swallowed), supports the False Life shape ("you gain 5 additional temporary hit points") by allowing optional intervening prose, and broadens `_classify_heal_or_damage` to search the full clause (so False Life's trailing "hit points" still routes to flat_healing_per_slot instead of mis-classifying as damage). The new `scale_flat_for_upcast` lives in `app/content/spell_upcast_parse.py` so it's unit-testable without booting FastAPI; the v2.110.0 `_scale_dice_for_upcast` sibling stays in `tabletop_routes.py` as the existing precedent (covered by end-to-end Fireball / Cure Wounds tests). Heal's base modeled in the same commit — "70" follows the SRD desc ("regain 70 hit points") and matches the v2.126.0 "Fill the Blanks" pattern. The end-to-end cast test is deferred because no demo PC carries an L7+ spell slot today (Tavik is a Cleric but not high enough); the parser unit tests + the scaler unit tests pin the contract so a future demo lift unlocks the cast test without engine changes.
+
+### Added
+- `app/content/spell_upcast_parse.py` — `_PER_SLOT_FLAT` regex; new public `scale_flat_for_upcast(base, per_flat, extra)` helper that handles "70" + 10×N, "1d4+4" + 5×N, and "1d8" + 5×N base shapes (unparseable bases like "1d8+1d6" are no-ops, never mis-scaled).
+- `tests/harness/test_spell_upcast_parser.py` — `test_parses_flat_healing_aid` / `test_parses_flat_healing_heal` / `test_parses_flat_healing_false_life` pin the parser; `test_flat_does_not_match_dice_clause` is a regression guard so a dice clause never surfaces its internal digit as a flat per-slot value. Plus 4 scaler tests: `test_flat_scaler_pure_flat_base`, `test_flat_scaler_dice_plus_flat_base`, `test_flat_scaler_pure_dice_base`, `test_flat_scaler_base_unchanged_on_no_op`.
+
+### Changed
+- `app/content/spell_upcast_parse.py` — `parse_upcast_dice` now tries (in order) per-two-dice → per-1-dice → flat. `_classify_heal_or_damage` searches the full clause so False Life's trailing "hit points" routes correctly.
+- `app/routes/tabletop_routes.py` — `/cast_spell` reads `flat_damage_per_slot` / `flat_healing_per_slot` from action / spell-top / parser, applies `_scale_flat_for_upcast` after the existing dice scaler in the same loop. Payload-level fallback paths (`spell_damage` / `spell_healing`) get the same routing.
+- `app/data/local/dnd5e/spells/heal.json` — modeled the previously-blank action `healing: "70"` from the SRD desc so the parser-derived `flat_healing_per_slot: 10` has a base to grow. RAW: Heal at L7 → 80 HP, L8 → 90, L9 → 100.
+- `docs/test-harness-coverage.md` — new rows for the 4 parser + 4 scaler tests; running total bumped 2007 → 2015.
+
+### Notes
+- No end-to-end cast test for Heal — no demo PC has an L7+ slot. The parser + scaler unit tests guarantee correctness; the cast harness contract is identical to the v2.110.0 dice path, so a future demo lift (or a homebrew PC at the appropriate level) can land the end-to-end coverage without engine changes. Aid (HP-max-buff) and False Life (temp HP) require their own mechanic wiring (`_install_buff` / `_grant_temp_hp`) and are deferred to follow-up commits. The parser already classifies their prose correctly; the engine just doesn't yet model the mechanic-specific delivery. **Total harness count: 2015** in `tests/harness/` (2007 → 2015); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.129.1] - 2026-06-08 — "Out of Slots" — drop the Flame Blade cast test that hit Mira's slot table
 
 **Schema version:** 69
