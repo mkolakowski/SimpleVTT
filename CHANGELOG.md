@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.139.1] - 2026-06-08 — "Roll Again" — bump the AP halving test retry bound from 5 to 10
+
+**Schema version:** 69
+**Commit summary:** **Test-only follow-up. `test_ap_marked_pc_attacking_third_party_halves_damage` retries Pip's Shortsword swing at Tavik until a hit lands; the v2.138.0 commit bounded retries at 5. Pip's +6 to-hit vs Tavik AC ~18 has ~45% hit chance per swing → P(miss × 5) ≈ 5%, well within "real flake" territory. Bump to 10 → P(miss × 10) ≈ 0.25%, comfortably below noise.**
+**Description:** The test logic is correct; only the retry bound was too low. The `_hit_pip_once` helper used elsewhere retries Krieger's Greataxe (+6 vs Pip AC 14, ~65% hit) which still works at 5. The Pip-vs-Tavik path is harder (Tavik AC ~18) so the same bound under-budgeted. Bumped to 10 + updated the diagnostic message to match.
+
+### Changed
+- `tests/harness/test_ancestral_protectors.py` — `test_ap_marked_pc_attacking_third_party_halves_damage` retries Pip's swing 10 times (was 5); updated the failure message and added a math note explaining the bound choice.
+
+### Notes
+- No engine change. **Total harness count: 2025** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.139.0] - 2026-06-08 — "Held Glance" — Unwavering Mark Phase 1 (install on melee hit)
 
 **Schema version:** 69

@@ -361,9 +361,11 @@ async def test_ap_marked_pc_attacking_third_party_halves_damage(
     assert rr.status_code == 200, rr.text
     await _hit_pip_once(gm_client, gm_ws, krieger, pip_tok)
     # Pip swings at Tavik — retry until a hit lands so we can assert
-    # the post-resistance damage_applied == damage_total // 2.
+    # the post-resistance damage_applied == damage_total // 2. Pip's
+    # Shortsword +6 vs Tavik AC ~18 has ~45% hit; bound to 10 attempts
+    # gives P(miss × 10) ≈ 0.25%.
     pip_hit = None
-    for _ in range(5):
+    for _ in range(10):
         r = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/attack",
             json={"character_id": pip["id"],
@@ -377,7 +379,7 @@ async def test_ap_marked_pc_attacking_third_party_halves_damage(
             pip_hit = d
             break
     assert pip_hit is not None, (
-        "Pip missed Tavik on 5 swings; check fixtures"
+        "Pip missed Tavik on 10 swings; check fixtures"
     )
     # AP halving: damage_applied is half of the rolled damage_total.
     # (Tavik isn't resistant to piercing; any halving here is from AP.)
