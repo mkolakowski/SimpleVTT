@@ -24497,7 +24497,7 @@ def _attacker_has_str_attack_advantage(
 def _attacker_marked_by_ancestral_protectors_vs_other(
     campaign_id: int,
     attacker_char_id: "int | None",
-    target_char_id: "int | None",
+    target_combatant_id: "str | None",
 ) -> bool:
     """v2.137.0 — Phase 1b of Ancestral Protectors (Ancestral Guardian
     Barbarian Lv 3+, XGE p.9): the marked creature has disadvantage on
@@ -24509,12 +24509,23 @@ def _attacker_marked_by_ancestral_protectors_vs_other(
     NPC targets (no char_id) so the protection chain naturally favors
     the marked creature when it swings at a non-PC; v1 simplification
     since the demo's protector is always a PC.
+
+    Looks up both attacker and target combatants from hub state by id
+    (mirrors the `_target_has_elusive` precedent), so callers in
+    /attack can pass the IDs that are already in scope.
     """
     if not attacker_char_id:
         return False
     state = hub.get_battle(campaign_id)
     if not state:
         return False
+    target_char_id = None
+    if target_combatant_id:
+        for c in state.get("combatants") or []:
+            if c.get("id") == target_combatant_id:
+                _tcid = c.get("char_id")
+                target_char_id = int(_tcid) if _tcid else None
+                break
     for c in state.get("combatants") or []:
         if c.get("char_id") != attacker_char_id:
             continue
@@ -72884,8 +72895,7 @@ async def use_attack(
         # them). Reads the attacker's combatant buffs for the mark
         # installed at the v2.136.0 post-hit hook.
         _ap_marked_vs_other = _attacker_marked_by_ancestral_protectors_vs_other(
-            campaign_id, char.id,
-            int((target_combatant or {}).get("char_id") or 0) or None,
+            campaign_id, char.id, target_combatant_id,
         )
         has_dis = (
             target_dodging or target_pfeag_blocks_type
@@ -72979,8 +72989,7 @@ async def use_attack(
         # them). Reads the attacker's combatant buffs for the mark
         # installed at the v2.136.0 post-hit hook.
         _ap_marked_vs_other = _attacker_marked_by_ancestral_protectors_vs_other(
-            campaign_id, char.id,
-            int((target_combatant or {}).get("char_id") or 0) or None,
+            campaign_id, char.id, target_combatant_id,
         )
         has_dis = (
             target_dodging or target_pfeag_blocks_type

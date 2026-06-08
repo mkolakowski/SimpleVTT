@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.137.1] - 2026-06-08 — "Look It Up" — fix the AP Phase 1b helper that read an unbound `target_combatant`
+
+**Schema version:** 69
+**Commit summary:** **Bug fix: `_attacker_marked_by_ancestral_protectors_vs_other` was wired into `/attack`'s adv/dis layering passing `target_combatant.get("char_id")`, but `target_combatant` is never bound in `/attack`'s scope — only `target_combatant_id`. The 500 cascade broke ALL `/attack` calls (including Krieger's hit-on-Pip install test, which never reaches its install hook). Updated the helper signature to take `target_combatant_id` and look up the char_id internally (mirrors the `_target_has_elusive` precedent).**
+**Description:** v2.137.0 shipped with a real bug: the new helper expected `target_combatant: dict | None` but the call sites passed `(target_combatant or {}).get("char_id")` where `target_combatant` was never assigned in `/attack`'s scope (only `target_combatant_id`). The result: `UnboundLocalError` on every `/attack` call → 500 → harness goes red. Confirmed via container logs (`docker logs simplevtt-app`): `cannot access local variable 'target_combatant' where it is not associated with a value`. Fix: refactor the helper to take `target_combatant_id` and resolve the target's `char_id` via the existing hub-state combatant scan — same pattern as `_target_has_elusive`. Both `/attack` adv/dis call sites (bonused + bonusless branches) updated to pass `target_combatant_id` directly. All 6 Ancestral Protectors tests pass once redeployed.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_attacker_marked_by_ancestral_protectors_vs_other(...)` signature now takes `target_combatant_id: str | None`; resolves target's char_id via a hub-state scan. Both call sites in `/attack`'s adv/dis layering simplified to `(campaign_id, char.id, target_combatant_id)`.
+
+### Notes
+- No engine-contract change to the v2.137.0 behavior; the helper's return semantics are identical (the docstring is unchanged on the logic side). **Total harness count: 2023** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). v2.137.0 was effectively broken on every /attack call between deploy and this fix.
+
+---
+
 ## [2.137.0] - 2026-06-08 — "Crossed Sights" — Ancestral Protectors Phase 1b (disadvantage gate)
 
 **Schema version:** 69
