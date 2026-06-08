@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.136.1] - 2026-06-08 — "Try Again" — retry-on-miss in the Ancestral Protectors install test
+
+**Schema version:** 69
+**Commit summary:** **Test-only follow-up to v2.136.0. The new `test_ap_install_on_raging_hit` swings Krieger's Greataxe (+6 to hit) at Pip (AC ~14) once; on a miss the install hook doesn't fire (no buff, no `battle_update`), and the test fails. Real flake hit on a fresh container. Wrap the swing in a 5-retry loop that breaks on `r.json()["hit"] is True`; >99.5% chance of at least one hit across 5 attempts.**
+**Description:** The v2.136.0 commit's test swung once. The Greataxe's +6 to-hit vs Pip's AC has a real miss chance per d20 roll; running against a fresh container I saw a single-swing miss → no install → no `battle_update` → test fails. The retry loop preserves the assertion semantics (still pins the install + buff shape on a real hit) while making the test resilient to RNG. 5 tries with ~65% hit chance per try gives >99.5% chance of at least one hit; if all 5 miss the test fails loudly with a "very unlikely — check the test fixtures" message so a future demo fixture change that breaks the gate doesn't masquerade as flakiness.
+
+### Changed
+- `tests/harness/test_ancestral_protectors.py` — `test_ap_install_on_raging_hit` wraps the `/attack` call in a 5-iteration retry loop; the buff assertions run only on the iteration that lands a hit. The `gm_ws.mark()` call moves inside the loop so each attempt's WS state is fresh.
+
+### Notes
+- No code change to the AP install hook or the announce endpoint. **Total harness count: 2021** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.136.0] - 2026-06-08 — "Spirit Mark" — Ancestral Protectors Phase 1 (install on hit)
 
 **Schema version:** 69

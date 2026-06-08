@@ -150,22 +150,32 @@ async def test_ap_install_on_raging_hit(
         json={"character_id": krieger["id"], "override": True},
     )
     assert rr.status_code == 200, rr.text
-    # Now Krieger swings his Greataxe at Pip. Use +50 to guarantee hit.
-    gm_ws.mark()
-    r = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/attack",
-        json={"character_id": krieger["id"],
-              "attack_index": 0,
-              "target_combatant_id": pip_tok,
-              "override": True},
+    # Krieger swings Greataxe at Pip — retry until a hit lands (the
+    # default Krieger to-hit +6 vs Pip's AC has a real miss chance per
+    # roll; 5 tries gives >99.5% chance of at least one hit).
+    hit_resp = None
+    for _ in range(5):
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": krieger["id"],
+                  "attack_index": 0,
+                  "target_combatant_id": pip_tok,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit") is True:
+            hit_resp = r.json()
+            break
+    assert hit_resp is not None, (
+        "Krieger's Greataxe missed Pip on 5 consecutive swings "
+        "(very unlikely; check the test fixtures)"
     )
-    assert r.status_code == 200, r.text
-    # The /attack broadcast should carry feature_used for ancestral-
-    # protectors (the install side-effect). Read the buffered
-    # battle_update broadcasts and confirm Pip has the mark.
+    # On a hit the install hook fires + broadcasts battle_update
+    # (the install path of `_install_buff_on_combatant_id`).
     await asyncio.sleep(0.3)
     bus = gm_ws.buffered("battle_update")
-    assert bus, "no battle_update broadcast received after attack"
+    assert bus, "no battle_update broadcast received after Krieger's hit"
     combs = {c.get("id"): c for c in (bus[-1]["data"].get("combatants") or [])}
     pip_cb = combs.get(pip_tok)
     assert pip_cb is not None, (
@@ -177,7 +187,7 @@ async def test_ap_install_on_raging_hit(
         None,
     )
     assert mark_buff is not None, (
-        f"mark buff missing from Pip after hit; got buffs="
+        f"mark buff missing from Pip after Krieger's hit; got buffs="
         f"{pip_cb.get('buffs')}"
     )
     effects = mark_buff.get("effects") or {}
