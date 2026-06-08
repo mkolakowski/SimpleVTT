@@ -1382,6 +1382,228 @@ async def test_use_protective_field_reduces_damage(
     assert int(last.get("applied") or 0) >= 1
 
 
+# ── v2.119.0 — Phase 7: Riposte (Battle Master) on a missed attack ──
+
+
+@pytest_asyncio.fixture
+async def garrik_riposte_bm(gm_client, roster):
+    """Garrik patched into Battle Master (Lv 9) with a full Superiority
+    Dice pool so a missed attack offers Riposte. Restore-safe: snapshots
+    subclass + level + resources via sheet-json and restores in finally
+    (no hardcoded `{"subclass": "Champion", "resources": []}` reset)."""
+    garrik = roster["Garrik Ironside"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-json",
+    )
+    orig = (snap.json() or {}).get("sheet") or {}
+    orig_subclass = orig.get("subclass")
+    orig_level = orig.get("level")
+    orig_resources = orig.get("resources") or []
+    await _patch_sheet_pf(
+        gm_client, garrik["id"],
+        {
+            "subclass": "Battle Master",
+            "level": 9,
+            "superiority_die_size": "d8",
+            "resources": [{
+                "key": "superiority-dice", "name": "Superiority Dice",
+                "current": 4, "max": 4, "reset": "short",
+                "source": "fighter Lv 3 / Combat Superiority",
+                "class_slug": "fighter", "manual": False,
+            }],
+        },
+        class_slug="fighter",
+    )
+    try:
+        yield garrik
+    finally:
+        restore = {"resources": orig_resources}
+        if orig_subclass is not None:
+            restore["subclass"] = orig_subclass
+        if orig_level is not None:
+            restore["level"] = orig_level
+        await _patch_sheet_pf(
+            gm_client, garrik["id"], restore, class_slug="fighter",
+        )
+
+
+async def test_riposte_prompt_fires_on_missed_attack(
+    gm_client, gm_ws, garrik_riposte_bm, roster,
+):
+    """v2.119.0 — when a PC attack MISSES a Battle Master who has a free
+    reaction + a Superiority Die, a `reaction_prompt(attack_missed)`
+    fires with a `use-riposte:{idx}` option. Krieger swings on Garrik
+    (patched Battle Master) until a MISS lands.
+    """
+    garrik = garrik_riposte_bm
+    krieger = roster["Krieger Stonefist"]
+
+    garrik_cid = f"tok_ri_{garrik['id']}"
+    krieger_cid = f"tok_ri_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": krieger_cid, "char_id": krieger["id"],
+            "name": krieger["name"], "initiative": 12,
+            "hp_current": 75, "hp_max": 75, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+        {
+            "id": garrik_cid, "char_id": garrik["id"],
+            "name": garrik["name"], "initiative": 10,
+            "hp_current": 80, "hp_max": 80, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(30):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": garrik_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit") is False:
+            break
+    else:
+        raise AssertionError("no miss landed in 30 swings")
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_missed"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(attack_missed) for Garrik; buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    options = prompts[0]["data"].get("options", []) or []
+    ri_keys = [
+        o.get("key") for o in options
+        if (o.get("key") or "").startswith("use-riposte:")
+    ]
+    assert ri_keys, f"expected a use-riposte:{{idx}} option; got {[o.get('key') for o in options]}"
+    ri_opt = next(o for o in options if o.get("key") == ri_keys[0])
+    params = ri_opt.get("params") or {}
+    assert params.get("target_combatant_id") == krieger_cid
+    assert params.get("die_size") == "d8"
+
+
+async def test_use_riposte_resolves_counter_attack(
+    gm_client, gm_ws, garrik_riposte_bm, roster,
+):
+    """End-to-end: Krieger misses Garrik (Battle Master) → prompt fires
+    → POST /use_reaction with the use-riposte:{idx} key → reaction flips
+    + a Superiority Die is spent (resource_update 4 → 3) +
+    feature_used(source=riposte) names the counter-attack.
+    """
+    garrik = garrik_riposte_bm
+    krieger = roster["Krieger Stonefist"]
+
+    garrik_cid = f"tok_ri2_{garrik['id']}"
+    krieger_cid = f"tok_ri2_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": krieger_cid, "char_id": krieger["id"],
+            "name": krieger["name"], "initiative": 12,
+            "hp_current": 75, "hp_max": 75, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+        {
+            "id": garrik_cid, "char_id": garrik["id"],
+            "name": garrik["name"], "initiative": 10,
+            "hp_current": 80, "hp_max": 80, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0},
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(30):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": garrik_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit") is False:
+            break
+    else:
+        raise AssertionError("no miss landed in 30 swings")
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_missed"
+    ]
+    assert prompts, "expected attack_missed prompt for Garrik"
+    prompt = prompts[0]["data"]
+    prompt_id = prompt["prompt_id"]
+    ri_key = next(
+        o["key"] for o in prompt["options"]
+        if (o.get("key") or "").startswith("use-riposte:")
+    )
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": ri_key,
+            "watcher_char_id": garrik["id"],
+        },
+    )
+    assert use.status_code == 200, use.text
+
+    await asyncio.sleep(0.2)
+    # economy_update: Garrik's reaction flips to used.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == garrik["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Garrik's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    # resource_update: a Superiority Die was spent (4 → 3).
+    sd = [
+        m for m in gm_ws.buffered("resource_update")
+        if (m.get("data") or {}).get("character_id") == garrik["id"]
+        and (m.get("data") or {}).get("key") == "superiority-dice"
+    ]
+    assert sd, "expected resource_update for superiority-dice"
+    assert sd[-1]["data"]["current"] == 3
+
+    # feature_used(source=riposte) names the counter-attack.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "riposte"
+        and (m.get("data") or {}).get("character_id") == garrik["id"]
+    ]
+    assert fu, "expected feature_used(source=riposte)"
+    last = fu[-1]["data"]
+    assert last.get("attacked") is True
+    assert int(last.get("extra_damage_on_hit") or 0) >= 1
+    assert last.get("dice_remaining") == 3
+
+
 # ── v2.80.0 — Uncanny Dodge vs Defensive Duelist interaction ──
 
 

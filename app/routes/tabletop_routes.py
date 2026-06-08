@@ -4526,6 +4526,32 @@ def _pc_has_counterspell_available(char) -> "tuple[bool, str, int]":
     return True, best_class, best_lv
 
 
+# v2.119.0 Phase 7 — Riposte (Battle Master Lv 3+). RAW (PHB p.74):
+# "When a creature misses you with a melee attack, you can use your
+# reaction and expend one superiority die to make a melee weapon
+# attack against the creature. If you hit, you add the superiority die
+# to the attack's damage roll." Eligibility mirrors the /use_riposte
+# endpoint gate (Battle Master subclass + a Superiority Die remaining).
+def _pc_has_riposte_available(char) -> "tuple[bool, str, int]":
+    """Return ``(eligible, die_size, dice_remaining)`` for Riposte. A
+    PC is eligible when they're a Battle Master Lv 3+ with at least one
+    Superiority Die left in the ``superiority-dice`` resource."""
+    if not char or not char.sheet:
+        return False, "d8", 0
+    sheet = char.sheet or {}
+    if not _pc_has_battle_master(sheet, 3):
+        return False, "d8", 0
+    remaining = 0
+    for r in (sheet.get("resources") or []):
+        if (r.get("key") or "").lower() == "superiority-dice":
+            remaining = int(r.get("current") or 0)
+            break
+    die_size = (sheet.get("superiority_die_size") or "d8").strip().lower()
+    if die_size not in _SUPERIORITY_DIE_SIZES:
+        die_size = "d8"
+    return remaining >= 1, die_size, remaining
+
+
 def _eligible_reactions(
     db: Session, campaign_id: int, watcher_char_id: int | None,
     trigger_event: str, context: dict,
@@ -5283,6 +5309,52 @@ def _eligible_reactions(
             "available": True,
             "unavailable_reason": None,
         }]
+    # v2.119.0 Phase 7 — Riposte (Battle Master Lv 3+). Fires from the
+    # attack-resolution paths (`/attack`, `/npc_attack`) when an attack
+    # MISSES the watcher. Surfaces one `use-riposte:{idx}` option per
+    # melee weapon (picker, mirroring the OA exit-reach picker) so the
+    # player picks which weapon to counter-attack with. Each option
+    # targets the attacker (carried in context) so the dispatch can
+    # resolve the counter-attack server-side.
+    if trigger_event == "attack_missed":
+        if not watcher_char_id:
+            return []
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+        except Exception:
+            char = None
+        if not char or not char.sheet:
+            return []
+        ri_elig, ri_die, ri_remaining = _pc_has_riposte_available(char)
+        if not ri_elig:
+            return []
+        attacker_combatant_id = context.get("attacker_combatant_id")
+        attacker_name = context.get("attacker_name") or "the attacker"
+        opts: list[dict] = []
+        for idx, atk in _pc_melee_attacks(char):
+            opts.append({
+                "key": f"use-riposte:{idx}",
+                "label": (
+                    f"⚔ Riposte with {atk.get('name') or 'weapon'} "
+                    f"(+1{ri_die} damage on hit, {ri_remaining} "
+                    f"Superiority {'die' if ri_remaining == 1 else 'dice'} left)"
+                ),
+                "kind": "class-feature",
+                "resource_cost": "Reaction + 1 Superiority Die",
+                "params": {
+                    "attack_index": idx,
+                    "attack_name": atk.get("name") or "",
+                    "target_combatant_id": attacker_combatant_id,
+                    "attacker_name": attacker_name,
+                    "die_size": ri_die,
+                    "dice_remaining": ri_remaining,
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+        return opts
     # Phase 2+ extends this stub with class features, spells, feats,
     # and items per the plan doc catalog.
     return []
@@ -21777,6 +21849,156 @@ async def use_reaction(
                     "int_mod": int_mod,
                     "fighter_level": fighter_lv,
                     "applied": applied,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key.startswith("use-riposte:") and watcher_char_id:
+        # v2.119.0 Phase 7 — Riposte. Decrement a Superiority Die,
+        # resolve the counter-attack against the attacker server-side
+        # (roll the chosen melee weapon vs their AC; on a hit apply
+        # weapon damage + the superiority die), mark the reaction, and
+        # broadcast resource_update + feature_used(source=riposte).
+        # Mirrors the /use_riposte endpoint resolution (v2.99.455).
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == reaction_key), None,
+            )
+            params = (matching or {}).get("params") or {}
+            attack_index = int(params.get("attack_index") or 0)
+            target_combatant_id = params.get("target_combatant_id")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            # Decrement a Superiority Die.
+            resources = list(sheet.get("resources") or [])
+            sd_idx, sd_cur, sd_max = -1, 0, 0
+            for i, r in enumerate(resources):
+                if (r.get("key") or "").lower() == "superiority-dice":
+                    sd_idx, sd_cur = i, int(r.get("current") or 0)
+                    sd_max = int(r.get("max") or 0)
+                    break
+            if sd_idx < 0 or sd_cur < 1:
+                return JSONResponse(status_code=409, content={
+                    "error": "out_of_uses", "label": "Superiority Dice",
+                })
+            new_sd = sd_cur - 1
+            resources[sd_idx] = {**resources[sd_idx], "current": new_sd}
+            sheet["resources"] = resources
+            from sqlalchemy.orm.attributes import flag_modified
+            watcher_char.sheet = sheet
+            flag_modified(watcher_char, "sheet")
+            db.commit()
+            die_size = (sheet.get("superiority_die_size") or "d8").strip().lower()
+            if die_size not in _SUPERIORITY_DIE_SIZES:
+                die_size = "d8"
+            try:
+                extra = int(dice_mod.roll(f"1{die_size}").total)
+            except Exception:
+                extra = 1
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "key": "superiority-dice",
+                    "current": new_sd, "max": sd_max,
+                },
+            })
+            # Resolve the counter-attack against the missing attacker.
+            attacked = False
+            hit = False
+            crit = False
+            attack_total = 0
+            target_ac = 0
+            damage_rolled = 0
+            damage_applied = 0
+            damage_type = ""
+            target_combatant = (
+                _lookup_combatant(campaign_id, str(target_combatant_id))
+                if target_combatant_id else None
+            )
+            attacks = list(sheet.get("attacks") or [])
+            if target_combatant and 0 <= attack_index < len(attacks):
+                weapon = attacks[attack_index] or {}
+                try:
+                    atk_bonus = int(
+                        str(weapon.get("attack_bonus") or "0")
+                        .replace("+", "").strip() or 0)
+                except (TypeError, ValueError):
+                    atk_bonus = 0
+                dmg_expr = str(weapon.get("damage") or "1d4")
+                damage_type = str(weapon.get("damage_type") or "")
+                target_ac = _read_target_ac(db, campaign_id, target_combatant)
+                attacked = True
+                try:
+                    _ar = dice_mod.roll(f"1d20{atk_bonus:+d}")
+                    attack_total, _abd = int(_ar.total), _ar.breakdown
+                except dice_mod.DiceParseError:
+                    attack_total, _abd = 0, ""
+                _nat_m = _re.search(r"\[(\d+)\]", _abd)
+                nat = (
+                    int(_nat_m.group(1)) if _nat_m
+                    else (attack_total - atk_bonus)
+                )
+                if nat == 20:
+                    hit, crit = True, True
+                elif nat == 1:
+                    hit, crit = False, False
+                else:
+                    hit, crit = (attack_total >= target_ac), False
+                if hit:
+                    w_expr = _double_dice_for_crit(dmg_expr) if crit else dmg_expr
+                    try:
+                        w_dmg = max(0, int(dice_mod.roll(w_expr).total))
+                    except dice_mod.DiceParseError:
+                        w_dmg = 0
+                    damage_rolled = w_dmg + int(extra)
+                    if damage_rolled > 0:
+                        _res = await _apply_damage_to_combatant(
+                            db, campaign_id, target_combatant, damage_rolled,
+                            damage_type, is_crit=crit, is_attack=True,
+                            attacker_char_id=int(watcher_char_id),
+                        )
+                        damage_applied = int(_res.get("applied") or 0)
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": (
+                        f"⚔ Riposte — counter-attack +{extra} damage on hit"
+                    ),
+                    "feature_desc": (
+                        f"Reaction. {watcher_char.name} ripostes the missed "
+                        f"attack with a melee swing"
+                        + (
+                            f" — {'HIT' if hit else 'MISS'} "
+                            f"(d20 {attack_total} vs AC {target_ac})"
+                            if attacked else ""
+                        )
+                        + f". +{extra} ({die_size}) damage on hit. "
+                        f"{new_sd}/{sd_max} Superiority Dice left."
+                    ),
+                    "source": "riposte",
+                    "reaction_kind": "class-feature",
+                    "extra_damage_on_hit": extra,
+                    "die_size": die_size,
+                    "dice_remaining": new_sd,
+                    "attacked": attacked,
+                    "hit": hit,
+                    "damage_rolled": damage_rolled,
+                    "damage_applied": damage_applied,
+                    "damage_type": damage_type,
                 },
             })
         except HTTPException:
@@ -72891,6 +73113,43 @@ async def use_attack(
                     )
     except Exception:
         pass
+    # v2.119.0 Phase 7 — Riposte. When this PC attack MISSES a target
+    # who is a Battle Master with a free reaction + a Superiority Die,
+    # emit `attack_missed` so they can counter-attack. The attacker
+    # (this PC) is the riposte target — resolve its combatant id from
+    # the live battle so the dispatch can swing back at it.
+    try:
+        if hit is False and target_combatant_id:
+            target_cb = _lookup_combatant(campaign_id, target_combatant_id)
+            if target_cb is not None and target_cb.get("char_id"):
+                _t_econ = (target_cb.get("economy") or {})
+                if not bool(_t_econ.get("reaction")):
+                    _atkr_cid = ""
+                    _state = hub.get_battle(campaign_id) or {}
+                    for _c in (_state.get("combatants") or []):
+                        if _c.get("char_id") == char.id:
+                            _atkr_cid = _c.get("id") or ""
+                            break
+                    await _emit_reaction_prompt(
+                        db, campaign, target_cb,
+                        trigger_event="attack_missed",
+                        summary=(
+                            f"{char.name} MISSED {target_cb.get('name') or 'you'} "
+                            f"with {name} (d20 total {attack_total} vs AC "
+                            f"{target_ac or '?'})."
+                        ),
+                        context={
+                            "attack_id": attack_id,
+                            "attack_total": attack_total,
+                            "target_ac": target_ac,
+                            "attacker_char_id": char.id,
+                            "attacker_name": char.name,
+                            "attacker_combatant_id": _atkr_cid,
+                            "attack_name": name,
+                        },
+                    )
+    except Exception:
+        pass
     # Return the attack + damage totals so the sheet's .atk-strike handler can
     # fire the shared roll-toast immediately. The broadcast still drives the
     # tabletop's roll-card path; this echo gives the rolling player a popup
@@ -73426,6 +73685,34 @@ async def use_npc_attack(
         )
     except Exception:
         _sentinel_triggers_for_response = []
+    # v2.119.0 Phase 7 — Riposte. When this NPC attack MISSES a PC who
+    # is a Battle Master with a free reaction + a Superiority Die, emit
+    # `attack_missed` so the PC can counter-attack the NPC. The NPC
+    # attacker (combatant_id) is the riposte target.
+    try:
+        if hit is False and target_combatant and target_combatant.get("char_id"):
+            _t_econ = (target_combatant.get("economy") or {})
+            if not bool(_t_econ.get("reaction")):
+                await _emit_reaction_prompt(
+                    db, campaign, target_combatant,
+                    trigger_event="attack_missed",
+                    summary=(
+                        f"{attacker_name} MISSED "
+                        f"{target_combatant.get('name') or 'you'} with "
+                        f"{action_name} (d20 total {attack_total} vs AC "
+                        f"{target_ac or '?'})."
+                    ),
+                    context={
+                        "attack_id": attack_id,
+                        "attack_total": attack_total,
+                        "target_ac": target_ac,
+                        "attacker_combatant_id": combatant_id,
+                        "attacker_name": attacker_name,
+                        "attack_name": action_name,
+                    },
+                )
+    except Exception:
+        pass
     return {
         "ok": True,
         "id": attack_id,

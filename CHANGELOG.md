@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.119.0] - 2026-06-08 — "Riposte Reflex" — a missed attack now prompts the Battle Master to counter
+
+**Schema version:** 69
+**Commit summary:** **Adds a new `attack_missed` reaction trigger and wires the Battle Master's Riposte into the proactive reaction-prompt framework: when an attack (PC via `/attack` or NPC via `/npc_attack`) MISSES a Battle Master who has a free reaction + a Superiority Die, they get a one-click prompt to counter-attack the attacker. The dispatch resolves the swing server-side (rolls the chosen melee weapon vs the attacker's AC, adds the Superiority Die to damage on a hit, spends the die + reaction).**
+**Description:** Phase 7 ("reactions breadth") of the [full-feature-automation](docs/plans/full-feature-automation.md) backlog, on the [reactions-automation](docs/plans/reactions-automation.md) framework — the headline item ("Riposte: attack after a miss"). The `/use_riposte` endpoint already resolved a counter-attack (v2.99.455), but it was only reachable by manual invocation — and there was no `attack_missed` event at all (the framework only fired `attack_targeted` *before* the d20). This commit adds the trigger: both attack-resolution paths now emit `attack_missed` on a miss against a PC Battle Master (with a free reaction), `_eligible_reactions["attack_missed"]` surfaces one `use-riposte:{idx}` option per melee weapon (picker, like the OA exit-reach picker), and a matching `/use_reaction` dispatch spends the die, rolls the counter-attack, applies damage on a hit, and broadcasts `feature_used(source=riposte)` + `resource_update`.
+
+### Added
+- `app/routes/tabletop_routes.py` — `attack_missed` trigger emitted from `/attack` (PC misses a PC) and `/npc_attack` (NPC misses a PC); `_pc_has_riposte_available` helper; `_eligible_reactions["attack_missed"]` Riposte picker branch; `use-riposte:{idx}` dispatch in `/use_reaction` (spends a Superiority Die, resolves the counter-attack, applies damage + the die on a hit).
+- `tests/harness/test_reaction_prompt.py` — `garrik_riposte_bm` restore-safe Battle Master fixture + `test_riposte_prompt_fires_on_missed_attack` (option surfaces targeting the attacker, d8 die) + `test_use_riposte_resolves_counter_attack` (reaction flips, Superiority Die spent 4→3, `feature_used(source=riposte)` names the counter-attack).
+
+### Notes
+- The new `attack_missed` trigger is general-purpose — future "on a miss" reactions can listen on it. v1 wires only Riposte. The standalone `/use_riposte` endpoint stays (GM-driven / off-prompt use).
+- **Total harness count: 1979** in `tests/harness/` (1977 → 1979); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.118.1] - 2026-06-08 — "Pick Your Swing" — OA reaction tests follow the attack picker
 
 **Schema version:** 69
