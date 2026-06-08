@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.140.0] - 2026-06-08 — "Held Close" — Unwavering Mark Phase 1b (5-ft disadvantage gate)
+
+**Schema version:** 69
+**Commit summary:** **Wires the disadvantage half of Unwavering Mark (Cavalier Fighter Lv 3+, XGE p.13): "While it is within 5 feet of you, a creature marked by you has disadvantage on any attack roll that doesn't target you." Adds `_attacker_marked_by_unwavering_mark_within_5ft_vs_other` (new helper paralleling AP Phase 1b but with a `_distance_ft_between_chars` 5-ft proximity gate). Both `/attack` adv/dis branches read the new source. `roll_state_applied` carries `"disadvantage_unwavering_mark_vs_other"`. Swings AT the Cavalier or by a marked creature >5 ft away both skip the gate per RAW.**
+**Description:** Builds directly on v2.139.0's install hook. The helper scans the attacker's combatant buffs for the UM mark, reads the `cavalier_char_id` field, and gates on (a) the new target's char_id != cavalier_char_id (skip when swinging at the marker per RAW "doesn't target you"), AND (b) `_distance_ft_between_chars(db, campaign_id, attacker_char_id, cavalier_char_id) <= 5.0` (the proximity gate that distinguishes UM from AP — AP has no range gate). Both `/attack` adv/dis branches (bonused + bonusless) fold the new source into `has_dis` alongside the existing AP gate; `dis_label` adds `"unwavering_mark_vs_other"`. The helper takes `db` (mirrors the audit's note on `_distance_ft_between_chars` requiring DB access for token lookups) — threaded as the first arg so the call shape stays close to the AP variant.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_attacker_marked_by_unwavering_mark_within_5ft_vs_other(db, campaign_id, attacker_char_id, target_combatant_id)` helper near the AP sibling.
+- `tests/harness/test_unwavering_mark.py` — `test_um_marked_within_5ft_swing_at_third_party_has_disadvantage`: place Garrik + Pip co-located at (700, 700), seed three-PC battle with Tavik, Garrik hits Pip → mark lands → Pip swings at Tavik → asserts `2d20kl1` + `roll_state_applied == "disadvantage_unwavering_mark_vs_other"`. `test_um_marked_swing_at_cavalier_no_disadvantage`: same setup but Pip swings AT Garrik → asserts the UM gate stays silent. Both use a 10-bound retry helper for Garrik's install swing.
+
+### Changed
+- `app/routes/tabletop_routes.py` — both `/attack` adv/dis branches fold `_um_marked_vs_other` into `has_dis`; `dis_label` adds `"unwavering_mark_vs_other"`.
+- `docs/test-harness-coverage.md` — running total bumped 2025 → 2027.
+
+### Notes
+- Phase 2 (bonus-action punish attack when the marked creature damages an ally) remains the final UM piece — a new `/use_punish_attack`-style endpoint that mirrors Riposte's (v2.119.0) bonus-melee shape with advantage + half-fighter-level extra damage. Filed. **Total harness count: 2027** in `tests/harness/` (2025 → 2027); **`tests/harness_ui/` 19** (unchanged). A future proximity-failed test would extend the suite (Pip placed >5 ft from Garrik → UM gate doesn't fire); the v1 positive + Cavalier-swing tests already pin the two RAW conditions (marker-id + range). Filed.
+
+---
+
 ## [2.139.1] - 2026-06-08 — "Roll Again" — bump the AP halving test retry bound from 5 to 10
 
 **Schema version:** 69

@@ -24514,6 +24514,61 @@ def _attacker_has_str_attack_advantage(
     return False
 
 
+def _attacker_marked_by_unwavering_mark_within_5ft_vs_other(
+    db,
+    campaign_id: int,
+    attacker_char_id: "int | None",
+    target_combatant_id: "str | None",
+) -> bool:
+    """v2.140.0 — Phase 1b of Unwavering Mark (Cavalier Fighter Lv 3+,
+    XGE p.13): "While it is within 5 feet of you, a creature marked by
+    you has disadvantage on any attack roll that doesn't target you."
+    Reads the attacker's combatant buffs for the UM mark + checks (a)
+    the new target's char_id != the buff's `cavalier_char_id` AND (b)
+    the attacker (the marked creature) is within 5 ft of the Cavalier.
+
+    Different from AP Phase 1b (v2.137.0) in two ways: the range gate
+    fires here (UM only disadvantages within 5 ft of the marker), and
+    the buff's marker-id field is `unwavering_mark_cavalier_char_id`
+    (vs AP's `ancestral_protectors_protected_char_id`). Mirrors the
+    AP helper otherwise so the call shape at /attack stays uniform.
+    """
+    if not attacker_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    target_char_id = None
+    attacker_combatant = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == attacker_char_id:
+            attacker_combatant = c
+        if target_combatant_id and c.get("id") == target_combatant_id:
+            _tcid = c.get("char_id")
+            target_char_id = int(_tcid) if _tcid else None
+    if attacker_combatant is None:
+        return False
+    for b in (attacker_combatant.get("buffs") or []):
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects") or {}
+        cav_id = effects.get("unwavering_mark_cavalier_char_id")
+        if not cav_id:
+            continue
+        cav_id_i = int(cav_id)
+        # RAW: "doesn't target you" — swinging at the Cavalier is fine.
+        if target_char_id is not None and target_char_id == cav_id_i:
+            continue
+        # RAW range gate: marked creature within 5 ft of the Cavalier.
+        dist = _distance_ft_between_chars(
+            db, campaign_id, int(attacker_char_id), cav_id_i,
+        )
+        if dist is None or dist > 5.0:
+            continue
+        return True
+    return False
+
+
 def _attacker_marked_by_ancestral_protectors_vs_other(
     campaign_id: int,
     attacker_char_id: "int | None",
@@ -72979,15 +73034,24 @@ async def use_attack(
         _ap_marked_vs_other = _attacker_marked_by_ancestral_protectors_vs_other(
             campaign_id, char.id, target_combatant_id,
         )
+        # v2.140.0 — Unwavering Mark Phase 1b: marked creature within 5
+        # ft of the Cavalier has disadvantage on attacks against non-
+        # Cavalier targets. Reads the v2.139.0 install + the 5-ft
+        # proximity gate via `_distance_ft_between_chars`.
+        _um_marked_vs_other = _attacker_marked_by_unwavering_mark_within_5ft_vs_other(
+            db, campaign_id, char.id, target_combatant_id,
+        )
         has_dis = (
             target_dodging or target_pfeag_blocks_type
             or _attacker_cant_see or _ap_marked_vs_other
+            or _um_marked_vs_other
         )
         dis_label = (
             "dodging" if target_dodging else
             "pfeag" if target_pfeag_blocks_type else
             "cant_see" if _attacker_cant_see else
-            "ancestral_protectors_vs_other" if _ap_marked_vs_other else ""
+            "ancestral_protectors_vs_other" if _ap_marked_vs_other else
+            "unwavering_mark_vs_other" if _um_marked_vs_other else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -73073,15 +73137,24 @@ async def use_attack(
         _ap_marked_vs_other = _attacker_marked_by_ancestral_protectors_vs_other(
             campaign_id, char.id, target_combatant_id,
         )
+        # v2.140.0 — Unwavering Mark Phase 1b: marked creature within 5
+        # ft of the Cavalier has disadvantage on attacks against non-
+        # Cavalier targets. Reads the v2.139.0 install + the 5-ft
+        # proximity gate via `_distance_ft_between_chars`.
+        _um_marked_vs_other = _attacker_marked_by_unwavering_mark_within_5ft_vs_other(
+            db, campaign_id, char.id, target_combatant_id,
+        )
         has_dis = (
             target_dodging or target_pfeag_blocks_type
             or _attacker_cant_see or _ap_marked_vs_other
+            or _um_marked_vs_other
         )
         dis_label = (
             "dodging" if target_dodging else
             "pfeag" if target_pfeag_blocks_type else
             "cant_see" if _attacker_cant_see else
-            "ancestral_protectors_vs_other" if _ap_marked_vs_other else ""
+            "ancestral_protectors_vs_other" if _ap_marked_vs_other else
+            "unwavering_mark_vs_other" if _um_marked_vs_other else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"

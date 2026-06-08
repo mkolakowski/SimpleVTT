@@ -182,3 +182,108 @@ async def test_um_install_on_melee_hit(
         "unwavering_mark_cavalier_char_id") or 0) == int(garrik["id"]), (
         f"UM buff should point at Garrik's char_id; got effects={effects}"
     )
+
+
+async def _place_token(gm_client, char_id, x, y):
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/place-token",
+        json={"x": float(x), "y": float(y)},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def _seed_three_pc_battle_um(gm_client, garrik, pip, tavik):
+    """Garrik, Pip, Tavik in init for Phase 1b tests."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(f"tok_um_g_{garrik['id']}", garrik),
+            _pc(f"tok_um_p_{pip['id']}", pip),
+            _pc(f"tok_um_t_{tavik['id']}", tavik),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+
+
+async def _land_um_mark_on_pip(gm_client, gm_ws, garrik, pip_tok):
+    """Garrik swings Greatsword at Pip until a hit lands. Retries
+    bound to 10 (Garrik +6 vs Pip AC ~14 → ~65% per swing)."""
+    for _ in range(10):
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": garrik["id"],
+                  "attack_index": 0,
+                  "target_combatant_id": pip_tok,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit") is True:
+            return
+    raise AssertionError("Garrik missed Pip on 10 swings; check fixtures")
+
+
+async def test_um_marked_within_5ft_swing_at_third_party_has_disadvantage(
+    gm_client, gm_ws, garrik_cavalier, roster,
+):
+    """v2.140.0 — Phase 1b: once Pip carries the UM mark from Garrik's
+    melee hit AND Pip is within 5 ft of Garrik, Pip's next attack at
+    Tavik (a non-Cavalier) gets `disadvantage_unwavering_mark_vs_other`
+    + 2d20kl1 in the breakdown. Tokens co-located at (700, 700) so
+    `_distance_ft_between_chars` returns 0 < 5 → gate fires."""
+    garrik = garrik_cavalier
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    pip_tok = f"tok_um_p_{pip['id']}"
+    tav_tok = f"tok_um_t_{tavik['id']}"
+    await _place_token(gm_client, garrik["id"], 700.0, 700.0)
+    await _place_token(gm_client, pip["id"], 700.0, 700.0)
+    await _place_token(gm_client, tavik["id"], 800.0, 800.0)
+    await _seed_three_pc_battle_um(gm_client, garrik, pip, tavik)
+    await _land_um_mark_on_pip(gm_client, gm_ws, garrik, pip_tok)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={"character_id": pip["id"],
+              "attack_index": 0,
+              "target_combatant_id": tav_tok,
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "2d20kl1" in (data.get("attack_breakdown") or ""), (
+        f"UM mark within 5 ft should produce 2d20kl1; got "
+        f"{data.get('attack_breakdown')!r}"
+    )
+    assert data.get("roll_state_applied") == "disadvantage_unwavering_mark_vs_other", (
+        f"roll_state_applied mismatch; got {data.get('roll_state_applied')!r}"
+    )
+
+
+async def test_um_marked_swing_at_cavalier_no_disadvantage(
+    gm_client, gm_ws, garrik_cavalier, roster,
+):
+    """v2.140.0 — Phase 1b complement: marked Pip swings AT the
+    Cavalier (Garrik). RAW: "doesn't target you" — gate is silent."""
+    garrik = garrik_cavalier
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+    gar_tok = f"tok_um_g_{garrik['id']}"
+    pip_tok = f"tok_um_p_{pip['id']}"
+    await _place_token(gm_client, garrik["id"], 700.0, 700.0)
+    await _place_token(gm_client, pip["id"], 700.0, 700.0)
+    await _place_token(gm_client, tavik["id"], 800.0, 800.0)
+    await _seed_three_pc_battle_um(gm_client, garrik, pip, tavik)
+    await _land_um_mark_on_pip(gm_client, gm_ws, garrik, pip_tok)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={"character_id": pip["id"],
+              "attack_index": 0,
+              "target_combatant_id": gar_tok,
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    label = data.get("roll_state_applied") or ""
+    assert "unwavering_mark_vs_other" not in label, (
+        f"UM gate must not fire vs the Cavalier; "
+        f"roll_state_applied={label!r}"
+    )
