@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.149.0] - 2026-06-08 — "Closing In" — Relentless Avenger installs a free-move budget (Vengeance Paladin Lv 7+)
+
+**Schema version:** 69
+**Commit summary:** **Wires Relentless Avenger (Vengeance Paladin Lv 7+, PHB p.88) Phase 1: when `/use_relentless_avenger` is called in an active battle, install a 1-round `relentless-avenger-bonus-move` buff on the Paladin carrying both `effects.free_movement_remaining_ft = base_speed // 2` AND `effects.oa_immune_during_move: True`. Phase 2 (deferred) will consume the budget on the next `/token/move` call and skip OA prompts while the OA-immune flag is set. Phase 1 makes the budget exist end-to-end so Phase 2 has something to read.**
+**Description:** RAW XGE: "When you hit a creature with an opportunity attack, you can move up to half your speed immediately after the attack and as part of the same reaction. This movement doesn't provoke opportunity attacks." Phase 1 ships the buff carrying both halves of the mechanic: the half-speed allowance + the OA-immunity flag. The player calls the endpoint after a successful OA (RAW trigger — GM-adjudicated until Phase 1b auto-fires this from the OA flow). Phase 2 — the movement system reading the buff — is the next slice; it'd decrement `free_movement_remaining_ft` per ft moved AND skip the OA prompt while `oa_immune_during_move` is set. Mirrors the v2.99.459 Stormborn + v2.147.0 Ascendant Step install patterns + the v2.148.0 Fancy Footwork mark-creation pattern. Caelan at his default Lv 7 + base speed 30 ft → 15 ft bonus move.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/use_relentless_avenger` installs a `relentless-avenger-bonus-move` buff via `_install_buff` after the existing subclass gate. Buff effects: `free_movement_remaining_ft: int` + `oa_immune_during_move: True`. Response + broadcast now surface `buff_installed: bool`. Mirrors buffs to the sheet via `_mirror_buffs_to_sheet` on a successful install.
+- `tests/harness/test_relentless_avenger.py` — `test_ra_installs_free_move_buff_on_caelan`: PATCH Caelan to Vengeance Lv 7 (existing fixture), seed Caelan in active battle, call endpoint, assert `bonus_move_ft: 15` + `buff_installed: True` + the `buff_update` broadcast shows the buff with the right effects.
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2039 → 2040.
+
+### Notes
+- Phase 2 (deferred): the `/token/move` endpoint reads the `free_movement_remaining_ft` budget on every move and decrements it per ft moved; while the budget is positive AND `oa_immune_during_move` is set, the OA flow's "this token left an enemy's reach" trigger short-circuits to skip the OA prompt. Phase 1b (deferred): auto-install via a hook in the OA flow (the `/attack` post-hit block can detect when `is_opportunity_attack=True` and the attacker is a Vengeance Paladin Lv 7+, and install the buff automatically). Both phases are filed. **Total harness count: 2040** in `tests/harness/` (2039 → 2040); **`tests/harness_ui/` 19** (unchanged). The `free_movement_remaining_ft` + `oa_immune_during_move` effect shape is generic enough to support future "free-move-with-OA-skip" features (Mobile feat, Charger feat, etc.) — filed.
+
+---
+
 ## [2.148.0] - 2026-06-08 — "Slip Away" — Fancy Footwork installs an OA-block buff (Swashbuckler Rogue Lv 3+)
 
 **Schema version:** 69

@@ -119,3 +119,51 @@ async def test_use_ra_level_gate(
             {"subclass": "Oath of Devotion", "level": 7},
             class_slug="paladin",
         )
+
+
+def _pc(cid, c):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": 60, "hp_max": 60, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def test_ra_installs_free_move_buff_on_caelan(
+    gm_client, gm_ws, caelan_vengeance_lv7,
+):
+    """v2.149.0 — Phase 1 mechanical wiring: when Caelan
+    (Vengeance Lv 7+) calls /use_relentless_avenger in an active
+    battle, install a 1-round `relentless-avenger-bonus-move` buff
+    on Caelan carrying both `effects.free_movement_remaining_ft: 15`
+    (half of 30 ft base walking speed) AND
+    `effects.oa_immune_during_move: True`. Verify the `buff_update`
+    broadcast shows the buff with the right effects."""
+    caelan = caelan_vengeance_lv7
+    cael_tok = f"tok_ra_c_{caelan['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [_pc(cael_tok, caelan)],
+              "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_relentless_avenger",
+        json={"character_id": caelan["id"]},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["bonus_move_ft"] == 15      # 30 / 2
+    assert data.get("buff_installed") is True
+    bu = await gm_ws.wait_for("buff_update")
+    buffs = bu["data"]["buffs"]
+    ra_buff = next(
+        (b for b in buffs if b.get("key") == "relentless-avenger-bonus-move"),
+        None,
+    )
+    assert ra_buff is not None, (
+        f"RA buff missing from buff_update; got keys="
+        f"{[b.get('key') for b in buffs]}"
+    )
+    effects = ra_buff.get("effects") or {}
+    assert int(effects.get("free_movement_remaining_ft") or 0) == 15
+    assert effects.get("oa_immune_during_move") is True

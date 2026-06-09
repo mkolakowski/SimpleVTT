@@ -50821,6 +50821,35 @@ async def use_relentless_avenger(
     base_speed = int(sheet.get("speed_walk") or sheet.get("speed") or 30)
     bonus_move_ft = base_speed // 2
 
+    # v2.149.0 — Phase 1 mechanical wiring: install a 1-round
+    # `relentless-avenger-bonus-move` buff carrying both the bonus
+    # movement budget AND the OA-suppression flag. RAW XGE: the move
+    # happens "as part of the same reaction" — Phase 2 (deferred) will
+    # consume the `free_movement_remaining_ft` budget on the next
+    # /token/move call and skip OA prompts while
+    # `oa_immune_during_move` is set. Phase 1 makes the budget exist
+    # end-to-end so Phase 2 has something to read.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "relentless-avenger-bonus-move",
+        "name": "🏃 Relentless Avenger (free move)",
+        "icon": "🏃",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "free_movement_remaining_ft": int(bonus_move_ft),
+            "oa_immune_during_move": True,
+        },
+        "desc": (
+            f"+{bonus_move_ft} ft free movement (half walking speed) "
+            f"that doesn't provoke OAs. (Vengeance Paladin Lv 7+ "
+            f"Relentless Avenger; consumed on next move.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -50854,6 +50883,7 @@ async def use_relentless_avenger(
             "bonus_move_ft": bonus_move_ft,
             "base_speed": base_speed,
             "paladin_level": pal_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -50863,6 +50893,7 @@ async def use_relentless_avenger(
         "bonus_move_ft": bonus_move_ft,
         "base_speed": base_speed,
         "paladin_level": pal_lv,
+        "buff_installed": buff_installed,
     }
 
 
