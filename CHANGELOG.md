@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.146.0] - 2026-06-08 — "Sword Dance" — Blade Flourish shared damage half (Swords Bard Lv 3+)
+
+**Schema version:** 69
+**Commit summary:** **Wires the shared damage half of Blade Flourish (Swords Bard Lv 3+, XGE p.16) into `/use_blade_flourish`. RAW ties a Bardic Inspiration die bonus to all three flourishes (Defensive / Slashing / Mobile); when `target_combatant_id` + `damage_type` are provided, the endpoint rolls the BI die server-side and applies it as bonus damage to the named target. Mirrors the v2.144.0 Combat Inspiration damage shape exactly. Defensive's AC bonus + Mobile's push + Slashing's "another creature within 5 ft" routing are deferred to Phase 2 (the caller passes whichever combatant id is correct for the chosen flourish).**
+**Description:** All three Blade Flourish sub-options share the "expend BI + add die roll to weapon damage" half. Phase 1 ships that shared mechanic; the per-flourish riders (Defensive AC buff + Mobile push + Slashing secondary-target routing) are filed for Phase 2. Backward-compatible: without `target_combatant_id` the endpoint stays announce-only — `bonus_rolled` and `bonus_applied` are `None`. BI die size from the same table as Bardic Inspiration / Combat Inspiration (d6 / d8 / d10 / d12 at Lv 3-4 / 5-9 / 10-14 / 15+). The damage rides the standard pipeline so v2.142.0 Scornful Rebuke + Aura of Warding's spell-damage gate + any resistance/vulnerability apply normally. Test asserts the BI die rolls in range AND damage hits the pipeline with `applied ∈ {rolled, rolled // 2}` to accept resistance halving from Pip's residual session state (same pattern as v2.144.1's CI test relaxation).
+
+### Added
+- `app/routes/tabletop_routes.py` — `/use_blade_flourish` accepts `damage_type` body field. When `target_combatant_id` + `damage_type` are provided, rolls `1d{die_size}` via `dice_mod.roll`, calls `_apply_damage_to_combatant` with `is_attack=True` + `attacker_char_id=char.id`, and includes `die_expression`, `die_size`, `bonus_rolled`, `bonus_applied`, `bonus_breakdown`, and `damage_type` on the response and the `feature_used` broadcast.
+- `tests/harness/test_blade_flourish.py` — `test_bf_damage_with_target_applies_bonus`: PATCH Lyra to Swords, seed Lyra + Pip in battle, call endpoint with `flourish=defensive` + `target_combatant_id=pip_tok` + `damage_type=slashing`, assert `bonus_rolled in [1, 8]` AND `bonus_applied in (rolled, rolled // 2)`. `test_bf_damage_without_target_announce_only`: same fixture but no `target_combatant_id` → `bonus_rolled is None` (backward-compatible).
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2035 → 2037.
+
+### Notes
+- Phase 2 (deferred): Defensive's `effects.ac_bonus: rolled` self-buff with `duration_rounds: 1`; Mobile's 5-ft target push (RAW XGE — uses `_force_move` if pushable); Slashing's "another creature within 5 ft" routing (already supported because the caller passes the secondary target's id — needs a follow-up that validates the secondary is within 5 ft of the original target). **Total harness count: 2037** in `tests/harness/` (2035 → 2037); **`tests/harness_ui/` 19** (unchanged). The CI + BF damage-half code paths are now nearly identical — a future refactor could extract a shared `_resolve_bardic_inspiration_damage_bonus` helper if a third site emerges.
+
+---
+
 ## [2.145.0] - 2026-06-08 — "Brace the Blow" — Combat Inspiration AC half (Phase 2 calculator)
 
 **Schema version:** 69

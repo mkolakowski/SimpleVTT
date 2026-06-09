@@ -61841,7 +61841,16 @@ async def use_blade_flourish(
     flourish = (body.get("flourish") or "defensive").strip().lower()
     if flourish not in ("defensive", "slashing", "mobile"):
         flourish = "defensive"
-    target_combatant_id = body.get("target_combatant_id") or None
+    target_combatant_id = (body.get("target_combatant_id") or "").strip() or None
+    # v2.146.0 — Phase 1 mechanical wiring (shared damage half): when
+    # `target_combatant_id` + `damage_type` are provided, roll the BI
+    # die server-side + apply the rolled value as bonus damage to the
+    # named target. RAW (XGE p.16) ties the BI bonus to all three
+    # flourishes; Slashing's "another creature within 5 ft of the
+    # target" is the caller's responsibility — they pass the secondary
+    # creature's combatant id. Defensive's AC bonus + Mobile's push are
+    # deferred to Phase 2.
+    damage_type = (body.get("damage_type") or "").strip().lower() or "slashing"
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -61866,6 +61875,35 @@ async def use_blade_flourish(
 
     bard_lv = _bard_level_from_sheet(sheet)
     walking_speed_bonus_ft = 10
+    # BI die size — same table as Bardic Inspiration / Combat Inspiration.
+    if bard_lv >= 15:
+        die_size = 12
+    elif bard_lv >= 10:
+        die_size = 10
+    elif bard_lv >= 5:
+        die_size = 8
+    else:
+        die_size = 6
+
+    # v2.146.0 — roll the BI die + apply bonus damage when wired.
+    bonus_rolled = None
+    bonus_applied = None
+    bonus_breakdown = ""
+    if target_combatant_id:
+        try:
+            _br = dice_mod.roll(f"1d{die_size}")
+            bonus_rolled = max(0, int(_br.total))
+            bonus_breakdown = _br.breakdown
+        except dice_mod.DiceParseError:
+            bonus_rolled = None
+        if bonus_rolled and bonus_rolled > 0:
+            _target = _lookup_combatant(campaign_id, target_combatant_id)
+            if _target is not None:
+                _dr = await _apply_damage_to_combatant(
+                    db, campaign_id, _target, bonus_rolled, damage_type,
+                    is_attack=True, attacker_char_id=char.id,
+                )
+                bonus_applied = int(_dr.get("applied") or 0)
 
     membership = (
         db.query(CampaignMembership)
@@ -61914,6 +61952,12 @@ async def use_blade_flourish(
             "walking_speed_bonus_ft": walking_speed_bonus_ft,
             "consumed_bardic_inspiration": True,
             "bard_level": bard_lv,
+            "die_expression": f"1d{die_size}",
+            "die_size": die_size,
+            "bonus_rolled": bonus_rolled,
+            "bonus_applied": bonus_applied,
+            "bonus_breakdown": bonus_breakdown,
+            "damage_type": damage_type if bonus_rolled is not None else "",
         },
     })
 
@@ -61925,6 +61969,11 @@ async def use_blade_flourish(
         "walking_speed_bonus_ft": walking_speed_bonus_ft,
         "consumed_bardic_inspiration": True,
         "bard_level": bard_lv,
+        "die_expression": f"1d{die_size}",
+        "die_size": die_size,
+        "bonus_rolled": bonus_rolled,
+        "bonus_applied": bonus_applied,
+        "bonus_breakdown": bonus_breakdown,
     }
 
 

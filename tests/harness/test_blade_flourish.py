@@ -151,3 +151,72 @@ async def test_use_bf_level_gate(
             {"subclass": "College of Lore", "level": 6},
             class_slug="bard",
         )
+
+
+def _pc(cid, c, hp=30):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp, "hp_max": hp, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def test_bf_damage_with_target_applies_bonus(
+    gm_client, gm_ws, lyra_swords, roster,
+):
+    """v2.146.0 — Phase 1 (shared damage half): when /use_blade_flourish
+    is called with `target_combatant_id` + `damage_type`, the endpoint
+    rolls the BI die server-side and applies it as bonus damage to the
+    target via `_apply_damage_to_combatant`. Backward-compatible:
+    without `target_combatant_id`, the endpoint stays announce-only.
+    Lyra Lv 6 → 1d8. Resistance halving may fire on Pip's residual
+    state (same pattern as v2.144.1's CI test); accept `applied` ∈
+    `{rolled, rolled // 2}`."""
+    lyra = lyra_swords
+    pip = roster["Pip Quickfingers"]
+    pip_tok = f"tok_bf_p_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(f"tok_bf_l_{lyra['id']}", lyra),
+            _pc(pip_tok, pip),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_blade_flourish",
+        json={"character_id": lyra["id"],
+              "flourish": "defensive",
+              "target_combatant_id": pip_tok,
+              "damage_type": "slashing"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["flourish"] == "defensive"
+    assert data["die_size"] == 8     # Lv 6 → 1d8
+    br = data.get("bonus_rolled")
+    ba = data.get("bonus_applied")
+    assert br is not None and 1 <= br <= 8, (
+        f"BI die should roll 1-8; got {br}"
+    )
+    assert ba is not None and ba > 0
+    assert ba in (br, br // 2), (
+        f"applied should be rolled or halved (resistance); got "
+        f"rolled={br}, applied={ba}"
+    )
+
+
+async def test_bf_damage_without_target_announce_only(
+    gm_client, lyra_swords,
+):
+    """v2.146.0 — Without `target_combatant_id`, the endpoint stays
+    announce-only (no BI die rolled, no damage applied). Backward-
+    compatible with the v2.99.323 contract."""
+    lyra = lyra_swords
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_blade_flourish",
+        json={"character_id": lyra["id"], "flourish": "defensive"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["flourish"] == "defensive"
+    assert data.get("bonus_rolled") is None
+    assert data.get("bonus_applied") is None
