@@ -77005,6 +77005,37 @@ async def update_battle(
         # target.
         if _active is not None:
             _active["has_acted"] = True
+        # v2.150.0 — Death Saves Phase 3a: when the newly-active
+        # combatant is a PC in `dying` state, broadcast a
+        # `death_save_prompt` event so the owning player's client can
+        # surface the "Roll Death Save" modal automatically. RAW: the
+        # death save is taken at the start of the dying character's
+        # turn. The client handler can post to the existing
+        # /character/{cid}/death-save endpoint once the player clicks
+        # through; this commit ships the server-side prompt hook only,
+        # the client UI is a follow-up.
+        if _active and _active.get("char_id"):
+            try:
+                _ds_char = db.query(Character).filter(
+                    Character.id == int(_active["char_id"]),
+                ).first()
+            except (TypeError, ValueError):
+                _ds_char = None
+            if _ds_char:
+                _ds_sheet = _ds_char.sheet or {}
+                _ds = _ds_sheet.get("death_saves") or {}
+                if (_ds.get("status") or "alive") == "dying":
+                    await hub.broadcast(campaign_id, {
+                        "type": "death_save_prompt",
+                        "data": {
+                            "character_id": _ds_char.id,
+                            "character_name": _ds_char.name,
+                            "combatant_id": _active.get("id"),
+                            "successes": int(_ds.get("successes") or 0),
+                            "failures": int(_ds.get("failures") or 0),
+                            "source": "turn_start",
+                        },
+                    })
         if _active and _active.get("char_id"):
             _active_buffs = _active.get("buffs") or []
             for _b in _active_buffs:

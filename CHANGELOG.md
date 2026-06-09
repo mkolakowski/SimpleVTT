@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.150.0] - 2026-06-08 — "Wake-Up Call" — Death Saves Phase 3a (turn-start auto-prompt)
+
+**Schema version:** 69
+**Commit summary:** **Wires Death Saves Phase 3a (per [`docs/plans/death-saves.md`](docs/plans/death-saves.md)): the turn-advance hook in PUT `/battle` now broadcasts a `death_save_prompt` event when the newly-active combatant is a PC in `dying` state. RAW: the death save is taken at the start of the dying character's turn. Server-side broadcast only; the client UI modal that consumes the event is a follow-up. Pairs with the v2.132.0 turn-advance hook that already flips `has_acted` on the newly-active combatant — same control point, sibling broadcast.**
+**Description:** Phase 1 of the death-saves plan shipped in v2.1.0 (state machine + manual roll button); Phase 2 was a reserved slot that never got populated; Phase 3 covers the initiative-tracker auto-prompt, the Medicine-check stabilize, and the stable countdown. This commit closes the auto-prompt half. The hook lives directly after the v2.132.0 `_active["has_acted"] = True` flip — same control point, so the perf cost is one extra DB lookup per turn-advance only when there's an active PC combatant. The broadcast carries `character_id` / `character_name` / `combatant_id` / `successes` / `failures` / `source: "turn_start"` so the client can render the prompt with the right counter state pre-filled. The `source` discriminator distinguishes the turn-start prompt from a future GM-forced prompt or a Medicine-check-failed prompt (filed for Phase 3b). Tests pin the positive case (Pip dropped to dying + turn advances to him → broadcast fires with right payload) AND the negative case (Pip alive + turn advances to him → no broadcast) so a future regression that spams the broadcast for every healthy PC gets caught immediately.
+
+### Added
+- `app/routes/tabletop_routes.py` — `death_save_prompt` broadcast inside PUT `/battle`'s turn-advance block (line ~77008), gated on the newly-active combatant being a PC AND in `death_saves.status == "dying"`. Falls through silently for NPC actives, missing `death_saves` field, or any state other than dying.
+- `tests/harness/test_death_save_prompt.py` — `test_death_save_prompt_fires_on_turn_start_for_dying_pc` (positive) + `test_death_save_prompt_does_not_fire_for_alive_pc` (negative). Both teardown-restore Pip via `/death-save/override` + long-rest so the next test in the session starts from a clean baseline.
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2040 → 2042.
+
+### Notes
+- Phase 3b (Medicine-check stabilize): adjacent ally clicks a "Stabilize via Medicine" button → endpoint rolls Medicine vs DC 10 → success sets the dying PC to `stable` per RAW PHB p.197. Filed. Phase 3c (stable countdown — 1d4 hours until 1 HP) remains gated on a session-time concept the project doesn't yet have. Phase 4 (NPC death saves with per-token toggle) remains deferred. **Total harness count: 2042** in `tests/harness/` (2040 → 2042); **`tests/harness_ui/` 19** (unchanged). Client UI for the new broadcast is the obvious next step — the `death_save_prompt` data shape is intentionally compatible with the existing `_death_saves_tracker.html` partial.
+
+---
+
 ## [2.149.2] - 2026-06-08 — "Triage" — re-evaluate TODO + index every design plan with a priority
 
 **Schema version:** 69
