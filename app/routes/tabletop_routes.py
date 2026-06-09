@@ -4011,6 +4011,49 @@ def _reroll_feature(key):
     return None
 
 
+def _max_dice_total(expr: str) -> tuple[int, str]:
+    """v2.143.0 — Supreme Healing (Life Domain Cleric Lv 17+, PHB
+    p.61): "when you would normally roll one or more dice to restore
+    hit points with a spell, you instead use the highest number
+    possible for each die." Returns ``(total, breakdown)`` for a dice
+    expression with each ``NdM`` term replaced by its max value
+    (``N × M``). Handles flat modifiers and mixed terms ("1d8+3" →
+    (8+3, "1d8[max:8] +3 => 11"); "2d4+1d6" → (8+6, …)).
+
+    Returns ``(0, "")`` on a missing / unparseable expression so the
+    caller can fall back to a normal roll cleanly. Used by the
+    /cast_spell heal pipeline when the caster passes
+    `_pc_has_life_domain(sheet, 17)`.
+    """
+    expr = (expr or "").strip()
+    if not expr:
+        return 0, ""
+    total = 0
+    parts: list[str] = []
+    for m in _re.finditer(r"([-+])?\s*(\d+d\d+|\d+)", expr):
+        sign_str = m.group(1) or "+"
+        sign = -1 if sign_str == "-" else 1
+        term = m.group(2)
+        md = _re.match(r"^(\d+)d(\d+)$", term)
+        if md:
+            n = int(md.group(1))
+            d = int(md.group(2))
+            v = n * d
+            total += sign * v
+            parts.append(f"{'-' if sign < 0 else '+'}{n}d{d}[max:{v}]")
+        else:
+            v = int(term)
+            total += sign * v
+            parts.append(f"{'-' if sign < 0 else '+'}{v}")
+    if not parts:
+        return 0, ""
+    # Strip the leading + on the first term for a cleaner read.
+    parts[0] = parts[0].lstrip("+")
+    final = max(0, total)
+    breakdown = " ".join(parts) + f"  =>  {final}"
+    return final, breakdown
+
+
 def _scale_dice_for_upcast(base_expr, per_slot_expr, extra_levels):
     """v2.110.0 — add ``extra_levels`` × ``per_slot_expr`` dice to
     ``base_expr``, merging same-die terms.
@@ -17213,13 +17256,23 @@ async def cast_spell(
         payload["spell_healing"]
         and (target_combatant_id or target_character_id_in)
     ):
-        try:
-            _r = dice_mod.roll(payload["spell_healing"])
-            heal_rolled = max(0, int(_r.total))
-            heal_breakdown = _r.breakdown
-        except dice_mod.DiceParseError:
-            heal_rolled = 0
-            heal_breakdown = ""
+        # v2.143.0 — Supreme Healing (Life Domain Cleric Lv 17+): when
+        # the caster is a Life Domain Cleric Lv 17+, every healing die
+        # rolls at maximum. Falls through to the normal roll otherwise.
+        _supreme_healing_active = _pc_has_life_domain(char.sheet or {}, 17)
+        if _supreme_healing_active:
+            heal_rolled, heal_breakdown = _max_dice_total(payload["spell_healing"])
+            heal_breakdown = f"💗 Supreme Healing: {heal_breakdown}"
+            payload["supreme_healing_applied"] = True
+        else:
+            try:
+                _r = dice_mod.roll(payload["spell_healing"])
+                heal_rolled = max(0, int(_r.total))
+                heal_breakdown = _r.breakdown
+            except dice_mod.DiceParseError:
+                heal_rolled = 0
+                heal_breakdown = ""
+            payload["supreme_healing_applied"] = False
         # v2.59.1 — RAW heal = dice + spellcasting modifier (Cure
         # Wounds heals "1d8 + your spellcasting modifier"; Healing
         # Word, Mass Healing Word, Mass Cure Wounds, Heal, etc. all

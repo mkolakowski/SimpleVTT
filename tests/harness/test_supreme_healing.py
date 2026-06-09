@@ -129,3 +129,45 @@ async def test_use_sh_level_gate(
             {"subclass": "Life Domain", "level": 6},
             class_slug="cleric",
         )
+
+
+async def test_sh_fires_on_cast_spell_heal(
+    gm_client, gm_ws, tavik_life_lv17, roster,
+):
+    """v2.143.0 — Phase 1: when a Life Domain Cleric Lv 17+ casts a
+    healing spell, the dice roll at maximum instead of being rolled.
+    End-to-end: Tavik PATCHed to Lv 17, casts Cure Wounds at himself
+    (target_character_id=tavik.id) → `spell_cast` broadcast carries
+    `supreme_healing_applied: True` AND the `heal_breakdown` field
+    surfaces the "💗 Supreme Healing" prefix. Per-die value
+    deterministically maxed (1d8 → 8) — verified via the breakdown
+    string containing `[max:8]`."""
+    tavik = tavik_life_lv17
+    CURE_WOUNDS_INDEX = 4  # per the existing Tavik fixture comments
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": CURE_WOUNDS_INDEX,
+            "slot_level": 1,
+            "class_slug": "cleric",
+            "target_character_id": tavik["id"],   # self-heal
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    msg = await gm_ws.wait_for("spell_cast")
+    d = msg["data"]
+    assert d["spell_name"] == "Cure Wounds"
+    assert d.get("supreme_healing_applied") is True, (
+        f"supreme_healing_applied flag should be True; got "
+        f"{d.get('supreme_healing_applied')!r}"
+    )
+    # The 1d8 should resolve to max 8 in the breakdown.
+    bd = d.get("auto_heal_breakdown") or ""
+    assert "💗 Supreme Healing" in bd, (
+        f"Supreme Healing prefix missing from breakdown; got {bd!r}"
+    )
+    assert "[max:8]" in bd, (
+        f"max-die marker missing from breakdown; got {bd!r}"
+    )

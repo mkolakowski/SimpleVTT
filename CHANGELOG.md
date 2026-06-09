@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.143.0] - 2026-06-08 — "Maxed Out" — Supreme Healing on the heal pipeline (Life Domain Cleric Lv 17+)
+
+**Schema version:** 69
+**Commit summary:** **Wires Supreme Healing (Life Domain Cleric Lv 17+, PHB p.61) into `/cast_spell`'s auto-heal path. When the caster passes `_pc_has_life_domain(sheet, 17)`, the heal dice resolve at maximum instead of being rolled — a 1d8 Cure Wounds heals 8, a 4d8 Mass Healing Word heals 32, etc. New helper `_max_dice_total(expr) -> (total, breakdown)` parses the dice expression and replaces each `NdM` term with `N × M`; flat modifiers and mixed terms ride through. The `spell_cast` broadcast carries `supreme_healing_applied: bool` so chat-card chrome can attribute the substitution, and the breakdown surfaces `💗 Supreme Healing: 1d8[max:8] +3 => 11` for the chat card.**
+**Description:** Closes Supreme Healing's announce-only state from v2.99.295. The hook lives in cast_spell's auto-heal block (line ~17260): if the caster is a Life Domain Cleric Lv 17+, replace the `dice_mod.roll(payload["spell_healing"])` with `_max_dice_total(payload["spell_healing"])`. The Disciple of Life uplift (Life Domain Lv 1+, +2 + slot_level on a heal) still applies on top — Supreme Healing replaces only the dice roll, not the post-roll modifiers. Same for the spellcasting-mod add. v1 simplification: the legacy `_heal_claims` flow (used when the cast has no target — the chat-card "Heal me" button) doesn't yet substitute; filed as Phase 1.5 because the substitution would need to happen at /apply_healing time when the target is bound. End-to-end test: Tavik PATCHed to Lv 17, casts Cure Wounds at himself, asserts `supreme_healing_applied: True` + `[max:8]` in the breakdown (the 1d8 → 8 substitution). The `/use_supreme_healing` announce-only endpoint stays in place as a passive declaration; the mechanic now fires automatically on every cast.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_max_dice_total(expr: str) -> tuple[int, str]` helper near `_scale_dice_for_upcast`. Parses dice/flat terms with a regex; returns `(max_total, breakdown_string)` with `[max:N]` markers on each die term. Returns `(0, "")` on unparseable input.
+- `tests/harness/test_supreme_healing.py` — `test_sh_fires_on_cast_spell_heal`: PATCH Tavik to Life Domain Lv 17, cast Cure Wounds at self, assert `supreme_healing_applied: True` on the broadcast + `💗 Supreme Healing` prefix + `[max:8]` marker in `auto_heal_breakdown`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/cast_spell`'s auto-heal block (line ~17260) branches on `_pc_has_life_domain(char.sheet or {}, 17)`: if True, use `_max_dice_total` + prefix the breakdown with "💗 Supreme Healing" + set `payload["supreme_healing_applied"] = True`. Else falls through to the existing `dice_mod.roll` path (with the flag explicitly set to False so the broadcast surface is consistent).
+- `docs/test-harness-coverage.md` — running total bumped 2030 → 2031.
+
+### Notes
+- v1 simplification: the legacy `_heal_claims` flow (when the cast has no target_combatant_id / target_character_id — chat-card "Heal me" button) doesn't yet substitute Supreme Healing. Filed as Phase 1.5; the substitution would need to happen at `/apply_healing` time when the target is bound. **Total harness count: 2031** in `tests/harness/` (2030 → 2031); **`tests/harness_ui/` 19** (unchanged). The `_max_dice_total` helper is also a candidate for future use by Brutal Critical, Reliable Talent, and other "max-the-die" features — same shape.
+
+---
+
 ## [2.142.1] - 2026-06-08 — "Mind the Gap" — refresh automation-coverage + full-feature-automation docs
 
 **Schema version:** 69
