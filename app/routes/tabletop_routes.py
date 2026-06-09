@@ -79845,6 +79845,151 @@ async def stabilize_character(
     return {"ok": True, "death_saves": new_ds}
 
 
+@router.post("/api/campaign/{campaign_id}/character/{healer_char_id}/medicine_stabilize")
+async def medicine_stabilize(
+    campaign_id: int,
+    healer_char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.151.0 — Death Saves Phase 3b (Medicine-check stabilize).
+    RAW PHB p.197: a healer can stabilize a dying creature with a
+    successful DC 10 Wisdom (Medicine) check as an action. This
+    endpoint resolves the roll server-side and applies the result.
+
+    Body: ``{target_char_id: int}``. Caller must be the healer
+    character's owner OR the GM. Both healer and target must be PCs
+    in the same campaign. Target must be in `dying` state. Rolls
+    1d20 + WIS mod + (PB if proficient in Medicine) vs DC 10. On
+    success, sets target's `death_saves.status = stable` (same as the
+    GM-only `/stabilize` endpoint). Broadcasts `character_death_save`
+    with `source: "medicine_check"` so the chat-card chrome can
+    attribute the stabilize source.
+
+    v1 simplification: no range check between healer and target (RAW
+    requires adjacency — GM adjudicates). The Medicine check uses the
+    standard skill check pipeline; advantage/disadvantage from the
+    healer's `roll_state` rides through naturally.
+    """
+    body = await request.json()
+    try:
+        target_char_id = int(body.get("target_char_id") or 0)
+    except (TypeError, ValueError):
+        target_char_id = 0
+    if target_char_id <= 0:
+        raise HTTPException(400, "target_char_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    healer = db.query(Character).filter(
+        Character.id == healer_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not healer:
+        raise HTTPException(404, "Healer not found")
+    if not (_user_is_gm(user, campaign, db) or healer.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+    target = db.query(Character).filter(
+        Character.id == target_char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not target:
+        raise HTTPException(404, "Target not found")
+    target_sheet = target.sheet or {}
+    target_ds = target_sheet.get("death_saves") or {}
+    if (target_ds.get("status") or "alive") != "dying":
+        return JSONResponse(status_code=409, content={
+            "error": "target_not_dying",
+            "target_status": target_ds.get("status") or "alive",
+        })
+
+    # Compute the healer's Medicine modifier: WIS mod + (PB if proficient).
+    healer_sheet = healer.sheet or {}
+    abilities = healer_sheet.get("abilities") or {}
+    try:
+        wis = int(abilities.get("WIS") or 10)
+    except (TypeError, ValueError):
+        wis = 10
+    wis_mod = (wis - 10) // 2
+    pb = int(healer_sheet.get("proficiency_bonus") or 2)
+    skills = healer_sheet.get("skills") or {}
+    med_entry = skills.get("Medicine") or {}
+    is_proficient = bool(med_entry.get("proficient"))
+    medicine_mod = wis_mod + (pb if is_proficient else 0)
+
+    # Roll 1d20 + modifier through the existing dice helper.
+    mod_str = f"+{medicine_mod}" if medicine_mod >= 0 else str(medicine_mod)
+    expr = f"1d20{mod_str}"
+    try:
+        r = dice_mod.roll(expr)
+        roll_total = int(r.total)
+        roll_breakdown = r.breakdown
+    except dice_mod.DiceParseError:
+        roll_total = 0
+        roll_breakdown = ""
+    dc = 10
+    passed = roll_total >= dc
+
+    new_ds = None
+    if passed:
+        new_ds = _set_death_save_state(
+            target, status="stable", successes=0, failures=0,
+        )
+        db.commit()
+        await hub.broadcast(campaign_id, {
+            "type": "character_death_save",
+            "data": {
+                "character_id": target.id,
+                "status": "stable",
+                "successes": 0,
+                "failures": 0,
+                "hp": dict(target_sheet.get("hp") or {}),
+                "source": "medicine_check",
+                "healer_char_id": healer.id,
+                "healer_char_name": healer.name,
+                "roll_total": roll_total,
+                "roll_breakdown": roll_breakdown,
+                "dc": dc,
+            },
+        })
+    else:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "source": "medicine_stabilize_failed",
+                "character_id": healer.id,
+                "character_name": healer.name,
+                "feature_name": (
+                    f"🩹 Medicine check failed (DC {dc}, rolled "
+                    f"{roll_total})"
+                ),
+                "feature_desc": (
+                    f"{healer.name}'s DC {dc} Medicine check to "
+                    f"stabilize {target.name} failed (rolled "
+                    f"{roll_total}). {target.name} remains dying."
+                ),
+                "target_char_id": target.id,
+                "target_char_name": target.name,
+                "roll_total": roll_total,
+                "roll_breakdown": roll_breakdown,
+                "dc": dc,
+            },
+        })
+
+    return {
+        "ok": True,
+        "passed": passed,
+        "roll_total": roll_total,
+        "roll_breakdown": roll_breakdown,
+        "medicine_modifier": medicine_mod,
+        "dc": dc,
+        "target_char_id": target.id,
+        "target_death_saves": new_ds if new_ds is not None else target_ds,
+    }
+
+
 # ----------- API: roll-state toggle (v2.2.0) -----------
 
 @router.post("/api/campaign/{campaign_id}/character/{char_id}/roll-state")

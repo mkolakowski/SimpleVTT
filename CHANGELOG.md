@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.151.0] - 2026-06-08 — "First Aid" — Death Saves Phase 3b (Medicine-check stabilize endpoint)
+
+**Schema version:** 69
+**Commit summary:** **New `/api/campaign/{cid}/character/{healer_char_id}/medicine_stabilize` endpoint resolves the RAW DC 10 Medicine check that stabilizes a dying creature (PHB p.197). Body takes `target_char_id`; endpoint computes the healer's Medicine modifier (WIS mod + PB if proficient), rolls 1d20 + mod vs DC 10 server-side, and on success transitions the target's `death_saves.status` to `stable` (same state transition as the GM-only `/stabilize`). Broadcasts `character_death_save` with `source: "medicine_check"` on success or `feature_used` with `source: "medicine_stabilize_failed"` on failure.**
+**Description:** Phase 3a (v2.150.0) shipped the turn-start auto-prompt; this commit ships Phase 3b — the Medicine-check stabilize action that an ally can take on a dying PC. The endpoint is owner-or-GM gated (the healer's owner or the GM can roll; a third-party PC can't). The Medicine modifier reads from the standard sheet fields: `abilities.WIS` for the WIS mod, `proficiency_bonus` for the PB, and `skills.Medicine.proficient` for the proficiency flag. v1 simplifications filed: no range check between healer and target (RAW requires adjacency — GM adjudicates); the Medicine check doesn't currently fold in the healer's `roll_state` (advantage/disadvantage) — it's a one-off `dice_mod.roll(1d20+mod)`; auto-applied advantage from the roll-state toggle is a Phase 3c follow-up. The new endpoint deliberately mirrors `/stabilize`'s payload shape so the existing `character_death_save` WebSocket handler reads both sources uniformly. Tests pin the 409 target-not-dying gate AND the success path (boost WIS to 30 + proficient so DC 10 is impossible to miss) AND the failure path (drop WIS to 1 + non-proficient so most rolls fail with `medicine_modifier == -5`; retries up to 5 to catch at least one failure).
+
+### Added
+- `app/routes/tabletop_routes.py` — `medicine_stabilize` endpoint (~150 lines) inserted between `/stabilize` and `/roll-state`. Body validates `target_char_id`; healer / target / campaign existence; healer ownership; target in dying state. Computes `medicine_modifier = WIS_mod + (PB if proficient else 0)`, rolls `1d20{±mod}` via `dice_mod.roll`, branches on `roll_total >= 10` for the success / failure path. Success broadcasts `character_death_save` with `source: "medicine_check"` + `healer_char_id` / `healer_char_name` / `roll_total` / `roll_breakdown` / `dc`. Failure broadcasts `feature_used` with `source: "medicine_stabilize_failed"` so chat-card chrome can render the failed attempt.
+- `tests/harness/test_medicine_stabilize.py` — `test_medicine_stabilize_409_when_target_not_dying`, `test_medicine_stabilize_success_when_modifier_high` (boost WIS to 30 + proficient → guaranteed success even on nat 1 → assert stable transition + character_death_save broadcast), `test_medicine_stabilize_failure_when_modifier_low` (drop WIS to 1 + non-proficient → retries up to 5 to surface a failure → assert dying remains + medicine_stabilize_failed broadcast). All teardown-restore Tavik's WIS + Medicine + Pip's death state.
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2042 → 2045.
+
+### Notes
+- Phase 3c (stable countdown — 1d4 hours until 1 HP per RAW) remains gated on a session-time concept the project doesn't yet have. Phase 4 (NPC death saves with per-token toggle) remains deferred. Filed follow-ups: thread the healer's `roll_state` through the Medicine check (would let advantage / disadvantage ride for free per the v2.2.0 plan); add a 5-ft range check between healer and target via `_distance_ft_between_chars`; surface the new endpoint in the mini-sheet UI for adjacent allies of a dying PC. **Total harness count: 2045** in `tests/harness/` (2042 → 2045); **`tests/harness_ui/` 19** (unchanged). Death Saves is now end-to-end across Phase 1 (manual rolls + state machine, v2.1.0) + Phase 3a (turn-start auto-prompt, v2.150.0) + Phase 3b (Medicine-check stabilize, this commit).
+
+---
+
 ## [2.150.0] - 2026-06-08 — "Wake-Up Call" — Death Saves Phase 3a (turn-start auto-prompt)
 
 **Schema version:** 69
