@@ -53898,10 +53898,23 @@ async def use_keeper_of_souls(
     the start of your next turn."
 
     Body: ``{character_id, enemy_hit_dice, override?}``. No
-    chip cost — passive end-of-enemy-turn trigger. v1
-    announce-only — the actual HP application + 1/turn
-    lockout is GM-tracked. Body accepts `enemy_hit_dice` to
-    inform the announce (defaults to 1 if missing).
+    chip cost — passive end-of-enemy-turn trigger. Body
+    accepts `enemy_hit_dice` to inform the manual announce
+    (defaults to 1 if missing).
+
+    v2.158.4 — Phase 8 fourth commit (Phase 1 of install-then-
+    deferred-read split, same shape as v2.158.3 Improved
+    Duplicity + v2.148.0 Fancy Footwork). Install a permanent
+    `keeper-of-souls-watcher` buff carrying the radius +
+    watcher-active flag:
+      * `effects.keeper_of_souls_watcher: True`
+      * `effects.keeper_of_souls_radius_ft: 60`
+    Phase 2 (deferred): on-death hook in `_apply_damage_to_combatant`'s
+    NPC branch detects the 0-HP transition, walks PC combatants for
+    the buff, range-gates at 60 ft, and auto-heals the watcher for
+    the dying NPC's Hit Dice count. The manual announce path stays
+    as the explicit override the player can press for non-detected
+    cases (offscreen kills, NPC-vs-NPC kills the watcher saw, etc.).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -53932,6 +53945,34 @@ async def use_keeper_of_souls(
 
     heal_amount = enemy_hd
     cleric_lv = _cleric_level_from_sheet(sheet)
+
+    # v2.158.4 — install the watcher flag buff. Permanent passive
+    # (idempotent on re-press via `_install_buff`'s key dedupe).
+    # Phase 2 (deferred): NPC 0-HP transition in
+    # `_apply_damage_to_combatant` walks PC combatants for this
+    # buff key + range-gates + auto-heals the watcher.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "keeper-of-souls-watcher",
+        "name": "⚱️ Keeper of Souls (watcher)",
+        "icon": "⚱️",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "keeper_of_souls_watcher": True,
+            "keeper_of_souls_radius_ft": 60,
+        },
+        "desc": (
+            f"{char.name} is attuned to nearby death. When an enemy "
+            f"within 60 ft dies, {char.name} or an ally regains HP "
+            f"= enemy's Hit Dice. (Grave Domain Cleric Lv 17+ "
+            f"passive. Phase 2: on-death hook in damage pipeline.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -53965,6 +54006,7 @@ async def use_keeper_of_souls(
             "enemy_hit_dice": enemy_hd,
             "max_range_ft": 60,
             "cleric_level": cleric_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -53975,6 +54017,7 @@ async def use_keeper_of_souls(
         "enemy_hit_dice": enemy_hd,
         "max_range_ft": 60,
         "cleric_level": cleric_lv,
+        "buff_installed": buff_installed,
     }
 
 

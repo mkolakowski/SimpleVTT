@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2076 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.3, 2026-06-09).
+**Total tests:** 2077 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.4, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -764,14 +764,15 @@ v2.99.299 — Forge Domain Cleric (XGE p.18) Saint of Forge and Fire Lv 17 passi
 | `test_sff_buff_payload_carries_fire_immunity_and_bps_resistance` | v2.158.2 — installed buff carries BOTH `effects.immunity_to=["fire"]` AND `effects.resistance_to` with the three `nonmagical-X` entries. Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). |
 
 ### `test_keeper_of_souls.py`
-v2.99.300 — Grave Domain Cleric (XGE p.19) Keeper of Souls Lv 17 (H.1 deeper). When enemy within 60 ft dies, you or one creature within 60 ft heals HP = enemy's HD. 1/turn. v1 announce-only.
+v2.99.300 — Grave Domain Cleric (XGE p.19) Keeper of Souls Lv 17 (H.1 deeper). When enemy within 60 ft dies, you or one creature within 60 ft heals HP = enemy's HD. 1/turn. v2.158.4 (Phase 8 fourth commit, Phase 1 of install-then-deferred-read): endpoint installs a permanent `keeper-of-souls-watcher` buff carrying `effects.keeper_of_souls_watcher: True` + `effects.keeper_of_souls_radius_ft: 60`. Phase 2 (deferred): on-death hook in `_apply_damage_to_combatant`'s NPC branch reads the buff + auto-heals the watcher for the dying NPC's HD count.
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_use_ks_happy_lv17` | Lv 17 Tavik, enemy HD 5 → `heal_amount == 5`, `max_range_ft == 60`, broadcast (source `keeper-of-souls`). |
-| `test_use_ks_default_hd_clamp` | Missing `enemy_hit_dice` → `heal_amount == 1` (clamp). |
+| `test_use_ks_happy_lv17` | Lv 17 Tavik, enemy HD 5 → `heal_amount == 5`, `max_range_ft == 60`, `buff_installed == True`, broadcast (source `keeper-of-souls`). v2.158.4 — seeds Tavik into an active battle so `_install_buff` returns True. |
+| `test_use_ks_default_hd_clamp` | Missing `enemy_hit_dice` → `heal_amount == 1` (clamp). v2.158.4 — also seeds the battle so the install fires. |
 | `test_use_ks_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_ks_level_gate` | Grave at Lv 16 → 409. |
+| `test_ks_buff_payload_carries_watcher_flag_and_radius` | v2.158.4 — installed buff carries `effects.keeper_of_souls_watcher: True` + `effects.keeper_of_souls_radius_ft: 60`. Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). Pins the Phase-2 contract so the future on-death hook has stable flag names to look up. |
 
 ### `test_visions_of_the_past.py`
 v2.99.301 — Knowledge Domain Cleric (PHB p.60) Visions of the Past Lv 17 (H.1 deeper). 1 min meditation → dream-like glimpses of recent events. Concentration up to WIS-score minutes. Modes: object (24h held-object history) or area (50-ft cube 24h history). Auto-bootstraps `visions-of-the-past` resource (max=1, reset=short). v1 announce-only.

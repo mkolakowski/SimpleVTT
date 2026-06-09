@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — Avatar of Battle (War Cleric Lv 17, v2.158.0) + PC `_resistance_halve` F6-aware (v2.158.1 hotfix) + Saint of Forge and Fire (Forge Cleric Lv 17, v2.158.2 — dual-effect buff w/ fire immunity + nonmagical-BPS resist) + Improved Duplicity (Trickery Cleric Lv 17, v2.158.3 — Phase 1 flag-install for the future Invoke Duplicity endpoint to read); the Lv-17 cleric subclass capstone batch is half-shipped (3 of 6). **Current coverage: 198+ tracked / 39- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — Avatar of Battle (War Cleric Lv 17, v2.158.0) + PC `_resistance_halve` F6-aware (v2.158.1 hotfix) + Saint of Forge and Fire (Forge Cleric Lv 17, v2.158.2 — dual-effect buff w/ fire immunity + nonmagical-BPS resist) + Improved Duplicity (Trickery Cleric Lv 17, v2.158.3 — Phase 1 flag-install for the future Invoke Duplicity endpoint to read) + Keeper of Souls (Grave Cleric Lv 17, v2.158.4 — Phase 1 watcher-flag install; on-death hook deferred to its own commit); the Lv-17 cleric subclass capstone batch is two-thirds shipped (4 of 6 — Order's Wrath + Improved Reaper remaining). **Current coverage: 199+ tracked / 38- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
 
 **v2.128.2–v2.149.0 retrofit summary** (curated; see [automation-coverage.md §Recent retrofits](../automation-coverage.md)):
 
@@ -274,12 +274,21 @@ composition. Batch by class, same cadence as the breadth sweep.
   install-then-deferred-read split (same shape as v2.148.0 Fancy Footwork
   + v2.149.0 Relentless Avenger). Phase 2 (deferred): when the Invoke
   Duplicity endpoint ships, it reads the flags off `_buffs_active`.
+- **v2.158.4 ("Soul Watcher") — Keeper of Souls** (Grave Cleric Lv 17):
+  permanent buff carrying `effects.keeper_of_souls_watcher: True` +
+  `effects.keeper_of_souls_radius_ft: 60`. Phase 1 of install-then-
+  deferred-read. Phase 2 (deferred): on-death hook in
+  `_apply_damage_to_combatant`'s NPC branch detects the 0-HP transition,
+  walks PC combatants for the buff, range-gates at 60 ft, and auto-heals
+  the watcher for the dying NPC's Hit Dice count. The Phase 2 hook is the
+  most-interesting follow-up — a new pipeline event that will also unlock
+  auto-firing for Touch of Death (Death Cleric Lv 1).
 
-The Lv-17 cleric subclass capstone recipe is now well-trodden — the
-remaining capstones (Improved Reaper, Keeper of Souls, Order's Wrath)
-follow the same shape. Then the Lv-15 / Lv-18 / Lv-20 capstones (Arcane
-Charge / Purity of Spirit / Arcane Mastery / Emissary of Redemption /
-Improved War Magic / …).
+The Lv-17 cleric subclass capstone recipe is well-trodden — the two
+remaining capstones (Order's Wrath, Improved Reaper) follow the same
+shape. Then the Lv-15 / Lv-18 / Lv-20 capstones (Arcane Charge / Purity
+of Spirit / Arcane Mastery / Emissary of Redemption / Improved War Magic
+/ …).
 
 ### Phase 9 — Test-contract upgrade (cross-cutting, every phase)
 Each retrofit converts its test from "asserts broadcast" to "asserts state":

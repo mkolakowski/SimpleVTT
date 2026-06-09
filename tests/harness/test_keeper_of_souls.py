@@ -1,19 +1,31 @@
-"""v2.99.300 — Grave Domain Cleric: Keeper of Souls (H.1 deeper, Lv 17).
+"""v2.99.300 → v2.158.4 — Grave Domain Cleric: Keeper of Souls (Lv 17).
 
-H.1 Lv 17 Grave ship. RAW XGE p.19: when an enemy within 60
-ft dies, you (or creature of your choice within 60 ft) heal
-HP = enemy's Hit Dice. 1/turn. Not while incapacitated.
+v2.99.300 shipped announce-only. v2.158.4 (Phase 8 fourth commit
+of the [full-feature-automation](../../docs/plans/full-feature-automation.md)
+plan; fourth Lv-17 cleric capstone after Avatar of Battle, Saint
+of Forge and Fire, Improved Duplicity) wires the endpoint to
+install a permanent `keeper-of-souls-watcher` buff carrying
+`effects.keeper_of_souls_watcher: True` +
+`effects.keeper_of_souls_radius_ft: 60`. Phase 1 of the standard
+install-then-deferred-read split (same shape as v2.158.3 Improved
+Duplicity + v2.148.0 Fancy Footwork). Phase 2 (deferred): an
+on-death hook in `_apply_damage_to_combatant`'s NPC branch reads
+the buff, range-gates at 60 ft, and auto-heals the watcher for
+the dying NPC's Hit Dice count.
 
-v1 announce-only — actual HP application + 1/turn lockout
-GM-tracked. No chip — passive trigger.
+RAW XGE p.19: when an enemy within 60 ft dies, you (or creature
+of your choice within 60 ft) heal HP = enemy's Hit Dice. 1/turn.
+Not while incapacitated.
 
 Tavik PATCH'd to Grave Lv 17.
 
 Tests:
-  - Lv 17 happy with enemy HD 5 → heal 5.
+  - Lv 17 happy with enemy HD 5 → heal 5, buff_installed True.
   - Default enemy_hit_dice missing → heal 1 (clamp).
   - Wrong subclass → 409.
   - Level gate (Lv 16) → 409.
+  - Installed buff carries the two `keeper_of_souls_*` flags
+    on `effects` with the right values (watcher True, radius 60).
 """
 import asyncio
 import pytest_asyncio
@@ -40,6 +52,27 @@ def _ks_broadcasts(gm_ws, character_id):
     ]
 
 
+def _pc(cid, c, *, hp_max=80):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp_max, "hp_max": hp_max,
+            "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def _seed_tavik_in_battle(gm_client, tavik):
+    """v2.158.4 — `_install_buff` requires an active battle. Seed a
+    minimal one with Tavik so the endpoint can lay down the watcher
+    buff."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [_pc(f"tok_ks_tavik_{tavik['id']}", tavik)],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
 @pytest_asyncio.fixture
 async def tavik_grave_lv17(gm_client, roster):
     """PATCH Tavik to Grave Domain Lv 17."""
@@ -62,8 +95,9 @@ async def tavik_grave_lv17(gm_client, roster):
 async def test_use_ks_happy_lv17(
     gm_client, gm_ws, tavik_grave_lv17,
 ):
-    """Lv 17 Grave, enemy HD 5 → heal 5."""
+    """Lv 17 Grave, enemy HD 5 → heal 5, buff_installed True."""
     tavik = tavik_grave_lv17
+    await _seed_tavik_in_battle(gm_client, tavik)
     gm_ws.mark()
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_keeper_of_souls",
@@ -75,6 +109,7 @@ async def test_use_ks_happy_lv17(
     assert data["enemy_hit_dice"] == 5
     assert data["max_range_ft"] == 60
     assert data["cleric_level"] == 17
+    assert data["buff_installed"] is True
     await asyncio.sleep(0.3)
     feats = _ks_broadcasts(gm_ws, tavik["id"])
     assert feats
@@ -85,6 +120,7 @@ async def test_use_ks_default_hd_clamp(
 ):
     """Missing enemy_hit_dice → heal 1 (clamp)."""
     tavik = tavik_grave_lv17
+    await _seed_tavik_in_battle(gm_client, tavik)
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_keeper_of_souls",
         json={"character_id": tavik["id"]},
@@ -133,3 +169,44 @@ async def test_use_ks_level_gate(
             {"subclass": "Life Domain", "level": 6},
             class_slug="cleric",
         )
+
+
+async def test_ks_buff_payload_carries_watcher_flag_and_radius(
+    gm_client, gm_ws, tavik_grave_lv17,
+):
+    """v2.158.4 — state contract (Phase 9): the installed
+    `keeper-of-souls-watcher` buff carries
+    `effects.keeper_of_souls_watcher: True` +
+    `effects.keeper_of_souls_radius_ft: 60`. Phase 2 (deferred)
+    will have an on-death hook in `_apply_damage_to_combatant`'s
+    NPC branch read these flags off PC `_buffs_active` to identify
+    watchers and range-gate; this test pins the flag shape so
+    that future read site has a stable contract."""
+    tavik = tavik_grave_lv17
+    await _seed_tavik_in_battle(gm_client, tavik)
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_keeper_of_souls",
+        json={"character_id": tavik["id"], "enemy_hit_dice": 3},
+    )
+    assert r.status_code == 200, r.text
+    bu = await gm_ws.wait_for("buff_update")
+    tavik_buffs = bu["data"]["buffs"]
+    ks_buff = next(
+        (b for b in tavik_buffs if b.get("key") == "keeper-of-souls-watcher"),
+        None,
+    )
+    assert ks_buff is not None, (
+        f"keeper-of-souls-watcher buff missing; got keys="
+        f"{[b.get('key') for b in tavik_buffs]}"
+    )
+    effects = ks_buff.get("effects") or {}
+    assert effects.get("keeper_of_souls_watcher") is True, (
+        f"watcher flag missing; got effects={effects}"
+    )
+    assert effects.get("keeper_of_souls_radius_ft") == 60, (
+        f"radius wrong; got effects={effects}"
+    )
+    # Permanent passive — no concentration, very long duration.
+    assert ks_buff.get("concentration") in (False, None)
+    assert int(ks_buff.get("duration_rounds") or 0) >= 1000

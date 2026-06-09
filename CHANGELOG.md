@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.4] - 2026-06-09 — "Soul Watcher" — Phase 8 fourth commit: Keeper of Souls (Grave Cleric Lv 17) installs the watcher flag buff (Phase 1; on-death hook deferred)
+
+**Schema version:** 69
+**Commit summary:** **Fourth Phase 8 commit, fourth Lv-17 cleric capstone after Avatar of Battle, Saint of Forge and Fire, Improved Duplicity. Same Phase 1 install-then-deferred-read shape as v2.158.3 Improved Duplicity + v2.148.0 Fancy Footwork: install a permanent `keeper-of-souls-watcher` buff carrying `effects.keeper_of_souls_watcher: True` + `effects.keeper_of_souls_radius_ft: 60`. Phase 2 (deferred): on-death hook in `_apply_damage_to_combatant`'s NPC branch detects the 0-HP transition, walks PC combatants for the buff, range-gates at 60 ft, and auto-heals the watcher for the dying NPC's Hit Dice count.**
+**Description:** RAW XGE p.19: "Starting at 17th level, when an enemy you can see dies within 60 feet of you, you or one creature of your choice that is within 60 feet of you regains hit points equal to the enemy's number of Hit Dice, provided that you aren't incapacitated. Once you use this feature, you can't do so again until the start of your next turn." This is the most mechanically complex of the four Lv-17 cleric capstones because it needs a new pipeline event (on-death) that doesn't yet exist as a primitive — same shape as v2.142.0's on-damage-taken hook but on the NPC death transition rather than PC damage application. Phase 1 captures the watcher state in the buff so the Phase 2 commit can focus solely on the hook itself; same scope-discipline pattern as v2.148.0 Fancy Footwork / v2.149.0 Relentless Avenger. The manual announce path (player presses button with `enemy_hit_dice` body) stays as the explicit GM-override the player can use for non-detected cases (NPC-vs-NPC kills the watcher saw, offscreen kills the player wants to claim, etc.).
+
+### Added
+- `tests/harness/test_keeper_of_souls.py::test_ks_buff_payload_carries_watcher_flag_and_radius` — state contract: installed buff carries `effects.keeper_of_souls_watcher: True` + `effects.keeper_of_souls_radius_ft: 60` + permanence sanity. The existing `test_use_ks_happy_lv17` was upgraded to seed Tavik into an active battle (required for `_install_buff`) and assert `buff_installed: True`; `test_use_ks_default_hd_clamp` was also updated to seed the battle so the install can fire on its call.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_keeper_of_souls` — adds the `_install_buff` call between the level gate and the broadcast. Buff payload: `key="keeper-of-souls-watcher"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, `effects.keeper_of_souls_watcher=True`, `effects.keeper_of_souls_radius_ft=60`. On install, mirrors the buff list to the sheet via `_mirror_buffs_to_sheet`. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_keeper_of_souls` from `⚪ announce-only` to `✅ tracked` (archetype D buff-install). Tracked / announce-only counts: 191 / 46 (was 190 / 47). New row in "Recent retrofits".
+- `docs/test-harness-coverage.md` — `test_keeper_of_souls.py` block updated. Total harness count bumped to **2077** (was 2076).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gained the Keeper of Souls citation.
+
+### Notes
+- Four of six Lv-17 cleric subclass capstones now shipped (Avatar of Battle, Saint of Forge and Fire, Improved Duplicity, Keeper of Souls). Two remaining: Order's Wrath (single-target mark for next attack — Hexblade's Curse sibling) and Improved Reaper (necromancy single-target → double-target spell routing — touches `/cast_spell`). The Phase 2 on-death hook for Keeper of Souls is the most interesting Phase-8-batch follow-up — a new pipeline event that will unlock future on-death features (e.g. Death Cleric's Touch of Death already shipped a v1 on-kill via temp HP; the same hook would let it Phase 2 to auto-fire). **Total harness count: 2077** in `tests/harness/` (was 2076); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.3] - 2026-06-09 — "Four-Faced Trick" — Phase 8 third commit: Improved Duplicity (Trickery Cleric Lv 17) installs an Invoke-Duplicity-parameter flag buff (Phase 1 of split, Phase 2 deferred)
 
 **Schema version:** 69
