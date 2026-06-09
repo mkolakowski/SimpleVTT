@@ -12488,6 +12488,33 @@ async def use_ascendant_step(
             "invocation": "ascendant-step",
         })
 
+    # v2.147.0 — install a levitate buff carrying a small fly speed
+    # (was announce-only). RAW Levitate is vertical-only ("rise or fall
+    # up to 20 ft per turn"), so `fly_speed_ft = 10` records the
+    # mechanical "you can move vertically each round" without
+    # over-claiming a horizontal fly speed; SimpleVTT's 2D map keeps
+    # altitude narrative-only per the v2.99.141 ship note. Concentration
+    # per RAW. Mirrors the v2.99.459 Stormborn shape; install requires
+    # an active battle.
+    fly_speed_ft = 10
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "ascendant-step-levitate",
+        "name": "Levitate (Ascendant Step)",
+        "icon": "🪶",
+        "duration_rounds": 100,
+        "duration_max": 100,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": {"fly_speed_ft": fly_speed_ft},
+        "desc": (
+            f"Levitates up to 20 ft. Vertical-only per RAW. "
+            f"Concentration up to 10 min. (Warlock Lv 9 Ascendant "
+            f"Step invocation.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -12502,12 +12529,16 @@ async def use_ascendant_step(
             "source": "ascendant-step",
             "altitude_ft": 20,
             "duration_rounds": 100,  # 10 minutes at 6s/round
+            "fly_speed_ft": fly_speed_ft,
+            "buff_installed": buff_installed,
         },
     })
 
     return {
         "ok": True,
         "character_id": char.id,
+        "fly_speed_ft": fly_speed_ft,
+        "buff_installed": buff_installed,
         "character_name": char.name,
         "altitude_ft": 20,
         "duration_rounds": 100,

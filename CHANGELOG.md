@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.147.0] - 2026-06-08 — "Lift Off" — Ascendant Step installs a levitate buff (Warlock Lv 9 invocation)
+
+**Schema version:** 69
+**Commit summary:** **Wires Ascendant Step (Warlock Lv 9 Eldritch Invocation, PHB p.110) into a mechanical buff install. RAW the invocation lets the Warlock cast Levitate on themselves at will; `/use_ascendant_step` now installs an `ascendant-step-levitate` buff carrying `effects.fly_speed_ft: 10` (vertical-only per RAW), `concentration: True`, `duration_rounds: 100` (10 minutes). Mirrors the v2.99.459 Stormborn pattern. Was announce-only since v2.99.141.**
+**Description:** RAW Levitate is vertical-only — the target rises or falls up to 20 ft per action with concentration up to 10 minutes. SimpleVTT's 2D map keeps altitude narrative-only (per the v2.99.141 ship note), so the v1 wiring records the mechanical "you have a small fly speed for vertical maneuver" via `fly_speed_ft: 10` rather than the full walking-speed equivalent — over-claiming horizontal fly speed would mis-model RAW. The buff carries `concentration: True` so it drops on a failed concentration save (the v2.110-vintage concentration pipeline already handles this for any buff with the concentration flag — Levitate doesn't need separate plumbing). Stormborn's buff was `concentration: False` because it's a passive Tempest Domain feature; Ascendant Step is a concentration invocation. Test: seed Magnus in an active battle, call the endpoint, verify the `buff_update` broadcast shows the levitate buff with the right effects + concentration flag.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/use_ascendant_step` installs an `ascendant-step-levitate` buff via `_install_buff` after the existing invocation gate. Response and broadcast now surface `fly_speed_ft: 10` + `buff_installed: bool`. Mirrors buffs to the sheet via `_mirror_buffs_to_sheet` on a successful install.
+- `tests/harness/test_use_ascendant_step.py` — `test_use_ascendant_step_installs_levitate_buff`: seeds Magnus in an active battle, calls the endpoint, asserts `buff_installed: True` + `fly_speed_ft: 10` on the response AND the `buff_update` broadcast carries the levitate buff with `effects.fly_speed_ft: 10` + `concentration: True`.
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2037 → 2038.
+
+### Notes
+- Install requires an active battle (per `_install_buff`'s contract). Outside of init the endpoint stays at the v2.99.141 announce-only contract — `buff_installed: False`. The existing v2.99.141 tests still pass because they don't seed a battle, so `buff_installed` lands False on the response — but those tests don't assert on `buff_installed`. Filed as a follow-up: a Phase 1.5 that decouples invocation announce-only from buff install or handles the no-battle case gracefully (current behavior is "announce the cast even without install" — acceptable). **Total harness count: 2038** in `tests/harness/` (2037 → 2038); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.146.0] - 2026-06-08 — "Sword Dance" — Blade Flourish shared damage half (Swords Bard Lv 3+)
 
 **Schema version:** 69
