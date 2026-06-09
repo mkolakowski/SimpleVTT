@@ -115,3 +115,83 @@ async def test_use_sr_level_gate(
             {"subclass": "Oath of Devotion", "level": 7},
             class_slug="paladin",
         )
+
+
+def _pc(cid, c, hp=30):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp, "hp_max": hp, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    form = {
+        "name": "Demo Campaign", "description": "demo",
+        "game_system": "dnd5e", "gm_tab_color": "", "font_override": "",
+        "default_encounter_id": "", "hp_threshold_1": "", "hp_threshold_2": "",
+        "hp_threshold_3": "", "hp_threshold_4": "", "auto_play_playlist_id": "",
+        "auto_play_mode": "order", "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+        follow_redirects=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def auto_apply_on(gm_client):
+    await _set_auto_apply(gm_client, True)
+    yield
+    await _set_auto_apply(gm_client, False)
+
+
+async def test_sr_fires_on_attack_against_conquest_lv15(
+    gm_client, gm_ws, caelan_conquest_lv15, roster, auto_apply_on,
+):
+    """v2.142.0 — Phase 1 (on-damage-taken hook). When a Conquest
+    Paladin Lv 15+ is hit by an attack, the attacker takes psychic
+    damage = max(1, CHA mod). End-to-end: Caelan PATCHed to Conquest
+    Lv 15 (CHA 16 → mod 3), seed Caelan + Pip in battle with auto-
+    apply on. Pip attacks Caelan → on a hit, the broadcast carries a
+    `feature_used` with source `scornful-rebuke`. Retry-on-miss bound
+    to 10 (Pip +6 vs Caelan AC ~18, ~45% hit)."""
+    caelan = caelan_conquest_lv15
+    pip = roster["Pip Quickfingers"]
+    cael_tok = f"tok_sr_c_{caelan['id']}"
+    pip_tok = f"tok_sr_p_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [_pc(cael_tok, caelan), _pc(pip_tok, pip)],
+              "turn_index": 1, "round": 1, "active": True},
+    )
+    sr_fired = False
+    for _ in range(10):
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": pip["id"],
+                  "attack_index": 0,
+                  "target_combatant_id": cael_tok,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit") is not True:
+            continue
+        await asyncio.sleep(0.3)
+        feats = _sr_broadcasts(gm_ws, caelan["id"])
+        if feats:
+            sr_fired = True
+            data = feats[-1]["data"]
+            assert data["psychic_damage"] == 3, (
+                f"CHA 16 → mod 3 → psychic 3; got {data['psychic_damage']}"
+            )
+            assert int(data.get("attacker_char_id") or 0) == int(pip["id"]), (
+                f"attacker_char_id should be Pip; got {data.get('attacker_char_id')!r}"
+            )
+            break
+    assert sr_fired, (
+        "Scornful Rebuke didn't fire after Pip's hit on Caelan; "
+        "check the on-damage-taken hook"
+    )

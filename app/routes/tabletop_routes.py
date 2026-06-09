@@ -7093,6 +7093,56 @@ async def _apply_damage_to_combatant(
         # Phase C.2 concentration save trigger.
         if applied > 0:
             await _maybe_concentration_save(campaign_id, char, applied, db=db)
+        # v2.142.0 — Scornful Rebuke (Conquest Paladin Lv 15+, XGE p.37):
+        # "Whenever a creature hits you with an attack, that creature
+        # takes psychic damage equal to your Charisma modifier (minimum
+        # of 1)." Fires only on attack-sourced damage (is_attack=True)
+        # to skip aura/spell-tick damage; the retaliation deals psychic
+        # damage to the attacker via a recursive call with is_attack=
+        # False to prevent infinite ping-pong (attacker's own scornful
+        # rebuke can't re-fire on this psychic damage).
+        if (
+            is_attack and applied > 0 and attacker_char_id
+            and _pc_has_conquest_oath(sheet, 15)
+        ):
+            _abilities = sheet.get("abilities") or {}
+            try:
+                _cha_mod = (int(_abilities.get("CHA") or 10) - 10) // 2
+            except (TypeError, ValueError):
+                _cha_mod = 0
+            _scornful_dmg = max(1, _cha_mod)
+            _atk_state = hub.get_battle(campaign_id)
+            _atk_comb = None
+            if _atk_state:
+                for _c in _atk_state.get("combatants") or []:
+                    if _c.get("char_id") == int(attacker_char_id):
+                        _atk_comb = _c
+                        break
+            if _atk_comb is not None:
+                await _apply_damage_to_combatant(
+                    db, campaign_id, _atk_comb, _scornful_dmg, "psychic",
+                    is_attack=False, attacker_char_id=None,
+                )
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "source": "scornful-rebuke",
+                        "character_id": int(combatant.get("char_id") or 0),
+                        "character_name": (char.name if char else ""),
+                        "feature_name": (
+                            f"💢 Scornful Rebuke — {_scornful_dmg} psychic to attacker"
+                        ),
+                        "feature_desc": (
+                            f"The attacker who just hit "
+                            f"{char.name if char else 'the Paladin'} "
+                            f"takes {_scornful_dmg} psychic damage. "
+                            f"(Conquest Paladin Lv 15+; passive auto-trigger.)"
+                        ),
+                        "psychic_damage": _scornful_dmg,
+                        "attacker_char_id": int(attacker_char_id),
+                        "attacker_combatant_id": _atk_comb.get("id"),
+                    },
+                })
         await hub.broadcast(campaign_id, {
             "type": "character_hp_update",
             "data": {

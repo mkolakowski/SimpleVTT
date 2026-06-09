@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.142.0] - 2026-06-08 — "Get Back" — Scornful Rebuke on-damage-taken hook (Conquest Paladin Lv 15+)
+
+**Schema version:** 69
+**Commit summary:** **Wires the auto-retaliation half of Scornful Rebuke (Conquest Paladin Lv 15+, XGE p.37). When a Conquest Paladin Lv 15+ is hit by an attack, the attacker takes psychic damage = `max(1, CHA mod)` automatically. New on-damage-taken hook inside `_apply_damage_to_combatant` PC branch: after damage is applied and `is_attack=True`, check the defender's sheet for Conquest Lv 15+, look up the attacker's combatant by `char_id`, and recursively apply the psychic retaliation (with `is_attack=False` to prevent ping-pong). Broadcasts a `feature_used` event sourced `scornful-rebuke` so chat-card chrome renders the retaliation.**
+**Description:** RAW XGE p.37: "Whenever a creature hits you with an attack, that creature takes psychic damage equal to your Charisma modifier (minimum of 1)." This is the first on-damage-taken hook in the codebase — a new mechanic primitive sibling to the existing on-hit-rider, aura-tick, and condition-install paths. Per the v2.128.1 audit, this was the right place for Scornful Rebuke (vs trying to force it into `_tick_auras`). The recursive call passes `is_attack=False` so the attacker's own Scornful Rebuke (if they're also a Conquest Lv 15+ Paladin — pathological case) doesn't ping-pong. Gated to attacker-sourced damage so spell-damage ticks, aura damage, and feature damage don't trigger; only weapon attacks and spell attacks (which fire through `_apply_damage_to_combatant` with `is_attack=True`) qualify. The v2.99.285 announce-only `/use_scornful_rebuke` endpoint stays as a manual declaration; the actual mechanic now fires automatically. Test path: Caelan PATCHed to Conquest Lv 15 (CHA 16 → mod 3 → psychic 3), Pip attacks Caelan with `auto_apply_damage` on, retries 10 times for a hit, asserts the `feature_used` broadcast carries `psychic_damage: 3` + `attacker_char_id: pip.id`.
+
+### Added
+- `app/routes/tabletop_routes.py` — on-damage-taken hook inside `_apply_damage_to_combatant`'s PC branch (~line 7095): after `_maybe_concentration_save`, when `is_attack and applied > 0 and attacker_char_id and _pc_has_conquest_oath(sheet, 15)`, look up the attacker's combatant and recursively apply `max(1, CHA mod)` psychic damage with `is_attack=False`. Broadcasts `feature_used` with source `scornful-rebuke` + `attacker_char_id` + `attacker_combatant_id` + `psychic_damage`.
+- `tests/harness/test_scornful_rebuke.py` — `test_sr_fires_on_attack_against_conquest_lv15`: PATCH Caelan to Conquest Lv 15, seed Caelan + Pip in battle with `auto_apply_damage` on, Pip attacks Caelan with 10-bound retry, assert the `scornful-rebuke` broadcast fires with the right payload.
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2029 → 2030.
+
+### Notes
+- First on-damage-taken hook primitive in the codebase. Future expansions: Eldritch Smite-style reactive damage, Hellish Rebuke (currently spell-cast-driven), reactive psychic damage on grapple, etc. Filed as a follow-up: rename the hook into a registry that supports multiple on-damage-taken sources cleanly. Edge case noted: when the attacker isn't in the active battle (e.g., out-of-init attack like a wandering NPC), the retaliation silently no-ops because the helper can't find the attacker's combatant — RAW edge that's filed for a follow-up. **Total harness count: 2030** in `tests/harness/` (2029 → 2030); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.141.0] - 2026-06-08 — "Punish the Marked" — Unwavering Mark Phase 2 (bonus-action punish endpoint)
 
 **Schema version:** 69
