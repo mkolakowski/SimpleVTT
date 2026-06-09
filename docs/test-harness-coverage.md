@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2086 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.14, 2026-06-09).
+**Total tests:** 2087 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.15, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1654,15 +1654,16 @@ v2.99.232 — Eldritch Knight Fighter (PHB p.74) Weapon Bond (Phase 1 of [docs/p
 | `test_use_weapon_bond_non_weapon` | `weapon_index` pointing at Chain mail (armor) → 400. |
 
 ### `test_wild_magic_spell_bombardment.py`
-v2.99.231 — Wild Magic Sorcerer (PHB p.103) Spell Bombardment (Phase 5 of [docs/plans/wild-magic.md](../plans/wild-magic.md), final phase). Once-per-turn flag tracked via `combatant.economy.spell_bombardment_used` (mirror of Colossus Slayer's v2.60.0 flag).
+v2.99.231 — Wild Magic Sorcerer (PHB p.103) Spell Bombardment (Phase 5 of [docs/plans/wild-magic.md](../plans/wild-magic.md), final phase). Once-per-turn flag tracked via `combatant.economy.spell_bombardment_used` (mirror of Colossus Slayer's v2.60.0 flag). v2.158.15 (Phase 8 Sorcerer diversification — closes the six-class arc): endpoint now installs a permanent `spell-bombardment-active` buff carrying three `spell_bombardment_*` parameter flags. Phase 2 (deferred): `/cast_spell` damage-roll path auto-detects max-rolled dice and surfaces the reroll option.
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_use_spell_bombardment_happy` | Lv 18 Wild Magic Zara, `die_size: 8` → `extra_damage` in 1..8 + broadcast (source `spell-bombardment`). |
+| `test_use_spell_bombardment_happy` | Lv 18 Wild Magic Zara, `die_size: 8` → `extra_damage` in 1..8, `buff_installed == True`, broadcast (source `spell-bombardment`). v2.158.15 — happy test gains the buff assertion. |
 | `test_use_spell_bombardment_once_per_turn` | First call succeeds; second call same turn → 409 `once_per_turn`. |
 | `test_use_spell_bombardment_bad_die_size` | `die_size: 5` → 400 (only 4/6/8/10/12 allowed). |
 | `test_use_spell_bombardment_wrong_subclass` | Default Draconic Bloodline → 409 `wrong_subclass_or_level`. |
 | `test_use_spell_bombardment_level_gate` | Wild Magic at Lv 17 (not 18+) → 409. |
+| `test_sb_buff_payload_carries_parameter_flags` | v2.158.15 — installed buff carries three `spell_bombardment_*` effect keys (active=True, die_sizes=[4,6,8,10,12], uses_per_turn=1) + permanence sanity. State-change contract (Phase 9). Pins the Phase-2 contract so the future `/cast_spell` read site has stable flag names. |
 
 ### `test_wild_magic_controlled_chaos.py`
 v2.99.230 — Wild Magic Sorcerer (PHB p.103) Controlled Chaos (Phase 4 of [docs/plans/wild-magic.md](../plans/wild-magic.md)). Lv 14+ Wild Magic Sorcerers roll the surge table twice and pick. Uses TEST_MODE `_force_surge_d20: 1` on `/cast_spell` for determinism.

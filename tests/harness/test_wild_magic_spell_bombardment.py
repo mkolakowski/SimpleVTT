@@ -83,7 +83,8 @@ async def zara_wild_magic_lv18(gm_client, roster):
 async def test_use_spell_bombardment_happy(
     gm_client, gm_ws, zara_wild_magic_lv18,
 ):
-    """Lv 18 Wild Magic Zara → 1d8 reroll in 1..8 + broadcast."""
+    """Lv 18 Wild Magic Zara → 1d8 reroll in 1..8 + broadcast +
+    buff installed."""
     zara = zara_wild_magic_lv18
     gm_ws.mark()
     r = await gm_client.post(
@@ -94,9 +95,52 @@ async def test_use_spell_bombardment_happy(
     data = r.json()
     assert data["die_size"] == 8
     assert 1 <= data["extra_damage"] <= 8
+    assert data["buff_installed"] is True
     await asyncio.sleep(0.3)
     feats = _sb_broadcasts(gm_ws, zara["id"])
     assert feats
+
+
+async def test_sb_buff_payload_carries_parameter_flags(
+    gm_client, gm_ws, zara_wild_magic_lv18,
+):
+    """v2.158.15 — state contract (Phase 9): the installed
+    `spell-bombardment-active` buff carries the three
+    `spell_bombardment_*` effect keys with the right values
+    (active=True, die_sizes=[4,6,8,10,12], uses_per_turn=1).
+    Phase 2 (deferred) will have `/cast_spell`'s damage-roll
+    path read these off the caster's `_buffs_active` to auto-
+    detect max-rolled dice and surface the reroll option; this
+    test pins the flag shape so that future read site has a
+    stable contract."""
+    zara = zara_wild_magic_lv18
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_spell_bombardment",
+        json={"character_id": zara["id"], "die_size": 6},
+    )
+    assert r.status_code == 200, r.text
+    bu = await gm_ws.wait_for("buff_update")
+    zara_buffs = bu["data"]["buffs"]
+    sb_buff = next(
+        (b for b in zara_buffs if b.get("key") == "spell-bombardment-active"),
+        None,
+    )
+    assert sb_buff is not None, (
+        f"spell-bombardment-active buff missing; got keys="
+        f"{[b.get('key') for b in zara_buffs]}"
+    )
+    effects = sb_buff.get("effects") or {}
+    assert effects.get("spell_bombardment_active") is True
+    die_sizes = effects.get("spell_bombardment_die_sizes") or []
+    for ds in (4, 6, 8, 10, 12):
+        assert ds in die_sizes, (
+            f"missing die_size {ds}; got {die_sizes}"
+        )
+    assert effects.get("spell_bombardment_uses_per_turn") == 1
+    # Permanent passive — no concentration, very long duration.
+    assert sb_buff.get("concentration") in (False, None)
+    assert int(sb_buff.get("duration_rounds") or 0) >= 1000
 
 
 async def test_use_spell_bombardment_once_per_turn(

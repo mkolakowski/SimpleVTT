@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.15] - 2026-06-09 — "Critical Cascade" — Phase 8 Sorcerer diversification: Spell Bombardment (Wild Magic Sorcerer Lv 18+) installs the max-die-reroll parameter flag buff (Phase 1; cast-flow auto-detection deferred)
+
+**Schema version:** 69
+**Commit summary:** **Phase 8 closes the diversification arc — Sorcerer is the sixth and final untouched class family flipped from announce-only to tracked this session (now spans cleric, paladin, fighter, druid, warlock, sorcerer). `use_spell_bombardment` (Wild Magic Sorcerer Lv 18+) already had once-per-turn flag tracking pre-Phase-8 (via `_is_spell_bombardment_used` / `_mark_spell_bombardment_used`); the Phase 8 enhancement adds a permanent `spell-bombardment-active` buff carrying three `spell_bombardment_*` effect keys (active=True, die_sizes=[4,6,8,10,12], uses_per_turn=1). Phase 2 (deferred): `/cast_spell` damage-roll path auto-detects max-rolled dice in the per-die breakdown, checks the buff + once-per-turn flag, and surfaces a one-click "reroll this max die" option to the player. Pre-Phase-8 the feature was player-invoked (the player saw the max die in their roll log + manually hit the endpoint).**
+**Description:** Same recipe as the Lv-17 cleric capstones, EK capstones, Druid Star Map, Paladin Purity of Spirit, and Warlock Devil's Sight commits earlier in this session. The buff captures the parameter contract so the Phase 2 read site has stable flag names to look up. Closes the session's six-class diversification arc: cleric (7 subclasses), paladin, fighter (EK), druid, warlock, sorcerer.
+
+### Added
+- `tests/harness/test_wild_magic_spell_bombardment.py::test_sb_buff_payload_carries_parameter_flags` — state contract: installed buff carries the three `spell_bombardment_*` effect keys (active=True, all five die sizes 4/6/8/10/12, uses_per_turn=1) with the right values. Plus permanence sanity (`concentration` falsy + `duration_rounds >= 1000`). The existing `test_use_spell_bombardment_happy` was upgraded to assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_spell_bombardment` — adds the `_install_buff` call between `_mark_spell_bombardment_used` and the broadcast. Buff payload: `key="spell-bombardment-active"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, plus the three `spell_bombardment_*` effect keys (die_sizes list pulled from `_SPELL_BOMBARDMENT_DIE_SIZES`). The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_spell_bombardment` from `⚪ announce-only` to `✅ tracked`. Tracked / announce-only counts: 198 / 39 (was 197 / 40). Phase 8 row notes the Sorcerer diversification + the closure of the six-class arc.
+- `docs/test-harness-coverage.md` — `test_wild_magic_spell_bombardment.py` block updated. Total harness count bumped to **2087** (was 2086).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Spell Bombardment citation + the six-class-coverage note.
+
+### Notes
+- Phase 8 session ledger: 16 commits, 7 features across 6 class families, 2 engine hotfixes, 2 Phase-2 read sites (Keeper of Souls + Order's Wrath), 1 new pipeline primitive (on-death). Lv-17 cleric capstone batch closed 6/6, Eldritch Knight closed 2/2. Future Phase-8 directions: Phase 2 read sites for the deferred commits, Lv-20 capstones (Emissary of Redemption), or the announce-only tail (now down to ~39 endpoints, mostly archetype J narration). **Total harness count: 2087** in `tests/harness/` (was 2086); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.14] - 2026-06-09 — "Through the Dark" — Phase 8 Warlock diversification: Devil's Sight (Warlock Lv 2+ invocation) installs the vision-parameter flag buff (Phase 1; darkness resolver deferred)
 
 **Schema version:** 69

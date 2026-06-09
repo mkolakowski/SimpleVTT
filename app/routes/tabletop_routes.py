@@ -43958,10 +43958,22 @@ async def use_spell_bombardment(
     economy `spell_bombardment_used`). Rolls 1d<die_size>, marks
     the flag, broadcasts.
 
-    v1 ships announce-only — the player invokes this after seeing
-    their damage roll show a max die. The bonus damage is announced
-    via feature_used; the GM applies the bump to the existing
-    damage roll manually.
+    v2.158.15 — Phase 8 Sorcerer diversification (first Sorcerer
+    subclass feature flipped from announce-only to tracked this
+    session — closes the diversification arc for the
+    cleric/paladin/fighter/druid/warlock/sorcerer six-family
+    coverage). Install a permanent `spell-bombardment-active`
+    buff carrying the parameter flags:
+      * `effects.spell_bombardment_active: True`
+      * `effects.spell_bombardment_die_sizes: [4,6,8,10,12]`
+      * `effects.spell_bombardment_uses_per_turn: 1`
+    Phase 2 (deferred): `/cast_spell` damage-roll path auto-
+    detects max-rolled dice in the per-die breakdown, checks
+    the buff + once-per-turn flag, and surfaces a one-click
+    "reroll this max die" option to the player. Pre-Phase-8 the
+    feature was player-invoked (announce-only) — the player saw
+    the max die in their roll log + manually hit the endpoint.
+    Phase 2 lets the cast flow auto-detect + offer it.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -44008,6 +44020,38 @@ async def use_spell_bombardment(
 
     await _mark_spell_bombardment_used(campaign_id, char.id)
 
+    # v2.158.15 — install the parameter-flag buff. Permanent
+    # passive (idempotent on re-press via key dedupe). Phase 2
+    # (deferred): `/cast_spell` reads
+    # `effects.spell_bombardment_*` off the caster's
+    # `_buffs_active` and auto-detects max-rolled dice in the
+    # damage breakdown.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "spell-bombardment-active",
+        "name": "💥 Spell Bombardment",
+        "icon": "💥",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "spell_bombardment_active": True,
+            "spell_bombardment_die_sizes": sorted(
+                list(_SPELL_BOMBARDMENT_DIE_SIZES)
+            ),
+            "spell_bombardment_uses_per_turn": 1,
+        },
+        "desc": (
+            f"{char.name} can reroll one max-rolled damage die per "
+            f"turn on a spell, adding the new roll to the damage. "
+            f"(Wild Magic Sorcerer Lv 18+ passive permanent. "
+            f"Phase 2: `/cast_spell` auto-detects max-rolled dice.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -44037,6 +44081,7 @@ async def use_spell_bombardment(
             "source": "spell-bombardment",
             "die_size": die_size,
             "extra_damage": extra,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -44045,6 +44090,7 @@ async def use_spell_bombardment(
         "feature": "spell-bombardment",
         "die_size": die_size,
         "extra_damage": extra,
+        "buff_installed": buff_installed,
     }
 
 
