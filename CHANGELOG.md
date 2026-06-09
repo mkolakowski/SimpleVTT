@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.157.4] - 2026-06-09 — "Single Source of Truth" — factor the condition-impact map into a shared Python module
+
+**Schema version:** 69
+**Commit summary:** **Refactor commit, no behavior change. Lifts the per-condition impact map out of the two places it was duplicated (the Jinja literal in `_mini_sheet_card.html` + the JS const in `tabletop.html`) into a single Python module `app/content/condition_impacts.py`. Exposed as a Jinja global (`CONDITION_IMPACTS`) for server-side templates and rendered as a `window._COND_IMPACT_MAP` JSON blob via an inline `<script>` in `tabletop.html`'s `{% block head %}` for the runtime JS.**
+**Description:** v2.157.1 added the Jinja `_cond_impact_map`; v2.157.2 cloned it into JS as `_COND_IMPACT_MAP` for client-side hydration. The two were synced by convention only — a one-line edit to one but not the other would have made the PC and NPC pills disagree on tooltip wording. v2.157.4 collapses the two into one Python dict: `CONDITION_IMPACTS` in `app/content/condition_impacts.py`. The Jinja template now reads `CONDITION_IMPACTS` directly (exposed as a global by `app/templates.py`). The JS reads `window._COND_IMPACT_MAP`, which is set by a server-side `<script>` tag rendering `{{ CONDITION_IMPACTS | tojson }}`. Adding a new condition is now a single edit; the v2.157.1 harness test catches breakage end-to-end.
+
+### Added
+- `app/content/condition_impacts.py` — new module with the `CONDITION_IMPACTS` dict (10 entries, same wording as the prior literals). Docstring covers the migration context + the key/value conventions.
+- `app/templates.py` — `from .content.condition_impacts import CONDITION_IMPACTS` + `templates.env.globals["CONDITION_IMPACTS"] = CONDITION_IMPACTS`. Sits next to the other env-globals (APP_VERSION etc.) so every template that includes `_mini_sheet_card.html` picks it up without a per-route context push.
+- `app/templates/tabletop.html` — new inline `<script>window._COND_IMPACT_MAP = {{ CONDITION_IMPACTS | tojson }};</script>` block in `{% block head %}` so the runtime JS reads the same dict the server-side template reads.
+
+### Changed
+- `app/templates/_mini_sheet_card.html` — replaced the inline `_cond_impact_map` literal with the Jinja global `CONDITION_IMPACTS`. Same key/value shape, so the surrounding warning-pill logic is unchanged.
+- `app/templates/tabletop.html` — `_COND_IMPACT_MAP` JS const replaced with a `window._COND_IMPACT_MAP || {}` lookup. Docstring updated to point at `app/content/condition_impacts.py` as the source of truth.
+
+### Notes
+- No code-coverage changes — the contract is unchanged (v2.157.1's harness test still pins the SSR pill rendering with "Poisoned" + the RAW impact phrase). Pure refactor. **Total harness count: 2072** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). Future condition additions: one edit to `CONDITION_IMPACTS` in `app/content/condition_impacts.py` + (if the new key drives a new server-side mechanic) the relevant frozenset addition in `tabletop_routes.py` (e.g. add to `_CHECK_DIS_CONDITION_KEYS` for a new check-dis condition).
+
+---
+
 ## [2.157.3] - 2026-06-09 — "Real-Time Tells" — PC live-update for the condition warning pill via renderBattle
 
 **Schema version:** 69

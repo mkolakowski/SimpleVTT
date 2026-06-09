@@ -2030,6 +2030,12 @@
 {% if campaign.font_override %}
 <script>document.documentElement.dataset.font = {{ campaign.font_override | tojson }};</script>
 {% endif %}
+{# v2.157.4 — Inline the shared CONDITION_IMPACTS map so the runtime
+   JS (mini-sheet abilities-header warning pill hydration in
+   _hydrateMonsterCard + the renderBattle PC branch) reads the same
+   dict the Jinja template reads server-side. Single source of truth
+   lives in ``app/content/condition_impacts.py``. #}
+<script>window._COND_IMPACT_MAP = {{ CONDITION_IMPACTS | tojson }};</script>
 {% endblock %}
 
 {% block content %}
@@ -7032,23 +7038,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      * conditions live on hub-state `combatant.buffs`). This helper
      * patches the pill in/out of the cloned card per-render so the GM
      * sees the warning whenever a monster carries one of the
-     * automation-driving conditions. Same per-condition impact map as
-     * the Jinja `_cond_impact_map` in _mini_sheet_card.html — kept in
-     * sync by convention; both fire on the same buff key set. The
-     * helper is idempotent: removes any existing pill before deciding
-     * whether to insert a fresh one. */
-    const _COND_IMPACT_MAP = {
-        'poisoned':    'disadvantage on attacks + ability checks',
-        'frightened':  'disadvantage on attacks + ability checks',
-        'restrained':  'disadvantage on attacks; attacks against have advantage; disadvantage on DEX saves',
-        'blinded':     'disadvantage on attacks; attacks against have advantage',
-        'prone':       'disadvantage on attacks (own); melee attacks against have advantage',
-        'paralyzed':   'incapacitated · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit',
-        'stunned':     'incapacitated · auto-fail STR + DEX saves · attacks against have advantage',
-        'unconscious': 'incapacitated, prone · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit',
-        'petrified':   'auto-fail STR + DEX saves · resistance to all damage',
-        'invisible':   'advantage on own attack rolls; attacks against have disadvantage',
-    };
+     * automation-driving conditions. v2.157.4: pulls the shared
+     * CONDITION_IMPACTS map from ``window._COND_IMPACT_MAP``
+     * (rendered server-side from ``app/content/condition_impacts.py``
+     * via the ``{% block head %}`` inline script) so the Jinja
+     * template and the runtime JS read the same dict. The helper is
+     * idempotent: removes any existing pill before deciding whether
+     * to insert a fresh one. */
+    const _COND_IMPACT_MAP = (typeof window !== 'undefined' && window._COND_IMPACT_MAP) || {};
     function _updateConditionWarnPill(rootEl, buffs) {
         if (!rootEl) return;
         const header = rootEl.querySelector('.mini-ab-header');

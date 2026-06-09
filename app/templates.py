@@ -10,6 +10,7 @@ from jinja2 import ChainableUndefined
 
 from .version import APP_VERSION, SCHEMA_VERSION
 from .config import get_settings
+from .content.condition_impacts import CONDITION_IMPACTS
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 # ChainableUndefined lets ``{{ user.foo or '' }}`` evaluate to ``''`` when
@@ -30,6 +31,14 @@ templates.env.globals["APP_DEFAULT_THEME"] = get_settings().default_theme
 templates.env.globals["DEMO_MODE"] = get_settings().demo_mode
 templates.env.globals["DEMO_RESET_INTERVAL_MINUTES"] = get_settings().demo_reset_interval_minutes
 templates.env.globals["DEMO_CREDENTIALS_VISIBLE"] = get_settings().demo_credentials_visible
+# v2.157.4 — Shared per-condition impact map driving the v2.157.1+
+# abilities-header warning pill. Single source of truth (the Jinja
+# template + the runtime JS both read this dict — see the
+# ``app/content/condition_impacts.py`` docstring for the migration
+# context). Exposed as a Jinja global so every template that includes
+# ``_mini_sheet_card.html`` picks it up without a per-route context
+# push.
+templates.env.globals["CONDITION_IMPACTS"] = CONDITION_IMPACTS
 
 
 # Starlette 1.0 (2026) removed the legacy ``TemplateResponse(name, context)``

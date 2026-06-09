@@ -114,27 +114,16 @@
                    modify saves/checks per RAW PHB Appendix A (matches the
                    v2.152.0–v2.157.0 server-side adv/dis automation). Reads
                    the v2.97.30 ``_buffs_active`` mirror; computes the
-                   tooltip text from a per-condition impact map so the
-                   GM/player knows *why* a click will fire with auto-dis or
-                   auto-fail. #}
-                {% set _cond_impact_map = {
-                    'poisoned':     'disadvantage on attacks + ability checks',
-                    'frightened':   'disadvantage on attacks + ability checks',
-                    'restrained':   'disadvantage on attacks; attacks against have advantage; disadvantage on DEX saves',
-                    'blinded':      'disadvantage on attacks; attacks against have advantage',
-                    'prone':        'disadvantage on attacks (own); melee attacks against have advantage',
-                    'paralyzed':    'incapacitated · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit',
-                    'stunned':      'incapacitated · auto-fail STR + DEX saves · attacks against have advantage',
-                    'unconscious':  'incapacitated, prone · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit',
-                    'petrified':    'auto-fail STR + DEX saves · resistance to all damage',
-                    'invisible':    'advantage on own attack rolls; attacks against have disadvantage',
-                } %}
+                   tooltip text from the shared ``CONDITION_IMPACTS`` map
+                   exposed as a Jinja global by ``app/templates.py``
+                   (single source of truth — also rendered to JS as
+                   ``window._COND_IMPACT_MAP`` via tabletop.html). #}
                 {% set _ab_warn_ns = namespace(parts=[]) %}
                 {% for _b in (sh.get('_buffs_active') or []) %}
                     {% set _bk = ((_b.get('key') if _b is mapping else '') or '') | lower | trim %}
-                    {% if _bk in _cond_impact_map %}
+                    {% if _bk in CONDITION_IMPACTS %}
                         {% set _bname = ((_b.get('name') if _b is mapping else '') or _bk | title) %}
-                        {% set _ = _ab_warn_ns.parts.append(_bname ~ ': ' ~ _cond_impact_map[_bk]) %}
+                        {% set _ = _ab_warn_ns.parts.append(_bname ~ ': ' ~ CONDITION_IMPACTS[_bk]) %}
                     {% endif %}
                 {% endfor %}
                 <div class="mini-ab-header">
