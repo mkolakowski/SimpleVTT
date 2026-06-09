@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.7] - 2026-06-09 — "Routed via Slug" — hotfix: Keeper of Souls HD parse now resolves the monster slug pointer instead of reading TokenTemplate.sheet directly
+
+**Schema version:** 69
+**Commit summary:** **Hotfix on v2.158.6's on-death helper `_fire_keeper_of_souls_on_npc_death`. The HD parse was reading `tmpl.sheet.get("hit_dice")` directly, but TokenTemplate.sheet on the demo's bandits is just a pointer (`monster_slug: "bandit"`) — the actual `hit_dice` field lives in the homebrew/SRD monster JSON resolved by `local_content.resolve(...)`. The post-rebuild verify on v2.158.6 caught the regression: the bandit-death broadcast came back with `enemy_hit_dice == 1` (the parse default) instead of 2 from the SRD bandit's `"2d8+2"`. v2.158.7 adds a fallback path that resolves the monster_slug pointer to the raw monster dict and re-reads `hit_dice` from there if the inlined sheet was empty.**
+**Description:** Mirror of the v2.158.1 hotfix lesson: when adding a new feature that reads NPC stat-block fields, follow the same resolution chain the rest of the codebase uses. The demo seed uses the pointer pattern (`monster_slug: "bandit"`) to keep TokenTemplate rows tiny and the stat-block authoring centralized in the homebrew/SRD content tier. Bypassing `local_content.resolve` works for hand-authored TokenTemplate rows that inline the full stat block, but silently degrades to default values for the pointer rows — which is most of the demo's NPCs. The `_monster_template_to_sheet` projection (the obvious target for "give me the merged sheet") drops `hit_dice` because no PC-sheet rendering consumer needs it; reading the raw monster dict directly is the right answer for stat-block field lookups that aren't sheet-bound.
+
+### Changed
+- `app/routes/tabletop_routes.py::_fire_keeper_of_souls_on_npc_death` — HD parse now reads `tmpl.sheet.get("hit_dice")` first (inlined templates), and falls back to `local_content.resolve(monster_slug, type="monsters")` to read `hit_dice` off the raw monster JSON when the inlined sheet is empty (pointer-style templates from the demo seed + operator imports).
+
+### Notes
+- Same `tests/harness/test_keeper_of_souls.py::test_ks_on_death_hook_heals_watcher_when_npc_dies` from v2.158.6 is the regression test — passes here. **Total harness count: 2079** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). Lesson filed: when adding NPC-stat-block reads to a feature hook, route through `_monster_template_to_sheet` not `tmpl.sheet` directly — the demo uses the pointer pattern and so will most operator-authored NPCs.
+
+---
+
 ## [2.158.6] - 2026-06-09 — "Parting Vitality" — Phase 8 sixth commit + new on-death pipeline primitive: Keeper of Souls Phase 2 auto-heals the watcher when an NPC dies
 
 **Schema version:** 69

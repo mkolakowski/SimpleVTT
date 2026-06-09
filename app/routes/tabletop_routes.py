@@ -7532,17 +7532,35 @@ async def _fire_keeper_of_souls_on_npc_death(
     """
     import re
     try:
-        # Parse the dying NPC's HD count from the token template.
+        # Parse the dying NPC's HD count. The TokenTemplate.sheet is
+        # often just a pointer (`monster_slug`) and the projected
+        # sheet shape (`_monster_dict_to_sheet`) doesn't carry the
+        # `hit_dice` field. So check the raw sheet first for inlined
+        # templates, then fall back to resolving the monster slug
+        # against `local_content` to read `hit_dice` off the raw
+        # SRD / homebrew JSON.
         hd_count = 1
         tmpl_id = dying_target.get("token_template_id")
-        tmpl_sheet: dict = {}
         if tmpl_id:
             tmpl = db.query(TokenTemplate).filter(
                 TokenTemplate.id == int(tmpl_id),
             ).first()
-            if tmpl and tmpl.sheet:
-                tmpl_sheet = dict(tmpl.sheet)
-                hd_str = str(tmpl_sheet.get("hit_dice") or "").strip().lower()
+            if tmpl:
+                hd_str = str(
+                    (tmpl.sheet or {}).get("hit_dice") or ""
+                ).strip().lower()
+                if not hd_str:
+                    monster_slug = (tmpl.sheet or {}).get("monster_slug")
+                    if monster_slug:
+                        resolved = local_content.resolve(
+                            str(monster_slug), type="monsters",
+                            campaign_id=campaign_id,
+                        )
+                        if resolved is not None:
+                            monster_dict, _src = resolved
+                            hd_str = str(
+                                (monster_dict or {}).get("hit_dice") or ""
+                            ).strip().lower()
                 m = re.match(r"\s*(\d+)d", hd_str)
                 if m:
                     hd_count = max(1, int(m.group(1)))
