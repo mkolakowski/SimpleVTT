@@ -59462,6 +59462,189 @@ async def use_unwavering_mark(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_unwavering_punish")
+async def use_unwavering_punish(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.141.0 — Phase 2 of Unwavering Mark (Cavalier Fighter Lv 3+,
+    XGE p.13): "if a creature marked by you deals damage to anyone
+    other than you, you can make a special melee weapon attack
+    against the marked creature as a bonus action on your next turn.
+    You have advantage on the attack roll. If it hits, the attack's
+    weapon deals extra damage to the target equal to half your
+    fighter level."
+
+    Body: ``{character_id, target_combatant_id, attack_index,
+    override?}``. Bonus-action gated unless `override`. Subclass
+    gated to Cavalier Fighter Lv 3+. v1 simplification: doesn't
+    enforce the "marked creature damaged an ally" trigger gate —
+    GM/player adjudicates. The attack rolls 2d20kh1 + weapon
+    attack_bonus, vs the target's AC. On a hit, rolls weapon damage
+    + a flat `fighter_lv // 2` bonus (RAW; the bonus damage type
+    matches the weapon's). Broadcasts `weapon_attack` so chat-card
+    chrome renders the swing.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    attack_index = int(body.get("attack_index", -1))
+    target_combatant_id = (body.get("target_combatant_id") or "").strip() or None
+    override = bool(body.get("override"))
+    if char_id <= 0 or attack_index < 0 or not target_combatant_id:
+        raise HTTPException(
+            400, "character_id, attack_index, target_combatant_id required",
+        )
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_cavalier(sheet, 3):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "cavalier fighter lv 3+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _fighter_level_from_sheet(sheet),
+        })
+
+    attacks = list(sheet.get("attacks") or [])
+    if attack_index >= len(attacks):
+        raise HTTPException(404, f"attack_index {attack_index} out of range")
+    attack = dict(attacks[attack_index])
+
+    # Bonus action chip gate.
+    if not override and _is_slot_used(campaign_id, char.id, "bonus"):
+        return JSONResponse(status_code=409, content={
+            "error": "bonus_action_already_used",
+            "char_name": char.name,
+        })
+
+    # Resolve the swing: 2d20kh1 + attack_bonus (advantage forced).
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    punish_bonus = fighter_lv // 2
+    bonus_str = str(attack.get("attack_bonus") or "").strip()
+    if bonus_str and not bonus_str.startswith(("+", "-")):
+        bonus_str = "+" + bonus_str
+    atk_expr = f"2d20kh1{bonus_str}"
+    try:
+        atk_r = dice_mod.roll(atk_expr)
+        attack_total = atk_r.total
+        attack_breakdown = atk_r.breakdown
+    except dice_mod.DiceParseError:
+        attack_total = None
+        attack_breakdown = ""
+
+    # Look up target AC.
+    target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+    target_ac = (
+        _read_target_ac(db, campaign_id, target_combatant)
+        if target_combatant else None
+    )
+    is_crit = False
+    if attack_breakdown:
+        import re as _re_crit
+        _m = _re_crit.search(r"\d*d20[^d=+ ]*=(\d+)", attack_breakdown)
+        if _m and int(_m.group(1)) >= 20:
+            is_crit = True
+    hit = (
+        is_crit
+        or (attack_total is not None
+            and target_ac is not None
+            and attack_total >= int(target_ac))
+    )
+
+    damage_total = None
+    damage_breakdown = ""
+    damage_type = str(attack.get("damage_type") or "").strip().lower()
+    if hit:
+        dmg_expr = str(attack.get("damage") or "").strip()
+        if is_crit:
+            dmg_expr = _double_dice_for_crit(dmg_expr)
+        if dmg_expr:
+            try:
+                d_r = dice_mod.roll(dmg_expr)
+                damage_total = int(d_r.total) + int(punish_bonus)
+                damage_breakdown = (
+                    f"{d_r.breakdown}  +  Unwavering Punish +{punish_bonus}"
+                )
+            except dice_mod.DiceParseError:
+                damage_total = punish_bonus
+                damage_breakdown = f"Unwavering Punish +{punish_bonus}"
+
+    # Mark bonus action used.
+    if not override:
+        await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    target_name = (target_combatant or {}).get("name") if target_combatant else ""
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    payload = {
+        "character_id": char.id,
+        "character_name": char.name,
+        "caster_char_name": char.name,
+        "user_color": caster_color,
+        "feature_name": (
+            f"🎯 Unwavering Punish — +{punish_bonus} bonus dmg vs marked"
+        ),
+        "feature_desc": (
+            f"{char.name} swings back at "
+            f"{target_name or 'the marked creature'} with advantage "
+            f"+ {punish_bonus} extra damage. "
+            f"(Cavalier Fighter Lv 3+ bonus-action punish.)"
+        ),
+        "source": "unwavering-punish",
+        "attack_name": attack.get("name") or "Punish",
+        "attack_total": attack_total,
+        "attack_breakdown": attack_breakdown,
+        "damage_total": damage_total,
+        "damage_breakdown": damage_breakdown,
+        "damage_type": damage_type,
+        "target_combatant_id": target_combatant_id,
+        "target_name": target_name,
+        "target_ac": target_ac,
+        "hit": hit,
+        "is_crit": is_crit,
+        "punish_bonus_damage": punish_bonus,
+        "fighter_level": fighter_lv,
+        "roll_state_applied": "advantage_unwavering_punish",
+    }
+    await hub.broadcast(campaign_id, {"type": "feature_used", "data": payload})
+
+    return {
+        "ok": True,
+        "feature": "unwavering-punish",
+        "attack_total": attack_total,
+        "attack_breakdown": attack_breakdown,
+        "damage_total": damage_total,
+        "damage_breakdown": damage_breakdown,
+        "hit": hit,
+        "is_crit": is_crit,
+        "punish_bonus_damage": punish_bonus,
+        "fighter_level": fighter_lv,
+        "roll_state_applied": "advantage_unwavering_punish",
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_rallying_cry")
 async def use_rallying_cry(
     campaign_id: int,

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.141.0] - 2026-06-08 — "Punish the Marked" — Unwavering Mark Phase 2 (bonus-action punish endpoint)
+
+**Schema version:** 69
+**Commit summary:** **New `/use_unwavering_punish` endpoint that resolves the Cavalier's RAW bonus-action follow-up swing (XGE p.13: "if a creature marked by you deals damage to anyone other than you, you can make a special melee weapon attack against the marked creature as a bonus action on your next turn. You have advantage on the attack roll. If it hits, the attack's weapon deals extra damage to the target equal to half your fighter level."). Body takes `character_id`, `target_combatant_id`, `attack_index`. Subclass-gated to Cavalier Lv 3+. Rolls 2d20kh1 + the weapon's `attack_bonus`, looks up the target's AC, on hit rolls weapon damage + a flat `fighter_lv // 2` bonus, marks the bonus-action chip, and broadcasts a `feature_used` event carrying the full attack/damage payload. v1 simplification: doesn't enforce the "marked creature damaged an ally" trigger gate — GM/player adjudicates whether the punish is warranted.**
+**Description:** Closes the Unwavering Mark feature chain. Phase 1 (v2.139.0) installed the mark; Phase 1b (v2.140.0) wired the disadvantage gate; this commit ships the bonus-action follow-up. The endpoint is intentionally slim — the full `/attack` rider chain (Hunter's Mark, Hex, Sneak Attack uplift, Colossus Slayer, Smite, etc.) doesn't fold in; this is a pure adv + flat bonus swing because the RAW text only specifies "weapon attack + extra damage = half your fighter level". The auto-apply-damage path isn't wired here either (v1 — the GM/player applies the damage manually from the broadcast); a Phase 2.5 follow-up could route the resolved damage through `_apply_damage_to_combatant` for auto-application. The bonus-chip gate honors the v2.0.0 action-economy machinery (`_is_slot_used` + `_mark_battle_economy`) so unless `override` is set, an already-spent bonus action returns 409. Mirrors the slim shape of Riposte's v2.99.262 / v2.99.455 wiring; Riposte uses reaction-chip, punish uses bonus-action. Garrik's existing test fixture (PATCHed to Cavalier Lv 9) gives `punish_bonus_damage = 4` cleanly.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/api/campaign/{cid}/use_unwavering_punish` endpoint (~150 lines). Inputs: body with `character_id`, `target_combatant_id`, `attack_index`, `override?`. Output: `{feature, attack_total, attack_breakdown, damage_total, damage_breakdown, hit, is_crit, punish_bonus_damage, fighter_level, roll_state_applied: "advantage_unwavering_punish"}`. Broadcasts `feature_used` (source `"unwavering-punish"`) with the same payload.
+- `tests/harness/test_unwavering_mark.py` — `test_use_um_punish_lv9_advantage_and_bonus_damage`: seeds Garrik + Pip, fires `/use_unwavering_punish` with `override=True`, asserts `feature == "unwavering-punish"` + `punish_bonus_damage == 4` + `fighter_level == 9` + `"2d20kh1" in attack_breakdown` + `roll_state_applied == "advantage_unwavering_punish"`. `test_use_um_punish_wrong_subclass`: default Garrik (Champion) → 409.
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2027 → 2029.
+
+### Notes
+- Unwavering Mark is now end-to-end across all three RAW mechanics: install (v2.139.0), 5-ft disadvantage gate (v2.140.0), and bonus-action punish (this commit). v1 simplifications filed: (a) the punish endpoint doesn't validate the "marked creature damaged an ally" trigger — the GM decides when to invoke; (b) damage isn't auto-applied via `_apply_damage_to_combatant` — the GM/player reads the broadcast and applies manually; (c) the punish swing doesn't currently fold in the full /attack rider chain (Hunter's Mark, Sneak Attack, Smite riders skip the Cavalier's Greatsword punish — fine for v1 since the RAW only describes weapon damage + flat bonus). **Total harness count: 2029** in `tests/harness/` (2027 → 2029); **`tests/harness_ui/` 19** (unchanged). The v2.99.375 announce-only `/use_unwavering_mark` endpoint stays in place as a passive declaration; all three mechanics now fire via their own automatic paths.
+
+---
+
 ## [2.140.1] - 2026-06-08 — "Double or Nothing" — accept the crit-doubled sneak-attack breakdown
 
 **Schema version:** 69

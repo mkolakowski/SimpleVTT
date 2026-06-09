@@ -287,3 +287,68 @@ async def test_um_marked_swing_at_cavalier_no_disadvantage(
         f"UM gate must not fire vs the Cavalier; "
         f"roll_state_applied={label!r}"
     )
+
+
+async def test_use_um_punish_lv9_advantage_and_bonus_damage(
+    gm_client, gm_ws, garrik_cavalier, roster,
+):
+    """v2.141.0 — Phase 2: Cavalier Lv 9's bonus-action punish swing
+    rolls 2d20kh1 + weapon bonus, on hit adds flat +4 (half fighter
+    level) extra damage. End-to-end: seed Garrik + Pip in battle,
+    POST /use_unwavering_punish targeting Pip with attack_index 0
+    (Greatsword) → assert advantage rolled + roll_state_applied
+    + punish_bonus_damage == 4 + the broadcast carries the swing.
+    Uses override to bypass the bonus-action chip gate (no battle
+    chip-management setup in this test)."""
+    garrik = garrik_cavalier
+    pip = roster["Pip Quickfingers"]
+    pip_tok = f"tok_um_p_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(f"tok_um_g_{garrik['id']}", garrik),
+            _pc(pip_tok, pip),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_unwavering_punish",
+        json={"character_id": garrik["id"],
+              "attack_index": 0,
+              "target_combatant_id": pip_tok,
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["feature"] == "unwavering-punish"
+    assert data["punish_bonus_damage"] == 4   # half fighter Lv 9
+    assert data["fighter_level"] == 9
+    # Advantage forced: 2d20kh1 in breakdown + roll_state_applied.
+    assert "2d20kh1" in (data.get("attack_breakdown") or ""), (
+        f"punish should roll 2d20kh1; got {data.get('attack_breakdown')!r}"
+    )
+    assert data.get("roll_state_applied") == "advantage_unwavering_punish"
+
+
+async def test_use_um_punish_wrong_subclass(
+    gm_client, roster,
+):
+    """v2.141.0 — Default Garrik (Champion) → 409 on punish."""
+    garrik = roster["Garrik Ironside"]
+    pip = roster["Pip Quickfingers"]
+    pip_tok = f"tok_um_punish_p_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(f"tok_um_punish_g_{garrik['id']}", garrik),
+            _pc(pip_tok, pip),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_unwavering_punish",
+        json={"character_id": garrik["id"],
+              "attack_index": 0,
+              "target_combatant_id": pip_tok,
+              "override": True},
+    )
+    assert r.status_code == 409, r.text
+    assert r.json().get("error") == "wrong_subclass_or_level"
