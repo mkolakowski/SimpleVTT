@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.14] - 2026-06-09 — "Through the Dark" — Phase 8 Warlock diversification: Devil's Sight (Warlock Lv 2+ invocation) installs the vision-parameter flag buff (Phase 1; darkness resolver deferred)
+
+**Schema version:** 69
+**Commit summary:** **Phase 8 diversifies into Warlock — first Warlock invocation flipped from announce-only to tracked. Same Phase 1 install-then-deferred-read shape as the cleric capstone / EK / Druid / Devotion-Paladin commits earlier in this session. Install a permanent `devils-sight-active` buff carrying two `devils_sight_*` effect keys (`range_ft: 120`, `through_magical_darkness: True`). Phase 2 (deferred): a `_pc_sees_in_darkness(sheet)` helper + darkness-modifier resolver short-circuit the "attacker/target in darkness" disadvantage adjudication at attack-roll time when the warlock is within 120 ft of the target through magical darkness, AND skip the install of a `blinded` condition from a darkness-trigger source.**
+**Description:** Closes the v2.99.131 filed item ("future commit can wire a `_pc_sees_in_darkness(sheet)` helper into a darkness-modifier resolver"). The buff captures the parameters so the read site has a stable contract — the Phase 2 commit can focus purely on the vision-resolver plumbing without having to re-derive Magnus's 120 ft range from his invocation list. Same recipe as v2.158.11 Arcane Charge / v2.158.12 Improved War Magic / v2.158.13 Star Map.
+
+The session's class coverage now spans seven class areas: cleric (7 subclasses), paladin, fighter (EK), druid, **+ warlock (Devil's Sight)**. Sorcerer is still untouched this session — left for the next session.
+
+### Added
+- `tests/harness/test_use_devils_sight.py::test_ds_buff_payload_carries_vision_flags` — state contract: installed buff carries the two `devils_sight_*` effect keys with the right values (range_ft=120, through_magical_darkness=True). Plus permanence sanity (`concentration` falsy + `duration_rounds >= 1000`). The existing `test_use_devils_sight_happy_path` was upgraded to seed Magnus into an active battle (required for `_install_buff`) and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_devils_sight` — adds the `_install_buff` call between the invocation gate and the broadcast. Buff payload: `key="devils-sight-active"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, plus the two `devils_sight_*` effect keys. On install, mirrors the buff list to the sheet via `_mirror_buffs_to_sheet`. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_devils_sight` from `⚪ announce-only` to `✅ tracked`. Tracked / announce-only counts: 197 / 40 (was 196 / 41). Phase 8 row notes the Warlock diversification.
+- `docs/test-harness-coverage.md` — `test_use_devils_sight.py` block updated. Total harness count bumped to **2086** (was 2085).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Devil's Sight citation.
+
+### Notes
+- The same flag-install pattern works for the other narration-adjacent Warlock invocations with real parameters (Eldritch Sight at-will Detect Magic, Mask of Many Faces at-will Disguise Self, etc.) — each follows the same recipe + the future vision/spell-detection resolvers have stable buff contracts to look up. **Total harness count: 2086** in `tests/harness/` (was 2085); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.13] - 2026-06-09 — "Chart the Heavens" — Phase 8 diversifies into Druid: Star Map (Stars Druid Lv 2+) installs a parameter-flag buff AND auto-bootstraps the long-promised `guiding-bolt-charges` resource
 
 **Schema version:** 69

@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.13 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.14 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -26,8 +26,8 @@ only spend a resource without a downstream effect.
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **196** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **41** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **197** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **40** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Lv-17 cleric capstone batch CLOSED 6/6** + **Eldritch Knight CLOSED 2/2** + Druid diversification (Star Map, v2.158.13). Plus Purity of Spirit (Devotion Paladin Lv-15, v2.158.10). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Lv-17 cleric capstone batch CLOSED 6/6** + **Eldritch Knight CLOSED 2/2** + Druid diversification (Star Map, v2.158.13) + Warlock diversification (Devil's Sight, v2.158.14). Plus Purity of Spirit (Devotion Paladin Lv-15, v2.158.10). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **Buff / temp-HP (D/F):** `supreme_healing` ✅ v2.143.0 (heal pipeline max-dice substitution via the new `_max_dice_total` helper); `combat_inspiration` ✅ v2.144.0–v2.145.0 (damage half — roll BI die + apply to target; AC half — calculator returning the boosted-AC outcome); `blade_flourish` ✅ v2.146.0 (shared damage half — Defensive/Slashing/Mobile riders deferred). `rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals.
 - **Movement (G):** `ascendant_step` ✅ v2.147.0 (levitate buff carrying `fly_speed_ft: 10` + concentration); `fancy_footwork` ✅ v2.148.0 (Phase 1 install of the OA-block mark on the target — OA-flow read deferred to Phase 2); `relentless_avenger` ✅ v2.149.0 (Phase 1 install of the free-move budget + OA-immune flag — `/token/move` read deferred to Phase 2). `stormborn` ✅ v2.99.459 fly buff.
 
-## Recent retrofits (v2.128.2 – v2.158.13)
+## Recent retrofits (v2.128.2 – v2.158.14)
 
 | Feature | Phases shipped | Notes |
 |---|---|---|
@@ -104,6 +104,7 @@ or passive damage-boosters that already ride other code paths
 | Arcane Charge | permanent teleport-budget flag buff (v2.158.11 — Phase 8 Lv-15 tier) | Eldritch Knight Fighter Lv 15+. Phase 1 of install-then-deferred-read split. Installs `arcane-charge-active` buff with two `arcane_charge_*` effect keys (`teleport_max_ft=30`, `requires_action_surge=True`). Phase 2 (deferred): `/use_action_surge` reads the buff + surfaces the teleport budget (before/after the additional action per RAW); the actual move uses existing `_force_move` / movement primitives. Sibling commit to v2.158.10 Purity of Spirit — both step Phase 8 out into the Lv-15 tier |
 | Improved War Magic | permanent Lv-1+ spell-threshold flag buff (v2.158.12 — Phase 8 Lv-18 tier; EK 2/2 close) | Eldritch Knight Fighter Lv 18+. Endpoint was already chip-marked pre-Phase-8 (so it was tracked); the Phase 8 enhancement adds the `improved-war-magic-active` flag buff with two `improved_war_magic_*` effect keys (active=True, min_spell_level=1). Phase 2 (deferred): War Magic / `/cast_spell` flow reads the buff and allows the bonus-action weapon attack rider when the cast spell's level >= 1 (vs the Lv-7 War Magic cantrip-only limit). Closes EK 2/2 Phase 8 tracked features |
 | Star Map | permanent buff + auto-bootstrap resource (v2.158.13 — Phase 8 Druid diversification) | Stars Druid Lv 2+ (Tasha's). Two-part Phase 1: install `star-map-active` buff with three `star_map_*` effect keys (active=True, free_guiding_bolt_uses_max=WIS_mod min 1, always_prepared=["Guidance","Guiding Bolt"]) + auto-bootstrap a `guiding-bolt-charges` resource on the sheet (max=WIS_mod min 1, reset=long) if missing — delivers on the original v2.99.316 docstring promise. The existing rest-character flow now refills Guiding Bolt charges on long rest automatically. Phase 2 (deferred): `/cast_spell` reads the buff + lets Guiding Bolt route through the resource decrement instead of consuming a slot. **First Druid subclass feature flipped from announce-only to tracked.** |
+| Devil's Sight | permanent vision-parameter flag buff (v2.158.14 — Phase 8 Warlock diversification) | Warlock Lv 2+ Eldritch Invocation. Installs `devils-sight-active` buff with two `devils_sight_*` effect keys (`range_ft: 120` + `through_magical_darkness: True`). Phase 2 (deferred): a `_pc_sees_in_darkness(sheet)` helper + darkness-modifier resolver short-circuit the "attacker/target in darkness" disadvantage adjudication at attack-roll time when the warlock is within 120 ft of the target through magical darkness + skip the install of a `blinded` condition from a darkness-trigger source. Closes the v2.99.131 filed item. **First Warlock invocation flipped from announce-only to tracked.** |
 
 ## Full classification
 
@@ -157,6 +158,7 @@ or passive damage-boosters that already ride other code paths
 | `use_countercharm` | ✅ tracked | D buff-install |
 | `use_cutting_words` | ✅ tracked | B on-hit-rider, C save-or-condition, D buff-install, D/E buff-install, G forced-move, damage, heal, heal/damage |
 | `use_dark_ones_blessing` | ✅ tracked | F temp-HP |
+| `use_devils_sight` | ✅ tracked | D buff-install (vision-parameter flags) |
 | `use_diamond_soul_reroll` | ✅ tracked | A use/resource |
 | `use_disarming_attack` | ✅ tracked | A use/resource |
 | `use_distracting_strike` | ✅ tracked | A use/resource |
@@ -317,7 +319,6 @@ or passive damage-boosters that already ride other code paths
 | `use_bonus_cantrip` | ⚪ announce-only | — |
 | `use_combat_inspiration` | ⚪ announce-only | — |
 | `use_dash` | ⚪ announce-only | — |
-| `use_devils_sight` | ⚪ announce-only | — |
 | `use_drunken_technique` | ⚪ announce-only | — |
 | `use_eldritch_sight` | ⚪ announce-only | — |
 | `use_emissary_of_redemption` | ⚪ announce-only | — |

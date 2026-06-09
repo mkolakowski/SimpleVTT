@@ -13884,16 +13884,22 @@ async def use_devils_sight(
     RAW (PHB p.110): "You can see normally in darkness, both magical
     and nonmagical, to a distance of 120 feet."
 
-    v1 ships the audit broadcast + the invocation gate. The full
-    lighting/vision engine that respects this marker isn't built yet
-    (filed) — today the endpoint emits a `feature_used` so the chat
-    log has a record when Magnus declares he's seeing through the
-    darkness. A future commit can wire a `_pc_sees_in_darkness(sheet)`
-    helper into a darkness-modifier resolver (e.g. for Pact of the
-    Blade weapon attacks while standing in Darkness, attacks vs.
-    creatures in Darkness, etc.).
-
     Body: ``{character_id}``.
+
+    v2.158.14 — Phase 8 Warlock diversification (first Warlock
+    invocation flipped from announce-only to tracked). Install a
+    permanent `devils-sight-active` buff carrying the two vision
+    parameters Phase 2's darkness/vision resolver will read:
+      * `effects.devils_sight_range_ft: 120`
+      * `effects.devils_sight_through_magical_darkness: True`
+    Phase 2 (deferred): a `_pc_sees_in_darkness(sheet)` helper +
+    darkness-modifier resolver short-circuit the
+    "attacker/target in darkness" disadvantage adjudication at
+    attack-roll time when the warlock is within 120 ft of the
+    target through magical darkness, AND skips the install of a
+    `blinded` condition from a darkness-trigger source. The
+    buff captures the parameters so the read site has a stable
+    contract.
 
     Validation:
       - Caller has `eldritch-invocation-devils-sight` on feats list
@@ -13927,6 +13933,33 @@ async def use_devils_sight(
             "invocation": "devils-sight",
         })
 
+    # v2.158.14 — install the parameter-carrying buff. Permanent
+    # passive (idempotent on re-press via key dedupe). Phase 2
+    # (deferred): vision/lighting resolver reads
+    # `effects.devils_sight_*` off the caster's `_buffs_active`.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "devils-sight-active",
+        "name": "👁 Devil's Sight",
+        "icon": "👁",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "devils_sight_range_ft": 120,
+            "devils_sight_through_magical_darkness": True,
+        },
+        "desc": (
+            f"{char.name} sees through both magical and nonmagical "
+            f"darkness out to 120 ft. (Warlock Lv 2+ Eldritch "
+            f"Invocation passive permanent. Phase 2: darkness "
+            f"resolver reads these flags off `_buffs_active`.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -13939,6 +13972,7 @@ async def use_devils_sight(
             ),
             "source": "devils-sight",
             "range_ft": 120,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -13947,6 +13981,7 @@ async def use_devils_sight(
         "character_id": char.id,
         "character_name": char.name,
         "range_ft": 120,
+        "buff_installed": buff_installed,
     }
 
 

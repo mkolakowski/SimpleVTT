@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Lv-17 cleric capstone batch CLOSED 6/6** + **Eldritch Knight CLOSED 2/2** + Druid diversification (Star Map, v2.158.13). Plus Purity of Spirit (Devotion Paladin Lv-15, v2.158.10). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 204+ tracked / 33- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Lv-17 cleric capstone batch CLOSED 6/6** + **Eldritch Knight CLOSED 2/2** + Druid diversification (Star Map, v2.158.13) + Warlock diversification (Devil's Sight, v2.158.14). Plus Purity of Spirit (Devotion Paladin Lv-15, v2.158.10). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 205+ tracked / 32- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
 
 **v2.128.2–v2.149.0 retrofit summary** (curated; see [automation-coverage.md §Recent retrofits](../automation-coverage.md)):
 
@@ -371,6 +371,18 @@ composition. Batch by class, same cadence as the breadth sweep.
   consuming a slot. New reusable pattern (capture parameter in
   buff + auto-create sheet resource if missing) for similar
   Lv-2-3 subclass focus-style features.
+- **v2.158.14 ("Through the Dark") — Devil's Sight** (Warlock
+  Lv 2+ Eldritch Invocation): Phase 8 diversifies into Warlock
+  — first Warlock invocation flipped from announce-only to
+  tracked this session. Permanent buff with two `devils_sight_*`
+  effect keys (`range_ft: 120` + `through_magical_darkness:
+  True`). Phase 2 (deferred): vision/darkness resolver short-
+  circuits the in-darkness disadvantage adjudication at
+  attack-roll time when the warlock is within 120 ft through
+  magical darkness. Closes the v2.99.131 filed item. Pattern
+  reusable for Eldritch Sight (at-will Detect Magic), Mask of
+  Many Faces (at-will Disguise Self), other Warlock invocations
+  with real parameters.
 
 The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
 Reaper is the last (necromancy single-target → double-target spell

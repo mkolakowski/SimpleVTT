@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2085 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.13, 2026-06-09).
+**Total tests:** 2086 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.14, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1490,6 +1490,16 @@ v2.99.255 — Battle Master maneuver 5 of 16 — Goading Attack (PHB p.74). Same
 | `test_use_ga_happy` | Lv 9 Garrik d8 → `extra_damage` 1..8, `save_dc == 16`, `save_ability == "WIS"`, dice 4 → 3, broadcast. |
 | `test_use_ga_out_of_dice` | Dice 0 → 409 `out_of_uses`. |
 | `test_use_ga_wrong_subclass` | Default Champion → 409. |
+
+### `test_use_devils_sight.py`
+v2.99.131 — Warlock Lv 2+ Eldritch Invocation (PHB p.110) Devil's Sight: 120 ft sight through magical+nonmagical darkness. v2.158.14 (Phase 8 Warlock diversification — first Warlock invocation flipped from announce-only to tracked): endpoint installs a permanent `devils-sight-active` buff carrying two `devils_sight_*` effect keys (`range_ft: 120`, `through_magical_darkness: True`). Phase 2 (deferred): vision/darkness resolver reads the buff.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_devils_sight_happy_path` | Magnus has the invocation → 200 + WS `feature_used` broadcast with `source: devils-sight` + `range_ft: 120` + `buff_installed == True`. v2.158.14 — seeds Magnus into an active battle so `_install_buff` returns True. |
+| `test_use_devils_sight_without_invocation_409` | Krieger (Barbarian, no invocations) → 409 `missing_invocation`. |
+| `test_use_devils_sight_missing_character_id_400` | Missing `character_id` → 400. |
+| `test_ds_buff_payload_carries_vision_flags` | v2.158.14 — installed buff carries `effects.devils_sight_range_ft == 120` + `effects.devils_sight_through_magical_darkness == True`. Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). |
 
 ### `test_use_purity_of_spirit.py`
 v2.99.154 — Devotion Paladin (PHB p.87) Purity of Spirit Lv 15+ passive (Phase E.2 subclass batch). RAW: always under the effects of Protection from Evil and Good. v2.158.10 (Phase 8 step-out to Lv-15 tier): endpoint now installs a permanent `purity-of-spirit` buff carrying the same `pfeag_*` effects payload as the cast spell. The two engine read sites (`_target_attackers_have_pfeag_disadvantage_against_type` + `_pc_has_pfeag_against_type`) accept either `key="purity-of-spirit"` or `key="protection-from-evil-and-good"`.
