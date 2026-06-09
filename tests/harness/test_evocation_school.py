@@ -111,10 +111,30 @@ async def test_use_sculpt_spells_wrong_class(
     assert data.get("error") == "wrong_subclass_or_level"
 
 
+def _pc(cid, c, *, hp_max=40):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp_max, "hp_max": hp_max,
+            "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def _seed_thal_in_battle(gm_client, thal):
+    """v2.158.19 — `_install_buff` requires an active battle."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [_pc(f"tok_ee_thal_{thal['id']}", thal)],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
 async def test_use_empowered_evocation_at_lv10(
     gm_client, gm_ws, roster,
 ):
-    """Thalindra PATCH'd to Lv 10 → +INT mod broadcast."""
+    """Thalindra PATCH'd to Lv 10 → +INT mod broadcast +
+    buff_installed True."""
     thal = roster["Thalindra Moonwhisper"]
     pre_level = 7
     await _patch_sheet(
@@ -122,6 +142,7 @@ async def test_use_empowered_evocation_at_lv10(
         class_slug="wizard",
     )
     try:
+        await _seed_thal_in_battle(gm_client, thal)
         gm_ws.mark()
         r = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/use_empowered_evocation",
@@ -130,6 +151,7 @@ async def test_use_empowered_evocation_at_lv10(
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["int_mod"] == 3  # INT 16 → +3
+        assert data["buff_installed"] is True
         await asyncio.sleep(0.3)
         feats = _empowered_broadcasts(gm_ws, thal["id"])
         assert feats
@@ -153,3 +175,53 @@ async def test_use_empowered_evocation_level_gate(
     assert r.status_code == 409, r.text
     data = r.json()
     assert data.get("error") == "wrong_subclass_or_level"
+
+
+async def test_ee_buff_payload_carries_int_mod_and_school_flags(
+    gm_client, gm_ws, roster,
+):
+    """v2.158.19 — state contract (Phase 9): the installed
+    `empowered-evocation-active` buff carries three
+    `empowered_evocation_*` effect keys with the right values
+    (active=True, int_mod=3 for Thalindra's INT 16, school="evocation").
+    Phase 2 (deferred) will have `/cast_spell` read these off
+    the caster's `_buffs_active` and offer +INT to one damage
+    roll per evocation cast; this test pins the flag shape so
+    that future read site has a stable contract."""
+    thal = roster["Thalindra Moonwhisper"]
+    pre_level = 7
+    await _patch_sheet(
+        gm_client, thal["id"], {"level": 10},
+        class_slug="wizard",
+    )
+    try:
+        await _seed_thal_in_battle(gm_client, thal)
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_empowered_evocation",
+            json={"character_id": thal["id"]},
+        )
+        assert r.status_code == 200, r.text
+        bu = await gm_ws.wait_for("buff_update")
+        thal_buffs = bu["data"]["buffs"]
+        ee_buff = next(
+            (b for b in thal_buffs
+             if b.get("key") == "empowered-evocation-active"),
+            None,
+        )
+        assert ee_buff is not None, (
+            f"empowered-evocation-active buff missing; got keys="
+            f"{[b.get('key') for b in thal_buffs]}"
+        )
+        effects = ee_buff.get("effects") or {}
+        assert effects.get("empowered_evocation_active") is True
+        assert effects.get("empowered_evocation_int_mod") == 3
+        assert effects.get("empowered_evocation_school") == "evocation"
+        # Permanent passive — no concentration, very long duration.
+        assert ee_buff.get("concentration") in (False, None)
+        assert int(ee_buff.get("duration_rounds") or 0) >= 1000
+    finally:
+        await _patch_sheet(
+            gm_client, thal["id"], {"level": pre_level},
+            class_slug="wizard",
+        )

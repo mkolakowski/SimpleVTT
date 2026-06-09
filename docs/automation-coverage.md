@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.18 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.19 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -26,8 +26,8 @@ only spend a resource without a downstream effect.
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **201** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **36** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **202** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **35** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Nine-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin (Purity of Spirit) + fighter (EK 2/2) + druid (Star Map) + warlock (Devil's Sight) + sorcerer (Spell Bombardment) + bard (Silver Tongue) + rogue (Mage Hand Legerdemain) + monk (Drunken Technique v2.158.18). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Ten-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin + fighter (EK 2/2) + druid + warlock + sorcerer + bard + rogue + monk + wizard (Empowered Evocation v2.158.19). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -179,6 +179,7 @@ or passive damage-boosters that already ride other code paths
 | `use_elemental_affinity` | ✅ tracked | D buff-install |
 | `use_emboldening_bond` | ✅ tracked | D buff-install |
 | `use_emissary_of_peace` | ✅ tracked | A use/resource |
+| `use_empowered_evocation` | ✅ tracked | D buff-install (+INT-damage parameter flags) |
 | `use_empty_body` | ✅ tracked | D buff-install |
 | `use_evasive_footwork` | ✅ tracked | A use/resource |
 | `use_eyes_of_the_grave` | ✅ tracked | A use/resource |
@@ -329,7 +330,6 @@ or passive damage-boosters that already ride other code paths
 | `use_dash` | ⚪ announce-only | — |
 | `use_eldritch_sight` | ⚪ announce-only | — |
 | `use_emissary_of_redemption` | ⚪ announce-only | — |
-| `use_empowered_evocation` | ⚪ announce-only | — |
 | `use_expansive_bond` | ⚪ announce-only | — |
 | `use_eyes_of_the_rune_keeper` | ⚪ announce-only | — |
 | `use_fancy_footwork` | ⚪ announce-only | — |

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.19] - 2026-06-09 — "Sharpened Bolt" — Phase 8 Wizard diversification: Empowered Evocation (Evocation Wizard Lv 10+) installs the +INT-damage parameter buff (Phase 1; /cast_spell read site deferred)
+
+**Schema version:** 69
+**Commit summary:** **Pushes the Phase 8 diversification arc to 10/12 classes — Wizard joins. Permanent `empowered-evocation-active` buff with three `empowered_evocation_*` effect keys (active=True, int_mod=<computed>, school="evocation"). Phase 2 (deferred): `/cast_spell` reads the buff for evocation spells + lets the player apply +INT to one damage roll per cast.**
+
+### Added
+- `tests/harness/test_evocation_school.py::test_ee_buff_payload_carries_int_mod_and_school_flags` — state contract pins the three `empowered_evocation_*` effect keys + permanence sanity. `test_use_empowered_evocation_at_lv10` upgraded to seed Thalindra into a battle and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_empowered_evocation` — `_install_buff` call between level gate and broadcast; `feature_used` + response gain `buff_installed: bool`.
+- `docs/automation-coverage.md` — `use_empowered_evocation` row flipped tracked. Counts: 202 / 35.
+- `docs/test-harness-coverage.md` + `docs/plans/full-feature-automation.md` — Wizard diversification cited; total harness count 2091.
+
+### Notes
+- Phase 8 session ledger: 20 commits, 11 features across 10 class families. Remaining untouched: Barbarian, Ranger (2 of 12). **Total harness count: 2091** in `tests/harness/`; `tests/harness_ui/` 19 (unchanged).
+
+---
+
 ## [2.158.18] - 2026-06-09 — "Stagger and Sway" — Phase 8 Monk diversification: Drunken Technique (Way of the Drunken Master Lv 3+) installs the 1-turn Flurry rider buff (reuses Step-of-the-Wind disengage engine flag)
 
 **Schema version:** 69

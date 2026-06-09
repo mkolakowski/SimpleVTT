@@ -43285,10 +43285,21 @@ async def use_empowered_evocation(
     Body: ``{character_id}``.
 
     Validates Evocation Wizard Lv 10+. Computes INT mod +
-    broadcasts. v1 ships announce-only — the player/GM applies
-    the +INT to the chosen damage roll manually. (Once-per-turn
-    tracking is filed; would require a battle-economy flag like
-    Foe Slayer / Colossus Slayer.)
+    broadcasts.
+
+    v2.158.19 — Phase 8 Wizard diversification (first Wizard
+    subclass feature flipped from announce-only to tracked this
+    session — pushes the diversification arc to 10/12 classes).
+    Install a permanent `empowered-evocation-active` buff
+    carrying the parameter flags:
+      * `effects.empowered_evocation_active: True`
+      * `effects.empowered_evocation_int_mod: <computed>`
+      * `effects.empowered_evocation_school: "evocation"`
+    Phase 2 (deferred): `/cast_spell` reads the buff for evocation
+    spells + lets the player apply +INT to one damage roll
+    per cast. (Once-per-cast tracking would still require a
+    battle-economy flag like Foe Slayer / Colossus Slayer at
+    Phase 2 time.)
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -43319,6 +43330,35 @@ async def use_empowered_evocation(
     int_score = int((sheet.get("abilities") or {}).get("INT") or 10)
     int_mod = (int_score - 10) // 2
 
+    # v2.158.19 — install the parameter-flag buff. Permanent
+    # passive (idempotent on re-press via key dedupe).
+    # Phase 2 (deferred): /cast_spell reads
+    # `effects.empowered_evocation_*` off the caster's
+    # `_buffs_active` for evocation spells.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "empowered-evocation-active",
+        "name": "💥 Empowered Evocation",
+        "icon": "💥",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "empowered_evocation_active": True,
+            "empowered_evocation_int_mod": int_mod,
+            "empowered_evocation_school": "evocation",
+        },
+        "desc": (
+            f"{char.name} can add INT mod ({int_mod:+}) to one "
+            f"damage roll of a wizard evocation spell cast. "
+            f"(Evocation Wizard Lv 10+ passive permanent. "
+            f"Phase 2: `/cast_spell` reads these flags.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -43346,6 +43386,7 @@ async def use_empowered_evocation(
             ),
             "source": "empowered-evocation",
             "int_mod": int_mod,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -43353,6 +43394,7 @@ async def use_empowered_evocation(
         "ok": True,
         "feature": "empowered-evocation",
         "int_mod": int_mod,
+        "buff_installed": buff_installed,
     }
 
 
