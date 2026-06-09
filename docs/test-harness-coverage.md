@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2078 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.5, 2026-06-09).
+**Total tests:** 2079 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.6, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -773,6 +773,7 @@ v2.99.300 — Grave Domain Cleric (XGE p.19) Keeper of Souls Lv 17 (H.1 deeper).
 | `test_use_ks_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_ks_level_gate` | Grave at Lv 16 → 409. |
 | `test_ks_buff_payload_carries_watcher_flag_and_radius` | v2.158.4 — installed buff carries `effects.keeper_of_souls_watcher: True` + `effects.keeper_of_souls_radius_ft: 60`. Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). Pins the Phase-2 contract so the future on-death hook has stable flag names to look up. |
+| `test_ks_on_death_hook_heals_watcher_when_npc_dies` | v2.158.6 — end-to-end Phase 2: seeds Tavik (Grave Lv 17 with watcher buff + low HP) + Pip + 1-HP SRD bandit, Pip kills the bandit, asserts a `keeper-of-souls-trigger` broadcast fires naming Tavik with `enemy_hit_dice == 2` (SRD bandit `2d8`) + `heal_amount == 2` + Tavik's sheet HP actually went up by 2 via the heal pipeline. Off-grid (no Token rows for the bandit) so the range gate falls through to the off-grid fallback. |
 
 ### `test_visions_of_the_past.py`
 v2.99.301 — Knowledge Domain Cleric (PHB p.60) Visions of the Past Lv 17 (H.1 deeper). 1 min meditation → dream-like glimpses of recent events. Concentration up to WIS-score minutes. Modes: object (24h held-object history) or area (50-ft cube 24h history). Auto-bootstraps `visions-of-the-past` resource (max=1, reset=short). v1 announce-only.

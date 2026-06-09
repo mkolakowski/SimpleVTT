@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — Avatar of Battle (War Cleric Lv 17, v2.158.0) + PC `_resistance_halve` F6-aware (v2.158.1 hotfix) + Saint of Forge and Fire (Forge Cleric Lv 17, v2.158.2 — dual-effect buff w/ fire immunity + nonmagical-BPS resist) + Improved Duplicity (Trickery Cleric Lv 17, v2.158.3 — Phase 1 flag-install) + Keeper of Souls (Grave Cleric Lv 17, v2.158.4 — Phase 1 watcher install) + Order's Wrath (Order Cleric Lv 17, v2.158.5 — first target-side curse via `_install_buff_on_combatant_id`); the Lv-17 cleric subclass capstone batch is 5/6 shipped (Improved Reaper remaining). **Current coverage: 200+ tracked / 37- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — Avatar of Battle (War Cleric Lv 17, v2.158.0) + PC `_resistance_halve` F6-aware (v2.158.1 hotfix) + Saint of Forge and Fire (Forge Cleric Lv 17, v2.158.2) + Improved Duplicity (Trickery Cleric Lv 17, v2.158.3) + Keeper of Souls Phase 1 (Grave Cleric Lv 17, v2.158.4) + Order's Wrath (Order Cleric Lv 17, v2.158.5 — first target-side curse) + **Keeper of Souls Phase 2 (v2.158.6 — new on-death pipeline primitive, first new pipeline event since v2.142.0's on-damage-taken Scornful Rebuke)**; the Lv-17 cleric subclass capstone batch is 5/6 shipped (Improved Reaper remaining). **Current coverage: 200+ tracked / 37- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
 
 **v2.128.2–v2.149.0 retrofit summary** (curated; see [automation-coverage.md §Recent retrofits](../automation-coverage.md)):
 
@@ -293,6 +293,20 @@ composition. Batch by class, same cadence as the breadth sweep.
   (deferred): `/attack` hit by an ally against a cursed target deals
   2d8 psychic + drops the curse. Falls back to historical announce-only
   when no target supplied.
+- **v2.158.6 ("Parting Vitality") — Keeper of Souls Phase 2 / new
+  on-death pipeline primitive**: closes the deferred Phase 2 of
+  v2.158.4. New helper `_fire_keeper_of_souls_on_npc_death` wires
+  into the NPC branch of `_apply_damage_to_combatant` after the
+  0-HP transition — walks PC combatants for the watcher buff,
+  range-gates at 60 ft via `_combatant_token` +
+  `_distance_ft_between_points`, parses dying NPC's HD count from
+  the token template's `hit_dice` field, auto-heals each in-range
+  watcher via `_apply_heal_to_combatant`. First new pipeline event
+  since v2.142.0's on-damage-taken Scornful Rebuke. Future on-death
+  features (Touch of Death auto-fire, on-kill triggers) reuse this
+  hook point. v1 simplifications filed: self-heal only (no "or one
+  creature of your choice" picker), no once-per-turn enforcement,
+  no line-of-sight gate.
 
 The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
 Reaper is the last (necromancy single-target → double-target spell

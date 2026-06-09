@@ -7468,6 +7468,20 @@ async def _apply_damage_to_combatant(
     await _break_buffs_on_damage(
         campaign_id, target.get("id") or "", applied,
     )
+    # v2.158.6 — Keeper of Souls (Grave Cleric Lv 17+) on-death hook,
+    # Phase 2 of v2.158.4's Phase 1 watcher-flag install. Detect the
+    # NPC's 0-HP transition (hp_cur > 0 → new_hp == 0 with a positive
+    # hp_max so we don't false-fire on combatants seeded with HP 0)
+    # and route into `_fire_keeper_of_souls_on_npc_death`, which walks
+    # PC watchers + range-gates at 60 ft + auto-heals each watcher for
+    # the dying NPC's Hit Dice count. Helper swallows its own
+    # exceptions so a Keeper-of-Souls failure can't break the damage
+    # pipeline. Sibling shape to v2.142.0 Scornful Rebuke (PC-side
+    # on-damage-taken) but for the NPC-side on-death event.
+    if hp_cur > 0 and new_hp == 0 and hp_max > 0:
+        await _fire_keeper_of_souls_on_npc_death(
+            db, campaign_id, target, state,
+        )
     return {
         "applied": applied,
         "hp_before": hp_cur,
@@ -7482,6 +7496,141 @@ async def _apply_damage_to_combatant(
         "is_dead": new_hp == 0 and hp_max > 0,
         "uncanny_dodge_used": False,
     }
+
+
+async def _fire_keeper_of_souls_on_npc_death(
+    db: Session, campaign_id: int, dying_target: dict, state: dict,
+) -> None:
+    """v2.158.6 — Phase 2 of v2.158.4 Keeper of Souls. Called from
+    the NPC branch of ``_apply_damage_to_combatant`` after the 0-HP
+    transition lands. Walks PC combatants for the
+    ``keeper-of-souls-watcher`` buff (installed via the v2.158.4
+    Phase 1 endpoint). For each watcher within 60 ft of the dying
+    NPC, auto-heals the watcher for the NPC's Hit Dice count.
+
+    HD parse: reads the dying NPC's TokenTemplate ``sheet.hit_dice``
+    (SRD shape ``"NdM"`` / ``"NdM+K"``) and extracts the leading
+    ``N``. Defaults to 1 HD on parse failure / missing template.
+
+    Range gate: 60 ft per RAW, computed via ``_combatant_token`` +
+    ``_distance_ft_between_points`` so PC-vs-NPC distance works
+    even though NPCs don't have a Character row. Off-grid scenes
+    (no active map / no grid) → no auto-heal (the manual announce
+    path stays available for GM-driven invocation).
+
+    v1 simplifications (filed):
+      * Self-heal only — RAW: "you or one creature of your choice
+        within 60 ft". Picker not yet wired; auto-heals the
+        watcher each time.
+      * No once-per-turn enforcement — RAW limits to 1/turn per
+        watcher. v1 fires on every enemy death.
+      * No "you must see the dying enemy" line-of-sight check.
+
+    Defensive — any exception from this hook is swallowed (logged
+    only) so a Keeper-of-Souls failure can never break the damage
+    pipeline itself.
+    """
+    import re
+    try:
+        # Parse the dying NPC's HD count from the token template.
+        hd_count = 1
+        tmpl_id = dying_target.get("token_template_id")
+        tmpl_sheet: dict = {}
+        if tmpl_id:
+            tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(tmpl_id),
+            ).first()
+            if tmpl and tmpl.sheet:
+                tmpl_sheet = dict(tmpl.sheet)
+                hd_str = str(tmpl_sheet.get("hit_dice") or "").strip().lower()
+                m = re.match(r"\s*(\d+)d", hd_str)
+                if m:
+                    hd_count = max(1, int(m.group(1)))
+        # Resolve the dying NPC's token for the range gate.
+        dying_token = _combatant_token(db, campaign_id, dying_target)
+        # Walk PC combatants for the watcher buff. We do this off the
+        # in-memory hub state (combatants[].char_id) AND fall back to
+        # the PC sheet's `_buffs_active` mirror (canonical for cross-
+        # session persistence — the buff is permanent).
+        for c in state.get("combatants") or []:
+            pc_char_id = c.get("char_id")
+            if not pc_char_id:
+                continue  # NPC combatant — skip
+            pc_char = db.query(Character).filter(
+                Character.id == int(pc_char_id),
+            ).first()
+            if not pc_char:
+                continue
+            pc_sheet = pc_char.sheet or {}
+            watcher_buff = None
+            for b in pc_sheet.get("_buffs_active") or []:
+                if not isinstance(b, dict):
+                    continue
+                effects = b.get("effects")
+                if not isinstance(effects, dict):
+                    continue
+                if effects.get("keeper_of_souls_watcher"):
+                    watcher_buff = b
+                    break
+            if watcher_buff is None:
+                continue
+            # Range gate. Off-grid (no token / no map) → skip (GM
+            # falls back to the manual announce-only path).
+            if dying_token is not None:
+                watcher_token = _combatant_token(db, campaign_id, c)
+                if watcher_token is None:
+                    continue
+                map_row = dying_token.map
+                if not map_row or not map_row.grid_size_px:
+                    continue
+                grid_type = (
+                    map_row.grid_type.value if map_row.grid_type else "square"
+                ).lower()
+                dist = _distance_ft_between_points(
+                    int(map_row.grid_size_px),
+                    grid_type,
+                    float(dying_token.x or 0), float(dying_token.y or 0),
+                    float(watcher_token.x or 0), float(watcher_token.y or 0),
+                )
+                radius_ft = float(
+                    (watcher_buff.get("effects") or {}).get(
+                        "keeper_of_souls_radius_ft"
+                    ) or 60
+                )
+                if dist > radius_ft:
+                    continue
+            # Auto-heal the watcher for the dying NPC's HD count.
+            heal_result = await _apply_heal_to_combatant(
+                db, campaign_id, c, hd_count,
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(pc_char.id),
+                    "character_name": pc_char.name,
+                    "user_color": pc_char.color,
+                    "feature_name": (
+                        f"⚱️ Keeper of Souls — heal {hd_count} HP "
+                        f"from a passing soul"
+                    ),
+                    "feature_desc": (
+                        f"{pc_char.name} draws vitality from "
+                        f"{dying_target.get('name') or 'the dying enemy'}'s "
+                        f"passing soul (HD {hd_count}). "
+                        f"(Grave Domain Cleric Lv 17+ auto-trigger.)"
+                    ),
+                    "source": "keeper-of-souls-trigger",
+                    "heal_amount": int(heal_result.get("applied") or 0),
+                    "enemy_hit_dice": hd_count,
+                    "watcher_char_id": int(pc_char.id),
+                    "enemy_combatant_id": dying_target.get("id"),
+                    "enemy_name": dying_target.get("name") or "",
+                },
+            })
+    except Exception:  # noqa: BLE001
+        # Defensive — never break the damage pipeline on a feature
+        # hook failure. Filed for telemetry / structured logging.
+        pass
 
 
 def _cleric_level_from_sheet(sheet: dict) -> int:

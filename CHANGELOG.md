@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.6] - 2026-06-09 — "Parting Vitality" — Phase 8 sixth commit + new on-death pipeline primitive: Keeper of Souls Phase 2 auto-heals the watcher when an NPC dies
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 of v2.158.4 Keeper of Souls + new on-death pipeline primitive. v2.158.4 installed a `keeper-of-souls-watcher` flag buff on the Grave-Lv-17 cleric and filed the on-death hook. This commit ships the hook: after the NPC branch of `_apply_damage_to_combatant` commits a 0-HP transition (hp_cur > 0 → new_hp == 0 with hp_max > 0), `_fire_keeper_of_souls_on_npc_death` walks PC combatants for the watcher buff, range-gates at 60 ft via `_combatant_token` + `_distance_ft_between_points`, parses the dying NPC's Hit Dice count from the token template's `hit_dice` field, and auto-heals each in-range watcher for the HD count via `_apply_heal_to_combatant`. A `feature_used` broadcast with source `keeper-of-souls-trigger` fires per watcher so the chat card surfaces the auto-trigger.**
+**Description:** First new pipeline event since v2.142.0's on-damage-taken hook (Scornful Rebuke). On-death is the sibling event — both fire from inside `_apply_damage_to_combatant` after HP state has been committed — and the helper shape is intentionally generic. Future on-death features (Touch of Death auto-fire, Death Cleric Reaper-style chain triggers, etc.) follow this same recipe: install a watcher buff in a Phase 1 endpoint, walk combatants for the buff in the Phase 2 hook, fire the mechanical effect. The helper swallows its own exceptions so a feature-hook failure can never break the damage pipeline (which would silently corrupt downstream features depending on `_apply_damage_to_combatant`'s return value).
+
+v1 simplifications filed:
+* **Self-heal only.** RAW: "you or one creature of your choice within 60 ft." v1 auto-heals the watcher each time; the picker-prompt is a future Phase 3 ship.
+* **No once-per-turn enforcement.** RAW limits Keeper of Souls to once per watcher's turn. v1 fires on every NPC death within range; a future commit can add the per-turn flag (mirror the v2.131.0 `has_acted` field shape).
+* **No "must see the dying enemy" line-of-sight check.** Adjacent to fog-of-war / vision plumbing, deferred to F2 follow-ups.
+* **HD parse defaults to 1.** When the token template's `hit_dice` field is missing or malformed, default to 1 HD so the heal still fires for a small amount instead of nothing.
+
+### Added
+- `app/routes/tabletop_routes.py::_fire_keeper_of_souls_on_npc_death` — the new on-death helper. Parses HD from the token template (regex `(\d+)d` against the SRD `"NdM"` / `"NdM+K"` shape), walks `state["combatants"]` for PCs carrying `keeper-of-souls-watcher` on `_buffs_active`, computes range from `_combatant_token` for both sides + `_distance_ft_between_points`, calls `_apply_heal_to_combatant(db, campaign_id, c, hd_count)`, broadcasts `feature_used` with source `keeper-of-souls-trigger`. Defensive try/except wraps the whole thing.
+- `tests/harness/test_keeper_of_souls.py::test_ks_on_death_hook_heals_watcher_when_npc_dies` — end-to-end: seeds Tavik (Grave Lv 17 with watcher buff + low HP) + Pip + a 1-HP SRD bandit, has Pip swing until the 1-HP bandit dies, asserts (1) a `keeper-of-souls-trigger` broadcast fires naming Tavik, (2) `enemy_hit_dice == 2` (SRD bandit `hit_dice: "2d8"`), (3) `heal_amount == 2`, and (4) Tavik's sheet HP actually went up by 2 via the heal pipeline. Off-grid setup (no Token rows for the bandit) so the range gate falls through to the off-grid fallback (heal still fires).
+
+### Changed
+- `app/routes/tabletop_routes.py::_apply_damage_to_combatant` (NPC branch) — adds the on-death detection (`hp_cur > 0 and new_hp == 0 and hp_max > 0`) right before the return, routes into `_fire_keeper_of_souls_on_npc_death`. No change to the return shape; existing callers see no behavior diff unless a Keeper-of-Souls watcher is in the battle.
+- `docs/automation-coverage.md` — refreshed v2.158.6 + Phase 8 row gains the Phase 2 citation (Phase 1 still tracked separately on `use_keeper_of_souls`; this commit adds the read site).
+- `docs/test-harness-coverage.md` — `test_keeper_of_souls.py` block gains the new Phase 2 row. Total harness count bumped to **2079** (was 2078).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Keeper-of-Souls-Phase-2 citation; Phase 8 batch progress reflects the new primitive.
+
+### Notes
+- The on-death primitive itself is the largest single Phase-8 commit so far — but most of the surface is the helper + test, not invasive damage-pipeline changes (4-line wire-up inside the NPC branch). Future on-death features (e.g. Death Cleric Touch of Death auto-fire, Grave Cleric Sentinel at Death's Door auto-prompts, on-kill XP awards, etc.) reuse the same hook point. **Total harness count: 2079** in `tests/harness/` (was 2078); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.5] - 2026-06-09 — "Marked for Order" — Phase 8 fifth commit: Order's Wrath (Order Cleric Lv 17) installs the curse buff on the target combatant (Phase 1; ally-hit trigger deferred)
 
 **Schema version:** 69

@@ -210,3 +210,165 @@ async def test_ks_buff_payload_carries_watcher_flag_and_radius(
     # Permanent passive — no concentration, very long duration.
     assert ks_buff.get("concentration") in (False, None)
     assert int(ks_buff.get("duration_rounds") or 0) >= 1000
+
+
+def _mkc_npc(cid, tmpl_id, *, name, hp_cur, hp_max=20):
+    return {
+        "id": cid, "char_id": None, "token_template_id": tmpl_id,
+        "name": name, "initiative": 10,
+        "hp_current": hp_cur, "hp_max": hp_max, "speed_walk": 30,
+        "buffs": [],
+        "economy": {"action": False, "bonus": False, "reaction": False,
+                    "movement": 0, "dash_bonus_ft": 0},
+    }
+
+
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    form = {
+        "name": "Demo Campaign", "description": "demo",
+        "game_system": "dnd5e", "gm_tab_color": "", "font_override": "",
+        "default_encounter_id": "", "hp_threshold_1": "", "hp_threshold_2": "",
+        "hp_threshold_3": "", "hp_threshold_4": "", "auto_play_playlist_id": "",
+        "auto_play_mode": "order", "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+        follow_redirects=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def auto_apply_on(gm_client):
+    await _set_auto_apply(gm_client, True)
+    yield
+    await _set_auto_apply(gm_client, False)
+
+
+async def test_ks_on_death_hook_heals_watcher_when_npc_dies(
+    gm_client, gm_ws, tavik_grave_lv17, roster, auto_apply_on,
+):
+    """v2.158.6 — Phase 2 end-to-end: when an NPC dies in the same
+    battle as a Grave-Lv-17 watcher, the on-death hook in
+    `_apply_damage_to_combatant`'s NPC branch auto-heals the
+    watcher for the dying NPC's HD count.
+
+    Setup: install Keeper of Souls watcher buff on Tavik (Grave
+    Lv 17). Seed battle with Tavik (low HP, room to heal) + Pip
+    (attacker) + a Bandit NPC with HP 1 so a single Pip hit kills
+    it. Bandit's `hit_dice` field on its template is read from
+    SRD as `"2d8"` → 2 HD. Off-grid scene (no Token rows for the
+    bandit) so the range gate falls through; the auto-heal still
+    fires.
+
+    Assertions: when Pip's attack kills the bandit, Tavik's HP
+    goes up by 2 (the bandit's HD count) within the same /attack
+    response, AND a `feature_used` broadcast with source
+    `keeper-of-souls-trigger` fires naming Tavik as the watcher."""
+    tavik = tavik_grave_lv17
+    pip = roster["Pip Quickfingers"]
+    tavik_tok = f"tok_ks_p2_tav_{tavik['id']}"
+    pip_tok = f"tok_ks_p2_pip_{pip['id']}"
+    bandit_id = "tok_ks_p2_bandit"
+
+    # Find a bandit template (SRD bandit has `hit_dice: "2d8"`).
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()), templates[0],
+    )
+
+    # First seed battle with all three combatants — Tavik low HP
+    # so the heal is observable.
+    pc_low_hp = 30
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": tavik_tok, "char_id": tavik["id"], "name": tavik["name"],
+             "initiative": 10, "hp_current": pc_low_hp, "hp_max": 80,
+             "buffs": [], "economy": {"action": False, "bonus": False,
+                                       "reaction": False, "movement": 0}},
+            {"id": pip_tok, "char_id": pip["id"], "name": pip["name"],
+             "initiative": 10, "hp_current": 30, "hp_max": 30,
+             "buffs": [], "economy": {"action": False, "bonus": False,
+                                       "reaction": False, "movement": 0}},
+            _mkc_npc(bandit_id, bandit_tmpl["id"],
+                     name=bandit_tmpl["name"], hp_cur=1, hp_max=20),
+        ], "turn_index": 1, "round": 1, "active": True},
+    )
+
+    # Damage Tavik so the heal has room to apply (sheet-level HP).
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-fields",
+        json={"hp": {"current": pc_low_hp}},
+    )
+
+    # Install Keeper of Souls watcher buff on Tavik.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_keeper_of_souls",
+        json={"character_id": tavik["id"], "enemy_hit_dice": 1},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["buff_installed"] is True
+
+    # Read Tavik's HP after the watcher install (no change yet).
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}"
+    )
+    sheet_before = (r.json().get("sheet") or {})
+    hp_before = int((sheet_before.get("hp") or {}).get("current") or 0)
+
+    # Pip swings at the 1-HP bandit until a hit lands. Bandit AC ~12;
+    # Pip Shortsword +6 vs AC 12 → ~70% hit. Bound to 12 swings.
+    gm_ws.mark()
+    killed = False
+    for _ in range(12):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": pip["id"],
+                  "attack_index": 0,
+                  "target_combatant_id": bandit_id,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        if d.get("hit") is True and int(d.get("damage_total") or 0) >= 1:
+            killed = True
+            break
+    assert killed, "Pip failed to hit the 1-HP bandit in 12 swings"
+    await asyncio.sleep(0.3)
+
+    # Assert a keeper-of-souls-trigger feature_used fired with Tavik
+    # as the watcher.
+    trigger_msgs = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "keeper-of-souls-trigger"
+        and int((m.get("data") or {}).get("watcher_char_id") or 0)
+            == int(tavik["id"])
+    ]
+    assert trigger_msgs, (
+        "no keeper-of-souls-trigger broadcast fired after the bandit "
+        "died — the on-death hook didn't fire or Tavik wasn't matched "
+        "as a watcher"
+    )
+    # Bandit HD = 2 (SRD bandit `hit_dice: "2d8"`).
+    last_trigger = trigger_msgs[-1]
+    assert int((last_trigger.get("data") or {}).get("enemy_hit_dice") or 0) == 2, (
+        f"expected enemy_hit_dice=2 from SRD bandit; got {last_trigger}"
+    )
+    healed = int((last_trigger.get("data") or {}).get("heal_amount") or 0)
+    assert healed == 2, (
+        f"watcher should heal for 2 HP (bandit HD); got {healed}"
+    )
+
+    # Verify Tavik's HP actually went up via the heal pipeline.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}"
+    )
+    sheet_after = (r.json().get("sheet") or {})
+    hp_after = int((sheet_after.get("hp") or {}).get("current") or 0)
+    assert hp_after == hp_before + 2, (
+        f"Tavik should heal 2 HP from Keeper of Souls; "
+        f"hp_before={hp_before}, hp_after={hp_after}"
+    )
