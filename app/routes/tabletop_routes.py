@@ -18285,6 +18285,12 @@ async def cast_spell(
                         npc_sheet, "dnd5e", stat_key,
                     )
                     expr = f"1d20{npc_mod:+d}"
+                    # v2.155.0 — Phase 2d: NPC condition disadvantage
+                    # on save d20. Restrained → DEX-save dis per RAW.
+                    if _npc_save_condition_disadvantage(
+                        target_combatant, stat_key,
+                    ):
+                        expr = expr.replace("1d20", "2d20kl1", 1)
                     # v2.97.35 — Bless / Bane save suffix on the
                     # NPC save side (single-target /cast_spell). Reads
                     # the NPC combatant's buff list directly via the
@@ -19912,6 +19918,12 @@ async def place_aoe(
             npc_sheet, "dnd5e", f"{save_ability.lower()}_save",
         )
         expr = f"1d20{npc_mod:+d}"
+        # v2.155.0 — Phase 2d: NPC condition disadvantage on save d20.
+        # Restrained → DEX-save dis per RAW.
+        if _npc_save_condition_disadvantage(
+            extra, f"{save_ability.lower()}_save",
+        ):
+            expr = expr.replace("1d20", "2d20kl1", 1)
         # v2.97.36 — Bless / Bane save suffix for /place_aoe NPC
         # save site. Reads the NPC combatant's buff list directly
         # since NPCs don't have a char_id.
@@ -24906,6 +24918,43 @@ def _roll_condition_disadvantage(
     return None
 
 
+def _npc_save_condition_disadvantage(
+    target_combatant: "dict | None",
+    stat_key_lc: str,
+) -> "str | None":
+    """v2.155.0 — Phase 2d. NPC counterpart of the v2.153.0
+    `_roll_condition_disadvantage`. Returns the condition key driving
+    the NPC's save d20 disadvantage, or None. NPCs don't have a sheet
+    mirror — the helper reads `target_combatant["buffs"]` directly
+    (the combatant dict the four NPC-save construction sites already
+    have in scope).
+
+    RAW PHB Appendix A: Restrained → DEX save disadvantage. Other
+    save conditions are auto-fail (Paralyzed/Stunned/Unconscious/
+    Petrified auto-fail STR/DEX saves) — a separate mechanic from
+    adv/dis, filed for follow-up.
+
+    ``stat_key_lc`` follows the standard convention: ``"dex_save"`` /
+    ``"wis_save"`` / etc. Anything other than a ``_save`` key returns
+    None — saves are the only NPC-side surface the helper covers.
+    """
+    if not target_combatant:
+        return None
+    if not stat_key_lc.endswith("_save"):
+        return None
+    ability_part = stat_key_lc.split("_save", 1)[0].upper()
+    if ability_part != "DEX":
+        return None
+    buffs = target_combatant.get("buffs") or []
+    for b in buffs:
+        if not isinstance(b, dict):
+            continue
+        key = (b.get("key") or "").strip().lower()
+        if key in _DEX_SAVE_DIS_CONDITION_KEYS:
+            return key
+    return None
+
+
 def _attacker_marked_by_unwavering_mark_within_5ft_vs_other(
     db,
     campaign_id: int,
@@ -26944,6 +26993,9 @@ async def _resolve_feature_save(
     npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
     npc_mod, _ = _resolve_stat_modifier(npc_sheet, "dnd5e", stat_key)
     expr = f"1d20{npc_mod:+d}"
+    # v2.155.0 — Phase 2d: NPC condition disadvantage on save d20.
+    if _npc_save_condition_disadvantage(target_combatant, stat_key):
+        expr = expr.replace("1d20", "2d20kl1", 1)
     bb_suffix = _saver_bless_bane_save_suffix(campaign_id, None, target_combatant)
     if bb_suffix:
         expr = f"{expr}{bb_suffix}"
@@ -39951,6 +40003,9 @@ async def use_stunning_strike(
             npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
             npc_mod, _ = _resolve_stat_modifier(npc_sheet, "dnd5e", stat_key)
             expr = f"1d20{npc_mod:+d}"
+            # v2.155.0 — Phase 2d: NPC condition disadvantage on save d20.
+            if _npc_save_condition_disadvantage(target_combatant, stat_key):
+                expr = expr.replace("1d20", "2d20kl1", 1)
             try:
                 _r = dice_mod.roll(expr)
                 auto_save_rolled = int(_r.total)
@@ -40369,6 +40424,9 @@ async def use_open_hand_technique(
             npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
             npc_mod, _ = _resolve_stat_modifier(npc_sheet, "dnd5e", stat_key)
             expr = f"1d20{npc_mod:+d}"
+            # v2.155.0 — Phase 2d: NPC condition disadvantage on save d20.
+            if _npc_save_condition_disadvantage(target_combatant, stat_key):
+                expr = expr.replace("1d20", "2d20kl1", 1)
             # v2.97.51 — Bless / Bane save suffix on the NPC save side
             # in /use_open_hand_technique. Reads the NPC combatant's
             # buff list directly via the helper since NPCs don't have
@@ -75779,6 +75837,9 @@ async def use_npc_cast_spell(
                 npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
                 npc_mod, _ = _resolve_stat_modifier(npc_sheet, "dnd5e", stat_key)
                 expr = f"1d20{npc_mod:+d}"
+                # v2.155.0 — Phase 2d: NPC condition disadvantage on save d20.
+                if _npc_save_condition_disadvantage(target_combatant, stat_key):
+                    expr = expr.replace("1d20", "2d20kl1", 1)
                 try:
                     r = dice_mod.roll(expr)
                     auto_save_rolled = int(r.total)

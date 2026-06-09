@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.155.0] - 2026-06-08 — "Tied at the Knees" — Advantage/Disadvantage Phase 2d: NPC condition-driven save disadvantage
+
+**Schema version:** 69
+**Commit summary:** **Closes the last Phase 2 symmetry gap: NPC saves now honor condition-driven disadvantage too. New `_npc_save_condition_disadvantage(target_combatant, stat_key_lc)` helper reads `target_combatant.buffs` directly (NPCs don't have a sheet mirror) + classifies by stat_key. RAW PHB Appendix A: Restrained → DEX-save disadvantage. Six NPC-save construction sites are wired uniformly so every PC-caster spell + NPC-caster spell + AoE save path now respects Restrained on the NPC side: `/cast_spell` single-target, `/place_aoe`, the shared resolution helper, `/use_open_hand_technique`, two additional PC-caster paths, and `/npc_cast_spell`.**
+**Description:** Phase 2a (v2.152.0) covered PC attacks; Phase 2b (v2.153.0) covered PC saves+checks; Phase 2c (v2.154.0) covered NPC attacks. The last symmetry gap was NPC saves — a PC casting Fireball at a Restrained bandit didn't auto-disadvantage the NPC's DEX save. The fix is one new helper (mirrors the Phase 2b shape with the same `_DEX_SAVE_DIS_CONDITION_KEYS` frozenset) plus six 3-line patches at each NPC-save construction site. Each patch is identical: after the existing `expr = f"1d20{npc_mod:+d}"` line, check the helper; if it returns a key, swap `1d20 → 2d20kl1` via `replace(..., 1)`. The `replace_first` semantics preserve the v2.97.35 Bless/Bane suffix (`+1d4`/`-1d4`) — only the leading d20 changes.
+
+Filed out of scope (per RAW): Paralyzed/Stunned/Unconscious/Petrified auto-fail STR/DEX saves. That's a different mechanic (auto-fail regardless of d20) from adv/dis and would need a save-construction hook that bypasses the dice roll entirely. Separately filed: NPC ability checks via `/roll` (the unified mini-sheet's stat-block click path) — those use `skip_roll_state=True` with no `combatant_id` in the body, so identifying the NPC to read its buffs requires a client-side change to pass the combatant ID. The save surface this commit covers is server-side-resolved, so no client change was needed.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_npc_save_condition_disadvantage(target_combatant, stat_key_lc)` helper. Sits next to the v2.153.0 Phase 2b `_roll_condition_disadvantage` helper. Reads `target_combatant["buffs"]` for any key in `_DEX_SAVE_DIS_CONDITION_KEYS` (reused from Phase 2b) when the stat_key ends with `_save` AND the ability segment is `DEX`. Returns the matching condition key or None.
+- `app/routes/tabletop_routes.py` — Phase 2d 3-line patch at six NPC-save construction sites: `/cast_spell` single-target PC→NPC (~line 18287), `/place_aoe` NPC save (~line 19920), the shared save-resolution helper (~line 26995), two additional PC-caster spell sites (~lines 40005, 40426), and `/npc_cast_spell` NPC→NPC (~line 75836). Each patch: post-`expr = f"1d20{npc_mod:+d}"`, call the new helper; on a non-None return, `expr.replace("1d20", "2d20kl1", 1)`. Bless/Bane suffix (`+1d4`/`-1d4`) added downstream is preserved by the first-occurrence-only replace.
+- `tests/harness/test_npc_save_condition_adv_dis.py` — 2 tests: `test_restrained_npc_dex_save_imposes_disadvantage` (Thalindra casts Fireball at a Restrained bandit → response `auto_save_breakdown` contains `2d20kl1`); `test_non_restrained_npc_dex_save_unchanged` (control — non-restrained bandit rolls a straight 1d20 DEX save).
+
+### Changed
+- `docs/plans/advantage-disadvantage.md` — status banner adds "Phase 2d shipped in v2.155.0" line; Implementation Status table gets a new ✅ row above the Phase 2c row.
+- `docs/test-harness-coverage.md` — running total bumped 2062 → 2064.
+- `TODO.md` — advantage-disadvantage Phase 2d marked shipped; only Phase 3 (Maps 2.0 positional) remains.
+
+### Notes
+- Filed follow-ups: auto-fail STR/DEX saves from Paralyzed/Stunned/Unconscious/Petrified (different mechanic — needs a save-construction hook that forces the result, not adv/dis); NPC ability/skill checks via `/roll` (needs a client-side change to pass `combatant_id` since the unified mini-sheet's NPC stat-block buttons use `skip_roll_state=True` with no character_id). **Total harness count: 2064** in `tests/harness/` (2062 → 2064); **`tests/harness_ui/` 19** (unchanged). Phase 2 of the advantage-disadvantage plan is now end-to-end across all four roll surfaces (PC attacks, PC saves+checks, NPC attacks, NPC saves). The only remaining piece is Phase 3 — positional adv/dis (5-ft prone-melee advantage / prone-ranged disadvantage), gated on Maps 2.0 grid-distance awareness.
+
+---
+
 ## [2.154.1] - 2026-06-08 — "Wrench in the Toolbox" — add a GM-only Campaign Settings pill to the tabletop Quick Links
 
 **Schema version:** 69
