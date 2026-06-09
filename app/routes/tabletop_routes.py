@@ -54481,9 +54481,24 @@ async def use_orders_wrath(
     a creature only once per turn."
 
     Body: ``{character_id, target_combatant_id?, override?}``.
-    No chip — passive trigger on Divine Strike. v1
-    announce-only — the curse install + ally-hit trigger is
-    GM-tracked.
+    No chip — passive trigger on Divine Strike.
+
+    v2.158.5 — Phase 8 fifth commit (Phase 1 of install-then-
+    deferred-read split). When `target_combatant_id` is supplied,
+    install an `orders-wrath-curse` buff on the target combatant
+    carrying the curse payload:
+      * `effects.orders_wrath_psychic_damage_expression: "2d8"`
+      * `effects.orders_wrath_caster_char_id: <cleric.id>`
+      * `effects.orders_wrath_active: True`
+    Duration 2 rounds (RAW: "until the start of your next turn"
+    — the first turn-tick decrement happens on the next round
+    boundary, so 2 covers the until-end-of-cleric's-next-turn
+    span). Phase 2 (deferred): `/attack` flow detects an ally
+    (anyone except the curse's `caster_char_id`) hitting the
+    cursed target → deals 2d8 psychic via `_apply_damage_to_combatant`
+    + drops the curse buff. If no `target_combatant_id` supplied
+    the endpoint falls back to the historical announce-only
+    behavior (manual GM application).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -54513,6 +54528,37 @@ async def use_orders_wrath(
         })
 
     cleric_lv = _cleric_level_from_sheet(sheet)
+
+    # v2.158.5 — install the curse buff on the target combatant
+    # (PC or NPC). Uses `_install_buff_on_combatant_id` so it
+    # routes by combatant id rather than character id — Order's
+    # Wrath is most often cast at NPCs who don't have a Character
+    # row. When no target supplied, fall back to historical
+    # announce-only behavior (no buff install, manual GM track).
+    curse_installed = False
+    if target_combatant_id:
+        curse_installed = await _install_buff_on_combatant_id(
+            campaign_id, str(target_combatant_id), {
+                "key": "orders-wrath-curse",
+                "name": "⚖️ Order's Wrath (curse)",
+                "icon": "⚖️",
+                "duration_rounds": 2,
+                "duration_max": 2,
+                "concentration": False,
+                "source_char_id": char.id,
+                "effects": {
+                    "orders_wrath_psychic_damage_expression": "2d8",
+                    "orders_wrath_caster_char_id": int(char.id),
+                    "orders_wrath_active": True,
+                },
+                "desc": (
+                    f"Cursed by {char.name}'s Order's Wrath. The next "
+                    f"ally to hit takes 2d8 psychic damage; curse ends "
+                    f"on hit or at the start of {char.name}'s next "
+                    f"turn. (Order Domain Cleric Lv 17+.)"
+                ),
+            },
+        )
 
     membership = (
         db.query(CampaignMembership)
@@ -54550,6 +54596,7 @@ async def use_orders_wrath(
             "psychic_damage_expression": "2d8",
             "expires_on": "next_turn_start",
             "cleric_level": cleric_lv,
+            "curse_installed": curse_installed,
         },
     })
 
@@ -54560,6 +54607,7 @@ async def use_orders_wrath(
         "psychic_damage_expression": "2d8",
         "expires_on": "next_turn_start",
         "cleric_level": cleric_lv,
+        "curse_installed": curse_installed,
     }
 
 

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2077 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.4, 2026-06-09).
+**Total tests:** 2078 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.5, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -814,14 +814,15 @@ v2.99.304 — Arcana Domain Cleric (SCAG p.125) Arcane Mastery Lv 17 (H.1 deeper
 | `test_use_am_level_gate` | Arcana at Lv 16 → 409. |
 
 ### `test_orders_wrath.py`
-v2.99.305 — Order Domain Cleric (TCE p.40) Order's Wrath Lv 17 (H.1 deeper — CLOSES H.1 Lv 17 FULL BATCH 13/13). When you Divine Strike, curse target until start of next turn; next ally-hit triggers 2d8 psychic and ends curse. Once per turn. v1 announce-only.
+v2.99.305 — Order Domain Cleric (TCE p.40) Order's Wrath Lv 17 (H.1 deeper — CLOSES H.1 Lv 17 FULL BATCH 13/13). When you Divine Strike, curse target until start of next turn; next ally-hit triggers 2d8 psychic and ends curse. Once per turn. v2.158.5 (Phase 8 fifth commit): when `target_combatant_id` supplied, endpoint installs an `orders-wrath-curse` buff on the target combatant via `_install_buff_on_combatant_id` carrying `effects.orders_wrath_psychic_damage_expression="2d8"` + `effects.orders_wrath_caster_char_id=<cleric.id>` + `effects.orders_wrath_active=True`, duration 2 rounds. Phase 2 (deferred): `/attack` flow detects ally-vs-cursed-target → deals 2d8 psychic + drops the curse. When no target supplied, falls back to historical announce-only.
 
 | Test | What it asserts |
 |------|-----------------|
 | `test_use_ow_happy_lv17` | Lv 17 Tavik → `psychic_damage_expression == "2d8"`, `expires_on == "next_turn_start"`, broadcast (source `orders-wrath`). |
-| `test_use_ow_with_target` | Optional `target_combatant_id` passed through in response. |
+| `test_use_ow_with_target` | v2.158.5 — bogus `target_combatant_id` "tok_test" → response passes the id through + `curse_installed == False` (no matching combatant in battle). |
 | `test_use_ow_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_ow_level_gate` | Order at Lv 16 → 409. |
+| `test_ow_installs_curse_on_real_target_combatant` | v2.158.5 — seeds Tavik+Pip battle, calls endpoint with Pip's tok as `target_combatant_id` → `curse_installed: True` + `battle_update` broadcast shows Pip carrying the `orders-wrath-curse` buff with the three `orders_wrath_*` effect keys + the 2-round duration + non-concentration. State-change contract (Phase 9). Uses Pip as a stand-in target (Phase 2's ally-vs-caster filter is what would skip self-hits at trigger time). |
 
 ### `test_assassinate.py`
 v2.99.306 — Assassin Rogue (PHB p.97) Assassinate Lv 3+ (E.3 Rogue subclass batch opener — pivoted after Thief Fast Hands was found already wired in v2.99.224). Advantage vs creatures that haven't taken a turn; auto-crit vs surprised. No chip — passive declaration. v1 announce-only.

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.5] - 2026-06-09 — "Marked for Order" — Phase 8 fifth commit: Order's Wrath (Order Cleric Lv 17) installs the curse buff on the target combatant (Phase 1; ally-hit trigger deferred)
+
+**Schema version:** 69
+**Commit summary:** **Fifth Phase 8 commit, fifth Lv-17 cleric capstone (only Improved Reaper remaining). First Phase 8 commit to install a buff on the TARGET combatant (not the caster) via `_install_buff_on_combatant_id`. When invoked with a `target_combatant_id`, installs an `orders-wrath-curse` buff carrying `effects.orders_wrath_psychic_damage_expression="2d8"` + `effects.orders_wrath_caster_char_id=<cleric.id>` + `effects.orders_wrath_active=True`, duration 2 rounds (covers "until the start of your next turn"). Phase 2 (deferred): `/attack` hit by an ally (anyone except the curse's caster) against a cursed target deals 2d8 psychic via `_apply_damage_to_combatant` + drops the curse buff. When no target supplied, falls back to the historical announce-only behavior so existing GM-driven workflows keep working.**
+**Description:** RAW TCE p.40: "When you deal your Divine Strike damage to a creature, you can curse it until the start of your next turn. The next time one of your allies hits the cursed creature with an attack, the cursed creature takes 2d8 psychic damage, and the curse ends. You can curse a creature only once per turn." First Phase 8 commit where the buff goes on a different combatant than the caster — different primitive (`_install_buff_on_combatant_id` instead of `_install_buff`) but same pattern: install a payload-carrying buff, defer the read site to a Phase 2 commit. The `_install_buff_on_combatant_id` helper routes by combatant id rather than character id, which lets the curse land on an NPC target (the typical case for Divine Strike) without needing a Character row. The caster_char_id is stamped into the buff so the Phase 2 ally-vs-caster filter has the right anchor.
+
+### Added
+- `tests/harness/test_orders_wrath.py::test_ow_installs_curse_on_real_target_combatant` — state contract: seeds a 2-PC battle (Tavik + Pip), calls the endpoint with Pip's tok as the target, asserts the `orders-wrath-curse` buff appears on Pip's combatant in the `battle_update` broadcast with the three `orders_wrath_*` effect keys + the 2-round duration + non-concentration. Uses Pip as a stand-in target for simplicity (Phase 2's ally-vs-caster filter is what would skip self-hits at trigger time; Phase 1 just installs the payload). Plus updated `test_use_ow_with_target` to assert `curse_installed: False` for a bogus combatant id.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_orders_wrath` — adds the `_install_buff_on_combatant_id` call between the level gate and the broadcast, gated on `target_combatant_id` being supplied. Buff payload: `key="orders-wrath-curse"`, `duration_rounds=2`, `duration_max=2`, `concentration=False`, `source_char_id=<cleric.id>`, `effects.orders_wrath_psychic_damage_expression="2d8"`, `effects.orders_wrath_caster_char_id=<cleric.id>`, `effects.orders_wrath_active=True`. The `feature_used` broadcast + JSON response both gain a `curse_installed: bool` field (False when no target supplied OR when the target combatant id doesn't match an active battle combatant).
+- `docs/automation-coverage.md` — flipped `use_orders_wrath` from `⚪ announce-only` to `✅ tracked` (archetype D buff-install, target-side). Tracked / announce-only counts: 192 / 45 (was 191 / 46). New row in "Recent retrofits".
+- `docs/test-harness-coverage.md` — `test_orders_wrath.py` block updated. Total harness count bumped to **2078** (was 2077).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gained the Order's Wrath citation.
+
+### Notes
+- Five of six Lv-17 cleric subclass capstones now shipped (Avatar of Battle, Saint of Forge and Fire, Improved Duplicity, Keeper of Souls, Order's Wrath). The last one — Improved Reaper (Death Cleric Lv 17 — necromancy single-target → double-target spell routing) — is the heavyweight of the batch because it touches `/cast_spell` plumbing for an extra target picker; best saved for its own session. **Total harness count: 2078** in `tests/harness/` (was 2077); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.4] - 2026-06-09 — "Soul Watcher" — Phase 8 fourth commit: Keeper of Souls (Grave Cleric Lv 17) installs the watcher flag buff (Phase 1; on-death hook deferred)
 
 **Schema version:** 69
