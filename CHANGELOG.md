@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.140.1] - 2026-06-08 — "Double or Nothing" — accept the crit-doubled sneak-attack breakdown
+
+**Schema version:** 69
+**Commit summary:** **Test-only follow-up. `test_attack_sneak_attack_uplift` asserts `"4d6" in bonus_damage_breakdown`, but on a natural-20 crit the bonus dice double to `8d6` per RAW (PHB p.196), so the breakdown reads `8d6[…]` and the substring search fails. Same flake pattern as the dragonborn one fixed in v2.138.1. Accept either `4d6` or `8d6` in the breakdown — the test's purpose is to confirm the sneak-attack rider rolled at all, not to pin the exact die count.**
+**Description:** The sneak-attack test asserts the rolled breakdown carries the dice expression. v2.51.6 bumped Pip to Lv 7 (sneak attack = 4d6); on a natural 20 the crit doubles dice via `_double_dice_for_crit` → 8d6. The other assertions in the test already accept both cases (`4 <= bonus_damage_total <= 48` and `bonus_damage_expr == "4d6"` — the un-rolled expression stays 4d6). Only the substring search was strict. Updated to `"4d6" in bd or "8d6" in bd` with a clear error message surfacing the actual breakdown when both miss.
+
+### Changed
+- `tests/harness/test_attack.py` — `test_attack_sneak_attack_uplift`'s `bonus_damage_breakdown` assertion accepts `4d6` (non-crit) or `8d6` (crit-doubled).
+
+### Notes
+- No engine change. Same pattern as v2.138.1's dragonborn-crit fix. **Total harness count: 2027** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). Other +50-to-hit / static-damage tests in the suite (test_attack_pip_shortsword, _dagger, _tavik_warhammer) already use range-tolerant `damage_total` assertions, so no fanout needed.
+
+---
+
 ## [2.140.0] - 2026-06-08 — "Held Close" — Unwavering Mark Phase 1b (5-ft disadvantage gate)
 
 **Schema version:** 69

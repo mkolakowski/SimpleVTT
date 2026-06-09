@@ -135,7 +135,14 @@ async def test_attack_sneak_attack_uplift(gm_client, gm_ws, roster):
     assert data["bonus_damage_total"] is not None
     # 4d6 non-crit range = [4, 24]; crit doubles to 8d6 → [8, 48].
     assert 4 <= data["bonus_damage_total"] <= 48
-    assert "4d6" in data["bonus_damage_breakdown"]
+    # The breakdown shows the rolled dice expression — `4d6[...]` on a
+    # non-crit, `8d6[...]` when the attack rolls a natural 20 and the
+    # crit doubles sneak attack dice. Both are correct; accept either.
+    bd = data["bonus_damage_breakdown"] or ""
+    assert "4d6" in bd or "8d6" in bd, (
+        f"bonus_damage_breakdown should carry 4d6 (non-crit) or 8d6 "
+        f"(crit-doubled); got {bd!r}"
+    )
     assert data["slot_spent_class"] == ""
     assert data["slot_spent_level"] == 0
 
