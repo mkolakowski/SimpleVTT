@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.18] - 2026-06-09 — "Stagger and Sway" — Phase 8 Monk diversification: Drunken Technique (Way of the Drunken Master Lv 3+) installs the 1-turn Flurry rider buff (reuses Step-of-the-Wind disengage engine flag)
+
+**Schema version:** 69
+**Commit summary:** **Pushes the Phase 8 diversification arc to 9/12 classes — Monk joins cleric, paladin, fighter, druid, warlock, sorcerer, bard, rogue. `use_drunken_technique` (Way of the Drunken Master Monk Lv 3+) used to broadcast `feature_used` + leave the Disengage + +10 ft speed rider to GM tracking. v2.158.18 installs a 1-turn `drunken-technique-active` buff carrying `effects.disengage: True` (reuses the engine flag from Step of the Wind so the existing OA-prompting flow already half-consumes it) plus `effects.drunken_technique_speed_bonus_ft: 10` and `effects.drunken_technique_rider_of: "flurry-of-blows"`.**
+**Description:** Different shape from the previous Phase 8 commits — this is a 1-turn buff (expires at next turn-start tick per RAW "until the end of the current turn") rather than a permanent-passive flag-install. The Disengage half reuses the existing `effects.disengage` engine flag (same one Step of the Wind installs at v2.99.x); the +10 ft speed half is the new Drunken-Technique-specific flag that the Phase 2 movement resolver will read to bump the effective walking speed for the turn. Half-implements Phase 2 already by virtue of the engine-flag reuse — Disengage / OA-immunity already fires through the existing OA-prompting flow.
+
+The 1-turn buff shape is reusable for similar per-turn rider features (e.g. Mobile feat's hit-and-run, Charger feat, etc.) where the buff captures the rider parameters + expires automatically at turn end.
+
+### Added
+- `tests/harness/test_drunken_technique.py::test_dt_buff_payload_carries_disengage_and_speed_flags` — state contract: installed buff carries `effects.disengage: True` + `effects.drunken_technique_speed_bonus_ft: 10` + `effects.drunken_technique_rider_of: "flurry-of-blows"` + `duration_rounds == 1` (until end of turn per RAW) + non-concentration. The existing `test_use_dt_happy_lv7` was upgraded to seed Kael into an active battle and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_drunken_technique` — adds the `_install_buff` call between the subclass/level gate and the broadcast. Buff payload: `key="drunken-technique-active"`, `duration_rounds=1`, `duration_max=1`, `concentration=False`, plus the three `effects.*` keys. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_drunken_technique` from `⚪ announce-only` to `✅ tracked`. Tracked / announce-only counts: 201 / 36 (was 200 / 37). Phase 8 row notes the Monk diversification + the 9-class arc.
+- `docs/test-harness-coverage.md` — `test_drunken_technique.py` block updated. Total harness count bumped to **2090** (was 2089).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Drunken Technique citation + the 9-class-coverage note.
+
+### Notes
+- Phase 8 session ledger: 19 commits, 10 features across 9 class families. Remaining untouched: Wizard, Barbarian, Ranger — 3 more for full 12/12 class coverage. **Total harness count: 2090** in `tests/harness/` (was 2089); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.17] - 2026-06-09 — "Sleight of Spell" — Phase 8 Rogue diversification: Mage Hand Legerdemain (Arcane Trickster Lv 3+) installs the spell-task parameter buff (Phase 1; Mage Hand cast-flow read site deferred)
 
 **Schema version:** 69

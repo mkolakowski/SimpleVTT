@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2089 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.17, 2026-06-09).
+**Total tests:** 2090 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.18, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1420,6 +1420,16 @@ v2.99.264 — Battle Master maneuver 14 of 16 — Distracting Strike (PHB p.74).
 | `test_use_ds_happy` | Lv 9 Garrik d8 → `extra_damage` 1..8, `target_name` mirrored, dice 4 → 3. |
 | `test_use_ds_out_of_dice` | Dice 0 → 409. |
 | `test_use_ds_wrong_subclass` | Default Champion → 409. |
+
+### `test_drunken_technique.py`
+v2.99.360 — Way of the Drunken Master Monk (XGE p.33) Drunken Technique Lv 3+ (Phase G Monk Ways batch). When you use Flurry of Blows, you gain Disengage + +10 ft walking speed until end of turn. v2.158.18 (Phase 8 Monk diversification — first Monk subclass feature flipped to tracked this session, pushes the diversification arc to 9/12 classes): endpoint installs a 1-turn `drunken-technique-active` buff carrying `effects.disengage: True` (reuses Step-of-the-Wind engine flag) + two Drunken-Technique-specific flags. Different shape from the permanent-passive Phase 8 commits — a 1-turn rider that expires at next turn-start tick.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_dt_happy_lv7` | PATCH Kael → Way of the Drunken Master Lv 7 → `disengage == True`, `speed_bonus_ft == 10`, `buff_installed == True`, broadcast (source `drunken-technique`). v2.158.18 — seeds Kael into an active battle so `_install_buff` returns True. |
+| `test_use_dt_wrong_subclass` | Default Kael (Open Hand) → 409. |
+| `test_use_dt_wrong_class` | Caelan (Paladin) → 409. |
+| `test_dt_buff_payload_carries_disengage_and_speed_flags` | v2.158.18 — installed buff carries `effects.disengage: True` + `effects.drunken_technique_speed_bonus_ft: 10` + `effects.drunken_technique_rider_of: "flurry-of-blows"` + `duration_rounds == 1` + non-concentration. State-change contract (Phase 9). |
 
 ### `test_evasive_footwork.py`
 v2.99.263 — Battle Master maneuver 13 of 16 — Evasive Footwork (PHB p.74). Movement-tied; +die AC until movement stops.

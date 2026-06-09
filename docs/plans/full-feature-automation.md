@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Eight-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin (v2.158.10) + fighter (EK 2/2: v2.158.11 + v2.158.12) + druid (v2.158.13) + warlock (v2.158.14) + sorcerer (v2.158.15) + bard (v2.158.16) + rogue (v2.158.17). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 208+ tracked / 29- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Nine-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin (v2.158.10) + fighter (EK 2/2: v2.158.11 + v2.158.12) + druid (v2.158.13) + warlock (v2.158.14) + sorcerer (v2.158.15) + bard (v2.158.16) + rogue (v2.158.17) + monk (v2.158.18). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 209+ tracked / 28- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
 
 **v2.128.2–v2.149.0 retrofit summary** (curated; see [automation-coverage.md §Recent retrofits](../automation-coverage.md)):
 
@@ -413,6 +413,16 @@ composition. Batch by class, same cadence as the breadth sweep.
   Phase 2 (deferred): Mage Hand cast flow reads the buff +
   surfaces the Legerdemain task picker (stow/retrieve from
   another's container, pick locks/disarm traps at range).
+- **v2.158.18 ("Stagger and Sway") — Drunken Technique** (Way
+  of the Drunken Master Monk Lv 3+): pushes the diversification
+  arc to 9/12 classes — Monk joins. 1-turn buff carrying
+  `effects.disengage: True` (reuses the engine flag from Step
+  of the Wind, so the existing OA-prompting flow already half-
+  consumes it) + `effects.drunken_technique_speed_bonus_ft: 10`
+  + `effects.drunken_technique_rider_of: "flurry-of-blows"`.
+  Different shape from the permanent-passive Phase 8 commits —
+  a 1-turn rider that expires at next turn-start tick. Half-
+  implements Phase 2 already via engine-flag reuse.
 
 The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
 Reaper is the last (necromancy single-target → double-target spell

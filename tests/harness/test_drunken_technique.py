@@ -62,11 +62,33 @@ async def kael_drunken(gm_client, roster):
         )
 
 
+def _pc(cid, c, *, hp_max=40):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp_max, "hp_max": hp_max,
+            "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def _seed_kael_in_battle(gm_client, kael):
+    """v2.158.18 — `_install_buff` requires an active battle.
+    Seed a minimal one with Kael."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [_pc(f"tok_dt_kael_{kael['id']}", kael)],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
 async def test_use_dt_happy_lv7(
     gm_client, gm_ws, kael_drunken,
 ):
-    """Lv 7 Drunken Master → disengage True, +10 ft speed."""
+    """Lv 7 Drunken Master → disengage True, +10 ft speed,
+    buff_installed True."""
     kael = kael_drunken
+    await _seed_kael_in_battle(gm_client, kael)
     gm_ws.mark()
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_drunken_technique",
@@ -78,10 +100,47 @@ async def test_use_dt_happy_lv7(
     assert data["disengage"] is True
     assert data["speed_bonus_ft"] == 10
     assert data["monk_level"] == 7
+    assert data["buff_installed"] is True
     await asyncio.sleep(0.3)
     feats = _dt_broadcasts(gm_ws, kael["id"])
     assert feats
     assert feats[-1]["data"]["speed_bonus_ft"] == 10
+
+
+async def test_dt_buff_payload_carries_disengage_and_speed_flags(
+    gm_client, gm_ws, kael_drunken,
+):
+    """v2.158.18 — state contract (Phase 9): the installed
+    `drunken-technique-active` buff carries `effects.disengage:
+    True` (reuses the engine flag from Step of the Wind), plus
+    the two Drunken-Technique-specific flags
+    (`speed_bonus_ft: 10`, `rider_of: "flurry-of-blows"`).
+    Duration 1 round (until end of turn per RAW)."""
+    kael = kael_drunken
+    await _seed_kael_in_battle(gm_client, kael)
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_drunken_technique",
+        json={"character_id": kael["id"]},
+    )
+    assert r.status_code == 200, r.text
+    bu = await gm_ws.wait_for("buff_update")
+    kael_buffs = bu["data"]["buffs"]
+    dt_buff = next(
+        (b for b in kael_buffs if b.get("key") == "drunken-technique-active"),
+        None,
+    )
+    assert dt_buff is not None, (
+        f"drunken-technique-active buff missing; got keys="
+        f"{[b.get('key') for b in kael_buffs]}"
+    )
+    effects = dt_buff.get("effects") or {}
+    assert effects.get("disengage") is True
+    assert effects.get("drunken_technique_speed_bonus_ft") == 10
+    assert effects.get("drunken_technique_rider_of") == "flurry-of-blows"
+    # 1-turn buff (until end of turn per RAW), not concentration.
+    assert dt_buff.get("concentration") in (False, None)
+    assert int(dt_buff.get("duration_rounds") or 0) == 1
 
 
 async def test_use_dt_wrong_subclass(

@@ -58883,8 +58883,22 @@ async def use_drunken_technique(
 
     Body: ``{character_id}``. No additional action cost — this is
     an automatic rider on Flurry of Blows (which already spends the
-    bonus action + 1 ki). v1 announce-only — the Disengage benefit
-    + speed boost are GM-tracked.
+    bonus action + 1 ki).
+
+    v2.158.18 — Phase 8 Monk diversification (first Monk subclass
+    feature flipped from announce-only to tracked this session —
+    pushes the diversification arc to 9/12 classes). Install a
+    1-turn `drunken-technique-active` buff carrying:
+      * `effects.disengage: True` (reuses the engine flag from
+        Step of the Wind / `effects.disengage` — movement
+        doesn't provoke OAs this turn)
+      * `effects.drunken_technique_speed_bonus_ft: 10`
+      * `effects.drunken_technique_rider_of: "flurry-of-blows"`
+    `duration_rounds: 1` (expires at next turn-start tick per
+    RAW "until the end of the current turn"). Different from
+    the permanent-passive Phase 8 commits — this is a per-Flurry
+    rider that the existing OA-prompting flow already half-
+    consumes via `effects.disengage`.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -58913,6 +58927,32 @@ async def use_drunken_technique(
         })
 
     monk_lv = _monk_level_from_sheet(sheet)
+
+    # v2.158.18 — install the 1-turn rider buff. The
+    # `effects.disengage` flag is the same one Step of the Wind
+    # installs; the OA-prompting flow already consumes it.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "drunken-technique-active",
+        "name": "🍶 Drunken Technique",
+        "icon": "🍶",
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "disengage": True,
+            "drunken_technique_speed_bonus_ft": 10,
+            "drunken_technique_rider_of": "flurry-of-blows",
+        },
+        "desc": (
+            f"{char.name}'s Flurry of Blows triggers the drunken "
+            f"weave: movement doesn't provoke OAs this turn + "
+            f"+10 ft walking speed. (Way of the Drunken Master "
+            f"Monk Lv 3+ XGE; expires at end of turn.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -58946,6 +58986,7 @@ async def use_drunken_technique(
             "disengage": True,
             "speed_bonus_ft": 10,
             "monk_level": monk_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -58955,6 +58996,7 @@ async def use_drunken_technique(
         "disengage": True,
         "speed_bonus_ft": 10,
         "monk_level": monk_lv,
+        "buff_installed": buff_installed,
     }
 
 
