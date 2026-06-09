@@ -24648,6 +24648,97 @@ def _attacker_has_str_attack_advantage(
     return False
 
 
+# v2.152.0 — Phase 2a of advantage/disadvantage automation
+# (docs/plans/advantage-disadvantage.md). 5e standard-condition buff keys
+# that impose disadvantage on the attacker's own attack rolls per PHB
+# Appendix A. Prone is included because a prone creature's melee attacks
+# are disadvantaged AND its only legal attack option from prone is melee
+# (ranged attack while prone has disadvantage too). Frightened RAW gates
+# on "source of fear is visible"; v1 simplification fires when the
+# condition is present, since the buff itself implies an active fear
+# source.
+_ATTACKER_DIS_CONDITION_KEYS = frozenset({
+    "blinded", "poisoned", "restrained", "frightened", "prone",
+})
+
+# Conditions on the target that grant the attacker advantage per PHB
+# Appendix A. Prone is intentionally excluded — RAW it only grants
+# advantage on MELEE attacks within 5 ft, which needs the Phase 3 /
+# Maps 2.0 positional awareness.
+_TARGET_ADV_CONDITION_KEYS = frozenset({
+    "blinded", "paralyzed", "petrified",
+    "restrained", "stunned", "unconscious",
+})
+
+
+def _attacker_has_condition_disadvantage(
+    sheet: "dict | None",
+) -> "str | None":
+    """v2.152.0 — Phase 2a of advantage/disadvantage automation.
+    Returns the matching condition key when the rolling PC's
+    ``_buffs_active`` mirror carries any standard 5e condition that
+    imposes disadvantage on its attack rolls (Blinded, Poisoned,
+    Restrained, Frightened, Prone — PHB Appendix A). Returns None
+    when no such condition is active.
+    """
+    if not sheet:
+        return None
+    for b in (sheet.get("_buffs_active") or []):
+        if not isinstance(b, dict):
+            continue
+        key = (b.get("key") or "").strip().lower()
+        if key in _ATTACKER_DIS_CONDITION_KEYS:
+            return key
+    return None
+
+
+def _attacker_has_invisible_advantage(sheet: "dict | None") -> bool:
+    """v2.152.0 — RAW Invisible (PHB p.291): "the creature's attack
+    rolls have advantage." Reads the attacker's ``_buffs_active`` for
+    an ``invisible`` buff (matched by key or by ``effects.invisible:
+    True`` for buffs that grant invisibility as a side effect).
+    """
+    if not sheet:
+        return False
+    for b in (sheet.get("_buffs_active") or []):
+        if not isinstance(b, dict):
+            continue
+        if (b.get("key") or "").strip().lower() == "invisible":
+            return True
+        effects = b.get("effects")
+        if isinstance(effects, dict) and effects.get("invisible") is True:
+            return True
+    return False
+
+
+def _target_has_condition_advantage(
+    campaign_id: int, target_combatant_id: "str | None",
+) -> "str | None":
+    """v2.152.0 — Phase 2a half. RAW (PHB Appendix A): attack rolls
+    against a target with Blinded / Paralyzed / Petrified / Restrained /
+    Stunned / Unconscious have advantage. Reads the target combatant's
+    buffs list from hub state (covers both PC and NPC targets via the
+    hub mirror). Returns the matching condition key for the adv label
+    or None when no such condition is active.
+    """
+    if not target_combatant_id:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            key = (b.get("key") or "").strip().lower()
+            if key in _TARGET_ADV_CONDITION_KEYS:
+                return key
+        return None
+    return None
+
+
 def _attacker_marked_by_unwavering_mark_within_5ft_vs_other(
     db,
     campaign_id: int,
@@ -73497,14 +73588,27 @@ async def use_attack(
             _pc_has_assassin_subclass(sheet, 3)
             and _target_hasnt_acted_yet(campaign_id, target_combatant_id)
         )
+        # v2.152.0 — Phase 2a advantage/disadvantage automation.
+        # Standard 5e condition buffs on the attacker / target push
+        # entries onto the same adv/dis source set as Rage / Dodge /
+        # Reckless. RAW order matters only for the label; the cancel
+        # logic is set-OR.
+        _attacker_invisible_adv = _attacker_has_invisible_advantage(sheet)
+        _target_adv_condition = _target_has_condition_advantage(
+            campaign_id, target_combatant_id,
+        )
         has_adv = (
             rage_advantage or target_grants_advantage
             or assassinate_target_hasnt_acted
+            or _attacker_invisible_adv
+            or bool(_target_adv_condition)
         )
         adv_label = (
             "rage" if rage_advantage else
             "reckless" if target_grants_advantage else
-            "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else ""
+            "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else
+            "invisible" if _attacker_invisible_adv else
+            f"target_{_target_adv_condition}" if _target_adv_condition else ""
         )
         # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
         # attack roll has advantage against you while you aren't
@@ -73545,17 +73649,25 @@ async def use_attack(
         _um_marked_vs_other = _attacker_marked_by_unwavering_mark_within_5ft_vs_other(
             db, campaign_id, char.id, target_combatant_id,
         )
+        # v2.152.0 — Phase 2a: attacker's own standard 5e disabling
+        # conditions (Blinded / Poisoned / Restrained / Frightened /
+        # Prone) impose disadvantage on its attack roll. Reads the PC
+        # `_buffs_active` mirror so we don't need a second hub lookup.
+        _attacker_dis_condition = _attacker_has_condition_disadvantage(sheet)
         has_dis = (
             target_dodging or target_pfeag_blocks_type
             or _attacker_cant_see or _ap_marked_vs_other
             or _um_marked_vs_other
+            or bool(_attacker_dis_condition)
         )
         dis_label = (
             "dodging" if target_dodging else
             "pfeag" if target_pfeag_blocks_type else
             "cant_see" if _attacker_cant_see else
             "ancestral_protectors_vs_other" if _ap_marked_vs_other else
-            "unwavering_mark_vs_other" if _um_marked_vs_other else ""
+            "unwavering_mark_vs_other" if _um_marked_vs_other else
+            f"attacker_{_attacker_dis_condition}"
+            if _attacker_dis_condition else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -73600,14 +73712,25 @@ async def use_attack(
             _pc_has_assassin_subclass(sheet, 3)
             and _target_hasnt_acted_yet(campaign_id, target_combatant_id)
         )
+        # v2.152.0 — Phase 2a advantage/disadvantage automation
+        # (bonusless branch mirror). Same source-set fold as the
+        # bonused branch above; see comment there for the contract.
+        _attacker_invisible_adv = _attacker_has_invisible_advantage(sheet)
+        _target_adv_condition = _target_has_condition_advantage(
+            campaign_id, target_combatant_id,
+        )
         has_adv = (
             rage_advantage or target_grants_advantage
             or assassinate_target_hasnt_acted
+            or _attacker_invisible_adv
+            or bool(_target_adv_condition)
         )
         adv_label = (
             "rage" if rage_advantage else
             "reckless" if target_grants_advantage else
-            "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else ""
+            "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else
+            "invisible" if _attacker_invisible_adv else
+            f"target_{_target_adv_condition}" if _target_adv_condition else ""
         )
         # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
         # attack roll has advantage against you while you aren't
@@ -73648,17 +73771,23 @@ async def use_attack(
         _um_marked_vs_other = _attacker_marked_by_unwavering_mark_within_5ft_vs_other(
             db, campaign_id, char.id, target_combatant_id,
         )
+        # v2.152.0 — Phase 2a attacker-condition disadvantage (bonusless
+        # branch mirror). See bonused branch above for the helper.
+        _attacker_dis_condition = _attacker_has_condition_disadvantage(sheet)
         has_dis = (
             target_dodging or target_pfeag_blocks_type
             or _attacker_cant_see or _ap_marked_vs_other
             or _um_marked_vs_other
+            or bool(_attacker_dis_condition)
         )
         dis_label = (
             "dodging" if target_dodging else
             "pfeag" if target_pfeag_blocks_type else
             "cant_see" if _attacker_cant_see else
             "ancestral_protectors_vs_other" if _ap_marked_vs_other else
-            "unwavering_mark_vs_other" if _um_marked_vs_other else ""
+            "unwavering_mark_vs_other" if _um_marked_vs_other else
+            f"attacker_{_attacker_dis_condition}"
+            if _attacker_dis_condition else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
