@@ -72,12 +72,10 @@ or passive damage-boosters that already ride other code paths
 - **Auras (E):** `aura_of_warding` ✅ v2.133.0–v2.135.1 (full RAW chain — `is_spell` plumbing through `_apply_damage_to_combatant` + `resistance_spell_damage` buff payload via `_tick_auras`); `ancestral_protectors` ✅ v2.136.0–v2.138.0 (install on raging melee hit → attacker-side disadvantage gate + attacker-side damage halving); `unwavering_mark` ✅ v2.139.0–v2.141.0 (install on melee hit + 5-ft disadvantage gate + `/use_unwavering_punish` bonus-action endpoint). `aura_of_conquest` ✅ v2.99.448 condition gate; `aura_of_alacrity` ✅ v2.99.449 buff-payload.
 - **On-being-hit retaliation (new primitive):** `scornful_rebuke` ✅ v2.142.0 — first on-damage-taken hook in `_apply_damage_to_combatant`; Conquest Paladin Lv 15+ auto-deals `max(1, CHA mod)` psychic to the attacker. Sibling to the on-hit-rider, aura-tick, and condition-install paths.
 - **On-hit / extra-attack:** `assassinate` ✅ v2.131.0–v2.132.0 (auto-crit on surprised + advantage vs not-yet-acted; uses `target_surprised: bool` body flag + the new combatant `has_acted` field). `genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 + `dread_ambusher` ✅ v2.99.452 server-resolved extra attacks.
-- **Buff / temp-HP (D/F):** `combat_inspiration`,
-  `blade_flourish`, `supreme_healing` (`rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals).
-- **Movement (G):** `ascendant_step` (fly),
-  `relentless_avenger`, `fancy_footwork` (`stormborn` ✅ v2.99.459 fly buff).
+- **Buff / temp-HP (D/F):** `supreme_healing` ✅ v2.143.0 (heal pipeline max-dice substitution via the new `_max_dice_total` helper); `combat_inspiration` ✅ v2.144.0–v2.145.0 (damage half — roll BI die + apply to target; AC half — calculator returning the boosted-AC outcome); `blade_flourish` ✅ v2.146.0 (shared damage half — Defensive/Slashing/Mobile riders deferred). `rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals.
+- **Movement (G):** `ascendant_step` ✅ v2.147.0 (levitate buff carrying `fly_speed_ft: 10` + concentration); `fancy_footwork` ✅ v2.148.0 (Phase 1 install of the OA-block mark on the target — OA-flow read deferred to Phase 2); `relentless_avenger` ✅ v2.149.0 (Phase 1 install of the free-move budget + OA-immune flag — `/token/move` read deferred to Phase 2). `stormborn` ✅ v2.99.459 fly buff.
 
-## Recent retrofits (v2.128.2 – v2.142.0)
+## Recent retrofits (v2.128.2 – v2.149.0)
 
 | Feature | Phases shipped | Notes |
 |---|---|---|
@@ -87,6 +85,12 @@ or passive damage-boosters that already ride other code paths
 | Ancestral Protectors | install (v2.136.0) + disadvantage gate (v2.137.0/.1) + damage halving (v2.138.0) | Three-pass RAW chain; the helper `_attacker_marked_by_ancestral_protectors_vs_other` is shared between the adv/dis and damage halving paths |
 | Unwavering Mark | install (v2.139.0) + 5-ft disadvantage gate (v2.140.0) + bonus-action punish endpoint (v2.141.0) | `_distance_ft_between_chars` 5-ft gate distinguishes UM from AP; `/use_unwavering_punish` rolls 2d20kh1 + weapon damage + flat half-fighter-level bonus |
 | Scornful Rebuke | on-damage-taken hook (v2.142.0) | New primitive — fires inside `_apply_damage_to_combatant` PC branch after `_maybe_concentration_save`; recursive psychic damage to attacker (with `is_attack=False` to break ping-pong) |
+| Supreme Healing | heal-pipeline max-dice substitution (v2.143.0) | New `_max_dice_total` helper parses any dice expression and returns max(N*M) per term; `/cast_spell` heal block branches on `_pc_has_life_domain(sheet, 17)` and substitutes the max value. `auto_heal_breakdown` surfaces `💗 Supreme Healing` prefix + `[max:8]` markers |
+| Combat Inspiration | damage half (v2.144.0/.1) + AC half (v2.145.0) | Damage: `mode=damage` + `target_combatant_id` rolls the BI die and applies bonus damage through `_apply_damage_to_combatant`. AC: `mode=ac` + `attack_total` + `target_ac` returns a pure calculator response with `ac_new_ac` + `ac_would_miss` |
+| Blade Flourish | shared damage half (v2.146.0) | Same shape as CI damage half — when `target_combatant_id` + `damage_type` are provided, rolls the BI die and applies bonus damage. Defensive AC buff + Mobile push + Slashing secondary-target routing deferred to Phase 2 |
+| Ascendant Step | levitate buff install (v2.147.0) | Mirrors v2.99.459 Stormborn — installs `ascendant-step-levitate` with `effects.fly_speed_ft: 10` (vertical-only per RAW) + `concentration: True`. SimpleVTT's 2D map keeps altitude narrative-only |
+| Fancy Footwork | OA-block mark on target (v2.148.0) | Phase 1 — install `fancy-footwork-blocked` buff on target with `effects.fancy_footwork_blocked_against_char_id`. Phase 2 (deferred): OA flow reads the buff and skips OAs against the named char_id |
+| Relentless Avenger | free-move budget buff (v2.149.0) | Phase 1 — install `relentless-avenger-bonus-move` with `effects.free_movement_remaining_ft: base_speed // 2` + `effects.oa_immune_during_move: True`. Phase 2 (deferred): `/token/move` consumes the budget + skips OA prompts while immune. Generic shape can serve Mobile feat / Charger feat in the future |
 
 ## Full classification
 

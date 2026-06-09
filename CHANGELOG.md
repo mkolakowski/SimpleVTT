@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.149.1] - 2026-06-08 — "Tally Up" — refresh automation-coverage + full-feature-automation docs (v2.143–v2.149)
+
+**Schema version:** 69
+**Commit summary:** **Doc-only. Aligns `docs/automation-coverage.md`'s "Notable announce-only" bullets + the "Recent retrofits" table with the 7 features shipped since v2.142.1: Supreme Healing (v2.143.0), Combat Inspiration damage + AC halves (v2.144.0–v2.145.0), Blade Flourish damage half (v2.146.0), Ascendant Step (v2.147.0), Fancy Footwork (v2.148.0), Relentless Avenger (v2.149.0). Also extends the parent plan's status banner + retrofit summary with the same items, including the new `_max_dice_total` heal-pipeline helper as a second new framework primitive alongside the v2.142.0 on-damage-taken hook.**
+**Description:** The docs are "living indexes" per the project's doc-discipline rules. After 14 commits delivering 7 features end-to-end since v2.142.1, the curated bullets and retrofit summary were stale. This commit aligns them; auto-generated per-endpoint row counts still need a classifier rerun (filed as a follow-up). The "Notable announce-only" Buff / temp-HP (D/F) and Movement (G) buckets now correctly mark all the previously-listed features as ✅ shipped with version ranges. The "Recent retrofits" table grows from 6 rows (closing at Scornful Rebuke v2.142.0) to 12 rows (closing at Relentless Avenger v2.149.0). The parent plan's status banner gets the second-primitive callout (the `_max_dice_total` helper landed alongside Supreme Healing and is also generic enough to serve future Brutal Critical / Reliable Talent-style features).
+
+### Changed
+- `docs/automation-coverage.md` — Buff / temp-HP (D/F) bullet now lists Supreme Healing + Combat Inspiration + Blade Flourish as ✅ shipped with version ranges. Movement (G) bullet now lists Ascendant Step + Fancy Footwork + Relentless Avenger as ✅ shipped. "Recent retrofits" table grows by 6 rows + retitled `v2.128.2 – v2.149.0`.
+- `docs/plans/full-feature-automation.md` — status banner adds the second-primitive callout (`_max_dice_total` helper v2.143.0) + coverage estimate bumped to 195+ tracked / 42- announce-only. Retrofit summary section grows by 6 bullets covering v2.143.0–v2.149.0.
+
+### Notes
+- Auto-generated row counts in `docs/automation-coverage.md`'s "Full classification" table still pin v2.99.460. Rerunning the classifier is the standalone Phase 0 refresh that's been filed since v2.99.460; doesn't gate any further work. **Total harness count: 2040** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). Both docs are already surfaced via `/wiki/doc/automation-coverage` and `/wiki/doc/plan-full-feature-automation`, so no wiki-allowlist update is required.
+
+---
+
 ## [2.149.0] - 2026-06-08 — "Closing In" — Relentless Avenger installs a free-move budget (Vengeance Paladin Lv 7+)
 
 **Schema version:** 69
