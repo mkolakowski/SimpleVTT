@@ -61413,6 +61413,12 @@ async def use_combat_inspiration(
     mode = (body.get("mode") or "damage").strip().lower()
     if mode not in ("damage", "ac"):
         mode = "damage"
+    # v2.144.0 — mechanical wiring (Phase 1, damage half): when the
+    # caller passes a `target_combatant_id` AND `mode="damage"`, roll
+    # the BI die server-side and apply it as bonus damage to the
+    # target. Falls back to announce-only when either is absent.
+    target_combatant_id = (body.get("target_combatant_id") or "").strip() or None
+    damage_type = (body.get("damage_type") or "").strip().lower() or "slashing"
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -61445,6 +61451,26 @@ async def use_combat_inspiration(
         die_size = 8
     else:
         die_size = 6
+
+    # v2.144.0 — roll the BI die + apply bonus damage when wired.
+    bonus_rolled = None
+    bonus_applied = None
+    bonus_breakdown = ""
+    if mode == "damage" and target_combatant_id:
+        try:
+            _br = dice_mod.roll(f"1d{die_size}")
+            bonus_rolled = max(0, int(_br.total))
+            bonus_breakdown = _br.breakdown
+        except dice_mod.DiceParseError:
+            bonus_rolled = None
+        if bonus_rolled and bonus_rolled > 0:
+            _target = _lookup_combatant(campaign_id, target_combatant_id)
+            if _target is not None:
+                _dr = await _apply_damage_to_combatant(
+                    db, campaign_id, _target, bonus_rolled, damage_type,
+                    is_attack=True, attacker_char_id=char.id,
+                )
+                bonus_applied = int(_dr.get("applied") or 0)
 
     membership = (
         db.query(CampaignMembership)
@@ -61481,6 +61507,11 @@ async def use_combat_inspiration(
             "die_expression": f"1d{die_size}",
             "die_size": die_size,
             "bard_level": bard_lv,
+            "bonus_rolled": bonus_rolled,
+            "bonus_applied": bonus_applied,
+            "bonus_breakdown": bonus_breakdown,
+            "target_combatant_id": target_combatant_id,
+            "damage_type": damage_type if bonus_rolled is not None else "",
         },
     })
 
@@ -61491,6 +61522,10 @@ async def use_combat_inspiration(
         "die_expression": f"1d{die_size}",
         "die_size": die_size,
         "bard_level": bard_lv,
+        "bonus_rolled": bonus_rolled,
+        "bonus_applied": bonus_applied,
+        "bonus_breakdown": bonus_breakdown,
+        "target_combatant_id": target_combatant_id,
     }
 
 

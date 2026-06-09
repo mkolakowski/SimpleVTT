@@ -64,6 +64,77 @@ async def lyra_valor(gm_client, roster):
         )
 
 
+def _pc(cid, c, hp=30):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp, "hp_max": hp, "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def test_ci_damage_with_target_applies_bonus(
+    gm_client, gm_ws, lyra_valor, roster,
+):
+    """v2.144.0 — Phase 1 (damage half): when /use_combat_inspiration
+    is called with `mode=damage` AND `target_combatant_id`, the
+    endpoint rolls the BI die server-side and applies the rolled
+    value as bonus damage to the target (with `attacker_char_id` set
+    to the Bard so the regular damage pipeline works — resistance,
+    on-damage-taken hooks, etc.). Verify the response carries
+    `bonus_rolled` in [1, 8] (1d8 at Lv 5-9) and `bonus_applied` =
+    the rolled value (no resistance on Pip for slashing)."""
+    lyra = lyra_valor
+    pip = roster["Pip Quickfingers"]
+    pip_tok = f"tok_ci_p_{pip['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(f"tok_ci_l_{lyra['id']}", lyra),
+            _pc(pip_tok, pip),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_combat_inspiration",
+        json={"character_id": lyra["id"], "mode": "damage",
+              "target_combatant_id": pip_tok,
+              "damage_type": "slashing"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mode"] == "damage"
+    assert data["die_size"] == 8     # Lv 6 → 1d8
+    br = data.get("bonus_rolled")
+    ba = data.get("bonus_applied")
+    assert br is not None and 1 <= br <= 8, (
+        f"BI die should roll 1-8; got {br}"
+    )
+    assert ba is not None and ba == br, (
+        f"applied should equal rolled (no resistance on Pip vs slashing); "
+        f"got rolled={br}, applied={ba}"
+    )
+
+
+async def test_ci_damage_without_target_announce_only(
+    gm_client, lyra_valor,
+):
+    """v2.144.0 — Without `target_combatant_id` the endpoint stays
+    announce-only (no BI die rolled, no damage applied). Backward-
+    compatible with the v2.99.320 contract for clients that haven't
+    been updated."""
+    lyra = lyra_valor
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_combat_inspiration",
+        json={"character_id": lyra["id"], "mode": "damage"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mode"] == "damage"
+    assert data.get("bonus_rolled") is None, (
+        f"announce-only path should not roll the die; got "
+        f"bonus_rolled={data.get('bonus_rolled')!r}"
+    )
+    assert data.get("bonus_applied") is None
+
+
 async def test_use_ci_happy_lv6(
     gm_client, gm_ws, lyra_valor,
 ):

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.144.0] - 2026-06-08 — "Inspiring Strike" — Combat Inspiration damage half (Valor Bard Lv 3+)
+
+**Schema version:** 69
+**Commit summary:** **Wires the damage half of Combat Inspiration (Valor College Bard Lv 3+, PHB p.55) into `/use_combat_inspiration`. When the caller passes `mode="damage"` AND `target_combatant_id` (+ optional `damage_type` defaulting to slashing), the endpoint rolls the BI die server-side and applies the rolled value as bonus damage to the target via `_apply_damage_to_combatant` (with `attacker_char_id` set to the Bard so resistance and on-damage-taken hooks fire). Backward-compatible: without `target_combatant_id` the endpoint stays announce-only — `bonus_rolled` / `bonus_applied` are `None`.**
+**Description:** RAW PHB p.55: "A creature that has a Bardic Inspiration die from you can roll that die and add the number rolled to a weapon damage roll it just made." Phase 1 ships the damage half — the AC half (reactive +AC vs incoming attack) is a separate slice. The endpoint computes the BI die size from the same table Bardic Inspiration uses (d6 / d8 / d10 / d12 at Lv 3-4 / 5-9 / 10-14 / 15+), rolls 1dN if wired, applies the damage server-side, and surfaces `bonus_rolled` + `bonus_applied` + `bonus_breakdown` on the response and the `feature_used` broadcast. The damage application threads through the standard pipeline so v2.142.0 Scornful Rebuke + Aura of Warding's spell-damage gate + any other resistance/vulnerability check applies normally; this isn't a special-cased damage path. v1 simplifications filed: (a) the BI die use isn't decremented from the recipient's resource pool — the endpoint trusts the caller; (b) the AC half (reactive +AC vs the triggering attack) is deferred; (c) the bonus damage rides the Bard's `attacker_char_id` rather than the actual recipient who hit the target — RAW it's "the creature with the BI die" who adds it, but the demo flow is the Bard granting + the recipient swinging, then the Bard endpoint resolves the boost; v2 could thread the recipient's char_id through the body for accurate attribution.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/use_combat_inspiration` accepts `target_combatant_id` + `damage_type` body fields. When provided + `mode="damage"`, rolls `1d{die_size}` via `dice_mod.roll`, calls `_apply_damage_to_combatant` with `is_attack=True` + `attacker_char_id=char.id`, and includes `bonus_rolled` / `bonus_applied` / `bonus_breakdown` on the response and the `feature_used` broadcast.
+- `tests/harness/test_combat_inspiration.py` — `test_ci_damage_with_target_applies_bonus`: PATCH Lyra to Valor, seed Lyra + Pip in battle, call endpoint with `mode=damage` + `target_combatant_id=pip_tok` + `damage_type=slashing`, assert `bonus_rolled in [1, 8]` AND `bonus_applied == bonus_rolled` (no resistance on Pip vs slashing). `test_ci_damage_without_target_announce_only`: same fixture but no `target_combatant_id` → `bonus_rolled is None` (backward-compatible announce-only path).
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2031 → 2033.
+
+### Notes
+- The Bard's `attacker_char_id` on the recursive damage call means Caelan-as-Conquest's Scornful Rebuke (v2.142.0) would fire if a Conquest Caelan ally is hit via Combat Inspiration — RAW behaves the same way because the recipient holding the BI die is making the swing. Acceptable v1 behavior. **Total harness count: 2033** in `tests/harness/` (2031 → 2033); **`tests/harness_ui/` 19** (unchanged). AC half + BI-die decrement filed for v2.144.x / v2.145.0.
+
+---
+
 ## [2.143.0] - 2026-06-08 — "Maxed Out" — Supreme Healing on the heal pipeline (Life Domain Cleric Lv 17+)
 
 **Schema version:** 69
