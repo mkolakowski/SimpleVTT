@@ -61472,6 +61472,39 @@ async def use_combat_inspiration(
                 )
                 bonus_applied = int(_dr.get("applied") or 0)
 
+    # v2.145.0 — Phase 2 AC half: when mode=ac AND the body provides
+    # both `attack_total` and `target_ac`, roll the BI die + compute
+    # the boosted AC + return whether it converts the hit to a miss.
+    # Pure calculation — no state mutation. RAW PHB p.55 lets the
+    # holder roll the BI die "after seeing the roll but before
+    # knowing whether it hits or misses," so this endpoint serves as
+    # the calculator the GM/player uses to reconcile the outcome.
+    ac_attack_total = None
+    ac_original_ac = None
+    ac_new_ac = None
+    ac_would_miss = None
+    if mode == "ac":
+        _at_in = body.get("attack_total")
+        _ac_in = body.get("target_ac")
+        try:
+            ac_attack_total = int(_at_in) if _at_in is not None else None
+        except (TypeError, ValueError):
+            ac_attack_total = None
+        try:
+            ac_original_ac = int(_ac_in) if _ac_in is not None else None
+        except (TypeError, ValueError):
+            ac_original_ac = None
+        if ac_attack_total is not None and ac_original_ac is not None:
+            try:
+                _br = dice_mod.roll(f"1d{die_size}")
+                bonus_rolled = max(0, int(_br.total))
+                bonus_breakdown = _br.breakdown
+            except dice_mod.DiceParseError:
+                bonus_rolled = None
+            if bonus_rolled is not None:
+                ac_new_ac = ac_original_ac + bonus_rolled
+                ac_would_miss = ac_attack_total < ac_new_ac
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -61512,6 +61545,10 @@ async def use_combat_inspiration(
             "bonus_breakdown": bonus_breakdown,
             "target_combatant_id": target_combatant_id,
             "damage_type": damage_type if bonus_rolled is not None else "",
+            "ac_attack_total": ac_attack_total,
+            "ac_original_ac": ac_original_ac,
+            "ac_new_ac": ac_new_ac,
+            "ac_would_miss": ac_would_miss,
         },
     })
 
@@ -61526,6 +61563,10 @@ async def use_combat_inspiration(
         "bonus_applied": bonus_applied,
         "bonus_breakdown": bonus_breakdown,
         "target_combatant_id": target_combatant_id,
+        "ac_attack_total": ac_attack_total,
+        "ac_original_ac": ac_original_ac,
+        "ac_new_ac": ac_new_ac,
+        "ac_would_miss": ac_would_miss,
     }
 
 

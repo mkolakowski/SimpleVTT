@@ -125,6 +125,63 @@ async def test_ci_damage_with_target_applies_bonus(
     )
 
 
+async def test_ci_ac_with_attack_inputs_computes_new_ac(
+    gm_client, lyra_valor,
+):
+    """v2.145.0 — Phase 2 (AC half): when /use_combat_inspiration is
+    called with `mode=ac` AND both `attack_total` + `target_ac`, the
+    endpoint rolls the BI die, computes `ac_new_ac = original + BI`,
+    and returns `ac_would_miss = attack_total < new_ac`. Pure
+    calculator — no state mutation, no damage application. Picks
+    attack_total = 15 + target_ac = 12 so the boosted AC (12 + 1d8 =
+    13–20) will turn the hit into a miss only when the BI die rolls
+    high enough (BI ≥ 4 → new_ac ≥ 16 > 15)."""
+    lyra = lyra_valor
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_combat_inspiration",
+        json={"character_id": lyra["id"], "mode": "ac",
+              "attack_total": 15, "target_ac": 12},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mode"] == "ac"
+    assert data["die_size"] == 8
+    assert data["ac_attack_total"] == 15
+    assert data["ac_original_ac"] == 12
+    br = data.get("bonus_rolled")
+    assert br is not None and 1 <= br <= 8, (
+        f"BI die should roll 1-8; got {br}"
+    )
+    expected_new_ac = 12 + br
+    assert data["ac_new_ac"] == expected_new_ac, (
+        f"ac_new_ac should be {expected_new_ac}; got {data['ac_new_ac']}"
+    )
+    expected_would_miss = 15 < expected_new_ac
+    assert data["ac_would_miss"] is expected_would_miss, (
+        f"ac_would_miss should be {expected_would_miss} for "
+        f"attack_total=15, new_ac={expected_new_ac}; got "
+        f"{data['ac_would_miss']}"
+    )
+
+
+async def test_ci_ac_without_inputs_announce_only(
+    gm_client, lyra_valor,
+):
+    """v2.145.0 — Without `attack_total` + `target_ac`, mode=ac stays
+    announce-only. Backward-compatible with the v2.99.320 contract."""
+    lyra = lyra_valor
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_combat_inspiration",
+        json={"character_id": lyra["id"], "mode": "ac"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mode"] == "ac"
+    assert data.get("bonus_rolled") is None
+    assert data.get("ac_new_ac") is None
+    assert data.get("ac_would_miss") is None
+
+
 async def test_ci_damage_without_target_announce_only(
     gm_client, lyra_valor,
 ):

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.145.0] - 2026-06-08 — "Brace the Blow" — Combat Inspiration AC half (Phase 2 calculator)
+
+**Schema version:** 69
+**Commit summary:** **Wires the AC half of Combat Inspiration (Valor Bard Lv 3+, PHB p.55) as a pure calculator. When `/use_combat_inspiration` is called with `mode="ac"` AND both `attack_total` + `target_ac` in the body, the endpoint rolls the BI die server-side and returns `ac_new_ac = target_ac + bonus_rolled` plus `ac_would_miss = attack_total < ac_new_ac`. No state mutation — RAW says the holder rolls "after seeing the roll but before knowing whether it hits or misses," so this gives the GM/player the deterministic outcome to reconcile chat. Backward-compatible: without the inputs, mode=ac stays announce-only.**
+**Description:** Phase 1 (v2.144.0) shipped the damage half; Phase 2 closes the AC half. The reactive flow is genuinely complex — it'd need a prompt-on-attacker's-attack flow with a reaction-chip gate + a hit/miss flip after a downstream roll. For v1, the pragmatic split: the endpoint stays a pure-calculation entrypoint that the GM/player can call AFTER seeing the attack roll, with the inputs visible in the chat. The response carries every field the client needs to render the outcome (`ac_attack_total`, `ac_original_ac`, `ac_new_ac`, `ac_would_miss`, `bonus_rolled`, `bonus_breakdown`). Phase 3 (filed) would integrate this into the reactions framework so the prompt fires automatically on `attack_targeted` for any combatant carrying a BI die buff. The damage-half Phase 1 + AC-half Phase 2 together cover both RAW use-cases the BI die holder can choose.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/use_combat_inspiration`'s `mode=ac` branch accepts `attack_total` + `target_ac` body fields. When provided, rolls `1d{die_size}` via `dice_mod.roll` + computes `ac_new_ac = target_ac + bonus_rolled` + `ac_would_miss = attack_total < ac_new_ac`. Returns + broadcasts `ac_attack_total`, `ac_original_ac`, `ac_new_ac`, `ac_would_miss` alongside the existing `bonus_rolled` / `bonus_breakdown` fields.
+- `tests/harness/test_combat_inspiration.py` — `test_ci_ac_with_attack_inputs_computes_new_ac`: PATCH Lyra to Valor (Lv 6 → d8), POST with `mode=ac`, `attack_total=15`, `target_ac=12`; assert `ac_new_ac == 12 + bonus_rolled` AND `ac_would_miss is (15 < new_ac)`. `test_ci_ac_without_inputs_announce_only`: same fixture but no inputs → `bonus_rolled` / `ac_new_ac` / `ac_would_miss` all `None` (backward-compatible).
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2033 → 2035.
+
+### Notes
+- Combat Inspiration is now end-to-end across both RAW use-cases: damage uplift (v2.144.0, mechanical) + AC boost (this commit, calculator). Phase 3 — integrate the AC half into the reactions framework so the prompt fires automatically on `attack_targeted` — filed. **Total harness count: 2035** in `tests/harness/` (2033 → 2035); **`tests/harness_ui/` 19** (unchanged). The same calculator shape could serve future "see-the-roll, then decide" features (Halfling Lucky for someone else's attack vs you, Silvery Barbs reaction, etc.) — filed.
+
+---
+
 ## [2.144.1] - 2026-06-08 — "Halved Glory" — relax the CI damage assertion for resistance halving
 
 **Schema version:** 69
