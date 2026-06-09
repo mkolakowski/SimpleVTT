@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.156.0] - 2026-06-09 — "Dead Weight" — Advantage/Disadvantage Phase 2e: auto-fail STR/DEX saves from Paralyzed / Stunned / Unconscious / Petrified
+
+**Schema version:** 69
+**Commit summary:** **RAW PHB Appendix A auto-fail mechanic: Paralyzed / Stunned / Unconscious / Petrified all auto-fail STR + DEX saving throws regardless of the d20. Different mechanic from advantage/disadvantage — the d20 still rolls (broadcast remains transparent) but the outcome is forced FAIL. New shared helper `_saver_auto_fails_strdex_save(buffs_iter, stat_key_lc)` works uniformly on PC `_buffs_active` and NPC `combatant.buffs`. PC path refactor: `respond_roll_request` now derives a single `_save_passed_final` flag that gates the note outcome, the Silvery-Barbs / Chronal-Shift watcher prompt, the condition-install path, and the AoE-PC damage-applied math — so a Paralyzed PC failing a DEX save against Banishment still installs Banished even on a natural 20. NPC path: each of the six NPC-save construction sites overrides `auto_save_passed = False` after the comparison.**
+**Description:** Phase 2e is the symmetric counterpart to Phase 2d but covers a separate RAW mechanic. Phase 2d's helper returns disadvantage (2d20kl1) — the d20 still matters. Phase 2e's helper forces the outcome regardless of the d20 — the d20 is shown for transparency but doesn't drive pass/fail. The four conditions (Paralyzed, Stunned, Unconscious, Petrified) all carry "Incapacitated" as a side effect in RAW, plus the auto-fail-STR/DEX-saves clause. Auto-fail composes naturally with the rest of the save pipeline: condition installs still fire (a Paralyzed PC banished by a Banishment save still gets Banished installed); damage-on-fail spells (Fireball at a Paralyzed bandit) deal full damage instead of half. The single `_save_passed_final` flag on the PC path replaces three inline comparisons (`result.total >= roll_req.dc` in the note, the Silvery-Barbs prompt, the install gate, and the AoE damage math) so the auto-fail override threads through all of them without per-site branching.
+
+Filed out of scope (Phase 2 follow-ups still open after this commit): NPC ability checks via `/roll` (needs a client-side change to pass `combatant_id` from the unified mini-sheet's NPC stat-block buttons); concentration-save auto-fail on damage taken (CON save — not in this commit's set; the v2.49.51 incapacitation hook already drops concentration when Stun/Paralyze/Unconscious lands so the gap is implicit-covered).
+
+### Added
+- `app/routes/tabletop_routes.py` — `_AUTO_FAIL_STR_DEX_SAVE_CONDITION_KEYS = frozenset({"paralyzed", "stunned", "unconscious", "petrified"})` constant + `_saver_auto_fails_strdex_save(buffs_iter, stat_key_lc)` helper. Sits next to the v2.155.0 `_npc_save_condition_disadvantage` helper. Returns the matching condition key when stat_key is `*_save` with ability in (STR, DEX) AND the buffs iterator carries any auto-fail key; None otherwise. Single helper serves both PC + NPC paths.
+- `app/routes/tabletop_routes.py` — PC-side `respond_roll_request` refactor: new `_auto_fail_key` + `_save_passed_final` variables computed once after the d20 + Halfling-Lucky reroll. Threaded through the note-outcome branch (line 16139), the Silvery-Barbs / Chronal-Shift watcher prompt (line 16227), the condition-install gate (line 16278), and the AoE PC damage-applied path (line 16622). Note shows `"✗ Fail (auto-fail: paralyzed)"` when auto-fail triggers.
+- `app/routes/tabletop_routes.py` — NPC-side: six save sites get a 4-line override after the existing `auto_save_passed = auto_save_rolled >= save_dc` comparison (or `result["passed"] = ...` in the shared helper, or `passed = rolled >= dc` in the /place_aoe block). Each site reads the target combatant's `buffs` + the local `stat_key` and force-sets pass to False when the helper returns a key.
+- `tests/harness/test_save_auto_fail.py` — 2 tests pin the contract: `test_paralyzed_npc_dex_save_auto_fails` (Thalindra casts Fireball at a Paralyzed bandit → response `auto_save_passed = False`) + `test_stunned_npc_dex_save_auto_fails` (same shape, stunned instead of paralyzed — confirms frozenset membership drives the override).
+
+### Changed
+- `docs/plans/advantage-disadvantage.md` — status banner adds "Phase 2e shipped in v2.156.0" line; Implementation Status table gets a new ✅ row for Phase 2e above the Phase 2d row, documenting the `_save_passed_final` refactor + the four covered conditions.
+- `docs/test-harness-coverage.md` — running total bumped 2064 → 2066.
+- `TODO.md` — advantage-disadvantage Phase 2e marked shipped; only Phase 3 (Maps 2.0 positional) remains.
+
+### Notes
+- The PC-side refactor introduces `_save_passed_final` as the canonical pass/fail variable. Three previous inline comparisons (line 16122 note outcome, line 16205 watcher prompt, line 16276 install gate, line 16619 AoE damage) now all read the same flag — a small but meaningful invariant: Phase 2e's auto-fail can't leak past one comparison while honoring another. **Total harness count: 2066** in `tests/harness/` (2064 → 2066); **`tests/harness_ui/` 19** (unchanged). Phase 2 of the advantage-disadvantage plan now covers all four roll surfaces AND the auto-fail variant — a Paralyzed character is now consistently treated as failing every STR/DEX save server-side regardless of which endpoint resolves it.
+
+---
+
 ## [2.155.0] - 2026-06-08 — "Tied at the Knees" — Advantage/Disadvantage Phase 2d: NPC condition-driven save disadvantage
 
 **Schema version:** 69

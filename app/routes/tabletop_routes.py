@@ -16109,6 +16109,23 @@ async def respond_roll_request(
                 result.breakdown,
             )
 
+    # v2.156.0 — Phase 2e: auto-fail STR/DEX saves from Paralyzed /
+    # Stunned / Unconscious / Petrified per RAW PHB Appendix A. The
+    # d20 still rolls (broadcast remains transparent) but the outcome
+    # is forced fail — `_save_passed_final` overrides the comparison
+    # so the install path + Silvery-Barbs / Chronal-Shift watcher gate
+    # + AoE damage-applied math all agree on "failed."
+    _auto_fail_key: "str | None" = None
+    if char and roll_req.stat_key:
+        _auto_fail_key = _saver_auto_fails_strdex_save(
+            (char.sheet or {}).get("_buffs_active"),
+            (roll_req.stat_key or "").lower(),
+        )
+    if roll_req.dc is not None:
+        _save_passed_final = (result.total >= roll_req.dc) and not _auto_fail_key
+    else:
+        _save_passed_final = None
+
     # Build a descriptive note
     char_name = char.name if char else None
     note_parts = [f"→ {roll_req.label}"]
@@ -16119,7 +16136,9 @@ async def respond_roll_request(
             f"🍀 Lucky reroll d20 1 → {_halfling_lucky_new_d20}"
         )
     if roll_req.dc is not None:
-        outcome = "✓ Pass" if result.total >= roll_req.dc else "✗ Fail"
+        outcome = "✓ Pass" if _save_passed_final else "✗ Fail"
+        if _auto_fail_key:
+            outcome = f"{outcome} (auto-fail: {_auto_fail_key})"
         note_parts.append(f"DC {roll_req.dc} — {outcome}")
     note = " | ".join(note_parts)[:200]
 
@@ -16202,7 +16221,10 @@ async def respond_roll_request(
     # emit-site watcher filter is now "SB-eligible-on-a-pass OR
     # Chronal-Shift-eligible" and `context.passed` carries the result.
     if roll_req.dc is not None:
-        _save_passed = result.total >= roll_req.dc
+        # v2.156.0 — read the unified `_save_passed_final` so the
+        # Phase 2e auto-fail flips Silvery-Barbs / Chronal-Shift
+        # eligibility too.
+        _save_passed = bool(_save_passed_final)
         try:
             state = hub.get_battle(campaign_id)
             if state:
@@ -16273,7 +16295,10 @@ async def respond_roll_request(
     _purge_save_request_context()
     ctx = _save_request_context.get(roll_req.id)
     if ctx and ctx.get("campaign_id") == campaign_id and roll_req.dc is not None:
-        if result.total < roll_req.dc:
+        # v2.156.0 — gate install on the unified `_save_passed_final`
+        # so the Phase 2e auto-fail still triggers save-or-suck
+        # condition installs even when result.total >= dc.
+        if not _save_passed_final:
             # v2.99.407 — Phase 3.2: a class-feature save (Menacing
             # Attack, …) stamps its own condition template into
             # ``ctx["condition_buff"]`` (same shape as a
@@ -16616,7 +16641,9 @@ async def respond_roll_request(
         # buffs (the only buff-installing save spells today are non-
         # AoE save-or-suck — Hold Person, Suggestion, etc.).
         if ctx and ctx.get("is_aoe") and roll_req.dc is not None:
-            _passed = result.total >= roll_req.dc
+            # v2.156.0 — read `_save_passed_final` so Phase 2e
+            # auto-fail flips the AoE damage-applied math too.
+            _passed = bool(_save_passed_final)
             _dmg_applied = 0
             _dmg_type = ctx.get("damage_type") or ""
             _cast_id = ctx.get("cast_id") or ""
@@ -18347,6 +18374,12 @@ async def cast_spell(
                         auto_save_rolled = 0
                         auto_save_breakdown = ""
                     auto_save_passed = auto_save_rolled >= auto_save_dc
+                    # v2.156.0 — Phase 2e: auto-fail STR/DEX saves
+                    # from Paralyzed / Stunned / Unconscious / Petrified.
+                    if _saver_auto_fails_strdex_save(
+                        target_combatant.get("buffs"), stat_key,
+                    ):
+                        auto_save_passed = False
                     # Broadcast as a regular roll so the toast fires
                     # AND ``_appendSaveResultToSpellCard`` correlates
                     # the result back to the cast card via note prefix.
@@ -19970,6 +20003,12 @@ async def place_aoe(
             rolled = 0
             bd = ""
         passed = rolled >= dc
+        # v2.156.0 — Phase 2e: auto-fail STR/DEX saves from Paralyzed /
+        # Stunned / Unconscious / Petrified on the NPC AoE save side.
+        if _saver_auto_fails_strdex_save(
+            extra.get("buffs"), f"{save_ability.lower()}_save",
+        ):
+            passed = False
         dmg_applied = 0
         dmg_breakdown = ""
         # v2.99.48 — Elemental Affinity AoE wire at /place_aoe NPC
@@ -24918,6 +24957,47 @@ def _roll_condition_disadvantage(
     return None
 
 
+# v2.156.0 — Phase 2e. RAW PHB Appendix A: Paralyzed / Stunned /
+# Unconscious / Petrified all auto-fail STR + DEX saving throws. This
+# is a SEPARATE mechanic from adv/dis — the d20 doesn't matter; the
+# save outcome is forced regardless of total. The helper is shared by
+# PC and NPC save paths: it takes a generic buffs iterator so both
+# `Character.sheet._buffs_active` (PC mirror) and
+# `combatant["buffs"]` (NPC hub state) work uniformly.
+_AUTO_FAIL_STR_DEX_SAVE_CONDITION_KEYS = frozenset({
+    "paralyzed", "stunned", "unconscious", "petrified",
+})
+
+
+def _saver_auto_fails_strdex_save(
+    buffs_iter, stat_key_lc: str,
+) -> "str | None":
+    """v2.156.0 — Phase 2e. Returns the matching condition key when
+    the saver carries a condition that auto-fails this STR/DEX save
+    per RAW PHB Appendix A; None otherwise. The stat_key gate so only
+    STR/DEX saves trigger the override — other saves (WIS, CHA, etc.)
+    are unaffected by these conditions.
+
+    ``buffs_iter`` accepts any iterable of buff dicts — pass the PC
+    sheet's ``_buffs_active`` list or the NPC combatant's ``buffs``
+    list. Non-dict / missing-key entries are skipped (defensive).
+    """
+    if not stat_key_lc.endswith("_save"):
+        return None
+    ability_part = stat_key_lc.split("_save", 1)[0].upper()
+    if ability_part not in ("STR", "DEX"):
+        return None
+    if not buffs_iter:
+        return None
+    for b in buffs_iter:
+        if not isinstance(b, dict):
+            continue
+        key = (b.get("key") or "").strip().lower()
+        if key in _AUTO_FAIL_STR_DEX_SAVE_CONDITION_KEYS:
+            return key
+    return None
+
+
 def _npc_save_condition_disadvantage(
     target_combatant: "dict | None",
     stat_key_lc: str,
@@ -27008,6 +27088,12 @@ async def _resolve_feature_save(
         result["save_breakdown"] = ""
     result["resolved"] = True
     result["passed"] = result["save_total"] >= int(dc)
+    # v2.156.0 — Phase 2e: auto-fail STR/DEX saves from Paralyzed /
+    # Stunned / Unconscious / Petrified.
+    if _saver_auto_fails_strdex_save(
+        target_combatant.get("buffs"), stat_key,
+    ):
+        result["passed"] = False
 
     target_name = target_combatant.get("name") or "Target"
     await hub.broadcast(campaign_id, {
@@ -40014,6 +40100,12 @@ async def use_stunning_strike(
                 auto_save_rolled = 0
                 auto_save_breakdown = ""
             auto_save_passed = auto_save_rolled >= save_dc
+            # v2.156.0 — Phase 2e: auto-fail STR/DEX saves from
+            # Paralyzed / Stunned / Unconscious / Petrified.
+            if _saver_auto_fails_strdex_save(
+                target_combatant.get("buffs"), stat_key,
+            ):
+                auto_save_passed = False
             await hub.broadcast(campaign_id, {
                 "type": "roll",
                 "data": {
@@ -40445,6 +40537,12 @@ async def use_open_hand_technique(
                 auto_save_rolled = 0
                 auto_save_breakdown = ""
             auto_save_passed = auto_save_rolled >= save_dc
+            # v2.156.0 — Phase 2e: auto-fail STR/DEX saves from
+            # Paralyzed / Stunned / Unconscious / Petrified.
+            if _saver_auto_fails_strdex_save(
+                target_combatant.get("buffs"), stat_key,
+            ):
+                auto_save_passed = False
             await hub.broadcast(campaign_id, {
                 "type": "roll",
                 "data": {
@@ -75848,6 +75946,12 @@ async def use_npc_cast_spell(
                     auto_save_rolled = 0
                     auto_save_breakdown = ""
                 auto_save_passed = auto_save_rolled >= save_dc
+                # v2.156.0 — Phase 2e: auto-fail STR/DEX saves from
+                # Paralyzed / Stunned / Unconscious / Petrified.
+                if _saver_auto_fails_strdex_save(
+                    target_combatant.get("buffs"), stat_key,
+                ):
+                    auto_save_passed = False
                 # Broadcast as a regular roll so the chat-card's
                 # _appendSaveResultToSpellCard correlates the result
                 # back to this cast via the note prefix. v2.49.219:
