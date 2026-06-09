@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.9] - 2026-06-09 — "Double Reaping" — Phase 8 final cleric-capstone commit: Improved Reaper (Death Cleric Lv 17) installs the necromancy-dual-target flag buff (Phase 1; spell-routing read site deferred)
+
+**Schema version:** 69
+**Commit summary:** **CLOSES the Lv-17 cleric subclass capstone batch (6/6) for Phase 8. Eighth feature commit (10th total Phase 8 commit including two hotfixes). Same Phase 1 install-then-deferred-read shape as v2.158.3 Improved Duplicity + v2.158.4 Keeper of Souls Phase 1: install a permanent `improved-reaper-active` buff carrying the necromancy dual-target parameters (`improved_reaper_active: True`, `improved_reaper_min_spell_level: 1`, `improved_reaper_max_spell_level: 5`, `improved_reaper_school: "necromancy"`, `improved_reaper_max_targets: 2`, `improved_reaper_max_target_separation_ft: 5`). Phase 2 (deferred): `/cast_spell` reads the buff off the caster's `_buffs_active` and accepts a second `target_combatant_id` when the spell qualifies (necromancy school, levels 1-5, default single-target shape, two targets within 5 ft of each other).**
+**Description:** RAW DMG p.97: "Starting at 17th level, when you cast a necromancy spell of 1st through 5th level that targets only one creature, the spell can instead target two creatures within range and within 5 feet of each other." Heaviest of the Lv-17 cleric capstones because Phase 2 needs to thread spell-routing changes through `/cast_spell` (add a second `target_combatant_id` field, validate school + level, range-gate the two targets at 5 ft, duplicate the spell's damage/save resolution against the second target). Phase 1 captures the parameters in a buff so the Phase 2 commit can focus purely on the spell-routing change. Same scope-discipline pattern that worked well for v2.158.4 Keeper of Souls + v2.158.5 Order's Wrath — both shipped their Phase 1 first, then Phase 2 as a focused follow-up commit.
+
+The cleric Lv-17 capstone batch is now 6/6 shipped:
+* Life Domain — Supreme Healing (shipped pre-Phase-8 at v2.143.0)
+* War Domain — Avatar of Battle (v2.158.0)
+* Forge Domain — Saint of Forge and Fire (v2.158.2)
+* Trickery Domain — Improved Duplicity (v2.158.3)
+* Grave Domain — Keeper of Souls (v2.158.4 Phase 1 + v2.158.6 Phase 2)
+* Order Domain — Order's Wrath (v2.158.5 Phase 1 + v2.158.8 Phase 2)
+* Death Domain — Improved Reaper (v2.158.9 Phase 1)
+
+### Added
+- `tests/harness/test_improved_reaper.py::test_ir_buff_payload_carries_necromancy_dual_target_flags` — state contract: installed buff carries the six `improved_reaper_*` flags on `effects` with the right values + permanence sanity. The existing `test_use_ir_happy_lv17` was upgraded to seed Tavik into an active battle (required for `_install_buff`) and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_improved_reaper` — adds the `_install_buff` call between the level gate and the broadcast. Buff payload: `key="improved-reaper-active"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, plus the six `improved_reaper_*` effect keys. Mirrors the v2.158.3 Improved Duplicity shape. On install, mirrors the buff list to the sheet via `_mirror_buffs_to_sheet`. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_improved_reaper` from `⚪ announce-only` to `✅ tracked`. Tracked / announce-only counts: 193 / 44 (was 192 / 45). Phase 8 row notes Lv-17 cleric batch is now closed 6/6. New row in "Recent retrofits".
+- `docs/test-harness-coverage.md` — `test_improved_reaper.py` block updated. Total harness count bumped to **2081** (was 2080).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line + Phase 8 section gains the Improved Reaper citation + the "batch closed" note.
+
+### Notes
+- Lv-17 cleric capstone batch is fully shipped end-to-end. Next Phase 8 directions: Lv-15 tier (Arcane Charge / Purity of Spirit), Lv-18 (Arcane Mastery / Avenging Angel) and Lv-20 (Emissary of Redemption / Holy Nimbus chain) tiers, or pick a fresh subclass area like Druid Circles or Sorcerer subclasses. Three Phase-1 commits in the batch have deferred Phase-2 spell/feature-flow read sites still pending: Improved Duplicity (needs Invoke Duplicity Lv-2 endpoint first), Improved Reaper (needs `/cast_spell` second-target picker), and Aura of Conquest / Improved War Magic still on the longer Phase-8 tail. **Total harness count: 2081** in `tests/harness/` (was 2080); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.8] - 2026-06-09 — "Ally's Reprisal" — Phase 8 seventh feature commit: Order's Wrath Phase 2 — an ally hitting the cursed target auto-triggers 2d8 psychic + drops the curse
 
 **Schema version:** 69

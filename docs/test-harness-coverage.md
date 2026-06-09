@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2080 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.8, 2026-06-09).
+**Total tests:** 2081 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.9, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -735,13 +735,14 @@ v2.99.296 — War Domain Cleric (PHB p.63) Avatar of Battle Lv 17 passive (H.1 d
 | `test_aob_halves_nonmagical_piercing_damage` | v2.158.0 — end-to-end: Pip's nonmagical Shortsword (piercing) against the buffed Tavik produces `damage_applied == damage_total // 2` through `_apply_damage_to_combatant`. Retries up to 12 swings to bound hit-rate flake. Auto-apply-damage fixture. |
 
 ### `test_improved_reaper.py`
-v2.99.297 — Death Domain Cleric (DMG p.97) Improved Reaper Lv 17 passive (H.1 deeper). 1st-5th level necromancy spells targeting one creature can target two creatures within range + within 5 ft of each other. v1 announce-only.
+v2.99.297 — Death Domain Cleric (DMG p.97) Improved Reaper Lv 17 passive (H.1 deeper). 1st-5th level necromancy spells targeting one creature can target two creatures within range + within 5 ft of each other. v2.158.9 (Phase 8 final cleric-capstone commit, Phase 1 of install-then-deferred-read): endpoint installs a permanent `improved-reaper-active` buff carrying the six necromancy dual-target parameters as `effects.improved_reaper_*` flags. Phase 2 (deferred): `/cast_spell` reads the flags off `_buffs_active` and accepts a second `target_combatant_id` when the spell qualifies. **CLOSES the Lv-17 cleric subclass capstone batch 6/6.**
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_use_ir_happy_lv17` | Lv 17 Tavik → `max_targets == 2`, `max_target_separation_ft == 5`, school necromancy, levels 1-5, broadcast (source `improved-reaper`). |
+| `test_use_ir_happy_lv17` | Lv 17 Tavik → `max_targets == 2`, `max_target_separation_ft == 5`, school necromancy, levels 1-5, `buff_installed == True`, broadcast (source `improved-reaper`). v2.158.9 — seeds Tavik into an active battle so `_install_buff` returns True. |
 | `test_use_ir_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_ir_level_gate` | Death at Lv 16 → 409. |
+| `test_ir_buff_payload_carries_necromancy_dual_target_flags` | v2.158.9 — installed buff carries the six `improved_reaper_*` effect keys (active, min_spell_level=1, max_spell_level=5, school="necromancy", max_targets=2, max_target_separation_ft=5). Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). Pins the Phase-2 contract so the future `/cast_spell` read site has stable flag names to look up. |
 
 ### `test_improved_duplicity.py`
 v2.99.298 — Trickery Domain Cleric (PHB p.62) Improved Duplicity Lv 17 passive (H.1 deeper). Invoke Duplicity now creates up to 4 duplicates (was 1). Bonus action moves any number up to 30 ft each, max 120 ft range. v2.158.3 (Phase 8 third commit): endpoint installs a permanent `improved-duplicity` buff carrying the upgraded Invoke Duplicity parameters as `effects.invoke_duplicity_max_duplicates=4` + `effects.invoke_duplicity_bonus_move_per_duplicate_ft=30` + `effects.invoke_duplicity_max_range_ft=120`. Phase 1 of the standard install-then-deferred-read split (Phase 2: `/use_invoke_duplicity` reads the flags off `_buffs_active` when shipped).

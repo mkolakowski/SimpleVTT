@@ -53807,9 +53807,23 @@ async def use_improved_reaper(
     feet of each other."
 
     Body: ``{character_id, override?}``. No chip cost —
-    passive permanent (modifies necromancy spell casts). v1
-    announce-only — the dual-target option is GM-tracked via
-    the player invoking the spell with two targets.
+    passive permanent (modifies necromancy spell casts).
+
+    v2.158.9 — Phase 8 eighth feature commit (CLOSES the Lv-17
+    cleric capstone batch 6/6). Phase 1 of the standard install-
+    then-deferred-read split (same shape as v2.158.3 Improved
+    Duplicity). Install a permanent `improved-reaper-active`
+    buff carrying the parameters Phase 2's spell-routing change
+    will read:
+      * `effects.improved_reaper_active: True`
+      * `effects.improved_reaper_min_spell_level: 1`
+      * `effects.improved_reaper_max_spell_level: 5`
+      * `effects.improved_reaper_school: "necromancy"`
+      * `effects.improved_reaper_max_targets: 2`
+      * `effects.improved_reaper_max_target_separation_ft: 5`
+    Phase 2 (deferred): `/cast_spell` reads the buff and accepts
+    a second `target_combatant_id` when the spell qualifies
+    (school=necromancy, level 1-5, default single-target shape).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -53838,6 +53852,39 @@ async def use_improved_reaper(
         })
 
     cleric_lv = _cleric_level_from_sheet(sheet)
+
+    # v2.158.9 — install the parameter-carrying buff. Permanent
+    # passive (idempotent on re-press via key dedupe). Phase 2
+    # (deferred): `/cast_spell` reads `effects.improved_reaper_*`
+    # off the caster's `_buffs_active` and routes a second target
+    # for qualifying single-target Lv-1-5 necromancy spells.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "improved-reaper-active",
+        "name": "💀 Improved Reaper",
+        "icon": "💀",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "improved_reaper_active": True,
+            "improved_reaper_min_spell_level": 1,
+            "improved_reaper_max_spell_level": 5,
+            "improved_reaper_school": "necromancy",
+            "improved_reaper_max_targets": 2,
+            "improved_reaper_max_target_separation_ft": 5,
+        },
+        "desc": (
+            f"{char.name}'s 1st-5th level necromancy spells that "
+            f"target one creature can now target two creatures within "
+            f"range and within 5 ft of each other. (Death Domain "
+            f"Cleric Lv 17+ passive permanent. Phase 2: `/cast_spell` "
+            f"reads these flags off `_buffs_active`.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -53873,6 +53920,7 @@ async def use_improved_reaper(
             "max_targets": 2,
             "max_target_separation_ft": 5,
             "cleric_level": cleric_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -53885,6 +53933,7 @@ async def use_improved_reaper(
         "max_targets": 2,
         "max_target_separation_ft": 5,
         "cleric_level": cleric_lv,
+        "buff_installed": buff_installed,
     }
 
 
