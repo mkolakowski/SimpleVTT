@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.20] - 2026-06-09 — "Bestial Aspect" — Phase 8 Barbarian diversification: Form of the Beast (Beast Barbarian Lv 3+) installs the 10-round natural-weapon parameter buff (Phase 1; attack-flow read site deferred)
+
+**Schema version:** 69
+**Commit summary:** **Pushes the Phase 8 diversification arc to 11/12 classes — Barbarian joins. 10-round (rage-duration) `form-of-the-beast-active` buff with six `form_of_the_beast_*` effect keys (active=True, form, damage_die, damage_type, reach_ft, special) capturing the chosen natural weapon's parameters. Phase 2 (deferred): /attack reads the buff and renders Bite/Claws/Tail as a built-in attack option while the buff is active.**
+
+### Added
+- `tests/harness/test_form_of_the_beast.py::test_fb_buff_payload_carries_form_parameter_flags` — state contract: installed buff carries six `form_of_the_beast_*` effect keys with the right values + 10-round duration + non-concentration. `test_use_fb_happy_claws` upgraded to seed Krieger into a battle and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_form_of_the_beast` — `_install_buff` call between subclass gate and broadcast; `feature_used` + response gain `buff_installed: bool`.
+- `docs/automation-coverage.md` — `use_form_of_the_beast` row flipped tracked. Counts: 203 / 34.
+- `docs/test-harness-coverage.md` + `docs/plans/full-feature-automation.md` — Barbarian diversification cited; total harness count 2092.
+
+### Notes
+- Phase 8 session ledger: 21 commits, 12 features across 11 class families. Remaining untouched: Ranger (1 of 12). **Total harness count: 2092**.
+
+---
+
 ## [2.158.19] - 2026-06-09 — "Sharpened Bolt" — Phase 8 Wizard diversification: Empowered Evocation (Evocation Wizard Lv 10+) installs the +INT-damage parameter buff (Phase 1; /cast_spell read site deferred)
 
 **Schema version:** 69

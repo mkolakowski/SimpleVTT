@@ -62,11 +62,32 @@ async def krieger_beast(gm_client, roster):
         )
 
 
+def _pc(cid, c, *, hp_max=70):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp_max, "hp_max": hp_max,
+            "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def _seed_krieger_in_battle(gm_client, krieger):
+    """v2.158.20 — `_install_buff` requires an active battle."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [_pc(f"tok_fb_kr_{krieger['id']}", krieger)],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
 async def test_use_fb_happy_claws(
     gm_client, gm_ws, krieger_beast,
 ):
-    """Lv 7 Path of the Beast, default → claws 1d6 slashing."""
+    """Lv 7 Path of the Beast, default → claws 1d6 slashing,
+    buff_installed True."""
     krieger = krieger_beast
+    await _seed_krieger_in_battle(gm_client, krieger)
     gm_ws.mark()
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
@@ -80,6 +101,7 @@ async def test_use_fb_happy_claws(
     assert data["damage_type"] == "slashing"
     assert data["reach_ft"] == 5
     assert data["barbarian_level"] == 7
+    assert data["buff_installed"] is True
     await asyncio.sleep(0.3)
     feats = _fb_broadcasts(gm_ws, krieger["id"])
     assert feats
@@ -126,3 +148,41 @@ async def test_use_fb_invalid_form(
         json={"character_id": krieger["id"], "form": "wings"},
     )
     assert r.status_code == 400, r.text
+
+
+async def test_fb_buff_payload_carries_form_parameter_flags(
+    gm_client, gm_ws, krieger_beast,
+):
+    """v2.158.20 — state contract (Phase 9): the installed
+    `form-of-the-beast-active` buff carries the six
+    `form_of_the_beast_*` effect keys with the right values
+    (active=True, form="bite", damage_die="1d8",
+    damage_type="piercing", reach_ft=5, special string)."""
+    krieger = krieger_beast
+    await _seed_krieger_in_battle(gm_client, krieger)
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "bite"},
+    )
+    assert r.status_code == 200, r.text
+    bu = await gm_ws.wait_for("buff_update")
+    krieger_buffs = bu["data"]["buffs"]
+    fb_buff = next(
+        (b for b in krieger_buffs
+         if b.get("key") == "form-of-the-beast-active"),
+        None,
+    )
+    assert fb_buff is not None, (
+        f"form-of-the-beast-active buff missing; got keys="
+        f"{[b.get('key') for b in krieger_buffs]}"
+    )
+    effects = fb_buff.get("effects") or {}
+    assert effects.get("form_of_the_beast_active") is True
+    assert effects.get("form_of_the_beast_form") == "bite"
+    assert effects.get("form_of_the_beast_damage_die") == "1d8"
+    assert effects.get("form_of_the_beast_damage_type") == "piercing"
+    assert effects.get("form_of_the_beast_reach_ft") == 5
+    # Rage-duration buff (1 minute = 10 rounds), not concentration.
+    assert fb_buff.get("concentration") in (False, None)
+    assert int(fb_buff.get("duration_rounds") or 0) == 10

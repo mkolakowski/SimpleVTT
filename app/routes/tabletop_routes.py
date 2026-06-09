@@ -60092,6 +60092,36 @@ async def use_form_of_the_beast(
     form_data = _FORM_OF_THE_BEAST[form]
     form_icon = {"bite": "🦷", "claws": "🐾", "tail": "🦎"}[form]
 
+    # v2.158.20 — install the form-parameter buff. 10 rounds =
+    # 1 minute rage duration. Idempotent on re-press via key
+    # dedupe (overwrites any prior form selection).
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "form-of-the-beast-active",
+        "name": f"{form_icon} Form of the Beast ({form.title()})",
+        "icon": form_icon,
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "form_of_the_beast_active": True,
+            "form_of_the_beast_form": form,
+            "form_of_the_beast_damage_die": form_data["damage_die"],
+            "form_of_the_beast_damage_type": form_data["damage_type"],
+            "form_of_the_beast_reach_ft": form_data["reach_ft"],
+            "form_of_the_beast_special": form_data["special"],
+        },
+        "desc": (
+            f"{char.name} manifests a {form} natural weapon "
+            f"({form_data['damage_die']} {form_data['damage_type']}, "
+            f"reach {form_data['reach_ft']} ft) while raging. "
+            f"{form_data['special']} (Path of the Beast Barbarian "
+            f"Lv 3+ TCE; expires when rage ends.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -60125,6 +60155,7 @@ async def use_form_of_the_beast(
             "form": form,
             **form_data,
             "barbarian_level": barb_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -60134,6 +60165,7 @@ async def use_form_of_the_beast(
         "form": form,
         **form_data,
         "barbarian_level": barb_lv,
+        "buff_installed": buff_installed,
     }
 
 

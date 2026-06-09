@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.19 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.20 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -26,8 +26,8 @@ only spend a resource without a downstream effect.
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **202** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **35** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **203** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **34** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Ten-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin + fighter (EK 2/2) + druid + warlock + sorcerer + bard + rogue + monk + wizard (Empowered Evocation v2.158.19). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Eleven-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin + fighter (EK 2/2) + druid + warlock + sorcerer + bard + rogue + monk + wizard + barbarian (Form of the Beast v2.158.20). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -192,6 +192,7 @@ or passive damage-boosters that already ride other code paths
 | `use_fighting_spirit` | ✅ tracked | F temp-HP |
 | `use_flurry_of_blows` | ✅ tracked | D buff-install |
 | `use_foe_slayer` | ✅ tracked | D buff-install |
+| `use_form_of_the_beast` | ✅ tracked | D buff-install (10-round rage natural-weapon parameter flags) |
 | `use_font_of_magic_to_points` | ✅ tracked | A use/resource |
 | `use_font_of_magic_to_slot` | ✅ tracked | A use/resource |
 | `use_frenzy` | ✅ tracked | A use/resource |
@@ -334,7 +335,6 @@ or passive damage-boosters that already ride other code paths
 | `use_eyes_of_the_rune_keeper` | ⚪ announce-only | — |
 | `use_fancy_footwork` | ⚪ announce-only | — |
 | `use_flesh_to_stone_make_permanent` | ⚪ announce-only | — |
-| `use_form_of_the_beast` | ⚪ announce-only | — |
 | `use_improved_minor_illusion` | ⚪ announce-only | — |
 | `use_invocation` | ⚪ announce-only | — |
 | `use_mask_of_many_faces` | ⚪ announce-only | — |
