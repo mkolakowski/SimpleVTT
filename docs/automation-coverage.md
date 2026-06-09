@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.10 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.11 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -26,8 +26,8 @@ only spend a resource without a downstream effect.
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **194** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **43** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **195** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **42** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Lv-17 cleric capstone batch CLOSED 6/6 in v2.158.x.** Step-out to **Lv-15 tier: Purity of Spirit (Devotion Paladin, v2.158.10)**. Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Lv-17 cleric capstone batch CLOSED 6/6 in v2.158.x.** Lv-15 tier in progress: Purity of Spirit (Devotion Paladin, v2.158.10), Arcane Charge (Eldritch Knight, v2.158.11). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **Buff / temp-HP (D/F):** `supreme_healing` ✅ v2.143.0 (heal pipeline max-dice substitution via the new `_max_dice_total` helper); `combat_inspiration` ✅ v2.144.0–v2.145.0 (damage half — roll BI die + apply to target; AC half — calculator returning the boosted-AC outcome); `blade_flourish` ✅ v2.146.0 (shared damage half — Defensive/Slashing/Mobile riders deferred). `rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals.
 - **Movement (G):** `ascendant_step` ✅ v2.147.0 (levitate buff carrying `fly_speed_ft: 10` + concentration); `fancy_footwork` ✅ v2.148.0 (Phase 1 install of the OA-block mark on the target — OA-flow read deferred to Phase 2); `relentless_avenger` ✅ v2.149.0 (Phase 1 install of the free-move budget + OA-immune flag — `/token/move` read deferred to Phase 2). `stormborn` ✅ v2.99.459 fly buff.
 
-## Recent retrofits (v2.128.2 – v2.158.10)
+## Recent retrofits (v2.128.2 – v2.158.11)
 
 | Feature | Phases shipped | Notes |
 |---|---|---|
@@ -101,6 +101,7 @@ or passive damage-boosters that already ride other code paths
 | Order's Wrath Phase 2 (ally-hit trigger) | on-attack-hit hook (v2.158.8) | Closes the Phase 2 of v2.158.5's install-then-deferred-read split. New helper `_fire_orders_wrath_on_attack_hit` wires into BOTH PC + NPC branches of `_apply_damage_to_combatant` after damage applies. Checks `orders-wrath-curse` buff on target + verifies attacker isn't the curse caster, rolls 2d8 psychic, applies via the damage pipeline (recursive with `is_attack=False` to prevent loop), drops the curse in place. Broadcasts `feature_used` source `orders-wrath-trigger`. Order in NPC branch: damage applies → break-on-damage → Order's Wrath trigger → Keeper of Souls on 0-HP (so a psychic-damage kill chains correctly into Keeper of Souls) |
 | Improved Reaper | permanent necromancy-dual-target flag buff (v2.158.9 — Phase 8 final cleric-capstone commit) | Death Domain Cleric Lv 17+. Phase 1 of install-then-deferred-read split. Installs `improved-reaper-active` buff with six `improved_reaper_*` effect keys (active, min_spell_level=1, max_spell_level=5, school="necromancy", max_targets=2, max_target_separation_ft=5). Phase 2 (deferred): `/cast_spell` reads the buff and accepts a second `target_combatant_id` when the spell qualifies (necromancy school, levels 1-5, default single-target shape). **CLOSES the Lv-17 cleric subclass capstone batch 6/6 in v2.158.x** |
 | Purity of Spirit | permanent PFE&G class-feature buff (v2.158.10 — Phase 8 step-out to Lv-15 tier) | Devotion Paladin Lv 15+. Installs `purity-of-spirit` buff carrying the same `pfeag_*` effects payload as the cast Protection from Evil and Good spell (six protected creature types + attackers-disadvantage flag + charm/frighten/possess-immunity flag + save-advantage flag). The two existing engine read sites (`_target_attackers_have_pfeag_disadvantage_against_type` + `_pc_has_pfeag_against_type`) were extended to accept either `key="purity-of-spirit"` or `key="protection-from-evil-and-good"` so the class-feature buff reuses the spell-buff engine wholesale. Distinct key so a cast PfE&G spell on top doesn't collide. Sets the engine-reuse pattern for future PFE&G-shape features |
+| Arcane Charge | permanent teleport-budget flag buff (v2.158.11 — Phase 8 Lv-15 tier) | Eldritch Knight Fighter Lv 15+. Phase 1 of install-then-deferred-read split. Installs `arcane-charge-active` buff with two `arcane_charge_*` effect keys (`teleport_max_ft=30`, `requires_action_surge=True`). Phase 2 (deferred): `/use_action_surge` reads the buff + surfaces the teleport budget (before/after the additional action per RAW); the actual move uses existing `_force_move` / movement primitives. Sibling commit to v2.158.10 Purity of Spirit — both step Phase 8 out into the Lv-15 tier |
 
 ## Full classification
 
@@ -126,6 +127,7 @@ or passive damage-boosters that already ride other code paths
 | `use_action_surge` | ✅ tracked | A use/resource |
 | `use_adjust_density` | ✅ tracked | A use/resource |
 | `use_animal_companion` | ✅ tracked | H summon, damage |
+| `use_arcane_charge` | ✅ tracked | D buff-install (Action-Surge teleport-budget flags) |
 | `use_arcane_deflection` | ✅ tracked | A use/resource |
 | `use_arcane_recovery` | ✅ tracked | A use/resource |
 | `use_arcane_shot` | ✅ tracked | A use/resource |
@@ -301,7 +303,6 @@ or passive damage-boosters that already ride other code paths
 | `use_wizardly_quill` | ✅ tracked | A use/resource |
 | `use_wrath_of_the_storm` | ✅ tracked | A use/resource |
 | `use_ancestral_protectors` | ⚪ announce-only | — |
-| `use_arcane_charge` | ⚪ announce-only | — |
 | `use_arcane_mastery` | ⚪ announce-only | — |
 | `use_ascendant_step` | ⚪ announce-only | — |
 | `use_assassinate` | ⚪ announce-only | — |

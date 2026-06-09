@@ -83,7 +83,7 @@ async def garrik_ek_in_battle(gm_client, roster):
 async def test_use_ac_happy_lv15(
     gm_client, gm_ws, garrik_ek_in_battle,
 ):
-    """Lv 15 EK → Arcane Charge broadcast."""
+    """Lv 15 EK → Arcane Charge broadcast + buff installed."""
     garrik = garrik_ek_in_battle
     await _patch_sheet(
         gm_client, garrik["id"], {"level": 15},
@@ -97,9 +97,50 @@ async def test_use_ac_happy_lv15(
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["teleport_max_ft"] == 30
+    assert data["buff_installed"] is True
     await asyncio.sleep(0.3)
     feats = _ac_broadcasts(gm_ws, garrik["id"])
     assert feats
+
+
+async def test_ac_buff_payload_carries_teleport_flags(
+    gm_client, gm_ws, garrik_ek_in_battle,
+):
+    """v2.158.11 — state contract (Phase 9): the installed
+    `arcane-charge-active` buff carries the two `arcane_charge_*`
+    effect keys with the right values (`teleport_max_ft: 30` +
+    `requires_action_surge: True`). Phase 2 (deferred) will have
+    `/use_action_surge` read these off the caster's
+    `_buffs_active` and surface the teleport budget; this test
+    pins the flag shape so that future read site has a stable
+    contract to look up."""
+    garrik = garrik_ek_in_battle
+    await _patch_sheet(
+        gm_client, garrik["id"], {"level": 15},
+        class_slug="fighter",
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_arcane_charge",
+        json={"character_id": garrik["id"]},
+    )
+    assert r.status_code == 200, r.text
+    bu = await gm_ws.wait_for("buff_update")
+    garrik_buffs = bu["data"]["buffs"]
+    ac_buff = next(
+        (b for b in garrik_buffs if b.get("key") == "arcane-charge-active"),
+        None,
+    )
+    assert ac_buff is not None, (
+        f"arcane-charge-active buff missing; got keys="
+        f"{[b.get('key') for b in garrik_buffs]}"
+    )
+    effects = ac_buff.get("effects") or {}
+    assert effects.get("arcane_charge_teleport_max_ft") == 30
+    assert effects.get("arcane_charge_requires_action_surge") is True
+    # Permanent passive — no concentration, very long duration.
+    assert ac_buff.get("concentration") in (False, None)
+    assert int(ac_buff.get("duration_rounds") or 0) >= 1000
 
 
 async def test_use_ac_level_gate(

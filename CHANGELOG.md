@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.11] - 2026-06-09 — "Charged Step" — Phase 8 Lv-15 tier: Arcane Charge (Eldritch Knight Lv 15+) installs the teleport-budget flag buff (Phase 1; Action Surge read site deferred)
+
+**Schema version:** 69
+**Commit summary:** **Sibling commit to v2.158.10 Purity of Spirit — both step Phase 8 out into the Lv-15 tier. Martial-subclass capstone after the previous commit's spellcaster-subclass capstone. Same Phase 1 install-then-deferred-read shape as the v2.158.x cleric capstone batch. Install a permanent `arcane-charge-active` buff carrying `effects.arcane_charge_teleport_max_ft: 30` + `effects.arcane_charge_requires_action_surge: True`. Phase 2 (deferred): `/use_action_surge` reads the buff and surfaces the teleport budget (before/after the additional action per RAW); the actual server-authoritative move uses the existing `_force_move` / movement primitives.**
+**Description:** Pure-composition Phase 1 commit — no new helper, no new primitive. The buff captures the Lv-15 EK's teleport budget so the future Action Surge read site has a stable parameter contract. The Phase 2 commit will be small: read the buff inside `/use_action_surge`'s response and either auto-teleport on a `target_x`/`target_y` body field or emit a follow-up prompt for the player to pick a teleport target. RAW lets the teleport happen before OR after the Action Surge's bonus action, so the Phase 2 read needs to surface both options.
+
+The Eldritch Knight Lv-15 capstone joins the Devotion Paladin Lv-15 (v2.158.10) as the second Lv-15 tier feature shipped in Phase 8. Improved War Magic (EK Lv-18, sibling endpoint) and the broader Lv-18+ subclass tier are next-up candidates if the user wants to keep moving up the level range.
+
+### Added
+- `tests/harness/test_eldritch_knight_capstones.py::test_ac_buff_payload_carries_teleport_flags` — state contract: installed buff carries the two `arcane_charge_*` effect keys (teleport_max_ft=30, requires_action_surge=True) with the right values, plus permanence sanity (`concentration` falsy + `duration_rounds >= 1000`). The existing `test_use_ac_happy_lv15` was upgraded to assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_arcane_charge` — adds the `_install_buff` call between the level gate and the broadcast. Buff payload: `key="arcane-charge-active"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, plus the two `arcane_charge_*` effect keys. Mirrors the v2.158.3 Improved Duplicity / v2.158.4 Keeper of Souls Phase 1 shapes. On install, mirrors the buff list to the sheet via `_mirror_buffs_to_sheet`. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_arcane_charge` from `⚪ announce-only` to `✅ tracked`. Tracked / announce-only counts: 195 / 42 (was 194 / 43). Phase 8 row notes the second Lv-15 tier shipment.
+- `docs/test-harness-coverage.md` — `test_eldritch_knight_capstones.py` block gains the new state-contract row. Total harness count bumped to **2083** (was 2082).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Arcane Charge citation.
+
+### Notes
+- The Lv-15 tier now has two Phase 8 commits (Purity of Spirit + Arcane Charge). Both follow the Phase-1 buff-install recipe. Improved War Magic (EK Lv-18, in the same test file) is the next mechanical sibling — the existing `test_use_iwm_happy_lv18` test exercises the chip-spend already, so a Phase 8 commit there would install a flag buff so the future War Magic spell-cast flow can read the Lv-18 "Lv-1+ spell instead of cantrip" upgrade. **Total harness count: 2083** in `tests/harness/` (was 2082); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.10] - 2026-06-09 — "Ward Made Permanent" — Phase 8 steps out to Lv-15 tier: Purity of Spirit (Devotion Paladin Lv 15+) installs a permanent PFE&G buff that the existing engine reads directly
 
 **Schema version:** 69

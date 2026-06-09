@@ -44027,8 +44027,18 @@ async def use_arcane_charge(
     your Action Surge."
 
     Body: ``{character_id, override?}``. Validates EK Lv 15+.
-    v1 announces the teleport; the "must be tied to Action
-    Surge" prereq is GM-tracked.
+
+    v2.158.11 — Phase 8 Lv-15 tier (martial subclass capstone
+    sibling of v2.158.10 Devotion Paladin's Purity of Spirit).
+    Phase 1 of install-then-deferred-read split. Install a
+    permanent `arcane-charge-active` buff carrying the
+    parameters Phase 2's Action Surge teleport flow will read:
+      * `effects.arcane_charge_teleport_max_ft: 30`
+      * `effects.arcane_charge_requires_action_surge: True`
+    Phase 2 (deferred): `/use_action_surge` reads the buff and
+    offers the teleport option (before/after the additional
+    action per RAW); the actual token move uses the existing
+    `_force_move` / movement primitives.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -44055,6 +44065,35 @@ async def use_arcane_charge(
             "got_subclass": (sheet.get("subclass") or "").lower(),
             "got_level": _fighter_level_from_sheet(sheet),
         })
+
+    # v2.158.11 — install the permanent parameter-carrying buff.
+    # Idempotent on re-press via `_install_buff`'s key dedupe.
+    # Phase 2 (deferred): `/use_action_surge` reads
+    # `effects.arcane_charge_*` off the caster's `_buffs_active`
+    # and surfaces the teleport budget.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "arcane-charge-active",
+        "name": "🌀 Arcane Charge",
+        "icon": "🌀",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "arcane_charge_teleport_max_ft": 30,
+            "arcane_charge_requires_action_surge": True,
+        },
+        "desc": (
+            f"{char.name} can teleport up to 30 ft when using "
+            f"Action Surge (before or after the additional action). "
+            f"(Eldritch Knight Lv 15+ passive permanent. Phase 2: "
+            f"`/use_action_surge` reads these flags off "
+            f"`_buffs_active`.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -44083,6 +44122,7 @@ async def use_arcane_charge(
             ),
             "source": "arcane-charge",
             "teleport_max_ft": 30,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -44090,6 +44130,7 @@ async def use_arcane_charge(
         "ok": True,
         "feature": "arcane-charge",
         "teleport_max_ft": 30,
+        "buff_installed": buff_installed,
     }
 
 
