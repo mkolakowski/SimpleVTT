@@ -42,6 +42,7 @@ COPY CHANGELOG_v1.md /app/CHANGELOG_v1.md
 COPY CLAUDE.md /app/CLAUDE.md
 COPY CREDITS.md /app/CREDITS.md
 COPY TODO.md /app/TODO.md
+COPY TODONE.md /app/TODONE.md
 
 # Create dirs for uploaded maps and tokens, and the homebrew volume mountpoint
 # (so the volume can mount cleanly on a fresh container before anything is

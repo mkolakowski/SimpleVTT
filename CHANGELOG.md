@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.151.4] - 2026-06-08 — "Ship the Box" — add the missing `COPY TODONE.md` line to the Dockerfile
+
+**Schema version:** 69
+**Commit summary:** **One-line Dockerfile fix. v2.151.3 added `TODONE.md` to the repo root + the wiki allowlist + the harness test, but the Dockerfile's repo-root COPY block was missed — so `/wiki/doc/todone` returned 404 inside the running container even though the local file system + wiki nav linked to it. Adds `COPY TODONE.md /app/TODONE.md` next to the existing `COPY TODO.md` line so the archive is actually inside the image.**
+**Description:** Caught during the v2.151.3 post-commit verification (`curl /wiki/doc/todone` returned 404, even though TODONE.md was present in the repo). Root cause: the Dockerfile's COPY-each-root-doc-by-name pattern means a new root doc is invisible to the image until it's added explicitly. The new test `test_wiki_doc_serves_todone` would have caught this on the next CI run, but shipping the fix immediately keeps the suite green now rather than after the next push. No other Dockerfile entries needed updating — the wiki route, the allowlist, the template, the README index, and the harness test were all correct.
+
+### Fixed
+- `Dockerfile` — added `COPY TODONE.md /app/TODONE.md` after the existing `COPY TODO.md` line so the archive resolves inside the image at `/app/TODONE.md`, matching the path `_DOC_ALLOWLIST["todone"]` resolves to via `_REPO_ROOT / Path("TODONE.md")`.
+
+### Notes
+- No code or test change beyond the Dockerfile edit. **Total harness count: 2046** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). After this commit, the in-container `curl /wiki/doc/todone` returns 200 with the archive's H1 ("Completed To-Dos") + the wiki nav, matching what the v2.151.3 test was asserting.
+
+---
+
 ## [2.151.3] - 2026-06-08 — "The Trophy Case" — move every completed to-do out of `TODO.md` into a new `TODONE.md` archive
 
 **Schema version:** 69
