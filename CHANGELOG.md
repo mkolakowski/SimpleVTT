@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.157.1] - 2026-06-09 — "Tipping the Hand" — pre-click condition warning pill on the mini-sheet abilities header
+
+**Schema version:** 69
+**Commit summary:** **UI affordance follow-up to Phase 2a–2f. When a PC carries a condition that drives the v2.152.0–v2.157.0 server-side adv/dis or auto-fail automation (Poisoned / Frightened / Restrained / Blinded / Prone / Paralyzed / Stunned / Unconscious / Petrified / Invisible), the mini-sheet's abilities header now renders a small ⚠ Conditions pill with a tooltip listing each active condition and its RAW impact. The tooltip text comes from a per-condition impact map in the template — same shape per condition, single source of truth.**
+**Description:** Pre-2.157.1 the only signal that a roll would fire with auto-disadvantage or auto-fail was the post-roll `roll_state_applied` label in the dice log. That meant the player or GM had to click the button to discover the modifier — confusing when a save fails on what looks like a great d20 because the helper forced the result. The new pill is server-rendered from `_mini_sheet_card.html` (reads the v2.97.30 `_buffs_active` mirror), so it shows up on the initial tabletop page load AND every time a `battle_update` broadcast re-renders the character's mini-sheet. Single pill per ability grid; tooltip text is generated from a per-key `_cond_impact_map` so the wording is consistent and additions are one-line entries. CSS uses `--danger` via `color-mix` so it tracks all 9 themes without bespoke palettes.
+
+### Added
+- `app/templates/_mini_sheet_card.html` — new pre-render block at the top of the abilities header: builds `_ab_warn_ns.parts` by walking the PC's `_buffs_active` and matching each key against a 10-entry `_cond_impact_map` (Poisoned / Frightened / Restrained / Blinded / Prone / Paralyzed / Stunned / Unconscious / Petrified / Invisible). If the list is non-empty, render `<span class="mini-ab-cond-warn" title="...">⚠ Conditions</span>` inside the existing `.mini-ab-header` between the section label and the Check/Save toggle.
+- `app/templates/tabletop.html` — `.mini-ab-cond-warn` CSS class: small inline pill with a `color-mix(in srgb, var(--danger) ...)` border + background tint, `cursor: help` so the tooltip hover reads as intentional, `white-space: nowrap` + `flex-shrink: 0` so it doesn't compress when the section label wraps.
+- `tests/harness/test_mini_sheet_cond_warn.py` — 2 tests: `test_poisoned_pc_mini_sheet_shows_warning_pill` (Pip seeded with Poisoned via PUT /battle → response body's Pip mini-sheet block contains `.mini-ab-cond-warn` + "Poisoned" + the RAW impact phrase from the map); `test_clean_pc_mini_sheet_omits_warning_pill` (control — no conditions → no pill markup).
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2070 → 2072.
+
+### Notes
+- The warning pill is a template-only addition; no new endpoints, no schema change. The `_cond_impact_map` is the single source of truth for "what does each condition do to d20 rolls" so the eventual per-button gating (Phase 2-finishing UI work — gate the warning to the buttons whose roll type is actually affected by each condition) can read the same map. Filed follow-up: extend the same pill to the GM-side init-tracker entries so the GM sees the warning when a monster carries a condition, and the GM is ABOUT to click the NPC's mini-sheet roll buttons. Today the v2.157.0 Phase 2f wiring works server-side for NPCs but the visual signal is PC-only. **Total harness count: 2072** in `tests/harness/` (2070 → 2072); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.157.0] - 2026-06-09 — "Last One Standing" — Advantage/Disadvantage Phase 2f: NPC `/roll` condition adv/dis
 
 **Schema version:** 69

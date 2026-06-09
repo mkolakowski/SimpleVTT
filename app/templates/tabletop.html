@@ -1119,6 +1119,25 @@
     .mini-ab-toggle { display: inline-flex; background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
     .mini-ab-toggle-btn { font-size: 10px; padding: 2px 8px; min-height: 26px; border: none; background: transparent; cursor: pointer; color: var(--fg-mute); line-height: 1; transition: background .12s, color .12s; }
     .mini-ab-toggle-btn.active { background: var(--accent); color: #fff; }
+    /* v2.157.1 — Pre-click warning pill for active conditions that
+       modify d20 rolls server-side (Phase 2a–2f of the adv/dis plan).
+       Sits in the mini-sheet abilities header between the section
+       label and the Check/Save toggle. Tooltip via `title` lists each
+       active condition + its impact. Color tracks `--danger` so it
+       reads across all themes; small + understated so it doesn't
+       crowd the header when many conditions stack. */
+    .mini-ab-cond-warn {
+        font-size: 10px;
+        padding: 2px 7px;
+        border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--danger) 15%, transparent);
+        color: var(--danger);
+        line-height: 1.1;
+        cursor: help;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
     /* ── Stat-block header (card header — also the open/close toggle) ── */
     /* v2.4.24: touch-action:manipulation suppresses iOS Safari's double-tap-to-zoom
        wait on this expand surface so a single iPad tap doesn't fire two clicks
