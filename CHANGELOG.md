@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.1] - 2026-06-09 — "Closing the F6 Gap" — PC `_resistance_halve` now uses `_resistance_matches_damage` so a buff's `nonmagical-X` entry actually halves nonmagical damage
+
+**Schema version:** 69
+**Commit summary:** **Hotfix on v2.158.0. Phase 8's Avatar of Battle endpoint correctly installed the buff with `effects.resistance_to = ["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]`, but the PC `_resistance_halve` helper was doing a literal `damage_type_l in resists` string compare against those entries — `"piercing"` is not literally in `["nonmagical-piercing", …]`, so the resistance never fired and the v2.158.0 `test_aob_halves_nonmagical_piercing_damage` test (`damage_total=7`, `damage_applied=7`) caught it on the post-rebuild verify run. v2.158.1 threads the `_apply_damage_to_combatant`'s existing `is_magical` flag down into `_resistance_halve` and replaces the per-entry compare with the F6-aware `_resistance_matches_damage` matcher — the same matcher `_resistance_halve_npc` has been using since v2.63.0.**
+**Description:** The F6 (v2.63.0) magical-source resistance gate was already plumbed end-to-end on the NPC side: monster stat blocks list `"Resistances: bludgeoning, piercing, slashing from nonmagical attacks"`, `_resistance_halve_npc` walks per entry through `_resistance_matches_damage`, and the matcher recognises the SRD phrasing variants (`"nonmagical-X"`, `"nonmagical X"`, `"X from nonmagical attacks"`, `"X from nonmagical weapons"`). PCs never had that machinery on the read side — the only PC-side consumers were race traits + Hellish Resistance type lists with literal type names, so the literal `in` compare sufficed. v2.158.0's Avatar of Battle is the first PC-side buff to ride the F6 phrasing — the PC `_resistance_halve` needed the same matcher.
+
+The fix is small (~15 lines): `_resistance_halve` grows an `is_magical: bool = False` kwarg; the per-buff `effects.resistance_to` loop swaps `damage_type_l in resists` for a `_resistance_matches_damage(r, damage_type_l, is_magical=is_magical)` per-entry call. The sheet-level `damage_resistances` loop gets the same upgrade so a racial or class-feature-permanent `"nonmagical-X"` entry works the same way (filed for future Stoneskin-style spells that target a PC). The one call site inside `_apply_damage_to_combatant` (line ~7086) threads `is_magical=is_magical` so the gate hooks up — the kwarg already exists on the parent function (v2.63.0). The lone other call site at the `/respond_take_damage`-style endpoint (line ~80122) keeps the default `is_magical=False` for backward compat — its callers don't track magical-source state and an all-mundane assumption matches its historical behavior.
+
+### Changed
+- `app/routes/tabletop_routes.py::_resistance_halve` — adds `is_magical: bool = False` kwarg. The per-entry compare on both the sheet-level `damage_resistances` list and the per-buff `effects.resistance_to` list now goes through `_resistance_matches_damage(r, damage_type_l, is_magical=is_magical)` instead of literal string equality. `"all"` wildcards still short-circuit at the top of each loop. Docstring updated with the v2.158.0 plumbing note.
+- `app/routes/tabletop_routes.py::_apply_damage_to_combatant` — the `_resistance_halve` call now threads `is_magical=is_magical` so Avatar of Battle + future F6-aware PC buffs actually halve correctly. No other behavior change.
+
+### Notes
+- Same `tests/harness/test_avatar_of_battle.py::test_aob_halves_nonmagical_piercing_damage` from v2.158.0 is the regression test — passes here. **Total harness count: 2074** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). Lesson filed: when adding a PC-side buff that rides an SRD phrasing variant (`"nonmagical-X"`, `"silvered-X"`, `"adamantine-X"`, …), check that the PC read site uses `_resistance_matches_damage` not literal `in` — the NPC side has had this matcher since v2.63.0 but the PC side trailed.
+
+---
+
 ## [2.158.0] - 2026-06-09 — "Iron Skin" — Phase 8 kick-off: Avatar of Battle (War Cleric Lv 17) flipped from announce-only to a real `_install_buff` + `nonmagical-X` resistance halve
 
 **Schema version:** 69

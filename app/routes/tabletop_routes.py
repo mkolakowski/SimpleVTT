@@ -7084,7 +7084,8 @@ async def _apply_damage_to_combatant(
                 damage_amount, damage_type, sheet,
             )
             _, resistance_applied = _resistance_halve(
-                damage_amount, damage_type, sheet, is_spell=is_spell,
+                damage_amount, damage_type, sheet,
+                is_spell=is_spell, is_magical=is_magical,
             )
             if vulnerability_applied and resistance_applied:
                 # Cancel: damage taken normally.
@@ -33542,7 +33543,7 @@ def _dragonborn_ancestry_resistance(sheet: "dict | None") -> str:
 
 def _resistance_halve(
     damage_amount: int, damage_type: str, target_sheet: dict,
-    *, is_spell: bool = False,
+    *, is_spell: bool = False, is_magical: bool = False,
 ) -> tuple[int, bool]:
     """If the target's ``_buffs_active`` has resistance to
     ``damage_type``, return (halved, True). Otherwise (damage_amount,
@@ -33565,6 +33566,19 @@ def _resistance_halve(
     specific resistance from other sources (Rage on bludgeoning +
     Aura of Warding on a spell — both halve, but only one applies
     per RAW per source; the helper returns on the first hit).
+
+    v2.158.0 — ``is_magical`` kwarg threaded so the per-entry match
+    can recognise SRD "X from nonmagical attacks" phrasing
+    (``"nonmagical-bludgeoning"``, ``"nonmagical bludgeoning"``,
+    ``"bludgeoning from nonmagical attacks"``, …). Matches the
+    F6-aware per-entry compare already in ``_resistance_halve_npc``
+    — so a buff carrying
+    ``effects.resistance_to=["nonmagical-piercing", …]`` halves a
+    nonmagical piercing hit but passes magical-source piercing at
+    full damage per RAW. Applied to both the sheet-level
+    ``damage_resistances`` list (race traits + permanent class
+    features stored at sheet root) and the per-buff
+    ``effects.resistance_to`` list.
     """
     if damage_amount <= 0 or not damage_type:
         return damage_amount, False
@@ -33583,7 +33597,9 @@ def _resistance_halve(
         if "all" in normalized:
             return damage_amount // 2, True
         for r in sheet_resists:
-            if (str(r) or "").strip().lower() == damage_type_l:
+            if isinstance(r, str) and _resistance_matches_damage(
+                r, damage_type_l, is_magical=is_magical,
+            ):
                 return damage_amount // 2, True
     # v2.99.196 — Dragonborn ancestry fallback. When the sheet has
     # `dragonborn_ancestry` set (e.g. "bronze") but the explicit
@@ -33622,8 +33638,16 @@ def _resistance_halve(
         # same field shape.
         if "all" in resists:
             return damage_amount // 2, True
-        if damage_type_l in resists:
-            return damage_amount // 2, True
+        # v2.158.0 — F6-aware per-entry compare so a buff carrying
+        # `"nonmagical-piercing"` halves a nonmagical piercing hit but
+        # passes magical-source piercing at full damage. Avatar of
+        # Battle (War Cleric Lv 17+) is the first PC-side consumer;
+        # mirrors the per-entry compare in `_resistance_halve_npc`.
+        for r in resists:
+            if _resistance_matches_damage(
+                r, damage_type_l, is_magical=is_magical,
+            ):
+                return damage_amount // 2, True
     return damage_amount, False
 
 
