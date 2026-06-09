@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.99.460
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.142.0 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -69,15 +69,24 @@ or passive damage-boosters that already ride other code paths
 (`potent_spellcasting`, `empowered_evocation`, `sculpt_spells`, `foe_slayer`,
 `spell_bombardment`). The genuinely-automatable tail:
 
-- **Auras (E):** `aura_of_warding`, `ancestral_protectors`,
-  `unwavering_mark`, `scornful_rebuke` — fold into `_tick_auras`
-  (`aura_of_conquest` ✅ v2.99.448 condition gate; `aura_of_alacrity` ✅ v2.99.449 buff-payload).
-- **On-hit / extra-attack:**
-  `assassinate` (auto-crit rider). (`genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 + `dread_ambusher` ✅ v2.99.452 server-resolved extra attacks.)
+- **Auras (E):** `aura_of_warding` ✅ v2.133.0–v2.135.1 (full RAW chain — `is_spell` plumbing through `_apply_damage_to_combatant` + `resistance_spell_damage` buff payload via `_tick_auras`); `ancestral_protectors` ✅ v2.136.0–v2.138.0 (install on raging melee hit → attacker-side disadvantage gate + attacker-side damage halving); `unwavering_mark` ✅ v2.139.0–v2.141.0 (install on melee hit + 5-ft disadvantage gate + `/use_unwavering_punish` bonus-action endpoint). `aura_of_conquest` ✅ v2.99.448 condition gate; `aura_of_alacrity` ✅ v2.99.449 buff-payload.
+- **On-being-hit retaliation (new primitive):** `scornful_rebuke` ✅ v2.142.0 — first on-damage-taken hook in `_apply_damage_to_combatant`; Conquest Paladin Lv 15+ auto-deals `max(1, CHA mod)` psychic to the attacker. Sibling to the on-hit-rider, aura-tick, and condition-install paths.
+- **On-hit / extra-attack:** `assassinate` ✅ v2.131.0–v2.132.0 (auto-crit on surprised + advantage vs not-yet-acted; uses `target_surprised: bool` body flag + the new combatant `has_acted` field). `genies_wrath` ✅ v2.99.450 flat rider; `horde_breaker` ✅ v2.99.451 + `dread_ambusher` ✅ v2.99.452 server-resolved extra attacks.
 - **Buff / temp-HP (D/F):** `combat_inspiration`,
   `blade_flourish`, `supreme_healing` (`rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals).
 - **Movement (G):** `ascendant_step` (fly),
   `relentless_avenger`, `fancy_footwork` (`stormborn` ✅ v2.99.459 fly buff).
+
+## Recent retrofits (v2.128.2 – v2.142.0)
+
+| Feature | Phases shipped | Notes |
+|---|---|---|
+| Up-cast tail | per-two-slot parser (v2.129.0), flat-bonus parser + scaler (v2.130.0) | Closes Aid / Heal / False Life / Flame Blade / Spiritual Weapon classes of up-cast prose; `parse_upcast_dice` now handles 3 RAW shapes (per-1 dice, per-2 dice, flat-N) |
+| Assassinate | auto-crit (v2.131.0) + advantage (v2.132.0) | `target_surprised: bool` body field; new combatant `has_acted` field flipped on turn-advance |
+| Aura of Warding | engine plumbing (v2.133.0) + endpoint install (v2.134.0) + Phase 4 tick test (v2.135.0) + Phase 1.5 deferred-site threading (v2.135.1) | `is_spell` plumbed through `_apply_damage_to_combatant` + `_resistance_halve` + `_resistance_halve_npc`; aura emitter buff installs `resistance_spell_damage` on allies + the emitter buff itself carries the flag for the caster's "you and …" half |
+| Ancestral Protectors | install (v2.136.0) + disadvantage gate (v2.137.0/.1) + damage halving (v2.138.0) | Three-pass RAW chain; the helper `_attacker_marked_by_ancestral_protectors_vs_other` is shared between the adv/dis and damage halving paths |
+| Unwavering Mark | install (v2.139.0) + 5-ft disadvantage gate (v2.140.0) + bonus-action punish endpoint (v2.141.0) | `_distance_ft_between_chars` 5-ft gate distinguishes UM from AP; `/use_unwavering_punish` rolls 2d20kh1 + weapon damage + flat half-fighter-level bonus |
+| Scornful Rebuke | on-damage-taken hook (v2.142.0) | New primitive — fires inside `_apply_damage_to_combatant` PC branch after `_maybe_concentration_save`; recursive psychic damage to attacker (with `is_attack=False` to break ping-pong) |
 
 ## Full classification
 

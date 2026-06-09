@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.142.1] - 2026-06-08 — "Mind the Gap" — refresh automation-coverage + full-feature-automation docs
+
+**Schema version:** 69
+**Commit summary:** **Doc-only. Refreshes the auras-backlog "Notable announce-only" section in [`docs/automation-coverage.md`](docs/automation-coverage.md) to mark every feature shipped this session as ✅ done (Aura of Warding, Ancestral Protectors, Unwavering Mark, Scornful Rebuke, Assassinate). Adds a new "Recent retrofits (v2.128.2 – v2.142.0)" table listing each feature's version range + the one-liner of what shipped. Updates the [`docs/plans/full-feature-automation.md`](docs/plans/full-feature-automation.md) status banner to mention the new on-damage-taken primitive and the v2.128.2–v2.142.0 retrofit summary.**
+**Description:** The automation-coverage doc and the full-feature-automation plan are both "living indexes" per the project's doc-discipline rules. After 23 commits delivering 6 features end-to-end, the curated bullets in those docs lagged the codebase by ~14 versions. This commit aligns them. Auto-generated row counts in the per-endpoint classification table are NOT touched — those need a classifier rerun, filed as a follow-up. The curated "Notable announce-only" bullets and the new retrofit summary table give a contributor scanning the doc an accurate picture of which features now ship server-side. The plan's status banner gets the same retrofit summary so the index reads consistently from both entry points.
+
+### Changed
+- `docs/automation-coverage.md` — the auras / on-hit / on-damage-taken bullets each marked ✅ with version ranges; new "Recent retrofits (v2.128.2 – v2.142.0)" subsection at the end with a 1-row-per-feature summary table; status line notes the auto-counts haven't been rerun.
+- `docs/plans/full-feature-automation.md` — status banner mentions the new on-damage-taken primitive (v2.142.0); adds the same v2.128.2–v2.142.0 retrofit summary inline so the plan doc and the audit doc agree.
+
+### Notes
+- Auto-generated row counts in `docs/automation-coverage.md` still pin v2.99.460; rerunning the classifier is filed as a follow-up. **Total harness count: 2030** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). Both docs are already surfaced via `/wiki/doc/automation-coverage` and `/wiki/doc/plan-full-feature-automation`, so no wiki-allowlist update is required.
+
+---
+
 ## [2.142.0] - 2026-06-08 — "Get Back" — Scornful Rebuke on-damage-taken hook (Conquest Paladin Lv 15+)
 
 **Schema version:** 69
