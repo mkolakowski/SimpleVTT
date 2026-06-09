@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.151.3] - 2026-06-08 — "The Trophy Case" — move every completed to-do out of `TODO.md` into a new `TODONE.md` archive
+
+**Schema version:** 69
+**Commit summary:** **Doc-reorg. Lifts ~30 ✅ DONE entries (Touch Target Remediation Phases 1-3, twelve Manually-Added bullets v2.91.0-v2.112.0, the Targeting Button combat row, the Phase-7/auras/on-hit/buff-tail/movement-tail archetype bullets from Full Class-Feature Automation, and the twelve "Shipped end-to-end" design plans) out of [`TODO.md`](TODO.md) and into a new repo-root [`TODONE.md`](TODONE.md) archive. Each entry preserves its original wording + the version reference that shipped it; pointers from the now-trimmed sections in `TODO.md` go back to `TODONE.md` for the history. Wires `TODONE.md` into the wiki as a repo-root doc (`/wiki/doc/todone`) so the archive surfaces through the same nav as `TODO.md`.**
+**Description:** The user asked to "move all the completed to-dos to a to-DONE document." `TODO.md` had accumulated ~30 ✅ DONE entries by the v2.149.2 "Triage" pass, and scanning it for the next thing to work on meant skipping over a lot of already-shipped noise. This commit splits the file into two: `TODO.md` for the live backlog (open P1/P2/P3 work + design-plan deferrals) and `TODONE.md` for the historical archive (sections preserved per the original topical grouping so the trail from "feature ask" to "ship version" stays intact). Repo-root pointer at the top of `TODO.md` directs future readers to `TODONE.md` and codifies the move-on-ship discipline. Wiki surfacing follows the same pattern as `todo` and `claude`: a `todone` row in `_DOC_ALLOWLIST`, the "Repo documentation" table in `wiki.html`, and the index in `docs/wiki/README.md`, plus a per-slug harness test (`test_wiki_doc_serves_todone`) and an assertion in `test_wiki_home_renders` for the landing-page row.
+
+### Added
+- `TODONE.md` — new repo-root archive (~200 lines). Mirrors the topical structure of `TODO.md` (Touch Target Remediation, Manually Added, Combat, Full Class-Feature Automation, Design Plans Backlog) but contains only the items that have shipped. Opens with a "why this file exists" preamble pointing back at `TODO.md`.
+- `app/routes/wiki_routes.py` — `_DOC_ALLOWLIST["todone"] = Path("TODONE.md")` row added next to the existing `todo` row.
+- `app/templates/wiki.html` — new row in the "Repo documentation" table linking to `/wiki/doc/todone`.
+- `docs/wiki/README.md` — matching row in the "Repo documentation" table.
+- `tests/harness/test_wiki.py` — `test_wiki_doc_serves_todone` (200 + body contains the archive's H1 + the nav menu); `test_wiki_home_renders` asserts `/wiki/doc/todone` is in the landing-page response.
+
+### Changed
+- `TODO.md` — Touch Target Remediation section removed entirely (all three phases shipped at v1.2.8–v1.2.10). Manually-Added section trimmed from ~12 ✅ DONE bullets to the 4 remaining P3 polish bullets. Combat section's "Targeting Button on the Attack Flow" bullet removed. Full Class-Feature Automation "Status by archetype" section's five ✅ DONE archetype bullets replaced with a single pointer line into `TODONE.md`. Design Plans Backlog's "Shipped end-to-end (kept for reference)" subsection replaced with a single pointer line into `TODONE.md`. Top-of-file callout added: "Completed items live in `TODONE.md`. When an item ships, move it there (preserving the version reference) rather than leaving a strikethrough or ✅ stub here."
+
+### Notes
+- No code or schema change beyond the wiki-allowlist row. The archive is a doc-reorg so future sessions can scan `TODO.md` without skipping past shipped noise; the historical detail isn't lost — it's one click away via `/wiki/doc/todone`. **Total harness count: 2046** in `tests/harness/` (2045 → 2046 with the new `test_wiki_doc_serves_todone`); **`tests/harness_ui/` 19** (unchanged). The discipline rule encoded at the top of `TODO.md` ("move it there when it ships") is the structural fix that keeps the split honest going forward — same approach that kept the wiki-allowlist + landing-page tables synced via the CLAUDE.md "every doc surfaced through the wiki" rule.
+
+---
+
 ## [2.151.2] - 2026-06-08 — "Filed Under Shipped" — mark Death Saves Phase 3a + 3b in the plan + TODO index
 
 **Schema version:** 69

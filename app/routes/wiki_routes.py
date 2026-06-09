@@ -56,6 +56,7 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "claude": Path("CLAUDE.md"),
     "credits": Path("CREDITS.md"),
     "todo": Path("TODO.md"),
+    "todone": Path("TODONE.md"),
     # docs/ references
     "roll-log-card-layout": Path("docs") / "roll-log-card-layout.md",
     "test-harness-coverage": Path("docs") / "test-harness-coverage.md",

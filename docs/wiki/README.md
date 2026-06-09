@@ -84,6 +84,7 @@ Canonical top-level documents at the repo root. Mirrored through the wiki so the
 | [CLAUDE — contributor + agent guidelines](../../CLAUDE.md) | Markdown (contributing) | Contributors | ✅ shipped · living |
 | [CREDITS & attribution](../../CREDITS.md) | Markdown (license) | All | ✅ shipped |
 | [TODO — planned features backlog](../../TODO.md) | Markdown (backlog) | Contributors | ✅ shipped · living |
+| [TODONE — completed to-do archive](../../TODONE.md) | Markdown (archive) | Contributors | ✅ shipped · living |
 
 ## TODO — guides to write
 

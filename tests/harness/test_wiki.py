@@ -76,6 +76,8 @@ async def test_wiki_home_renders():
     assert "/wiki/reactions" in resp.text
     # v2.99.8: testing-checklist per-version verification log listed.
     assert "/wiki/testing-checklist" in resp.text
+    # v2.151.3: TODONE completed-to-do archive listed in Repo documentation.
+    assert "/wiki/doc/todone" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -489,6 +491,22 @@ async def test_wiki_doc_serves_root_doc():
     assert resp.status_code == 200
     assert "SimpleVTT" in resp.text
     assert "Claude Code guidelines" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_todone():
+    """v2.151.3: GET /wiki/doc/todone — 200 + body contains the
+    archive's H1 + the nav menu. The route reads ``TODONE.md`` from
+    the repo root via the _DOC_ALLOWLIST mapping. The archive holds
+    the items moved out of ``TODO.md`` once they shipped so the active
+    backlog stays scannable.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/todone")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # The archive's H1 is "SimpleVTT — Completed To-Dos".
+    assert "completed to-dos" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 
