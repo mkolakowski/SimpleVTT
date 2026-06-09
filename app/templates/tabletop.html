@@ -4680,6 +4680,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     // name when the click came from outside the init tracker.
                     const _actorName = _getMonsterActorName(btn);
                     if (_actorName && _actorName !== 'Monster') body.actor_name = _actorName;
+                    // v2.157.0 — Phase 2f: pass the NPC's combatant_id so
+                    // the server can read its hub-state buffs and apply
+                    // condition adv/dis (Poisoned/Frightened → check dis;
+                    // Restrained → DEX-save dis). When the click came from
+                    // an init-tracker entry, charIdRaw is the combatant
+                    // slot id (.init-entry's data-char-id = combatant.id).
+                    // Template-browser clicks use 'monster-<tid>' which
+                    // isn't a combatant — skip those.
+                    if (charIdRaw && !charIdRaw.startsWith('monster-')) {
+                        body.combatant_id = charIdRaw;
+                    }
                 }
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                     method: 'POST',

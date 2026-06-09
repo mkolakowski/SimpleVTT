@@ -15443,6 +15443,21 @@ async def roll_dice(
         cond_dis_key = _roll_condition_disadvantage(
             _char.sheet or {}, stat_key_lc, stat_ability_raw,
         )
+    # v2.157.0 — Phase 2f: NPC fallback. When the caller is the NPC
+    # mini-sheet (skip_roll_state + no PC char) AND the body carries a
+    # combatant_id pointing at an NPC in hub state, read the NPC's
+    # combatant.buffs for the same condition adv/dis rule set as
+    # Phase 2b. PC and NPC paths are mutually exclusive — the helper
+    # only fires when the PC path didn't.
+    if cond_dis_key is None:
+        _npc_combatant_id_for_roll = (
+            str(body.get("combatant_id") or "").strip() or None
+        )
+        if _npc_combatant_id_for_roll:
+            cond_dis_key = _npc_roll_condition_disadvantage(
+                campaign_id, _npc_combatant_id_for_roll,
+                stat_key_lc, stat_ability_raw,
+            )
     if cond_dis_key:
         if roll_state_applied in ("auto_advantage", "manual_advantage"):
             # Cancel per RAW PHB p.173. Auto rolls already expanded
@@ -24995,6 +25010,62 @@ def _saver_auto_fails_strdex_save(
         key = (b.get("key") or "").strip().lower()
         if key in _AUTO_FAIL_STR_DEX_SAVE_CONDITION_KEYS:
             return key
+    return None
+
+
+def _npc_roll_condition_disadvantage(
+    campaign_id: int,
+    combatant_id: "str | None",
+    stat_key_lc: str,
+    stat_ability: str,
+) -> "str | None":
+    """v2.157.0 — Phase 2f. NPC counterpart of the v2.153.0
+    `_roll_condition_disadvantage` PC helper. Returns the matching
+    condition key when the NPC's ``combatant.buffs`` carries a
+    condition that imposes disadvantage on this save/check roll per
+    RAW PHB Appendix A; None otherwise.
+
+    Same rule set as the PC version: Poisoned + Frightened on ability
+    checks; Restrained on DEX saves only. NPCs don't have a sheet
+    mirror — the helper reads hub state directly via
+    ``hub.get_battle(campaign_id)`` and matches ``combatant_id``.
+
+    The roll-type classification gate (check vs save) preserves the
+    Phase 2b conservative default: untyped ``/roll`` calls without a
+    ``stat_key`` don't fire — only classified rolls do.
+    """
+    if not combatant_id:
+        return None
+    if not stat_key_lc:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    for c in state.get("combatants") or []:
+        if c.get("id") != combatant_id:
+            continue
+        buffs = c.get("buffs") or []
+        if not buffs:
+            return None
+        keys = {
+            (b.get("key") or "").strip().lower()
+            for b in buffs
+            if isinstance(b, dict)
+        }
+        keys.discard("")
+        if not keys:
+            return None
+        is_save = stat_key_lc.endswith("_save")
+        is_check = bool(stat_key_lc) and not is_save
+        if is_check:
+            for k in _CHECK_DIS_CONDITION_KEYS:
+                if k in keys:
+                    return k
+        if is_save and stat_ability == "DEX":
+            for k in _DEX_SAVE_DIS_CONDITION_KEYS:
+                if k in keys:
+                    return k
+        return None
     return None
 
 

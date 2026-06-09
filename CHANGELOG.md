@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.157.0] - 2026-06-09 — "Last One Standing" — Advantage/Disadvantage Phase 2f: NPC `/roll` condition adv/dis
+
+**Schema version:** 69
+**Commit summary:** **Closes the last open Phase 2 surface — NPC ability checks + saves rolled via `/api/campaign/{cid}/roll`. The unified mini-sheet's NPC stat-block buttons now plumb `combatant_id` into the POST body when the click originated from an init-tracker entry; the server's `/roll` handler reads it as an NPC fallback to the existing Phase 2b PC composition. Same rule set: Poisoned/Frightened → check disadvantage; Restrained → DEX-save disadvantage. New hub-state helper `_npc_roll_condition_disadvantage` mirrors the PC version's classification gate but reads `combatant.buffs` directly (no sheet mirror needed for NPCs).**
+**Description:** Phase 2f was filed during the Phase 2c/2d push as a one-helper-plus-client-change extension. The client side stamps `combatant_id: charIdRaw` into the `/roll` body when the rolling token is an init-tracker NPC entry (the slot id IS the combatant id by convention). Template-browser monster clicks (`charIdRaw = 'monster-<tid>'`) deliberately skip the field — they have no associated combatant. Server side adds an NPC fallback after the existing PC `_roll_condition_disadvantage` composition: if the PC path returned `None` (no PC sheet or no condition active) AND the body carries `combatant_id`, look up the NPC's buffs from hub state via the new helper. The two paths are mutually exclusive — a single request can't have both a PC `_char` AND `skip_roll_state` + `combatant_id`. The downstream cancel/compose logic is unchanged; the new helper's return value just feeds the same `cond_dis_key` branch that v2.153.0 built. Phase 2f completes Phase 2 of the adv/dis plan: PC attacks (2a), PC saves+checks (2b), NPC attacks (2c), NPC saves (2d), auto-fail (2e), NPC saves+checks via /roll (2f). Only Phase 3 (positional adv/dis blocked on Maps 2.0) remains.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_npc_roll_condition_disadvantage(campaign_id, combatant_id, stat_key_lc, stat_ability)` helper. Walks `hub.get_battle(campaign_id)` for the named combatant, reuses the Phase 2b `_CHECK_DIS_CONDITION_KEYS` + `_DEX_SAVE_DIS_CONDITION_KEYS` frozensets, applies the same is_save/is_check classification. Returns the matching condition key or None.
+- `app/routes/tabletop_routes.py` — `/roll` endpoint NPC fallback. After the PC `_roll_condition_disadvantage` block at ~line 15445, if `cond_dis_key is None`, read `body.get("combatant_id")` and call the new helper. Composition with `_apply_roll_state` and the cancel/note-suffix branches is unchanged.
+- `app/templates/tabletop.html` — `.mini-roll-btn, .mini-sk-btn` click handler at ~line 4644 now stamps `body.combatant_id = charIdRaw` inside the existing isMonster branch when `charIdRaw` doesn't start with `monster-` (template-browser case). The `data-char-id` on the init-tracker entry already IS the combatant slot id by convention (`slotId = c.id` per the v2.97.x init-tracker render).
+- `tests/harness/test_npc_roll_condition_adv_dis.py` — 4 tests: `test_npc_poisoned_check_imposes_disadvantage` (str_check → 2d20kl1 + label), `test_npc_frightened_check_imposes_disadvantage` (wis_check), `test_npc_no_buff_check_unchanged` (control), `test_npc_restrained_dex_save_imposes_disadvantage` (dex_save).
+
+### Changed
+- `docs/plans/advantage-disadvantage.md` — status banner adds "Phase 2f shipped in v2.157.0" line; Implementation Status table gets a ✅ row for Phase 2f. All six Phase 2 sub-phases (2a–2f) now marked shipped.
+- `docs/test-harness-coverage.md` — running total bumped 2066 → 2070.
+- `TODO.md` — advantage-disadvantage Phase 2f marked shipped.
+
+### Notes
+- The two condition paths (PC `_buffs_active` mirror, NPC hub `combatant.buffs`) are now symmetric across every adv/dis surface: attacks (2a + 2c), saves+checks (2b + 2f), NPC-target server-rolled saves (2d), auto-fail (2e). The adv/dis plan now has only Phase 3 (positional / 5-ft prone-melee advantage) remaining — gated on Maps 2.0 grid-distance awareness. **Total harness count: 2070** in `tests/harness/` (2066 → 2070); **`tests/harness_ui/` 19** (unchanged). Filed follow-up: a UI affordance to indicate "condition adv/dis active" on the mini-sheet button itself (a small dot + tooltip), so the GM/player knows BEFORE clicking that the roll will fire with auto-dis — currently the only signal is the `auto_disadvantage_*` label that lands in the roll log post-roll.
+
+---
+
 ## [2.156.0] - 2026-06-09 — "Dead Weight" — Advantage/Disadvantage Phase 2e: auto-fail STR/DEX saves from Paralyzed / Stunned / Unconscious / Petrified
 
 **Schema version:** 69

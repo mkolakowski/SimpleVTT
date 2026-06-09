@@ -308,7 +308,7 @@ Now lives in [`TODONE.md`](TODONE.md#design-plans-backlog--shipped-end-to-end) �
 
 ### 🟡 P2 — Substantial deferred phases
 
-- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phase 1 ✅ v2.2.0; Phase 2a ✅ v2.152.0; Phase 2b ✅ v2.153.0; Phase 2c ✅ v2.154.0; Phase 2d ✅ v2.155.0; Phase 2e ✅ v2.156.0; **only Phase 3 (positional / 5-ft prone-melee advantage) remains, blocked on Maps 2.0**.
+- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phase 1 ✅ v2.2.0; Phase 2a ✅ v2.152.0; Phase 2b ✅ v2.153.0; Phase 2c ✅ v2.154.0; Phase 2d ✅ v2.155.0; Phase 2e ✅ v2.156.0; Phase 2f ✅ v2.157.0; **only Phase 3 (positional / 5-ft prone-melee advantage) remains, blocked on Maps 2.0**.
 - [`paladin-oaths.md`](docs/plans/paladin-oaths.md) — Phase 1 ✅ v2.99.245; this session shipped Aura of Warding (Ancients) v2.133.0–v2.135.1 + Scornful Rebuke (Conquest) v2.142.0 + Relentless Avenger (Vengeance) v2.149.0 + Aura of the Guardian (Redemption) per v2.99.281; **Phase 2–6 + 2 oaths (Crown, Treachery) deferred**.
 - [`battle-master.md`](docs/plans/battle-master.md) — Phase 1 ✅ v2.99.233; **Phase 2–5 + 15 maneuvers deferred**.
 - [`eldritch-knight.md`](docs/plans/eldritch-knight.md) — Phase 1 ✅ v2.99.232; **Phase 2–4 deferred**.
