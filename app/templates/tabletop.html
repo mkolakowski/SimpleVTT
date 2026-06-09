@@ -7025,6 +7025,56 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      * correctly (the underlying combatant.action_charges state remains
      * authoritative server-side), but the GM doesn't see the per-combatant
      * 2/2 ↻ counter until the migration ships. */
+    /* v2.157.2 — Companion to the v2.157.1 server-side abilities-header
+     * condition warning pill. NPC mini-sheets are cloned from the
+     * template card pool by ``_hydrateMonsterCard`` below; the source
+     * card has no `_buffs_active` (NPCs don't have a sheet mirror —
+     * conditions live on hub-state `combatant.buffs`). This helper
+     * patches the pill in/out of the cloned card per-render so the GM
+     * sees the warning whenever a monster carries one of the
+     * automation-driving conditions. Same per-condition impact map as
+     * the Jinja `_cond_impact_map` in _mini_sheet_card.html — kept in
+     * sync by convention; both fire on the same buff key set. The
+     * helper is idempotent: removes any existing pill before deciding
+     * whether to insert a fresh one. */
+    const _COND_IMPACT_MAP = {
+        'poisoned':    'disadvantage on attacks + ability checks',
+        'frightened':  'disadvantage on attacks + ability checks',
+        'restrained':  'disadvantage on attacks; attacks against have advantage; disadvantage on DEX saves',
+        'blinded':     'disadvantage on attacks; attacks against have advantage',
+        'prone':       'disadvantage on attacks (own); melee attacks against have advantage',
+        'paralyzed':   'incapacitated · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit',
+        'stunned':     'incapacitated · auto-fail STR + DEX saves · attacks against have advantage',
+        'unconscious': 'incapacitated, prone · auto-fail STR + DEX saves · attacks against have advantage · melee = auto-crit',
+        'petrified':   'auto-fail STR + DEX saves · resistance to all damage',
+        'invisible':   'advantage on own attack rolls; attacks against have disadvantage',
+    };
+    function _updateConditionWarnPill(rootEl, buffs) {
+        if (!rootEl) return;
+        const header = rootEl.querySelector('.mini-ab-header');
+        if (!header) return;
+        const existing = header.querySelector('.mini-ab-cond-warn');
+        if (existing) existing.remove();
+        if (!Array.isArray(buffs) || !buffs.length) return;
+        const parts = [];
+        for (const b of buffs) {
+            const k = String((b && b.key) || '').toLowerCase().trim();
+            if (k && (k in _COND_IMPACT_MAP)) {
+                const name = (b && b.name) || (k.charAt(0).toUpperCase() + k.slice(1));
+                parts.push(name + ': ' + _COND_IMPACT_MAP[k]);
+            }
+        }
+        if (!parts.length) return;
+        const pill = document.createElement('span');
+        pill.className = 'mini-ab-cond-warn';
+        pill.setAttribute('aria-label', 'Active conditions affecting d20 rolls');
+        pill.title = 'Active conditions affecting d20 rolls:\n\n' + parts.join('\n');
+        pill.textContent = '⚠ Conditions';
+        const toggle = header.querySelector('.mini-ab-toggle');
+        if (toggle) header.insertBefore(pill, toggle);
+        else header.appendChild(pill);
+    }
+
     function _hydrateMonsterCard(combatant, slotKey) {
         if (!combatant || !combatant.token_template_id) return false;
         if (!slotKey) return false;
@@ -7127,6 +7177,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const cur = (actionId in _charges) ? (parseInt(_charges[actionId]) || 0) : cmax;
             castBtn.disabled = (cur <= 0);
         });
+        // v2.157.2 — patch the abilities-header condition warning pill
+        // from combatant.buffs. Runs on every render pass; idempotent.
+        // The .mini-ab-header lives inside .mini-body which can be
+        // hoisted out of `card` into the init-entry slot mid-render,
+        // so look in BOTH places: walk `card` first; if no header
+        // there, fall back to the init-entry hoisted location.
+        _updateConditionWarnPill(card, combatant.buffs);
+        const _hoistedBody = document.querySelector(
+            '.init-entry[data-char-id="' + slotKey + '"] .mini-body'
+        );
+        if (_hoistedBody) _updateConditionWarnPill(_hoistedBody, combatant.buffs);
         return true;
     }
 

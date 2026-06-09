@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.157.2] - 2026-06-09 — "Show Their Hand" — condition warning pill extended to GM-side NPC init-tracker mini-sheets
+
+**Schema version:** 69
+**Commit summary:** **Companion to v2.157.1. The abilities-header condition warning pill is now patched client-side onto NPC mini-sheets too — `_hydrateMonsterCard` walks `combatant.buffs` per renderBattle pass and inserts/removes a matching `.mini-ab-cond-warn` element on both the pool-resident card AND the hoisted mini-body in the init-entry slot. Reuses the same `_COND_IMPACT_MAP` shape as the v2.157.1 Jinja template so PC + NPC pills surface identical wording.**
+**Description:** v2.157.1 server-rendered the pill from `_buffs_active` on the PC sheet, but NPC mini-sheets are cloned from a template-card pool (no per-NPC sheet mirror — conditions live on hub-state `combatant.buffs`). The fix: a small `_updateConditionWarnPill(rootEl, buffs)` JS helper that's idempotent (clears any existing pill, then decides whether to insert a fresh one based on the buffs argument). Called from `_hydrateMonsterCard` on every renderBattle pass, against both the pool-resident `card` AND the hoisted-mini-body inside the matching init-entry — since the mini-body can live in either location depending on whether the GM has expanded the row, patching both keeps the pill alive across the hoist toggle.
+
+Closes the "PC-only signal" gap noted in v2.157.1's filed follow-ups: a GM who has Pip Quickfingers AND a poisoned Bandit Captain in the same init now sees the warning on BOTH mini-sheets — Pip via the Jinja SSR path, Bandit Captain via this JS hydration. The mapping is identical (10 conditions, same impact strings) because the JS map is a literal copy of the Jinja `_cond_impact_map`. Filed follow-up: PC live-updates via a `battle_update` WS handler that re-runs `_updateConditionWarnPill` on every PC mini-sheet too — today PC pills only update on full page refresh; live buff installs (a fresh Banishment landing on Pip) won't surface the pill until the next reload.
+
+### Added
+- `app/templates/tabletop.html` — `_COND_IMPACT_MAP` const + `_updateConditionWarnPill(rootEl, buffs)` JS helper. The helper reads the buffs array, builds a tooltip string from per-condition impact entries, and inserts the `.mini-ab-cond-warn` element via `header.insertBefore(pill, toggle)` so the layout matches the SSR markup (pill between the "Abilities" label and the Check/Save toggle).
+- `app/templates/tabletop.html` — `_hydrateMonsterCard`: two `_updateConditionWarnPill` calls at the end of the data-patching block — one against the pool-resident `card`, one against the hoisted `.init-entry[data-char-id="..."] .mini-body` if present. Idempotent; safe to run every renderBattle pass.
+
+### Changed
+- No code-coverage changes — this is a JS-only addition that hydrates pre-existing markup-shaped DOM. The v2.157.1 harness test covers the SSR contract; the v2.157.2 path is a runtime DOM patch that runs in the browser and is exercised by manual GM click-through.
+
+### Notes
+- The `_COND_IMPACT_MAP` JS map is the runtime sibling of the v2.157.1 Jinja `_cond_impact_map`. If you change one, change both — they're load-bearing in the same way (driving the same user-facing tooltip text). Filed follow-up: factor the map out into a shared source (e.g. a `static/condition-impacts.json` loaded by both the template and the JS at boot) so the two stay in lockstep. **Total harness count: 2072** in `tests/harness/` (unchanged — JS-only addition); **`tests/harness_ui/` 19** (unchanged). Phase 2 of the advantage-disadvantage plan is now fully surfaced (server-side automation + PC SSR pill + NPC JS pill) — the only remaining piece is Phase 3 (Maps-2.0-blocked positional adv/dis).
+
+---
+
 ## [2.157.1] - 2026-06-09 — "Tipping the Hand" — pre-click condition warning pill on the mini-sheet abilities header
 
 **Schema version:** 69
