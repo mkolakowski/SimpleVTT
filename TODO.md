@@ -304,10 +304,11 @@ Now lives in [`TODONE.md`](TODONE.md#design-plans-backlog--shipped-end-to-end) �
 
 ### 🔴 P1 — Next substantial work
 
-- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phase 1 ✅ shipped; **Phase 2–3 deferred** (condition automation, context-aware rolls). Pairs well with Combat 2.0 action economy. **Now the only P1 design plan with substantial open work.**
+- *(All previous P1 design plans have either shipped or moved to P2 — advantage-disadvantage Phase 2a + 2b shipped in v2.152.0 + v2.152.1; Phase 3 is gated on Maps 2.0 so it sits in P2 below.)*
 
 ### 🟡 P2 — Substantial deferred phases
 
+- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phase 1 ✅ v2.2.0; Phase 2a ✅ v2.152.0; Phase 2b ✅ v2.152.1; Phase 2c (NPC attacker conditions reading combatant.buffs) deferred; **Phase 3 (positional / 5-ft prone-melee advantage) blocked on Maps 2.0**.
 - [`paladin-oaths.md`](docs/plans/paladin-oaths.md) — Phase 1 ✅ v2.99.245; this session shipped Aura of Warding (Ancients) v2.133.0–v2.135.1 + Scornful Rebuke (Conquest) v2.142.0 + Relentless Avenger (Vengeance) v2.149.0 + Aura of the Guardian (Redemption) per v2.99.281; **Phase 2–6 + 2 oaths (Crown, Treachery) deferred**.
 - [`battle-master.md`](docs/plans/battle-master.md) — Phase 1 ✅ v2.99.233; **Phase 2–5 + 15 maneuvers deferred**.
 - [`eldritch-knight.md`](docs/plans/eldritch-knight.md) — Phase 1 ✅ v2.99.232; **Phase 2–4 deferred**.

@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.153.0] - 2026-06-08 — "Wide Net" — Advantage/Disadvantage Phase 2b: condition-driven save + check disadvantage on `/roll`
+
+**Schema version:** 69
+**Commit summary:** **Phase 2b extends the v2.152.0 condition-driven adv/dis source set from `/attack` to the generic `/api/campaign/{id}/roll` endpoint that backs ability checks, saves, and skill rolls. A new `_roll_condition_disadvantage(sheet, stat_key_lc, stat_ability)` helper classifies the roll by `stat_key` + `stat_ability` and returns the RAW-correct condition key per PHB Appendix A: Poisoned + Frightened on ability checks; Restrained on DEX saves only. Composes with the existing v2.2.0 `_apply_roll_state` per PHB p.173 cancel logic — manual `1d20a` / `2d20kh1` + condition-driven dis reverts to a straight 1d20 with a `canceled_*` label; manual dis stacks as a no-op; no prior roll_state + condition fires → `auto_disadvantage_<key>`.**
+**Description:** Closes the "Phase 2b — `/roll` parity" deferral that was open even after v2.152.0 shipped Phase 2a. The user-facing impact: a Poisoned character now auto-disadvantages on ability checks too (not just attacks); a Frightened character likewise; a Restrained character auto-disadvantages on DEX saves (matching RAW PHB Appendix A). Generic untyped `/roll` calls without a `stat_key` (the dice-roller text-box path) deliberately don't fire — the conservative default is "don't auto-disadvantage rolls we can't classify." The helper sits next to the Phase 2a helpers in `tabletop_routes.py` so all four roll-type-driven adv/dis sources read the same `_buffs_active` mirror. Reuses the existing `_MANUAL_ADV_RE` regex shape for cancel — `_re.sub(r"(?i)\b(?:2d20kh1|1d20a)\b", "1d20", ...)` reverts both the auto-expanded and manual-shorthand forms cleanly. Phase 2c (NPC attacker reading combatant.buffs) + Phase 3 (Maps-2.0 positional awareness) remain deferred — Phase 3 still gated on Maps 2.0 grid-distance awareness; Phase 2c is a one-helper extension filed for follow-up.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_CHECK_DIS_CONDITION_KEYS = frozenset({"poisoned", "frightened"})` + `_DEX_SAVE_DIS_CONDITION_KEYS = frozenset({"restrained"})` constants + `_roll_condition_disadvantage(sheet, stat_key_lc, stat_ability)` helper. Inserted just before `_attacker_marked_by_unwavering_mark_within_5ft_vs_other` so it sits with the adv/dis source helpers from Phase 2a + UM.
+- `app/routes/tabletop_routes.py` — `/roll` endpoint: after `_apply_roll_state`, layer condition disadvantage via the new helper. Three-branch compose: (a) prior advantage + condition dis → cancel to 1d20 + `canceled_<prev>_vs_disadvantage_<key>` label; (b) prior disadvantage + condition dis → no-op (RAW no-stack); (c) no prior roll_state + condition fires → `1d20 → 2d20kl1` + `auto_disadvantage_<key>` label. `_roll_state_note_suffix` extended inline to surface readable suffixes for the new shapes.
+- `tests/harness/test_roll_condition_adv_dis.py` — 6 tests: `test_poisoned_check_imposes_disadvantage` (STR check → 2d20kl1 + label), `test_frightened_check_imposes_disadvantage` (Perception skill → 2d20kl1 + label), `test_restrained_dex_save_imposes_disadvantage` (DEX save → 2d20kl1 + label), `test_restrained_str_save_no_disadvantage` (control — Restrained doesn't disadvantage STR saves), `test_poisoned_save_no_disadvantage` (control — Poisoned only affects checks, not saves), `test_manual_advantage_vs_condition_disadvantage_cancels` (RAW p.173 cancel via `1d20a` + Poisoned).
+
+### Changed
+- `docs/plans/advantage-disadvantage.md` — status banner adds "Phase 2b shipped in v2.153.0" line; Implementation Status row for Phase 2b flips from ⏸ to ✅ with the helper signature + the three-branch compose described.
+- `docs/test-harness-coverage.md` — running total bumped 2050 → 2056.
+- `TODO.md` — advantage-disadvantage moved from 🔴 P1 to 🟡 P2 (only Phase 3 remains, gated on Maps 2.0); P1 section now empty.
+
+### Notes
+- The `_apply_roll_state` regex contract (manual `1d20a` / `1d20d` shorthand + auto `2d20kh1` / `2d20kl1` longhand) is preserved as-is; Phase 2b composes on top of it rather than replacing it. Filed follow-ups: extend Phase 2b's helper to read NPC combatant.buffs as a fallback when `_char.sheet` isn't a PC sheet (Phase 2c, one-helper extension); add auto-fail-STR/DEX-saves from Paralyzed/Stunned/Unconscious/Petrified (separate mechanic from adv/dis — needs a dedicated save-construction hook). **Total harness count: 2056** in `tests/harness/` (2050 → 2056); **`tests/harness_ui/` 19** (unchanged). The advantage-disadvantage plan now sits at 🟡 P2 in the TODO since the only remaining substantial work (Phase 3 positional) is blocked on Maps 2.0.
+
+---
+
 ## [2.152.0] - 2026-06-08 — "Glass Houses" — Advantage/Disadvantage Phase 2a: condition-driven attack adv/dis
 
 **Schema version:** 69

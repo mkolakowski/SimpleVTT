@@ -15429,7 +15429,53 @@ async def roll_dice(
     if not skip_roll_state:
         rs = (_char.sheet or {}).get("roll_state") if _char else None
         expr, roll_state_applied = _apply_roll_state(expr, rs)
+
+    # v2.153.0 — Phase 2b: condition-driven disadvantage on saves +
+    # checks. Composes with the v2.2.0 manual/auto roll_state via RAW
+    # PHB p.173 cancel logic — if the prior step gave advantage and a
+    # condition imposes disadvantage, revert to a straight 1d20 +
+    # tag the label as canceled; if the prior step already gave
+    # disadvantage, the condition stacks as a no-op (RAW: adv/dis don't
+    # double up). When the prior step was a no-op, the condition just
+    # imposes 2d20kl1.
+    cond_dis_key = None
+    if not skip_roll_state and _char is not None:
+        cond_dis_key = _roll_condition_disadvantage(
+            _char.sheet or {}, stat_key_lc, stat_ability_raw,
+        )
+    if cond_dis_key:
+        if roll_state_applied in ("auto_advantage", "manual_advantage"):
+            # Cancel per RAW PHB p.173. Auto rolls already expanded
+            # into 2d20kh1 via _apply_roll_state; manual rolls use the
+            # 1d20a shorthand or the 2d20kh1 longhand. Revert either
+            # form to a straight 1d20.
+            expr = _re.sub(
+                r"(?i)\b(?:2d20kh1|1d20a)\b", "1d20", expr, count=1,
+            )
+            roll_state_applied = (
+                f"canceled_{roll_state_applied}_vs_disadvantage_{cond_dis_key}"
+            )
+        elif roll_state_applied in ("auto_disadvantage", "manual_disadvantage"):
+            # Already 2d20kl1 — RAW says adv/dis don't stack; no-op.
+            pass
+        else:
+            # No prior roll_state; impose disadvantage now.
+            if "1d20" in expr and "2d20" not in expr:
+                expr = expr.replace("1d20", "2d20kl1", 1)
+                roll_state_applied = f"auto_disadvantage_{cond_dis_key}"
+
     note_suffix = _roll_state_note_suffix(roll_state_applied)
+    if not note_suffix and roll_state_applied.startswith(
+        ("auto_disadvantage_", "canceled_")
+    ):
+        # Phase 2b labels carry extra context after the base label —
+        # surface a readable suffix for the new shapes too.
+        if roll_state_applied.startswith("auto_disadvantage_"):
+            note_suffix = (
+                f" (auto disadvantage · {roll_state_applied.split('_', 2)[2]})"
+            )
+        else:
+            note_suffix = " (auto adv canceled by condition)"
     if note_suffix:
         note = (note + note_suffix)[:200]
 
@@ -24736,6 +24782,63 @@ def _target_has_condition_advantage(
             if key in _TARGET_ADV_CONDITION_KEYS:
                 return key
         return None
+    return None
+
+
+# v2.153.0 — Phase 2b. Per RAW PHB Appendix A, condition-driven adv/dis
+# beyond the attack-roll surface (Phase 2a) lands on saves + checks too:
+#   - Poisoned: disadvantage on ability checks.
+#   - Frightened: disadvantage on ability checks (while source visible
+#     RAW; v1 simplifies to always since the project doesn't track LoS).
+#   - Restrained: disadvantage on DEX saves.
+# Auto-fail STR/DEX saves from Paralyzed/Stunned/Unconscious/Petrified
+# is a separate mechanic (filed for follow-up — not adv/dis).
+_CHECK_DIS_CONDITION_KEYS = frozenset({"poisoned", "frightened"})
+_DEX_SAVE_DIS_CONDITION_KEYS = frozenset({"restrained"})
+
+
+def _roll_condition_disadvantage(
+    sheet: "dict | None",
+    stat_key_lc: str,
+    stat_ability: str,
+) -> "str | None":
+    """v2.153.0 — Phase 2b. Returns the condition key giving the rolling
+    PC's d20 save/check disadvantage, or None. The roll-type context
+    (``stat_key_lc`` like ``"str_check"`` / ``"wis_save"`` / ``"perception"``
+    + ``stat_ability`` like ``"DEX"``) gates each condition to the RAW
+    surface it actually applies to. Mirrors the Phase 2a
+    ``_attacker_has_condition_disadvantage`` helper but with roll-type
+    awareness so a Poisoned PC doesn't disadvantage their saves.
+
+    Generic ``/roll`` calls without a ``stat_key`` (the dice-roller
+    text-box path) don't fire — the conservative default is "don't
+    auto-disadvantage rolls we can't classify."
+    """
+    if not sheet:
+        return None
+    buffs_active = sheet.get("_buffs_active") or []
+    if not isinstance(buffs_active, list) or not buffs_active:
+        return None
+    keys = {
+        (b.get("key") or "").strip().lower()
+        for b in buffs_active
+        if isinstance(b, dict)
+    }
+    keys.discard("")
+    if not keys:
+        return None
+    is_save = stat_key_lc.endswith("_save")
+    # An ability check is anything classified that isn't a save —
+    # stat_key like "str_check" / "perception" / "athletics" / "stealth".
+    is_check = bool(stat_key_lc) and not is_save
+    if is_check:
+        for k in _CHECK_DIS_CONDITION_KEYS:
+            if k in keys:
+                return k
+    if is_save and stat_ability == "DEX":
+        for k in _DEX_SAVE_DIS_CONDITION_KEYS:
+            if k in keys:
+                return k
     return None
 
 
