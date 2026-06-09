@@ -7041,8 +7041,8 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      * automation-driving conditions. v2.157.4: pulls the shared
      * CONDITION_IMPACTS map from ``window._COND_IMPACT_MAP``
      * (rendered server-side from ``app/content/condition_impacts.py``
-     * via the ``{% block head %}`` inline script) so the Jinja
-     * template and the runtime JS read the same dict. The helper is
+     * via the head-block inline script) so the Jinja template and
+     * the runtime JS read the same dict. The helper is
      * idempotent: removes any existing pill before deciding whether
      * to insert a fresh one. */
     const _COND_IMPACT_MAP = (typeof window !== 'undefined' && window._COND_IMPACT_MAP) || {};

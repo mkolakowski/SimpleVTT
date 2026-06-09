@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.157.5] - 2026-06-09 — "Bracket Match" — fix a Jinja-syntax error in v2.157.4's JS-comment reference to `{% block head %}`
+
+**Schema version:** 69
+**Commit summary:** **Hotfix on top of v2.157.4. The refactor docstring inside `_updateConditionWarnPill`'s `/* ... */` block referenced "via the `{% block head %}` inline script" as descriptive prose, but Jinja parses template directives top-to-bottom regardless of HTML/JS context — the literal `{% block %}` opener inside the JS comment was treated as a real block opener, leaving the template with an unmatched `{% block %}` and 500-erroring on every render. v2.157.5 rewrites the comment to "via the head-block inline script" (no template syntax in the comment text) so the parser sees just one `{% block head %}` and one `{% endblock %}`.**
+**Description:** The harness regression test `test_clean_pc_mini_sheet_omits_warning_pill` caught the bug immediately after the rebuild — every tabletop page render returned 500 because the template never finished parsing. The fix is one-character-level safe: remove the `{% block head %}` text from the comment and replace it with prose. The refactor itself (v2.157.4) was correct; only the docstring wording broke the parse. Filed lesson: avoid literal Jinja-tag syntax inside template files even in comments — both `{# ... #}` and `<!-- ... -->` and `/* ... */` are NOT escape hatches for the `{% %}` / `{{ }}` parser; the only safe ways are HTML entities (`&#123;%`) or `{% raw %}` blocks.
+
+### Fixed
+- `app/templates/tabletop.html` — `_updateConditionWarnPill` docstring at ~line 7044: replaced `{% block head %}` with "head-block" so Jinja doesn't misinterpret the comment text as a real block opener. The parser was hitting `{% endblock %}` at line 9275 with TWO unclosed `{% block %}` openers in scope (the real `{% block head %}` at line 12 + the comment one at line 7044) and erroring.
+
+### Notes
+- The v2.157.1 harness test (`test_mini_sheet_cond_warn`) caught the regression on the post-rebuild verify run. **Total harness count: 2072** in `tests/harness/` (unchanged — pure hotfix); **`tests/harness_ui/` 19** (unchanged). Phase 2 of the adv/dis plan + the warning pill UI affordance + the single-source-of-truth refactor are all now stable end-to-end.
+
+---
+
 ## [2.157.4] - 2026-06-09 — "Single Source of Truth" — factor the condition-impact map into a shared Python module
 
 **Schema version:** 69
