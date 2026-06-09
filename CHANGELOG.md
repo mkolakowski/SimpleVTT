@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.149.2] - 2026-06-08 — "Triage" — re-evaluate TODO + index every design plan with a priority
+
+**Schema version:** 69
+**Commit summary:** **Doc-only. User-requested re-evaluation of `TODO.md`: marks every item in the "Full Class-Feature Automation — remaining backlog" section as ✅ DONE that actually shipped during the v2.128.2–v2.149.1 push (auras backlog all four, on-hit Assassinate, buff/temp-HP all six, movement all four), so only Phase 8 + a few per-feature Phase-2 finishers remain. Adds a brand-new "Design Plans Backlog" section that indexes every `docs/plans/*.md` (26 plans) + the 2 repo-root planning docs with explicit priority tags: 🔥 IN PROGRESS (1), ✅ shipped (11), 🔴 P1 (2), 🟡 P2 (10), 🟢 P3 (3). Adds a "Quick map of where to look" panel at the top of TODO so the new structure is discoverable.**
+**Description:** The class-feature automation backlog hadn't been refreshed since the v2.128.2–v2.149.1 push closed nearly every named bullet. The user asked to "add all plans to the to-do and give them priorities, also please re-evaluate all items in the to-do." Re-evaluation: the entire "Auras backlog (E)" + "On-hit backlog (B)" + "Buff/temp-HP tail (D/F)" + "Movement tail (G)" bullets are now ✅ DONE with version references. The remaining work is Phase 8 (higher-level subclass features Lv 6/10/14/17/20) + 6 per-feature Phase-2 finishers (Blade Flourish AC buff, Fancy Footwork OA-flow gate, Relentless Avenger `/token/move` consumer, Supreme Healing `/apply_healing` flow, Combat Inspiration reactions integration, AP/UM auto-install via `/attack` post-hit). Plus the classifier rerun on `automation-coverage.md`. Design Plans Backlog: shipped plans are split out for reference (Phase 5 auras, Phase 4 temp-HP, Phase 3 feature saves, Phase 6 movement, demo-mode, OA flow, on-hit riders, ruler & range, spell up-casting, test harness, wild magic). Active plans needing next-substantial-work: death-saves (P1) + advantage-disadvantage (P1). Plans with substantial deferred phases (P2): paladin-oaths, battle-master, eldritch-knight, warlock-pact-boon, sorcery-points-and-metamagic, spell-validation-suite, reactions-automation, encounter-sim-test-suite, unified-mini-sheet, encounters-plan, multi-system-refactor. Living / speculative (P3): player-simulacrum, wiki-expansion, class-content-status. The Manually Added section's P-tags weren't touched (those were already current); the topic-grouped sections at the bottom (Character Sheet, GM Tools, etc.) stay topic-organized per the existing legend.
+
+### Changed
+- `TODO.md` — "Full Class-Feature Automation" section: marked every bullet that shipped during the v2.128.2–v2.149.1 batch as ✅ DONE with version references. Only Phase 8 + 6 per-feature Phase-2 finishers + the classifier rerun remain.
+- `TODO.md` — added a new "Design Plans Backlog" section that indexes all 28 plans with priority tags (1 IN PROGRESS, 11 shipped, 2 P1, 11 P2, 3 P3).
+- `TODO.md` — added a "Quick map of where to look" pointer panel near the top so the new structure is discoverable.
+
+### Notes
+- No code or schema change. **Total harness count: 2040** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). TODO.md is already surfaced via `/wiki/doc/todo`, so no wiki-allowlist update is needed. The plan docs themselves haven't been edited — only the TODO entry pointing at each of them. The new Design Plans Backlog section is a navigation aid; the per-plan status detail lives in each plan's own status banner.
+
+---
+
 ## [2.149.1] - 2026-06-08 — "Tally Up" — refresh automation-coverage + full-feature-automation docs (v2.143–v2.149)
 
 **Schema version:** 69

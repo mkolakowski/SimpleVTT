@@ -13,6 +13,13 @@ Backlog of features to implement.
 
 When the assistant offers a single-option "what's next?" via `AskUserQuestion` after a commit, the **top-priority** item (highest P-level, or the IN PROGRESS phase) should be the **(Recommended)** option per the rule in [`CLAUDE.md`](CLAUDE.md#offer-whats-next-as-multiple-choice-questions).
 
+**Quick map of where to look:**
+
+- **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
+- **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
+- **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
+- **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
 ---
 
 ## Touch Target Remediation
@@ -405,24 +412,84 @@ Garrik bump 7 → 9 (prof +3 → +4, HP +14, Second Wind 1d10+9). New `/use_indo
 
 ## Full Class-Feature Automation — remaining backlog
 
-🔥 **IN PROGRESS** — plan: [`docs/plans/full-feature-automation.md`](docs/plans/full-feature-automation.md); live audit: [`docs/automation-coverage.md`](docs/automation-coverage.md). **Phases 0–6 ✅ done** (feature-use registry, on-hit riders, feature saves, temp-HP + roll bonuses, auras, movement + summons + the Phase 0 audit). **Coverage: 182 tracked / 55 announce-only of 239** (was ~60/156 at baseline). The engine primitives all exist; what's left is routing the announce-only tail through them + the two unstarted phases.
+🔥 **IN PROGRESS** — plan: [`docs/plans/full-feature-automation.md`](docs/plans/full-feature-automation.md); live audit: [`docs/automation-coverage.md`](docs/automation-coverage.md). **Phases 0–7 ✅ done** + the entire v2.128.2–v2.149.1 retrofit batch landed (see CHANGELOG). Only Phase 8 (higher-level subclass features Lv 6/10/14/17/20) and a few Phase-1.5 / Phase-2 follow-ups on individual features remain.
 
-**Concrete next-session tasks** (each one PATCH-bump + harness test that asserts the *state change*, then refresh the audit doc's counts via the classifier):
+**Status by archetype (re-evaluated 2026-06-08):**
 
-- ✅ **DONE — v2.118.0–v2.122.0 — Phase 7: reactions breadth.** New reaction kinds on the existing reactions framework ([`docs/plans/reactions-automation.md`](docs/plans/reactions-automation.md)):
-    - Protective Field (Psi Warrior) — self-prompt on `damage_taken` (v2.118.0) + ally-within-30-ft walker on `ally_damaged_near` (v2.121.0); rolls the Psionic Energy die + INT mod and heals the reduction back.
-    - Riposte (Battle Master) — new `attack_missed` trigger fired from `/attack` + `/npc_attack`; the prompt resolves the counter-attack server-side (v2.119.0).
-    - Chronal Shift (Chronurgy Wizard) — `save_resolved` prompt on ANY outcome; the emit now fires on pass OR fail and offers both Silvery Barbs (pass-only) and Chronal Shift (v2.120.0).
-    - Restore Balance (Clockwork Soul) — now a REAL adv/disadv cancel: clears the target's active `roll_state` + broadcasts `character_roll_state` (v2.122.0).
-    - **Filed follow-ups:** NPC-damaged-ally Protective Field (walker on the NPC damage branch); intercepting a one-off manual `2d20kh1` for Restore Balance; a proactive prompt for Restore Balance (needs an "about-to-roll-with-adv/disadv" trigger event); auto-application of the Chronal Shift / Silvery Barbs rerolls (v3 pending-roll state).
-- 🟡 **P2 — Auras backlog (E).** All four already have manual `/use_*` endpoints; the automation gap is making them fire automatically. **Audit (v2.128.x) found they do NOT fold into `_tick_auras`** — that helper is a turn-start *emitter→subject* model with damage/heal/temp_hp/save payloads, and only `aura_of_warding` is even a radius aura. Each needs different machinery:
-    - `aura_of_warding` (Ancients Paladin Lv 7) — passive **resistance to spell damage** for allies within 10 ft. The real lift: the damage pipeline must know a hit is *spell-sourced*. Plan: thread an `is_spell` flag through every spell-damage application into `_apply_damage_to_combatant`, add a `resistance_spell_damage` buff flag (sibling to Absorb Elements' `resistance_damage_type`), and have `_tick_auras` install that buff on in-range allies via a new `resistance` aura payload. Multi-commit; the flagged "bigger lift."
-    - `ancestral_protectors` (Ancestral Guardian Barbarian Lv 3) — **on-hit** rider (when you hit a creature, it gets disadvantage vs others + resistance to your allies). Belongs in the on-hit-rider framework ([`on-hit-riders.md`](docs/plans/on-hit-riders.md)), not `_tick_auras`.
-    - `unwavering_mark` (Cavalier Fighter Lv 3) — **on-hit** mark + a bonus-action punish attack. On-hit rider + a bonus-action follow-up; not a turn-start aura.
-    - `scornful_rebuke` (Conquest Paladin Lv 15) — **on-being-hit** retaliation (attacker takes psychic damage). Needs an on-damage-taken hook (sibling to the `damage_taken` reaction trigger), not `_tick_auras`.
-- 🟡 **P2 — On-hit / attack-roll backlog (B).** `assassinate` (advantage + auto-crit vs surprised — a new attack-roll-modifier mechanic, distinct from the damage riders done). The flat/dice once-per-turn rider shape (Genie's Wrath v2.99.450) and the server-resolved extra attack (Horde Breaker v2.99.451 / Dread Ambusher v2.99.452) are already proven for the rest.
-- 🟢 **P3 — Buff / temp-HP tail (D/F).** `combat_inspiration`, `rallying_cry`, `blade_flourish`, `protective_spirit`, `grim_harvest`, `supreme_healing` — `_install_buff` / `_grant_temp_hp` retrofits.
-- 🟢 **P3 — Movement tail (G).** `ascendant_step` / `stormborn` (fly via a speed/fly buff), `relentless_avenger`, `fancy_footwork`.
-- 🟢 **P3 — Phase 8: higher-level subclass features (Lv 6/10/14/17/20).** Mostly composition on the now-built primitives; batch by class. The long tail.
+- ✅ **DONE — Phase 7: reactions breadth (v2.118.0–v2.122.0).** Protective Field, Riposte, Chronal Shift, Restore Balance. Filed follow-ups: NPC-damaged-ally Protective Field walker; intercepting one-off manual `2d20kh1` for Restore Balance; proactive prompt for Restore Balance; auto-application of Chronal Shift / Silvery Barbs rerolls.
+- ✅ **DONE — Auras backlog (E) all four shipped this session:**
+    - `aura_of_warding` ✅ v2.133.0–v2.135.1 — full RAW chain (`is_spell` plumbing + `resistance_spell_damage` buff + `_tick_auras` aura-installs-buff payload).
+    - `ancestral_protectors` ✅ v2.136.0–v2.138.0 — install + disadvantage gate + damage halving (3-pass RAW chain).
+    - `unwavering_mark` ✅ v2.139.0–v2.141.0 — install + 5-ft disadvantage + bonus-action punish endpoint (full RAW chain).
+    - `scornful_rebuke` ✅ v2.142.0 — first on-damage-taken hook in the codebase.
+- ✅ **DONE — On-hit / attack-roll backlog (B):** `assassinate` ✅ v2.131.0–v2.132.0 (auto-crit + advantage halves, full RAW chain).
+- ✅ **DONE — Buff / temp-HP tail (D/F) all six shipped:**
+    - `supreme_healing` ✅ v2.143.0 — heal-pipeline max-dice substitution.
+    - `combat_inspiration` ✅ v2.144.0–v2.145.0 — damage half + AC half.
+    - `blade_flourish` ✅ v2.146.0 — shared damage half (per-flourish riders deferred to Phase 2).
+    - `rallying_cry` ✅ v2.99.454, `grim_harvest` ✅ v2.99.457, `protective_spirit` ✅ v2.99.458.
+- ✅ **DONE — Movement tail (G) all four shipped:**
+    - `stormborn` ✅ v2.99.459 (fly buff).
+    - `ascendant_step` ✅ v2.147.0 (levitate buff with vertical fly_speed).
+    - `fancy_footwork` ✅ v2.148.0 (OA-block mark install; Phase 2 OA-flow read deferred).
+    - `relentless_avenger` ✅ v2.149.0 (free-move budget + OA-immune flag; Phase 2 `/token/move` read deferred).
+- 🟢 **P3 — Phase 8: higher-level subclass features (Lv 6/10/14/17/20).** Mostly composition on the now-built primitives; batch by class. The long tail. **Now the primary remaining work for the parent plan.**
+- 🟢 **P3 — Per-feature Phase-2 finishers (deferred from this session):**
+    - **Blade Flourish Phase 2** — Defensive AC self-buff + Mobile push + Slashing secondary-target routing.
+    - **Fancy Footwork Phase 2** — OA-flow gate reads the `fancy-footwork-blocked` buff and skips OAs against the named char_id.
+    - **Relentless Avenger Phase 2** — `/token/move` consumes `free_movement_remaining_ft` budget + skips OA prompts while `oa_immune_during_move` is set.
+    - **Supreme Healing Phase 1.5** — `/apply_healing` chat-card path (legacy `_heal_claims` flow) also substitutes max dice.
+    - **Combat Inspiration Phase 3** — Integrate the AC half into the reactions framework so the prompt fires automatically on `attack_targeted` for any combatant carrying a BI die buff.
+    - **AP Phase 3 / UM Phase 1b** — Auto-install via `/attack` post-hit hook (currently both require player-driven trigger via the `target_surprised` / endpoint call).
+- 🟢 **P3 — Classifier rerun for `docs/automation-coverage.md`.** Auto-generated row counts in the "Full classification" table still pin v2.99.460; rerun the classifier after the v2.128.2–v2.149.1 batch so the per-endpoint table reflects reality. Curated bullets + the "Recent retrofits" table are aligned per v2.142.1 + v2.149.1.
 
 The remaining ~30 announce-only rows are **archetype J** (narration-only-by-design: passive senses, language grants, passive damage-boosters that already ride other paths) — leave as-is; see the audit doc's "Notable announce-only backlog" section for the full split.
+
+---
+
+## Design Plans Backlog
+
+Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning docs (`docs/encounters-plan.md` + `docs/multi-system-refactor.md`). Priorities reflect the post-v2.149.1 state of each plan — **🔥 IN PROGRESS** = a plan with ongoing commits this session; **🔴 P1** = next-up substantial work; **🟡 P2** = substantial deferred phases or proposed work; **🟢 P3** = lower-priority or living-doc style.
+
+### 🔥 IN PROGRESS
+
+- [`full-feature-automation.md`](docs/plans/full-feature-automation.md) — see the section above; Phase 8 is the next slice.
+
+### ✅ Shipped end-to-end (kept for reference)
+
+- [`auras.md`](docs/plans/auras.md) — Phase 5 ✅ v2.99.424–.429.
+- [`demo-mode.md`](docs/plans/demo-mode.md) — ✅ v2.3.0.
+- [`feature-saves.md`](docs/plans/feature-saves.md) — Phase 3 ✅ v2.99.405–.414.
+- [`movement-and-summons.md`](docs/plans/movement-and-summons.md) — Phase 6 ✅ v2.99.431–.446.
+- [`movement-oa-flow.md`](docs/plans/movement-oa-flow.md) — ✅ all 6 phases v2.99.52–.57.
+- [`on-hit-riders.md`](docs/plans/on-hit-riders.md) — Phase 2 ✅ v2.99.395–.403.
+- [`ruler-and-range.md`](docs/plans/ruler-and-range.md) — ✅ all phases (1, 2, 3A–E).
+- [`spell-upcasting.md`](docs/plans/spell-upcasting.md) — ✅ A+B+C v2.108.0–v2.110.0; prose parser v2.125.0; per-two-slot v2.129.0; flat-bonus v2.130.0.
+- [`temp-hp-and-bonuses.md`](docs/plans/temp-hp-and-bonuses.md) — Phase 4 ✅ v2.99.415–.423.
+- [`test-harness.md`](docs/plans/test-harness.md) — ✅ Phases 1–5 (2040 tests).
+- [`wild-magic.md`](docs/plans/wild-magic.md) — ✅ all 5 phases v2.99.227–231.
+
+### 🔴 P1 — Next substantial work
+
+- [`death-saves.md`](docs/plans/death-saves.md) — Phase 1 ✅ shipped; **Phase 2–4 deferred** (mini-sheet pips, GM stabilize controls, full death-save UI states). Substantial popular feature.
+- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phase 1 ✅ shipped; **Phase 2–3 deferred** (condition automation, context-aware rolls). Pairs well with Combat 2.0 action economy.
+
+### 🟡 P2 — Substantial deferred phases
+
+- [`paladin-oaths.md`](docs/plans/paladin-oaths.md) — Phase 1 ✅ v2.99.245; this session shipped Aura of Warding (Ancients) v2.133.0–v2.135.1 + Scornful Rebuke (Conquest) v2.142.0 + Relentless Avenger (Vengeance) v2.149.0 + Aura of the Guardian (Redemption) per v2.99.281; **Phase 2–6 + 2 oaths (Crown, Treachery) deferred**.
+- [`battle-master.md`](docs/plans/battle-master.md) — Phase 1 ✅ v2.99.233; **Phase 2–5 + 15 maneuvers deferred**.
+- [`eldritch-knight.md`](docs/plans/eldritch-knight.md) — Phase 1 ✅ v2.99.232; **Phase 2–4 deferred**.
+- [`warlock-pact-boon.md`](docs/plans/warlock-pact-boon.md) — **Phase 0–5 unstarted** (this session partially touched the Warlock surface via Ascendant Step v2.147.0 but the pact-boon plan itself is unshipped).
+- [`sorcery-points-and-metamagic.md`](docs/plans/sorcery-points-and-metamagic.md) — Phase 0 ✅ v2.49.120; **Phase 1–5 unstarted**.
+- [`spell-validation-suite.md`](docs/plans/spell-validation-suite.md) — **Phase 0–5 unstarted**. Would close the spell-upcasting backfill audit gap.
+- [`reactions-automation.md`](docs/plans/reactions-automation.md) — Phase 1a + 1b + 2a-partial ✅ v2.67.0–.2 + Phase 7 ✅ v2.118.0–.122.0; **Phase 2b–6 + the proactive-prompt machinery deferred**.
+- [`encounter-sim-test-suite.md`](docs/plans/encounter-sim-test-suite.md) — design finalized; **Phase 1 PoC pending**.
+- [`unified-mini-sheet.md`](docs/plans/unified-mini-sheet.md) — 3 mockups landed; **Phase 1–3 unstarted**. Pairs naturally with Class Resource Tracking + Combat 2.0.
+- [`docs/encounters-plan.md`](docs/encounters-plan.md) — **proposed, not started**.
+- [`docs/multi-system-refactor.md`](docs/multi-system-refactor.md) — **proposed, not started**. Big architectural lift.
+
+### 🟢 P3 — Lower-priority / living docs
+
+- [`player-simulacrum.md`](docs/plans/player-simulacrum.md) — **design only, all phases unstarted**. Speculative.
+- [`wiki-expansion.md`](docs/plans/wiki-expansion.md) — living roadmap of how-to guides + reference cards still to write. Doc-style work, lots of small slices.
+- [`class-content-status.md`](docs/plans/class-content-status.md) — living inventory; updates as features ship.
