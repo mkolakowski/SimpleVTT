@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2074 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.0, 2026-06-09).
+**Total tests:** 2075 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.2, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -753,13 +753,14 @@ v2.99.298 — Trickery Domain Cleric (PHB p.62) Improved Duplicity Lv 17 passive
 | `test_use_id_level_gate` | Trickery at Lv 16 → 409. |
 
 ### `test_saint_of_forge_and_fire.py`
-v2.99.299 — Forge Domain Cleric (XGE p.18) Saint of Forge and Fire Lv 17 passive (H.1 deeper). Fire immunity + (while wearing heavy armor) resistance to BPS from nonmagical attacks. v1 announce-only.
+v2.99.299 — Forge Domain Cleric (XGE p.18) Saint of Forge and Fire Lv 17 passive (H.1 deeper). Fire immunity + (while wearing heavy armor) resistance to BPS from nonmagical attacks. v2.158.2 (Phase 8 follow-up to Avatar of Battle): the endpoint now installs a permanent `saint-of-forge-and-fire` buff carrying both `effects.immunity_to=["fire"]` (read by `_immunity_zero`) and `effects.resistance_to=["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]` (read by the v2.158.1-upgraded `_resistance_halve`).
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_use_sff_happy_lv17` | Lv 17 Tavik → `fire_immunity == True`, `heavy_armor_bps_resistance == True`, BPS in `resistance_types`, broadcast (source `saint-of-forge-and-fire`). |
+| `test_use_sff_happy_lv17` | Lv 17 Tavik → `fire_immunity == True`, `heavy_armor_bps_resistance == True`, BPS in `resistance_types`, `buff_installed == True`, broadcast (source `saint-of-forge-and-fire`). v2.158.2 — seeds Tavik into an active battle so `_install_buff` returns True. |
 | `test_use_sff_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_sff_level_gate` | Forge at Lv 16 → 409. |
+| `test_sff_buff_payload_carries_fire_immunity_and_bps_resistance` | v2.158.2 — installed buff carries BOTH `effects.immunity_to=["fire"]` AND `effects.resistance_to` with the three `nonmagical-X` entries. Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). |
 
 ### `test_keeper_of_souls.py`
 v2.99.300 — Grave Domain Cleric (XGE p.19) Keeper of Souls Lv 17 (H.1 deeper). When enemy within 60 ft dies, you or one creature within 60 ft heals HP = enemy's HD. 1/turn. v1 announce-only.

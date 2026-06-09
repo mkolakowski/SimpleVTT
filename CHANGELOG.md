@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.2] - 2026-06-09 — "Saint of the Anvil" — Phase 8 follow-up: Saint of Forge and Fire (Forge Cleric Lv 17) installs fire immunity + nonmagical-BPS resistance in one buff
+
+**Schema version:** 69
+**Commit summary:** **Second Phase 8 commit, sibling of v2.158.0 Avatar of Battle. `use_saint_of_forge_and_fire` (Forge Domain Cleric Lv 17+) used to broadcast `feature_used` + claim two passive effects the GM had to track; now it installs a permanent `saint-of-forge-and-fire` buff carrying BOTH `effects.immunity_to=["fire"]` (read by `_immunity_zero`) AND `effects.resistance_to=["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]` (read by the v2.158.1-upgraded F6-aware `_resistance_halve`). Pure composition on shipped primitives — no new helper.**
+**Description:** RAW XGE p.18: "you gain immunity to fire damage, and while you're wearing heavy armor, you have resistance to bludgeoning, piercing, and slashing damage from nonmagical attacks." Two effect keys in one buff payload, both consumed by the existing PC damage pipeline. The Lv-17 capstone recipe is now well-trodden — install permanent buff, point at existing matchers, ship harness state-contract test. v1 simplification noted in the code comment: the BPS half of the buff installs unconditionally even though RAW gates it on "while wearing heavy armor" — PC sheets don't currently track equipped-armor category (the demo sets `ac` directly with no armor field), and at Lv 17 a Forge Cleric is canonically wearing heavy armor (Heavy Armor proficiency at Lv 1 + the capstone explicitly assumes it). Filed for a future PC-armor-detection helper that gates the BPS half — when that helper lands, the buff payload conditionally drops the `resistance_to` block. The fire-immunity half is unconditional per RAW so it stays as-is.
+
+### Added
+- `tests/harness/test_saint_of_forge_and_fire.py::test_sff_buff_payload_carries_fire_immunity_and_bps_resistance` — state contract: the installed buff carries both `effects.immunity_to=["fire"]` AND `effects.resistance_to=["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]`. Plus permanence sanity (`concentration` falsy, `duration_rounds >= 1000`). The existing `test_use_sff_happy_lv17` was upgraded to seed Tavik into an active battle (required for `_install_buff`) and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_saint_of_forge_and_fire` — adds the `_install_buff` call between the level gate and the broadcast. Buff payload: `key="saint-of-forge-and-fire"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, `effects.immunity_to=["fire"]`, `effects.resistance_to=["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]`. Mirrors the v2.158.0 Avatar of Battle shape. On install, mirrors the buff list to the sheet via `_mirror_buffs_to_sheet` so the PC `_immunity_zero` + `_resistance_halve` read sites (which walk `sheet._buffs_active`) see the new entries on the next attack. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_saint_of_forge_and_fire` from `⚪ announce-only` to `✅ tracked` (archetype D buff-install). Tracked / announce-only counts: 189 / 48 (was 188 / 49). New row in the "Recent retrofits" table noting the dual-effect buff payload. Notable announce-only backlog Auras-(E) bullet picked up `saint_of_forge_and_fire ✅ v2.158.2`.
+- `docs/test-harness-coverage.md` — `test_saint_of_forge_and_fire.py` block updated with the new test entry + the upgraded happy-path assertion. Total harness count bumped to **2075** (was 2074).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gained the Saint of Forge and Fire citation.
+
+### Notes
+- Phase 8 cadence holding: one commit per feature, each composing the already-shipped primitives, each shipping a Phase-9-shaped state-contract harness test. Next-in-line by RAW shape: Improved Reaper (Death Cleric Lv 17 — necromancy single-target spells gain a second target) is a bigger commit because it touches `/cast_spell` routing; Improved Duplicity / Keeper of Souls / Order's Wrath are smaller. **Total harness count: 2075** in `tests/harness/` (was 2074); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.1] - 2026-06-09 — "Closing the F6 Gap" — PC `_resistance_halve` now uses `_resistance_matches_damage` so a buff's `nonmagical-X` entry actually halves nonmagical damage
 
 **Schema version:** 69

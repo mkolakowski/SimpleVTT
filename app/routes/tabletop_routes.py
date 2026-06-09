@@ -53705,8 +53705,25 @@ async def use_saint_of_forge_and_fire(
     attacks."
 
     Body: ``{character_id, override?}``. No chip cost —
-    passive permanent. v1 announce-only — fire immunity +
-    nonmagical BPS resistance (in heavy armor) are GM-tracked.
+    passive permanent.
+
+    v2.158.2 — Phase 8 follow-up to v2.158.0 Avatar of Battle:
+    install a permanent `saint-of-forge-and-fire` buff carrying:
+      * `effects.immunity_to=["fire"]` — read by `_immunity_zero`
+        (PC side); a fire-damage hit on the cleric drops to 0
+        regardless of source (magical or mundane per RAW).
+      * `effects.resistance_to=["nonmagical-bludgeoning",
+        "nonmagical-piercing","nonmagical-slashing"]` — read by
+        the v2.158.1-upgraded F6-aware `_resistance_halve`. Halves
+        nonmagical BPS hits, passes magical BPS at full damage.
+
+    v1 simplification — RAW gates the BPS resistance on "while
+    wearing heavy armor", but PC sheets don't currently track
+    equipped-armor category (the demo sets `ac` directly). At Lv 17
+    a Forge Cleric is canonically wearing heavy armor (their Lv 1
+    proficiency + the capstone explicitly assumes it). Filed for a
+    future PC-armor-detection helper that gates the BPS half of the
+    buff — for now both halves install unconditionally.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -53735,6 +53752,38 @@ async def use_saint_of_forge_and_fire(
         })
 
     cleric_lv = _cleric_level_from_sheet(sheet)
+
+    # v2.158.2 — install fire-immunity + nonmagical-BPS resistance
+    # in a single permanent buff. Mirrors the v2.158.0 Avatar of
+    # Battle shape. Idempotent on re-press via the `_install_buff`
+    # key dedupe.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "saint-of-forge-and-fire",
+        "name": "🔥 Saint of Forge and Fire",
+        "icon": "🔥",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "immunity_to": ["fire"],
+            "resistance_to": [
+                "nonmagical-bludgeoning",
+                "nonmagical-piercing",
+                "nonmagical-slashing",
+            ],
+        },
+        "desc": (
+            f"{char.name} is immune to fire damage. While wearing "
+            f"heavy armor, also resistant to nonmagical bludgeoning, "
+            f"piercing, and slashing. (Forge Domain Cleric Lv 17+ "
+            f"passive permanent. v1 simplification: BPS halving "
+            f"installs unconditionally pending PC armor detection.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -53769,6 +53818,7 @@ async def use_saint_of_forge_and_fire(
             "resistance_types": ["bludgeoning", "piercing", "slashing"],
             "resistance_nonmagical_only": True,
             "cleric_level": cleric_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -53780,6 +53830,7 @@ async def use_saint_of_forge_and_fire(
         "resistance_types": ["bludgeoning", "piercing", "slashing"],
         "resistance_nonmagical_only": True,
         "cleric_level": cleric_lv,
+        "buff_installed": buff_installed,
     }
 
 
