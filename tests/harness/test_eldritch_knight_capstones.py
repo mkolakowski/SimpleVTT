@@ -162,7 +162,8 @@ async def test_use_ac_level_gate(
 async def test_use_iwm_happy_lv18(
     gm_client, gm_ws, garrik_ek_in_battle,
 ):
-    """Lv 18 EK → Improved War Magic broadcast + bonus chip."""
+    """Lv 18 EK → Improved War Magic broadcast + bonus chip +
+    buff installed."""
     garrik = garrik_ek_in_battle
     await _patch_sheet(
         gm_client, garrik["id"], {"level": 18},
@@ -174,9 +175,53 @@ async def test_use_iwm_happy_lv18(
         json={"character_id": garrik["id"], "override": True},
     )
     assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["buff_installed"] is True
     await asyncio.sleep(0.3)
     feats = _iwm_broadcasts(gm_ws, garrik["id"])
     assert feats
+
+
+async def test_iwm_buff_payload_carries_min_spell_level_flag(
+    gm_client, gm_ws, garrik_ek_in_battle,
+):
+    """v2.158.12 — state contract (Phase 9): the installed
+    `improved-war-magic-active` buff carries the two
+    `improved_war_magic_*` effect keys with the right values
+    (active flag + min_spell_level=1). Phase 2 (deferred) will
+    have the War Magic / `/cast_spell` flow read these off the
+    caster's `_buffs_active` to allow the bonus-action weapon
+    attack rider when the cast spell's level >= 1 (vs the Lv-7
+    War Magic limit of cantrips only); this test pins the flag
+    shape so that future read site has a stable contract to look
+    up."""
+    garrik = garrik_ek_in_battle
+    await _patch_sheet(
+        gm_client, garrik["id"], {"level": 18},
+        class_slug="fighter",
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_improved_war_magic",
+        json={"character_id": garrik["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    bu = await gm_ws.wait_for("buff_update")
+    garrik_buffs = bu["data"]["buffs"]
+    iwm_buff = next(
+        (b for b in garrik_buffs if b.get("key") == "improved-war-magic-active"),
+        None,
+    )
+    assert iwm_buff is not None, (
+        f"improved-war-magic-active buff missing; got keys="
+        f"{[b.get('key') for b in garrik_buffs]}"
+    )
+    effects = iwm_buff.get("effects") or {}
+    assert effects.get("improved_war_magic_active") is True
+    assert effects.get("improved_war_magic_min_spell_level") == 1
+    # Permanent passive — no concentration, very long duration.
+    assert iwm_buff.get("concentration") in (False, None)
+    assert int(iwm_buff.get("duration_rounds") or 0) >= 1000
 
 
 async def test_use_iwm_level_gate(

@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Lv-17 cleric subclass capstone batch CLOSED 6/6** (Avatar of Battle, Saint of Forge and Fire, Improved Duplicity, Keeper of Souls P1+P2, Order's Wrath P1+P2, Improved Reaper P1). **Lv-15 tier in progress:** Purity of Spirit (Devotion Paladin, v2.158.10), Arcane Charge (Eldritch Knight, v2.158.11). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 203+ tracked / 34- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Lv-17 cleric capstone batch CLOSED 6/6** + **Eldritch Knight CLOSED 2/2** (Arcane Charge Lv-15 v2.158.11 + Improved War Magic Lv-18 v2.158.12). Plus Purity of Spirit (Devotion Paladin Lv-15, v2.158.10). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 203+ tracked / 34- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
 
 **v2.128.2–v2.149.0 retrofit summary** (curated; see [automation-coverage.md §Recent retrofits](../automation-coverage.md)):
 
@@ -349,6 +349,15 @@ composition. Batch by class, same cadence as the breadth sweep.
   `/use_action_surge` reads the buff + surfaces the teleport
   budget; actual server move via existing `_force_move`
   primitives.
+- **v2.158.12 ("Bonus Bolt") — Improved War Magic** (Eldritch
+  Knight Fighter Lv 18+): closes the EK 2/2 Phase 8 tracked
+  features. Endpoint was already chip-marked pre-Phase-8; the
+  Phase 8 enhancement adds the `improved-war-magic-active`
+  flag buff with `improved_war_magic_*` effect keys (active=True,
+  min_spell_level=1). Phase 2 (deferred): War Magic /
+  `/cast_spell` flow reads the buff and allows the bonus-action
+  weapon attack rider when the cast spell's level >= 1 (vs the
+  Lv-7 War Magic cantrip-only limit).
 
 The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
 Reaper is the last (necromancy single-target → double-target spell

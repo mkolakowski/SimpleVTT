@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2083 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.11, 2026-06-09).
+**Total tests:** 2084 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.12, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1358,9 +1358,10 @@ v2.99.269 — Eldritch Knight Fighter (PHB p.74) Arcane Charge + Improved War Ma
 |------|-----------------|
 | `test_use_ac_happy_lv15` | Lv 15 EK Garrik → `teleport_max_ft == 30`, `buff_installed == True`, broadcast (source `arcane-charge`). v2.158.11 — happy test gains the buff assertion. |
 | `test_use_ac_level_gate` | Lv 14 → 409. |
-| `test_use_iwm_happy_lv18` | Lv 18 EK Garrik → broadcast (source `improved-war-magic`), bonus chip marked. |
+| `test_use_iwm_happy_lv18` | Lv 18 EK Garrik → broadcast (source `improved-war-magic`), bonus chip marked, `buff_installed == True` (v2.158.12). |
 | `test_use_iwm_level_gate` | Lv 17 → 409. |
 | `test_ac_buff_payload_carries_teleport_flags` | v2.158.11 — installed buff carries `effects.arcane_charge_teleport_max_ft == 30` + `effects.arcane_charge_requires_action_surge == True`. Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). Pins the Phase-2 contract so the future `/use_action_surge` read site has stable flag names to look up. |
+| `test_iwm_buff_payload_carries_min_spell_level_flag` | v2.158.12 — installed `improved-war-magic-active` buff carries `effects.improved_war_magic_active == True` + `effects.improved_war_magic_min_spell_level == 1`. Plus permanence sanity. State-change contract (Phase 9). Pins the Phase-2 contract so the future War Magic / `/cast_spell` read site has stable flag names. Closes EK 2/2 Phase 8 tracked features. |
 
 ### `test_eldritch_strike.py`
 v2.99.268 — Eldritch Knight Fighter (PHB p.74) Eldritch Strike buff install (Phase E.2 Phase 3). Lv 10+; on hit, target has disadvantage on next save vs an EK spell before end of next turn.

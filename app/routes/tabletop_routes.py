@@ -44154,6 +44154,20 @@ async def use_improved_war_magic(
     **CLOSES PHASE E.2.** With this commit + sibling Arcane
     Charge, all 4 phases of docs/plans/eldritch-knight.md are
     shipped.
+
+    v2.158.12 — Phase 8 Lv-18 tier. Already chip-marked via
+    `_mark_battle_economy` (so the table flagged this `tracked`
+    pre-Phase-8); the Phase 8 enhancement installs a permanent
+    `improved-war-magic-active` flag buff so the future War
+    Magic spell-cast flow has an explicit parameter contract
+    for the Lv-1+ upgrade:
+      * `effects.improved_war_magic_active: True`
+      * `effects.improved_war_magic_min_spell_level: 1`
+    Phase 2 (deferred): the War Magic / `/cast_spell` flow reads
+    the buff + allows the bonus-action weapon attack rider when
+    the cast spell's level >= the flag's threshold (1 by RAW).
+    Before Phase 8 the Lv-1+-not-cantrip gate was implicit (the
+    chip mark just claimed the bonus action was spent).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -44198,6 +44212,33 @@ async def use_improved_war_magic(
 
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
+    # v2.158.12 — install the parameter-flag buff so the future
+    # War Magic / `/cast_spell` flow has an explicit Lv-1+
+    # threshold to look up. Idempotent on re-press via key
+    # dedupe.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "improved-war-magic-active",
+        "name": "⚡ Improved War Magic",
+        "icon": "⚡",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "improved_war_magic_active": True,
+            "improved_war_magic_min_spell_level": 1,
+        },
+        "desc": (
+            f"{char.name} can cast a Lv 1+ spell with action and "
+            f"make one weapon attack as a bonus action. (Eldritch "
+            f"Knight Lv 18+ passive permanent. Phase 2: War Magic "
+            f"spell-cast flow reads these flags.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -44225,6 +44266,7 @@ async def use_improved_war_magic(
             "source": "improved-war-magic",
             "over_budget": was_used,
             "over_budget_slot": "bonus" if was_used else "",
+            "buff_installed": buff_installed,
         },
     })
 
@@ -44232,6 +44274,7 @@ async def use_improved_war_magic(
         "ok": True,
         "feature": "improved-war-magic",
         "over_budget": was_used,
+        "buff_installed": buff_installed,
     }
 
 

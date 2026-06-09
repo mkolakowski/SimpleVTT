@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.12] - 2026-06-09 — "Bonus Bolt" — Phase 8 Lv-18 tier: Improved War Magic (Eldritch Knight Lv 18+) installs the Lv-1+ spell-threshold flag buff (Phase 1; spell-cast read site deferred)
+
+**Schema version:** 69
+**Commit summary:** **Stays close to v2.158.11 Arcane Charge — same EK subclass, +1 level tier (Lv-18). Sibling endpoint to Arcane Charge (both ship in the same `test_eldritch_knight_capstones.py` test file). The endpoint was already chip-marked via `_mark_battle_economy` (so the automation-coverage table flagged it tracked pre-Phase-8); the Phase 8 enhancement adds a permanent `improved-war-magic-active` flag buff carrying `effects.improved_war_magic_active: True` + `effects.improved_war_magic_min_spell_level: 1`. Phase 2 (deferred): the War Magic / `/cast_spell` flow reads the buff and allows the bonus-action weapon attack rider when the cast spell's level >= the flag's threshold (1 by RAW) — vs the Lv-7 War Magic limit of cantrips only.**
+**Description:** Pre-Phase-8 the "Lv-1+ not cantrip" gate was implicit — the chip mark just claimed the bonus action was spent and the GM tracked the spell-level eligibility separately. Phase 1 captures the threshold in a buff so the Phase 2 read site has an explicit, stable parameter contract. Closes the EK 2/2 Phase 8 tracked features (Arcane Charge v2.158.11 + Improved War Magic v2.158.12). EK is now fully Phase 8'd.
+
+### Added
+- `tests/harness/test_eldritch_knight_capstones.py::test_iwm_buff_payload_carries_min_spell_level_flag` — state contract: installed buff carries the two `improved_war_magic_*` effect keys (active=True, min_spell_level=1) with the right values + permanence sanity (`concentration` falsy + `duration_rounds >= 1000`). The existing `test_use_iwm_happy_lv18` was upgraded to assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_improved_war_magic` — adds the `_install_buff` call between `_mark_battle_economy` and the broadcast. Buff payload: `key="improved-war-magic-active"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, plus the two `improved_war_magic_*` effect keys. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field. Mirrors the v2.158.3 Improved Duplicity / v2.158.11 Arcane Charge Phase 1 shapes.
+- `docs/automation-coverage.md` — `use_improved_war_magic` row was already `✅ tracked` (chip-mark) pre-Phase-8; the archetype label is updated to reflect the new buff install. Counts unchanged (still 195 tracked / 42 announce-only).
+- `docs/test-harness-coverage.md` — `test_eldritch_knight_capstones.py` block gains the new state-contract row. Total harness count bumped to **2084** (was 2083).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Improved War Magic citation. EK is now 2/2 Phase 8'd at the Lv-15/Lv-18 tier.
+
+### Notes
+- The EK subclass is now fully Phase 8'd — both Lv-15 Arcane Charge and Lv-18 Improved War Magic install permanent flag buffs that capture their respective Action Surge / War Magic upgrade parameters. The deferred Phase 2 reads on both are small and could ship together in a future commit. **Total harness count: 2084** in `tests/harness/` (was 2083); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.11] - 2026-06-09 — "Charged Step" — Phase 8 Lv-15 tier: Arcane Charge (Eldritch Knight Lv 15+) installs the teleport-budget flag buff (Phase 1; Action Surge read site deferred)
 
 **Schema version:** 69

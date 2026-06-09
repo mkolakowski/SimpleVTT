@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.11 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.12 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Lv-17 cleric capstone batch CLOSED 6/6 in v2.158.x.** Lv-15 tier in progress: Purity of Spirit (Devotion Paladin, v2.158.10), Arcane Charge (Eldritch Knight, v2.158.11). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Lv-17 cleric capstone batch CLOSED 6/6** + **Eldritch Knight CLOSED 2/2** (Arcane Charge Lv-15 + Improved War Magic Lv-18) in v2.158.x. Plus Purity of Spirit (Devotion Paladin Lv-15, v2.158.10). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **Buff / temp-HP (D/F):** `supreme_healing` ✅ v2.143.0 (heal pipeline max-dice substitution via the new `_max_dice_total` helper); `combat_inspiration` ✅ v2.144.0–v2.145.0 (damage half — roll BI die + apply to target; AC half — calculator returning the boosted-AC outcome); `blade_flourish` ✅ v2.146.0 (shared damage half — Defensive/Slashing/Mobile riders deferred). `rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals.
 - **Movement (G):** `ascendant_step` ✅ v2.147.0 (levitate buff carrying `fly_speed_ft: 10` + concentration); `fancy_footwork` ✅ v2.148.0 (Phase 1 install of the OA-block mark on the target — OA-flow read deferred to Phase 2); `relentless_avenger` ✅ v2.149.0 (Phase 1 install of the free-move budget + OA-immune flag — `/token/move` read deferred to Phase 2). `stormborn` ✅ v2.99.459 fly buff.
 
-## Recent retrofits (v2.128.2 – v2.158.11)
+## Recent retrofits (v2.128.2 – v2.158.12)
 
 | Feature | Phases shipped | Notes |
 |---|---|---|
@@ -102,6 +102,7 @@ or passive damage-boosters that already ride other code paths
 | Improved Reaper | permanent necromancy-dual-target flag buff (v2.158.9 — Phase 8 final cleric-capstone commit) | Death Domain Cleric Lv 17+. Phase 1 of install-then-deferred-read split. Installs `improved-reaper-active` buff with six `improved_reaper_*` effect keys (active, min_spell_level=1, max_spell_level=5, school="necromancy", max_targets=2, max_target_separation_ft=5). Phase 2 (deferred): `/cast_spell` reads the buff and accepts a second `target_combatant_id` when the spell qualifies (necromancy school, levels 1-5, default single-target shape). **CLOSES the Lv-17 cleric subclass capstone batch 6/6 in v2.158.x** |
 | Purity of Spirit | permanent PFE&G class-feature buff (v2.158.10 — Phase 8 step-out to Lv-15 tier) | Devotion Paladin Lv 15+. Installs `purity-of-spirit` buff carrying the same `pfeag_*` effects payload as the cast Protection from Evil and Good spell (six protected creature types + attackers-disadvantage flag + charm/frighten/possess-immunity flag + save-advantage flag). The two existing engine read sites (`_target_attackers_have_pfeag_disadvantage_against_type` + `_pc_has_pfeag_against_type`) were extended to accept either `key="purity-of-spirit"` or `key="protection-from-evil-and-good"` so the class-feature buff reuses the spell-buff engine wholesale. Distinct key so a cast PfE&G spell on top doesn't collide. Sets the engine-reuse pattern for future PFE&G-shape features |
 | Arcane Charge | permanent teleport-budget flag buff (v2.158.11 — Phase 8 Lv-15 tier) | Eldritch Knight Fighter Lv 15+. Phase 1 of install-then-deferred-read split. Installs `arcane-charge-active` buff with two `arcane_charge_*` effect keys (`teleport_max_ft=30`, `requires_action_surge=True`). Phase 2 (deferred): `/use_action_surge` reads the buff + surfaces the teleport budget (before/after the additional action per RAW); the actual move uses existing `_force_move` / movement primitives. Sibling commit to v2.158.10 Purity of Spirit — both step Phase 8 out into the Lv-15 tier |
+| Improved War Magic | permanent Lv-1+ spell-threshold flag buff (v2.158.12 — Phase 8 Lv-18 tier; EK 2/2 close) | Eldritch Knight Fighter Lv 18+. Endpoint was already chip-marked pre-Phase-8 (so it was tracked); the Phase 8 enhancement adds the `improved-war-magic-active` flag buff with two `improved_war_magic_*` effect keys (active=True, min_spell_level=1). Phase 2 (deferred): War Magic / `/cast_spell` flow reads the buff and allows the bonus-action weapon attack rider when the cast spell's level >= 1 (vs the Lv-7 War Magic cantrip-only limit). Closes EK 2/2 Phase 8 tracked features |
 
 ## Full classification
 
@@ -203,7 +204,7 @@ or passive damage-boosters that already ride other code paths
 | `use_hypnotic_gaze` | ✅ tracked | C save-or-condition |
 | `use_improved_duplicity` | ✅ tracked | D buff-install (Invoke Duplicity parameter flags) |
 | `use_improved_reaper` | ✅ tracked | D buff-install (necromancy dual-target flags) |
-| `use_improved_war_magic` | ✅ tracked | A use/resource |
+| `use_improved_war_magic` | ✅ tracked | A use/resource + D buff-install (Lv-1+ spell-threshold flag) |
 | `use_indomitable` | ✅ tracked | D buff-install |
 | `use_indomitable_reroll` | ✅ tracked | A use/resource |
 | `use_insightful_fighting` | ✅ tracked | A use/resource |
