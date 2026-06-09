@@ -458,6 +458,7 @@ Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning
 ### ✅ Shipped end-to-end (kept for reference)
 
 - [`auras.md`](docs/plans/auras.md) — Phase 5 ✅ v2.99.424–.429.
+- [`death-saves.md`](docs/plans/death-saves.md) — Phase 1 ✅ v2.1.0; Phase 3a ✅ v2.150.0; Phase 3b ✅ v2.151.0. (Phase 3c needs a session-time concept the project doesn't have; Phase 4 NPC death-saves deferred.)
 - [`demo-mode.md`](docs/plans/demo-mode.md) — ✅ v2.3.0.
 - [`feature-saves.md`](docs/plans/feature-saves.md) — Phase 3 ✅ v2.99.405–.414.
 - [`movement-and-summons.md`](docs/plans/movement-and-summons.md) — Phase 6 ✅ v2.99.431–.446.
@@ -466,13 +467,12 @@ Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning
 - [`ruler-and-range.md`](docs/plans/ruler-and-range.md) — ✅ all phases (1, 2, 3A–E).
 - [`spell-upcasting.md`](docs/plans/spell-upcasting.md) — ✅ A+B+C v2.108.0–v2.110.0; prose parser v2.125.0; per-two-slot v2.129.0; flat-bonus v2.130.0.
 - [`temp-hp-and-bonuses.md`](docs/plans/temp-hp-and-bonuses.md) — Phase 4 ✅ v2.99.415–.423.
-- [`test-harness.md`](docs/plans/test-harness.md) — ✅ Phases 1–5 (2040 tests).
+- [`test-harness.md`](docs/plans/test-harness.md) — ✅ Phases 1–5 (2045 tests).
 - [`wild-magic.md`](docs/plans/wild-magic.md) — ✅ all 5 phases v2.99.227–231.
 
 ### 🔴 P1 — Next substantial work
 
-- [`death-saves.md`](docs/plans/death-saves.md) — Phase 1 ✅ shipped; **Phase 2–4 deferred** (mini-sheet pips, GM stabilize controls, full death-save UI states). Substantial popular feature.
-- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phase 1 ✅ shipped; **Phase 2–3 deferred** (condition automation, context-aware rolls). Pairs well with Combat 2.0 action economy.
+- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phase 1 ✅ shipped; **Phase 2–3 deferred** (condition automation, context-aware rolls). Pairs well with Combat 2.0 action economy. **Now the only P1 design plan with substantial open work.**
 
 ### 🟡 P2 — Substantial deferred phases
 

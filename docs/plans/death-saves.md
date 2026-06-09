@@ -1,19 +1,20 @@
 # Death Saving Throws — Design Plan
 
-**Status:** Phase 1 shipped in **v2.1.0**, refined in **v2.1.1** (always-on tracker visibility, healing also clears `dead`), gained adv/dis interaction in **v2.2.0**, gained cross-character rollover fix in **v2.2.2** / **v2.3.18**.
-**Phases 2–4 still deferred** — see [Implementation status](#implementation-status) below for the per-phase breakdown.
-**Tracked in:** [`TODO.md`](../../TODO.md) → Combat → Death Saving Throws.
+**Status:** Phase 1 shipped in **v2.1.0**, refined in **v2.1.1** (always-on tracker visibility, healing also clears `dead`), gained adv/dis interaction in **v2.2.0**, gained cross-character rollover fix in **v2.2.2** / **v2.3.18**. **Phase 3a (turn-start auto-prompt) shipped in v2.150.0** + **Phase 3b (Medicine-check stabilize endpoint) shipped in v2.151.0**. Phase 3c (stable countdown) + Phase 4 (NPC death saves) remain deferred.
+**Tracked in:** [`TODO.md`](../../TODO.md) → Design Plans Backlog → death-saves (now P3 — only the session-time-blocked Phase 3c + the deferred Phase 4 remain).
 
 ---
 
 ## Implementation status
 
-(Annotation pass v2.3.26 — audited against CHANGELOG_v1 / CHANGELOG / code.)
+(Annotation pass v2.151.1 — audited against CHANGELOG / code.)
 
 - ✅ **Phase 1 — Manual rolls + auto state on HP changes** — done in v2.1.0. State machine in `_apply_hp_change`, three endpoints (`/death-save`, `/death-save/override`, `/stabilize`), `_death_saves_tracker.html` partial, mini-sheet + full sheet UI, GM token-context override, massive-damage instant-kill, adv/dis interaction (v2.2.0).
 - 🔄 **v2.1.1 refinements** — tracker is now always visible (not hide-when-alive), and healing also clears `dead` status (the original "GM override required to revive" rule was confusing in practice).
 - ⏸ **Phase 2 — Reserved slot** — never populated. The original Phase 2 ("damage at 0 = auto failures") was pulled into Phase 1 from day one.
-- ⏸ **Phase 3 — Initiative auto-prompt + Medicine check + stable countdown** — deferred. Auto-prompt on initiative turn requires the Initiative Tracker Roll Prompt TODO. Medicine check + stable countdown both wait on a session-time concept the project doesn't have.
+- ✅ **Phase 3a — Initiative auto-prompt** — shipped in v2.150.0. PUT `/battle`'s turn-advance hook (line ~77019, sibling to the v2.132.0 `has_acted` flip) broadcasts `death_save_prompt` when the newly-active combatant is a PC in `dying` state. Payload carries `character_id`, `character_name`, `combatant_id`, `successes`, `failures`, `source: "turn_start"`. Server-side broadcast only — the client UI modal that consumes the event is a follow-up (the broadcast shape is intentionally compatible with the existing `_death_saves_tracker.html` partial).
+- ✅ **Phase 3b — Medicine-check stabilize** — shipped in v2.151.0. New `POST /api/campaign/{cid}/character/{healer_char_id}/medicine_stabilize` takes a `target_char_id` body field; computes the healer's Medicine modifier (`WIS_mod + (PB if proficient)`); rolls `1d20 + mod` vs DC 10; on success transitions target's `death_saves.status` to `stable` (same state transition as the GM-only `/stabilize`). Broadcasts `character_death_save` with `source: "medicine_check"` on success or `feature_used` with `source: "medicine_stabilize_failed"` on failure. Owner-or-GM gated. v1 simplifications filed: no range check between healer and target (GM adjudicates); roll_state advantage/disadvantage doesn't ride through (would be a clean follow-up).
+- ⏸ **Phase 3c — Stable countdown (1d4 hours → regain 1 HP)** — gated on a session-time concept the project doesn't yet have. Still deferred.
 - ⏸ **Phase 4 — NPC death saves with per-token toggle** — deferred. Monsters drop dead at 0 HP per RAW; a "boss should roll saves" toggle hasn't been requested.
 - ❌ **Self-stabilize features / revivify automation** — explicitly out of scope from day one. Still out of scope.
 

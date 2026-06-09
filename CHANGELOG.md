@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.151.2] - 2026-06-08 — "Filed Under Shipped" — mark Death Saves Phase 3a + 3b in the plan + TODO index
+
+**Schema version:** 69
+**Commit summary:** **Doc-only. Updates [`docs/plans/death-saves.md`](docs/plans/death-saves.md)'s status banner + Implementation Status section to mark Phase 3a (v2.150.0) + Phase 3b (v2.151.0) as shipped with version references and the per-feature notes for each. Promotes the death-saves entry in `TODO.md`'s Design Plans Backlog from 🔴 P1 to ✅ Shipped (now sits in the "Shipped end-to-end" reference list); the only remaining P1 design-plan slot is the advantage-disadvantage Phase 2-3 work.**
+**Description:** After v2.150.0 + v2.151.0, the death-saves plan's "Phase 2–4 still deferred" line was stale — Phase 3a + 3b both shipped, and only Phase 3c (gated on a session-time concept the project doesn't have) + Phase 4 (NPC death saves, low priority) remain truly deferred. This commit aligns three surfaces:
+
+1. **The plan doc** ([`docs/plans/death-saves.md`](docs/plans/death-saves.md)) — status banner notes Phase 3a + 3b shipped; the Implementation Status section's deferred Phase 3 bullet splits into two ✅ rows (3a + 3b) plus a ⏸ row for 3c.
+2. **The TODO Design Plans Backlog** — the death-saves entry moves from 🔴 P1 to the ✅ Shipped list, with the per-phase status preserved as a sub-note.
+3. **The P1 row** — explicit "advantage-disadvantage is now the only P1 design plan with substantial open work" callout so the next-session triage is unambiguous.
+
+Pairs with the v2.149.2 TODO triage; same "living index" doc-discipline rule.
+
+### Changed
+- `docs/plans/death-saves.md` — status banner mentions Phase 3a + 3b ship versions; Implementation Status section gets two new ✅ rows with per-feature notes (turn-advance hook location for 3a; endpoint shape + Medicine modifier computation + filed follow-ups for 3b); Phase 3c moved to its own deferred row.
+- `TODO.md` — death-saves moves from 🔴 P1 to the ✅ Shipped end-to-end reference list (per-phase status preserved); P1 row gets an explicit callout that advantage-disadvantage is the only remaining P1 design-plan slot; test-harness's "(2040 tests)" bumped to "(2045 tests)" to match v2.151.0.
+
+### Notes
+- No code or schema change. **Total harness count: 2045** in `tests/harness/` (unchanged); **`tests/harness_ui/` 19** (unchanged). The plan + the TODO + the CHANGELOG now agree on death-saves status; future sessions reading the TODO will correctly find advantage-disadvantage as the obvious P1 pick.
+
+---
+
 ## [2.151.1] - 2026-06-08 — "Negative Bonus" — relax the Medicine-stabilize-failure test's exact modifier assertion
 
 **Schema version:** 69
