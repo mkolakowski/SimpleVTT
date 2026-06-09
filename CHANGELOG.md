@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.154.1] - 2026-06-08 — "Wrench in the Toolbox" — add a GM-only Campaign Settings pill to the tabletop Quick Links
+
+**Schema version:** 69
+**Commit summary:** **Template-only addition: a GM-gated `🛠 Campaign Settings` pill inside the tabletop Tools drawer's Quick Links grid that links to `/campaign/{cid}/settings`. Mirrors the existing `{% if user.is_admin %}` gating pattern but uses `{% if is_gm %}` (the per-campaign role). Closes a one-click navigation gap — previously, GMs had to leave the tabletop and dig through the global Settings page to find the campaign-specific settings.**
+**Description:** User-requested one-click affordance: opening the campaign-specific settings page from inside the tabletop drawer. The settings route (`/campaign/{cid}/settings`) was already GM-gated server-side (raises 403 for non-GM members), so this is purely a UX addition — exposes the link only to viewers the server would let through anyway. Insert sits between the global "⚙ Settings" pill and the admin `🛡 Admin` pill in the existing two-column grid, keeping the visual flow of generic → role-specific → power-user.
+
+### Added
+- `app/templates/tabletop.html` — new GM-gated quick-link pill inside the Tools drawer's Quick Links grid (around line 3849): `{% if is_gm %}<a href="/campaign/{{ campaign.id }}/settings" class="ql-pill" title="...">🛠 Campaign Settings</a>{% endif %}`. Reuses the existing `.ql-pill` class so styling tracks the surrounding pills.
+- `tests/harness/test_quick_links_campaign_settings.py` — 2 tests: `test_gm_sees_campaign_settings_quick_link` (GM tabletop response contains the `/campaign/{cid}/settings` href AND the "Campaign Settings" label) + `test_player_does_not_see_campaign_settings_quick_link` (Alice's tabletop response does NOT contain the href).
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2060 → 2062.
+
+### Notes
+- The settings route was already GM-gated (`/campaign/{campaign_id}/settings` raises 403 for non-GM via `_user_is_gm`), so this is a pure UX surfacing — no new endpoint, no new authorization surface. **Total harness count: 2062** in `tests/harness/` (2060 → 2062); **`tests/harness_ui/` 19** (unchanged). Filed follow-up: a parallel "🛠 Encounters" pill linking to `/campaign/{cid}/settings#encounters` (if the settings page supports section anchors) for a faster route to the encounter library, also GM-only.
+
+---
+
 ## [2.154.0] - 2026-06-08 — "Both Sides Now" — Advantage/Disadvantage Phase 2c: condition-driven adv/dis on `/npc_attack`
 
 **Schema version:** 69

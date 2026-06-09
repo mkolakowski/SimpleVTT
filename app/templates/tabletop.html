@@ -3847,6 +3847,9 @@
                 <a href="/wiki" target="_blank" rel="noopener noreferrer" class="ql-pill" title="Open the wiki in a new tab">📖 Wiki</a>
                 <a href="/characters" class="ql-pill">🧝 Characters</a>
                 <a href="/settings" class="ql-pill">⚙ Settings</a>
+                {% if is_gm %}
+                <a href="/campaign/{{ campaign.id }}/settings" class="ql-pill" title="Open this campaign's settings (GM only)">🛠 Campaign Settings</a>
+                {% endif %}
                 {% if user.is_admin %}
                 <a href="/admin" class="ql-pill">🛡 Admin</a>
                 {% endif %}
