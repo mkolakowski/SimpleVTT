@@ -53980,6 +53980,35 @@ async def use_fancy_footwork(
 
     rogue_lv = _rogue_level_from_sheet(sheet)
 
+    # v2.148.0 — Phase 1 mechanical wiring: when the caller passes
+    # `target_combatant_id`, install a 1-round `fancy-footwork-blocked`
+    # buff on the target carrying `effects.fancy_footwork_blocked_against_char_id
+    # = swashbuckler.id`. A Phase 2 hook in the OA flow will read this
+    # buff and skip the OA against the named char_id; this commit just
+    # makes the mark exist end-to-end.
+    buff_installed = False
+    if target_combatant_id:
+        buff_installed = await _install_buff_on_combatant_id(
+            campaign_id, str(target_combatant_id), {
+                "key": "fancy-footwork-blocked",
+                "name": "🎭 Fancy Footwork (no OA vs Swashbuckler)",
+                "icon": "🎭",
+                "duration_rounds": 1,
+                "duration_max": 1,
+                "concentration": False,
+                "effects": {
+                    "fancy_footwork_blocked_against_char_id": int(char.id),
+                },
+                "desc": (
+                    f"Can't make opportunity attacks against "
+                    f"{char.name} until the end of {char.name}'s "
+                    f"turn. (Swashbuckler Rogue Lv 3+.)"
+                ),
+                "source": "fancy-footwork",
+                "source_char_id": int(char.id),
+            },
+        )
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -54014,6 +54043,7 @@ async def use_fancy_footwork(
             "target_combatant_id": target_combatant_id,
             "oa_suppressed_until": "end_of_turn",
             "rogue_level": rogue_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -54023,6 +54053,7 @@ async def use_fancy_footwork(
         "target_combatant_id": target_combatant_id,
         "oa_suppressed_until": "end_of_turn",
         "rogue_level": rogue_lv,
+        "buff_installed": buff_installed,
     }
 
 

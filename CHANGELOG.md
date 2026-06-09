@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.148.0] - 2026-06-08 — "Slip Away" — Fancy Footwork installs an OA-block buff (Swashbuckler Rogue Lv 3+)
+
+**Schema version:** 69
+**Commit summary:** **Wires Fancy Footwork (Swashbuckler Rogue Lv 3+, XGE p.16) Phase 1: when `/use_fancy_footwork` is called with `target_combatant_id`, install a 1-round `fancy-footwork-blocked` buff on the target carrying `effects.fancy_footwork_blocked_against_char_id = swashbuckler.id`. Phase 2 (deferred) will hook the OA flow to read this buff and skip the OA against the named char_id — Phase 1 makes the mark exist end-to-end so the OA flow has something to read.**
+**Description:** RAW XGE p.16: "During your turn, if you make a melee attack against a creature, that creature can't make opportunity attacks against you for the rest of your turn." The endpoint at v2.99.224 was announce-only; this commit ships the install half. The OA flow integration (Phase 2) lives in the v2.99.52-57 movement-OA chain — the gate at the "would this creature get an OA?" decision point reads any `fancy-footwork-blocked` buff on the would-be OA-attacker and skips the OA when the attached `fancy_footwork_blocked_against_char_id` matches the Swashbuckler currently moving. Filed as the standalone Phase 2 slice. v1 trigger model: the player calls `/use_fancy_footwork` after their melee attack (manual declaration); a Phase 1b auto-install on the `/attack` post-hit block (similar to the AP/UM marks shipped earlier this session) would make this fully automatic. Both Phase 1b and Phase 2 are filed; this commit takes the cleanest first step. Mirrors the v2.136.0 AP / v2.139.0 UM install pattern.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/use_fancy_footwork` installs a `fancy-footwork-blocked` buff via `_install_buff_on_combatant_id` when `target_combatant_id` is provided. Buff effects: `fancy_footwork_blocked_against_char_id: int`. Response + broadcast now carry `buff_installed: bool`.
+- `tests/harness/test_fancy_footwork.py` — `test_ff_installs_block_buff_on_target`: PATCH Pip to Swashbuckler, seed Pip + Tavik in battle, call `/use_fancy_footwork` targeting Tavik, assert `buff_installed: True` AND `battle_update` shows Tavik carrying `fancy-footwork-blocked` with `effects.fancy_footwork_blocked_against_char_id == pip.id`.
+
+### Changed
+- `docs/test-harness-coverage.md` — running total bumped 2038 → 2039.
+
+### Notes
+- Phase 2 (deferred): hook the OA decision point to read the `fancy-footwork-blocked` buff and skip OAs against the named char_id. Phase 1b (deferred): auto-install on the `/attack` post-hit block when the attacker is a Swashbuckler Lv 3+ swinging a melee weapon (mirror of v2.136.0 AP + v2.139.0 UM auto-install patterns). **Total harness count: 2039** in `tests/harness/` (2038 → 2039); **`tests/harness_ui/` 19** (unchanged). The same "buff on target blocking OAs against attacker" shape could serve future features that have similar "deny OA" semantics — filed.
+
+---
+
 ## [2.147.0] - 2026-06-08 — "Lift Off" — Ascendant Step installs a levitate buff (Warlock Lv 9 invocation)
 
 **Schema version:** 69
