@@ -24785,6 +24785,70 @@ def _target_has_condition_advantage(
     return None
 
 
+# v2.154.0 — Phase 2c. NPC-attacker mirrors of the v2.152.0 PC helpers.
+# The PC versions read ``sheet._buffs_active`` (the v2.97.30 mirror copy);
+# NPCs don't have a sheet — their conditions live directly on the hub's
+# combatant.buffs list. These two helpers walk that list for an attacker
+# identified by combatant_id so /npc_attack honors the same condition
+# surface PCs do.
+
+
+def _npc_attacker_has_condition_disadvantage(
+    campaign_id: int, attacker_combatant_id: "str | None",
+) -> "str | None":
+    """v2.154.0 — Phase 2c. Returns the matching ``_ATTACKER_DIS_CONDITION_KEYS``
+    key (Blinded / Poisoned / Restrained / Frightened / Prone) when the
+    NPC attacker's combatant.buffs carries any standard 5e condition
+    that imposes disadvantage on its attack rolls. Returns None when
+    none active or the combatant isn't in hub state.
+    """
+    if not attacker_combatant_id:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    for c in state.get("combatants") or []:
+        if c.get("id") != attacker_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            key = (b.get("key") or "").strip().lower()
+            if key in _ATTACKER_DIS_CONDITION_KEYS:
+                return key
+        return None
+    return None
+
+
+def _npc_attacker_has_invisible_advantage(
+    campaign_id: int, attacker_combatant_id: "str | None",
+) -> bool:
+    """v2.154.0 — Phase 2c. NPC equivalent of the PC
+    ``_attacker_has_invisible_advantage`` — returns True when the NPC
+    attacker's combatant.buffs carries an ``invisible`` key OR a buff
+    with ``effects.invisible: True``. RAW PHB p.291: the creature's
+    attack rolls have advantage.
+    """
+    if not attacker_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != attacker_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "invisible":
+                return True
+            effects = b.get("effects")
+            if isinstance(effects, dict) and effects.get("invisible") is True:
+                return True
+        return False
+    return False
+
+
 # v2.153.0 — Phase 2b. Per RAW PHB Appendix A, condition-driven adv/dis
 # beyond the attack-roll surface (Phase 2a) lands on saves + checks too:
 #   - Poisoned: disadvantage on ability checks.
@@ -75143,6 +75207,21 @@ async def use_npc_attack(
     target_grants_advantage = _target_grants_advantage_to_attackers(
         campaign_id, target_combatant_id,
     )
+    # v2.154.0 — Phase 2c: NPC attacker condition adv/dis. Mirrors the
+    # Phase 2a PC `/attack` source-set with three new hub-read helpers
+    # gating on the NPC's combatant.buffs (which doesn't have a sheet
+    # mirror). Plus the symmetric `_target_has_condition_advantage`
+    # that was missing from the NPC path despite already existing on
+    # the PC side.
+    _npc_attacker_dis_condition = _npc_attacker_has_condition_disadvantage(
+        campaign_id, combatant_id,
+    )
+    _npc_attacker_invisible_adv = _npc_attacker_has_invisible_advantage(
+        campaign_id, combatant_id,
+    )
+    _npc_target_adv_condition = _target_has_condition_advantage(
+        campaign_id, target_combatant_id,
+    )
 
     # Build the d20 attack expression. Accept "+5", "5", or "" (flat).
     attack_total = None
@@ -75157,17 +75236,41 @@ async def use_npc_attack(
         atk_expr = "1d20" + bonus_expr
     else:
         atk_expr = "1d20"
-    # v2.49.238 — NPC casters honor target's Reckless Attack buff too:
-    # an NPC firing Inflict Wounds at a reckless PC gets advantage.
-    # Same cancel-on-both-sources rule as use_attack.
-    if target_grants_advantage and target_dodging:
-        attack_roll_state_applied = "canceled_reckless_vs_dodging"
-    elif target_grants_advantage:
+    # v2.154.0 — Phase 2c: full advantage/disadvantage composition for
+    # NPC attacks. Source set is now symmetric with PC /attack:
+    #   adv = target_grants_advantage (reckless) OR npc invisible OR
+    #         target condition adv (blinded / paralyzed / etc.)
+    #   dis = target_dodging OR npc attacker condition dis
+    # Cancel per RAW PHB p.173. Replaces the v2.49.238 reckless-only
+    # branch (which is still expressed below as part of the adv label
+    # ordering).
+    has_adv = (
+        target_grants_advantage
+        or _npc_attacker_invisible_adv
+        or bool(_npc_target_adv_condition)
+    )
+    adv_label = (
+        "reckless" if target_grants_advantage else
+        "invisible" if _npc_attacker_invisible_adv else
+        f"target_{_npc_target_adv_condition}" if _npc_target_adv_condition else ""
+    )
+    has_dis = (
+        target_dodging
+        or bool(_npc_attacker_dis_condition)
+    )
+    dis_label = (
+        "dodging" if target_dodging else
+        f"attacker_{_npc_attacker_dis_condition}"
+        if _npc_attacker_dis_condition else ""
+    )
+    if has_adv and has_dis:
+        attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
+    elif has_adv:
         atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
-        attack_roll_state_applied = "advantage_reckless"
-    elif target_dodging:
+        attack_roll_state_applied = f"advantage_{adv_label}"
+    elif has_dis:
         atk_expr = atk_expr.replace("1d20", "2d20kl1", 1)
-        attack_roll_state_applied = "disadvantage_dodging"
+        attack_roll_state_applied = f"disadvantage_{dis_label}"
     try:
         r = dice_mod.roll(atk_expr)
         attack_total = r.total
@@ -75360,6 +75463,10 @@ async def use_npc_attack(
         "target_hp_after": target_hp_after,
         "auto_applied": bool(campaign.auto_apply_damage),
         "is_npc_attack": True,
+        # v2.154.0 — Phase 2c: echo the adv/dis label so the client +
+        # tests can read which condition (or combination) drove the
+        # roll. Matches the PC /attack response convention.
+        "roll_state_applied": attack_roll_state_applied or None,
         "sentinel_triggers": _sentinel_triggers_for_response,
     }
 

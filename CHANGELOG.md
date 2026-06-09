@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.154.0] - 2026-06-08 — "Both Sides Now" — Advantage/Disadvantage Phase 2c: condition-driven adv/dis on `/npc_attack`
+
+**Schema version:** 69
+**Commit summary:** **Closes the last Phase 2 deferral by bringing `/api/campaign/{id}/npc_attack` to parity with PC `/attack`. Three condition sources now layer into the NPC attack's adv/dis source set: NPC attacker condition disadvantage (Blinded / Poisoned / Restrained / Frightened / Prone), NPC attacker Invisible advantage, and target condition advantage (Blinded / Paralyzed / Petrified / Restrained / Stunned / Unconscious). Two new hub-state helpers — `_npc_attacker_has_condition_disadvantage` + `_npc_attacker_has_invisible_advantage` — read the attacker's combatant.buffs directly (no sheet mirror needed for NPCs). The pre-existing v2.49.238 reckless-only branch is replaced with the full PC-symmetric composition. `roll_state_applied` is now also echoed in the `/npc_attack` response (matching PC `/attack`'s convention) so clients + tests can read the label.**
+**Description:** Phase 2c was filed during Phase 2a (v2.152.0) as "one-helper extension reading the attacker's combatant.buffs as a fallback when no PC sheet is present." On audit, the gap was wider: the entire condition source set was missing from `/npc_attack` — the existing branch only honored `target_grants_advantage` (reckless) and `target_dodging`, so an NPC carrying poisoned didn't auto-disadvantage AND an NPC attacking a blinded PC didn't auto-advantage either. v2.154.0 lands the full symmetric source-set instead of the originally-scoped one-helper version. New helpers sit next to the Phase 2a/2b helpers; reuse `_ATTACKER_DIS_CONDITION_KEYS` + `_TARGET_ADV_CONDITION_KEYS` frozensets so the keys stay in lockstep with PC `/attack`. The PC-symmetric helper for the target side (`_target_has_condition_advantage`) was already implemented in Phase 2a; this commit just wires it into the NPC path. Cancel logic matches PHB p.173: `has_adv and has_dis` → straight 1d20 with `canceled_<adv>_vs_<dis>` label. The adv/dis plan now has only Phase 3 (positional / 5-ft prone-melee advantage) remaining, and Phase 3 is gated on Maps 2.0.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_npc_attacker_has_condition_disadvantage(campaign_id, attacker_combatant_id)` + `_npc_attacker_has_invisible_advantage(campaign_id, attacker_combatant_id)` helpers. Both walk `hub.get_battle(campaign_id)` for the attacker's combatant.buffs list, mirroring the shape of the existing `_target_has_condition_advantage` and `_target_has_dodging` hub-readers. Reuse the v2.152.0 `_ATTACKER_DIS_CONDITION_KEYS` frozenset (Blinded / Poisoned / Restrained / Frightened / Prone) and the Invisible buff detection (key + `effects.invisible: True` shape) from `_attacker_has_invisible_advantage`.
+- `app/routes/tabletop_routes.py` — `/npc_attack` adv/dis composition rewritten to match PC `/attack`'s source-set pattern: `has_adv` = OR of (target_grants_advantage, _npc_attacker_invisible_adv, _npc_target_adv_condition); `has_dis` = OR of (target_dodging, _npc_attacker_dis_condition); labels include `attacker_<condition>` / `target_<condition>` / `invisible` / `reckless` / `dodging`. Replaces the v2.49.238 reckless-only branch (the reckless source is still present via the new `target_grants_advantage` source entry).
+- `app/routes/tabletop_routes.py` — `/npc_attack` response payload now includes `"roll_state_applied": attack_roll_state_applied or None` (matching PC `/attack`'s response). Lets clients + tests read which condition combination drove the roll without reading the broadcast.
+- `tests/harness/test_npc_attack_condition_adv_dis.py` — 4 tests: `test_npc_attacker_poisoned_imposes_disadvantage` (NPC poisoned → 2d20kl1 + label), `test_npc_attacker_invisible_grants_self_advantage` (NPC invisible → 2d20kh1 + label), `test_npc_attacks_restrained_target_gets_advantage` (target restrained → 2d20kh1 + label), `test_npc_adv_and_dis_cancel_per_raw` (PHB p.173 cancel).
+
+### Changed
+- `docs/plans/advantage-disadvantage.md` — status banner adds "Phase 2c shipped in v2.154.0" line; Implementation Status row for Phase 2c flips from ⏸ to ✅ with helper signatures + the source-set rewrite described.
+- `docs/test-harness-coverage.md` — running total bumped 2056 → 2060.
+- `TODO.md` — advantage-disadvantage Phase 2c marked shipped; only Phase 3 (Maps 2.0 positional) remains in P2.
+
+### Notes
+- Filed follow-ups: NPC saving throws + ability checks don't yet honor the same condition source set — they go through `/npc_save` and `/roll` respectively. The `_roll_condition_disadvantage` helper from Phase 2b assumes a PC `sheet` argument; an NPC-side variant reading combatant.buffs would close the gap for NPC saves/checks too (one-helper extension, same shape as the PC version). **Total harness count: 2060** in `tests/harness/` (2056 → 2060); **`tests/harness_ui/` 19** (unchanged). The advantage-disadvantage plan now has only Phase 3 deferred — that piece is gated on Maps 2.0 grid-distance awareness, which is the larger blocker. Phase 2 of the plan is end-to-end across PC attacks, PC saves+checks, and NPC attacks.
+
+---
+
 ## [2.153.0] - 2026-06-08 — "Wide Net" — Advantage/Disadvantage Phase 2b: condition-driven save + check disadvantage on `/roll`
 
 **Schema version:** 69
