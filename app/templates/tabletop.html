@@ -7276,6 +7276,25 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // buildMonsterInitSheet fallback below.
             if (c.token_template_id && c.id) {
                 _hydrateMonsterCard(c, slotId);
+            } else if (c.char_id && slotId) {
+                // v2.157.3 — PC live-update for the abilities-header
+                // condition warning pill. The PC mini-sheet is
+                // server-rendered with v2.157.1's SSR pill on initial
+                // load, but `_buffs_active` is baked in at render time —
+                // when a buff lands or drops mid-combat via WS
+                // battle_update, only the JS-side hub state mutates,
+                // not the DOM. Mirror the v2.157.2 NPC hydration path
+                // for PCs: read `c.buffs` (kept fresh by the WS
+                // broadcast — the v2.97.30 mirror copies it to
+                // `_buffs_active` server-side but the client never
+                // re-fetches the partial), patch the pill on the
+                // pool-resident card + the hoisted mini-body.
+                const _pcCard = document.getElementById('char-detail-' + slotId);
+                if (_pcCard) _updateConditionWarnPill(_pcCard, c.buffs);
+                const _pcHoistedBody = document.querySelector(
+                    '.init-entry[data-char-id="' + slotId + '"] .mini-body'
+                );
+                if (_pcHoistedBody) _updateConditionWarnPill(_pcHoistedBody, c.buffs);
             }
             const hasCharDetail = !!(slotId && document.getElementById('char-detail-' + slotId));
             // v2.4.26: ``pointer-events: none`` + ``draggable="false"``

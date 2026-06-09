@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.157.3] - 2026-06-09 — "Real-Time Tells" — PC live-update for the condition warning pill via renderBattle
+
+**Schema version:** 69
+**Commit summary:** **Closes the last filed gap from v2.157.2: PC mini-sheets get the same JS-side `_updateConditionWarnPill` patch the NPCs got, so a buff installed/removed mid-combat surfaces (or clears) the abilities-header pill live without a page refresh. Symmetric branch next to the NPC `_hydrateMonsterCard` call: when the combatant has `char_id` (PC, not NPC), call the helper against the PC's `.char-detail` card AND the hoisted mini-body inside the init-entry.**
+**Description:** v2.157.1 rendered the pill server-side from `_buffs_active`; v2.157.2 hydrated it client-side for NPCs (no sheet mirror). But PCs in combat have the SSR pill stamped at page-load time and the JS never re-runs against PC cards — so a fresh Banishment landing on Pip during combat would NOT surface the pill until a full page reload. The fix is one else-if branch in `renderBattle` (right next to the NPC hydration call) that reuses the same `_updateConditionWarnPill` helper from v2.157.2 against `c.buffs` (which IS kept fresh by the WS `battle_update` payload — the broadcast carries each combatant's current buffs list). The pill now updates symmetrically for PCs and NPCs on every `battle_update` broadcast, since `battle_update` triggers `renderBattle`, which iterates every combatant.
+
+The `c.buffs` data path is reliable because the server's v2.97.30 buff-install pipeline writes the buff into BOTH the PC sheet's `_buffs_active` mirror AND the combatant's `buffs` list — the latter is what the WS broadcast carries. So this client-side update reads the same source of truth the server-side adv/dis automation reads on the next `/roll` or `/attack` call. Phase 2 of the advantage-disadvantage plan is now fully surfaced AND fully live across PC + NPC. The only remaining piece is Phase 3 (Maps-2.0-blocked positional adv/dis).
+
+### Added
+- `app/templates/tabletop.html` — `renderBattle` PC branch in the combatant render loop: `else if (c.char_id && slotId) { ... _updateConditionWarnPill(_pcCard, c.buffs) ... }`. Symmetric to the NPC `_hydrateMonsterCard` branch directly above it. Patches the pill on both the pool-resident card and the hoisted mini-body so the pill is alive regardless of whether the init-tracker entry is currently expanded.
+
+### Changed
+- No code-coverage changes — this is a JS-only addition that hydrates pre-existing markup-shaped DOM (the `.mini-ab-header` is server-rendered for PCs). The v2.157.1 harness test covers the SSR contract; the v2.157.2 + v2.157.3 paths are runtime DOM patches exercised by GM click-through.
+
+### Notes
+- The PC pill is now both server-rendered (v2.157.1, initial state) AND client-patched on every `renderBattle` (v2.157.3, live updates). The two share the same `_cond_impact_map` shape — the Jinja version drives the SSR; the JS `_COND_IMPACT_MAP` (added v2.157.2) drives the runtime patch. Filed follow-up: factor the impact map to a shared `static/condition-impacts.json` so the two stay in lockstep without convention-only enforcement. **Total harness count: 2072** in `tests/harness/` (unchanged — JS-only addition); **`tests/harness_ui/` 19** (unchanged). Phase 2 of the adv/dis plan is end-to-end across all six server-side surfaces (2a–2f) AND fully surfaced via the warning pill on PC + NPC, on initial render + live updates.
+
+---
+
 ## [2.157.2] - 2026-06-09 — "Show Their Hand" — condition warning pill extended to GM-side NPC init-tracker mini-sheets
 
 **Schema version:** 69
