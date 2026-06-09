@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.0] - 2026-06-09 — "Iron Skin" — Phase 8 kick-off: Avatar of Battle (War Cleric Lv 17) flipped from announce-only to a real `_install_buff` + `nonmagical-X` resistance halve
+
+**Schema version:** 69
+**Commit summary:** **First Phase 8 (higher-level subclass features) commit of the [full-feature-automation](docs/plans/full-feature-automation.md) plan. `use_avatar_of_battle` (War Domain Cleric Lv 17+) used to broadcast `feature_used` + leave the resistance to GM bookkeeping; now it composes the existing primitives — `_install_buff` lays down a permanent `avatar-of-battle` buff carrying `effects.resistance_to = ["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]`, and the v2.63.0 F6 `_resistance_matches_damage` matcher does the rest. A nonmagical BPS hit against the cleric now halves through `_apply_damage_to_combatant`; a magical attack (spell, magical weapon, Ki-Empowered Strikes, Pact of the Blade) sails past at full damage per RAW.**
+**Description:** Phase 8 of the parent plan reads: "Higher-level subclass features (Lv 6/10/14/17/20) — with the primitives in place, these become mostly composition." Avatar of Battle is the cleanest opening volley — a Lv-17 subclass capstone whose entire mechanical contract is "resistance to nonmagical BPS" — three F6 entries in a buff payload. No new primitive, no new pipeline branch, no new helper: the install call is ~25 lines of buff dict + a single `_mirror_buffs_to_sheet` for the PC `_resistance_halve` read site, and the F6 matcher (v2.63.0) recognises the `nonmagical-bludgeoning` / `nonmagical-piercing` / `nonmagical-slashing` SRD phrasing and gates on the incoming attack's `is_magical` flag. Idempotent on re-install — `_install_buff`'s key-dedupe path overwrites cleanly so the player can re-press the button without stacking.
+
+Sibling Lv 17 features lined up by the same recipe (Saint of Forge and Fire, Purity of Spirit, Emissary of Redemption, …) are now one-commit-each follow-ups. The existing announce-only endpoints just need the buff dict swapped in. Filed for the next batch.
+
+### Added
+- `tests/harness/test_avatar_of_battle.py` — two new tests: `test_aob_buff_payload_carries_nonmagical_bps_resistance` (state contract — installed buff carries the three `nonmagical-X` resistance entries, plus permanence sanity checks: `concentration` falsy + `duration_rounds >= 1000`) + `test_aob_halves_nonmagical_piercing_damage` (end-to-end — Pip's Shortsword against the buffed Tavik produces `damage_applied == damage_total // 2` through `_apply_damage_to_combatant`; retries up to 12 swings to bound hit-rate flake). The existing `test_use_aob_happy_lv17` was upgraded to seed Tavik into an active battle (required for `_install_buff`) and assert `buff_installed: True` in the response.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_avatar_of_battle` — added the `_install_buff` call between the level gate and the broadcast. Buff payload: `key="avatar-of-battle"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, `effects.resistance_to=["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]`. On install, mirrors the buff list to the sheet via `_mirror_buffs_to_sheet` so the PC `_resistance_halve` read site (which walks `sheet._buffs_active`) sees the new entries on the next attack. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field so harness tests + client UIs can verify the state change.
+- `docs/automation-coverage.md` — flipped `use_avatar_of_battle` from `⚪ announce-only` to `✅ tracked` (archetype D buff-install). Tracked / announce-only counts: 188 / 49 (was 187 / 50). Phase 8 row in the phase status table flipped from `⚪ mostly unshipped` to `🟠 in progress — kicked off v2.158.0 (Avatar of Battle)`. The "Notable announce-only backlog" Auras-(E) bullet picked up an `avatar_of_battle ✅ v2.158.0` checkmark.
+- `docs/test-harness-coverage.md` — total harness count bumped to **2074** (was 2072) for the two new Phase-9-shaped state-contract tests.
+- `docs/plans/full-feature-automation.md` — Phase 8 status flipped from `⚪` to `🟠 started v2.158.0 (Avatar of Battle)`; status header line updated to reflect the new tracked count.
+
+### Notes
+- Phase 8 cadence: same shape as the Phase 6 sub-plan and the Phase 5 auras retrofit — one commit per feature, each composing the already-shipped primitives, each shipping a state-contract harness test (Phase 9 contract upgrade). The Lv-17 cleric subclass capstones (Avatar of Battle ✅, Saint of Forge and Fire, Improved Reaper, Improved Duplicity, Keeper of Souls, Order's Wrath) are the natural first batch — they're all passive permanent or passive-on-trigger, all gateable on the F6 + buff effect machinery. Then the Lv-15 + Lv-18 + Lv-20 capstones (Arcane Charge / Purity of Spirit / Arcane Mastery / Emissary of Redemption / Improved War Magic / …). The first MAJOR-bump candidate (3.0.0) is still gated on user-name-approval per the [feedback_no_unapproved_major_bump](.claude/projects/-Users-matthewj-kolakowski-GitHub-SimpleVTT/memory/) rule. **Total harness count: 2074** in `tests/harness/` (was 2072); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.157.5] - 2026-06-09 — "Bracket Match" — fix a Jinja-syntax error in v2.157.4's JS-comment reference to `{% block head %}`
 
 **Schema version:** 69

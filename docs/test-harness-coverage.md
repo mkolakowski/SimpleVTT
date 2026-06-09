@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2072 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.157.1, 2026-06-09).
+**Total tests:** 2074 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.0, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -724,13 +724,15 @@ v2.99.295 — Life Domain Cleric (PHB p.61) Supreme Healing Lv 17 passive (H.1 d
 | `test_use_sh_level_gate` | Life at Lv 16 → 409. |
 
 ### `test_avatar_of_battle.py`
-v2.99.296 — War Domain Cleric (PHB p.63) Avatar of Battle Lv 17 passive (H.1 deeper). Resistance to bludgeoning, piercing, slashing from nonmagical attacks. v1 announce-only.
+v2.99.296 — War Domain Cleric (PHB p.63) Avatar of Battle Lv 17 passive (H.1 deeper). Resistance to bludgeoning, piercing, slashing from nonmagical attacks. v2.158.0 (Phase 8 kick-off): the endpoint now installs a permanent `avatar-of-battle` buff carrying `effects.resistance_to = ["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]`; the F6 `_resistance_matches_damage` matcher (v2.63.0) halves nonmagical BPS damage through `_apply_damage_to_combatant` and skips magical attacks per RAW.
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_use_aob_happy_lv17` | Lv 17 Tavik → resistance_types BPS, `nonmagical_only == True`, broadcast (source `avatar-of-battle`). |
+| `test_use_aob_happy_lv17` | Lv 17 Tavik → resistance_types BPS, `nonmagical_only == True`, `buff_installed == True`, broadcast (source `avatar-of-battle`). v2.158.0 — seeds Tavik into an active battle so `_install_buff` returns True. |
 | `test_use_aob_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_aob_level_gate` | War at Lv 16 → 409. |
+| `test_aob_buff_payload_carries_nonmagical_bps_resistance` | v2.158.0 — installed buff carries the three `nonmagical-X` resistance entries on `effects.resistance_to`; `concentration` falsy + `duration_rounds >= 1000` (permanent passive). |
+| `test_aob_halves_nonmagical_piercing_damage` | v2.158.0 — end-to-end: Pip's nonmagical Shortsword (piercing) against the buffed Tavik produces `damage_applied == damage_total // 2` through `_apply_damage_to_combatant`. Retries up to 12 swings to bound hit-rate flake. Auto-apply-damage fixture. |
 
 ### `test_improved_reaper.py`
 v2.99.297 — Death Domain Cleric (DMG p.97) Improved Reaper Lv 17 passive (H.1 deeper). 1st-5th level necromancy spells targeting one creature can target two creatures within range + within 5 ft of each other. v1 announce-only.

@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.142.0 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.0 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -26,8 +26,8 @@ only spend a resource without a downstream effect.
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **187** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **50** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **188** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **49** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | ⚪ mostly unshipped |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 (Avatar of Battle — War Cleric Lv 17) |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **Buff / temp-HP (D/F):** `supreme_healing` ✅ v2.143.0 (heal pipeline max-dice substitution via the new `_max_dice_total` helper); `combat_inspiration` ✅ v2.144.0–v2.145.0 (damage half — roll BI die + apply to target; AC half — calculator returning the boosted-AC outcome); `blade_flourish` ✅ v2.146.0 (shared damage half — Defensive/Slashing/Mobile riders deferred). `rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals.
 - **Movement (G):** `ascendant_step` ✅ v2.147.0 (levitate buff carrying `fly_speed_ft: 10` + concentration); `fancy_footwork` ✅ v2.148.0 (Phase 1 install of the OA-block mark on the target — OA-flow read deferred to Phase 2); `relentless_avenger` ✅ v2.149.0 (Phase 1 install of the free-move budget + OA-immune flag — `/token/move` read deferred to Phase 2). `stormborn` ✅ v2.99.459 fly buff.
 
-## Recent retrofits (v2.128.2 – v2.149.0)
+## Recent retrofits (v2.128.2 – v2.158.0)
 
 | Feature | Phases shipped | Notes |
 |---|---|---|
@@ -91,6 +91,7 @@ or passive damage-boosters that already ride other code paths
 | Ascendant Step | levitate buff install (v2.147.0) | Mirrors v2.99.459 Stormborn — installs `ascendant-step-levitate` with `effects.fly_speed_ft: 10` (vertical-only per RAW) + `concentration: True`. SimpleVTT's 2D map keeps altitude narrative-only |
 | Fancy Footwork | OA-block mark on target (v2.148.0) | Phase 1 — install `fancy-footwork-blocked` buff on target with `effects.fancy_footwork_blocked_against_char_id`. Phase 2 (deferred): OA flow reads the buff and skips OAs against the named char_id |
 | Relentless Avenger | free-move budget buff (v2.149.0) | Phase 1 — install `relentless-avenger-bonus-move` with `effects.free_movement_remaining_ft: base_speed // 2` + `effects.oa_immune_during_move: True`. Phase 2 (deferred): `/token/move` consumes the budget + skips OA prompts while immune. Generic shape can serve Mobile feat / Charger feat in the future |
+| Avatar of Battle | permanent `nonmagical-X` resistance buff (v2.158.0 — Phase 8 kick-off) | War Domain Cleric Lv 17+. Endpoint installs the `avatar-of-battle` buff with `effects.resistance_to = ["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]` + `permanent: True` + `duration_rounds: 100000`. The v2.63.0 F6 `_resistance_matches_damage` matcher halves nonmagical BPS damage through `_apply_damage_to_combatant` + skips magical attacks per RAW. Idempotent on re-install via key dedupe. Pure composition on shipped primitives — sets the recipe for the Lv-17 cleric subclass capstone batch (Saint of Forge and Fire, Improved Reaper, Improved Duplicity, Keeper of Souls, Order's Wrath) |
 
 ## Full classification
 
@@ -124,6 +125,7 @@ or passive damage-boosters that already ride other code paths
 | `use_aura_of_alacrity` | ✅ tracked | D buff-install |
 | `use_aura_of_conquest` | ✅ tracked | D buff-install, E aura |
 | `use_aura_of_the_guardian` | ✅ tracked | A use/resource |
+| `use_avatar_of_battle` | ✅ tracked | D buff-install |
 | `use_avenging_angel` | ✅ tracked | D buff-install |
 | `use_balm_of_the_summer_court` | ✅ tracked | A use/resource |
 | `use_bardic_inspiration` | ✅ tracked | D buff-install |
@@ -289,7 +291,6 @@ or passive damage-boosters that already ride other code paths
 | `use_ascendant_step` | ⚪ announce-only | — |
 | `use_assassinate` | ⚪ announce-only | — |
 | `use_aura_of_warding` | ⚪ announce-only | — |
-| `use_avatar_of_battle` | ⚪ announce-only | — |
 | `use_awakened_mind` | ⚪ announce-only | — |
 | `use_beast_speech` | ⚪ announce-only | — |
 | `use_beguiling_influence` | ⚪ announce-only | — |

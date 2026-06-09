@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`). **Current coverage: 195+ tracked / 42- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — Avatar of Battle (War Cleric Lv 17) flipped from announce-only to a real `_install_buff` + `nonmagical-X` resistance halve; pure composition on shipped primitives, no new engine. **Current coverage: 196+ tracked / 41- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
 
 **v2.128.2–v2.149.0 retrofit summary** (curated; see [automation-coverage.md §Recent retrofits](../automation-coverage.md)):
 
@@ -244,9 +244,19 @@ New reaction kinds for Protective Field (reduce damage), Riposte (attack after
 miss), Chronal Shift (reroll), Restore Balance (cancel adv/disadv — buff exists,
 make it a real reaction), etc. Reuses the framework.
 
-### Phase 8 — Higher-level subclass features (L, ongoing)
+### Phase 8 — Higher-level subclass features (L, ongoing) 🟠 started v2.158.0
 With the primitives in place, the Lv 6/10/14/17/20 features become mostly
-composition. Batch by class, same cadence as the breadth sweep.
+composition. Batch by class, same cadence as the breadth sweep. Kicked off
+v2.158.0 ("Iron Skin") — Avatar of Battle (War Cleric Lv 17): the endpoint
+installs a permanent `avatar-of-battle` buff carrying
+`effects.resistance_to = ["nonmagical-bludgeoning","nonmagical-piercing",
+"nonmagical-slashing"]`, and the v2.63.0 F6
+`_resistance_matches_damage` matcher halves nonmagical BPS damage through
+`_apply_damage_to_combatant`. Pure composition — no new primitive — so this
+sets the cadence for the Lv-17 cleric subclass capstone batch next: Saint of
+Forge and Fire, Improved Reaper, Improved Duplicity, Keeper of Souls, Order's
+Wrath. Then the Lv-15 / Lv-18 / Lv-20 capstones (Arcane Charge / Purity of
+Spirit / Arcane Mastery / Emissary of Redemption / Improved War Magic / …).
 
 ### Phase 9 — Test-contract upgrade (cross-cutting, every phase)
 Each retrofit converts its test from "asserts broadcast" to "asserts state":

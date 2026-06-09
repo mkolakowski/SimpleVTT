@@ -53356,10 +53356,20 @@ async def use_avatar_of_battle(
     damage from nonmagical attacks."
 
     Body: ``{character_id, override?}``. No chip cost —
-    passive permanent. The endpoint serves as an announce
-    trigger. v1 announce-only — the actual resistance vs
-    nonmagical BPS damage is GM-tracked (a follow-up could
-    wire this into the /apply_damage pipeline).
+    passive permanent.
+
+    v2.158.0 — Phase 8 first commit: install a permanent
+    `avatar-of-battle` buff carrying
+    `effects.resistance_to = ["nonmagical-bludgeoning",
+    "nonmagical-piercing", "nonmagical-slashing"]`. The F6
+    `_resistance_matches_damage` matcher (v2.63.0) already
+    handles the `nonmagical-X` SRD phrasing — it skips the
+    resistance when the incoming attack is flagged
+    `is_magical=True` (magical weapon, spell, Ki-Empowered
+    Strikes, Pact of the Blade, etc.) and applies the half
+    on mundane attacks. Idempotent — the `_install_buff`
+    key-dedupe path overwrites any prior install so the
+    player can re-press without stacking.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -53389,6 +53399,38 @@ async def use_avatar_of_battle(
 
     cleric_lv = _cleric_level_from_sheet(sheet)
 
+    # v2.158.0 — install the resistance buff. Permanent passive per
+    # RAW: huge duration_rounds + `permanent: True` flag so the
+    # turn-tick decrement never expires it. The buff's
+    # `effects.resistance_to` triplet is read by the PC damage
+    # pipeline's `_resistance_halve` (which delegates per-entry to
+    # `_resistance_matches_damage` with the attack's `is_magical`
+    # flag). No concentration — passive class feature.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "avatar-of-battle",
+        "name": "⚔️ Avatar of Battle",
+        "icon": "⚔️",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "resistance_to": [
+                "nonmagical-bludgeoning",
+                "nonmagical-piercing",
+                "nonmagical-slashing",
+            ],
+        },
+        "desc": (
+            f"{char.name} has resistance to bludgeoning, piercing, "
+            f"and slashing damage from nonmagical attacks. "
+            f"(War Domain Cleric Lv 17+ passive permanent.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -53417,6 +53459,7 @@ async def use_avatar_of_battle(
             "resistance_types": ["bludgeoning", "piercing", "slashing"],
             "nonmagical_only": True,
             "cleric_level": cleric_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -53426,6 +53469,7 @@ async def use_avatar_of_battle(
         "resistance_types": ["bludgeoning", "piercing", "slashing"],
         "nonmagical_only": True,
         "cleric_level": cleric_lv,
+        "buff_installed": buff_installed,
     }
 
 
