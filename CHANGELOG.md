@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.3] - 2026-06-09 — "Four-Faced Trick" — Phase 8 third commit: Improved Duplicity (Trickery Cleric Lv 17) installs an Invoke-Duplicity-parameter flag buff (Phase 1 of split, Phase 2 deferred)
+
+**Schema version:** 69
+**Commit summary:** **Third Phase 8 commit, completing the small-cleric-capstone hat-trick (Avatar of Battle v2.158.0, Saint of Forge and Fire v2.158.2, Improved Duplicity v2.158.3). Same Phase 1 install-then-deferred-read shape as v2.148.0 Fancy Footwork + v2.149.0 Relentless Avenger: Invoke Duplicity itself isn't yet a server-side endpoint (announce-only / GM-tracked at Trickery Cleric Lv 2), so there's no concrete state to mutate — but the Lv-17 upgrade IS a real change to the parameters Invoke Duplicity will eventually read. Phase 1 captures those parameters in a permanent `improved-duplicity` buff: `effects.invoke_duplicity_max_duplicates=4` + `effects.invoke_duplicity_bonus_move_per_duplicate_ft=30` + `effects.invoke_duplicity_max_range_ft=120`. Phase 2 (deferred): when `/use_invoke_duplicity` ships, it reads these flags off `_buffs_active` and uses the upgraded params.**
+**Description:** RAW PHB p.62: "When you reach 17th level in this class, you can create up to four duplicates of yourself, instead of one, when you use Invoke Duplicity. As a bonus action on your turn, you can move any number of them up to 30 feet, to a maximum range of 120 feet." Because the parameters change at Lv 17 (1 → 4 duplicates; 0 → 30 ft bonus-move; — → 120 ft max range), capturing them in a buff lets the future Invoke Duplicity endpoint read the upgraded values for any Lv-17+ Trickery cleric without re-deriving them from the level + subclass. Same parameter-flag shape used by Fancy Footwork's `fancy_footwork_blocked_against_char_id` and Relentless Avenger's `free_movement_remaining_ft`. Stable Phase-2 contract — the test pins the flag names and values so the future read site has something deterministic to look up.
+
+### Added
+- `tests/harness/test_improved_duplicity.py::test_id_buff_payload_carries_invoke_duplicity_flags` — state contract: installed buff carries the three `invoke_duplicity_*` flags on `effects` with the right values, plus permanence sanity (`concentration` falsy, `duration_rounds >= 1000`). The existing `test_use_id_happy_lv17` was upgraded to seed Tavik into an active battle (required for `_install_buff`) and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_improved_duplicity` — adds the `_install_buff` call between the level gate and the broadcast. Buff payload: `key="improved-duplicity"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, `effects.invoke_duplicity_max_duplicates=4`, `effects.invoke_duplicity_bonus_move_per_duplicate_ft=30`, `effects.invoke_duplicity_max_range_ft=120`. On install, mirrors the buff list to the sheet via `_mirror_buffs_to_sheet`. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_improved_duplicity` from `⚪ announce-only` to `✅ tracked` (archetype D buff-install). Tracked / announce-only counts: 190 / 47 (was 189 / 48). New row in "Recent retrofits".
+- `docs/test-harness-coverage.md` — `test_improved_duplicity.py` block updated. Total harness count bumped to **2076** (was 2075).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gained the Improved Duplicity citation.
+
+### Notes
+- The Lv-17 cleric subclass capstone batch now has three of the six shipped (Avatar of Battle, Saint of Forge and Fire, Improved Duplicity). Three remaining: Keeper of Souls (on-death heal trigger — sibling to Scornful Rebuke pattern), Order's Wrath (next-attack mark — sibling to Hexblade's Curse), Improved Reaper (necromancy single-target → double-target spell routing — touches `/cast_spell`). Improved Reaper is the heavyweight of the batch; the other two are the same size as today's commit. **Total harness count: 2076** in `tests/harness/` (was 2075); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.2] - 2026-06-09 — "Saint of the Anvil" — Phase 8 follow-up: Saint of Forge and Fire (Forge Cleric Lv 17) installs fire immunity + nonmagical-BPS resistance in one buff
 
 **Schema version:** 69

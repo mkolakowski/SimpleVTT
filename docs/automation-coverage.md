@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.2 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.3 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -26,8 +26,8 @@ only spend a resource without a downstream effect.
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **189** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **48** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **190** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **47** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — Avatar of Battle (War Cleric Lv 17, v2.158.0), Saint of Forge and Fire (Forge Cleric Lv 17, v2.158.2) |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — Avatar of Battle (War Cleric Lv 17, v2.158.0), Saint of Forge and Fire (Forge Cleric Lv 17, v2.158.2), Improved Duplicity (Trickery Cleric Lv 17, v2.158.3) |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **Buff / temp-HP (D/F):** `supreme_healing` ✅ v2.143.0 (heal pipeline max-dice substitution via the new `_max_dice_total` helper); `combat_inspiration` ✅ v2.144.0–v2.145.0 (damage half — roll BI die + apply to target; AC half — calculator returning the boosted-AC outcome); `blade_flourish` ✅ v2.146.0 (shared damage half — Defensive/Slashing/Mobile riders deferred). `rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals.
 - **Movement (G):** `ascendant_step` ✅ v2.147.0 (levitate buff carrying `fly_speed_ft: 10` + concentration); `fancy_footwork` ✅ v2.148.0 (Phase 1 install of the OA-block mark on the target — OA-flow read deferred to Phase 2); `relentless_avenger` ✅ v2.149.0 (Phase 1 install of the free-move budget + OA-immune flag — `/token/move` read deferred to Phase 2). `stormborn` ✅ v2.99.459 fly buff.
 
-## Recent retrofits (v2.128.2 – v2.158.2)
+## Recent retrofits (v2.128.2 – v2.158.3)
 
 | Feature | Phases shipped | Notes |
 |---|---|---|
@@ -94,6 +94,7 @@ or passive damage-boosters that already ride other code paths
 | Avatar of Battle | permanent `nonmagical-X` resistance buff (v2.158.0 — Phase 8 kick-off) | War Domain Cleric Lv 17+. Endpoint installs the `avatar-of-battle` buff with `effects.resistance_to = ["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]` + `permanent: True` + `duration_rounds: 100000`. The v2.63.0 F6 `_resistance_matches_damage` matcher halves nonmagical BPS damage through `_apply_damage_to_combatant` + skips magical attacks per RAW. Idempotent on re-install via key dedupe. Pure composition on shipped primitives — sets the recipe for the Lv-17 cleric subclass capstone batch (Saint of Forge and Fire, Improved Reaper, Improved Duplicity, Keeper of Souls, Order's Wrath) |
 | PC `_resistance_halve` F6 plumbing | hotfix shipped with Phase 8 kick-off (v2.158.1) | Threads `_apply_damage_to_combatant`'s existing `is_magical` flag down into `_resistance_halve` + swaps the per-entry literal `in` compare for the F6-aware `_resistance_matches_damage` matcher. Sheet-level `damage_resistances` + per-buff `effects.resistance_to` both route through it. Closes the gap where PC-side resistance ignored the SRD "X from nonmagical attacks" phrasing variants — the NPC side has had this matcher since v2.63.0 |
 | Saint of Forge and Fire | permanent fire-immunity + nonmagical-BPS resistance buff (v2.158.2 — Phase 8 follow-up) | Forge Domain Cleric Lv 17+. Endpoint installs the `saint-of-forge-and-fire` buff with BOTH `effects.immunity_to=["fire"]` (read by `_immunity_zero`) AND `effects.resistance_to=["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]` (read by the v2.158.1-upgraded `_resistance_halve`). v1 simplification: BPS halving installs unconditionally pending a PC-armor-detection helper (Lv 17 Forge canonically wears heavy armor; the RAW conditional is treated as always-on for now). Pure composition — no new primitive |
+| Improved Duplicity | permanent Invoke-Duplicity-parameter buff (v2.158.3 — Phase 8 third commit; Phase 1 of install-then-deferred-read split) | Trickery Domain Cleric Lv 17+. Endpoint installs the `improved-duplicity` buff with `effects.invoke_duplicity_max_duplicates=4` + `effects.invoke_duplicity_bonus_move_per_duplicate_ft=30` + `effects.invoke_duplicity_max_range_ft=120`. Invoke Duplicity itself isn't yet a server-side endpoint, so this captures the upgraded params for the future `/use_invoke_duplicity` read site (Phase 2 deferred). Same shape as v2.148.0 Fancy Footwork + v2.149.0 Relentless Avenger |
 
 ## Full classification
 
@@ -192,6 +193,7 @@ or passive damage-boosters that already ride other code paths
 | `use_holy_nimbus` | ✅ tracked | D buff-install |
 | `use_horde_breaker` | ✅ tracked | damage |
 | `use_hypnotic_gaze` | ✅ tracked | C save-or-condition |
+| `use_improved_duplicity` | ✅ tracked | D buff-install (Invoke Duplicity parameter flags) |
 | `use_improved_war_magic` | ✅ tracked | A use/resource |
 | `use_indomitable` | ✅ tracked | D buff-install |
 | `use_indomitable_reroll` | ✅ tracked | A use/resource |
@@ -311,7 +313,6 @@ or passive damage-boosters that already ride other code paths
 | `use_fancy_footwork` | ⚪ announce-only | — |
 | `use_flesh_to_stone_make_permanent` | ⚪ announce-only | — |
 | `use_form_of_the_beast` | ⚪ announce-only | — |
-| `use_improved_duplicity` | ⚪ announce-only | — |
 | `use_improved_minor_illusion` | ⚪ announce-only | — |
 | `use_improved_reaper` | ⚪ announce-only | — |
 | `use_invocation` | ⚪ announce-only | — |

@@ -53610,10 +53610,25 @@ async def use_improved_duplicity(
     of them up to 30 feet, to a maximum range of 120 feet."
 
     Body: ``{character_id, override?}``. No chip cost —
-    passive upgrade to Invoke Duplicity CD. The endpoint
-    serves as an announce trigger. v1 announce-only — the
-    duplicate-count + per-bonus-action move logic is
-    GM-tracked.
+    passive upgrade to Invoke Duplicity CD.
+
+    v2.158.3 — Phase 8 third commit (Phase 1 of the standard
+    install-then-deferred-read split, same shape as v2.148.0
+    Fancy Footwork + v2.149.0 Relentless Avenger). Invoke
+    Duplicity itself isn't yet a server-side endpoint
+    (announce-only / GM-tracked at Trickery Cleric Lv 2), so
+    Improved Duplicity has no concrete state to mutate yet —
+    but the Lv-17 upgrade IS a real change to the parameters
+    Invoke Duplicity will eventually read. Phase 1 captures
+    those parameters in a permanent `improved-duplicity` buff:
+      * `effects.invoke_duplicity_max_duplicates: 4` (was 1)
+      * `effects.invoke_duplicity_bonus_move_per_duplicate_ft: 30`
+      * `effects.invoke_duplicity_max_range_ft: 120`
+    Phase 2 (deferred): when Invoke Duplicity gets its own
+    `/use_invoke_duplicity` endpoint, it walks the caster's
+    `_buffs_active`, finds an `improved-duplicity` buff (if
+    present), and uses the upgraded params instead of the
+    baseline 1-duplicate / 0-bonus-move shape.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -53642,6 +53657,36 @@ async def use_improved_duplicity(
         })
 
     cleric_lv = _cleric_level_from_sheet(sheet)
+
+    # v2.158.3 — install the parameter-carrying buff. Permanent
+    # passive (idempotent on re-press via `_install_buff`'s key
+    # dedupe). Phase 2 (deferred): Invoke Duplicity reads
+    # `effects.invoke_duplicity_*` off the caster's
+    # `_buffs_active` and substitutes the upgraded params.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "improved-duplicity",
+        "name": "🎭 Improved Duplicity",
+        "icon": "🎭",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "invoke_duplicity_max_duplicates": 4,
+            "invoke_duplicity_bonus_move_per_duplicate_ft": 30,
+            "invoke_duplicity_max_range_ft": 120,
+        },
+        "desc": (
+            f"{char.name}'s Invoke Duplicity now creates up to 4 "
+            f"duplicates (was 1) + bonus-action 30 ft each. "
+            f"(Trickery Domain Cleric Lv 17+ passive upgrade. "
+            f"Phase 2: Invoke Duplicity endpoint will read these "
+            f"flags off `_buffs_active`.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -53675,6 +53720,7 @@ async def use_improved_duplicity(
             "bonus_move_per_duplicate_ft": 30,
             "max_range_ft": 120,
             "cleric_level": cleric_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -53685,6 +53731,7 @@ async def use_improved_duplicity(
         "bonus_move_per_duplicate_ft": 30,
         "max_range_ft": 120,
         "cleric_level": cleric_lv,
+        "buff_installed": buff_installed,
     }
 
 
