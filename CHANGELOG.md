@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.13] - 2026-06-09 — "Chart the Heavens" — Phase 8 diversifies into Druid: Star Map (Stars Druid Lv 2+) installs a parameter-flag buff AND auto-bootstraps the long-promised `guiding-bolt-charges` resource
+
+**Schema version:** 69
+**Commit summary:** **Phase 8 steps out of the cleric/paladin/fighter cluster into Druid (first Druid subclass feature flipped from announce-only to tracked this session). `use_star_map` (Stars Druid Lv 2+) used to announce + leave the prepared-spell + free-cast mechanics to GM tracking. v2.158.13 ships a two-part Phase 1: install a permanent `star-map-active` buff carrying the three `star_map_*` parameter flags (active=True, free_guiding_bolt_uses_max=WIS_mod min 1, always_prepared=["Guidance", "Guiding Bolt"]) AND deliver on the original docstring's "auto-bootstrap a `guiding-bolt-charges` resource" promise — adds the resource entry to `sheet.resources` if missing (key="guiding-bolt-charges", max=WIS_mod min 1, reset=long).**
+**Description:** The resource bootstrap delivers v2.99.316's filed intent + means the existing rest-character flow now refills Guiding Bolt charges on long rest automatically — the player just ticks the resource for each free cast, the next long rest refills it. Phase 2 (deferred) will wire `/cast_spell` to read the buff and let Guiding Bolt route through the resource decrement instead of consuming a spell slot when the resource has charges. The buff payload pins the contract for the Phase 2 read site.
+
+Star Map also exempts Guidance + Guiding Bolt from the prepared-spell limit per RAW; the `star_map_always_prepared` flag list captures this for a future spell-prep read site to consult (small commit, separable from the cast-routing change).
+
+### Added
+- `tests/harness/test_star_map.py::test_sm_buff_payload_carries_parameter_flags` — state contract: installed buff carries the three `star_map_*` effect keys with the right values (active=True, free_guiding_bolt_uses_max=3 for Mira's WIS 17 mod 3, always_prepared list with Guidance + Guiding Bolt). Plus permanence sanity (`concentration` falsy + `duration_rounds >= 1000`).
+- The existing `test_use_sm_happy_lv5` was upgraded to seed Mira into an active battle (required for `_install_buff`), assert `buff_installed: True`, and validate `resource_bootstrapped` is present in the response (not pinned to True since same-session re-press leaves the resource in place).
+
+### Changed
+- `app/routes/tabletop_routes.py::use_star_map` — adds the resource auto-bootstrap block (delivers on the v2.99.316 filed intent) + the `_install_buff` call. Buff payload: `key="star-map-active"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, plus the three `star_map_*` effect keys. On install, mirrors the buff list to the sheet via `_mirror_buffs_to_sheet`. The `feature_used` broadcast + JSON response both gain `buff_installed` + `resource_bootstrapped` boolean fields.
+- `docs/automation-coverage.md` — flipped `use_star_map` from `⚪ announce-only` to `✅ tracked`. Tracked / announce-only counts: 196 / 41 (was 195 / 42). Phase 8 row notes the Druid diversification.
+- `docs/test-harness-coverage.md` — `test_star_map.py` block updated. Total harness count bumped to **2085** (was 2084).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Star Map citation. First Druid subclass Phase-8 feature.
+
+### Notes
+- The auto-bootstrap pattern shipped in this commit (capture the parameter in a buff + auto-create the corresponding sheet resource if missing) is reusable for similar Lv-2-3 subclass focus-style features (e.g. Twilight Cleric's Eyes of Night, Genie Warlock's Genie's Wrath, Way of Mercy's Hands of Mercy charges). The resource is the thing the player actually ticks; the buff captures the parameter so the cast-routing read site can short-circuit slot consumption when the resource is non-zero. **Total harness count: 2085** in `tests/harness/` (was 2084); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.12] - 2026-06-09 — "Bonus Bolt" — Phase 8 Lv-18 tier: Improved War Magic (Eldritch Knight Lv 18+) installs the Lv-1+ spell-threshold flag buff (Phase 1; spell-cast read site deferred)
 
 **Schema version:** 69

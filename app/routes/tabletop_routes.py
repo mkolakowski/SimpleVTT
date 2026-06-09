@@ -56345,11 +56345,31 @@ async def use_star_map(
     slot WIS_mod times per long rest (min 1).
 
     Body: ``{character_id, override?}``. No chip — passive
-    declaration. Auto-bootstraps a `guiding-bolt-charges`
-    resource (max=WIS_mod, reset=long) if missing. v1
-    announce-only — the actual prepared-spell + free-cast
-    mechanics are GM-tracked via the existing spellcasting
-    flow.
+    declaration.
+
+    v2.158.13 — Phase 8 diversifies into Druid (first Druid
+    subclass feature flipped from announce-only to tracked).
+    Two-part Phase 1:
+      1. Install a permanent `star-map-active` buff carrying
+         the parameter flags:
+           * `effects.star_map_active: True`
+           * `effects.star_map_free_guiding_bolt_uses_max`
+             (= WIS mod, min 1)
+           * `effects.star_map_always_prepared`
+             (= ["Guidance", "Guiding Bolt"])
+      2. Delivers on the original docstring's "auto-bootstrap
+         a `guiding-bolt-charges` resource" promise — adds the
+         resource entry to `sheet.resources` if missing
+         (key="guiding-bolt-charges", max=WIS_mod min 1,
+         reset="long"). The existing rest-character flow
+         refills it on long rest; the existing resource-decrement
+         flow lets the player tick a free Guiding Bolt cast.
+
+    Phase 2 (deferred): `/cast_spell` reads the buff and lets
+    "Guiding Bolt" be cast without a slot when the resource has
+    charges. Spell-preparation read sites exempt
+    "Guidance" + "Guiding Bolt" from the prep cap when the buff
+    is present.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -56385,6 +56405,62 @@ async def use_star_map(
     free_guiding_bolt_uses = max(1, wis_mod)
     druid_lv = _druid_level_from_sheet(sheet)
 
+    # v2.158.13 — auto-bootstrap the `guiding-bolt-charges`
+    # resource if missing. Re-press doesn't reset the current
+    # charge count (idempotent in that sense — the player won't
+    # accidentally refund themselves a free cast by re-pressing).
+    # Refilled on long rest by the existing `rest_character`
+    # generic loop (resets `current` to `max` for any entry
+    # with `reset == "long"`).
+    resources = list(sheet.get("resources") or [])
+    gb_idx = next(
+        (i for i, r in enumerate(resources)
+         if (r.get("key") or "").lower() == "guiding-bolt-charges"),
+        -1,
+    )
+    resource_bootstrapped = False
+    if gb_idx < 0:
+        resources.append({
+            "key": "guiding-bolt-charges",
+            "label": "Guiding Bolt (free casts)",
+            "current": free_guiding_bolt_uses,
+            "max": free_guiding_bolt_uses,
+            "reset": "long",
+        })
+        sheet["resources"] = resources
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
+        resource_bootstrapped = True
+
+    # v2.158.13 — install the permanent parameter-flag buff.
+    # Idempotent on re-press via key dedupe.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "star-map-active",
+        "name": "🌌 Star Map",
+        "icon": "🌌",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "star_map_active": True,
+            "star_map_free_guiding_bolt_uses_max": free_guiding_bolt_uses,
+            "star_map_always_prepared": ["Guidance", "Guiding Bolt"],
+        },
+        "desc": (
+            f"{char.name}'s star chart is a spellcasting focus. "
+            f"Guidance + Guiding Bolt always prepared; Guiding Bolt "
+            f"castable {free_guiding_bolt_uses}/long rest without "
+            f"a slot. (Stars Druid Lv 2+ passive. Phase 2: "
+            f"`/cast_spell` reads these flags.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -56417,6 +56493,8 @@ async def use_star_map(
             "free_guiding_bolt_uses": free_guiding_bolt_uses,
             "always_prepared": ["Guidance", "Guiding Bolt"],
             "druid_level": druid_lv,
+            "buff_installed": buff_installed,
+            "resource_bootstrapped": resource_bootstrapped,
         },
     })
 
@@ -56426,6 +56504,8 @@ async def use_star_map(
         "free_guiding_bolt_uses": free_guiding_bolt_uses,
         "always_prepared": ["Guidance", "Guiding Bolt"],
         "druid_level": druid_lv,
+        "buff_installed": buff_installed,
+        "resource_bootstrapped": resource_bootstrapped,
     }
 
 

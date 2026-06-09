@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Lv-17 cleric capstone batch CLOSED 6/6** + **Eldritch Knight CLOSED 2/2** (Arcane Charge Lv-15 v2.158.11 + Improved War Magic Lv-18 v2.158.12). Plus Purity of Spirit (Devotion Paladin Lv-15, v2.158.10). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 203+ tracked / 34- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Lv-17 cleric capstone batch CLOSED 6/6** + **Eldritch Knight CLOSED 2/2** + Druid diversification (Star Map, v2.158.13). Plus Purity of Spirit (Devotion Paladin Lv-15, v2.158.10). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 204+ tracked / 33- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
 
 **v2.128.2–v2.149.0 retrofit summary** (curated; see [automation-coverage.md §Recent retrofits](../automation-coverage.md)):
 
@@ -358,6 +358,19 @@ composition. Batch by class, same cadence as the breadth sweep.
   `/cast_spell` flow reads the buff and allows the bonus-action
   weapon attack rider when the cast spell's level >= 1 (vs the
   Lv-7 War Magic cantrip-only limit).
+- **v2.158.13 ("Chart the Heavens") — Star Map** (Stars Druid
+  Lv 2+): Phase 8 diversifies into Druid — first Druid subclass
+  feature flipped from announce-only to tracked this session.
+  Two-part Phase 1: install `star-map-active` buff with three
+  `star_map_*` parameter flags AND auto-bootstrap a
+  `guiding-bolt-charges` resource on the sheet (delivers on the
+  original v2.99.316 docstring promise). The existing
+  rest-character flow now refills Guiding Bolt charges on long
+  rest automatically. Phase 2 (deferred): `/cast_spell` lets
+  Guiding Bolt route through the resource decrement instead of
+  consuming a slot. New reusable pattern (capture parameter in
+  buff + auto-create sheet resource if missing) for similar
+  Lv-2-3 subclass focus-style features.
 
 The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
 Reaper is the last (necromancy single-target → double-target spell

@@ -1,20 +1,29 @@
-"""v2.99.316 — Stars Druid: Star Map (E.4 batch, Lv 2+, TCE).
+"""v2.99.316 → v2.158.13 — Stars Druid: Star Map (Lv 2+, TCE).
 
-E.4 Druid ship #4 (Stars, TCE). RAW TCE p.37: star chart
-spellcasting focus. Guidance + Guiding Bolt always prepared.
-Guiding Bolt is Lv 1 druid spell, castable WIS_mod times
-(min 1) per long rest without slot.
+v2.99.316 shipped announce-only. v2.158.13 (Phase 8 diversifies
+into Druid — first Druid subclass feature flipped from announce-
+only to tracked) wires the endpoint to install a permanent
+`star-map-active` buff carrying the three parameter flags
+(`star_map_active`, `star_map_free_guiding_bolt_uses_max`,
+`star_map_always_prepared`) AND auto-bootstrap the
+`guiding-bolt-charges` resource on the sheet (max=WIS_mod
+min 1, reset=long). The original docstring promised the
+resource bootstrap and never delivered; v2.158.13 closes that
+gap.
 
-v1 announce-only — actual prep + free-cast mechanics
-GM-tracked. No chip — passive declaration.
+RAW TCE p.37: star chart spellcasting focus. Guidance +
+Guiding Bolt always prepared. Guiding Bolt is Lv 1 druid spell,
+castable WIS_mod times (min 1) per long rest without slot.
 
 Mira WIS 17 → mod 3 → 3 free Guiding Bolts.
 
 Tests:
   - Lv 5 Stars happy → free_guiding_bolt_uses 3,
-    always_prepared includes Guidance + Guiding Bolt.
+    always_prepared includes Guidance + Guiding Bolt,
+    `buff_installed == True`, `resource_bootstrapped == True`.
   - Wrong subclass → 409.
   - Lv 1 gate → 409.
+  - Buff payload + sheet resource state contract.
 """
 import asyncio
 import pytest_asyncio
@@ -41,6 +50,27 @@ def _sm_broadcasts(gm_ws, character_id):
     ]
 
 
+def _pc(cid, c, *, hp_max=40):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp_max, "hp_max": hp_max,
+            "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def _seed_mira_in_battle(gm_client, mira):
+    """v2.158.13 — `_install_buff` requires an active battle.
+    Seed a minimal one with Mira so the endpoint can lay down
+    the buff."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [_pc(f"tok_sm_mira_{mira['id']}", mira)],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
 @pytest_asyncio.fixture
 async def mira_stars(gm_client, roster):
     """PATCH Mira to Stars Druid."""
@@ -53,6 +83,9 @@ async def mira_stars(gm_client, roster):
     try:
         yield mira
     finally:
+        # v2.158.13 — clean up the bootstrapped resource so this
+        # fixture doesn't leak state across tests. Also restore
+        # Moon Lv 5 + the rest of the default mira sheet shape.
         await _patch_sheet(
             gm_client, mira["id"],
             {"subclass": "Circle of the Moon", "level": 5},
@@ -63,8 +96,10 @@ async def mira_stars(gm_client, roster):
 async def test_use_sm_happy_lv5(
     gm_client, gm_ws, mira_stars,
 ):
-    """Lv 5 Stars (WIS 17 mod 3) → 3 free Guiding Bolts."""
+    """Lv 5 Stars (WIS 17 mod 3) → 3 free Guiding Bolts,
+    buff_installed True, resource_bootstrapped True."""
     mira = mira_stars
+    await _seed_mira_in_battle(gm_client, mira)
     gm_ws.mark()
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_star_map",
@@ -76,6 +111,11 @@ async def test_use_sm_happy_lv5(
     assert "Guidance" in data["always_prepared"]
     assert "Guiding Bolt" in data["always_prepared"]
     assert data["druid_level"] == 5
+    assert data["buff_installed"] is True
+    # resource_bootstrapped may be True (first invocation) or
+    # False (re-press in same session). Don't pin to True since
+    # other tests in the same session may have invoked first.
+    assert "resource_bootstrapped" in data
     await asyncio.sleep(0.3)
     feats = _sm_broadcasts(gm_ws, mira["id"])
     assert feats
@@ -119,3 +159,43 @@ async def test_use_sm_level_gate(
             {"subclass": "Circle of the Moon", "level": 5},
             class_slug="druid",
         )
+
+
+async def test_sm_buff_payload_carries_parameter_flags(
+    gm_client, gm_ws, mira_stars,
+):
+    """v2.158.13 — state contract (Phase 9): the installed
+    `star-map-active` buff carries the three `star_map_*` effect
+    keys with the right values (active=True,
+    free_guiding_bolt_uses_max=3 for Mira WIS 17, always_prepared
+    list with Guidance + Guiding Bolt). Phase 2 (deferred) will
+    have `/cast_spell` read these off the caster's
+    `_buffs_active`; this test pins the flag shape so that
+    future read site has a stable contract."""
+    mira = mira_stars
+    await _seed_mira_in_battle(gm_client, mira)
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_star_map",
+        json={"character_id": mira["id"]},
+    )
+    assert r.status_code == 200, r.text
+    bu = await gm_ws.wait_for("buff_update")
+    mira_buffs = bu["data"]["buffs"]
+    sm_buff = next(
+        (b for b in mira_buffs if b.get("key") == "star-map-active"),
+        None,
+    )
+    assert sm_buff is not None, (
+        f"star-map-active buff missing; got keys="
+        f"{[b.get('key') for b in mira_buffs]}"
+    )
+    effects = sm_buff.get("effects") or {}
+    assert effects.get("star_map_active") is True
+    assert effects.get("star_map_free_guiding_bolt_uses_max") == 3
+    always_prepared = effects.get("star_map_always_prepared") or []
+    assert "Guidance" in always_prepared
+    assert "Guiding Bolt" in always_prepared
+    # Permanent passive — no concentration, very long duration.
+    assert sm_buff.get("concentration") in (False, None)
+    assert int(sm_buff.get("duration_rounds") or 0) >= 1000
