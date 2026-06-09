@@ -62,11 +62,33 @@ async def pip_arcane_trickster(gm_client, roster):
         )
 
 
+def _pc(cid, c, *, hp_max=30):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp_max, "hp_max": hp_max,
+            "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def _seed_pip_in_battle(gm_client, pip):
+    """v2.158.17 — `_install_buff` requires an active battle.
+    Seed a minimal one with Pip."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [_pc(f"tok_ml_pip_{pip['id']}", pip)],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
 async def test_use_ml_happy(
     gm_client, gm_ws, pip_arcane_trickster,
 ):
-    """Arcane Trickster → invisible hand, range 30, tasks listed."""
+    """Arcane Trickster → invisible hand, range 30, tasks listed,
+    buff_installed True."""
     pip = pip_arcane_trickster
+    await _seed_pip_in_battle(gm_client, pip)
     gm_ws.mark()
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_mage_hand_legerdemain",
@@ -78,10 +100,54 @@ async def test_use_ml_happy(
     assert data["range_ft"] == 30
     assert data["invisible"] is True
     assert len(data["tasks"]) >= 1
+    assert data["buff_installed"] is True
     await asyncio.sleep(0.3)
     feats = _ml_broadcasts(gm_ws, pip["id"])
     assert feats
     assert feats[-1]["data"]["invisible"] is True
+
+
+async def test_ml_buff_payload_carries_parameter_flags(
+    gm_client, gm_ws, pip_arcane_trickster,
+):
+    """v2.158.17 — state contract (Phase 9): the installed
+    `mage-hand-legerdemain-active` buff carries the four
+    `mage_hand_legerdemain_*` effect keys with the right values
+    (range_ft=30, invisible=True, bonus_action_control=True,
+    unnoticed_check="sleight_of_hand_vs_passive_perception").
+    Phase 2 (deferred) will have the Mage Hand cast flow read
+    these off the caster's `_buffs_active` and surface the
+    Legerdemain task picker; this test pins the flag shape so
+    that future read site has a stable contract."""
+    pip = pip_arcane_trickster
+    await _seed_pip_in_battle(gm_client, pip)
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_mage_hand_legerdemain",
+        json={"character_id": pip["id"]},
+    )
+    assert r.status_code == 200, r.text
+    bu = await gm_ws.wait_for("buff_update")
+    pip_buffs = bu["data"]["buffs"]
+    ml_buff = next(
+        (b for b in pip_buffs
+         if b.get("key") == "mage-hand-legerdemain-active"),
+        None,
+    )
+    assert ml_buff is not None, (
+        f"mage-hand-legerdemain-active buff missing; got keys="
+        f"{[b.get('key') for b in pip_buffs]}"
+    )
+    effects = ml_buff.get("effects") or {}
+    assert effects.get("mage_hand_legerdemain_range_ft") == 30
+    assert effects.get("mage_hand_legerdemain_invisible") is True
+    assert effects.get("mage_hand_legerdemain_bonus_action_control") is True
+    assert effects.get("mage_hand_legerdemain_unnoticed_check") == (
+        "sleight_of_hand_vs_passive_perception"
+    )
+    # Permanent passive — no concentration, very long duration.
+    assert ml_buff.get("concentration") in (False, None)
+    assert int(ml_buff.get("duration_rounds") or 0) >= 1000
 
 
 async def test_use_ml_wrong_subclass(

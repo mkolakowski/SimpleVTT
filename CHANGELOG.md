@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.17] - 2026-06-09 — "Sleight of Spell" — Phase 8 Rogue diversification: Mage Hand Legerdemain (Arcane Trickster Lv 3+) installs the spell-task parameter buff (Phase 1; Mage Hand cast-flow read site deferred)
+
+**Schema version:** 69
+**Commit summary:** **Pushes the Phase 8 diversification arc to 8/12 classes — Rogue joins cleric, paladin, fighter, druid, warlock, sorcerer, bard. `use_mage_hand_legerdemain` (Arcane Trickster Rogue Lv 3+) used to broadcast `feature_used` + leave the spell-task list to GM tracking. v2.158.17 installs a permanent `mage-hand-legerdemain-active` buff carrying four `mage_hand_legerdemain_*` effect keys (range_ft=30, invisible=True, bonus_action_control=True, unnoticed_check="sleight_of_hand_vs_passive_perception"). Phase 2 (deferred): the Mage Hand cantrip cast flow reads the buff and surfaces the Legerdemain task picker (stow/retrieve from another's container, pick locks/disarm traps at range, unnoticed-on-Sleight-vs-passive-Perception).**
+**Description:** Same Phase 1 install-then-deferred-read shape used across all 16 prior session commits. Captures the parameter contract so the Phase 2 spell-cast read site has stable flag names. Arcane Trickster's Mage Hand Legerdemain is a real subclass mechanic with discrete parameters — invisibility flag, range, bonus-action control, the unnoticed-check formula — so the buff payload is data-rich.
+
+The Phase 2 read site will likely live next to the Mage Hand cantrip resolution: when the Arcane Trickster casts Mage Hand, check for the buff, and if present, present a follow-up task picker dialog (stow/retrieve | pick lock/disarm trap | normal Mage Hand) before resolving the cantrip's actual effect. The unnoticed-check string captures the "Sleight of Hand vs target's passive Perception" formula in a structured way the picker can parse.
+
+### Added
+- `tests/harness/test_mage_hand_legerdemain.py::test_ml_buff_payload_carries_parameter_flags` — state contract: installed buff carries the four `mage_hand_legerdemain_*` effect keys with the right values + permanence sanity. The existing `test_use_ml_happy` was upgraded to seed Pip into an active battle and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_mage_hand_legerdemain` — adds the `_install_buff` call between the level/subclass gate and the broadcast. Buff payload: `key="mage-hand-legerdemain-active"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, plus the four `mage_hand_legerdemain_*` effect keys. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_mage_hand_legerdemain` from `⚪ announce-only` to `✅ tracked`. Tracked / announce-only counts: 200 / 37 (was 199 / 38). Phase 8 row notes the Rogue diversification + the 8-class arc.
+- `docs/test-harness-coverage.md` — `test_mage_hand_legerdemain.py` block updated. Total harness count bumped to **2089** (was 2088).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Mage Hand Legerdemain citation + the 8-class-coverage note.
+
+### Notes
+- Phase 8 session ledger: 18 commits, 9 features across 8 class families. Remaining untouched class families: Monk, Wizard, Barbarian, Ranger — all four could be diversified to push to 12/12 full class coverage. **Total harness count: 2089** in `tests/harness/` (was 2088); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.16] - 2026-06-09 — "Honeyed Lies" — Phase 8 Bard diversification: Silver Tongue (Eloquence Bard Lv 3+) installs the d20-floor parameter buff (Phase 1; ability-check resolver deferred)
 
 **Schema version:** 69

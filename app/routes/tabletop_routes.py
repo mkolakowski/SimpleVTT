@@ -60073,8 +60073,24 @@ async def use_mage_hand_legerdemain(
     Perception with a Sleight of Hand check."
 
     Body: ``{character_id}``. No action cost beyond the Mage Hand
-    cast itself (controlled as a bonus action). v1 announce-only —
-    the hand's tasks + Stealth checks are GM-tracked.
+    cast itself (controlled as a bonus action).
+
+    v2.158.17 — Phase 8 Rogue diversification (first Rogue
+    subclass feature flipped from announce-only to tracked this
+    session — pushes the diversification arc to 8/12 classes).
+    Install a permanent `mage-hand-legerdemain-active` buff
+    carrying the parameter flags:
+      * `effects.mage_hand_legerdemain_range_ft: 30`
+      * `effects.mage_hand_legerdemain_invisible: True`
+      * `effects.mage_hand_legerdemain_bonus_action_control: True`
+      * `effects.mage_hand_legerdemain_unnoticed_check`:
+        `"sleight_of_hand_vs_passive_perception"`
+    Phase 2 (deferred): when the Mage Hand cantrip is cast +
+    targets a humanoid carry, the spell-cast flow reads the buff
+    and surfaces the Legerdemain task picker (stow/retrieve,
+    pick locks/disarm traps, unnoticed-on-Sleight-vs-passive-
+    Perception). The buff captures the parameters so the read
+    site has a stable contract.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -60108,6 +60124,41 @@ async def use_mage_hand_legerdemain(
         "pick locks and disarm traps at range (thieves' tools)",
         "control the hand as a bonus action",
     ]
+
+    # v2.158.17 — install the parameter-flag buff. Permanent
+    # passive (idempotent on re-press via key dedupe). Phase 2
+    # (deferred): Mage Hand cast flow reads
+    # `effects.mage_hand_legerdemain_*` off the caster's
+    # `_buffs_active` and surfaces the Legerdemain task picker.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "mage-hand-legerdemain-active",
+        "name": "🖐️ Mage Hand Legerdemain",
+        "icon": "🖐️",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "mage_hand_legerdemain_range_ft": 30,
+            "mage_hand_legerdemain_invisible": True,
+            "mage_hand_legerdemain_bonus_action_control": True,
+            "mage_hand_legerdemain_unnoticed_check": (
+                "sleight_of_hand_vs_passive_perception"
+            ),
+        },
+        "desc": (
+            f"{char.name} can cast Mage Hand invisible at 30 ft + "
+            f"work Legerdemain tasks (stow/retrieve, pick "
+            f"locks/disarm traps at range) controlled as a bonus "
+            f"action. Unnoticed on Sleight-of-Hand vs passive "
+            f"Perception. (Arcane Trickster Rogue Lv 3+ passive "
+            f"permanent. Phase 2: Mage Hand cast flow reads "
+            f"these flags.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -60143,6 +60194,7 @@ async def use_mage_hand_legerdemain(
             "invisible": True,
             "tasks": tasks,
             "rogue_level": rogue_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -60153,6 +60205,7 @@ async def use_mage_hand_legerdemain(
         "invisible": True,
         "tasks": tasks,
         "rogue_level": rogue_lv,
+        "buff_installed": buff_installed,
     }
 
 

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2088 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.16, 2026-06-09).
+**Total tests:** 2089 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.17, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -978,6 +978,16 @@ v2.99.320 — Valor College Bard (PHB p.55) Combat Inspiration Lv 3+ (F.1 Bard s
 | `test_use_ci_default_mode` | Missing mode → "damage". |
 | `test_use_ci_wrong_subclass` | Default Lyra (Lore) → 409. |
 | `test_use_ci_level_gate` | Valor at Lv 2 → 409. |
+
+### `test_mage_hand_legerdemain.py`
+v2.99.369 — Arcane Trickster Rogue (PHB p.97) Mage Hand Legerdemain Lv 3+ (Phase G Rogue archetype sweep). When you cast Mage Hand, make the spectral hand invisible and perform extra tasks (stow/retrieve from another's container, pick locks/disarm traps at range). v2.158.17 (Phase 8 Rogue diversification — first Rogue subclass feature flipped to tracked this session, pushes the diversification arc to 8/12 classes): endpoint installs a permanent `mage-hand-legerdemain-active` buff with four `mage_hand_legerdemain_*` parameter flags. Phase 2 (deferred): Mage Hand cast flow reads the buff + surfaces the Legerdemain task picker.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_ml_happy` | PATCH Pip → Arcane Trickster → `range_ft == 30`, `invisible == True`, tasks list ≥1, `buff_installed == True`, broadcast (source `mage-hand-legerdemain`). v2.158.17 — seeds Pip into an active battle so `_install_buff` returns True. |
+| `test_use_ml_wrong_subclass` | Default Pip (Thief) → 409. |
+| `test_use_ml_wrong_class` | Caelan (Paladin) → 409. |
+| `test_ml_buff_payload_carries_parameter_flags` | v2.158.17 — installed buff carries four `mage_hand_legerdemain_*` effect keys (range_ft=30, invisible=True, bonus_action_control=True, unnoticed_check="sleight_of_hand_vs_passive_perception") + permanence sanity. State-change contract (Phase 9). Pins the Phase-2 contract so the future Mage Hand cast-flow read site has stable flag names. |
 
 ### `test_mantle_of_inspiration.py`
 v2.99.321 — Glamour College Bard (XGE p.16) Mantle of Inspiration Lv 3+ (F.1 Bard batch). Bonus action + 1 BI use → up to CHA-mod (min 1) allies within 60 ft each gain 5+bard_lv temp HP + immediate reaction-move at full speed without provoking OAs. v1 announce-only.
