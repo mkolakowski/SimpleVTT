@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2087 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.15, 2026-06-09).
+**Total tests:** 2088 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.16, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1011,13 +1011,14 @@ v2.99.323 — Swords College Bard (XGE p.16) Blade Flourish Lv 3+ (F.1 Bard batc
 | `test_use_bf_level_gate` | Swords at Lv 2 → 409. |
 
 ### `test_silver_tongue.py`
-v2.99.324 — Eloquence College Bard (TCE p.28) Silver Tongue Lv 3+ (F.1 Bard batch). Cha (Persuasion) and Cha (Deception) checks treat a d20 roll of 9 or lower as a 10. v1 announce-only.
+v2.99.324 — Eloquence College Bard (TCE p.28) Silver Tongue Lv 3+ (F.1 Bard batch). Cha (Persuasion) and Cha (Deception) checks treat a d20 roll of 9 or lower as a 10. v2.158.16 (Phase 8 Bard diversification — first Bard subclass feature flipped to tracked this session, pushes the diversification arc to 7/12 classes): endpoint installs a permanent `silver-tongue-active` buff with three `silver_tongue_*` parameter flags. Phase 2 (deferred): ability-check resolver applies the min-10 floor.
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_use_st_happy_lv6` | PATCH Lyra → Eloquence Lv 6 → `minimum_d20_value == 10`, applies_to includes persuasion + deception, `ability == "CHA"`, broadcast (source `silver-tongue`). |
+| `test_use_st_happy_lv6` | PATCH Lyra → Eloquence Lv 6 → `minimum_d20_value == 10`, applies_to includes persuasion + deception, `ability == "CHA"`, `buff_installed == True`, broadcast (source `silver-tongue`). v2.158.16 — seeds Lyra into an active battle so `_install_buff` returns True. |
 | `test_use_st_wrong_subclass` | Default Lyra (Lore) → 409. |
 | `test_use_st_level_gate` | Eloquence at Lv 2 → 409. |
+| `test_st_buff_payload_carries_parameter_flags` | v2.158.16 — installed buff carries three `silver_tongue_*` effect keys (min_d20=10, skills list with persuasion+deception, ability="CHA") + permanence sanity. State-change contract (Phase 9). Pins the Phase-2 contract so the future ability-check resolver has stable flag names. |
 
 ### `test_tales_from_beyond.py`
 v2.99.325 — Spirits College Bard (TCE p.30) Tales from Beyond Lv 3+ (F.1 Bard batch). Bonus action to roll 1d6 on Spirit Tales table; action to apply tale (6 tales: Clever Animal/Duelist/Beloved Friends/Brute/Tragic Romance/Traveler). `force_tale` body param (1-6) is a TEST_MODE escape hatch. v1 announce-only.

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.16] - 2026-06-09 — "Honeyed Lies" — Phase 8 Bard diversification: Silver Tongue (Eloquence Bard Lv 3+) installs the d20-floor parameter buff (Phase 1; ability-check resolver deferred)
+
+**Schema version:** 69
+**Commit summary:** **Pushes the Phase 8 diversification arc to 7/12 classes — Bard joins cleric, paladin, fighter, druid, warlock, sorcerer. `use_silver_tongue` (Eloquence College Bard Lv 3+) used to broadcast `feature_used` + leave the d20-min-10 substitution to GM tracking. v2.158.16 installs a permanent `silver-tongue-active` buff carrying three `silver_tongue_*` effect keys (min_d20=10, skills=["persuasion","deception"], ability="CHA"). Phase 2 (deferred): ability-check roll resolver reads the buff and applies the min-10 floor to the d20 result on CHA Persuasion/Deception checks.**
+**Description:** Same Phase 1 install-then-deferred-read shape used across all 14 prior session commits — install a permanent buff carrying the parameter contract, file the read-site change for a follow-up commit. Eloquence Bard's Silver Tongue is the canonical example of a "floor a d20 result" feature; the Phase 2 ability-check resolver hook will be reusable for Reliable Talent (Rogue Lv 11 — d20 floor 10 on prof skills) and Bardic Inspiration: Peerless Skill (Lore Bard Lv 14) if/when those Phase 8 candidates ship.
+
+### Added
+- `tests/harness/test_silver_tongue.py::test_st_buff_payload_carries_parameter_flags` — state contract: installed buff carries the three `silver_tongue_*` effect keys with the right values (min_d20=10, skills list with persuasion + deception, ability="CHA") + permanence sanity. The existing `test_use_st_happy_lv6` was upgraded to seed Lyra into an active battle and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_silver_tongue` — adds the `_install_buff` call between the level gate and the broadcast. Buff payload: `key="silver-tongue-active"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False`, plus the three `silver_tongue_*` effect keys. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — flipped `use_silver_tongue` from `⚪ announce-only` to `✅ tracked`. Tracked / announce-only counts: 199 / 38 (was 198 / 39). Phase 8 row notes the Bard diversification + the 7-class arc.
+- `docs/test-harness-coverage.md` — `test_silver_tongue.py` block updated. Total harness count bumped to **2088** (was 2087).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Silver Tongue citation + the 7-class-coverage note.
+
+### Notes
+- Phase 8 session ledger: 17 commits, 8 features across 7 class families, 2 engine hotfixes, 2 Phase-2 read sites (Keeper of Souls + Order's Wrath), 1 new pipeline primitive (on-death). Remaining untouched class families: Monk, Rogue, Wizard, Barbarian, Ranger — all five could be diversified in a future session if pushing for full 12/12 coverage. **Total harness count: 2088** in `tests/harness/` (was 2087); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.15] - 2026-06-09 — "Critical Cascade" — Phase 8 Sorcerer diversification: Spell Bombardment (Wild Magic Sorcerer Lv 18+) installs the max-die-reroll parameter flag buff (Phase 1; cast-flow auto-detection deferred)
 
 **Schema version:** 69

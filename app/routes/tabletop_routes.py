@@ -63463,9 +63463,20 @@ async def use_silver_tongue(
     as a 10."
 
     Body: ``{character_id, override?}``. No chip — passive
-    permanent feature. v1 announce-only — the d20 minimum-10
-    substitution is GM-tracked on the Bard's Persuasion /
-    Deception checks.
+    permanent feature.
+
+    v2.158.16 — Phase 8 Bard diversification (first Bard
+    subclass feature flipped from announce-only to tracked this
+    session — pushes the diversification arc to 7/12 classes).
+    Install a permanent `silver-tongue-active` buff carrying the
+    parameter flags:
+      * `effects.silver_tongue_min_d20: 10`
+      * `effects.silver_tongue_skills: ["persuasion", "deception"]`
+      * `effects.silver_tongue_ability: "CHA"`
+    Phase 2 (deferred): the ability-check roll resolver reads
+    the buff and applies the min-10 floor to the d20 result on
+    Persuasion / Deception (CHA) checks. The buff captures the
+    parameters so the read site has a stable contract.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -63494,6 +63505,35 @@ async def use_silver_tongue(
         })
 
     bard_lv = _bard_level_from_sheet(sheet)
+
+    # v2.158.16 — install the parameter-flag buff. Permanent
+    # passive (idempotent on re-press via key dedupe). Phase 2
+    # (deferred): ability-check roll resolver reads
+    # `effects.silver_tongue_*` off the caster's `_buffs_active`
+    # and applies the min-10 floor on CHA Persuasion/Deception.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "silver-tongue-active",
+        "name": "💬 Silver Tongue",
+        "icon": "💬",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "silver_tongue_min_d20": 10,
+            "silver_tongue_skills": ["persuasion", "deception"],
+            "silver_tongue_ability": "CHA",
+        },
+        "desc": (
+            f"{char.name}'s Cha (Persuasion) and Cha (Deception) "
+            f"checks treat a d20 roll of 9 or lower as a 10. "
+            f"(Eloquence College Bard Lv 3+ passive permanent. "
+            f"Phase 2: ability-check resolver reads these flags.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     membership = (
         db.query(CampaignMembership)
@@ -63526,6 +63566,7 @@ async def use_silver_tongue(
             "applies_to": ["persuasion", "deception"],
             "ability": "CHA",
             "bard_level": bard_lv,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -63536,6 +63577,7 @@ async def use_silver_tongue(
         "applies_to": ["persuasion", "deception"],
         "ability": "CHA",
         "bard_level": bard_lv,
+        "buff_installed": buff_installed,
     }
 
 

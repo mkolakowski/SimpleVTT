@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.15 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.16 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -26,8 +26,8 @@ only spend a resource without a downstream effect.
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **198** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **39** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **199** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **38** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
 | **Total** | **239** | `use_*` / `cast_*` endpoints |
 
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Six-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin (Purity of Spirit) + fighter (EK 2/2) + druid (Star Map) + warlock (Devil's Sight) + sorcerer (Spell Bombardment v2.158.15). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Seven-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin (Purity of Spirit) + fighter (EK 2/2) + druid (Star Map) + warlock (Devil's Sight) + sorcerer (Spell Bombardment) + bard (Silver Tongue v2.158.16). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **Buff / temp-HP (D/F):** `supreme_healing` ✅ v2.143.0 (heal pipeline max-dice substitution via the new `_max_dice_total` helper); `combat_inspiration` ✅ v2.144.0–v2.145.0 (damage half — roll BI die + apply to target; AC half — calculator returning the boosted-AC outcome); `blade_flourish` ✅ v2.146.0 (shared damage half — Defensive/Slashing/Mobile riders deferred). `rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals.
 - **Movement (G):** `ascendant_step` ✅ v2.147.0 (levitate buff carrying `fly_speed_ft: 10` + concentration); `fancy_footwork` ✅ v2.148.0 (Phase 1 install of the OA-block mark on the target — OA-flow read deferred to Phase 2); `relentless_avenger` ✅ v2.149.0 (Phase 1 install of the free-move budget + OA-immune flag — `/token/move` read deferred to Phase 2). `stormborn` ✅ v2.99.459 fly buff.
 
-## Recent retrofits (v2.128.2 – v2.158.15)
+## Recent retrofits (v2.128.2 – v2.158.16)
 
 | Feature | Phases shipped | Notes |
 |---|---|---|
@@ -106,6 +106,7 @@ or passive damage-boosters that already ride other code paths
 | Star Map | permanent buff + auto-bootstrap resource (v2.158.13 — Phase 8 Druid diversification) | Stars Druid Lv 2+ (Tasha's). Two-part Phase 1: install `star-map-active` buff with three `star_map_*` effect keys (active=True, free_guiding_bolt_uses_max=WIS_mod min 1, always_prepared=["Guidance","Guiding Bolt"]) + auto-bootstrap a `guiding-bolt-charges` resource on the sheet (max=WIS_mod min 1, reset=long) if missing — delivers on the original v2.99.316 docstring promise. The existing rest-character flow now refills Guiding Bolt charges on long rest automatically. Phase 2 (deferred): `/cast_spell` reads the buff + lets Guiding Bolt route through the resource decrement instead of consuming a slot. **First Druid subclass feature flipped from announce-only to tracked.** |
 | Devil's Sight | permanent vision-parameter flag buff (v2.158.14 — Phase 8 Warlock diversification) | Warlock Lv 2+ Eldritch Invocation. Installs `devils-sight-active` buff with two `devils_sight_*` effect keys (`range_ft: 120` + `through_magical_darkness: True`). Phase 2 (deferred): a `_pc_sees_in_darkness(sheet)` helper + darkness-modifier resolver short-circuit the "attacker/target in darkness" disadvantage adjudication at attack-roll time when the warlock is within 120 ft of the target through magical darkness + skip the install of a `blinded` condition from a darkness-trigger source. Closes the v2.99.131 filed item. **First Warlock invocation flipped from announce-only to tracked.** |
 | Spell Bombardment | permanent max-die-reroll parameter flag buff (v2.158.15 — Phase 8 Sorcerer diversification; closes the six-class arc) | Wild Magic Sorcerer Lv 18+. Already chip-tracked pre-Phase-8 via `_is_spell_bombardment_used` / `_mark_spell_bombardment_used`; the Phase 8 enhancement adds the `spell-bombardment-active` flag buff with three `spell_bombardment_*` effect keys (active=True, die_sizes=[4,6,8,10,12], uses_per_turn=1). Phase 2 (deferred): `/cast_spell` damage-roll path auto-detects max-rolled dice in the per-die breakdown, checks the buff + once-per-turn flag, and surfaces a one-click "reroll this max die" option. **First Sorcerer subclass feature flipped to tracked this session; closes the cleric/paladin/fighter/druid/warlock/sorcerer six-class diversification arc.** |
+| Silver Tongue | permanent d20-floor parameter flag buff (v2.158.16 — Phase 8 Bard diversification; pushes the arc to 7/12 classes) | Eloquence College Bard Lv 3+. Installs `silver-tongue-active` buff with three `silver_tongue_*` effect keys (min_d20=10, skills=["persuasion","deception"], ability="CHA"). Phase 2 (deferred): ability-check roll resolver reads the buff and applies the min-10 floor to the d20 result on CHA Persuasion/Deception checks. Pattern reusable for Reliable Talent (Rogue Lv 11 — d20 floor 10 on prof skills) and similar floor-the-d20 features. **First Bard subclass feature flipped to tracked this session; pushes the diversification arc to 7/12 classes.** |
 
 ## Full classification
 
@@ -265,6 +266,7 @@ or passive damage-boosters that already ride other code paths
 | `use_saint_of_forge_and_fire` | ✅ tracked | D buff-install (fire immunity + nonmagical-BPS resist) |
 | `use_second_wind` | ✅ tracked | heal/damage |
 | `use_shadow_arts` | ✅ tracked | A use/resource |
+| `use_silver_tongue` | ✅ tracked | D buff-install (d20-floor parameter flags) |
 | `use_skirmisher` | ✅ tracked | A use/resource |
 | `use_slayers_prey` | ✅ tracked | D buff-install |
 | `use_soul_of_vengeance` | ✅ tracked | A use/resource |
@@ -340,7 +342,6 @@ or passive damage-boosters that already ride other code paths
 | `use_relentless_avenger` | ⚪ announce-only | — |
 | `use_scornful_rebuke` | ⚪ announce-only | — |
 | `use_sculpt_spells` | ⚪ announce-only | — |
-| `use_silver_tongue` | ⚪ announce-only | — |
 | `use_supreme_healing` | ⚪ announce-only | — |
 | `use_totem_spirit` | ⚪ announce-only | — |
 | `use_unwavering_mark` | ⚪ announce-only | — |
