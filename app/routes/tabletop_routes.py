@@ -13253,13 +13253,19 @@ async def use_purity_of_spirit(
       - Advantage on saves to end an active charm/frighten/possess
         from such a creature.
 
-    v1 ships the audit broadcast + level/subclass gate only. The
-    full mechanical hooks (attack-roll disadvantage from listed
-    creature types, condition-install gate) need creature-type
-    metadata on the attacker/source — filed for follow-up. The
-    audit lets the GM/table see the passive is active.
-
     Body: ``{character_id}``.
+
+    v2.158.10 — Phase 8 step-out to the Lv-15 tier. Install a
+    permanent `purity-of-spirit` buff carrying the same
+    `pfeag_*` effects payload the v2.97.46+ Protection from Evil
+    and Good spell-buff uses. The two existing PFE&G read sites
+    (`_target_attackers_have_pfeag_disadvantage_against_type` +
+    `_pc_has_pfeag_against_type`) accept either `key="purity-of-
+    spirit"` or `key="protection-from-evil-and-good"` so the
+    class-feature buff reuses the spell-buff engine wholesale.
+    Distinct key (vs reusing the spell's key) so a cast PfE&G
+    spell on top doesn't collide with the permanent class feature
+    via `_install_buff`'s key-dedupe.
 
     Validation:
       - Caster is Paladin Lv 15+ with subclass Oath of Devotion
@@ -13295,6 +13301,42 @@ async def use_purity_of_spirit(
             "required": "Paladin Lv 15+ Oath of Devotion",
         })
 
+    # v2.158.10 — install the permanent PFE&G-effects buff.
+    # Idempotent on re-press via key dedupe. Permanent (very long
+    # duration + `permanent: True` flag) + non-concentration per
+    # RAW "you are always under the effects" — distinct from the
+    # spell which is 10 min concentration.
+    protected_types = [
+        "aberration", "celestial", "elemental",
+        "fey", "fiend", "undead",
+    ]
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "purity-of-spirit",
+        "name": "✨ Purity of Spirit",
+        "icon": "✨",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "pfeag_protected_types": protected_types,
+            "pfeag_attackers_have_disadvantage": True,
+            "pfeag_immune_to_charm_frighten_possess": True,
+            "pfeag_advantage_on_saves_vs_types": True,
+        },
+        "desc": (
+            f"{char.name} is always under the effects of Protection "
+            f"from Evil and Good. Aberrations, celestials, elementals, "
+            f"fey, fiends, and undead have disadvantage on attacks "
+            f"against {char.name}; {char.name} can't be "
+            f"charmed/frightened/possessed by them. (Devotion Paladin "
+            f"Lv 15+ passive permanent.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -13309,10 +13351,8 @@ async def use_purity_of_spirit(
                 f"be charmed/frightened/possessed by them."
             ),
             "source": "purity-of-spirit",
-            "protected_against": [
-                "aberration", "celestial", "elemental",
-                "fey", "fiend", "undead",
-            ],
+            "protected_against": protected_types,
+            "buff_installed": buff_installed,
         },
     })
 
@@ -13320,10 +13360,8 @@ async def use_purity_of_spirit(
         "ok": True,
         "character_id": char.id,
         "character_name": char.name,
-        "protected_against": [
-            "aberration", "celestial", "elemental",
-            "fey", "fiend", "undead",
-        ],
+        "protected_against": protected_types,
+        "buff_installed": buff_installed,
     }
 
 
@@ -25698,7 +25736,12 @@ def _target_pfeag_blocks_attacker_type(
         for b in (c.get("buffs") or []):
             if not isinstance(b, dict):
                 continue
-            if b.get("key") != "protection-from-evil-and-good":
+            # v2.158.10 — accept Devotion Paladin Lv 15+ Purity of
+            # Spirit's permanent class-feature buff alongside the
+            # cast spell. Both carry the same pfeag_* effects.
+            if b.get("key") not in (
+                "protection-from-evil-and-good", "purity-of-spirit",
+            ):
                 continue
             effects = b.get("effects")
             if not isinstance(effects, dict):
@@ -33492,7 +33535,12 @@ def _pc_has_pfeag_against_type(
     for b in _get_buffs(campaign_id, int(target_char_id)) or []:
         if not isinstance(b, dict):
             continue
-        if b.get("key") != "protection-from-evil-and-good":
+        # v2.158.10 — accept the Devotion Paladin Lv 15+ Purity of
+        # Spirit permanent class-feature buff alongside the cast
+        # spell. Both carry the same pfeag_* effects payload.
+        if b.get("key") not in (
+            "protection-from-evil-and-good", "purity-of-spirit",
+        ):
             continue
         effects = b.get("effects")
         if not isinstance(effects, dict):

@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Lv-17 cleric subclass capstone batch CLOSED 6/6 in v2.158.x:** Avatar of Battle (v2.158.0), Saint of Forge and Fire (v2.158.2), Improved Duplicity (v2.158.3), Keeper of Souls (v2.158.4 P1 + v2.158.6 P2 on-death), Order's Wrath (v2.158.5 P1 + v2.158.8 P2 ally-hit trigger), Improved Reaper (v2.158.9 P1 — `/cast_spell` P2 deferred). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 201+ tracked / 36- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Lv-17 cleric subclass capstone batch CLOSED 6/6 in v2.158.x** (Avatar of Battle, Saint of Forge and Fire, Improved Duplicity, Keeper of Souls P1+P2, Order's Wrath P1+P2, Improved Reaper P1). Step-out to **Lv-15 tier with Purity of Spirit (Devotion Paladin, v2.158.10)**. Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 202+ tracked / 35- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
 
 **v2.128.2–v2.149.0 retrofit summary** (curated; see [automation-coverage.md §Recent retrofits](../automation-coverage.md)):
 
@@ -332,6 +332,14 @@ composition. Batch by class, same cadence as the breadth sweep.
   (deferred): `/cast_spell` reads the flags + accepts a second
   `target_combatant_id` when the spell qualifies (necromancy
   school, levels 1-5, single-target).
+- **v2.158.10 ("Ward Made Permanent") — Purity of Spirit**
+  (Devotion Paladin Lv 15+): Phase 8 step-out to the Lv-15
+  tier. Permanent buff carrying the same `pfeag_*` effects
+  payload as the cast Protection from Evil and Good spell. The
+  two existing engine read sites accept either `key="purity-of-
+  spirit"` or `key="protection-from-evil-and-good"` so the
+  class feature reuses the spell-buff engine wholesale. Sets
+  the engine-reuse pattern for future PFE&G-shape features.
 
 The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
 Reaper is the last (necromancy single-target → double-target spell

@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.10] - 2026-06-09 — "Ward Made Permanent" — Phase 8 steps out to Lv-15 tier: Purity of Spirit (Devotion Paladin Lv 15+) installs a permanent PFE&G buff that the existing engine reads directly
+
+**Schema version:** 69
+**Commit summary:** **Steps Phase 8 out of the Lv-17 cleric capstone batch (now closed 6/6) into the Lv-15 tier. `use_purity_of_spirit` (Devotion Paladin Lv 15+) used to broadcast `feature_used` + leave the protection to GM tracking; now it installs a permanent `purity-of-spirit` buff carrying the same `pfeag_*` effects payload the v2.97.46+ Protection from Evil and Good spell-buff uses. The two existing PFE&G engine read sites (`_target_attackers_have_pfeag_disadvantage_against_type` at line ~25701 + `_pc_has_pfeag_against_type` at line ~33495) were extended to accept either `key="purity-of-spirit"` or `key="protection-from-evil-and-good"` so the class-feature buff reuses the spell-buff engine wholesale — disadvantage on attacks from the six protected creature types AND charm/frighten/possess condition immunity AND save advantage all just work.**
+**Description:** Distinct buff key (vs reusing the spell's key) so a cast PfE&G spell on top doesn't collide with the permanent class feature via `_install_buff`'s key-dedupe. The two engine reads use a small tuple check `(b.get("key") not in ("protection-from-evil-and-good", "purity-of-spirit"))` instead of literal string equality — same shape as the v2.158.1 F6 hotfix that broadened the per-entry matcher. This is the cheapest possible read-site change that still cleanly distinguishes the two sources in the buff UI / chat card.
+
+The Devotion Paladin Lv-15 capstone joins the Lv-17 batch's recipe: install a permanent passive buff, point at existing engine reads, ship harness state-contract test. No new primitive needed — pure composition.
+
+### Added
+- `tests/harness/test_use_purity_of_spirit.py::test_pos_buff_payload_carries_pfeag_effects` — state contract: installed buff carries the four `pfeag_*` effect keys with the right values (six protected types list, three flag booleans). Plus permanence sanity (`concentration` falsy + `duration_rounds >= 1000`). The existing `test_use_purity_of_spirit_happy_path` was upgraded to seed Caelan into an active battle (required for `_install_buff`) and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_purity_of_spirit` — adds the `_install_buff` call between the level gate and the broadcast. Buff payload: `key="purity-of-spirit"`, `duration_rounds=100000`, `duration_max=100000`, `permanent=True`, `concentration=False` (per RAW "always under the effects of"), plus the four `pfeag_*` effect keys mirrored from the spell buff. On install, mirrors the buff list to the sheet via `_mirror_buffs_to_sheet`. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `app/routes/tabletop_routes.py::_target_attackers_have_pfeag_disadvantage_against_type` (line ~25701) — the buff-key check now accepts either `"protection-from-evil-and-good"` or `"purity-of-spirit"`. Both carry the same `pfeag_*` effects payload so the rest of the read logic is unchanged.
+- `app/routes/tabletop_routes.py::_pc_has_pfeag_against_type` (line ~33495) — same key-tuple extension. Used by the `_SPELL_CONDITION_MAP` install gate to short-circuit Charmed / Frightened installs when the source is a protected creature type.
+- `docs/automation-coverage.md` — flipped `use_purity_of_spirit` from `⚪ announce-only` to `✅ tracked`. Tracked / announce-only counts: 194 / 43 (was 193 / 44). Phase 8 row notes the Lv-15 step-out. New row in "Recent retrofits".
+- `docs/test-harness-coverage.md` — `test_use_purity_of_spirit.py` block updated. Total harness count bumped to **2082** (was 2081).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line + Phase 8 section gain the Purity of Spirit citation.
+
+### Notes
+- Engine-reuse pattern locked in for future PFE&G-shape features (e.g. potential racial Protection-style traits, future archetype capstones). Adding a new buff key is now a one-line tuple extension. **Total harness count: 2082** in `tests/harness/` (was 2081); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.9] - 2026-06-09 — "Double Reaping" — Phase 8 final cleric-capstone commit: Improved Reaper (Death Cleric Lv 17) installs the necromancy-dual-target flag buff (Phase 1; spell-routing read site deferred)
 
 **Schema version:** 69
