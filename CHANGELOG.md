@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.8] - 2026-06-09 — "Ally's Reprisal" — Phase 8 seventh feature commit: Order's Wrath Phase 2 — an ally hitting the cursed target auto-triggers 2d8 psychic + drops the curse
+
+**Schema version:** 69
+**Commit summary:** **Closes the Phase 2 of v2.158.5 Order's Wrath. New helper `_fire_orders_wrath_on_attack_hit` wires into BOTH branches of `_apply_damage_to_combatant` (PC + NPC target). After damage applies from an attack (`is_attack=True`, `attacker_char_id` supplied, `applied > 0`), the helper checks if the target carries the `orders-wrath-curse` buff (v2.158.5 install) AND the attacker isn't the curse's caster. If both true, rolls 2d8 psychic and applies via the damage pipeline (recursive with `is_attack=False` so the on-attack hook can't ping-pong), then drops the curse buff from the target. Broadcasts `feature_used` with source `orders-wrath-trigger` naming the cleric. Same recipe shape as v2.158.6 Keeper of Souls Phase 2 — install Phase 1 in the feature endpoint, read site Phase 2 in the damage pipeline.**
+**Description:** The PC + NPC branches differ slightly in how they fetch the live combatant: the NPC branch already has `target` from the hub state (it's been mutating directly); the PC branch has to re-fetch via `hub.get_battle` because the PC path's `combatant` is a parameter ref + the hub state can drift. The helper itself is symmetric — same buff-check, same recursive damage call, same broadcast. The order in the NPC branch is: damage applies → break-on-damage drops Turned-style buffs → **Order's Wrath fires here** → Keeper of Souls fires on 0-HP transition. If the 2d8 psychic itself kills the target, Keeper of Souls hooks the recursive call's 0-HP transition naturally. The curse is dropped IN PLACE on the target's buffs list BEFORE the recursive damage call so the buff can't re-fire from the psychic damage.
+
+### Added
+- `app/routes/tabletop_routes.py::_fire_orders_wrath_on_attack_hit` — the new on-attack-hit helper. Walks target's `buffs` list for `orders-wrath-curse`, validates attacker ≠ caster, rolls 2d8 psychic, drops the curse in place, calls `_apply_damage_to_combatant(... is_attack=False)` for the recursive psychic damage, broadcasts `feature_used` source `orders-wrath-trigger` with `psychic_damage`, `target_combatant_id`, `target_name`, `attacker_char_id`. Defensive try/except wraps the whole thing.
+- `tests/harness/test_orders_wrath.py::test_ow_ally_hit_on_cursed_npc_triggers_psychic_and_drops_curse` — end-to-end: seeds Tavik (Order Lv 17) + Pip + 50-HP bandit (high HP so 2d8 doesn't kill, lets us verify the buff drop), installs the curse via the v2.158.5 endpoint, Pip swings until a hit lands, asserts (1) an `orders-wrath-trigger` broadcast fires naming Tavik with `psychic_damage` in [2, 16], (2) the curse buff is absent from the bandit's buffs in the latest `battle_update` (drop verified).
+
+### Changed
+- `app/routes/tabletop_routes.py::_apply_damage_to_combatant` — adds the Order's Wrath hook in BOTH the PC and NPC branches after damage applies. Same gate: `is_attack and applied > 0 and attacker_char_id`. In the PC branch the helper re-fetches the hub combatant by `char_id` so the buff drop sticks; in the NPC branch the helper mutates `target` directly. The hook is placed BEFORE the Keeper of Souls on-death hook in the NPC branch so the chain naturally extends (psychic damage killing the target triggers Keeper of Souls via the recursive call).
+- `docs/automation-coverage.md` — Phase 8 row gains the Order's Wrath Phase 2 citation. New row in "Recent retrofits".
+- `docs/test-harness-coverage.md` — `test_orders_wrath.py` block gains the new Phase 2 row. Total harness count bumped to **2080** (was 2079).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line gains the Order's Wrath Phase 2 citation; Phase 8 batch reflects all four deferred Phase-2 commits are now landed except for Improved Reaper's, which never had a Phase 1 yet (the spell-routing change is a single commit, not a split).
+
+### Notes
+- Two of the three deferred Phase-2 read sites from earlier Phase 8 commits are now shipped: Keeper of Souls (v2.158.6) + Order's Wrath (v2.158.8). The remaining one — Improved Duplicity's Invoke Duplicity endpoint that reads the parameter flags — is gated on shipping the underlying Invoke Duplicity Lv-2 endpoint first (out of scope for the cleric Lv-17 batch; better when the Trickery Lv-2 features get their own pass). **Total harness count: 2080** in `tests/harness/` (was 2079); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.7] - 2026-06-09 — "Routed via Slug" — hotfix: Keeper of Souls HD parse now resolves the monster slug pointer instead of reading TokenTemplate.sheet directly
 
 **Schema version:** 69

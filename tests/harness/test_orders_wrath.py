@@ -229,3 +229,149 @@ async def test_use_ow_level_gate(
             {"subclass": "Life Domain", "level": 6},
             class_slug="cleric",
         )
+
+
+def _mkc_npc(cid, tmpl_id, *, name, hp_cur=20, hp_max=20):
+    return {
+        "id": cid, "char_id": None, "token_template_id": tmpl_id,
+        "name": name, "initiative": 10,
+        "hp_current": hp_cur, "hp_max": hp_max, "speed_walk": 30,
+        "buffs": [],
+        "economy": {"action": False, "bonus": False, "reaction": False,
+                    "movement": 0, "dash_bonus_ft": 0},
+    }
+
+
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    form = {
+        "name": "Demo Campaign", "description": "demo",
+        "game_system": "dnd5e", "gm_tab_color": "", "font_override": "",
+        "default_encounter_id": "", "hp_threshold_1": "", "hp_threshold_2": "",
+        "hp_threshold_3": "", "hp_threshold_4": "", "auto_play_playlist_id": "",
+        "auto_play_mode": "order", "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+        follow_redirects=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def auto_apply_on(gm_client):
+    await _set_auto_apply(gm_client, True)
+    yield
+    await _set_auto_apply(gm_client, False)
+
+
+async def test_ow_ally_hit_on_cursed_npc_triggers_psychic_and_drops_curse(
+    gm_client, gm_ws, tavik_order_lv17, roster, auto_apply_on,
+):
+    """v2.158.8 — Phase 2 end-to-end: when an ally (not the cleric)
+    hits an NPC carrying the `orders-wrath-curse` buff, the on-hit
+    trigger in `_apply_damage_to_combatant` deals 2d8 psychic to
+    the target + drops the curse buff.
+
+    Setup: PATCH Tavik to Order Lv 17 + install the curse on a
+    high-HP Bandit (so the 2d8 psychic doesn't kill outright + we
+    can verify the curse drop on the next battle_update). Pip
+    swings at the cursed Bandit until a hit lands.
+
+    Assertions: a `feature_used` broadcast with source
+    `orders-wrath-trigger` fires naming Tavik as the curse caster
+    + a psychic_damage value in [2, 16] + the orders-wrath-curse
+    buff is absent from the Bandit's buffs in a subsequent
+    battle_update."""
+    tavik = tavik_order_lv17
+    pip = roster["Pip Quickfingers"]
+    tavik_tok = f"tok_ow_p2_tav_{tavik['id']}"
+    pip_tok = f"tok_ow_p2_pip_{pip['id']}"
+    bandit_id = "tok_ow_p2_bandit"
+
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+
+    # Seed 3-combatant battle. High-HP bandit (50 HP) so 2d8 psychic
+    # damage definitely doesn't kill (max 16) and we can verify the
+    # buff drop on the surviving target.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(tavik_tok, tavik), _pc(pip_tok, pip),
+            _mkc_npc(bandit_id, bandit_tmpl["id"],
+                     name=bandit_tmpl["name"], hp_cur=50, hp_max=50),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+
+    # Install the curse on the bandit via the v2.158.5 endpoint.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_orders_wrath",
+        json={"character_id": tavik["id"],
+              "target_combatant_id": bandit_id},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["curse_installed"] is True
+
+    # Pip swings until a hit lands. Bandit AC ~12 vs Pip's
+    # Shortsword +6 → ~70% hit; bound to 12 attempts.
+    gm_ws.mark()
+    hit = None
+    for _ in range(12):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": pip["id"],
+                  "attack_index": 0,
+                  "target_combatant_id": bandit_id,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        if d.get("hit") is True and int(d.get("damage_total") or 0) >= 1:
+            hit = d
+            break
+    assert hit is not None, "Pip failed to hit the bandit in 12 swings"
+    await asyncio.sleep(0.3)
+
+    # Assert orders-wrath-trigger fired naming Tavik as the caster.
+    trigger_msgs = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "orders-wrath-trigger"
+        and int((m.get("data") or {}).get("character_id") or 0)
+            == int(tavik["id"])
+    ]
+    assert trigger_msgs, (
+        "no orders-wrath-trigger broadcast fired after the ally "
+        "hit the cursed bandit"
+    )
+    last_trigger = trigger_msgs[-1]
+    psychic_dmg = int((last_trigger.get("data") or {}).get("psychic_damage") or 0)
+    assert 2 <= psychic_dmg <= 16, (
+        f"2d8 psychic should be in [2, 16]; got {psychic_dmg}"
+    )
+    assert (last_trigger.get("data") or {}).get("target_combatant_id") == bandit_id
+
+    # Verify the curse was dropped. Check the most recent
+    # battle_update for the bandit's buffs list — the
+    # orders-wrath-curse buff should be gone.
+    bus = gm_ws.buffered("battle_update")
+    assert bus, "no battle_update broadcast received"
+    last_bu = bus[-1]
+    combs = {c.get("id"): c for c in (last_bu["data"].get("combatants") or [])}
+    bandit_cb = combs.get(bandit_id)
+    assert bandit_cb is not None, (
+        f"bandit missing from last battle_update; got ids={list(combs.keys())}"
+    )
+    curse_still_there = next(
+        (b for b in (bandit_cb.get("buffs") or [])
+         if b.get("key") == "orders-wrath-curse"),
+        None,
+    )
+    assert curse_still_there is None, (
+        f"orders-wrath-curse should be dropped after triggering; "
+        f"got bandit buffs={bandit_cb.get('buffs')}"
+    )

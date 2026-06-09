@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2079 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.6, 2026-06-09).
+**Total tests:** 2080 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.8, 2026-06-09).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -824,6 +824,7 @@ v2.99.305 — Order Domain Cleric (TCE p.40) Order's Wrath Lv 17 (H.1 deeper —
 | `test_use_ow_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_ow_level_gate` | Order at Lv 16 → 409. |
 | `test_ow_installs_curse_on_real_target_combatant` | v2.158.5 — seeds Tavik+Pip battle, calls endpoint with Pip's tok as `target_combatant_id` → `curse_installed: True` + `battle_update` broadcast shows Pip carrying the `orders-wrath-curse` buff with the three `orders_wrath_*` effect keys + the 2-round duration + non-concentration. State-change contract (Phase 9). Uses Pip as a stand-in target (Phase 2's ally-vs-caster filter is what would skip self-hits at trigger time). |
+| `test_ow_ally_hit_on_cursed_npc_triggers_psychic_and_drops_curse` | v2.158.8 — end-to-end Phase 2: seeds Tavik (Order Lv 17) + Pip + 50-HP bandit, installs the curse on the bandit via the v2.158.5 endpoint, Pip hits the bandit, asserts (1) an `orders-wrath-trigger` broadcast fires naming Tavik with `psychic_damage` in [2, 16], (2) the curse buff is absent from the bandit's buffs in the latest battle_update (drop verified). High-HP bandit so 2d8 psychic doesn't kill outright; auto-apply-damage fixture. |
 
 ### `test_assassinate.py`
 v2.99.306 — Assassin Rogue (PHB p.97) Assassinate Lv 3+ (E.3 Rogue subclass batch opener — pivoted after Thief Fast Hands was found already wired in v2.99.224). Advantage vs creatures that haven't taken a turn; auto-crit vs surprised. No chip — passive declaration. v1 announce-only.

@@ -7341,6 +7341,28 @@ async def _apply_damage_to_combatant(
                     )
         except Exception:
             pass
+        # v2.158.8 — Order's Wrath (Order Cleric Lv 17+) Phase 2
+        # trigger, PC-target case. If a PC is the cursed target (rare
+        # but possible — evil cleric divine-strikes a PC, or a charmed
+        # cleric strikes an ally; the v2.158.5 test exercises this
+        # shape with Pip as the curse holder), an ally hitting them
+        # triggers the 2d8 psychic + drops the curse. Reads the live
+        # hub-state combatant's `buffs` list (the PC sheet's
+        # `_buffs_active` is the mirror; we read the hub copy directly
+        # so we can mutate it in place).
+        if is_attack and applied > 0 and attacker_char_id:
+            _ow_state = hub.get_battle(campaign_id)
+            if _ow_state:
+                _ow_target = None
+                for _c in _ow_state.get("combatants") or []:
+                    if _c.get("char_id") == int(combatant.get("char_id") or 0):
+                        _ow_target = _c
+                        break
+                if _ow_target is not None:
+                    await _fire_orders_wrath_on_attack_hit(
+                        db, campaign_id, _ow_target,
+                        int(attacker_char_id), _ow_state,
+                    )
         return {
             "applied": applied,
             "hp_before": hp_cur,
@@ -7468,6 +7490,18 @@ async def _apply_damage_to_combatant(
     await _break_buffs_on_damage(
         campaign_id, target.get("id") or "", applied,
     )
+    # v2.158.8 — Order's Wrath (Order Cleric Lv 17+) Phase 2 trigger,
+    # NPC-target case. If the just-damaged NPC carries the
+    # `orders-wrath-curse` buff (v2.158.5 install) AND the attacker
+    # isn't the curse's caster, deal 2d8 psychic via the damage
+    # pipeline (recursive with `is_attack=False`) + drop the curse.
+    # Fires BEFORE Keeper of Souls so the chain naturally extends —
+    # if the 2d8 psychic kills the NPC, Keeper of Souls hooks the
+    # recursive call's 0-HP transition.
+    if is_attack and applied > 0 and attacker_char_id:
+        await _fire_orders_wrath_on_attack_hit(
+            db, campaign_id, target, int(attacker_char_id), state,
+        )
     # v2.158.6 — Keeper of Souls (Grave Cleric Lv 17+) on-death hook,
     # Phase 2 of v2.158.4's Phase 1 watcher-flag install. Detect the
     # NPC's 0-HP transition (hp_cur > 0 → new_hp == 0 with a positive
@@ -7496,6 +7530,99 @@ async def _apply_damage_to_combatant(
         "is_dead": new_hp == 0 and hp_max > 0,
         "uncanny_dodge_used": False,
     }
+
+
+async def _fire_orders_wrath_on_attack_hit(
+    db: Session, campaign_id: int, target_combatant: dict,
+    attacker_char_id: int, state: dict,
+) -> None:
+    """v2.158.8 — Phase 2 of v2.158.5 Order's Wrath. Called from
+    ``_apply_damage_to_combatant`` after an attack hits a combatant
+    (PC or NPC). If the target carries the ``orders-wrath-curse``
+    buff (v2.158.5 install) AND the attacker isn't the curse's
+    caster, deal 2d8 psychic to the target via the damage pipeline
+    + drop the curse buff. Broadcasts ``feature_used`` with source
+    ``orders-wrath-trigger`` naming the cleric as the curse source.
+
+    Sibling shape to v2.142.0 Scornful Rebuke (on-damage-taken) and
+    v2.158.6 Keeper of Souls (on-death). The recursive damage call
+    passes ``is_attack=False`` so this trigger can't ping-pong
+    against itself (and so a chained Scornful Rebuke / similar
+    on-attack hook can't re-fire from the psychic damage).
+
+    The curse is dropped IN PLACE on the target's buffs list, then
+    ``hub.set_battle`` commits the state. The drop happens BEFORE
+    the recursive damage call so the curse doesn't re-fire if the
+    psychic damage somehow re-triggers an attack hook.
+
+    Defensive — any exception from this hook is swallowed so a
+    feature-hook failure can never break the damage pipeline.
+    """
+    try:
+        if not attacker_char_id:
+            return
+        curse_buff = None
+        for b in target_combatant.get("buffs") or []:
+            if (
+                isinstance(b, dict)
+                and b.get("key") == "orders-wrath-curse"
+            ):
+                curse_buff = b
+                break
+        if curse_buff is None:
+            return
+        caster_id = (curse_buff.get("effects") or {}).get(
+            "orders_wrath_caster_char_id"
+        )
+        if not caster_id or int(caster_id) == int(attacker_char_id):
+            return
+        # Roll 2d8 psychic.
+        import random
+        psychic_dmg = sum(random.randint(1, 8) for _ in range(2))
+        # Drop the curse buff IN PLACE on the target's buffs list,
+        # then commit so the recursive damage call reads a clean
+        # buff state.
+        target_combatant["buffs"] = [
+            b for b in (target_combatant.get("buffs") or [])
+            if not (isinstance(b, dict) and b.get("key") == "orders-wrath-curse")
+        ]
+        hub.set_battle(campaign_id, state)
+        # Apply psychic damage via the pipeline (recursive call;
+        # `is_attack=False` breaks the on-attack ping-pong).
+        await _apply_damage_to_combatant(
+            db, campaign_id, target_combatant, psychic_dmg, "psychic",
+            is_attack=False, attacker_char_id=None,
+        )
+        # Resolve caster name + color for the chat card.
+        caster_char = db.query(Character).filter(
+            Character.id == int(caster_id),
+        ).first()
+        caster_name = caster_char.name if caster_char else "Order Cleric"
+        caster_color = caster_char.color if caster_char else None
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "source": "orders-wrath-trigger",
+                "character_id": int(caster_id),
+                "character_name": caster_name,
+                "user_color": caster_color,
+                "feature_name": (
+                    f"⚖️ Order's Wrath — {psychic_dmg} psychic to cursed target"
+                ),
+                "feature_desc": (
+                    f"{caster_name}'s curse triggers on "
+                    f"{target_combatant.get('name') or 'the cursed target'} — "
+                    f"dealing {psychic_dmg} psychic damage. (Order Domain "
+                    f"Cleric Lv 17+ auto-trigger.)"
+                ),
+                "psychic_damage": psychic_dmg,
+                "target_combatant_id": target_combatant.get("id"),
+                "target_name": target_combatant.get("name") or "",
+                "attacker_char_id": int(attacker_char_id),
+            },
+        })
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def _fire_keeper_of_souls_on_npc_death(

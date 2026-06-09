@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.6 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.8 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — Avatar of Battle (War Cleric Lv 17, v2.158.0), Saint of Forge and Fire (Forge Cleric Lv 17, v2.158.2), Improved Duplicity (Trickery Cleric Lv 17, v2.158.3), Keeper of Souls (Grave Cleric Lv 17, v2.158.4 Phase 1 + v2.158.6 Phase 2 on-death hook ← new pipeline primitive), Order's Wrath (Order Cleric Lv 17, v2.158.5 first target-side buff; ally-hit trigger deferred) |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — Avatar of Battle (War Cleric Lv 17, v2.158.0), Saint of Forge and Fire (Forge Cleric Lv 17, v2.158.2), Improved Duplicity (Trickery Cleric Lv 17, v2.158.3), Keeper of Souls (Grave Cleric Lv 17, v2.158.4 Phase 1 + v2.158.6 Phase 2 on-death hook), Order's Wrath (Order Cleric Lv 17, v2.158.5 Phase 1 target-side curse + v2.158.8 Phase 2 ally-hit trigger) |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **Buff / temp-HP (D/F):** `supreme_healing` ✅ v2.143.0 (heal pipeline max-dice substitution via the new `_max_dice_total` helper); `combat_inspiration` ✅ v2.144.0–v2.145.0 (damage half — roll BI die + apply to target; AC half — calculator returning the boosted-AC outcome); `blade_flourish` ✅ v2.146.0 (shared damage half — Defensive/Slashing/Mobile riders deferred). `rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals.
 - **Movement (G):** `ascendant_step` ✅ v2.147.0 (levitate buff carrying `fly_speed_ft: 10` + concentration); `fancy_footwork` ✅ v2.148.0 (Phase 1 install of the OA-block mark on the target — OA-flow read deferred to Phase 2); `relentless_avenger` ✅ v2.149.0 (Phase 1 install of the free-move budget + OA-immune flag — `/token/move` read deferred to Phase 2). `stormborn` ✅ v2.99.459 fly buff.
 
-## Recent retrofits (v2.128.2 – v2.158.6)
+## Recent retrofits (v2.128.2 – v2.158.8)
 
 | Feature | Phases shipped | Notes |
 |---|---|---|
@@ -98,6 +98,7 @@ or passive damage-boosters that already ride other code paths
 | Keeper of Souls | permanent watcher-flag buff (v2.158.4 — Phase 8 fourth commit; Phase 1 of install-then-deferred-read split) | Grave Domain Cleric Lv 17+. Endpoint installs the `keeper-of-souls-watcher` buff with `effects.keeper_of_souls_watcher: True` + `effects.keeper_of_souls_radius_ft: 60`. Phase 2 (deferred): on-death hook in `_apply_damage_to_combatant`'s NPC branch reads the buff, range-gates at 60 ft from the dying NPC, and auto-heals the watcher for the NPC's Hit Dice count. Manual announce path stays as the player-driven GM override. New pipeline event (on-death) is the natural Phase 8 follow-up; will also unlock auto-firing for Touch of Death (Death Cleric Lv 1 — already has v1 manual install) |
 | Order's Wrath | target-side curse buff (v2.158.5 — Phase 8 fifth commit; Phase 1 of install-then-deferred-read split) | Order Domain Cleric Lv 17+. First Phase 8 commit to install on a target combatant (not the caster) via `_install_buff_on_combatant_id`. When `target_combatant_id` supplied, installs the `orders-wrath-curse` buff with `effects.orders_wrath_psychic_damage_expression="2d8"` + `effects.orders_wrath_caster_char_id=<cleric.id>` + `effects.orders_wrath_active=True`, duration 2 rounds. Phase 2 (deferred): `/attack` hit by an ally against a cursed target deals 2d8 psychic + drops the curse. When no target supplied, falls back to historical announce-only behavior |
 | Keeper of Souls Phase 2 (on-death hook) | new pipeline primitive (v2.158.6) | Closes the Phase 2 of v2.158.4's install-then-deferred-read split. New helper `_fire_keeper_of_souls_on_npc_death` walks PC combatants for the v2.158.4 watcher buff, range-gates at 60 ft via `_combatant_token` + `_distance_ft_between_points`, parses dying NPC's HD count from token template's `hit_dice` field (regex `(\d+)d`), auto-heals each in-range watcher via `_apply_heal_to_combatant`, broadcasts `feature_used` with source `keeper-of-souls-trigger`. Wired into the NPC branch of `_apply_damage_to_combatant` after the 0-HP transition. Defensive try/except so a feature-hook failure can never break the damage pipeline. Sibling primitive shape to v2.142.0 Scornful Rebuke (on-damage-taken) — first new pipeline event since that commit. Future on-death features reuse this hook point |
+| Order's Wrath Phase 2 (ally-hit trigger) | on-attack-hit hook (v2.158.8) | Closes the Phase 2 of v2.158.5's install-then-deferred-read split. New helper `_fire_orders_wrath_on_attack_hit` wires into BOTH PC + NPC branches of `_apply_damage_to_combatant` after damage applies. Checks `orders-wrath-curse` buff on target + verifies attacker isn't the curse caster, rolls 2d8 psychic, applies via the damage pipeline (recursive with `is_attack=False` to prevent loop), drops the curse in place. Broadcasts `feature_used` source `orders-wrath-trigger`. Order in NPC branch: damage applies → break-on-damage → Order's Wrath trigger → Keeper of Souls on 0-HP (so a psychic-damage kill chains correctly into Keeper of Souls) |
 
 ## Full classification
 
