@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.61] - 2026-06-10 — "The Drunken Weave" — Drunken Technique had a working endpoint (`/use_drunken_technique`) that installs the Disengage + 10 ft speed rider on Flurry of Blows, but the class-features Use button fell through to the announce-only `/use_feature`, so clicking it never installed the buff. This wires the button to the dedicated endpoint
+
+**Schema version:** 69
+**Commit summary:** **Frontend wiring for the Drunken Technique install gap surfaced by the Phase-8 re-audit (the third install-half straggler closed this session, after Form of the Beast in v2.158.59). The class-features Use button (`.cf-use` → `_bindUseButtons` in `sheet_dnd5e.html`) routed a fixed allowlist of features to dedicated endpoints and everything else to `/use_feature` (announce-only, no buff). Drunken Technique (Way of the Drunken Master Monk Lv 3+, XGE) was in the fall-through bucket, so clicking it never installed the `drunken-technique-active` buff — leaving the v2.158.18 Disengage rider + the v2.158.37 +10 ft speed bonus (read by the OA-prompt flow and `effective_speed_walk`) un-triggered from the UI. This adds an `isDrunkenTechnique` branch that POSTs `/use_drunken_technique` with the standard 409 `over_budget` → `handleOverBudget` retry and a confirmation toast. No picker + no action cost — it's an automatic rider the player triggers alongside Flurry of Blows.**
+**Description:** This is the install-half fix for another of the five "read site works, but the buff can't be installed from the UI" stragglers the re-audit found (same class of bug fixed for Vow of Enmity / Invoke Duplicity in v2.158.55 and Form of the Beast in v2.158.59). The buff-effect read sites shipped across v2.158.18 (the `effects.disengage` rider, consumed by the existing OA-prompt flow) and v2.158.37 (the `effects.speed_bonus_ft: 10` half, summed by `effective_speed_walk`), but the activation trigger was missing: a player could see Drunken Technique in their class-features list and click Use, but it only announced. Now the click installs the 1-turn rider buff. No endpoint or broadcast-shape change — pure sheet wiring of the already-shipped, already-harness-tested `/use_drunken_technique` (covered by `tests/harness/test_drunken_technique.py`).
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — the class-features Use button routes Drunken Technique → `/use_drunken_technique` through a new `isDrunkenTechnique` branch and surfaces a confirmation toast; all other features keep the generic `/use_feature` announce.
+
+### Notes
+- No new endpoint or broadcast surface, so no new harness test is required — `/use_drunken_technique` is already harness-covered. Total harness count unchanged: **2155** in `tests/harness/`; **`tests/harness_ui/` 22**.
+- Browser click-through was not performed: the only demo Monk (Kael Brightleaf) is Way of the Open Hand, so no demo PC carries a `drunken-technique` class feature for the button to render. Seeding a Way of the Drunken Master Monk (mirroring the v2.158.60 Beast Barbarian) is the natural follow-up that makes this click-testable. The wiring mirrors the existing Rage / Reckless Attack / Form of the Beast routes verbatim.
+
+---
+
 ## [2.158.60] - 2026-06-10 — "The Wildmane" — v2.158.59 wired the Form of the Beast sheet button to its dedicated endpoint, but no demo PC was a Path of the Beast Barbarian, so the button never rendered and couldn't be click-tested. This seeds a 14th demo PC (Brakka Wildmane, Path of the Beast Lv 5) carrying a `form-of-the-beast` class feature, then covers the seed contract + the now-reachable button in both the HTTP and Playwright harnesses
 
 **Schema version:** 69

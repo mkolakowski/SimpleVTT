@@ -5554,6 +5554,17 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // a Bite/Claws/Tail picker first (the endpoint takes
                     // a `form` parameter).
                     const isFormOfTheBeast = featureKey === 'form-of-the-beast';
+                    // v2.158.61: Drunken Technique (Way of the Drunken
+                    // Master Monk Lv 3+). Routes to /use_drunken_technique
+                    // so the v2.158.18 `drunken-technique-active` buff
+                    // installs (the Disengage + 10 ft speed rider on
+                    // Flurry of Blows). Without this route the picker
+                    // would fall through to /use_feature, which only
+                    // emits an announce — the buff (read by the OA-prompt
+                    // flow + `effective_speed_walk`) would never install.
+                    // No picker + no action cost — it's an automatic
+                    // rider the player triggers alongside Flurry.
+                    const isDrunkenTechnique = featureKey === 'drunken-technique';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -5731,6 +5742,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                    : isMetamagicEmpowered ? 'use_metamagic_empowered_spell'
                                    : isVanish ? 'use_vanish'
                                    : isFormOfTheBeast ? 'use_form_of_the_beast'
+                                   : isDrunkenTechnique ? 'use_drunken_technique'
                                    : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
@@ -5781,6 +5793,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             } : isFormOfTheBeast ? {
                                 character_id: MY_CHAR_ID,
                                 form: fotbForm,
+                                override: !!override,
+                            } : isDrunkenTechnique ? {
+                                character_id: MY_CHAR_ID,
                                 override: !!override,
                             } : {
                                 character_id: MY_CHAR_ID,
@@ -5860,6 +5875,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 : '';
                             const buffNote = data.buff_installed ? ' — natural weapon manifested' : '';
                             window.showToast(`${formIcon} Form of the Beast — ${String(data.form || '').replace(/^\w/, c => c.toUpperCase())}${dmg}${buffNote}. Lasts until your rage ends.`, 'info');
+                        } else if (isDrunkenTechnique) {
+                            const buffNote = data.buff_installed ? ' — rider buff installed' : '';
+                            window.showToast(`🍶 Drunken Technique: Disengage + ${data.speed_bonus_ft || 10} ft speed until end of turn${buffNote}. (Rider on Flurry of Blows.)`, 'info');
                         } else {
                             const lbl = data.feature_label || 'Feature used';
                             const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';
