@@ -42856,8 +42856,13 @@ async def use_vanish(
     means" half is filed (SimpleVTT doesn't model tracking
     checks today).
 
-    No resource cost RAW. No buff installation either; the GM
-    + player resolve the Hide check normally.
+    No resource cost RAW. v2.158.21 — Phase 8 Ranger
+    diversification: each press now also installs a permanent
+    passive ``vanish-active`` buff carrying three
+    ``vanish_*`` parameter flags so Phase 2 resolvers (Hide-as-
+    bonus-action picker on the action UI; non-magical tracking
+    adjudication) can read the state off ``_buffs_active``.
+    Idempotent on re-press via ``_install_buff``'s key dedupe.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -42912,6 +42917,37 @@ async def use_vanish(
 
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
+    # v2.158.21 — install the parameter-carrying passive buff.
+    # Permanent (idempotent on re-press via key dedupe). Phase 2
+    # (deferred): (a) action-UI surfaces Hide as a bonus-action
+    # option when the buff is present + ranger_lv >= 14; (b) any
+    # future non-magical tracking-check resolver short-circuits
+    # when `vanish_untrackable_nonmagical` is set on the target.
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "vanish-active",
+        "name": "🌑 Vanish",
+        "icon": "🌑",
+        "duration_rounds": 100000,
+        "duration_max": 100000,
+        "permanent": True,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "vanish_active": True,
+            "vanish_hide_as_bonus_action": True,
+            "vanish_untrackable_nonmagical": True,
+        },
+        "desc": (
+            f"{char.name} can Hide as a bonus action and can't "
+            f"be tracked by nonmagical means unless they choose "
+            f"to leave a trail. (Ranger Lv 14+ passive permanent. "
+            f"Phase 2: action-UI Hide-as-bonus picker + tracking "
+            f"resolver read these flags off `_buffs_active`.)"
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -42939,6 +42975,7 @@ async def use_vanish(
             "source": "vanish",
             "over_budget": was_used,
             "over_budget_slot": "bonus" if was_used else "",
+            "buff_installed": buff_installed,
         },
     })
 
@@ -42946,6 +42983,7 @@ async def use_vanish(
         "ok": True,
         "feature": "vanish",
         "over_budget": was_used,
+        "buff_installed": buff_installed,
     }
 
 

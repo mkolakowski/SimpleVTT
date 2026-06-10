@@ -11,9 +11,20 @@ is rolled normally via /roll. The "can't be tracked by
 nonmagical means" half is filed (SimpleVTT doesn't model
 tracking checks).
 
+v2.158.21 — Phase 8 Ranger diversification closes the
+twelve-class arc: each press now ALSO installs a permanent
+passive ``vanish-active`` buff carrying three ``vanish_*``
+parameter flags (active, hide_as_bonus_action,
+untrackable_nonmagical). Phase 2 (deferred): action-UI Hide-
+as-bonus picker + tracking resolver consume the flags off
+``_buffs_active``.
+
 Tests:
-  - Happy: Rowan Lv 14 → /use_vanish → 200 + broadcast.
+  - Happy: Rowan Lv 14 (in battle) → /use_vanish → 200,
+    broadcast, buff_installed True.
   - Gate: Rowan Lv 7 → 409 level_too_low.
+  - State contract: the installed buff carries the three
+    ``vanish_*`` effect keys + permanent duration.
 """
 import asyncio
 import pytest_asyncio
@@ -40,6 +51,25 @@ def _vanish_broadcasts(gm_ws, character_id):
     ]
 
 
+def _pc(cid, c, *, hp_max=60):
+    return {"id": cid, "char_id": c["id"], "name": c["name"],
+            "initiative": 10, "hp_current": hp_max, "hp_max": hp_max,
+            "buffs": [],
+            "economy": {"action": False, "bonus": False,
+                        "reaction": False, "movement": 0}}
+
+
+async def _seed_rowan_in_battle(gm_client, rowan):
+    """v2.158.21 — `_install_buff` requires an active battle."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [_pc(f"tok_vn_rw_{rowan['id']}", rowan)],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
 @pytest_asyncio.fixture
 async def rowan_lv14(gm_client, roster):
     """PATCH Rowan to Lv 14. Restore Lv 7 in teardown."""
@@ -58,8 +88,9 @@ async def rowan_lv14(gm_client, roster):
 async def test_use_vanish_happy_path(
     gm_client, gm_ws, rowan_lv14,
 ):
-    """Rowan Lv 14 → /use_vanish → 200 + broadcast."""
+    """Rowan Lv 14 → /use_vanish → 200 + broadcast + buff_installed."""
     rowan = rowan_lv14
+    await _seed_rowan_in_battle(gm_client, rowan)
     gm_ws.mark()
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_vanish",
@@ -68,6 +99,7 @@ async def test_use_vanish_happy_path(
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["feature"] == "vanish"
+    assert data["buff_installed"] is True
     await asyncio.sleep(0.3)
     feats = _vanish_broadcasts(gm_ws, rowan["id"])
     assert feats, (
@@ -89,3 +121,40 @@ async def test_use_vanish_level_gate(
     data = r.json()
     assert data.get("error") == "level_too_low"
     assert data.get("required") == 14
+
+
+async def test_vanish_buff_payload_carries_parameter_flags(
+    gm_client, gm_ws, rowan_lv14,
+):
+    """v2.158.21 — state contract (Phase 9): the installed
+    ``vanish-active`` buff carries the three ``vanish_*``
+    effect keys with the right values
+    (active=True, hide_as_bonus_action=True,
+    untrackable_nonmagical=True), is permanent (high duration_rounds)
+    and non-concentration."""
+    rowan = rowan_lv14
+    await _seed_rowan_in_battle(gm_client, rowan)
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_vanish",
+        json={"character_id": rowan["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+    bu = await gm_ws.wait_for("buff_update")
+    rowan_buffs = bu["data"]["buffs"]
+    vn_buff = next(
+        (b for b in rowan_buffs
+         if b.get("key") == "vanish-active"),
+        None,
+    )
+    assert vn_buff is not None, (
+        f"vanish-active buff missing; got keys="
+        f"{[b.get('key') for b in rowan_buffs]}"
+    )
+    effects = vn_buff.get("effects") or {}
+    assert effects.get("vanish_active") is True
+    assert effects.get("vanish_hide_as_bonus_action") is True
+    assert effects.get("vanish_untrackable_nonmagical") is True
+    # Permanent passive (large duration), not concentration.
+    assert vn_buff.get("concentration") in (False, None)
+    assert int(vn_buff.get("duration_rounds") or 0) >= 1000

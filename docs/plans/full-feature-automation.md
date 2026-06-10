@@ -1,6 +1,6 @@
 # Full Class-Feature Automation — design plan
 
-**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Eleven-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin (v2.158.10) + fighter (EK 2/2: v2.158.11+12) + druid (v2.158.13) + warlock (v2.158.14) + sorcerer (v2.158.15) + bard (v2.158.16) + rogue (v2.158.17) + monk (v2.158.18) + wizard (v2.158.19) + barbarian (v2.158.20). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 211+ tracked / 26- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
+**Status:** 🟠 in progress — Phase 0 ✅ ([automation-coverage.md](../automation-coverage.md), v2.99.447), Phase 1 ✅, Phase 2 ✅ ([on-hit-riders.md](on-hit-riders.md), v2.99.395–.403), Phase 3 ✅ ([feature-saves.md](feature-saves.md), v2.99.405–.414), Phase 4 ✅ ([temp-hp-and-bonuses.md](temp-hp-and-bonuses.md), v2.99.415–.423), Phase 5 ✅ ([auras.md](auras.md), v2.99.424–.429), Phase 6 ✅ ([movement-and-summons.md](movement-and-summons.md), v2.99.431–.446); Phase 7 (reactions breadth) 🟠 started — Riposte counter-attack (v2.99.455) + Protective Field damage-reduction (v2.99.456) resolve server-side; **new on-damage-taken primitive shipped v2.142.0** (Scornful Rebuke); **new heal-pipeline max-dice helper shipped v2.143.0** (Supreme Healing — generic `_max_dice_total`); **Phase 8 (higher-level subclass features) 🟠 started v2.158.0** — **Twelve-class diversification arc CLOSED — full PHB class coverage:** cleric (Lv-17 batch 6/6) + paladin (v2.158.10) + fighter (EK 2/2: v2.158.11+12) + druid (v2.158.13) + warlock (v2.158.14) + sorcerer (v2.158.15) + bard (v2.158.16) + rogue (v2.158.17) + monk (v2.158.18) + wizard (v2.158.19) + barbarian (v2.158.20) + ranger (v2.158.21). Plus PC `_resistance_halve` F6 hotfix (v2.158.1) + monster_slug HD resolve hotfix (v2.158.7). **Current coverage: 211+ tracked / 26- announce-only of 239 feature endpoints** (was ~60/156 at baseline; see [automation-coverage.md](../automation-coverage.md); auto-counts pin v2.99.460 — rerun the classifier after the next batch).
 
 **v2.128.2–v2.149.0 retrofit summary** (curated; see [automation-coverage.md §Recent retrofits](../automation-coverage.md)):
 
@@ -423,6 +423,36 @@ composition. Batch by class, same cadence as the breadth sweep.
   Different shape from the permanent-passive Phase 8 commits —
   a 1-turn rider that expires at next turn-start tick. Half-
   implements Phase 2 already via engine-flag reuse.
+- **v2.158.19 ("Sharpened Bolt") — Empowered Evocation**
+  (Evocation School Wizard Lv 10+): pushes the diversification
+  arc to 10/12 classes — Wizard joins. Permanent
+  `empowered-evocation-active` buff with three
+  `empowered_evocation_*` effect keys (active=True, int_mod,
+  school="evocation"). Phase 2 (deferred): `/cast_spell` reads
+  the buff and lets the player apply +INT to one damage roll
+  per evocation cast.
+- **v2.158.20 ("Bestial Aspect") — Form of the Beast** (Path
+  of the Beast Barbarian Lv 3+ TCE): pushes the diversification
+  arc to 11/12 classes — Barbarian joins. 10-round rage-
+  duration `form-of-the-beast-active` buff with six
+  `form_of_the_beast_*` effect keys (active=True, form,
+  damage_die, damage_type, reach_ft, special). Phase 2
+  (deferred): `/attack` reads the buff and renders Bite/Claws/
+  Tail as a built-in attack option while the buff is active.
+- **v2.158.21 ("Faded Footprints") — Vanish** (Ranger Lv 14+
+  PHB): **CLOSES the twelve-class diversification arc — full
+  PHB class coverage.** Endpoint was already chip-marked pre-
+  Phase-8 (bonus-action slot); the Phase 8 enhancement adds
+  the permanent passive `vanish-active` buff with three
+  `vanish_*` effect keys (active=True, hide_as_bonus_action=
+  True, untrackable_nonmagical=True). Phase 2 (deferred): (a)
+  action-UI surfaces Hide as a bonus-action option when the
+  buff is present + ranger_lv >= 14; (b) any future non-
+  magical tracking-check resolver short-circuits when the
+  target carries `vanish_untrackable_nonmagical`. Same install-
+  then-deferred-read shape as Devil's Sight (v2.158.14) and
+  Mage Hand Legerdemain (v2.158.17). Every PHB class now has
+  at least one Phase-8 buff-payload feature.
 
 The Lv-17 cleric subclass capstone batch is 5/6 shipped — Improved
 Reaper is the last (necromancy single-target → double-target spell

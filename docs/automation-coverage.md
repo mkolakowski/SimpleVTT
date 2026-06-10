@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.20 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.21 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -49,7 +49,7 @@ announce-only tail below (much of it archetype J, narration-only-OK).
 | P5 — auras (`_tick_auras`) | radius effects | ✅ v2.99.424–.429 (+ Aura of Conquest v2.99.448) |
 | P6 — movement + summons (`_force_move`, `_summon_companion`) | push/pull + companions | ✅ v2.99.431–.446 |
 | P7 — reactions breadth | new reaction kinds | ⚪ not started |
-| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Eleven-class diversification arc CLOSED:** cleric (Lv-17 batch 6/6) + paladin + fighter (EK 2/2) + druid + warlock + sorcerer + bard + rogue + monk + wizard + barbarian (Form of the Beast v2.158.20). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
+| P8 — higher-level subclass features | composition on primitives | 🟠 started v2.158.0 — **Twelve-class diversification arc CLOSED — full PHB class coverage:** cleric (Lv-17 batch 6/6) + paladin + fighter (EK 2/2) + druid + warlock + sorcerer + bard + rogue + monk + wizard + barbarian + ranger (Vanish v2.158.21). Plus engine improvements: v2.158.1 PC `_resistance_halve` F6 hotfix + v2.158.7 monster_slug HD resolve hotfix |
 | P9 — test-contract upgrade | assert state not broadcast | 🟢 ongoing |
 
 ## Archetype legend
@@ -75,7 +75,7 @@ or passive damage-boosters that already ride other code paths
 - **Buff / temp-HP (D/F):** `supreme_healing` ✅ v2.143.0 (heal pipeline max-dice substitution via the new `_max_dice_total` helper); `combat_inspiration` ✅ v2.144.0–v2.145.0 (damage half — roll BI die + apply to target; AC half — calculator returning the boosted-AC outcome); `blade_flourish` ✅ v2.146.0 (shared damage half — Defensive/Slashing/Mobile riders deferred). `rallying_cry` ✅ v2.99.454 heals allies; `grim_harvest` ✅ v2.99.457 + `protective_spirit` ✅ v2.99.458 self-heals.
 - **Movement (G):** `ascendant_step` ✅ v2.147.0 (levitate buff carrying `fly_speed_ft: 10` + concentration); `fancy_footwork` ✅ v2.148.0 (Phase 1 install of the OA-block mark on the target — OA-flow read deferred to Phase 2); `relentless_avenger` ✅ v2.149.0 (Phase 1 install of the free-move budget + OA-immune flag — `/token/move` read deferred to Phase 2). `stormborn` ✅ v2.99.459 fly buff.
 
-## Recent retrofits (v2.128.2 – v2.158.18)
+## Recent retrofits (v2.128.2 – v2.158.21)
 
 | Feature | Phases shipped | Notes |
 |---|---|---|
@@ -109,6 +109,9 @@ or passive damage-boosters that already ride other code paths
 | Silver Tongue | permanent d20-floor parameter flag buff (v2.158.16 — Phase 8 Bard diversification; pushes the arc to 7/12 classes) | Eloquence College Bard Lv 3+. Installs `silver-tongue-active` buff with three `silver_tongue_*` effect keys (min_d20=10, skills=["persuasion","deception"], ability="CHA"). Phase 2 (deferred): ability-check roll resolver reads the buff and applies the min-10 floor to the d20 result on CHA Persuasion/Deception checks. Pattern reusable for Reliable Talent (Rogue Lv 11 — d20 floor 10 on prof skills) and similar floor-the-d20 features. **First Bard subclass feature flipped to tracked this session; pushes the diversification arc to 7/12 classes.** |
 | Mage Hand Legerdemain | permanent spell-task parameter flag buff (v2.158.17 — Phase 8 Rogue diversification; pushes the arc to 8/12 classes) | Arcane Trickster Rogue Lv 3+. Installs `mage-hand-legerdemain-active` buff with four `mage_hand_legerdemain_*` effect keys (range_ft=30, invisible=True, bonus_action_control=True, unnoticed_check="sleight_of_hand_vs_passive_perception"). Phase 2 (deferred): Mage Hand cast flow reads the buff and surfaces the Legerdemain task picker (stow/retrieve from another's container, pick locks/disarm traps at range). **First Rogue subclass feature flipped to tracked this session; pushes the diversification arc to 8/12 classes.** |
 | Drunken Technique | 1-turn Flurry-of-Blows rider buff (v2.158.18 — Phase 8 Monk diversification; pushes the arc to 9/12 classes) | Way of the Drunken Master Monk Lv 3+. Installs a 1-turn `drunken-technique-active` buff with `effects.disengage: True` (reuses the engine flag from Step of the Wind so the OA-prompting flow already half-consumes it) + two Drunken-Technique-specific flags (`speed_bonus_ft: 10`, `rider_of: "flurry-of-blows"`). Different shape from the permanent-passive Phase 8 commits — a 1-turn rider that expires at next turn-start tick per RAW. Engine-flag reuse pattern half-implements Phase 2 already via the existing OA-prompting flow. **First Monk subclass feature flipped to tracked this session; pushes the diversification arc to 9/12 classes.** |
+| Empowered Evocation | permanent +INT-damage parameter flag buff (v2.158.19 — Phase 8 Wizard diversification; pushes the arc to 10/12 classes) | Evocation School Wizard Lv 10+. Installs `empowered-evocation-active` buff with three `empowered_evocation_*` effect keys (active=True, int_mod=<computed at install time>, school="evocation"). Phase 2 (deferred): `/cast_spell` reads the buff for evocation spells + lets the player apply +INT to one damage roll per cast. **First Wizard subclass feature flipped to tracked this session; pushes the diversification arc to 10/12 classes.** |
+| Form of the Beast | 10-round natural-weapon parameter buff (v2.158.20 — Phase 8 Barbarian diversification; pushes the arc to 11/12 classes) | Path of the Beast Barbarian Lv 3+ (TCE). 10-round rage-duration `form-of-the-beast-active` buff with six `form_of_the_beast_*` effect keys (active=True, form, damage_die, damage_type, reach_ft, special) capturing the chosen natural weapon's parameters. Phase 2 (deferred): `/attack` reads the buff and renders Bite/Claws/Tail as a built-in attack option while the buff is active. **First Barbarian subclass feature flipped to tracked this session; pushes the diversification arc to 11/12 classes.** |
+| Vanish | permanent passive parameter flag buff (v2.158.21 — Phase 8 Ranger diversification; **CLOSES the 12/12 arc — full PHB class coverage**) | Ranger Lv 14+ (PHB). Endpoint was already chip-tracked pre-Phase-8 (bonus-action slot); the Phase 8 enhancement adds the permanent passive `vanish-active` buff with three `vanish_*` effect keys (active=True, hide_as_bonus_action=True, untrackable_nonmagical=True). Phase 2 (deferred): (a) action-UI surfaces Hide as a bonus-action option when the buff is present + ranger_lv >= 14; (b) any future non-magical tracking-check resolver short-circuits when the target carries `vanish_untrackable_nonmagical`. **First Ranger subclass feature given a Phase-8 buff payload this session; closes the twelve-class diversification arc at 12/12 — every PHB class now has at least one Phase-8 buff-payload feature.** |
 
 ## Full classification
 
@@ -304,7 +307,7 @@ or passive damage-boosters that already ride other code paths
 | `use_turn_the_faithless` | ✅ tracked | A use/resource |
 | `use_turn_the_unholy` | ✅ tracked | D buff-install, D/E buff-install |
 | `use_undying_sentinel` | ✅ tracked | A use/resource |
-| `use_vanish` | ✅ tracked | A use/resource |
+| `use_vanish` | ✅ tracked | A use/resource + D buff-install (Lv-14 passive parameter flags) |
 | `use_vigilant_blessing` | ✅ tracked | D buff-install |
 | `use_visions_of_the_past` | ✅ tracked | A use/resource |
 | `use_voice_of_authority` | ✅ tracked | A use/resource |

@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.21] - 2026-06-09 — "Faded Footprints" — Phase 8 Ranger diversification CLOSES the 12-class arc: Vanish (Ranger Lv 14+) installs the permanent passive parameter buff (Phase 1; Hide-as-bonus picker + tracking resolver deferred)
+
+**Schema version:** 69
+**Commit summary:** **Closes the Phase 8 diversification arc at 12/12 classes — Ranger joins. `use_vanish` (Ranger Lv 14+) was already chip-marked pre-Phase-8 (bonus-action slot). v2.158.21 also installs a permanent passive `vanish-active` buff carrying three `vanish_*` effect keys (active=True, hide_as_bonus_action=True, untrackable_nonmagical=True). Phase 2 (deferred): (a) action-UI surfaces Hide as a bonus-action option when the buff is present; (b) any future non-magical tracking-check resolver short-circuits when the target carries `vanish_untrackable_nonmagical`.**
+**Description:** This commit closes the twelve-class Phase 8 diversification arc opened at v2.158.0. Every PHB class now has at least one Phase-8 buff-payload feature: cleric (Lv-17 batch 6/6) + paladin (v2.158.10) + fighter (EK 2/2: v2.158.11+12) + druid (v2.158.13) + warlock (v2.158.14) + sorcerer (v2.158.15) + bard (v2.158.16) + rogue (v2.158.17) + monk (v2.158.18) + wizard (v2.158.19) + barbarian (v2.158.20) + ranger (v2.158.21). Vanish is the same install-then-deferred-read shape used by Devil's Sight (v2.158.14) and Mage Hand Legerdemain (v2.158.17): a permanent passive flag-buff captures the parameter contract so the Phase 2 read sites have stable flag names to consume. Re-pressing /use_vanish is idempotent (key dedupe in `_install_buff`).
+
+The two Phase 2 read sites are independent: the Hide-as-bonus-action picker is a UI affordance (the action-economy bar shows a "Hide" bonus-action button when the buff is present + ranger_lv >= 14), while the non-magical tracking adjudication waits on a tracking-check resolver primitive that doesn't exist today (filed under SimpleVTT's "we don't model tracking" gap).
+
+### Added
+- `tests/harness/test_use_vanish.py::test_vanish_buff_payload_carries_parameter_flags` — state contract (Phase 9): the installed buff carries `vanish_active: True` + `vanish_hide_as_bonus_action: True` + `vanish_untrackable_nonmagical: True`, is permanent (high `duration_rounds`), and non-concentration. The existing `test_use_vanish_happy_path` was upgraded to seed Rowan into an active battle and assert `buff_installed: True`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_vanish` — adds the `_install_buff` call between the bonus-action chip mark and the broadcast. Buff payload: `key="vanish-active"`, `duration_rounds=100000`, `permanent=True`, `concentration=False`, plus the three `effects.vanish_*` keys. The `feature_used` broadcast + JSON response both gain a `buff_installed: bool` field.
+- `docs/automation-coverage.md` — `use_vanish` row archetype upgraded from `A use/resource` to `A use/resource + D buff-install (Lv-14 passive parameter flags)`. Phase 8 row notes the Ranger diversification + the 12/12 arc close (counts unchanged: 203 / 34 since Vanish was already tracked pre-Phase-8). New "Recent retrofits" entry citing the buff payload.
+- `docs/test-harness-coverage.md` — total harness count bumped to **2093** (was 2092).
+- `docs/plans/full-feature-automation.md` — Phase 8 status line bumped to "Twelve-class diversification arc CLOSED" with the Vanish citation; Phase 8 entry list grows by one bullet for v2.158.21.
+
+### Notes
+- Phase 8 session ledger: 22 commits, 13 features across **12 class families — full PHB class coverage**. The Phase 8 plan's Lv-17 / Lv-15 / Lv-18 / Lv-20 capstone trees still have plenty of features waiting on either (a) Phase 2 read sites or (b) Phase 1 install sites for the remaining capstones (e.g. Foe Slayer was already Phase 8'd via the foe-slayer rider in v2.99.460; Hide in Plain Sight in v2.99.214). **Total harness count: 2093** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.20] - 2026-06-09 — "Bestial Aspect" — Phase 8 Barbarian diversification: Form of the Beast (Beast Barbarian Lv 3+) installs the 10-round natural-weapon parameter buff (Phase 1; attack-flow read site deferred)
 
 **Schema version:** 69
