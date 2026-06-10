@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.26] - 2026-06-09 — "Bite In Place" — Phase 2 attack-pipeline read site for the v2.158.20 Form of the Beast buff: /attack now merges sheet.attacks + buff-derived natural weapons so an attack_index past the regular weapons resolves Bite/Claws/Tail through the standard attack flow
+
+**Schema version:** 69
+**Commit summary:** **Wires the v2.158.25 `_pc_active_natural_weapons` helper into the `/attack` pipeline. `use_attack` (the main `POST /api/campaign/{cid}/attack` endpoint) now extends `sheet.get("attacks")` with the helper's output before the `attack_index` lookup, so a buff-derived natural-weapon entry is reachable through the standard attack-resolution flow — d20 roll + damage roll + apply-to-target + `weapon_attack` broadcast — without any new endpoint or any branch in the resolution code.**
+**Description:** v2.158.25 shipped the `/active_natural_weapons` query endpoint that returns the merged list, but the actual attack-resolution path still 404'd on indices past the sheet's regular attacks. v2.158.26 closes that gap — a Path of the Beast Barbarian with `form-of-the-beast-active` installed now has effectively (len(sheet.attacks) + 1) attack slots, and pointing `attack_index` at the natural-weapon slot fires the full attack flow (proficiency + STR-mod attack bonus, weapon-die + STR-mod damage, crit detection, target HP application, broadcast). The merge is purely additive: with no qualifying buff active, `attack_index` past `len(sheet.attacks)` still 404s as before.
+
+The buff's name + attack_bonus + damage + damage_type + range fields are pre-computed by the v2.158.25 helper, so the attack pipeline reads them like any sheet weapon. The buff's `form_of_the_beast_special` rider text is in the entry's `desc` for the chat-card / GM-visibility surface; firing the rider mechanically (claws extra-attack, bite self-heal on hit below half HP, tail reaction-AC) is still TODO and stays filed.
+
+### Added
+- `tests/harness/test_form_of_the_beast.py::test_attack_with_buff_derived_natural_weapon` — end-to-end: install bite form via `/use_form_of_the_beast`, fetch sheet via `/sheet-json` to find the natural-weapon index dynamically, POST `/attack` with `attack_index = len(sheet.attacks)`, assert response carries `attack_name` containing "Bite" + `damage_type: "piercing"` + non-zero `attack_total` and `damage_total`, plus the `weapon_attack` WS broadcast carries the same name.
+- `tests/harness/test_form_of_the_beast.py::test_attack_natural_weapon_index_404s_without_buff` — control: with the battle cleared (no buff present), an `attack_index` past `len(sheet.attacks)` still 404s. Pins the merge-only-when-buff-active contract.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_attack` — after `attacks = list(sheet.get("attacks") or [])`, calls `_pc_active_natural_weapons(sheet, campaign_id, char.id)` and extends the local list. The downstream `attack = dict(attacks[attack_index] or {})` lookup picks up either a sheet weapon or a buff-derived entry without further branching.
+- `docs/test-harness-coverage.md` — total harness count bumped to **2105** (was 2103).
+
+### Notes
+- Frontend rendering (the Attacks panel surfaces Bite/Claws/Tail buttons alongside the regular weapons when the buff is active) is still TBD. The backend contract is now stable for that wiring to land against — the client just needs to (a) fetch `/active_natural_weapons`, (b) append entries to the rendered list at indices `len(sheet.attacks)..`, and (c) POST `/attack` with the corresponding index.
+- The `form_of_the_beast_special` riders (claws extra-attack, bite self-heal, tail reaction-AC) are still narrative-only via the desc field. Wiring them mechanically would require attack-pipeline rider primitives that are partially in place (Phase 2 of v2.158.20) but not yet consumed for these.
+- **Total harness count: 2105** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.25] - 2026-06-09 — "Manifest Claws" — Phase 2 read site for the v2.158.20 Form of the Beast buff: new `GET /active_natural_weapons` endpoint returns sheet-attack-shaped entries derived from active natural-weapon-grant buffs (today: form-of-the-beast-active; future: Polymorph beast shapes, Form of Dread, Bestial Soul)
 
 **Schema version:** 69

@@ -150,6 +150,91 @@ async def test_use_fb_invalid_form(
     assert r.status_code == 400, r.text
 
 
+async def test_attack_with_buff_derived_natural_weapon(
+    gm_client, gm_ws, krieger_beast,
+):
+    """v2.158.26 — Phase 2 read site: /attack merges sheet.attacks
+    with the buff-derived natural weapons (from
+    `_pc_active_natural_weapons`), so an attack_index past the sheet's
+    regular attacks resolves to a Form-of-the-Beast entry. End-to-end:
+    install bite form → POST /attack with attack_index = len(sheet.attacks)
+    → expect attack_name contains "Bite", damage_type "piercing", and
+    standard attack/damage rolls."""
+    krieger = krieger_beast
+    await _seed_krieger_in_battle(gm_client, krieger)
+    # Read Krieger's sheet to find the natural-weapon index dynamically.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-json",
+    )
+    assert r.status_code == 200, r.text
+    sheet = r.json().get("sheet") or {}
+    base_attacks = sheet.get("attacks") or []
+    natural_index = len(base_attacks)
+    # Install bite form.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "bite"},
+    )
+    assert r.status_code == 200, r.text
+    # Confirm the merged list now has the natural-weapon at natural_index.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/active_natural_weapons",
+        params={"character_id": krieger["id"]},
+    )
+    assert r.status_code == 200, r.text
+    assert len(r.json()["natural_weapons"]) == 1
+    # Attack via the merged index.
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": krieger["id"],
+            "attack_index": natural_index,
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "Bite" in data["attack_name"], (
+        f"expected 'Bite' in attack_name; got {data['attack_name']!r}"
+    )
+    assert data["damage_type"] == "piercing"
+    assert data["attack_total"] >= 1
+    assert data["damage_total"] >= 1
+    msg = await gm_ws.wait_for("weapon_attack")
+    assert "Bite" in msg["data"]["attack_name"]
+
+
+async def test_attack_natural_weapon_index_404s_without_buff(
+    gm_client, krieger_beast,
+):
+    """Control: without the form-of-the-beast buff, an attack_index
+    past sheet.attacks still 404s — the merge only kicks in when the
+    buff is active."""
+    krieger = krieger_beast
+    # Wipe any stale battle state so no stray buff is present.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [], "turn_index": 0, "round": 1, "active": False,
+        },
+    )
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-json",
+    )
+    sheet = r.json().get("sheet") or {}
+    out_of_range_index = len(sheet.get("attacks") or [])
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": krieger["id"],
+            "attack_index": out_of_range_index,
+            "override": True,
+        },
+    )
+    assert r.status_code == 404, r.text
+
+
 async def test_fb_buff_payload_carries_form_parameter_flags(
     gm_client, gm_ws, krieger_beast,
 ):

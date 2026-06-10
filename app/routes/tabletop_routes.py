@@ -75027,6 +75027,19 @@ async def use_attack(
 
     sheet = dict(char.sheet or {})
     attacks = list(sheet.get("attacks") or [])
+    # v2.158.26 — Phase 2 read site for buff-derived natural weapons.
+    # Append the entries from `_pc_active_natural_weapons` (today:
+    # form-of-the-beast-active; future: shape-change buffs) so an
+    # attack_index past the sheet's regular attacks resolves to a
+    # natural-weapon entry. Same attack-resolution pipeline (d20 +
+    # damage roll + apply to target) as a sheet weapon — the
+    # buff-derived entry already carries name / attack_bonus /
+    # damage / damage_type / range / desc in the sheet-attacks shape.
+    natural_weapons = _pc_active_natural_weapons(
+        sheet, campaign_id, char.id,
+    )
+    if natural_weapons:
+        attacks.extend(natural_weapons)
     if attack_index >= len(attacks):
         raise HTTPException(404, "Attack not found")
     attack = dict(attacks[attack_index] or {})
