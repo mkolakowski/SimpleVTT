@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.48] - 2026-06-10 — "Elemental Ward" — Absorb Elements' reaction buff carried a `resistance_damage_type` string, but the damage path never read it — the resistance was announce-only. Wiring the read site into `_resistance_halve` halves matching elemental damage for the buff's duration
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.71.0 Absorb Elements reaction buff (PHB p.211): the reaction grants resistance to the triggering damage type until the start of your next turn (plus a +slot-level d6 rider on your next melee hit). v2.71.0 installed an `absorb-elements-active` buff carrying `resistance_damage_type` + `next_melee_bonus_dice` + `next_melee_bonus_type`, but the downstream consumers were deferred — the buff captured the effects for GM adjudication only. This commit wires the RESISTANCE half: `_resistance_halve` now reads the buff's single `resistance_damage_type` string (distinct from the `resistance_to` list other buffs carry) and halves matching damage. The buff's 1-round duration handles expiry — resistance is NOT consumed, so it halves every matching hit in the interim. The next-melee-bonus-damage rider stays deferred for a follow-up `/attack` read site.**
+**Description:** v2.71.0 shipped the Absorb Elements reaction to install the `absorb-elements-active` buff, but the resistance was never consumed by the damage path — `_resistance_halve` only read sheet-level `damage_resistances` and per-buff `effects.resistance_to` lists / `effects.resistance_spell_damage`. Absorb Elements stores its protected type as a single `resistance_damage_type` string, which no read site matched. This commit adds the read inside the per-buff loop of `_resistance_halve`: when a buff carries `resistance_damage_type` matching the incoming damage type, the damage halves (floor). Unlike the consumer buffs (Supreme Sneak, Tides of Chaos), it is NOT removed — the buff's 1-round duration handles expiry per RAW (resistance lasts until the start of your next turn, halving every matching hit in the interim).
+
+This flips the Absorb Elements resistance from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `tests/harness/test_absorb_elements_resistance.py::test_absorb_elements_halves_matching_type` — Phase 2 read-site test: Pip (Halfling, no innate fire resistance) carrying `absorb-elements-active` (resistance to fire) → a Fire Bolt hit is halved (`damage_applied == damage_total // 2`). `test_absorb_elements_no_resistance_without_buff` — control: Pip with no buff → Fire Bolt damage is not halved (`damage_applied == damage_total`).
+
+### Changed
+- `app/routes/tabletop_routes.py::_resistance_halve` — per-buff loop now halves damage matching a buff's `effects.resistance_damage_type` string (Absorb Elements). Not consumed; duration-based expiry.
+
+### Notes
+- Total harness count: **2134** in `tests/harness/` (was 2132); **`tests/harness_ui/` 19** (unchanged).
+- The next-melee-bonus-damage rider (`next_melee_bonus_dice` / `next_melee_bonus_type`) stays deferred — it belongs in a future `/attack` read site. The resistance read composes with the existing sheet-level `damage_resistances` and `resistance_to` / `resistance_spell_damage` checks (first match wins).
+
+---
+
 ## [2.158.47] - 2026-06-10 — "Bonds of Peace" — Emboldening Bond's installed buff was inert: the `/roll` handler never read it, so the bonded-creature +1d4 was announce-only. Wiring the read site adds 1d4 to a bonded creature's ability checks, skill checks, and saving throws
 
 **Schema version:** 69

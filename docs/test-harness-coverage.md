@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2132 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.47, 2026-06-10).
+**Total tests:** 2134 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.48, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -426,6 +426,14 @@ v2.99.18 — (D) Phase 3 third-ship: Tiefling Hellish Resistance (sheet-level `d
 |------|-----------------|
 | `test_tiefling_halves_fire_damage` | Thalindra casts Fire Bolt at Zara (Tiefling); deterministic seed lands a hit; `damage_applied == damage_total // 2` (resistance halving). |
 | `test_no_resistance_for_non_tiefling` | Control: Fire Bolt at Pip (Halfling) → `damage_applied == damage_total` (no halving). Regression guard against over-broad resistance match. |
+
+### `test_absorb_elements_resistance.py`
+v2.158.48 — Phase 2 read site for the v2.71.0 Absorb Elements reaction buff (PHB p.211). `_resistance_halve` extended to read a buff's single `effects.resistance_damage_type` string (distinct from the `resistance_to` list) and halve matching damage. Not consumed — the buff's 1-round duration handles expiry. The next-melee-bonus-damage rider stays deferred for a future `/attack` read site.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_absorb_elements_halves_matching_type` | Pip (Halfling, no innate fire resistance) carrying `absorb-elements-active` (resistance to fire); Thalindra's Fire Bolt hit is halved (`damage_applied == damage_total // 2`, `< damage_total`). |
+| `test_absorb_elements_no_resistance_without_buff` | Control: Pip with no buff → Fire Bolt damage is not halved (`damage_applied == damage_total`). |
 
 ### `test_cast_sleep_multi_class.py`
 v2.49.63 — closes the "add Sleep to Bard / Sorcerer / Warlock lists" filed item. Seed-list backfill verified via one happy-path cast per class. Sleep is RAW on bard / sorcerer / warlock / wizard lists; pre-v2.49.63 only Thalindra (wizard) had it.

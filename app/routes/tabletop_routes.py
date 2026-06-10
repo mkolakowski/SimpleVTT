@@ -34870,6 +34870,15 @@ def _resistance_halve(
         # doesn't otherwise resist.
         if is_spell and effects.get("resistance_spell_damage"):
             return damage_amount // 2, True
+        # v2.158.48 — Absorb Elements (v2.71.0 reaction) carries a
+        # single `resistance_damage_type` string (not a `resistance_to`
+        # list). Halve when it matches the incoming damage type. The
+        # buff's 1-round duration handles expiry — resistance is NOT
+        # consumed here (RAW: it lasts until the start of your next
+        # turn, so it halves every matching hit in the interim).
+        _ae_rdt = str(effects.get("resistance_damage_type") or "").strip().lower()
+        if _ae_rdt and _ae_rdt == damage_type_l:
+            return damage_amount // 2, True
         resists = [str(r).strip().lower() for r in (effects.get("resistance_to") or [])]
         # v2.99.121 — "all" wildcard: Petrified (RAW PHB p.290) grants
         # "resistance to all damage". Any damage type halved when "all"
