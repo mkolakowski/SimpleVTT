@@ -72,9 +72,10 @@ async def roster(gm_client: httpx.AsyncClient) -> dict[str, dict]:
     # Druid / Fighter / Monk / Paladin / Ranger / Rogue / Sorcerer /
     # Warlock / Wizard); v2.158.56 adds a 13th PC, a Vengeance Paladin
     # (Dame Seraphine Vael), so the Vow of Enmity sheet button has a
-    # live demo fixture. If this fails the demo seed has drifted and
-    # every downstream test will fail mysteriously — better to fail
-    # fast here.
+    # live demo fixture; v2.158.60 adds a 14th, a Path of the Beast
+    # Barbarian (Brakka Wildmane), so the Form of the Beast button has
+    # one too. If this fails the demo seed has drifted and every
+    # downstream test will fail mysteriously — better to fail fast here.
     expected = {
         "Pip Quickfingers",
         "Thalindra Moonwhisper",
@@ -89,6 +90,7 @@ async def roster(gm_client: httpx.AsyncClient) -> dict[str, dict]:
         "Rowan Quickbow",
         "Magnus Hexbinder",
         "Dame Seraphine Vael",
+        "Brakka Wildmane",
     }
     missing = expected - set(by_name)
     if missing:

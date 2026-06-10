@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.60] - 2026-06-10 — "The Wildmane" — v2.158.59 wired the Form of the Beast sheet button to its dedicated endpoint, but no demo PC was a Path of the Beast Barbarian, so the button never rendered and couldn't be click-tested. This seeds a 14th demo PC (Brakka Wildmane, Path of the Beast Lv 5) carrying a `form-of-the-beast` class feature, then covers the seed contract + the now-reachable button in both the HTTP and Playwright harnesses
+
+**Schema version:** 69
+**Commit summary:** **New demo PC Brakka Wildmane (Path of the Beast Barbarian Lv 5) + the harness coverage the v2.158.59 button needed. `app/demo_seed.py` gains `_barbarian_beast_sheet` (STR 17 / CON 16, Greataxe, Rage 3/long, and a `class_features` list whose entries include `form-of-the-beast`) and registers Brakka as the 14th seeded PC. The roster fixture's `expected` set in `tests/harness/conftest.py` grows to 14 so a seed drift fails fast. Two HTTP tests (`tests/harness/test_demo_beast_barbarian.py`) assert the seed shape the `.cf-use` button depends on, then fire `/use_form_of_the_beast` (form "claws") against the REAL seeded PC — no PATCH, unlike `test_form_of_the_beast.py` which PATCHes Krieger. One Playwright test (`tests/harness_ui/test_form_of_the_beast_picker_ui.py`) expands Brakka's class-features row, clicks the Form of the Beast Use button, asserts the Bite/Claws/Tail option picker opens, picks Claws, and asserts a `/use_form_of_the_beast` POST fired (never `/use_feature`) with no console errors.**
+**Description:** This makes the v2.158.59 Form of the Beast wiring reachable and regression-tested in the demo — mirroring the v2.158.56 Vengeance Paladin arc that gave the Vow of Enmity button a live fixture. The existing demo Barbarian (Krieger Stonefist, Path of the Berserker) has no `form-of-the-beast` class feature, so the button never rendered for any seeded PC; converting Krieger would break his Berserker harness coverage, so a new PC is the right call. Brakka's `class_features` list carries the `form-of-the-beast` entry the `.cf-use` button renders + routes from, so the button now appears in the live demo. The Playwright test is the first to drive a class-features `.cf-use` button (prior UI tests clicked directly-visible resource pills), so it expands the collapsed `.cf-body` row before clicking. No endpoint, broadcast, or schema change — the new PC is additive seed data and the tests exercise the already-shipped `/use_form_of_the_beast` contract and v2.158.59 sheet wiring.
+
+### Added
+- `app/demo_seed.py` — `_barbarian_beast_sheet` + a 14th seeded PC, Brakka Wildmane (Path of the Beast Barbarian Lv 5), whose `class_features` list carries the `form-of-the-beast` entry so the v2.158.59 Use button renders + routes in the live demo.
+- `tests/harness/test_demo_beast_barbarian.py` — seed-contract test (PC is a Lv 5 Path of the Beast Barbarian carrying a `form-of-the-beast` class feature) + happy-path test (firing `/use_form_of_the_beast` form "claws" against the real seeded PC returns 200, installs the buff, and broadcasts `feature_used(source=form-of-the-beast)`).
+- `tests/harness_ui/test_form_of_the_beast_picker_ui.py` — `test_cf_button_routes_form_of_the_beast` expands Brakka's class-features row, clicks the Form of the Beast Use button, asserts the Bite/Claws/Tail picker opens, picks Claws, and asserts a `/use_form_of_the_beast` POST fired (never `/use_feature`) with no console errors.
+
+### Changed
+- `tests/harness/conftest.py` — the `roster` fixture's `expected` set grows to 14 PCs (adds "Brakka Wildmane") so a missing/renamed seed fails fast at fixture setup.
+
+### Notes
+- Total harness count: **2155** in `tests/harness/` (was 2153, +2 HTTP tests); **`tests/harness_ui/` 22** (was 21, +1 Playwright test).
+- No endpoint, broadcast, or schema change (still v69) — additive demo seed + harness coverage of the already-shipped `/use_form_of_the_beast` endpoint and v2.158.59 button wiring.
+
+---
+
 ## [2.158.59] - 2026-06-10 — "Claws Out" — Form of the Beast had a working endpoint (`/use_form_of_the_beast`), a read site (the natural-weapons panel), and a bonus claw-attack button — but no way to *install* the buff from the sheet. The class-features Use button fell through to the announce-only `/use_feature`, so the natural-weapon UI never populated. This wires the button to the dedicated endpoint with a Bite/Claws/Tail picker
 
 **Schema version:** 69

@@ -2456,6 +2456,112 @@ def _barbarian_sheet(name: str) -> dict:
     }
 
 
+def _barbarian_beast_sheet(name: str) -> dict:
+    """v2.158.60: demo Barbarian Lv 5 (Path of the Beast, TCE) — the
+    14th demo PC. Krieger Stonefist is Path of the Berserker, whose
+    class-features list has no Form of the Beast entry, so the
+    v2.158.59 Form of the Beast sheet button (Path of the Beast
+    Barbarian Lv 3+ → /use_form_of_the_beast) was unreachable in the
+    live demo. This PC carries a `form-of-the-beast` class feature so
+    the button renders + the Bite/Claws/Tail picker is verifiable.
+
+    A distinct PC from Krieger so his Berserker coverage (Frenzy /
+    Mindless Rage / Feral Instinct) stays untouched — mirrors the
+    v2.158.56 Vengeance Paladin decision (a new PC rather than
+    converting Sir Caelan).
+    """
+    return {
+        "class": "Barbarian",
+        "subclass": "Path of the Beast",
+        "level": 5,
+        "race": "Human",
+        "alignment": "Chaotic Good",
+        "background": "Outlander",
+        "abilities": {"STR": 17, "DEX": 14, "CON": 16, "INT": 8, "WIS": 12, "CHA": 10},
+        # Unarmored Defense: 10 + DEX +2 + CON +3 = 15.
+        "ac": 15,
+        # Fast Movement (Lv 5): base 30 + 10 = 40.
+        "speed": 40,
+        # Lv 1 max d12 (12) + 4× avg d12 (7) + CON +3 × 5 = 12 + 28 + 15 = 55.
+        "hp": {"current": 55, "max": 55, "temp": 0},
+        "initiative_bonus": 2,
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d12",
+        "saving_throws": {"STR": True, "CON": True},
+        "skills": {
+            "Athletics":    {"ability": "STR", "proficient": True, "expertise": False},
+            "Survival":     {"ability": "WIS", "proficient": True, "expertise": False},
+            "Intimidation": {"ability": "CHA", "proficient": True, "expertise": False},
+            "Perception":   {"ability": "WIS", "proficient": True, "expertise": False},
+        },
+        "attacks": [
+            {"name": "Greataxe", "attack_bonus": "+6", "damage": "1d12+3",
+             "damage_type": "slashing", "range": "5 ft",
+             "desc": "Two-handed, heavy. While raging: +2 damage (Lv 1-8 Rage bonus)."},
+            {"name": "Javelin", "attack_bonus": "+6", "damage": "1d6+3",
+             "damage_type": "piercing", "range": "30/120 ft",
+             "desc": "Thrown."},
+        ],
+        "inventory": [
+            {"name": "Greataxe", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 2,
+             "damage": "1d12", "damage_type": "slashing",
+             "properties": "heavy, two-handed", "_slug": "greataxe"},
+            {"name": "Javelin", "type": "weapon", "qty": 4,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "piercing",
+             "range": "30/120 ft", "properties": "thrown",
+             "_slug": "javelin"},
+            {"name": "Explorer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
+        ],
+        "resources": [
+            {
+                "key": "rage",
+                "name": "Rage",
+                "current": 3, "max": 3, "reset": "long",
+                "source": "barbarian Lv 1",
+                "class_slug": "barbarian",
+                "desc": "Bonus action — enter rage: +2 damage on STR melee attacks (Lv 1-8), advantage on STR checks / saves, resistance to bludgeoning / piercing / slashing. 3 uses at Lv 3-5; refreshes on long rest.",
+                "manual": False,
+            },
+        ],
+        "class_features": [
+            {
+                "key": "rage",
+                "name": "Rage",
+                "desc": "Bonus action — enter rage: damage bonus + advantage on STR + resistance to physical damage. Lasts 1 min.",
+            },
+            {
+                "key": "reckless-attack",
+                "name": "Reckless Attack",
+                "desc": "Free — declare on your first attack: gain advantage on STR melee attacks this turn; attacks against you have advantage until your next turn.",
+            },
+            {
+                "key": "danger-sense",
+                "name": "Danger Sense",
+                "desc": "Passive — advantage on Dex saves vs effects you can see (traps, spells). Fires automatically server-side on Dex-save spells like Fireball.",
+            },
+            {
+                "key": "fast-movement",
+                "name": "Fast Movement",
+                "desc": "Passive (Lv 5+) — +10 ft speed while not in heavy armor. Already baked into the listed speed (40 ft).",
+            },
+            # v2.158.60: Form of the Beast (Path of the Beast Lv 3+,
+            # TCE). The Use button routes to /use_form_of_the_beast
+            # (v2.158.59 wiring) and opens a Bite/Claws/Tail picker;
+            # the chosen form installs the natural-weapon buff that the
+            # v2.158.25 natural-weapons panel + bonus claw attack read.
+            {
+                "key": "form-of-the-beast",
+                "name": "Form of the Beast",
+                "desc": "When you enter your rage, manifest a natural weapon as part of the bonus action — Bite (1d8 piercing, self-heal), Claws (1d6 slashing, extra attack), or Tail (1d8 piercing, 10-ft reach, reaction AC). Lasts until your rage ends.",
+            },
+        ],
+    }
+
+
 def _monk_sheet(name: str) -> dict:
     """v2.18.0: demo Monk Kael Brightleaf (Way of the Open Hand).
     Bumped to Lv 6 in v2.49.227 to unlock Wholeness of Body. Bumped to
@@ -3339,9 +3445,22 @@ def seed_characters(
         sheet=_paladin_vengeance_sheet("Dame Seraphine Vael"),
         color="#b03a4a",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc])
+    # v2.158.60: 14th PC — demo Path of the Beast Barbarian (Brakka
+    # Wildmane). Lv 5 so the v2.158.59 Form of the Beast sheet button
+    # (Path of the Beast Lv 3+ → /use_form_of_the_beast) is reachable
+    # in the live demo. Krieger is Path of the Berserker, whose
+    # class-features list has no Form of the Beast entry. GM-owned.
+    beast_barbarian_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Brakka Wildmane",
+        template="dnd5e",
+        sheet=_barbarian_beast_sheet("Brakka Wildmane"),
+        color="#7a4a2a",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:

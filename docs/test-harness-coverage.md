@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2153 in `tests/harness/` + 21 in `tests/harness_ui/` (as of v2.158.58, 2026-06-10).
+**Total tests:** 2155 in `tests/harness/` + 22 in `tests/harness_ui/` (as of v2.158.60, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1308,6 +1308,14 @@ v2.158.56 — Demo Vengeance Paladin (Dame Seraphine Vael, 13th demo PC) so the 
 |------|-----------------|
 | `test_demo_vengeance_paladin_seed_contract` | Seeded PC exists, is Paladin / Oath of Vengeance Lv 3, and carries a `channel-divinity` resource with `subclass_slug == "vengeance"` (the field the CD picker filter reads to surface Vow of Enmity). |
 | `test_demo_vengeance_paladin_can_fire_vow` | Reset CD to 1 + target in battle → `/use_vow_of_enmity` → 200, `uses_remaining == 0`, `buff_installed: True`, `target_name == "Bandit Quarry"`, `feature_used(source=vow-of-enmity)` broadcast. |
+
+### `test_demo_beast_barbarian.py`
+v2.158.60 — Demo Path of the Beast Barbarian (Brakka Wildmane, 14th demo PC) so the v2.158.59 Form of the Beast class-features button has a live demo fixture. Exercises the REAL seeded PC (no PATCH), unlike `test_form_of_the_beast.py` which PATCHes Krieger.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_demo_beast_barbarian_seed_contract` | Seeded PC exists, is Barbarian / Path of the Beast Lv 5, and carries a `class_features` entry keyed `form-of-the-beast` (the entry the `.cf-use` button renders + routes from). |
+| `test_demo_beast_barbarian_can_manifest_form` | Battle seeded → `/use_form_of_the_beast` (form "claws") → 200, `ok: True`, `form == "claws"`, `damage_die == "1d6"`, `buff_installed: True`, `feature_used(source=form-of-the-beast)` broadcast. |
 
 ### `test_turn_the_faithless.py`
 v2.99.272 — Ancients Paladin (PHB p.87) Turn the Faithless CD (H.2 Phase 2). Sibling CD to Nature's Wrath (v2.99.245). 30-ft AOE Wis save vs fey/fiend or Turned 1 minute.
@@ -2785,6 +2793,13 @@ v2.158.58 — the targetless sibling of the Vow-of-Enmity UI test. Proves Invoke
 | Test | What it asserts |
 |------|-----------------|
 | `test_cd_picker_routes_invoke_duplicity` | PATCHes Brother Tavik Stonebrow into Trickery Domain Lv 2 (CD full) + seeds a battle, clicks `.res-use[data-key="channel-divinity"]`, asserts `#resource-option-picker` surfaces a `.rop-opt` labelled "Invoke Duplicity", picks it, asserts the option picker closes with NO `.target-picker-overlay` opening (the distinguisher from the vow branch), and asserts a POST fired to `/use_invoke_duplicity` (never `/use_feature`) with no console errors. Restores Tavik to Life Domain Lv 8 in a `finally`. |
+
+### `test_form_of_the_beast_picker_ui.py`
+v2.158.60 — browser coverage of the v2.158.59 Form of the Beast class-features button against the v2.158.60 seeded Path of the Beast Barbarian (Brakka Wildmane). The first UI test to drive a class-features `.cf-use` button (prior UI tests clicked directly-visible resource pills), so it expands the collapsed `.cf-body` row first.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cf_button_routes_form_of_the_beast` | Seeds a one-combatant server-side battle, expands Brakka's Form of the Beast `.cf-row` (clicks `.cf-header`), clicks `.cf-use[data-feature="form-of-the-beast"]`, asserts `#resource-option-picker` opens with a `.rop-opt` "Claws" option, picks it, and asserts a POST fired to `/use_form_of_the_beast` (never `/use_feature`) with no console errors. |
 
 ---
 
