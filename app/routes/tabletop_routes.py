@@ -3829,11 +3829,57 @@ def _pc_has_defensive_duelist_available(char) -> "tuple[bool, int]":
 # no feats). Existing tests in test_use_attack_uncanny_dodge.py
 # continue to pass for Pip's default sheet (no DD/Shield/Lucky/item
 # reactions on him).
-def _pc_has_other_attack_targeted_reactions(char) -> bool:
+def _pc_has_valor_bi_buff(
+    db: Session, campaign_id: int, character_id: int,
+) -> dict | None:
+    """v2.158.68 — Walk the PC's live combatant buffs for a
+    `bardic-inspiration-die` whose `source_char_id` is a Valor
+    College Bard Lv 3+. Returns the buff dict (carrying
+    `effects.bardic_inspiration_die` + `source_char_id`) so callers
+    can read the die expression without re-walking; returns None
+    when none is found (no active battle, target not in init, no BI
+    buff, or the granting bard isn't Valor 3+). Drives the Combat
+    Inspiration Phase 3 integration (option surfacing in
+    `_eligible_reactions` + UD-auto-fire suppression in
+    `_apply_damage_to_combatant` + dispatch eligibility in
+    `/use_reaction`).
+    """
+    try:
+        for b in (_get_buffs(campaign_id, int(character_id)) or []):
+            if not isinstance(b, dict):
+                continue
+            if b.get("key") != "bardic-inspiration-die":
+                continue
+            src_id = b.get("source_char_id")
+            if not src_id:
+                continue
+            src_char = db.query(Character).filter(
+                Character.id == int(src_id),
+            ).first()
+            if not src_char or not src_char.sheet:
+                continue
+            if _pc_has_valor_bard(src_char.sheet, 3):
+                return b
+    except Exception:
+        return None
+    return None
+
+
+def _pc_has_other_attack_targeted_reactions(
+    char, *,
+    db: "Session | None" = None,
+    campaign_id: "int | None" = None,
+) -> bool:
     """Returns True when the PC has at least one attack_targeted
     reaction eligible OTHER than Uncanny Dodge. Used to gate UD's
     auto-fire suppression so the player can pick from the prompt
     instead of having UD silently consume the reaction.
+
+    v2.158.68 — accepts optional `db` + `campaign_id` so callers
+    inside an active-battle context can also flag a Valor-Bard-
+    sourced `bardic-inspiration-die` buff as an "other" reaction.
+    Without those kwargs the BI check is skipped — backward-
+    compatible with any caller that didn't plumb the battle state.
     """
     if not char or not char.sheet:
         return False
@@ -3845,6 +3891,12 @@ def _pc_has_other_attack_targeted_reactions(char) -> bool:
         return True
     if _pc_item_reactions_for_trigger(char, "attack_targeted"):
         return True
+    # v2.158.68 — Combat Inspiration AC reaction. Only checked when
+    # the caller plumbed db + campaign_id (both `_eligible_reactions`
+    # and `_apply_damage_to_combatant` do, as of this commit).
+    if db is not None and campaign_id is not None:
+        if _pc_has_valor_bi_buff(db, int(campaign_id), int(char.id)):
+            return True
     return False
 
 
@@ -5070,7 +5122,9 @@ def _eligible_reactions(
                 # path's existing v2.67.2 surface).
                 if (
                     _rogue_level_from_sheet(char.sheet) >= 5
-                    and _pc_has_other_attack_targeted_reactions(char)
+                    and _pc_has_other_attack_targeted_reactions(
+                        char, db=db, campaign_id=campaign_id,
+                    )
                 ):
                     ud_dmg_applied = context.get("damage_applied") or 0
                     ud_heal_back = (
@@ -5135,100 +5189,76 @@ def _eligible_reactions(
                 # Lv 3+. RAW PHB p.55: a creature holding a Bardic
                 # Inspiration die from a Valor Bard may, as a reaction,
                 # roll the die and add it to its AC vs the triggering
-                # attack. The dispatch (rolling the die + verdict +
-                # consuming the BI die buff + marking the reaction) is
-                # deferred to the Phase 3b follow-up commit; this slice
-                # only ships the option's surfacing so the picker offers
-                # it automatically. Without this gate, the player had to
-                # manually call `/use_combat_inspiration?mode=ac` and
-                # plug attack_total + target_ac in by hand (v2.145.0).
-                try:
-                    _ci_watcher_buffs = _get_buffs(
-                        campaign_id, int(watcher_char_id),
-                    )
-                except Exception:
-                    _ci_watcher_buffs = []
-                for _ci_bi in _ci_watcher_buffs or []:
-                    if not isinstance(_ci_bi, dict):
-                        continue
-                    if _ci_bi.get("key") != "bardic-inspiration-die":
-                        continue
-                    _ci_src_id = _ci_bi.get("source_char_id")
-                    if not _ci_src_id:
-                        continue
-                    try:
-                        _ci_src_char = db.query(Character).filter(
-                            Character.id == int(_ci_src_id),
-                        ).first()
-                    except Exception:
-                        _ci_src_char = None
-                    if not _ci_src_char or not _ci_src_char.sheet:
-                        continue
-                    if not _pc_has_valor_bard(_ci_src_char.sheet, 3):
-                        continue
+                # attack. v2.158.68 — Phase 3b wires the dispatch
+                # (rolling the die + verdict + consuming the BI die
+                # buff + marking the reaction) in the
+                # `/use_reaction` elif chain below. Refactored to use
+                # the shared `_pc_has_valor_bi_buff` helper so the
+                # surfacing gate + UD suppression + dispatch all read
+                # from the same source of truth.
+                _ci_bi_buff = _pc_has_valor_bi_buff(
+                    db, campaign_id, int(watcher_char_id),
+                )
+                if _ci_bi_buff is not None:
                     _ci_die_raw = (
-                        ((_ci_bi.get("effects") or {})
+                        ((_ci_bi_buff.get("effects") or {})
                          .get("bardic_inspiration_die")) or ""
                     )
-                    if not _ci_die_raw:
-                        continue
                     # BI stores the die as "d8" / "d10" etc. (no "1"
                     # prefix). Normalize to "1dN" so the label + params
                     # match the convention used by every other dice
                     # expression in the codebase (Tail Swat → "1d8",
-                    # Defensive Duelist → "+PB AC", Lucky → "1d20").
+                    # Lucky → "1d20").
                     try:
                         _ci_die_max = int(
                             str(_ci_die_raw).lower().rsplit("d", 1)[-1]
                         )
                     except (ValueError, AttributeError):
                         _ci_die_max = 0
-                    if _ci_die_max <= 0:
-                        continue
-                    _ci_die_expr = f"1d{_ci_die_max}"
-                    _ci_ac = int(char.sheet.get("ac") or 0)
-                    _ci_atk_total = context.get("attack_total")
-                    _ci_hint = ""
-                    if (
-                        isinstance(_ci_atk_total, int)
-                        and _ci_ac
-                    ):
-                        _ci_need = max(
-                            1, int(_ci_atk_total) - _ci_ac + 1,
-                        )
-                        if _ci_need <= _ci_die_max:
-                            _ci_hint = (
-                                f" — +{_ci_die_expr} AC vs d20 "
-                                f"{_ci_atk_total}; roll {_ci_need}+ on "
-                                f"the die to MISS."
+                    if _ci_die_max > 0:
+                        _ci_die_expr = f"1d{_ci_die_max}"
+                        _ci_ac = int(char.sheet.get("ac") or 0)
+                        _ci_atk_total = context.get("attack_total")
+                        _ci_hint = ""
+                        if (
+                            isinstance(_ci_atk_total, int)
+                            and _ci_ac
+                        ):
+                            _ci_need = max(
+                                1, int(_ci_atk_total) - _ci_ac + 1,
                             )
-                        else:
-                            _ci_hint = (
-                                f" — +{_ci_die_expr} AC vs d20 "
-                                f"{_ci_atk_total}; can't reach miss "
-                                f"threshold (need {_ci_need}+)."
-                            )
-                    opts.append({
-                        "key": "use-combat-inspiration-ac",
-                        "label": (
-                            f"🎺 Combat Inspiration "
-                            f"(+{_ci_die_expr} AC){_ci_hint}"
-                        ),
-                        "kind": "class_feature",
-                        "resource_cost": "Reaction + 1× BI die",
-                        "params": {
-                            "die_expression": _ci_die_expr,
-                            "die_size": _ci_die_max,
-                            "source_char_id": int(_ci_src_id),
-                            "target_ac": _ci_ac,
-                            "attack_total": _ci_atk_total,
-                        },
-                        "available": True,
-                        "unavailable_reason": None,
-                    })
-                    # Only surface ONE option even if the watcher
-                    # somehow carries multiple BI-die buffs.
-                    break
+                            if _ci_need <= _ci_die_max:
+                                _ci_hint = (
+                                    f" — +{_ci_die_expr} AC vs d20 "
+                                    f"{_ci_atk_total}; roll {_ci_need}+ "
+                                    f"on the die to MISS."
+                                )
+                            else:
+                                _ci_hint = (
+                                    f" — +{_ci_die_expr} AC vs d20 "
+                                    f"{_ci_atk_total}; can't reach miss "
+                                    f"threshold (need {_ci_need}+)."
+                                )
+                        opts.append({
+                            "key": "use-combat-inspiration-ac",
+                            "label": (
+                                f"🎺 Combat Inspiration "
+                                f"(+{_ci_die_expr} AC){_ci_hint}"
+                            ),
+                            "kind": "class_feature",
+                            "resource_cost": "Reaction + 1× BI die",
+                            "params": {
+                                "die_expression": _ci_die_expr,
+                                "die_size": _ci_die_max,
+                                "source_char_id": int(
+                                    _ci_bi_buff.get("source_char_id") or 0
+                                ),
+                                "target_ac": _ci_ac,
+                                "attack_total": _ci_atk_total,
+                            },
+                            "available": True,
+                            "unavailable_reason": None,
+                        })
                 # v2.78.0 Phase 5 — Item reactions. Walks equipped
                 # inventory items for `_reactions[]` entries binding
                 # to the attack_targeted trigger.
@@ -7206,7 +7236,9 @@ async def _apply_damage_to_combatant(
             # the only attack_targeted reaction available.
             if (
                 _ud_applies and _ud_char is not None
-                and _pc_has_other_attack_targeted_reactions(_ud_char)
+                and _pc_has_other_attack_targeted_reactions(
+                    _ud_char, db=db, campaign_id=campaign_id,
+                )
             ):
                 _ud_applies = False
             if _ud_applies and _ud_char is not None:
@@ -24323,6 +24355,136 @@ async def use_reaction(
                     "new_ac": new_ac,
                     "attack_total": atk_total,
                     "verdict": verdict,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "use-combat-inspiration-ac" and watcher_char_id:
+        # v2.158.68 — Combat Inspiration Phase 3b dispatch. The Phase
+        # 3a option-add (v2.158.67) surfaces a
+        # `use-combat-inspiration-ac` option on `attack_targeted` when
+        # the watcher holds a Valor-Bard-sourced
+        # `bardic-inspiration-die` buff. This branch consumes the
+        # option: roll the BI die server-side, compute the boosted
+        # AC + miss/hit verdict against the triggering attack, drop
+        # the BI die buff (RAW: the die is spent), mark the reaction,
+        # and broadcast `feature_used(source=combat-inspiration)` with
+        # the verdict + roll details. Mirrors the Form of the Beast
+        # Tail dispatch shape so the chat card renders consistently.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (
+                    o for o in options
+                    if o.get("key") == "use-combat-inspiration-ac"
+                ),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            # Re-verify the BI buff is still there at dispatch time —
+            # the option might have raced with another consumption
+            # (e.g. the BI-die was spent on a damage roll a moment ago).
+            ci_buff = _pc_has_valor_bi_buff(
+                db, campaign_id, int(watcher_char_id),
+            )
+            if ci_buff is None:
+                return JSONResponse(status_code=409, content={
+                    "error": "bi_die_no_longer_available",
+                    "detail": (
+                        "The Bardic Inspiration die buff is gone — it "
+                        "may have already been spent. Combat "
+                        "Inspiration's AC reaction can't fire."
+                    ),
+                })
+            try:
+                die_size = int(params.get("die_size") or 0)
+            except (TypeError, ValueError):
+                die_size = 0
+            if die_size <= 0:
+                # Recompute from the live buff if the option's params
+                # got stale.
+                _live_die_raw = (
+                    ((ci_buff.get("effects") or {})
+                     .get("bardic_inspiration_die")) or ""
+                )
+                try:
+                    die_size = int(
+                        str(_live_die_raw).lower().rsplit("d", 1)[-1]
+                    )
+                except (ValueError, AttributeError):
+                    die_size = 0
+            if die_size <= 0:
+                raise HTTPException(
+                    400, "Combat Inspiration: missing die size",
+                )
+            try:
+                base_ac = int(
+                    params.get("target_ac")
+                    or watcher_char.sheet.get("ac") or 0
+                )
+            except (TypeError, ValueError):
+                base_ac = int(watcher_char.sheet.get("ac") or 0)
+            die_rolled = max(1, int(dice_mod.roll(f"1d{die_size}").total))
+            new_ac = base_ac + die_rolled
+            atk_total = params.get("attack_total")
+            try:
+                atk_total = int(atk_total) if atk_total is not None else None
+            except (TypeError, ValueError):
+                atk_total = None
+            verdict = None
+            if isinstance(atk_total, int):
+                verdict = "miss" if atk_total < new_ac else "hit"
+            # Consume the BI die buff — RAW: the die is spent when
+            # used (whether on damage or AC). Drop it via the live
+            # battle state mutator so the buff_update broadcast fires.
+            await _remove_buff(
+                campaign_id, int(watcher_char_id),
+                "bardic-inspiration-die",
+            )
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            if verdict == "miss":
+                verdict_txt = (
+                    f" The d20 {atk_total} now MISSES AC {new_ac}."
+                )
+            elif verdict == "hit":
+                verdict_txt = (
+                    f" The d20 {atk_total} still HITS AC {new_ac}."
+                )
+            else:
+                verdict_txt = ""
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": (
+                        f"🎺 Combat Inspiration (+{die_rolled} AC)"
+                    ),
+                    "feature_desc": (
+                        f"Reaction. +1d{die_size} AC (rolled "
+                        f"{die_rolled}: {base_ac} → {new_ac}) "
+                        f"against the triggering attack."
+                        f"{verdict_txt}"
+                    ),
+                    "source": "combat-inspiration",
+                    "reaction_kind": "class_feature",
+                    "ac_bonus": die_rolled,
+                    "base_ac": base_ac,
+                    "new_ac": new_ac,
+                    "attack_total": atk_total,
+                    "verdict": verdict,
+                    "die_size": die_size,
+                    "die_expression": f"1d{die_size}",
                 },
             })
         except HTTPException:

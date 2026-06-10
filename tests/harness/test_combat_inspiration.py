@@ -497,3 +497,260 @@ async def test_ci_phase3a_no_bi_buff_no_option(
             f"use-combat-inspiration-ac must NOT surface without a BI "
             f"buff; got keys={keys}"
         )
+
+
+async def test_ci_phase3b_dispatch_rolls_consumes_and_broadcasts(
+    gm_client, gm_ws, lyra_valor, roster,
+):
+    """v2.158.68 — Phase 3b dispatch. Seeds Lyra (Valor Lv 6) + Pip
+    + Garrik in a battle; casts BI from Lyra onto Garrik (installs
+    `bardic-inspiration-die` on his combatant, source = Lyra); Pip
+    hits Garrik so the `attack_targeted` prompt fires with
+    `use-combat-inspiration-ac` in its options; then POSTs
+    `/use_reaction` with that key. Asserts (a) 200 + a
+    `feature_used(source=combat-inspiration, reaction_kind=class_feature)`
+    broadcast carries `ac_bonus` (1..8 for Lv 6 → 1d8), `base_ac`,
+    `new_ac == base_ac + ac_bonus`, `attack_total`, `verdict ∈
+    {"hit", "miss"}`; (b) a `buff_update` broadcast fires for Garrik
+    with `bardic-inspiration-die` REMOVED from his buff list (RAW:
+    the die is spent on a reaction-AC use); (c) an `economy_update`
+    flips Garrik's reaction chip to used."""
+    lyra = lyra_valor
+    pip = roster["Pip Quickfingers"]
+    garrik = roster["Garrik Ironside"]
+    refill = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+        json={"type": "long"},
+    )
+    assert refill.status_code == 200, refill.text
+    lyra_tok = f"tok_ci3b_l_{lyra['id']}"
+    pip_tok = f"tok_ci3b_p_{pip['id']}"
+    garrik_tok = f"tok_ci3b_g_{garrik['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": pip_tok, "char_id": pip["id"],
+             "name": pip["name"], "initiative": 20,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": lyra_tok, "char_id": lyra["id"],
+             "name": lyra["name"], "initiative": 15,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": garrik_tok, "char_id": garrik["id"],
+             "name": garrik["name"], "initiative": 10,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    bi = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration",
+        json={
+            "character_id": lyra["id"],
+            "target_character_id": garrik["id"],
+            "override": True,
+        },
+    )
+    assert bi.status_code == 200, bi.text
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+    for _ in range(20):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": pip["id"],
+                "attack_index": 0,
+                "target_combatant_id": garrik_tok,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit"):
+            break
+    else:
+        raise AssertionError("Pip failed to hit Garrik in 20 swings")
+    await asyncio.sleep(0.3)
+    prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, "expected attack_targeted reaction_prompt for Garrik"
+    ci_opts = [
+        o for o in prompts[0]["data"].get("options", [])
+        if o.get("key") == "use-combat-inspiration-ac"
+    ]
+    assert ci_opts, "Phase 3a regression: use-combat-inspiration-ac missing"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+    gm_ws.mark()
+    rx = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "use-combat-inspiration-ac",
+            "watcher_char_id": garrik["id"],
+        },
+    )
+    assert rx.status_code == 200, rx.text
+    await asyncio.sleep(0.3)
+    # (a) feature_used broadcast surfaces the resolved roll + verdict.
+    feats = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "combat-inspiration"
+        and (m.get("data") or {}).get("character_id") == garrik["id"]
+    ]
+    assert feats, "expected combat-inspiration feature_used broadcast"
+    fd = feats[-1]["data"]
+    assert fd.get("reaction_kind") == "class_feature"
+    ac_bonus = int(fd.get("ac_bonus") or 0)
+    assert 1 <= ac_bonus <= 8, (
+        f"ac_bonus should be 1..8 for Lv 6 Valor (1d8); got {ac_bonus}"
+    )
+    base_ac = int(fd.get("base_ac") or 0)
+    new_ac = int(fd.get("new_ac") or 0)
+    assert new_ac == base_ac + ac_bonus, (
+        f"new_ac should be base_ac + ac_bonus; got base_ac={base_ac}, "
+        f"ac_bonus={ac_bonus}, new_ac={new_ac}"
+    )
+    assert fd.get("verdict") in ("hit", "miss"), (
+        f"verdict should be 'hit' or 'miss'; got {fd.get('verdict')!r}"
+    )
+    assert fd.get("die_size") == 8
+    assert fd.get("die_expression") == "1d8"
+    # (b) buff_update shows the BI die buff is consumed (RAW spend).
+    bu_msgs = [
+        m for m in gm_ws.buffered("buff_update")
+        if int((m.get("data") or {}).get("character_id") or 0) == int(garrik["id"])
+    ]
+    assert bu_msgs, "expected buff_update broadcast after BI consume"
+    final_buffs = (bu_msgs[-1].get("data") or {}).get("buffs") or []
+    assert not any(
+        b.get("key") == "bardic-inspiration-die" for b in final_buffs
+    ), (
+        f"bardic-inspiration-die should be consumed; got "
+        f"keys={[b.get('key') for b in final_buffs]}"
+    )
+    # (c) Garrik's reaction chip flipped.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == garrik["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ and econ[-1]["data"]["used"] is True, (
+        "expected Garrik's reaction economy to flip to used"
+    )
+
+
+async def test_ci_phase3b_ud_suppression_lets_rogue_see_the_prompt(
+    gm_client, gm_ws, lyra_valor, roster,
+):
+    """v2.158.68 — Phase 3b UD suppression: when the watcher is a
+    Rogue Lv 5+ AND carries a Valor-sourced `bardic-inspiration-die`
+    buff, Uncanny Dodge's v2.49.243 auto-fire should step aside (the
+    v2.80.0 `_pc_has_other_attack_targeted_reactions` pattern). Pre-
+    fix, UD pre-consumed the reaction before the prompt fired —
+    the BI option never surfaced. This asserts the fix: Pip's
+    `attack_targeted` prompt now lists `use-combat-inspiration-ac`
+    AND Pip's reaction stays UNUSED until she resolves the prompt
+    (no auto-fired `feature_used(source=uncanny-dodge)` lands first).
+
+    Setup: Lyra casts BI on Pip (Rogue Lv 5+); Garrik swings at Pip
+    (Fighter doesn't carry UD, can use as attacker). After a hit,
+    assert both the prompt + the no-UD-auto-fire invariants.
+    """
+    lyra = lyra_valor
+    pip = roster["Pip Quickfingers"]
+    garrik = roster["Garrik Ironside"]
+    refill = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+        json={"type": "long"},
+    )
+    assert refill.status_code == 200, refill.text
+    lyra_tok = f"tok_ci3b_ud_l_{lyra['id']}"
+    pip_tok = f"tok_ci3b_ud_p_{pip['id']}"
+    garrik_tok = f"tok_ci3b_ud_g_{garrik['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": garrik_tok, "char_id": garrik["id"],
+             "name": garrik["name"], "initiative": 20,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": lyra_tok, "char_id": lyra["id"],
+             "name": lyra["name"], "initiative": 15,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": pip_tok, "char_id": pip["id"],
+             "name": pip["name"], "initiative": 10,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    bi = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration",
+        json={
+            "character_id": lyra["id"],
+            "target_character_id": pip["id"],
+            "override": True,
+        },
+    )
+    assert bi.status_code == 200, bi.text
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+    for _ in range(20):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": garrik["id"],
+                "attack_index": 0,
+                "target_combatant_id": pip_tok,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit"):
+            break
+    else:
+        raise AssertionError("Garrik failed to hit Pip in 20 swings")
+    await asyncio.sleep(0.3)
+    # UD auto-fire MUST NOT have landed — its feature_used broadcast
+    # would carry source="uncanny-dodge" tied to Pip.
+    ud_autofired = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "uncanny-dodge"
+        and (m.get("data") or {}).get("character_id") == pip["id"]
+    ]
+    assert not ud_autofired, (
+        f"Uncanny Dodge auto-fired despite Pip carrying a Valor-sourced "
+        f"BI buff — Phase 3b UD-suppression failed. Got: "
+        f"{[m.get('data') for m in ud_autofired]}"
+    )
+    prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("watcher_char_id") == pip["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, (
+        "expected attack_targeted prompt for Pip even though she's a "
+        "Rogue Lv 5+; UD's auto-fire should have been suppressed by "
+        "the BI buff"
+    )
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "use-combat-inspiration-ac" in keys, (
+        f"expected use-combat-inspiration-ac on Pip's prompt; got {keys}"
+    )
+    # UD itself should ALSO surface (suppression flips the auto-fire
+    # to a manual pick) — Pip can choose between UD's halve-damage
+    # and Combat Inspiration's +AC.
+    assert "cast-uncanny-dodge" in keys, (
+        f"UD-suppression should surface cast-uncanny-dodge as a manual "
+        f"option alongside use-combat-inspiration-ac; got {keys}"
+    )
