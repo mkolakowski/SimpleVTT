@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.38] - 2026-06-10 — "The Cobbler's Bill" — Fancy Footwork's `fancy-footwork-blocked` mark was install-only dead weight: the OA-detection flow never read it. Wiring the read site makes the marked creature actually unable to make opportunity attacks against the swashbuckler
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.148.0 Fancy Footwork mark (Swashbuckler Rogue Lv 3+, XGE p.47). When a swashbuckler makes a melee attack against a creature, that creature can't make opportunity attacks against the swashbuckler for the rest of the turn. v2.148.0 installed a 1-round `fancy-footwork-blocked` buff on the target carrying `effects.fancy_footwork_blocked_against_char_id = <swashbuckler char_id>`, but the OA-detection flow (`_check_opportunity_attack_triggers`) never read it — so the mark was announce-only. This commit adds `_combatant_oa_blocked_against` and skips any watcher whose mark names the moving swashbuckler, suppressing the OA trigger (and its reaction prompt) for the turn.**
+**Description:** v2.148.0 flipped Fancy Footwork from announce-only to a buff-installing endpoint (Phase 1), placing a `fancy-footwork-blocked` mark on the melee target that names the swashbuckler's char_id. But the consumer was deferred: `_check_opportunity_attack_triggers` iterated battle combatants (watchers) and never inspected the mark, so a marked creature still provoked the swashbuckler's OA when the swashbuckler walked away. This commit wires the read. The OA flow now computes the mover's char_id and, inside the watcher loop, skips any watcher carrying a `fancy-footwork-blocked` buff whose `fancy_footwork_blocked_against_char_id` matches the mover — exactly the RAW scope (the mark only blocks OAs against the swashbuckler who placed it, not against everyone). Marks naming a different character still let the OA fire.
+
+This flips Fancy Footwork from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `app/routes/tabletop_routes.py::_combatant_oa_blocked_against` — read gate returning True when a watcher combatant carries an active `fancy-footwork-blocked` buff whose `effects.fancy_footwork_blocked_against_char_id` equals the moving swashbuckler's char_id.
+- `tests/harness/test_fancy_footwork.py::test_ff_block_suppresses_watcher_oa` — Phase 2 read-site test: a watcher marked against the mover provokes NO OA when the mover leaves reach. `test_ff_block_only_suppresses_named_char` — specificity control: a mark naming a different char still lets the OA fire.
+
+### Changed
+- `app/routes/tabletop_routes.py::_check_opportunity_attack_triggers` — computes the mover's char_id and skips any watcher whose `fancy-footwork-blocked` mark names that char_id, suppressing the OA trigger + reaction prompt for the turn. `use_fancy_footwork` docstring updated to mark the Phase 2 finisher.
+
+### Notes
+- Total harness count: **2121** in `tests/harness/` (was 2119); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.37] - 2026-06-10 — "Walk It Off" — Drunken Technique's +10 ft speed rider was inert dead weight: the Phase-1 buff stored the bonus under a key nothing read. Wiring it to the engine-generic `speed_bonus_ft` makes the move-cap actually rise
 
 **Schema version:** 69

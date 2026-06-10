@@ -3434,6 +3434,35 @@ from app.content.effective_speed import (
 )
 
 
+def _combatant_oa_blocked_against(combatant: dict, mover_char_id: int) -> bool:
+    """v2.158.38 — Phase 2 read gate for the v2.148.0 Fancy Footwork
+    mark (Swashbuckler Rogue Lv 3+, XGE p.47): "if you make a melee
+    attack against a creature, that creature can't make opportunity
+    attacks against you for the rest of your turn."
+
+    Returns True when this watcher carries an active
+    `fancy-footwork-blocked` buff whose
+    `effects.fancy_footwork_blocked_against_char_id` equals the moving
+    swashbuckler's char_id — in which case the OA trigger is suppressed.
+    """
+    if not mover_char_id:
+        return False
+    for b in (combatant.get("buffs") or []):
+        if not isinstance(b, dict):
+            continue
+        if (str(b.get("key") or "").strip().lower() != "fancy-footwork-blocked"):
+            continue
+        eff = b.get("effects") or {}
+        if not isinstance(eff, dict):
+            continue
+        try:
+            if int(eff.get("fancy_footwork_blocked_against_char_id") or 0) == int(mover_char_id):
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def _check_opportunity_attack_triggers(
     db: Session, campaign_id: int,
     mover_token_id: int,
@@ -3478,6 +3507,13 @@ def _check_opportunity_attack_triggers(
     mover_team = (
         (mover_token_row.team or "neutral").strip().lower()
         if mover_token_row else "neutral"
+    )
+    # v2.158.38 — Fancy Footwork (Swashbuckler Rogue Lv 3+). The mover's
+    # char_id keys the `fancy-footwork-blocked` OA-suppression read below.
+    mover_char_id = (
+        int(mover_token_row.character_id)
+        if mover_token_row and mover_token_row.character_id
+        else None
     )
     triggers: list[dict] = []
     for c in combatants:
@@ -3532,6 +3568,12 @@ def _check_opportunity_attack_triggers(
             and watcher_team != "neutral"
             and mover_team == watcher_team
         ):
+            continue
+        # v2.158.38 — Fancy Footwork read site. If this watcher was
+        # marked by the moving swashbuckler's earlier melee attack
+        # (`fancy-footwork-blocked` buff naming the mover's char_id),
+        # they can't make OAs against the swashbuckler this turn — skip.
+        if _combatant_oa_blocked_against(c, mover_char_id):
             continue
         wx = float(watcher_token.x or 0)
         wy = float(watcher_token.y or 0)
@@ -55917,9 +55959,10 @@ async def use_fancy_footwork(
     # v2.148.0 — Phase 1 mechanical wiring: when the caller passes
     # `target_combatant_id`, install a 1-round `fancy-footwork-blocked`
     # buff on the target carrying `effects.fancy_footwork_blocked_against_char_id
-    # = swashbuckler.id`. A Phase 2 hook in the OA flow will read this
-    # buff and skip the OA against the named char_id; this commit just
-    # makes the mark exist end-to-end.
+    # = swashbuckler.id`.
+    # v2.158.38 — Phase 2 (shipped): `_check_opportunity_attack_triggers`
+    # reads this buff via `_combatant_oa_blocked_against` and suppresses
+    # the marked watcher's OA against the swashbuckler for the turn.
     buff_installed = False
     if target_combatant_id:
         buff_installed = await _install_buff_on_combatant_id(
