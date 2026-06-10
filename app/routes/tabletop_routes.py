@@ -278,6 +278,19 @@ _FEATURE_ECONOMY: dict[str, dict] = {
         "slot": "action",
         "desc": "Action: end one charmed or frightened condition on yourself.",
     },
+    # v2.158.23: Vanish (Ranger Lv 14+). Mirror of the client-side
+    # entry in app/static/dnd5e_feature_economy.js. The cf-use button
+    # routes featureKey == "vanish" to /use_vanish (not /use_feature)
+    # so the v2.158.21 buff-install fires; this entry exists so the
+    # picker UI's slot-color chip + slot-validation fallback path
+    # both resolve to "bonus" consistently.
+    "vanish": {
+        "slot": "bonus",
+        "desc": (
+            "Hide as a bonus action; can't be tracked by nonmagical "
+            "means unless you choose to leave a trail."
+        ),
+    },
 }
 
 

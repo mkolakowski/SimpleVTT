@@ -340,6 +340,22 @@ window._FEATURE_ECONOMY = {
         // because clicking the Quickened button itself is the slot
         // selector for the spell that follows.
     },
+
+    /* ── Ranger ──────────────────────────────────────────────────── */
+    // v2.158.23: Vanish (Ranger Lv 14+). Hide as a bonus action — the
+    // dedicated /use_vanish endpoint marks the bonus chip + installs
+    // the permanent `vanish-active` parameter buff (v2.158.21) carrying
+    // the three `vanish_*` effect keys. The cf-use button handler in
+    // sheet_dnd5e.html routes featureKey === 'vanish' to /use_vanish
+    // (not /use_feature) so the buff install fires. Mirror in
+    // app/routes/tabletop_routes.py's _FEATURE_ECONOMY.
+    'vanish': {
+        slot: 'bonus',
+        class: 'ranger',
+        unlock_level: 14,
+        label: 'Vanish',
+        desc: "Hide as a bonus action; can't be tracked by nonmagical means unless you choose to leave a trail.",
+    },
 };
 
 /* Lookup helper. Returns the merged feature + option entry or null

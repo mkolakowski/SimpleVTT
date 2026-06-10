@@ -123,6 +123,34 @@ async def test_use_vanish_level_gate(
     assert data.get("required") == 14
 
 
+async def test_use_feature_vanish_curated_entry_resolves_bonus_slot(
+    gm_client, rowan_lv14,
+):
+    """v2.158.23 — server-side `_FEATURE_ECONOMY['vanish']` mirror.
+
+    The cf-use picker routes featureKey === 'vanish' to /use_vanish
+    directly (which installs the buff), but the curated server mirror
+    exists as a defensive fallback so a /use_feature call with
+    ``feature_key: 'vanish'`` resolves the slot to "bonus" instead of
+    404-ing on "Unknown feature". This pins the back-compat path.
+    """
+    rowan = rowan_lv14
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": rowan["id"],
+            "feature_key": "vanish",
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("slot") == "bonus", (
+        f"v2.158.23: /use_feature should resolve `vanish` to the bonus "
+        f"slot via the curated table; got slot={data.get('slot')!r}"
+    )
+
+
 async def test_vanish_buff_payload_carries_parameter_flags(
     gm_client, gm_ws, rowan_lv14,
 ):

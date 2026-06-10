@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.23] - 2026-06-09 — "One-Click Vanish" — Phase 2 frontend wiring: Vanish (Ranger Lv 14+) now has a curated `_FEATURE_ECONOMY` entry on both sides; cf-use picker routes featureKey === 'vanish' to /use_vanish so the v2.158.21 buff install fires from the class-features button
+
+**Schema version:** 69
+**Commit summary:** **First-class UI surface for the v2.158.21 Vanish feature. Adds a `vanish` entry to the curated `_FEATURE_ECONOMY` table on BOTH sides — `app/static/dnd5e_feature_economy.js` (client, with `class: 'ranger'` + `unlock_level: 14`) and `app/routes/tabletop_routes.py::_FEATURE_ECONOMY` (server mirror, slot="bonus"). The `cf-use` button click handler in `app/templates/sheet_dnd5e.html` now recognises `featureKey === 'vanish'` and routes the POST to `/use_vanish` instead of the generic `/use_feature` flow — so the v2.158.21 `vanish-active` buff install fires from a one-click sheet button. A new "Vanish: Hide as bonus action — vanish-active buff installed" toast surfaces server confirmation to the player.**
+**Description:** v2.158.21 shipped the buff-install backend; v2.158.22 shipped the `can_hide_as_bonus` query endpoint. v2.158.23 closes the user-facing loop: a Ranger Lv 14+ PC with "vanish" in their `sheet["class_features"]` list now sees a Vanish button rendered in the Class abilities panel (the existing rowHtml renderer picks up the curated entry's label/desc/slot automatically), and clicking it fires the full Vanish ceremony — bonus chip mark + buff install + feature_used broadcast — via the dedicated `/use_vanish` endpoint.
+
+The server-side `_FEATURE_ECONOMY['vanish']` entry is a defensive mirror: if a client somehow POSTs `/use_feature` with `feature_key: 'vanish'` instead of routing to `/use_vanish` (e.g. an older client, a homebrew picker), the curated table resolves the slot to "bonus" so the chip still flips correctly. That path doesn't install the buff (only `/use_vanish` does), but it stays back-compat for the chip flip.
+
+Demo seed update — adding "vanish" to a fixture Ranger's class_features list at Lv 14+ — is deferred to a follow-up commit; for now the curated entry is in place so any sheet (manual edit, homebrew import, future demo character) that lists "vanish" gets the picker button + the right routing.
+
+### Added
+- `app/static/dnd5e_feature_economy.js` — new `'vanish'` entry in a new Ranger block (`class: 'ranger'`, `unlock_level: 14`, `slot: 'bonus'`, `label: 'Vanish'`, plus the SRD desc).
+- `app/routes/tabletop_routes.py::_FEATURE_ECONOMY['vanish']` — server-side mirror of the same entry. `slot: 'bonus'` + the SRD desc.
+- `app/templates/sheet_dnd5e.html` — `cf-use` button handler now sets `const isVanish = featureKey === 'vanish'`, routes the endpoint dispatch to `'use_vanish'`, builds the body shape `{character_id, override}`, and surfaces a "🌑 Vanish: Hide as bonus action — vanish-active buff installed. Roll Stealth normally." toast on success.
+- `tests/harness/test_use_vanish.py::test_use_feature_vanish_curated_entry_resolves_bonus_slot` — pins the server mirror: a `/use_feature` call with `feature_key: 'vanish'` for a Ranger Lv 14 returns 200 with `slot: "bonus"` (back-compat path; doesn't install the buff).
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2098** (was 2097).
+
+### Notes
+- The non-magical tracking-check resolver (the buff's other Phase 2 deferred read site) still doesn't have a primitive in the codebase. Filed.
+- The Hide-as-bonus action-economy bar button (the alternative location the v2.158.22 endpoint was meant to power) is still TBD. The class-features panel route is simpler and ships today; the action-bar button can layer on later. **Total harness count: 2098** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.22] - 2026-06-09 — "Trail's End" — Phase 2 read site for the v2.158.21 Vanish buff: new `GET /can_hide_as_bonus` endpoint consolidates the "can this PC Hide as a bonus action?" check (consults Vanish buff + Rogue Cunning Action)
 
 **Schema version:** 69

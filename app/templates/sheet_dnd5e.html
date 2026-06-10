@@ -5531,6 +5531,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // the buff and rerolls up to CHA-mod lowest dice.
                     // No picker — the option has only one behaviour.
                     const isMetamagicEmpowered = featureKey === 'empowered-spell';
+                    // v2.158.23: Vanish (Ranger Lv 14+). Routes to
+                    // /use_vanish so the v2.158.21 `vanish-active`
+                    // buff install fires (alongside the bonus chip
+                    // mark + feature_used broadcast). Without this
+                    // route the picker would fall through to
+                    // /use_feature which only flips the chip + emits
+                    // an announce-style broadcast — missing the buff.
+                    const isVanish = featureKey === 'vanish';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -5681,6 +5689,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                           ? 'use_font_of_magic_to_points'
                                           : 'use_font_of_magic_to_slot')
                                    : isMetamagicEmpowered ? 'use_metamagic_empowered_spell'
+                                   : isVanish ? 'use_vanish'
                                    : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
@@ -5725,6 +5734,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 override: !!override,
                             } : isMetamagicEmpowered ? {
                                 character_id: MY_CHAR_ID,
+                            } : isVanish ? {
+                                character_id: MY_CHAR_ID,
+                                override: !!override,
                             } : {
                                 character_id: MY_CHAR_ID,
                                 feature_key: featureKey,
@@ -5791,6 +5803,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             window.showToast(`⚔ Reckless Attack: advantage on STR attacks until end of turn; attackers have advantage against you until your next turn.`, 'info');
                         } else if (isMetamagicEmpowered) {
                             window.showToast(`✨ Empowered Spell armed (1 SP spent — reroll up to ${data.rerolls_available} lowest dice on your next damaging spell). ${data.sp_remaining}/${data.sp_max} SP left.`, 'info');
+                        } else if (isVanish) {
+                            const buffNote = data.buff_installed
+                                ? ' — vanish-active buff installed'
+                                : '';
+                            window.showToast(`🌑 Vanish: Hide as bonus action${buffNote}. Roll Stealth normally.`, 'info');
                         } else {
                             const lbl = data.feature_label || 'Feature used';
                             const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';
