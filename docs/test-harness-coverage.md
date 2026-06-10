@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2164 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.71, 2026-06-10).
+**Total tests:** 2165 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.72, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2671,6 +2671,7 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_root_doc` | v2.49.9: `GET /wiki/doc/claude` → 200, body contains CLAUDE.md's H1 ("Claude Code guidelines") + the nav menu. Resolves through the allowlist to the repo-root `CLAUDE.md`. |
 | `test_wiki_doc_serves_automation_coverage` | v2.99.447: `GET /wiki/doc/automation-coverage` → 200, body contains "automation coverage" + the nav menu. Resolves through the allowlist to `docs/automation-coverage.md` (the Phase 0 audit doc). |
 | `test_wiki_doc_serves_magic_items_automation_plan` | v2.158.71: `GET /wiki/doc/plan-magic-items-automation` → 200, body contains "magic-item automation" + "pearl of power" + the nav menu. Resolves through the allowlist to `docs/plans/magic-items-automation.md` (the SRD-audit P1 plan). |
+| `test_wiki_doc_serves_exhaustion_levels_plan` | v2.158.72: `GET /wiki/doc/plan-exhaustion-levels` → 200, body contains "exhaustion levels" + the nav menu. Resolves through the allowlist to `docs/plans/exhaustion-levels.md` (the SRD-audit P1 plan to replace single-flag exhaustion with RAW 6-level tracking). |
 | `test_wiki_doc_unknown_slug_404` | v2.49.9: a slug that isn't in `_DOC_ALLOWLIST` → 404. Important security guarantee — the allowlist is the only way to reach a file outside `docs/wiki/`. |
 | `test_wiki_doc_traversal_blocked` | v2.49.9: directory-traversal characters in the doc slug → 404 / 400, rejected by the slug guard before the allowlist lookup. |
 

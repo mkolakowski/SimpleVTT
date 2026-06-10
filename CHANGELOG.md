@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.72] - 2026-06-10 — "The Six Tides" — File the Exhaustion-levels design plan and surface it through the wiki — P1 finding of the v2.158.69 SRD audit: the engine today treats `exhaustion` as a single-flag condition buff, but RAW SRD 5.1 has six cumulative levels (disadvantage on checks → speed halved → disadvantage on attacks + saves → HP max halved → speed 0 → death)
+
+**Schema version:** 69
+**Commit summary:** **New design plan `docs/plans/exhaustion-levels.md` lays out the four-phase strategy for replacing the engine's single-flag exhaustion treatment with RAW 6-level tracking: Phase 0 (schema — `exhaustion_level` integer 0–6 on the character/combatant sheet, validation, broadcast contract), Phase 1 (per-level rule application via the existing buff walker — Lv 1 disadvantage on checks routes through the `_apply_disadvantage` hook, Lv 2 speed halved through the `_compute_speed` walker, Lv 3 disadvantage on attacks + saves, Lv 4 HP max halved via the `_apply_hp_max_modifier` hook, Lv 5 speed 0, Lv 6 death-on-tick), Phase 2 (long-rest hook reduces by 1 + GM "Adjust exhaustion ±1" sheet button + the v2.99.x death-saves Phase 2 caster-on-death-tick hook fires at Lv 6), Phase 3 (sources catalog — Berserker Frenzy, Forced March, the half-dozen SRD spells that inflict it, and the third-day exposure-without-food/water tick). Per CLAUDE.md wiki rule the plan is surfaced four ways in the same commit: (1) `_DOC_ALLOWLIST` entry `plan-exhaustion-levels` in `app/routes/wiki_routes.py`, (2) "Design plans" row in `app/templates/wiki.html` after the magic-items row, (3) mirror row in `docs/wiki/README.md`, (4) per-slug smoke test `test_wiki_doc_serves_exhaustion_levels_plan` in `tests/harness/test_wiki.py` + landing-page assertion line added to `test_wiki_home_renders`. `docs/test-harness-coverage.md` bumped 2164 → 2165 with the new row. Plan-only commit — engine wiring lands later under the plan's Phase 1.**
+**Description:** The 2026-06-10 SRD audit (see TODO.md "SRD 5e Audit") flagged Exhaustion-level tracking as the second-biggest un-planned RAW gap after magic items: the condition exists in the engine as a single binary buff, so a GM stacking exhaustion across a long marching day has to remember which level the party is on and apply the cumulative effects by hand. This commit doesn't fix that — it files the plan that does. Phase 1 is the leverage point: the buff walker already has all the hooks (`_apply_disadvantage`, `_compute_speed`, `_apply_hp_max_modifier`) needed to install each level's effect as a synthetic auto-buff keyed off the integer level, so the wiring is mostly data plumbing rather than new engine surface.
+
+### Added
+- `docs/plans/exhaustion-levels.md` — new design plan (P1 of the 2026-06-10 SRD audit). Phases 0–3 + RAW table + sources catalog + per-phase test plan.
+- `app/routes/wiki_routes.py` — `_DOC_ALLOWLIST` entry `plan-exhaustion-levels` → `docs/plans/exhaustion-levels.md`.
+- `app/templates/wiki.html` — "Design plans" table row for the new plan after the magic-items row (status: ⚪ proposed).
+- `docs/wiki/README.md` — matching row in the on-disk mirror so the two indexes stay in lock-step.
+- `tests/harness/test_wiki.py` — `test_wiki_doc_serves_exhaustion_levels_plan` smoke test (200 + recognizable substring + nav menu) + `test_wiki_home_renders` landing-page assertion line.
+- `docs/test-harness-coverage.md` — new row + total bumped 2164 → 2165.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.158.71 → 2.158.72. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.72.
+
+### Notes
+- Plan-only commit; the engine surface (level integer on sheet, walker hooks, long-rest decrement, sources) lands later under the plan's Phase 0 + 1. The 2026-06-10 SRD audit named magic-items + exhaustion-levels as the two un-planned P1s; with this commit both now have plans on the wiki.
+
+---
+
 ## [2.158.71] - 2026-06-10 — "The Empty Charges" — File the magic-item automation design plan and surface it through the wiki — the top P1 finding of the v2.158.69 SRD audit (292 SRD magic items shipped under `app/data/local/dnd5e/items/` with `actions: []` on every entry, no attunement gating, no charge tracking, no spell-effect dispatch)
 
 **Schema version:** 69

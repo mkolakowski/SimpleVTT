@@ -50,6 +50,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-paladin-oaths" in resp.text
     # v2.158.71: magic-item automation plan listed (SRD audit P1).
     assert "/wiki/doc/plan-magic-items-automation" in resp.text
+    # v2.158.72: exhaustion-levels plan listed (SRD audit P1).
+    assert "/wiki/doc/plan-exhaustion-levels" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.49.168: targeting system visual guide listed.
@@ -524,6 +526,20 @@ async def test_wiki_doc_serves_magic_items_automation_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     assert "magic-item automation" in resp.text.lower()
     assert "pearl of power" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_exhaustion_levels_plan():
+    """v2.158.72: GET /wiki/doc/plan-exhaustion-levels — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/exhaustion-levels.md``. Filed by
+    the 2026-06-10 SRD audit (TODO.md) as a P1 gap: engine treats
+    Exhaustion as a single-flag buff, RAW has 6 cumulative levels."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-exhaustion-levels")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "exhaustion levels" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 
