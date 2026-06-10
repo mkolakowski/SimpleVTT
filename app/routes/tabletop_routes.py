@@ -42987,6 +42987,100 @@ async def use_vanish(
     }
 
 
+def _pc_can_hide_as_bonus_action(
+    sheet: dict, campaign_id: int, character_id: int,
+) -> tuple[bool, str | None]:
+    """v2.158.22 — Phase 2 read site for the Vanish buff's
+    ``vanish_hide_as_bonus_action`` flag (installed by /use_vanish
+    at Ranger Lv 14+ in v2.158.21).
+
+    Returns ``(can_hide, source)`` where ``source`` is the canonical
+    key granting the ability:
+      * ``"cunning-action"`` for Rogue Lv 2+ (always-on);
+      * ``"vanish"`` for any PC carrying the ``vanish-active`` buff;
+      * ``None`` when the PC can only Hide as a full action.
+
+    Cunning Action wins when both apply (more permissive — no buff
+    required + no level/class gate to re-validate at read time).
+    """
+    cls = (sheet.get("class") or "").strip().lower()
+    rogue_lv = 0
+    if cls == "rogue":
+        try:
+            rogue_lv = int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            rogue_lv = 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "rogue":
+            try:
+                rogue_lv = max(rogue_lv, int(entry.get("level") or 0))
+            except (TypeError, ValueError):
+                pass
+    if rogue_lv >= 2:
+        return True, "cunning-action"
+    for buff in _get_buffs(campaign_id, int(character_id)):
+        if not isinstance(buff, dict):
+            continue
+        effects = buff.get("effects") or {}
+        if effects.get("vanish_hide_as_bonus_action"):
+            return True, "vanish"
+    return False, None
+
+
+@router.get("/api/campaign/{campaign_id}/can_hide_as_bonus")
+def can_hide_as_bonus(
+    campaign_id: int,
+    character_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.158.22 — Phase 2 read site for the Vanish buff. Returns
+    whether the character can Hide as a bonus action right now + the
+    canonical source key. Backend consolidation of the "can this PC
+    Hide as a bonus?" check so the frontend can surface a Hide-as-
+    bonus button (action-economy bar / mini-sheet) without re-deriving
+    the rules client-side.
+
+    Query: ``?character_id=N``.
+
+    Response:
+    ```
+    {
+      "ok": True,
+      "character_id": N,
+      "can_hide_as_bonus": bool,
+      "source": "cunning-action" | "vanish" | null
+    }
+    ```
+
+    Reads the ``vanish_hide_as_bonus_action`` effect flag from the
+    PC's active buffs (installed by /use_vanish at Ranger Lv 14+),
+    with a Rogue Cunning Action fallback for Lv 2+ rogues. See
+    ``_pc_can_hide_as_bonus_action`` for the resolution logic.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == int(character_id),
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+    sheet = dict(char.sheet or {})
+    can, source = _pc_can_hide_as_bonus_action(
+        sheet, campaign_id, int(character_id),
+    )
+    return {
+        "ok": True,
+        "character_id": int(character_id),
+        "can_hide_as_bonus": bool(can),
+        "source": source,
+    }
+
+
 _HUNTERS_PREY_OPTIONS = {
     "colossus-slayer", "giant-killer", "horde-breaker",
 }

@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.22] - 2026-06-09 — "Trail's End" — Phase 2 read site for the v2.158.21 Vanish buff: new `GET /can_hide_as_bonus` endpoint consolidates the "can this PC Hide as a bonus action?" check (consults Vanish buff + Rogue Cunning Action)
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 backend read site for the v2.158.21 `vanish_hide_as_bonus_action` buff flag. New `_pc_can_hide_as_bonus_action(sheet, campaign_id, character_id) -> (bool, source)` helper consolidates the canonical "can Hide as bonus" check — reads the `vanish-active` buff at Ranger Lv 14+ AND falls back to Rogue Cunning Action at Rogue Lv 2+. New `GET /api/campaign/{cid}/can_hide_as_bonus?character_id=N` endpoint exposes the helper to the frontend so an action-economy "Hide" button can decide whether to surface itself without re-deriving rules client-side.**
+**Description:** The v2.158.21 commit installed the Vanish buff but the buff's three effect flags (`vanish_active`, `vanish_hide_as_bonus_action`, `vanish_untrackable_nonmagical`) had no read sites yet. v2.158.22 ships the first one: the `vanish_hide_as_bonus_action` flag is now consumed by a centralised helper + query endpoint.
+
+The "source" field in the response (`"cunning-action"` / `"vanish"` / `null`) tells the UI which feature is granting the ability so the button can label itself correctly ("Hide (Cunning Action)" vs "Hide (Vanish)"). Cunning Action wins when both apply (more permissive — no buff required + no level/class gate to re-validate at read time). The non-magical tracking-check resolver (the buff's other Phase 2 deferred read site) still doesn't have a primitive in the codebase and stays filed.
+
+### Added
+- `app/routes/tabletop_routes.py::_pc_can_hide_as_bonus_action` — backend helper. Reads the Rogue level (top-level `class` + `classes[]` list) then the PC's buff list for the `vanish_hide_as_bonus_action` effect flag. Returns `(can_hide, source)`.
+- `app/routes/tabletop_routes.py::can_hide_as_bonus` — `GET /api/campaign/{cid}/can_hide_as_bonus?character_id=N`. Membership + ownership-gated like the other character-scoped reads. Returns `{ok, character_id, can_hide_as_bonus, source}`.
+- `tests/harness/test_can_hide_as_bonus.py` — four state-contract tests: (1) Rowan Lv 7 Ranger (no Rogue, no buff) → False/None; (2) Pip Lv 5 Rogue → True/"cunning-action"; (3) Rowan Lv 14 Ranger before /use_vanish → False, then True/"vanish" after /use_vanish installs the buff (pins the install-then-read contract); (4) unknown character_id → 404.
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2097** (was 2093).
+
+### Notes
+- The Phase 2 frontend wiring (action-economy bar surfaces a Hide-as-bonus button that calls this endpoint to decide visibility, then routes to /use_vanish or the cunning-action /use_feature flow on click) is deferred to a follow-up commit. The backend contract is now stable for that wiring to land against. **Total harness count: 2097** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.21] - 2026-06-09 — "Faded Footprints" — Phase 8 Ranger diversification CLOSES the 12-class arc: Vanish (Ranger Lv 14+) installs the permanent passive parameter buff (Phase 1; Hide-as-bonus picker + tracking resolver deferred)
 
 **Schema version:** 69
