@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.25] - 2026-06-09 — "Manifest Claws" — Phase 2 read site for the v2.158.20 Form of the Beast buff: new `GET /active_natural_weapons` endpoint returns sheet-attack-shaped entries derived from active natural-weapon-grant buffs (today: form-of-the-beast-active; future: Polymorph beast shapes, Form of Dread, Bestial Soul)
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 backend read site for the v2.158.20 `form-of-the-beast-active` buff's six `form_of_the_beast_*` effect flags. New `_pc_active_natural_weapons(sheet, campaign_id, character_id) -> list[dict]` helper walks the PC's active buffs and returns a list of `sheet["attacks"]`-shaped entries with computed `attack_bonus` (STR mod + proficiency), `damage` (buff die + STR mod), and the buff's reach/damage-type/special text. New `GET /api/campaign/{cid}/active_natural_weapons?character_id=N` endpoint exposes the helper to the frontend so the attack list can render Bite/Claws/Tail buttons alongside the sheet's regular weapons without re-deriving the buff effect flags client-side.**
+**Description:** v2.158.20 shipped the buff-install backend; the six `form_of_the_beast_*` effect flags had no read sites yet (the Phase 2 deferred line in the changelog called it out explicitly). v2.158.25 ships the first one: the buff's parameters now feed a canonical natural-weapon list that the frontend can consume.
+
+The helper's contract is intentionally general — it walks for any buff carrying a `*_form` + `*_damage_die` + `*_damage_type` + `*_reach_ft` shape, so future shape-change buffs (Polymorph variants, Form of Dread the Undead Warlock equivalent, Bestial Soul Bear / Eagle / Tiger options) can drop in by mirroring the same effect-key contract. The endpoint returns an empty list when no qualifying buff is active.
+
+Attack bonus is computed at read time from the PC's STR mod + proficiency bonus (RAW for natural weapons). Damage adds STR mod to the buff's die. Rage damage bonus is NOT layered on here (the rage buff's own damage adder fires at attack-resolve time, not at the natural-weapon-list-build time — same separation as for sheet weapons).
+
+### Added
+- `app/routes/tabletop_routes.py::_pc_active_natural_weapons` — backend helper. Walks `_get_buffs(...)`, recognises `form_of_the_beast_active` flag, computes the attack-dict entry (name, attack_bonus, damage, damage_type, range, desc, source_buff_key, form). Shaped to extend to future natural-weapon buffs without further changes.
+- `app/routes/tabletop_routes.py::active_natural_weapons` — `GET /api/campaign/{cid}/active_natural_weapons?character_id=N`. Membership + ownership-gated. Returns `{ok, character_id, natural_weapons: [...]}`. Mirrors the v2.158.22 `can_hide_as_bonus` shape.
+- `tests/harness/test_active_natural_weapons.py` — four state-contract tests: (1) no buff → empty list; (2) claws form → 1d6 slashing reach 5 + name contains "Claws" + signed attack_bonus + source_buff_key + form="claws"; (3) tail form → reach 10 ft piercing + form="tail" + 1d8 die; (4) unknown character_id → 404.
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2103** (was 2099).
+
+### Notes
+- Frontend wiring (the attack-list rendering in `sheet_dnd5e.html` / the mini-sheet in `tabletop.html` reads this endpoint or its WS-broadcast equivalent and inserts the buttons) is deferred to a follow-up commit. The backend contract is now stable for that wiring to land against.
+- The Phase 2 read-site fan-out for the buff's `form_of_the_beast_special` text (e.g. claws' "extra attack as part of the Attack action", bite's "regain HP equal to proficiency on hit when below half HP") is still TODO — today the special string rides in the entry's `desc` field as GM-readable text, not as engine-fired riders. Filed.
+- **Total harness count: 2103** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.24] - 2026-06-09 — "Visible Vanish" — Demo seed adds the Vanish entry to Rowan's `class_features` list so the v2.158.23 picker button is discoverable without manual sheet edits (Rowan is Lv 7; the button 409s until she's bumped to Lv 14)
 
 **Schema version:** 69

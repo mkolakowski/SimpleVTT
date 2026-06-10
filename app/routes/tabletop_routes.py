@@ -60314,6 +60314,138 @@ async def use_form_of_the_beast(
     }
 
 
+def _pc_active_natural_weapons(
+    sheet: dict, campaign_id: int, character_id: int,
+) -> list[dict]:
+    """v2.158.25 — Phase 2 read site for the v2.158.20 Form of the
+    Beast buff (and any future natural-weapon-grant buffs).
+
+    Walks the PC's active buffs for entries that carry natural-weapon
+    parameters and returns a list of attack-dict-shaped entries
+    (mirroring ``sheet["attacks"]``) so callers can render them as
+    additional attack options while the buff is active. Each entry
+    carries:
+
+      * ``name`` — e.g. "Bite (Form of the Beast)"
+      * ``attack_bonus`` — string like "+7" (STR mod + proficiency)
+      * ``damage`` — e.g. "1d8+4" (die from buff + STR mod)
+      * ``damage_type`` — buff's damage type
+      * ``range`` — e.g. "5 ft" (reach from buff)
+      * ``desc`` — the buff's special-rider text
+      * ``source_buff_key`` — back-pointer to the granting buff
+      * ``form`` — the form key (bite / claws / tail) for callers
+        that need to surface variant labels
+
+    Today this covers ``form-of-the-beast-active`` (Path of the Beast
+    Barbarian Lv 3+ TCE); the helper is shaped to accommodate future
+    natural-weapon buffs (Form of Dread, Polymorph beast shapes,
+    Bestial Soul) by reading effects.*_active flags and *_form /
+    *_damage_die / *_damage_type / *_reach_ft keys with the same
+    contract.
+    """
+    out: list[dict] = []
+    abilities = sheet.get("abilities") or {}
+    try:
+        str_score = int(abilities.get("STR") or 10)
+    except (TypeError, ValueError):
+        str_score = 10
+    str_mod = (str_score - 10) // 2
+    try:
+        prof = int(sheet.get("proficiency_bonus") or 2)
+    except (TypeError, ValueError):
+        prof = 2
+    for buff in _get_buffs(campaign_id, int(character_id)):
+        if not isinstance(buff, dict):
+            continue
+        effects = buff.get("effects") or {}
+        if effects.get("form_of_the_beast_active"):
+            form = str(effects.get("form_of_the_beast_form") or "claws")
+            die = str(effects.get("form_of_the_beast_damage_die") or "1d6")
+            dmg_type = str(
+                effects.get("form_of_the_beast_damage_type") or "slashing"
+            )
+            try:
+                reach_ft = int(effects.get("form_of_the_beast_reach_ft") or 5)
+            except (TypeError, ValueError):
+                reach_ft = 5
+            special = str(effects.get("form_of_the_beast_special") or "")
+            atk_bonus = str_mod + prof
+            dmg_bonus = str_mod
+            damage_expr = f"{die}{dmg_bonus:+d}" if dmg_bonus else die
+            entry = {
+                "name": f"{form.title()} (Form of the Beast)",
+                "attack_bonus": f"{atk_bonus:+d}",
+                "damage": damage_expr,
+                "damage_type": dmg_type,
+                "range": f"{reach_ft} ft",
+                "desc": special,
+                "source_buff_key": "form-of-the-beast-active",
+                "form": form,
+            }
+            out.append(entry)
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/active_natural_weapons")
+def active_natural_weapons(
+    campaign_id: int,
+    character_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.158.25 — Phase 2 read site for natural-weapon-grant buffs
+    (today: Form of the Beast Lv 3+ Barbarian; future: similar shape-
+    change buffs). Returns the merged list of natural weapons the PC
+    currently has access to via active buffs, in ``sheet["attacks"]``-
+    shaped dicts so callers can render them as additional attack
+    options without re-deriving the buff effect flags client-side.
+
+    Query: ``?character_id=N``.
+
+    Response:
+    ```
+    {
+      "ok": True,
+      "character_id": N,
+      "natural_weapons": [
+        {"name": "Bite (Form of the Beast)",
+         "attack_bonus": "+7",
+         "damage": "1d8+4",
+         "damage_type": "piercing",
+         "range": "5 ft",
+         "desc": "...",
+         "source_buff_key": "form-of-the-beast-active",
+         "form": "bite"},
+         ...
+      ]
+    }
+    ```
+
+    Empty list when no qualifying buff is active. See
+    ``_pc_active_natural_weapons`` for the resolution logic.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == int(character_id),
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+    sheet = dict(char.sheet or {})
+    weapons = _pc_active_natural_weapons(
+        sheet, campaign_id, int(character_id),
+    )
+    return {
+        "ok": True,
+        "character_id": int(character_id),
+        "natural_weapons": weapons,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_mage_hand_legerdemain")
 async def use_mage_hand_legerdemain(
     campaign_id: int,
