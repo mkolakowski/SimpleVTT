@@ -151,6 +151,68 @@ async def test_use_tides_of_chaos_wrong_subclass(
     assert data.get("error") == "wrong_subclass_or_level"
 
 
+async def _seed_dice(gm_client, seed: int):
+    r = await gm_client.post(
+        "/api/test/dice/seed", json={"seed": seed},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_tides_of_chaos_grants_advantage_and_consumes(
+    gm_client, zara_wild_magic,
+):
+    """v2.158.46 — Phase 2 read site for the v2.99.227
+    `tides-of-chaos-active` buff. Install it (Wild Magic Zara), then roll
+    a d20 ability check → the expression expands to 2d20kh1 (advantage) +
+    breakdown mentions 'Tides of Chaos'. The buff is one-shot consumed: a
+    second d20 roll rolls a straight 1d20 with no Tides mention."""
+    zara = zara_wild_magic
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_tides_of_chaos",
+        json={"character_id": zara["id"]},
+    )
+    assert r.status_code == 200, r.text
+    await _seed_dice(gm_client, 7)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20",
+            "character_id": zara["id"],
+            "stat_key": "Arcana",
+            "stat_ability": "INT",
+            "visibility": "public",
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    breakdown = data.get("breakdown") or ""
+    assert "Tides of Chaos" in breakdown, (
+        f"expected breakdown to mention 'Tides of Chaos'; got {breakdown!r}"
+    )
+    assert "2d20" in breakdown, (
+        f"expected advantage (2d20kh1) expansion; got {breakdown!r}"
+    )
+    # One-shot consume: a second d20 roll gets no advantage / no mention.
+    r2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20",
+            "character_id": zara["id"],
+            "stat_key": "Arcana",
+            "stat_ability": "INT",
+            "visibility": "public",
+        },
+    )
+    assert r2.status_code == 200, r2.text
+    breakdown2 = r2.json().get("breakdown") or ""
+    assert "Tides of Chaos" not in breakdown2, (
+        f"buff should be consumed after the first d20 roll; got {breakdown2!r}"
+    )
+    assert "2d20" not in breakdown2, (
+        f"second roll should be a straight 1d20; got {breakdown2!r}"
+    )
+
+
 async def test_tides_of_chaos_long_rest_refill(
     gm_client, zara_wild_magic,
 ):

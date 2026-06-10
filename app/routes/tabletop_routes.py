@@ -16064,10 +16064,67 @@ async def roll_dice(
             expr = expr.replace("1d20", "2d20kh1", 1)
             _rage_str_check_fired = True
 
+    # v2.158.46 — Tides of Chaos (Wild Magic Sorcerer Lv 1+, PHB
+    # p.103) advantage consumer. Phase 2 read site for the v2.99.227
+    # `tides-of-chaos-active` buff (installed by /use_tides_of_chaos):
+    # grant advantage on the next d20 roll (ability check / saving
+    # throw / generic d20) then consume it. Applied BEFORE the roll
+    # like the Rage STR-check hook above. Composes with roll_state per
+    # RAW PHB p.173 — advantage cancels an existing disadvantage to a
+    # straight d20; redundant atop existing advantage but still
+    # consumed. Attack rolls route through /attack (a separate read
+    # site, deferred).
+    _toc_has_buff = False
+    if (
+        _char is not None
+        and "d20" in expr.lower()
+        and isinstance(_char.sheet, dict)
+    ):
+        for _b in (_char.sheet.get("_buffs_active") or []):
+            if not isinstance(_b, dict):
+                continue
+            if (
+                (_b.get("key") or "").strip().lower()
+                != "tides-of-chaos-active"
+            ):
+                continue
+            _eff = _b.get("effects") or {}
+            if isinstance(_eff, dict) and _eff.get("next_roll_advantage"):
+                _toc_has_buff = True
+            break
+    if _toc_has_buff:
+        if "2d20kl1" in expr:
+            expr = expr.replace("2d20kl1", "1d20", 1)
+        elif "1d20" in expr and "2d20kh1" not in expr:
+            expr = expr.replace("1d20", "2d20kh1", 1)
+
     try:
         result = dice_mod.roll(expr)
     except dice_mod.DiceParseError as e:
         raise HTTPException(400, str(e))
+
+    # v2.158.46 — Tides of Chaos consume + breakdown annotation. The
+    # advantage swap happened pre-roll above; here we tag the breakdown
+    # (so the roll log shows the source) and remove the one-shot buff.
+    # Re-mirror to the sheet so a subsequent /roll re-reads the consumed
+    # state rather than the stale snapshot (same fix as Supreme Sneak).
+    if _toc_has_buff:
+        try:
+            import copy
+            result = copy.copy(result)
+            result.breakdown = f"{result.breakdown} (Tides of Chaos)"
+        except Exception:
+            pass
+        try:
+            await _remove_buff(
+                campaign_id, int(_char.id), "tides-of-chaos-active",
+            )
+            _mirror_buffs_to_sheet(
+                db, int(_char.id),
+                _get_buffs(campaign_id, int(_char.id)),
+            )
+        except Exception:
+            pass
 
     # v2.99.22 — Halfling Lucky check-roll surface. Closes the last
     # v2.99.13 / v2.99.21 simplification — RAW Halfling Lucky covers

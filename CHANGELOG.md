@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.46] - 2026-06-10 — "Bend the Odds" — Tides of Chaos's installed buff was inert: the `/roll` handler never read it, so the "advantage on your next roll" feature was announce-only. Wiring the consumer grants advantage on a Wild Magic sorcerer's next d20 check/save and one-shot removes the buff
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.99.227 Tides of Chaos buff (Wild Magic Sorcerer Lv 1+, PHB p.103): "gain advantage on one attack roll, ability check, or saving throw." v2.99.227 installed a `tides-of-chaos-active` buff carrying `next_roll_advantage: True` + `consume_on_d20_roll: True`, and claimed the `/roll` consumer would pick it up — but no such consumer existed, so the buff sat inert. This commit wires the consumer into the `/roll` handler: when a buff-carrying sorcerer makes a d20 roll, advantage is applied pre-roll (mirroring the Rage STR-check hook — `1d20`→`2d20kh1`, or cancel an existing disadvantage per RAW PHB p.173), the breakdown gains a "Tides of Chaos" suffix, and the buff is one-shot removed.**
+**Description:** v2.99.227 shipped `/use_tides_of_chaos` to install the `tides-of-chaos-active` buff (advantage on the next d20 roll, consumed on use), but the consumer was never wired — the `/roll` handler ignored the buff. This commit closes that gap. The `/roll` handler now, before rolling, checks the caster's `_buffs_active` for `tides-of-chaos-active` on any d20 expression and applies advantage (`1d20`→`2d20kh1`; or cancels an existing `2d20kl1` disadvantage to a straight `1d20` per RAW PHB p.173; redundant atop existing advantage but still consumed). After the roll it appends `(Tides of Chaos)` to the breakdown, removes the buff via `_remove_buff`, and re-mirrors to the sheet (same one-shot persistence fix as Supreme Sneak) so a subsequent roll doesn't re-apply it. Attack rolls route through `/attack` (a separate read site, deferred).
+
+This flips Tides of Chaos from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `tests/harness/test_wild_magic_tides.py::test_tides_of_chaos_grants_advantage_and_consumes` — Phase 2 read-site test: install the buff (Wild Magic Zara), roll a d20 check → expression expands to `2d20kh1` + breakdown mentions "Tides of Chaos"; a second roll rolls a straight `1d20` (one-shot consume).
+
+### Changed
+- `app/routes/tabletop_routes.py::roll` — d20 rolls now consume `tides-of-chaos-active`: advantage applied pre-roll, breakdown suffix added, buff removed + sheet re-mirrored.
+
+### Notes
+- Total harness count: **2130** in `tests/harness/` (was 2129); **`tests/harness_ui/` 19** (unchanged).
+- Attack rolls (`/attack`) and the disadvantage-cancel edge cases beyond a single straight swap stay deferred; the advisory composes with the existing roll_state / condition-disadvantage pipeline.
+
+---
+
 ## [2.158.45] - 2026-06-10 — "On Little Cat Feet" — Supreme Sneak's installed buff was inert: the `/roll` Stealth hook only consumed Hide in Plain Sight, never `supreme-sneak-active`. Wiring the consumer adds +5 to a Thief's Stealth roll and one-shot removes the buff
 
 **Schema version:** 69
