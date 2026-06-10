@@ -19238,6 +19238,24 @@ async def cast_spell(
                         campaign_id, int(char.id),
                         "metamagic-heightened-pending",
                     )
+                # v2.158.54 — Eldritch Strike (Eldritch Knight Fighter
+                # Lv 10+, PHB p.74) Phase 2 read. When the SAVER carries
+                # an `eldritch-strike-target` buff naming THIS caster,
+                # the save is at disadvantage. Same kl1 swap + RAW
+                # cancellation idiom as Heightened above; the buff is
+                # one-use (`consume_on_first_save`) so drop it after.
+                _eldritch_strike_fired = _saver_has_eldritch_strike_vs_caster(
+                    campaign_id, int(tgt_char.id), int(char.id),
+                )
+                if _eldritch_strike_fired:
+                    if _ds_base.startswith("2d20kh1"):
+                        _ds_base = _ds_base.replace("2d20kh1", "1d20", 1)
+                    elif "2d20kl1" not in _ds_base:
+                        _ds_base = _ds_base.replace("1d20", "2d20kl1", 1)
+                    await _remove_buff(
+                        campaign_id, int(tgt_char.id),
+                        "eldritch-strike-target",
+                    )
                 # v2.99.38 — Careful Spell metamagic auto-pass at the
                 # single-target PC save site. If the casting Sorcerer
                 # has a `metamagic-careful-pending` buff AND this
@@ -19360,6 +19378,26 @@ async def cast_spell(
                     await _broadcast_heightened_consumed(
                         campaign_id, char, tgt_char.name,
                     )
+                # v2.158.54 — Eldritch Strike consume broadcast.
+                if _eldritch_strike_fired:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "user_color": char.color,
+                            "feature_name": (
+                                "🗡️ Eldritch Strike — disadvantage on save"
+                            ),
+                            "feature_desc": (
+                                f"{tgt_char.name} has disadvantage on the "
+                                f"save vs {char.name}'s {payload['spell_name']} "
+                                f"(Eldritch Strike mark consumed)."
+                            ),
+                            "source": "eldritch-strike",
+                            "target_name": tgt_char.name,
+                        },
+                    })
                 # v2.37.0 Phase T.3d: stash the cast context so the
                 # roll-response handler can install the matching
                 # condition buff if the PC fails. Slug + char_id +
@@ -37359,6 +37397,49 @@ def _caster_has_heightened_pending(
             if not isinstance(b, dict):
                 continue
             if (b.get("key") or "").strip().lower() == "metamagic-heightened-pending":
+                return True
+        return False
+    return False
+
+
+def _saver_has_eldritch_strike_vs_caster(
+    campaign_id: int,
+    saver_char_id: "int | None",
+    caster_char_id: "int | None",
+) -> bool:
+    """v2.158.54 — Phase 2 read site for the v2.99.268 Eldritch Strike
+    buff (Eldritch Knight Fighter Lv 10+, PHB p.74): "When you hit a
+    creature with a weapon attack, that creature has disadvantage on
+    the next saving throw it makes against a spell you cast before the
+    end of your next turn." `/use_eldritch_strike` installs an
+    `eldritch-strike-target` buff on the struck creature carrying
+    `effects.save_disadvantage_against_caster_id` (the EK's char id)
+    + `consume_on_first_save: True`.
+
+    Returns True when the saver carries that buff AND its
+    `save_disadvantage_against_caster_id` matches the casting PC — so
+    the save-roll construction site can swap the saver's d20 → 2d20kl1
+    (disadvantage) and consume the buff. Mirrors
+    `_caster_has_heightened_pending` but keyed off the SAVER's combatant
+    and gated on the caster id, so an EK's mark only bites saves vs the
+    EK's own spells.
+    """
+    if not saver_char_id or not caster_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != saver_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() != "eldritch-strike-target":
+                continue
+            eff = b.get("effects") or {}
+            marked = eff.get("save_disadvantage_against_caster_id")
+            if marked is not None and int(marked) == int(caster_char_id):
                 return True
         return False
     return False

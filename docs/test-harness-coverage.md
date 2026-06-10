@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2149 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.53, 2026-06-10).
+**Total tests:** 2151 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.54, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -461,6 +461,14 @@ v2.158.51 — Phase 2 read site for the v2.149.0 Relentless Avenger buff (Vengea
 | `test_relentless_avenger_suppresses_oa_and_consumes_buff` | Caelan with the buff moves out of Tavik's reach (no `oa_confirmed`) → 200, `relentless_avenger_applied` True, empty `opportunity_attack_triggers`, and a `buff_update` removing the buff. |
 | `test_move_provokes_oa_without_relentless_avenger` | Control: same move without the buff → 409 `oa_confirmation_required`. |
 | `test_relentless_avenger_exempts_free_move_from_speed_cap` | At-cap combatant + buff moves +5 ft → 200 (free move exempt); identical drag without the buff → 409 `over_speed_cap`. |
+
+### `test_eldritch_strike_resolver.py`
+v2.158.54 — Phase 2 read site for the v2.99.268 Eldritch Strike buff (Eldritch Knight Fighter Lv 10+, PHB p.74). The new `_saver_has_eldritch_strike_vs_caster` helper reads the saver's combatant buffs for `eldritch-strike-target` and, when `effects.save_disadvantage_against_caster_id` matches the current caster, swaps the single-target PC save's `base_expression` d20 → 2d20kl1 (with RAW advantage-cancellation) and consumes the one-use buff. Closes the last Phase-8 straggler.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_eldritch_strike_imposes_save_disadvantage_and_consumes` | Pip's combatant carries `eldritch-strike-target` naming Zara; Zara casts Hold Person at Pip → save `base_expression == "2d20kl1"`, a `feature_used(source="eldritch-strike")` consume broadcast fires, and the buff is dropped. Buff seeded directly on the saver's combatant; read site is class-agnostic (matches the saver's mark against the casting PC). |
+| `test_eldritch_strike_no_disadvantage_for_other_caster` | Per-caster guard: the mark names a different caster id → save stays `1d20`, buff NOT consumed. |
 
 ### `test_vow_of_enmity_resolver.py`
 v2.158.53 — Phase 2 read site for the v2.99.246 Vow of Enmity buff (Vengeance Paladin Lv 3+ CD, PHB p.88). The new `_attacker_has_vow_of_enmity_vs_target` helper reads the attacker's combatant buffs for `vow-of-enmity-active` and, when `effects.attack_advantage_vs_target_combatant_id` matches the current target, folds advantage onto the `/attack` d20 roll (label `advantage_vow_of_enmity`). Per-target match — advantage only vs the marked creature.

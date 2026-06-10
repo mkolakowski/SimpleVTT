@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.54] - 2026-06-10 — "The Knight's Opening" — Eldritch Strike installed an `eldritch-strike-target` buff on the struck creature (disadvantage on its next save vs the EK's spell), but the spell-save resolver never read it — the disadvantage was GM-tracked. Wiring the read site rolls the marked saver's save at disadvantage and consumes the mark. This closes the last Phase-8 straggler
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.99.268 Eldritch Strike buff (Eldritch Knight Fighter Lv 10+, PHB p.74): "When you hit a creature with a weapon attack, that creature has disadvantage on the next saving throw it makes against a spell you cast before the end of your next turn." `/use_eldritch_strike` installs an `eldritch-strike-target` buff on the struck creature carrying `effects.save_disadvantage_against_caster_id` (the EK's char id) + `consume_on_first_save: True`, but no resolver read it. This commit wires it into the single-target PC save-roll construction site in `/cast_spell`: a new helper `_saver_has_eldritch_strike_vs_caster` returns True when the saver carries the buff naming the CURRENT caster, swapping the save's `base_expression` d20 → 2d20kl1 (disadvantage, with the same RAW PHB-p.173 advantage-cancellation idiom as Heightened Spell) and dropping the one-use buff via `_remove_buff`, plus a `feature_used` consume broadcast (source "eldritch-strike").**
+**Description:** v2.99.268 shipped the gated Channel-Divinity-style endpoint that installs the buff, but the disadvantage half was inert — `save_disadvantage_against_caster_id` had no read site (the second of two Phase-8 stragglers surfaced by the v2.158.52 re-audit; the first, Vow of Enmity, landed in v2.158.53). This commit closes it. The new `_saver_has_eldritch_strike_vs_caster(campaign_id, saver_char_id, caster_char_id)` helper (mirrors `_caster_has_heightened_pending` but keyed off the SAVER's combatant and gated on the caster id) reads the saver's combatant buffs from hub state. When it fires at the single-target PC save site, the d20 → 2d20kl1 swap applies (collapsing back to 1d20 if an advantage source is already present, per RAW), the buff is consumed, and a consume broadcast fires. The caster-id gate ensures an EK's mark only bites saves vs the EK's own spells, not a different caster's. AOE / NPC-saver save sites are deferred (the buff installs only on PC targets via `_install_buff`, so the single-target PC path is the live surface); the buff's 10-round duration is the backstop.
+
+This flips Eldritch Strike's disadvantage from announce-only to tracked, **closing the Phase 8 install-then-deferred-read arc** — the v2.158.52 re-audit's two stragglers are both wired.
+
+### Added
+- `tests/harness/test_eldritch_strike_resolver.py::test_eldritch_strike_imposes_save_disadvantage_and_consumes` — Pip's combatant carries `eldritch-strike-target` naming Zara; Zara casts Hold Person at Pip → save `base_expression == "2d20kl1"`, a `feature_used(source="eldritch-strike")` consume broadcast fires, and the buff is dropped. `test_eldritch_strike_no_disadvantage_for_other_caster` — per-caster guard: the mark names a different caster id → save stays `1d20` and the buff is NOT consumed.
+
+### Changed
+- `app/routes/tabletop_routes.py` — added `_saver_has_eldritch_strike_vs_caster` helper; the single-target PC save-roll construction site now reads it, swaps to disadvantage (with RAW cancellation), consumes the one-use buff, and emits a consume broadcast.
+
+### Notes
+- Total harness count: **2151** in `tests/harness/` (was 2149); **`tests/harness_ui/` 19** (unchanged).
+- The read is class-agnostic by design (it matches the saver's buff against the casting PC's id); the buff is only ever installed by a real Eldritch Knight via the gated `/use_eldritch_strike`, so the gate lives at install time. AOE save spells and NPC savers are out of scope this commit (the endpoint installs the mark only on PC targets).
+
+---
+
 ## [2.158.53] - 2026-06-10 — "The Sworn Foe" — Vow of Enmity installed a `vow-of-enmity-active` buff carrying the marked target's combatant id, but `/attack` never read it — the advantage was GM-tracked. Wiring the read site grants the Vengeance Paladin advantage on attack rolls against the sworn target
 
 **Schema version:** 69
