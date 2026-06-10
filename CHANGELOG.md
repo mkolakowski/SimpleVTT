@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.57] - 2026-06-10 — "The Witnessed Vow" — The /use_vow_of_enmity endpoint and its sheet button are both harness-covered server-side, but no test drives the actual browser click path: open the Channel Divinity picker, see Vow of Enmity surface for a Vengeance Paladin, pick it, and confirm it routes to the dedicated endpoint. This adds that Playwright UI test
+
+**Schema version:** 69
+**Commit summary:** **New Playwright UI test `tests/harness_ui/test_channel_divinity_picker_ui.py` that proves the v2.158.55 frontend wiring end-to-end in a real browser against the v2.158.56 seeded Vengeance Paladin (Dame Seraphine Vael). It clicks the `channel-divinity` resource-pill Use button, asserts the option picker (`#resource-option-picker`) surfaces a `.rop-opt` labelled "Vow of Enmity" (proving the class+subclass+level filter matches her Oath of Vengeance Lv 3), picks it, and asserts the init-tracker target picker (`.target-picker-overlay`) opens — the load-bearing distinguisher, since a generic CD option never opens a target picker. It then taps the seeded Bandit row and asserts a POST fired to `/use_vow_of_enmity` (and NOT `/use_feature`), with no console errors. CD is PATCHed full + a one-combatant battle seeded into `localStorage` so the flow is deterministic under shared-DB contention.**
+**Description:** The HTTP harness proves the `/use_vow_of_enmity` contract and the demo-seed shape, but the v2.158.55 sheet wiring (`_fireCDDedicated` → branch in the CD picker `onPick`) was browser-verified only by eyeball — there was no Vengeance Paladin in the demo until v2.158.56, so it couldn't be click-tested in CI. This commit closes that gap with a headless-browser regression test. The key assertion is that picking Vow of Enmity opens the target picker: every other Channel Divinity option POSTs the generic `/use_feature` announce with no target step, so the target-picker overlay's appearance is positive proof the dedicated branch fired. The request-capture step then nails the routing to `/use_vow_of_enmity` directly. No app-code change — this is test-only coverage of already-shipped UI.
+
+### Added
+- `tests/harness_ui/test_channel_divinity_picker_ui.py` — `test_cd_picker_routes_vow_of_enmity` drives Dame Seraphine Vael's sheet: opens the CD option picker, asserts "Vow of Enmity" surfaces, picks it, asserts the target picker opens, taps the Bandit row, and asserts a `/use_vow_of_enmity` POST fired (never `/use_feature`) with no console errors.
+
+### Notes
+- Total harness count: **2153** in `tests/harness/` (unchanged); **`tests/harness_ui/` 20** (was 19).
+- Test-only commit — no endpoint, broadcast, schema, or app-code change (still v69). Exercises the v2.158.55 sheet wiring against the v2.158.56 seeded PC.
+
+---
+
 ## [2.158.56] - 2026-06-10 — "The Avenging Knight" — The v2.158.55 Vow of Enmity sheet button had no live demo fixture — Sir Caelan is Oath of Devotion, whose Channel Divinity options filter Vow of Enmity out. This adds a 13th demo PC, a Lv 3 Oath of Vengeance Paladin, so the button is reachable and verifiable in the demo
 
 **Schema version:** 69
