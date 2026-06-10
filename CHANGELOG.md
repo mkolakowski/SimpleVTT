@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.37] - 2026-06-10 — "Walk It Off" — Drunken Technique's +10 ft speed rider was inert dead weight: the Phase-1 buff stored the bonus under a key nothing read. Wiring it to the engine-generic `speed_bonus_ft` makes the move-cap actually rise
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 finisher for the v2.158.18 Drunken Technique rider (Way of the Drunken Master Monk Lv 3+, XGE p.33). The 1-turn `drunken-technique-active` buff installed a +10 ft walking-speed bonus under the descriptive `effects.drunken_technique_speed_bonus_ft` key — but the speed engine (`effective_speed_walk` → `effective_speed_bonus_ft`) only sums the generic `effects.speed_bonus_ft`, so the rider's speed half did nothing. The buff now also carries `speed_bonus_ft: 10`, the same key Longstrider / Glory Paladin / Step of the Wind use, so the `/token/move` speed cap rises 30 → 40 for the turn. The disengage half was already live (consumed by the OA-prompting flow).**
+**Description:** v2.158.18 flipped Drunken Technique from announce-only to a buff-installing endpoint, but only half the rider was wired: the `effects.disengage` flag reused Step of the Wind's engine flag (already consumed by the OA flow), while the +10 ft walking-speed bonus was stored under a feature-specific key (`drunken_technique_speed_bonus_ft`) that no reader consumes. The engine's speed-bonus summation reads exactly one key — `speed_bonus_ft` — so the speed half of the rider was inert. This commit adds `speed_bonus_ft: 10` to the buff effects (keeping the descriptive key for the state-contract surface), so the existing `effective_speed_walk` path folds the +10 into the combatant's move cap and Mov chip. No engine change — just routing the bonus to the key the engine already reads.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_drunken_technique` — the installed `drunken-technique-active` buff now also carries `effects.speed_bonus_ft: 10` (the engine-generic key `effective_speed_bonus_ft` sums), making the +10 ft walking-speed rider live via the `/token/move` speed cap. Docstring updated to mark the Phase 2 finisher.
+
+### Added
+- `tests/harness/test_drunken_technique.py::test_dt_speed_bonus_raises_move_cap` — Phase 2 read-site test: a combatant carrying the buff (`speed_bonus_ft: 10`) has its `/token/move` cap raised 30 → 40, so a 35 ft move that 409s for an unbuffed control returns 200. The `test_dt_buff_payload_carries_disengage_and_speed_flags` state-contract test now also asserts the engine-generic `speed_bonus_ft` key.
+
+### Notes
+- Total harness count: **2119** in `tests/harness/` (was 2118); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.36] - 2026-06-10 — "The Velvet Floor" — Silver Tongue's installed buff now actually does something: a low d20 on a Cha (Persuasion/Deception) check is floored to 10 on `/roll`, flipping the Eloquence Bard feature from announce-only to a live mechanical read site
 
 **Schema version:** 69

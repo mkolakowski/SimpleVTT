@@ -59502,8 +59502,16 @@ async def use_drunken_technique(
     `duration_rounds: 1` (expires at next turn-start tick per
     RAW "until the end of the current turn"). Different from
     the permanent-passive Phase 8 commits — this is a per-Flurry
-    rider that the existing OA-prompting flow already half-
-    consumes via `effects.disengage`.
+    rider that the existing OA-prompting flow already consumes
+    via `effects.disengage`.
+
+    v2.158.37 — Phase 2 finisher: the +10 ft speed half of the
+    rider is now live. The buff also carries the engine-generic
+    `effects.speed_bonus_ft: 10`, which `effective_speed_walk`
+    already folds into a combatant's `/token/move` speed cap (and
+    the Mov chip). Previously the rider stored the bonus only under
+    the descriptive `drunken_technique_speed_bonus_ft` key, which
+    nothing read — so the speed half was inert.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -59536,6 +59544,13 @@ async def use_drunken_technique(
     # v2.158.18 — install the 1-turn rider buff. The
     # `effects.disengage` flag is the same one Step of the Wind
     # installs; the OA-prompting flow already consumes it.
+    # v2.158.37 — Phase 2 read site for the +10 ft speed rider: the
+    # buff now ALSO carries the generic `effects.speed_bonus_ft: 10`
+    # key, which `effective_speed_walk` (via `effective_speed_bonus_ft`)
+    # already sums into a combatant's move cap — same engine path
+    # Longstrider / Glory Paladin / Step of the Wind use. The
+    # descriptive `drunken_technique_speed_bonus_ft` key is kept for the
+    # state-contract surface; `speed_bonus_ft` is the one the engine reads.
     buff_installed = await _install_buff(campaign_id, char.id, {
         "key": "drunken-technique-active",
         "name": "🍶 Drunken Technique",
@@ -59546,6 +59561,7 @@ async def use_drunken_technique(
         "source_char_id": char.id,
         "effects": {
             "disengage": True,
+            "speed_bonus_ft": 10,
             "drunken_technique_speed_bonus_ft": 10,
             "drunken_technique_rider_of": "flurry-of-blows",
         },
