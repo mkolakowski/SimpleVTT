@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2143 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.51, 2026-06-10).
+**Total tests:** 2147 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.52, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -790,6 +790,16 @@ v2.99.298 — Trickery Domain Cleric (PHB p.62) Improved Duplicity Lv 17 passive
 | `test_use_id_wrong_subclass` | Default Tavik (Life Domain) → 409. |
 | `test_use_id_level_gate` | Trickery at Lv 16 → 409. |
 | `test_id_buff_payload_carries_invoke_duplicity_flags` | v2.158.3 — installed buff carries the three `invoke_duplicity_*` flags on `effects` with the right values (4 / 30 / 120). Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). Pins the Phase-2 read contract so the future `/use_invoke_duplicity` endpoint has stable flag names to look up. |
+
+### `test_invoke_duplicity.py`
+v2.158.52 — Trickery Domain Cleric (PHB p.62) Invoke Duplicity Lv 2 Channel Divinity + the Phase 2 read site for the v2.158.3 `improved-duplicity` upgrade buff. The new `/use_invoke_duplicity` endpoint costs 1 CD use + an action and installs a 10-round concentration `invoke-duplicity-active` buff. Before installing, it walks the caster's combatant buffs for `improved-duplicity` and reads `effects.invoke_duplicity_max_duplicates` (4) instead of the Lv-2 baseline of 1 — flipping that previously install-only buff to consumed. Closes the last Phase-8 install-then-deferred-read gap.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_invoke_duplicity_happy_lv2` | Lv 2 Trickery Tavik → `duplicates == 1`, `improved == False`, `bonus_move_per_duplicate_ft == 30`, `max_range_ft == 120`, `cleric_level == 2`, `channel_divinity_remaining == 1`, `buff_installed == True`, plus a `feature_used` broadcast (source `invoke-duplicity`) carrying `duplicates == 1`. Seeds Tavik into an active battle so `_install_buff` returns True; passes `override: true` to bypass the action-economy gate. |
+| `test_use_invoke_duplicity_reads_improved_buff_lv17` | Phase 2 read: at Lv 17, calls `/use_improved_duplicity` first to install the upgrade buff, then `/use_invoke_duplicity` → `duplicates == 4`, `improved == True` (the read off `improved-duplicity.effects.invoke_duplicity_max_duplicates`), broadcast `duplicates == 4`. |
+| `test_use_invoke_duplicity_out_of_cd` | Channel Divinity drained to 0 → 409 `out_of_uses`. |
+| `test_use_invoke_duplicity_wrong_subclass` | Default Tavik (Life Domain) → 409 `wrong_subclass_or_level`. |
 
 ### `test_saint_of_forge_and_fire.py`
 v2.99.299 — Forge Domain Cleric (XGE p.18) Saint of Forge and Fire Lv 17 passive (H.1 deeper). Fire immunity + (while wearing heavy armor) resistance to BPS from nonmagical attacks. v2.158.2 (Phase 8 follow-up to Avatar of Battle): the endpoint now installs a permanent `saint-of-forge-and-fire` buff carrying both `effects.immunity_to=["fire"]` (read by `_immunity_zero`) and `effects.resistance_to=["nonmagical-bludgeoning","nonmagical-piercing","nonmagical-slashing"]` (read by the v2.158.1-upgraded `_resistance_halve`).

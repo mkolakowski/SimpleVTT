@@ -55559,6 +55559,224 @@ async def use_improved_reaper(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/use_invoke_duplicity")
+async def use_invoke_duplicity(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.158.52 — Invoke Duplicity (Trickery Domain Cleric Lv 2+,
+    PHB p.62) Channel Divinity. RAW: "As an action, you create a
+    perfect illusion of yourself that lasts for 1 minute, or until
+    you lose your concentration ... As a bonus action on your turn,
+    you can move the illusion up to 30 feet ... but it must remain
+    within 120 feet of you ... when both you and your illusion are
+    within 5 feet of a creature that can see the illusion, you have
+    advantage on attack rolls against that creature."
+
+    Body: ``{character_id, override?}``. Costs 1 Channel Divinity use
+    + an action; installs a 1-minute (10-round) concentration
+    ``invoke-duplicity-active`` buff.
+
+    This is the **Phase 2 read site** for the v2.158.3
+    ``improved-duplicity`` buff (Trickery Cleric Lv 17+). RAW the
+    Lv-17 upgrade raises the duplicate count from 1 to 4 (the 30-ft
+    bonus move + 120-ft range are unchanged at both tiers). The
+    endpoint walks the caster's combatant buffs for
+    ``improved-duplicity`` and, when present, reads
+    ``effects.invoke_duplicity_max_duplicates`` (4) instead of the
+    Lv-2 baseline of 1 — flipping that buff from announce-only to
+    consumed.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Cleric character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if not _pc_has_trickery_domain(sheet, 2):
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass_or_level",
+            "expected": "trickery domain cleric lv 2+",
+            "got_class": (sheet.get("class") or "").lower(),
+            "got_subclass": (sheet.get("subclass") or "").lower(),
+            "got_level": _cleric_level_from_sheet(sheet),
+        })
+
+    resources = list(sheet.get("resources") or [])
+    cd_row = None
+    cd_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "channel-divinity":
+            cd_row = dict(r)
+            cd_idx = i
+            break
+    if cd_row is None:
+        raise HTTPException(404, "No Channel Divinity resource on this sheet")
+    cd_cur = int(cd_row.get("current") or 0)
+    cd_max = int(cd_row.get("max") or 0)
+    if cd_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Channel Divinity",
+            "resource_key": "channel-divinity",
+        })
+
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "invoke-duplicity",
+            "label": "Invoke Duplicity",
+            "strict": strict,
+        })
+
+    # v2.158.52 — Phase 2 read of the v2.158.3 improved-duplicity buff.
+    # Baseline Lv-2 Invoke Duplicity makes 1 duplicate; the Lv-17+
+    # upgrade buff bumps it to 4 (move + range are identical at both
+    # tiers, so they're read as constants here).
+    max_duplicates = 1
+    bonus_move_ft = 30
+    max_range_ft = 120
+    improved = False
+    for b in _get_buffs(campaign_id, char.id):
+        if (b or {}).get("key") != "improved-duplicity":
+            continue
+        eff = b.get("effects") or {}
+        try:
+            max_duplicates = int(eff.get("invoke_duplicity_max_duplicates") or 1)
+        except (TypeError, ValueError):
+            max_duplicates = 1
+        try:
+            bonus_move_ft = int(
+                eff.get("invoke_duplicity_bonus_move_per_duplicate_ft") or 30
+            )
+        except (TypeError, ValueError):
+            bonus_move_ft = 30
+        try:
+            max_range_ft = int(eff.get("invoke_duplicity_max_range_ft") or 120)
+        except (TypeError, ValueError):
+            max_range_ft = 120
+        improved = True
+        break
+
+    cd_row["current"] = cd_cur - 1
+    resources[cd_idx] = cd_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    cleric_lv = _cleric_level_from_sheet(sheet)
+    buff_installed = await _install_buff(campaign_id, char.id, {
+        "key": "invoke-duplicity-active",
+        "name": "🎭 Invoke Duplicity",
+        "icon": "🎭",
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": True,
+        "source_char_id": char.id,
+        "effects": {
+            "duplicates": max_duplicates,
+            "duplicate_move_ft": bonus_move_ft,
+            "duplicate_max_range_ft": max_range_ft,
+            "advantage_when_flanking_with_duplicate": True,
+        },
+        "desc": (
+            f"{char.name} projects {max_duplicates} illusory "
+            f"{'duplicate' if max_duplicates == 1 else 'duplicates'}. "
+            f"Bonus action: move {'it' if max_duplicates == 1 else 'them'} "
+            f"up to {bonus_move_ft} ft (max {max_range_ft} ft away). "
+            f"Advantage on attacks vs. a creature when both you and a "
+            f"duplicate are within 5 ft of it. Concentration, 1 minute."
+        ),
+    })
+    if buff_installed:
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    await _mark_battle_economy(campaign_id, char.id, "action")
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "channel-divinity",
+            "current": cd_cur - 1,
+            "max": cd_max,
+        },
+    })
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🎭 Invoke Duplicity — {max_duplicates} "
+                f"{'duplicate' if max_duplicates == 1 else 'duplicates'}"
+            ),
+            "feature_desc": (
+                f"{char.name} creates {max_duplicates} perfect "
+                f"{'illusion' if max_duplicates == 1 else 'illusions'} of "
+                f"{'himself' if max_duplicates == 1 else 'themselves'} "
+                f"within 30 ft. Concentration, 1 minute. "
+                f"(Trickery Domain Cleric Lv 2+ Channel Divinity"
+                f"{'; Improved Duplicity upgrade' if improved else ''}.)"
+            ),
+            "source": "invoke-duplicity",
+            "duplicates": max_duplicates,
+            "bonus_move_per_duplicate_ft": bonus_move_ft,
+            "max_range_ft": max_range_ft,
+            "improved": improved,
+            "cleric_level": cleric_lv,
+            "buff_installed": buff_installed,
+        },
+    })
+
+    return {
+        "ok": True,
+        "feature": "invoke-duplicity",
+        "duplicates": max_duplicates,
+        "bonus_move_per_duplicate_ft": bonus_move_ft,
+        "max_range_ft": max_range_ft,
+        "improved": improved,
+        "cleric_level": cleric_lv,
+        "channel_divinity_remaining": cd_cur - 1,
+        "buff_installed": buff_installed,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_improved_duplicity")
 async def use_improved_duplicity(
     campaign_id: int,

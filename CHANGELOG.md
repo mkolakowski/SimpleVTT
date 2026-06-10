@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.52] - 2026-06-10 — "The Mirror Step" — Invoke Duplicity (Trickery Domain Cleric Lv 2 Channel Divinity) had no server endpoint at all — the Lv-17 `improved-duplicity` upgrade buff installed in v2.158.3 was doubly-deferred with nothing to read it. This commit ships the base `/use_invoke_duplicity` endpoint AND wires it to read that buff, raising the duplicate count from 1 to 4 at Lv 17
+
+**Schema version:** 69
+**Commit summary:** **New base Channel Divinity endpoint `/use_invoke_duplicity` (Trickery Domain Cleric Lv 2+, PHB p.62): "As an action, you create a perfect illusion of yourself that lasts for 1 minute, or until you lose your concentration … As a bonus action, you can move the illusion up to 30 feet … but it must remain within 120 feet of you … you have advantage on attack rolls against a creature when both you and your illusion are within 5 feet of it." Costs 1 Channel Divinity use + an action; installs a 10-round concentration `invoke-duplicity-active` buff. This is ALSO the Phase 2 read site for the v2.158.3 `improved-duplicity` buff (Trickery Cleric Lv 17+): the endpoint walks the caster's combatant buffs and, when `improved-duplicity` is present, reads `effects.invoke_duplicity_max_duplicates` (4) instead of the Lv-2 baseline of 1 — flipping that previously install-only buff to consumed.**
+**Description:** v2.158.3 installed the `improved-duplicity` upgrade buff (Lv-17 raises Invoke Duplicity's duplicate count 1→4), but Invoke Duplicity itself was never a server feature — it was announce-only / GM-tracked, so the upgrade buff was doubly-deferred with no read site. This commit closes both gaps in one coherent change: it adds the missing base `/use_invoke_duplicity` Channel Divinity endpoint (modeled on Turn the Faithless) — validate Trickery Domain Lv 2+ (409 `wrong_subclass_or_level`), find the `channel-divinity` resource (404 if absent, 409 `out_of_uses` if drained), action-economy gate (409 `over_budget`, bypassable with `override`/GM), decrement 1 CD use, install the concentration buff, and broadcast `resource_update` + `feature_used` (source "invoke-duplicity"). Before installing, the endpoint performs the Phase 2 read: it reads `improved-duplicity.effects.invoke_duplicity_max_duplicates` off the caster's combatant buffs (defaulting to 1), so a Lv-17 caster who has installed the upgrade gets 4 duplicates. The 30-ft bonus move + 120-ft range are identical at both tiers (read as constants). The `advantage_when_flanking_with_duplicate` flag and the duplicate-move bonus action stay GM-adjudicated for now — positional duplicate tracking is Maps 2.0 work.
+
+This flips Invoke Duplicity from announce-only to tracked and closes the last Phase-8 install-then-deferred-read gap.
+
+### Added
+- `app/routes/tabletop_routes.py::use_invoke_duplicity` — new `POST /api/campaign/{campaign_id}/use_invoke_duplicity` endpoint. Trickery Domain Cleric Lv 2+ Channel Divinity; costs 1 CD use + an action; installs a 10-round concentration `invoke-duplicity-active` buff. Reads the v2.158.3 `improved-duplicity` buff to set the duplicate count (1 baseline / 4 with the Lv-17 upgrade). Returns `{ok, feature, duplicates, bonus_move_per_duplicate_ft, max_range_ft, improved, cleric_level, channel_divinity_remaining, buff_installed}`.
+- `tests/harness/test_invoke_duplicity.py` — `test_use_invoke_duplicity_happy_lv2` (Lv 2 → 1 duplicate, `improved` False, CD 2 → 1, `feature_used` broadcast). `test_use_invoke_duplicity_reads_improved_buff_lv17` (the Phase 2 read: install `improved-duplicity` first, then invoke → 4 duplicates, `improved` True). `test_use_invoke_duplicity_out_of_cd` (CD 0 → 409 `out_of_uses`). `test_use_invoke_duplicity_wrong_subclass` (default Life Domain → 409 `wrong_subclass_or_level`).
+
+### Notes
+- Total harness count: **2147** in `tests/harness/` (was 2143); **`tests/harness_ui/` 19** (unchanged).
+- The duplicate-move bonus action and the within-5-ft flanking advantage stay GM-adjudicated — they need positional duplicate tokens (Maps 2.0). The `invoke-duplicity-active` buff's `effects` carry `duplicates`, `duplicate_move_ft`, `duplicate_max_range_ft`, and `advantage_when_flanking_with_duplicate` so a future positional read has a stable contract.
+
+---
+
 ## [2.158.51] - 2026-06-10 — "The Unprovoked Step" — Relentless Avenger installed a `relentless-avenger-bonus-move` buff (half-speed move that doesn't provoke OAs), but `/token/move` never read it — the OA-free movement was GM-tracked. Wiring the read site suppresses the move's opportunity attacks, exempts the bonus distance from the speed cap, and consumes the buff
 
 **Schema version:** 69
