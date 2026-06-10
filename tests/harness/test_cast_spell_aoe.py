@@ -15,6 +15,8 @@ Tests:
   - PC target in AoE list is recorded as ``pc_skipped: True`` — v1
     doesn't auto-roll PC AoE saves; the GM still resolves manually.
 """
+import asyncio
+
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
@@ -353,21 +355,36 @@ async def test_aoe_pc_response_applies_damage_and_broadcasts_update(
     assert upd_data["damage_type"] == "fire"
 
     # PC's HP should have dropped. Full damage on fail, half (rounded
-    # down) on save — both > 0 for an 8d6 fireball.
-    pc_hp_after = await _pc_hp()
-    assert pc_hp_after < pc_hp_before, (
-        f"{pc['name']}'s HP did not drop: before={pc_hp_before} after={pc_hp_after}"
+    # down) on save — both > 0 for an 8d6 fireball. v2.158.64 — assert
+    # via the `character_hp_update` broadcast that
+    # `_apply_damage_to_combatant` fires (source="attack" for the
+    # AoE-cast damage path). Live clients (mini-sheet, init tracker)
+    # read this broadcast, not a follow-up sheet GET, so pinning it is
+    # the load-bearing contract.
+    await asyncio.sleep(0.3)
+    hp_msgs = [
+        m for m in gm_ws.buffered("character_hp_update")
+        if int((m.get("data") or {}).get("character_id") or 0) == int(pc["id"])
+    ]
+    assert hp_msgs, (
+        "no character_hp_update broadcast fired for the PC target "
+        "— the AoE damage didn't land via _apply_damage_to_combatant"
+    )
+    last_hp_msg = hp_msgs[-1]
+    delta = int((last_hp_msg.get("data") or {}).get("delta") or 0)
+    assert delta < 0, (
+        f"character_hp_update delta should be negative (damage); "
+        f"got delta={delta}, msg={last_hp_msg}"
     )
     # damage_applied is the post-resistance amount the server tried to
     # subtract; the actual HP delta floors at 0, so the broadcast may
     # overshoot when the PC was already low. With a fresh long-rest
     # above, Krieger starts at full HP — 8d6 fire (avg ~28) won't
     # one-shot a Lv 5 Barbarian, so the broadcast value should match
-    # the HP delta.
-    assert upd_data["damage_applied"] >= pc_hp_before - pc_hp_after, (
-        f"damage_applied lower than HP delta: broadcast says "
-        f"{upd_data['damage_applied']}, HP delta is "
-        f"{pc_hp_before - pc_hp_after}"
+    # the HP delta (delta is negative, so compare against -damage_applied).
+    assert upd_data["damage_applied"] >= -delta, (
+        f"damage_applied lower than HP delta: spell_cast_target_updated says "
+        f"{upd_data['damage_applied']}, character_hp_update delta is {delta}"
     )
 
 
@@ -632,6 +649,11 @@ async def test_place_aoe_auto_rolls_pc_save_and_applies_damage(
     assert cast_resp.status_code == 200, cast_resp.text
     cast_id = cast_resp.json()["id"]
 
+    # v2.158.64 — mark the WS cursor so the post-/place_aoe assertion
+    # against `character_hp_update` only sees broadcasts from the
+    # damage-apply codepath that this test is actually exercising.
+    gm_ws.mark()
+
     place_resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
         json={
@@ -656,10 +678,25 @@ async def test_place_aoe_auto_rolls_pc_save_and_applies_damage(
     assert isinstance(bandit_entry["rolled"], int)
     assert bandit_entry["damage_applied"] > 0
 
-    # PC's HP dropped server-side.
-    pc_hp_after = await _pc_hp()
-    assert pc_hp_after < pc_hp_before, (
-        f"{pc['name']}'s HP did not drop: before={pc_hp_before} after={pc_hp_after}"
+    # PC's HP dropped server-side. v2.158.64 — assert via the
+    # `character_hp_update` broadcast that `_apply_damage_to_combatant`
+    # fires for the PC target, instead of a follow-up roster GET. The
+    # broadcast is the contract live clients (mini-sheet, init tracker)
+    # actually subscribe to.
+    await asyncio.sleep(0.3)
+    hp_msgs = [
+        m for m in gm_ws.buffered("character_hp_update")
+        if int((m.get("data") or {}).get("character_id") or 0) == int(pc["id"])
+    ]
+    assert hp_msgs, (
+        "no character_hp_update broadcast fired for the PC target "
+        "— /place_aoe didn't drop the PC's HP via _apply_damage_to_combatant"
+    )
+    last_hp_msg = hp_msgs[-1]
+    delta = int((last_hp_msg.get("data") or {}).get("delta") or 0)
+    assert delta < 0, (
+        f"character_hp_update delta should be negative (damage); "
+        f"got delta={delta}, msg={last_hp_msg}"
     )
 
 

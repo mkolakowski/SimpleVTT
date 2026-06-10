@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.64] - 2026-06-10 — "The Pulse Catcher" — Sibling refactor to v2.158.63: `test_cast_spell_aoe.py` had two PC-AoE tests that bracketed a Fireball cast with `_pc_hp()` roster GETs to confirm "PC's HP dropped," coupling the assertion to a downstream fetch instead of the `character_hp_update` WebSocket broadcast `_apply_damage_to_combatant` actually fires. This swaps each post-cast `_pc_hp()` poll for a buffered `character_hp_update` filter that asserts the broadcast for the PC target with `delta < 0`, mirroring the keeper-of-souls fix
+
+**Schema version:** 69
+**Commit summary:** **Test-only refactor of the two PC-AoE end-to-end assertions in `tests/harness/test_cast_spell_aoe.py`. `test_aoe_pc_response_applies_damage_and_broadcasts_update` and `test_place_aoe_auto_rolls_pc_save_and_applies_damage` previously called `_pc_hp()` (a GET `/api/campaign/.../roster` round-trip extracting `hp_current` for the PC target) once before seeding the battle AND a second time after the cast to assert `pc_hp_after < pc_hp_before`. The before-call stays — it's needed to seed the PC's `hp_current` into the battle. The after-call is replaced with `gm_ws.buffered("character_hp_update")` filtered to the PC's `character_id`, asserting at least one HP-update broadcast fired and the last one carries `delta < 0`. Test 1 also reworks the `damage_applied >= pc_hp_before - pc_hp_after` cross-check to `damage_applied >= -delta` (using the broadcast's delta as the load-bearing HP-change source). Test 2 adds a `gm_ws.mark()` immediately before its `/place_aoe` POST so the buffered scan is scoped to the test's own damage event. Added `import asyncio` and a `await asyncio.sleep(0.3)` in test 1 to match the keeper-of-souls broadcast-settle pattern.**
+**Description:** This closes the second (and last) instance of the HTTP-poll-around-damage-event antipattern surfaced by the v2.158.63 keeper-of-souls audit. Same rationale: live clients (mini-sheet, init tracker, full sheet) read the HP delta off the `character_hp_update` broadcast — that's the contract. The previous polling assertion inferred the broadcast went out from "the GET later shows the right HP", which a future regression where damage lands via a backdoor path but the broadcast is dropped would NOT catch (every live client would see stale HP, but the GET would still pass). The new shape pins the broadcast surface directly. No app-code, endpoint, or broadcast-shape change (still v69) — pure assertion-shape improvement. Both tests already pass green against the live v2.158.63 container.
+
+### Changed
+- `tests/harness/test_cast_spell_aoe.py` — `test_aoe_pc_response_applies_damage_and_broadcasts_update` and `test_place_aoe_auto_rolls_pc_save_and_applies_damage` swap their post-cast `_pc_hp()` poll for a `gm_ws.buffered("character_hp_update")` filter on the PC's `character_id` that asserts the last HP-update broadcast carries `delta < 0`. Test 2 adds a `gm_ws.mark()` before `/place_aoe` so its scan is scoped. The pre-cast `_pc_hp()` stays — it's needed to seed the PC's `hp_current` into the battle. Added `import asyncio` + `asyncio.sleep(0.3)` to settle the WS buffer in test 1 (matching the keeper-of-souls fix).
+
+### Notes
+- Total harness count unchanged: **2157** in `tests/harness/`; **`tests/harness_ui/` 23** — test-only refactor, no count change.
+- No endpoint, broadcast-shape, or schema change — pure assertion-shape improvement.
+- The audit kicked off in v2.158.63 found no remaining HTTP-poll-around-event antipatterns in the harness after this commit: `test_keeper_of_souls.py::test_ks_on_death_hook_heals_watcher_when_npc_dies` (fixed v2.158.63) and these two AoE tests (fixed v2.158.64) were the only matches. The other 15 hp-event tests already pin `character_hp_update`.
+
+---
+
 ## [2.158.63] - 2026-06-10 — "The Heartbeat Wire" — The Keeper of Souls on-death-hook test (`test_ks_on_death_hook_heals_watcher_when_npc_dies`) verified Tavik's heal landed by GET-polling his sheet's HP before + after the kill and asserting the delta. That polling round-trip is the wrong assertion surface: the *contract* the engine has with the UI is the `character_hp_update` WebSocket broadcast — that's what every client (initiative tracker, mini-sheet, full sheet) actually reads. This swaps the HTTP poll for a broadcast assertion so the test pins the load-bearing event instead of a downstream fetch
 
 **Schema version:** 69
