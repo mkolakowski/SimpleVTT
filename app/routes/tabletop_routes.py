@@ -7638,6 +7638,94 @@ async def _fire_orders_wrath_on_attack_hit(
         pass
 
 
+async def _apply_form_of_the_beast_bite_on_hit(
+    db: Session,
+    campaign_id: int,
+    attacker_char_id: int,
+    attacker_name: str,
+    sheet: dict,
+    attack: dict,
+    damage_applied: int,
+) -> dict | None:
+    """v2.158.28 — Phase 2 rider for the v2.158.20 Form of the Beast
+    bite. RAW (TCE p.9): "Once per turn when you damage a creature
+    with the bite, regain HP equal to your proficiency bonus — provided
+    you have less than half your hit points."
+
+    Fires from the /attack post-hit block. Gated on:
+      * the attack was the bite variant (the v2.158.25 merged entry
+        carries ``source_buff_key="form-of-the-beast-active"`` +
+        ``form="bite"``);
+      * actual damage landed on the target (``damage_applied > 0``);
+      * the attacker's current HP < half their max HP (the RAW gate);
+      * the once-per-turn flag ``fb_bite_heal_used`` isn't set
+        on the attacker's economy.
+
+    Returns ``{"healed": int, "hp_before": int, "hp_after": int,
+    "prof_bonus": int}`` on success, or ``None`` when any gate
+    short-circuits. Defensive — any exception is swallowed so a
+    feature-hook failure can never break the attack pipeline.
+
+    Once-per-turn enforcement uses the standard
+    ``combatant.economy.fb_bite_heal_used`` flag pattern (see
+    ``_mark_attack_flag``); resets when the GM advances the turn.
+    """
+    try:
+        if attack.get("source_buff_key") != "form-of-the-beast-active":
+            return None
+        if attack.get("form") != "bite":
+            return None
+        if int(damage_applied or 0) <= 0:
+            return None
+        # Already fired this turn?
+        state = hub.get_battle(campaign_id)
+        if not state:
+            return None
+        attacker = None
+        for c in state.get("combatants") or []:
+            if c.get("char_id") == int(attacker_char_id):
+                attacker = c
+                break
+        if attacker is None:
+            return None
+        econ = attacker.get("economy") or {}
+        if econ.get("fb_bite_heal_used"):
+            return None
+        # Read live HP from the PC's sheet (the canonical source — the
+        # combatant dict's hp_current can lag mid-turn).
+        char = db.query(Character).filter(
+            Character.id == int(attacker_char_id),
+        ).first()
+        if not char:
+            return None
+        live_sheet = char.sheet or {}
+        hp = dict(live_sheet.get("hp") or {})
+        hp_cur = int(hp.get("current") or 0)
+        hp_max = int(hp.get("max") or 0)
+        if hp_max <= 0:
+            return None
+        # RAW: "less than half" — strictly less than max/2.
+        if hp_cur * 2 >= hp_max:
+            return None
+        prof_bonus = int(live_sheet.get("proficiency_bonus") or sheet.get("proficiency_bonus") or 2)
+        if prof_bonus <= 0:
+            return None
+        heal_result = await _apply_heal_to_combatant(
+            db, campaign_id, attacker, prof_bonus,
+        )
+        await _mark_attack_flag(
+            campaign_id, int(attacker_char_id), "fb_bite_heal",
+        )
+        return {
+            "healed": int(heal_result.get("applied") or 0),
+            "hp_before": int(heal_result.get("hp_before") or hp_cur),
+            "hp_after": int(heal_result.get("hp_after") or hp_cur),
+            "prof_bonus": prof_bonus,
+        }
+    except Exception:  # noqa: BLE001
+        return None
+
+
 async def _fire_keeper_of_souls_on_npc_death(
     db: Session, campaign_id: int, dying_target: dict, state: dict,
 ) -> None:
@@ -75962,6 +76050,53 @@ async def use_attack(
             except Exception:
                 logging.exception(
                     "Ancestral Protectors install failed for char_id=%s",
+                    char.id,
+                )
+
+        # v2.158.28 — Form of the Beast Phase 2 bite self-heal rider
+        # (Path of the Beast Barbarian Lv 3+ TCE). Once per turn when
+        # the attacker damages a creature with the BITE form (not
+        # claws / tail), they regain HP equal to their proficiency
+        # bonus — provided their current HP is less than half max.
+        # Gates + helper live in `_apply_form_of_the_beast_bite_on_hit`.
+        # RAW: "when you damage a creature" — killing the target still
+        # qualifies, so this hook fires on hits regardless of
+        # target_dead (unlike Ancestral Protectors / Unwavering Mark
+        # which need a live target).
+        if hit and damage_applied > 0:
+            try:
+                fb_bite_result = await _apply_form_of_the_beast_bite_on_hit(
+                    db, campaign_id, char.id, char.name,
+                    sheet, attack, damage_applied,
+                )
+                if fb_bite_result is not None:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "feature_name": (
+                                f"🦷 Form of the Beast — Bite self-heal "
+                                f"+{fb_bite_result['healed']} HP"
+                            ),
+                            "feature_desc": (
+                                f"{char.name}'s bite drains vitality: "
+                                f"regained {fb_bite_result['healed']} HP "
+                                f"(proficiency bonus +{fb_bite_result['prof_bonus']}) "
+                                f"after damaging a creature while below "
+                                f"half HP. (Path of the Beast Barbarian "
+                                f"Lv 3+ TCE; once per turn.)"
+                            ),
+                            "source": "form-of-the-beast-bite-heal",
+                            "healed": fb_bite_result["healed"],
+                            "prof_bonus": fb_bite_result["prof_bonus"],
+                            "hp_before": fb_bite_result["hp_before"],
+                            "hp_after": fb_bite_result["hp_after"],
+                        },
+                    })
+            except Exception:
+                logging.exception(
+                    "Form of the Beast bite self-heal failed for char_id=%s",
                     char.id,
                 )
 

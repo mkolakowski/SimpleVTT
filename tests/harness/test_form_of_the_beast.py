@@ -235,6 +235,239 @@ async def test_attack_natural_weapon_index_404s_without_buff(
     assert r.status_code == 404, r.text
 
 
+def _mkc_npc(cid, tmpl_id, *, name, hp_cur=1, hp_max=20):
+    return {
+        "id": cid, "char_id": None, "token_template_id": tmpl_id,
+        "name": name, "initiative": 10,
+        "hp_current": hp_cur, "hp_max": hp_max, "speed_walk": 30,
+        "buffs": [],
+        "economy": {"action": False, "bonus": False, "reaction": False,
+                    "movement": 0, "dash_bonus_ft": 0},
+    }
+
+
+async def _set_auto_apply(gm_client, on: bool):
+    form = {
+        "name": "Demo Campaign", "description": "demo",
+        "game_system": "dnd5e", "gm_tab_color": "", "font_override": "",
+        "default_encounter_id": "", "hp_threshold_1": "",
+        "hp_threshold_2": "", "hp_threshold_3": "", "hp_threshold_4": "",
+        "auto_play_playlist_id": "", "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+        follow_redirects=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def fb_bite_auto_apply_on(gm_client):
+    await _set_auto_apply(gm_client, True)
+    yield
+    await _set_auto_apply(gm_client, False)
+
+
+async def _seed_krieger_vs_bandit(
+    gm_client, krieger, *, krieger_hp_cur, bandit_hp_cur=1,
+):
+    """Seed a 2-combatant battle: Krieger (live HP set via PATCH +
+    combatant payload) plus a bandit set up for a near-guaranteed hit
+    (1 HP, default bandit AC ~12). Returns the bandit token id."""
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    bandit_id = f"tok_fb_bite_bandit_{krieger['id']}"
+    krieger_tok = f"tok_fb_bite_kr_{krieger['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": krieger_tok, "char_id": krieger["id"],
+             "name": krieger["name"], "initiative": 20,
+             "hp_current": krieger_hp_cur, "hp_max": 75,
+             "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            _mkc_npc(bandit_id, bandit_tmpl["id"],
+                     name=bandit_tmpl["name"], hp_cur=bandit_hp_cur),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    return bandit_id
+
+
+async def test_bite_self_heal_fires_when_below_half_hp_on_hit(
+    gm_client, gm_ws, krieger_beast, fb_bite_auto_apply_on,
+):
+    """v2.158.28 — Phase 2 bite rider: Krieger Path of the Beast Lv 7
+    with HP set below half max (30 / 75 → 40%), bite form installed.
+    Swing at the 1-HP bandit until a hit lands → expect a
+    feature_used broadcast with source "form-of-the-beast-bite-heal"
+    + healed == prof_bonus (+3 at Lv 7 RAW)."""
+    krieger = krieger_beast
+    # PATCH Krieger's sheet HP to 30/75 (below half).
+    await _patch_sheet(
+        gm_client, krieger["id"],
+        {"hp": {"current": 30, "max": 75, "temp": 0}},
+        class_slug="barbarian",
+    )
+    await _seed_krieger_vs_bandit(
+        gm_client, krieger, krieger_hp_cur=30,
+    )
+    # Read sheet to find the natural-weapon index dynamically.
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-json",
+    )
+    sheet = r.json().get("sheet") or {}
+    natural_index = len(sheet.get("attacks") or [])
+    bandit_id = (
+        f"tok_fb_bite_bandit_{krieger['id']}"
+    )
+    # Install bite form.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "bite"},
+    )
+    assert r.status_code == 200, r.text
+    # Swing until a hit lands. Krieger +7 vs AC 12 → ~80% hit rate;
+    # bound to 10 swings.
+    gm_ws.mark()
+    landed_hit = False
+    for _ in range(10):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": krieger["id"],
+                  "attack_index": natural_index,
+                  "target_combatant_id": bandit_id,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        if d.get("hit") is True and int(d.get("damage_total") or 0) >= 1:
+            landed_hit = True
+            break
+    assert landed_hit, "Krieger failed to bite-hit the bandit in 10 swings"
+    await asyncio.sleep(0.3)
+    # Bite-heal feature_used broadcast.
+    heal_msgs = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "form-of-the-beast-bite-heal"
+        and int((m.get("data") or {}).get("character_id") or 0)
+            == int(krieger["id"])
+    ]
+    assert heal_msgs, (
+        "no form-of-the-beast-bite-heal broadcast fired after the bite "
+        "hit — the bite Phase-2 hook didn't fire or didn't match Krieger"
+    )
+    last = heal_msgs[-1]["data"]
+    # Krieger Lv 7 proficiency_bonus = 3.
+    assert int(last.get("prof_bonus") or 0) == 3, (
+        f"expected prof_bonus=3 at Lv 7; got {last}"
+    )
+    assert int(last.get("healed") or 0) == 3, (
+        f"expected healed=3 (prof bonus); got {last}"
+    )
+
+
+async def test_bite_self_heal_does_not_fire_at_full_hp(
+    gm_client, gm_ws, krieger_beast, fb_bite_auto_apply_on,
+):
+    """Control: at full HP (75/75), the bite-heal RAW gate ("less than
+    half") blocks. No `form-of-the-beast-bite-heal` broadcast even
+    after a confirmed bite hit."""
+    krieger = krieger_beast
+    await _patch_sheet(
+        gm_client, krieger["id"],
+        {"hp": {"current": 75, "max": 75, "temp": 0}},
+        class_slug="barbarian",
+    )
+    await _seed_krieger_vs_bandit(
+        gm_client, krieger, krieger_hp_cur=75,
+    )
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-json",
+    )
+    sheet = r.json().get("sheet") or {}
+    natural_index = len(sheet.get("attacks") or [])
+    bandit_id = f"tok_fb_bite_bandit_{krieger['id']}"
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "bite"},
+    )
+    assert r.status_code == 200, r.text
+    gm_ws.mark()
+    for _ in range(6):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": krieger["id"],
+                  "attack_index": natural_index,
+                  "target_combatant_id": bandit_id,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit") is True:
+            break
+    await asyncio.sleep(0.3)
+    heal_msgs = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "form-of-the-beast-bite-heal"
+    ]
+    assert not heal_msgs, (
+        f"bite self-heal should NOT fire at full HP; got {heal_msgs}"
+    )
+
+
+async def test_claws_form_does_not_trigger_bite_self_heal(
+    gm_client, gm_ws, krieger_beast, fb_bite_auto_apply_on,
+):
+    """Control: at low HP but with CLAWS form (not bite), no self-heal
+    fires. Pins the form-gate in the helper."""
+    krieger = krieger_beast
+    await _patch_sheet(
+        gm_client, krieger["id"],
+        {"hp": {"current": 30, "max": 75, "temp": 0}},
+        class_slug="barbarian",
+    )
+    await _seed_krieger_vs_bandit(
+        gm_client, krieger, krieger_hp_cur=30,
+    )
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/sheet-json",
+    )
+    sheet = r.json().get("sheet") or {}
+    natural_index = len(sheet.get("attacks") or [])
+    bandit_id = f"tok_fb_bite_bandit_{krieger['id']}"
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "claws"},
+    )
+    assert r.status_code == 200, r.text
+    gm_ws.mark()
+    for _ in range(6):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": krieger["id"],
+                  "attack_index": natural_index,
+                  "target_combatant_id": bandit_id,
+                  "override": True},
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit") is True:
+            break
+    await asyncio.sleep(0.3)
+    heal_msgs = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "form-of-the-beast-bite-heal"
+    ]
+    assert not heal_msgs, (
+        f"claws form should not trigger bite self-heal; got {heal_msgs}"
+    )
+
+
 async def test_fb_buff_payload_carries_form_parameter_flags(
     gm_client, gm_ws, krieger_beast,
 ):

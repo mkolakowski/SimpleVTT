@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.28] - 2026-06-09 — "Vampire's Bite" — Phase 2 bite rider for Form of the Beast: once-per-turn self-heal of proficiency-bonus HP when the bite hits while attacker is below half max HP
+
+**Schema version:** 69
+**Commit summary:** **First mechanical rider for the v2.158.20 Form of the Beast buff. New `_apply_form_of_the_beast_bite_on_hit(...)` helper wires into `/attack`'s post-hit block: when an attacker damages a target via the BITE form-variant (not claws / tail) AND their current HP is strictly less than half of max, they regain proficiency-bonus HP via `_apply_heal_to_combatant`. Standard once-per-turn gate (`combatant.economy.fb_bite_heal_used`), broadcasts `feature_used` with source `form-of-the-beast-bite-heal` carrying the heal + prof-bonus + pre/post HP.**
+**Description:** v2.158.20–27 shipped Form of the Beast end-to-end as an attack option, but the per-form `*_special` rider text was narration-only. v2.158.28 ships the first real rider — the bite self-heal (RAW TCE p.9: "Once per turn when you damage a creature with the bite, regain HP equal to your proficiency bonus — provided you have less than half your hit points").
+
+The helper detects the bite attack via the v2.158.25 merged entry's `source_buff_key="form-of-the-beast-active"` + `form="bite"` so the form-gate is unambiguous (no string-matching the attack name). HP is read live from the PC's sheet (not the combatant's lagging `hp_current` mirror) so the gate sees real damage state. Once-per-turn is enforced via the same `_mark_attack_flag` pattern used by Colossus Slayer / Divine Strike, so the GM-driven nextTurn flow clears the flag automatically.
+
+Claws extra-attack and tail reaction-AC riders are still TBD — each needs its own engine primitive (extra-attack hook, reaction framework wire-in) so they stay filed as follow-up commits.
+
+### Added
+- `app/routes/tabletop_routes.py::_apply_form_of_the_beast_bite_on_hit` — backend helper. Detects bite attack via the merged-entry effect keys, reads attacker live HP from the sheet, gates on prof-bonus > 0 + HP * 2 < max + once-per-turn flag, fires `_apply_heal_to_combatant` for the prof bonus, marks the flag, returns `{healed, hp_before, hp_after, prof_bonus}`.
+- `app/routes/tabletop_routes.py::use_attack` — new post-hit block (after damage applies, alongside Ancestral Protectors / Unwavering Mark hooks) calls the helper and broadcasts a `feature_used` card with source `form-of-the-beast-bite-heal`. Defensive try/except so a hook failure can never break the attack pipeline.
+- `tests/harness/test_form_of_the_beast.py` — three new state-contract tests: (1) Lv 7 Krieger at 30/75 HP attacks with bite until a hit lands → `feature_used` source `form-of-the-beast-bite-heal` fires + `prof_bonus: 3` + `healed: 3`; (2) full-HP control → no broadcast; (3) claws-form control → no broadcast. Each uses the standard "swing until hit" pattern (Krieger +7 vs bandit AC 12, ~80% hit rate, 6–10 swings).
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2108** (was 2105).
+
+### Notes
+- Claws extra-attack rider (RAW: "make one additional claw attack as part of the Attack action") needs an extra-attack-pending marker the player can spend on a follow-up attack. Filed for a follow-up commit.
+- Tail reaction-AC rider (RAW: "Reaction: when a creature you can see within 10 ft hits you with an attack, add 1d8 to your AC against it") needs reactions-framework integration + post-roll AC modifier hook. Filed.
+- **Total harness count: 2108** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.27] - 2026-06-09 — "Strike With Claws" — Phase 2 frontend wiring for the v2.158.20–26 Form of the Beast trio: new Natural Weapons panel under the Attacks list surfaces Bite/Claws/Tail click-to-strike buttons when the buff is active
 
 **Schema version:** 69
