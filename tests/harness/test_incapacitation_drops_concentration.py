@@ -26,6 +26,8 @@ Tests:
     concentration still cascade-removes the target's Paralyzed
     buff (the v2.38.0 path stays intact).
 """
+import asyncio
+import time
 from typing import List
 
 from .conftest import CAMPAIGN_ID
@@ -144,8 +146,6 @@ async def test_paralyzed_pc_drops_own_concentration(gm_client, gm_ws, roster):
         )
         # 💀 GM log entry should fire naming the cause. The broadcast
         # is async vs the HTTP /respond return, so poll for up to 2s.
-        import asyncio
-        import time
         deadline = time.monotonic() + 2.0
         skull_logs: list = []
         while time.monotonic() < deadline:

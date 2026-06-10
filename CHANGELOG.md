@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.65] - 2026-06-10 — "Top of the File" — Four harness tests carried `import time` / `import asyncio` calls inside test functions or in a mid-file comment-break block: `test_concentration_skull_log.py::_wait_for_concentration_log` (line 82), `test_incapacitation_drops_concentration.py` (inside the test body, line 147-148), `test_use_stunning_strike.py` (inside the test body, line 249-250), and `test_use_open_hand_technique.py` (mid-file at line 377-378 after a long comment block). Python style is `import`s at module top; late imports inside functions hide dependencies from a reader scanning the file header and re-import on every call. This hoists each one to its proper home
+
+**Schema version:** 69
+**Commit summary:** **Test-only style cleanup of mid-function imports across four harness files. Every `import time` and `import asyncio` that lived inside a test function (or in a mid-file comment-section break) is moved to the module-top import block, sorted with the existing imports (`asyncio` before `time` before `pytest_asyncio`). The inline `import` lines are deleted. No behavior change — Python imports are idempotent so the late-import was a no-op on every call after the first, but module-top placement matches the convention used by the other 245 harness files and makes the dependency graph readable from the header alone.**
+**Description:** Surfaced by the v2.158.64 sweep for harness anti-patterns. Late imports inside functions:  (a) hide the module's actual dependency list from anyone scanning the import block — a reader has to grep the whole file to learn the function uses `time.monotonic`; (b) re-execute (no-op after first call, but still a registry lookup) every time the function is called; (c) drift away from the project's established convention. The fix is mechanical and isolated: hoist each `import` to the top, delete the late copy, sort with the existing imports. Test bodies are otherwise unchanged. All 23 tests in the four files still pass green against the live v2.158.64 container.
+
+### Changed
+- `tests/harness/test_concentration_skull_log.py` — adds `import time` to the module-top imports; removes the inline `import time` from `_wait_for_concentration_log` at line 82.
+- `tests/harness/test_incapacitation_drops_concentration.py` — adds `import asyncio` and `import time` to the module-top imports; removes the inline `import asyncio` / `import time` from the test body (was at line 147-148).
+- `tests/harness/test_use_stunning_strike.py` — adds `import asyncio` and `import time` to the module-top imports; removes the inline `import asyncio` / `import time` from the test body (was at line 249-250).
+- `tests/harness/test_use_open_hand_technique.py` — moves the mid-file `import asyncio` / `import time` (previously at line 377-378 after a long comment-section break) to the module-top imports.
+
+### Notes
+- Total harness count unchanged: **2157** in `tests/harness/`; **`tests/harness_ui/` 23** — pure style cleanup, no test added/removed/renamed.
+- No endpoint, broadcast-shape, or schema change — pure cleanup. The four files now match the import convention of the other 245 harness files.
+
+---
+
 ## [2.158.64] - 2026-06-10 — "The Pulse Catcher" — Sibling refactor to v2.158.63: `test_cast_spell_aoe.py` had two PC-AoE tests that bracketed a Fireball cast with `_pc_hp()` roster GETs to confirm "PC's HP dropped," coupling the assertion to a downstream fetch instead of the `character_hp_update` WebSocket broadcast `_apply_damage_to_combatant` actually fires. This swaps each post-cast `_pc_hp()` poll for a buffered `character_hp_update` filter that asserts the broadcast for the PC target with `delta < 0`, mirroring the keeper-of-souls fix
 
 **Schema version:** 69

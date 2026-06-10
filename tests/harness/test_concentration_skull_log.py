@@ -24,6 +24,7 @@ Tests:
     (regression guard — don't over-correct).
 """
 import asyncio
+import time
 from typing import List
 
 from .conftest import CAMPAIGN_ID
@@ -79,7 +80,6 @@ async def _wait_for_concentration_log(gm_ws, timeout: float = 3.0) -> dict:
     """Like wait_for('roll') but filters specifically for the
     concentration GM log entry (matched on note text). Useful because
     other ``roll``-type messages may be in flight."""
-    import time
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         for m in gm_ws.buffered():

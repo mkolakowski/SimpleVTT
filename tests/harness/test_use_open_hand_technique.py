@@ -33,6 +33,9 @@ Tests:
     subclass via /sheet PATCH, fire the endpoint, restore.
   - 400 bad mode: invalid mode string → 400.
 """
+import asyncio
+import time
+
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
@@ -373,10 +376,6 @@ async def test_open_hand_bad_mode(gm_client, kael_rested):
 #     path). Verify reaction-denied lands on the PC's hub + sheet
 #     mirror.
 # ---------------------------------------------------------------------------
-
-import asyncio
-import time
-
 
 async def _install_hex(gm_client, magnus_id: int, target_id: int):
     r = await gm_client.post(

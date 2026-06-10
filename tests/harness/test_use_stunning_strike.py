@@ -26,6 +26,9 @@ Tests:
     concentration=False incapacitating buff via the PC /respond path),
     (c) 💀 GM log fired.
 """
+import asyncio
+import time
+
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
@@ -246,9 +249,6 @@ async def test_stunning_strike_pc_drops_own_concentration(
 
     Retry loop because Magnus's CON save outcome is random.
     """
-    import asyncio
-    import time
-
     kael = kael_rested
     magnus = roster["Magnus Hexbinder"]
     pip = roster["Pip Quickfingers"]
