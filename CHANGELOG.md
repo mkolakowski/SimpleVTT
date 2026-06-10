@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.40] - 2026-06-10 — "The Wider Door" — Improved War Magic's installed buff was inert: `/use_war_magic` never read it. Wiring the read site widens the bonus-action weapon-attack prerequisite from cantrips only to any Lv 1+ spell
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.158.12 Improved War Magic buff (Eldritch Knight Fighter Lv 18+, PHB p.74): "when you use your action to cast a spell, you can make one weapon attack as a bonus action" — widening the Lv-7 War Magic prerequisite from cantrips only to any spell. v2.158.12 installed a permanent `improved-war-magic-active` buff carrying `effects.improved_war_magic_active: True` + `effects.improved_war_magic_min_spell_level: 1`, but `/use_war_magic` never read it — so the upgrade was announce-only. This commit adds `_pc_improved_war_magic_min_level` and, when the EK carries the buff, surfaces the widened prerequisite on the War Magic response (`improved_war_magic` + `spell_min_level`) + its `feature_used` broadcast (relabeled "Improved War Magic", desc mentioning the Lv 1+ widening).**
+**Description:** v2.158.12 flipped Improved War Magic from announce-only to a buff-installing endpoint (Phase 1), placing a permanent `improved-war-magic-active` buff on the EK that names the relaxed prerequisite (any Lv 1+ spell, not just a cantrip). But the consumer was deferred: `/use_war_magic` marked the bonus chip and broadcast the base cantrip-only message, never inspecting the buff. This commit wires the read. `/use_war_magic` now reads the mirrored `_buffs_active` via `_pc_improved_war_magic_min_level` and, when the EK carries the buff, relabels the feature "Improved War Magic", rewrites the desc to mention casting any Lv 1+ spell, and returns `improved_war_magic: True` + `spell_min_level: 1` on both the response and the broadcast. EKs without the buff (Lv 7-17 base War Magic) get `improved_war_magic: False` + `spell_min_level: 0` — the cantrip-only prerequisite, unchanged.
+
+This flips Improved War Magic from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `app/routes/tabletop_routes.py::_pc_improved_war_magic_min_level` — read gate returning the minimum qualifying spell level (1 by RAW) when the PC carries an active `improved-war-magic-active` buff; 0 otherwise (base cantrip-only War Magic). Reads the mirrored sheet `_buffs_active`, no hub fetch.
+- `tests/harness/test_war_magic.py::test_wm_improved_widens_prerequisite` — Phase 2 read-site test: a Lv 18 EK carrying the buff sees `/use_war_magic` return `improved_war_magic: True` + `spell_min_level: 1` on the response + broadcast, with the Lv 1+ widening in the desc. `test_wm_base_cantrip_only_without_buff` — control: with the buff removed, `improved_war_magic: False` + `spell_min_level: 0`.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_war_magic` — reads the Improved War Magic buff and, when present, widens the prerequisite to any Lv 1+ spell: relabels the feature, rewrites the desc, and surfaces `improved_war_magic` + `spell_min_level` on the response + `feature_used` broadcast. `use_improved_war_magic` docstring/buff-desc updated to mark the Phase 2 finisher.
+
+### Notes
+- Total harness count: **2125** in `tests/harness/` (was 2123); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.39] - 2026-06-10 — "Blink Step" — Arcane Charge's installed buff was inert: `/use_action_surge` never read it. Wiring the read site surfaces the 30 ft teleport budget when an Eldritch Knight uses Action Surge
 
 **Schema version:** 69

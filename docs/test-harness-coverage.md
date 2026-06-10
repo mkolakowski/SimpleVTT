@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2123 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.39, 2026-06-10).
+**Total tests:** 2125 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.40, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1392,11 +1392,13 @@ v2.99.268 — Eldritch Knight Fighter (PHB p.74) Eldritch Strike buff install (P
 | `test_use_es_target_not_in_battle` | Unknown target → 404 `target_not_in_battle`. |
 
 ### `test_war_magic.py`
-v2.99.267 — Eldritch Knight Fighter (PHB p.74) War Magic announce (Phase E.2 Phase 2). Lv 7+; after casting a cantrip with action, make one weapon attack as a bonus action.
+v2.99.267 — Eldritch Knight Fighter (PHB p.74) War Magic announce (Phase E.2 Phase 2). Lv 7+; after casting a cantrip with action, make one weapon attack as a bonus action. v2.158.40 (Phase 2 read site for the v2.158.12 Improved War Magic Lv-18 buff): `/use_war_magic` reads `improved-war-magic-active` via `_pc_improved_war_magic_min_level` + widens the prerequisite to any Lv 1+ spell.
 
 | Test | What it asserts |
 |------|-----------------|
 | `test_use_wm_happy` | Lv 9 Eldritch Knight Garrik → 200, broadcast (source `war-magic`), bonus chip marked. |
+| `test_wm_improved_widens_prerequisite` | v2.158.40 Phase 2 — a Lv 18 EK carrying `improved-war-magic-active` sees `/use_war_magic` return `improved_war_magic == True` + `spell_min_level == 1` on the response + broadcast, with the Lv 1+ widening in the desc. |
+| `test_wm_base_cantrip_only_without_buff` | v2.158.40 control — buff installed then ended → `improved_war_magic == False` + `spell_min_level == 0` (base cantrip-only War Magic). |
 | `test_use_wm_wrong_subclass` | Default Garrik (Champion) → 409 `wrong_subclass_or_level`. |
 | `test_use_wm_level_gate` | Eldritch Knight at Lv 6 (not 7+) → 409. |
 

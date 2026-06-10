@@ -44942,11 +44942,14 @@ async def use_improved_war_magic(
     for the Lv-1+ upgrade:
       * `effects.improved_war_magic_active: True`
       * `effects.improved_war_magic_min_spell_level: 1`
-    Phase 2 (deferred): the War Magic / `/cast_spell` flow reads
-    the buff + allows the bonus-action weapon attack rider when
-    the cast spell's level >= the flag's threshold (1 by RAW).
-    Before Phase 8 the Lv-1+-not-cantrip gate was implicit (the
-    chip mark just claimed the bonus action was spent).
+    v2.158.40 — Phase 2 (shipped): `/use_war_magic` reads the buff
+    via `_pc_improved_war_magic_min_level` and, when present, widens
+    the bonus-action weapon-attack prerequisite from cantrips only to
+    any Lv 1+ spell — surfacing `improved_war_magic` + `spell_min_level`
+    on its response + `feature_used` broadcast (and relabeling the
+    feature "Improved War Magic"). Before Phase 8 the Lv-1+-not-cantrip
+    gate was implicit (the chip mark just claimed the bonus action was
+    spent).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -45011,8 +45014,9 @@ async def use_improved_war_magic(
         "desc": (
             f"{char.name} can cast a Lv 1+ spell with action and "
             f"make one weapon attack as a bonus action. (Eldritch "
-            f"Knight Lv 18+ passive permanent. Phase 2: War Magic "
-            f"spell-cast flow reads these flags.)"
+            f"Knight Lv 18+ passive permanent. v2.158.40 Phase 2: "
+            f"`/use_war_magic` reads these flags to widen the "
+            f"prerequisite to any Lv 1+ spell.)"
         ),
     })
     if buff_installed:
@@ -45202,6 +45206,40 @@ async def use_eldritch_strike(
     }
 
 
+def _pc_improved_war_magic_min_level(sheet: "dict | None") -> int:
+    """v2.158.40 — Phase 2 read gate for the v2.158.12 Improved War
+    Magic buff (Eldritch Knight Fighter Lv 18+, PHB p.74): "when you
+    use your action to cast a spell, you can make one weapon attack as
+    a bonus action." This widens the Lv-7 War Magic prerequisite from
+    cantrips only to any spell.
+
+    Returns the minimum spell level that qualifies for the bonus-action
+    weapon attack when the PC carries an active `improved-war-magic-
+    active` buff (1 by RAW — any Lv 1+ spell); 0 when absent (the base
+    Lv-7 War Magic limit of cantrips only). Reads the mirrored sheet
+    buff (`_buffs_active`) — same source the other Phase-8 read sites
+    use — so it works off `/use_war_magic`'s already-loaded `char.sheet`.
+    """
+    if not isinstance(sheet, dict):
+        return 0
+    for b in (sheet.get("_buffs_active") or []):
+        if not isinstance(b, dict):
+            continue
+        if (str(b.get("key") or "").strip().lower()
+                != "improved-war-magic-active"):
+            continue
+        eff = b.get("effects") or {}
+        if not isinstance(eff, dict):
+            continue
+        if not eff.get("improved_war_magic_active"):
+            continue
+        try:
+            return int(eff.get("improved_war_magic_min_spell_level") or 1)
+        except (TypeError, ValueError):
+            return 1
+    return 0
+
+
 @router.post("/api/campaign/{campaign_id}/use_war_magic")
 async def use_war_magic(
     campaign_id: int,
@@ -45276,22 +45314,45 @@ async def use_war_magic(
         else (campaign.gm_color if user.id == campaign.gm_user_id else None)
     )
     caster_color = char.color or player_color
+
+    # v2.158.40 — Phase 2 read site for the v2.158.12 Improved War
+    # Magic buff. A Lv 18+ EK carrying `improved-war-magic-active` may
+    # trigger the bonus-action weapon attack after casting ANY Lv 1+
+    # spell (not just a cantrip); surface the widened prerequisite on
+    # the response + broadcast so the client describes it correctly.
+    iwm_min_level = _pc_improved_war_magic_min_level(sheet)
+    if iwm_min_level > 0:
+        feature_desc = (
+            f"{char.name} invokes Improved War Magic: after casting a "
+            f"cantrip OR any Lv {iwm_min_level}+ spell with your action, "
+            f"make one weapon attack as a bonus action. (Eldritch Knight "
+            f"Lv 18+ class feature.) Roll the attack via the normal path."
+        )
+    else:
+        feature_desc = (
+            f"{char.name} invokes War Magic: after casting a "
+            f"cantrip with your action, make one weapon attack "
+            f"as a bonus action. (Eldritch Knight Lv 7+ class "
+            f"feature.) Roll the attack via the normal path."
+        )
+
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": char.id,
             "character_name": char.name,
             "user_color": caster_color,
-            "feature_name": "⚡ War Magic — bonus weapon attack",
-            "feature_desc": (
-                f"{char.name} invokes War Magic: after casting a "
-                f"cantrip with your action, make one weapon attack "
-                f"as a bonus action. (Eldritch Knight Lv 7+ class "
-                f"feature.) Roll the attack via the normal path."
+            "feature_name": (
+                "⚡ Improved War Magic — bonus weapon attack"
+                if iwm_min_level > 0
+                else "⚡ War Magic — bonus weapon attack"
             ),
+            "feature_desc": feature_desc,
             "source": "war-magic",
             "over_budget": was_used,
             "over_budget_slot": "bonus" if was_used else "",
+            "improved_war_magic": iwm_min_level > 0,
+            "spell_min_level": iwm_min_level,
         },
     })
 
@@ -45299,6 +45360,8 @@ async def use_war_magic(
         "ok": True,
         "feature": "war-magic",
         "over_budget": was_used,
+        "improved_war_magic": iwm_min_level > 0,
+        "spell_min_level": iwm_min_level,
     }
 
 

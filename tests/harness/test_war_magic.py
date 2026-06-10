@@ -89,6 +89,87 @@ async def test_use_wm_happy(
     assert feats
 
 
+async def test_wm_improved_widens_prerequisite(
+    gm_client, gm_ws, garrik_eldritch_knight,
+):
+    """v2.158.40 — Phase 2 read site for the v2.158.12 Improved War
+    Magic buff. A Lv 18 EK carrying `improved-war-magic-active` sees
+    `/use_war_magic` widen the prerequisite to any Lv 1+ spell: the
+    response carries `improved_war_magic == True` + `spell_min_level
+    == 1`, the broadcast names "Improved War Magic", and the desc
+    mentions the Lv 1+ widening."""
+    garrik = garrik_eldritch_knight
+    await _patch_sheet(
+        gm_client, garrik["id"], {"level": 18}, class_slug="fighter",
+    )
+    try:
+        # Phase 1: install the Improved War Magic buff.
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_improved_war_magic",
+            json={"character_id": garrik["id"], "override": True},
+        )
+        assert r.status_code == 200, r.text
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_war_magic",
+            json={"character_id": garrik["id"], "override": True},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("improved_war_magic") is True, (
+            f"buff present → improved_war_magic True; got {data}"
+        )
+        assert data.get("spell_min_level") == 1
+        msg = await gm_ws.wait_for("feature_used")
+        assert msg["data"]["source"] == "war-magic"
+        assert msg["data"].get("improved_war_magic") is True
+        assert msg["data"].get("spell_min_level") == 1
+        assert "Lv 1+" in (msg["data"].get("feature_desc") or "")
+    finally:
+        await _patch_sheet(
+            gm_client, garrik["id"], {"level": 9}, class_slug="fighter",
+        )
+
+
+async def test_wm_base_cantrip_only_without_buff(
+    gm_client, garrik_eldritch_knight,
+):
+    """Control: with the Improved War Magic buff removed,
+    `/use_war_magic` reports the base cantrip-only prerequisite
+    (`improved_war_magic == False`, `spell_min_level == 0`). Installs
+    then ends the buff so the sheet mirror is clean regardless of
+    prior test state (the buff is permanent)."""
+    garrik = garrik_eldritch_knight
+    await _patch_sheet(
+        gm_client, garrik["id"], {"level": 18}, class_slug="fighter",
+    )
+    try:
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_improved_war_magic",
+            json={"character_id": garrik["id"], "override": True},
+        )
+        end = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": garrik["id"],
+                  "key": "improved-war-magic-active"},
+        )
+        assert end.status_code == 200, end.text
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_war_magic",
+            json={"character_id": garrik["id"], "override": True},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("improved_war_magic") is False, (
+            f"no buff → improved_war_magic False; got {data}"
+        )
+        assert data.get("spell_min_level") == 0
+    finally:
+        await _patch_sheet(
+            gm_client, garrik["id"], {"level": 9}, class_slug="fighter",
+        )
+
+
 async def test_use_wm_wrong_subclass(
     gm_client, roster,
 ):
