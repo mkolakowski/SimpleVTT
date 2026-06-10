@@ -34,6 +34,13 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
+async def _seed_dice(gm_client, seed: int):
+    r = await gm_client.post(
+        "/api/test/dice/seed", json={"seed": seed},
+    )
+    assert r.status_code == 200, r.text
+
+
 async def _patch_sheet(gm_client, char_id, fields, class_slug=None):
     body = dict(fields)
     if class_slug:
@@ -164,6 +171,67 @@ async def test_use_supreme_sneak_at_lv9(
             gm_client, pip["id"], {"level": pre_level},
             class_slug="rogue",
         )
+
+
+async def test_supreme_sneak_consumes_on_stealth_roll(
+    gm_client, pip_in_battle,
+):
+    """v2.158.45 — Phase 2 read site for the v2.99.224
+    `supreme-sneak-active` buff. Install the buff (Pip Lv 9), then roll
+    a Stealth check → total gets +5 + breakdown mentions 'Supreme
+    Sneak'. The buff is one-shot consumed: a second Stealth roll the
+    same session gets no bonus."""
+    pip = pip_in_battle
+    await _patch_sheet(
+        gm_client, pip["id"], {"level": 9}, class_slug="rogue")
+    try:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_supreme_sneak",
+            json={"character_id": pip["id"]},
+        )
+        assert r.status_code == 200, r.text
+        await _seed_dice(gm_client, 42)
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll",
+            json={
+                "expression": "1d20",
+                "character_id": pip["id"],
+                "stat_key": "Stealth",
+                "stat_ability": "DEX",
+                "visibility": "public",
+            },
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        breakdown = data.get("breakdown") or ""
+        total = int(data.get("total") or 0)
+        assert "Supreme Sneak" in breakdown, (
+            f"expected breakdown to include 'Supreme Sneak'; "
+            f"got {breakdown!r}"
+        )
+        # d20 (1-20) + 5 → 6-25.
+        assert 6 <= total <= 25, (
+            f"total should be d20 + 5; got {total}, "
+            f"breakdown={breakdown!r}"
+        )
+        # One-shot consume: a second Stealth roll gets no bonus.
+        r2 = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll",
+            json={
+                "expression": "1d20",
+                "character_id": pip["id"],
+                "stat_key": "Stealth",
+                "stat_ability": "DEX",
+                "visibility": "public",
+            },
+        )
+        assert r2.status_code == 200, r2.text
+        assert "Supreme Sneak" not in (r2.json().get("breakdown") or ""), (
+            "buff should be consumed after the first Stealth roll"
+        )
+    finally:
+        await _patch_sheet(
+            gm_client, pip["id"], {"level": 7}, class_slug="rogue")
 
 
 async def test_use_supreme_sneak_level_gate(

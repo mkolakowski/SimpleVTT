@@ -16161,6 +16161,62 @@ async def roll_dice(
                 pass
             break
 
+    # v2.158.45 — Supreme Sneak (Thief Rogue Lv 9+, PHB p.97) Stealth
+    # consumer. Phase 2 read site for the v2.99.224 `supreme-sneak-active`
+    # buff (installed by /use_supreme_sneak): when the PC carries it AND
+    # the roll is a Stealth check, add its `stealth_bonus` (+5 advantage
+    # proxy) to the total + consume the buff. Mirrors the Hide in Plain
+    # Sight consumer above; composes after it so a Ranger 10 / Thief 9
+    # multiclass stacks both bonuses on one roll.
+    _ss_old_total: "int | None" = None
+    _ss_bonus = 0
+    if (
+        _char
+        and stat_key_lc == "stealth"
+        and isinstance(_char.sheet, dict)
+    ):
+        for _b in (_char.sheet.get("_buffs_active") or []):
+            if not isinstance(_b, dict):
+                continue
+            if (
+                (_b.get("key") or "").strip().lower()
+                != "supreme-sneak-active"
+            ):
+                continue
+            _effects = _b.get("effects") or {}
+            if not isinstance(_effects, dict):
+                continue
+            _bonus = int(_effects.get("stealth_bonus") or 0)
+            if _bonus <= 0:
+                continue
+            try:
+                import copy
+                result = copy.copy(result)
+                _ss_old_total = int(result.total or 0)
+                result.total = int(result.total or 0) + _bonus
+                result.breakdown = (
+                    f"{result.breakdown} + {_bonus} (Supreme Sneak)"
+                )
+                _ss_bonus = _bonus
+            except Exception:
+                pass
+            try:
+                await _remove_buff(
+                    campaign_id, int(_char.id),
+                    "supreme-sneak-active",
+                )
+                # _remove_buff only updates the live battle combatant;
+                # re-mirror to the DB sheet so a subsequent /roll in the
+                # same session re-reads the consumed (empty) state rather
+                # than the stale `_buffs_active` snapshot.
+                _mirror_buffs_to_sheet(
+                    db, int(_char.id),
+                    _get_buffs(campaign_id, int(_char.id)),
+                )
+            except Exception:
+                pass
+            break
+
     # v2.99.204 — Indomitable Might (Barbarian Lv 18+). Phase F.1
     # cont'd of the v2.99.193 phased completion plan. RAW PHB
     # p.49: when a STR check's total is less than the PC's STR
@@ -16209,6 +16265,11 @@ async def roll_dice(
             + (
                 f" | 💪 Indomitable Might floored {_im_old_total} → {_im_str_score}"
                 if _im_old_total is not None
+                else ""
+            )
+            + (
+                f" | 🐾 Supreme Sneak +{_ss_bonus}"
+                if _ss_old_total is not None
                 else ""
             )
         )[:200],

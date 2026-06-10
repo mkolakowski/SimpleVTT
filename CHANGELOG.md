@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.45] - 2026-06-10 — "On Little Cat Feet" — Supreme Sneak's installed buff was inert: the `/roll` Stealth hook only consumed Hide in Plain Sight, never `supreme-sneak-active`. Wiring the consumer adds +5 to a Thief's Stealth roll and one-shot removes the buff
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.99.224 Supreme Sneak buff (Thief Rogue Lv 9+, PHB p.97): "you have advantage on a Dexterity (Stealth) check if you move no more than half your speed on the same turn." v2.99.224 installed a permanent-ish `supreme-sneak-active` buff carrying `stealth_bonus: 5` + `consume_on_stealth_roll: True`, and the install docstring claimed the v2.99.214 `/roll` Stealth hook consumed it — but that hook only ever read `hide-in-plain-sight-active`, so the buff sat inert. This commit adds a Supreme Sneak consumer to the `/roll` post-result intercept (mirroring the Hide in Plain Sight block): when a buff-carrying Thief rolls a Stealth check, +5 is added to the total, the breakdown gains a "Supreme Sneak" suffix, and the buff is one-shot removed.**
+**Description:** v2.99.224 shipped `/use_supreme_sneak` to install the `supreme-sneak-active` buff (+5 Stealth advantage proxy, consumed on the next Stealth roll), but the consumer was never wired — the `/roll` Stealth intercept (added v2.99.214 for Hide in Plain Sight) only matched `hide-in-plain-sight-active`. This commit closes that gap. The `/roll` handler now, after resolving the roll, checks the caster's `_buffs_active` for `supreme-sneak-active` on a Stealth check, adds its `stealth_bonus` (+5) to `result.total`, appends `+ 5 (Supreme Sneak)` to the breakdown, adds a `🐾 Supreme Sneak +5` note segment, and removes the buff via `_remove_buff`. It composes after the Hide in Plain Sight consumer so a Ranger 10 / Thief 9 multiclass stacks both bonuses on one roll.
+
+This flips Supreme Sneak from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `tests/harness/test_thief_features.py::test_supreme_sneak_consumes_on_stealth_roll` — Phase 2 read-site test: install the buff (Pip Lv 9), roll a Stealth check → total gets +5 + breakdown mentions "Supreme Sneak"; a second Stealth roll gets no bonus (one-shot consume).
+
+### Changed
+- `app/routes/tabletop_routes.py::roll` — Stealth post-result intercept now consumes `supreme-sneak-active` (+5 to total, breakdown + note suffix, buff removed), mirroring the Hide in Plain Sight consumer.
+
+### Notes
+- Total harness count: **2134** in `tests/harness/` (was 2133); **`tests/harness_ui/` 19** (unchanged).
+- The half-speed-movement RAW constraint stays player-driven (movement tracking integration is filed separately, as noted on the install endpoint).
+
+---
+
 ## [2.158.44] - 2026-06-10 — "Highest Number Possible" — Spell Bombardment's installed buff was inert in the cast flow: `/cast_spell` never read it. Wiring the read site surfaces a "reroll a max-rolled die" advisory when a Lv 18 Wild Magic sorcerer casts a damage spell with the once-per-turn use available
 
 **Schema version:** 69
