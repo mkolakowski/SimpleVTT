@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.44] - 2026-06-10 — "Highest Number Possible" — Spell Bombardment's installed buff was inert in the cast flow: `/cast_spell` never read it. Wiring the read site surfaces a "reroll a max-rolled die" advisory when a Lv 18 Wild Magic sorcerer casts a damage spell with the once-per-turn use available
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.158.15 Spell Bombardment buff (Wild Magic Sorcerer Lv 18+, PHB p.103): "When you roll damage for a spell and roll the highest number possible on any of the dice, choose one of those dice, roll it again and add that roll to the damage. You can use the feature only once per turn." v2.158.15 installed a permanent `spell-bombardment-active` buff carrying the parameter flags, but the cast flow never read them — so the upgrade was player-invoked/announce-only. This commit adds `_pc_spell_bombardment_params` and, when a buff-carrying sorcerer casts a damage spell with the once-per-turn flag still unused, surfaces `spell_bombardment_available: True` + `spell_bombardment_die_sizes` + `spell_bombardment_uses_remaining` on the cast response so the client can offer the max-die reroll.**
+**Description:** v2.158.15 flipped Spell Bombardment from announce-only to a buff-installing endpoint (Phase 1), placing a permanent `spell-bombardment-active` buff on the sorcerer carrying the eligible die sizes + once-per-turn allotment. But the consumer was deferred: `/cast_spell` never inspected the buff on a damage cast. This commit wires an advisory read. `/cast_spell` now reads the caster's `spell-bombardment-active` buff via `_pc_spell_bombardment_params` when the cast spell deals damage dice (top-level `spell.damage` or any `actions[].damage`, after SRD enrichment), checks the once-per-turn `spell_bombardment_used` combatant-economy flag via `_is_spell_bombardment_used`, and surfaces `spell_bombardment_available: True` + `spell_bombardment_die_sizes` + `spell_bombardment_uses_remaining` on the payload + response. Casts that don't qualify (non-damage spells, no buff, or the flag already used this turn) report `spell_bombardment_available: False` + `0` + `[]`. The actual max-die detection + reroll stays on the existing player-invoked `/use_spell_bombardment` endpoint for v1 (advisory model).
+
+This flips Spell Bombardment from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `app/routes/tabletop_routes.py::_pc_spell_bombardment_params` — read gate returning `{die_sizes, uses_per_turn}` from the active `spell-bombardment-active` buff's effect flags; None when the buff is absent.
+- `tests/harness/test_wild_magic_spell_bombardment.py::test_sb_cast_damage_spell_surfaces_advisory` — Phase 2 read-site test: a Lv 18 Wild Magic Zara carrying the buff (unused flag) who casts a damage cantrip (Fire Bolt, injected) sees `/cast_spell` return `spell_bombardment_available: True` + `spell_bombardment_uses_remaining: 1` + the eligible die sizes. `test_sb_advisory_not_surfaced_on_non_damage_spell` — control: casting Light (no damage dice) reports `False` + `0` + `[]`.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_spell` — reads the Spell Bombardment buff + once-per-turn flag on a damage-spell cast and surfaces the reroll advisory on the payload + response.
+
+### Notes
+- Total harness count: **2133** in `tests/harness/` (was 2131); **`tests/harness_ui/` 19** (unchanged).
+- Advisory scope: the max-rolled-die detection + reroll stays on the player-invoked `/use_spell_bombardment` endpoint for v1 (the advisory just tells the player the feature is available on this cast).
+
+---
+
 ## [2.158.43] - 2026-06-10 — "Free Stars" — Star Map's installed buff was inert in the cast flow: `/cast_spell` never read it. Wiring the read site surfaces a free-Guiding-Bolt advisory when a Circle of Stars druid casts Guiding Bolt
 
 **Schema version:** 69

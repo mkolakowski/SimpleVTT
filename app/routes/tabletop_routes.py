@@ -17414,6 +17414,42 @@ def _pc_star_map_free_guiding_bolt_charges(
     return None
 
 
+def _pc_spell_bombardment_params(
+    campaign_id: int, character_id: "int | None",
+) -> "dict | None":
+    """v2.158.44 — Phase 2 read site for the v2.158.15
+    ``spell-bombardment-active`` buff (Wild Magic Sorcerer Lv 18+,
+    PHB p.103): "When you roll damage for a spell and roll the highest
+    number possible on any of the dice, choose one of those dice, roll
+    it again and add that roll to the damage. You can use the feature
+    only once per turn."
+
+    Returns ``{die_sizes, uses_per_turn}`` from the buff's effect flags
+    when the caster carries the active buff; None otherwise. The cast
+    flow uses this to surface an advisory "you can reroll a max-rolled
+    die with Spell Bombardment" flag on a damage-spell cast. The actual
+    max-die detection + reroll stays on the existing player-invoked
+    ``/use_spell_bombardment`` endpoint for v1 (advisory model).
+    """
+    if not character_id:
+        return None
+    for b in _get_buffs(campaign_id, int(character_id)):
+        if (b or {}).get("key") != "spell-bombardment-active":
+            continue
+        eff = (b or {}).get("effects") or {}
+        if not eff.get("spell_bombardment_active"):
+            continue
+        try:
+            uses_per_turn = int(eff.get("spell_bombardment_uses_per_turn") or 1)
+        except (TypeError, ValueError):
+            uses_per_turn = 1
+        return {
+            "die_sizes": list(eff.get("spell_bombardment_die_sizes") or []),
+            "uses_per_turn": uses_per_turn,
+        }
+    return None
+
+
 @router.post("/api/campaign/{campaign_id}/cast_spell")
 async def cast_spell(
     campaign_id: int,
@@ -18009,6 +18045,36 @@ async def cast_spell(
     payload["star_map_free_guiding_bolt"] = _star_map_charges is not None
     payload["star_map_guiding_bolt_charges_remaining"] = (
         int(_star_map_charges) if _star_map_charges is not None else 0
+    )
+
+    # v2.158.44 — Phase 2 read site for the v2.158.15 Spell Bombardment
+    # buff (Wild Magic Sorcerer Lv 18+). Advisory read: when a caster
+    # carrying `spell-bombardment-active` casts a damage spell and the
+    # once-per-turn flag is still unused this turn, surface
+    # `spell_bombardment_available` + the eligible die sizes + the uses
+    # remaining so the cast card can prompt "reroll a max-rolled die".
+    # The max-die detection + reroll stays on the player-invoked
+    # `/use_spell_bombardment` endpoint for v1 (advisory model).
+    _sb_spell_has_damage = bool(
+        (spell.get("damage") or "").strip()
+        or any((a or {}).get("damage") for a in (spell.get("actions") or []))
+    )
+    _sb_params = (
+        _pc_spell_bombardment_params(campaign_id, char.id)
+        if _sb_spell_has_damage else None
+    )
+    _sb_used = (
+        _is_spell_bombardment_used(campaign_id, char.id)
+        if _sb_params else False
+    )
+    _sb_available = bool(_sb_params) and not _sb_used
+    payload["spell_bombardment_available"] = _sb_available
+    payload["spell_bombardment_die_sizes"] = (
+        list(_sb_params["die_sizes"]) if _sb_params else []
+    )
+    payload["spell_bombardment_uses_remaining"] = (
+        max(0, _sb_params["uses_per_turn"] - (1 if _sb_used else 0))
+        if _sb_params else 0
     )
 
     # v2.110.0 — up-cast dice scaling (Approach B). When casting above
@@ -20330,6 +20396,16 @@ async def cast_spell(
             "star_map_free_guiding_bolt", False),
         "star_map_guiding_bolt_charges_remaining": payload.get(
             "star_map_guiding_bolt_charges_remaining", 0),
+        # v2.158.44 — Spell Bombardment advisory: True when a buff-
+        # carrying Wild Magic Sorcerer casts a damage spell with the
+        # once-per-turn use still available; the client offers the
+        # max-die reroll.
+        "spell_bombardment_available": payload.get(
+            "spell_bombardment_available", False),
+        "spell_bombardment_die_sizes": payload.get(
+            "spell_bombardment_die_sizes", []),
+        "spell_bombardment_uses_remaining": payload.get(
+            "spell_bombardment_uses_remaining", 0),
     }
 
 
