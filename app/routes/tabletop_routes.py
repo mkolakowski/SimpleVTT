@@ -60534,6 +60534,198 @@ def active_natural_weapons(
     }
 
 
+@router.post(
+    "/api/campaign/{campaign_id}/use_form_of_the_beast_claws_attack"
+)
+async def use_form_of_the_beast_claws_attack(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.158.29 — Phase 2 rider for the v2.158.20 Form of the Beast
+    CLAWS form (Path of the Beast Barbarian Lv 3+ TCE p.9). RAW:
+    "Immediately after you use the Attack action on your turn to attack
+    with your claws, you can make one additional attack with your claws
+    as a bonus action."
+
+    Body: ``{character_id, target_combatant_id?, target_name?, override?}``.
+
+    Gates:
+      * an active Form of the Beast buff whose form is ``claws`` (the
+        v2.158.25 read site `_pc_active_natural_weapons` surfaces it);
+        otherwise 409 ``no_claws_form``;
+      * once-per-turn via the attacker's economy flag
+        ``fb_claws_extra_used`` (409 ``already_used``);
+      * Phase 4 over-budget gate on the BONUS slot (RAW: the extra
+        claw attack is a bonus action), with the standard
+        ``override`` / strict-mode handling.
+
+    When a ``target_combatant_id`` is supplied the extra claw attack is
+    resolved server-side (d20 vs AC, damage on a hit) reusing the same
+    helpers as Horde Breaker. Consumes the bonus slot, marks the
+    once-per-turn flag, and broadcasts ``feature_used``
+    (source ``form-of-the-beast-claws``).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_name = (str(body.get("target_name") or "")).strip()[:80]
+    target_combatant_id = body.get("target_combatant_id") or None
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    natural_weapons = _pc_active_natural_weapons(sheet, campaign_id, char.id)
+    claws = next(
+        (w for w in natural_weapons if str(w.get("form")) == "claws"),
+        None,
+    )
+    if claws is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_claws_form",
+            "feature": "form-of-the-beast-claws",
+        })
+
+    # Once-per-turn gate via the attacker combatant's economy flag.
+    _state = hub.get_battle(campaign_id)
+    _atk_cb = next(
+        (c for c in (_state.get("combatants") or [])
+         if c.get("char_id") == char.id), None,
+    ) if _state else None
+    if _atk_cb and bool((_atk_cb.get("economy") or {}).get(
+            "fb_claws_extra_used")):
+        return JSONResponse(status_code=409, content={
+            "error": "already_used",
+            "feature": "form-of-the-beast-claws",
+        })
+
+    # Phase 4 over-budget gate (bonus slot — RAW: bonus action).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "form-of-the-beast-claws",
+            "label": "Form of the Beast — Claw attack",
+            "strict": strict,
+        })
+
+    attacked = False
+    hit = False
+    crit = False
+    attack_total = 0
+    target_ac = 0
+    damage_rolled = 0
+    damage_applied = 0
+    damage_type = str(claws.get("damage_type") or "slashing")
+    if target_combatant_id:
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if not target_combatant:
+            raise HTTPException(404, "Target not in battle")
+        try:
+            atk_bonus = int(
+                str(claws.get("attack_bonus") or "0").replace("+", "").strip()
+                or 0)
+        except (TypeError, ValueError):
+            atk_bonus = 0
+        dmg_expr = str(claws.get("damage") or "1d6")
+        target_ac = _read_target_ac(db, campaign_id, target_combatant)
+        attacked = True
+        atk_roll_expr = f"1d20{atk_bonus:+d}"
+        try:
+            _ar = dice_mod.roll(atk_roll_expr)
+            attack_total, _abd = int(_ar.total), _ar.breakdown
+        except dice_mod.DiceParseError:
+            attack_total, _abd = 0, ""
+        _nat_m = _re.search(r"\[(\d+)\]", _abd)
+        nat = int(_nat_m.group(1)) if _nat_m else (attack_total - atk_bonus)
+        if nat == 20:
+            hit, crit = True, True
+        elif nat == 1:
+            hit, crit = False, False
+        else:
+            hit, crit = (attack_total >= target_ac), False
+        if hit:
+            roll_expr = _double_dice_for_crit(dmg_expr) if crit else dmg_expr
+            try:
+                damage_rolled = max(0, int(dice_mod.roll(roll_expr).total))
+            except dice_mod.DiceParseError:
+                damage_rolled = 0
+            if damage_rolled > 0:
+                _res = await _apply_damage_to_combatant(
+                    db, campaign_id, target_combatant, damage_rolled,
+                    damage_type, is_crit=crit, is_attack=True,
+                    attacker_char_id=char.id,
+                )
+                damage_applied = int(_res.get("applied") or 0)
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+    await _mark_attack_flag(campaign_id, char.id, "fb_claws_extra")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    target_phrase = f" vs {target_name}" if target_name else ""
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": (
+                f"🐾 Form of the Beast — Claw attack{target_phrase}"
+            ),
+            "feature_desc": (
+                f"{char.name} made one additional claw attack{target_phrase} "
+                f"as a bonus action (Path of the Beast Barbarian Lv 3+ TCE; "
+                f"once per turn)."
+            ),
+            "source": "form-of-the-beast-claws",
+            "target_name": target_name,
+            "attacked": attacked,
+            "hit": hit,
+            "damage_applied": damage_applied,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {"ok": True, "feature": "form-of-the-beast-claws",
+            "target_name": target_name,
+            "attacked": attacked,
+            "hit": hit,
+            "crit": crit,
+            "attack_total": attack_total,
+            "target_ac": target_ac,
+            "damage_rolled": damage_rolled,
+            "damage_applied": damage_applied,
+            "damage_type": damage_type}
+
+
 @router.post("/api/campaign/{campaign_id}/use_mage_hand_legerdemain")
 async def use_mage_hand_legerdemain(
     campaign_id: int,

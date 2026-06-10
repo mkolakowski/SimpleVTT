@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.29] - 2026-06-09 — "One More Swipe" — Phase 2 claws rider for Form of the Beast: dedicated bonus-action extra-claw-attack endpoint, resolved server-side with a once-per-turn gate
+
+**Schema version:** 69
+**Commit summary:** **Second mechanical rider for the v2.158.20 Form of the Beast buff. New `POST /api/campaign/{cid}/use_form_of_the_beast_claws_attack` endpoint (modeled on `use_horde_breaker`) resolves the RAW "one additional claw attack as a bonus action" server-side: validates an active claws-form buff via the v2.158.25 `_pc_active_natural_weapons` read site, gates once-per-turn (`combatant.economy.fb_claws_extra_used`) and on the Phase 4 bonus slot, rolls d20 vs AC + damage on a hit, marks the bonus chip, and broadcasts `feature_used` (source `form-of-the-beast-claws`).**
+**Description:** v2.158.28 shipped the bite self-heal; v2.158.29 ships the second per-form rider — the claws extra attack (RAW TCE p.9: "Immediately after you use the Attack action on your turn to attack with your claws, you can make one additional attack with your claws as a bonus action").
+
+Rather than threading the extra-attack into `/attack`'s economy branch (which would have to special-case the bonus-vs-action slot for one form), this ships a dedicated endpoint mirroring the established Horde Breaker / Dread Ambusher "extra-attack" pattern: the player fires their normal claws Attack action via `/attack`, then triggers the bonus follow-up through the new endpoint. The form-gate reads the same merged natural-weapon entry as the rest of the v2.158.25–28 stack (no attack-name string-matching), so only an active **claws** Form-of-the-Beast buff unlocks it. The attack resolves with the claws entry's own `attack_bonus` / `damage` / `damage_type`, so STR-mod + proficiency scaling rides through automatically.
+
+Tail reaction-AC rider is still TBD — it needs reaction-framework integration + a post-roll AC modifier hook, so it stays filed as a follow-up commit. Frontend wiring (a "🐾 +1 Claw (bonus)" button on the Natural Weapons panel claws row) is also a separate follow-up; this commit ships the backend endpoint + harness coverage.
+
+### Added
+- `app/routes/tabletop_routes.py::use_form_of_the_beast_claws_attack` — new endpoint. Validates an active claws-form buff (else 409 `no_claws_form`), once-per-turn flag (else 409 `already_used`), Phase 4 bonus-slot over-budget gate (else 409 `over_budget`), resolves the attack server-side when `target_combatant_id` is supplied (reusing `_read_target_ac` / `_double_dice_for_crit` / `_apply_damage_to_combatant`), marks the bonus economy + `fb_claws_extra` flag, broadcasts `feature_used` source `form-of-the-beast-claws`.
+- `tests/harness/test_form_of_the_beast.py` — four new tests: (1) happy path (install claws → claw attack vs bandit → 200 + `feature_used` source `form-of-the-beast-claws`); (2) once-per-turn (second call → 409 `already_used`); (3) wrong-form control (bite installed → 409 `no_claws_form`); (4) error path (missing `character_id` → 400).
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2112** (was 2108).
+
+### Notes
+- Tail reaction-AC rider (RAW: "Reaction: when a creature you can see within 10 ft hits you with an attack, add 1d8 to your AC against it") needs reactions-framework integration + post-roll AC modifier hook. Still filed for a follow-up commit.
+- Frontend "+1 Claw (bonus)" button on the Natural Weapons panel is a separate follow-up.
+- **Total harness count: 2112** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.28] - 2026-06-09 — "Vampire's Bite" — Phase 2 bite rider for Form of the Beast: once-per-turn self-heal of proficiency-bonus HP when the bite hits while attacker is below half max HP
 
 **Schema version:** 69

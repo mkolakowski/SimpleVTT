@@ -468,6 +468,102 @@ async def test_claws_form_does_not_trigger_bite_self_heal(
     )
 
 
+async def test_claws_extra_attack_happy(
+    gm_client, gm_ws, krieger_beast, fb_bite_auto_apply_on,
+):
+    """v2.158.29 — Phase 2 claws rider: install claws form, then POST
+    /use_form_of_the_beast_claws_attack against the bandit. Expect 200,
+    attacked True, and a feature_used broadcast with source
+    "form-of-the-beast-claws"."""
+    krieger = krieger_beast
+    await _seed_krieger_vs_bandit(
+        gm_client, krieger, krieger_hp_cur=75,
+    )
+    bandit_id = f"tok_fb_bite_bandit_{krieger['id']}"
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "claws"},
+    )
+    assert r.status_code == 200, r.text
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast_claws_attack",
+        json={"character_id": krieger["id"],
+              "target_combatant_id": bandit_id,
+              "target_name": "Bandit",
+              "override": True},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["feature"] == "form-of-the-beast-claws"
+    assert data["attacked"] is True
+    assert data["damage_type"] == "slashing"
+    assert data["attack_total"] >= 1
+    msg = await gm_ws.wait_for("feature_used")
+    assert msg["data"]["source"] == "form-of-the-beast-claws"
+
+
+async def test_claws_extra_attack_once_per_turn(
+    gm_client, krieger_beast, fb_bite_auto_apply_on,
+):
+    """Second claw attack in the same turn → 409 already_used (the
+    once-per-turn economy flag fb_claws_extra_used)."""
+    krieger = krieger_beast
+    await _seed_krieger_vs_bandit(
+        gm_client, krieger, krieger_hp_cur=75,
+    )
+    bandit_id = f"tok_fb_bite_bandit_{krieger['id']}"
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "claws"},
+    )
+    assert r.status_code == 200, r.text
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast_claws_attack",
+        json={"character_id": krieger["id"],
+              "target_combatant_id": bandit_id, "override": True},
+    )
+    assert r.status_code == 200, r.text
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast_claws_attack",
+        json={"character_id": krieger["id"],
+              "target_combatant_id": bandit_id, "override": True},
+    )
+    assert r.status_code == 409, r.text
+    assert r.json().get("error") == "already_used"
+
+
+async def test_claws_extra_attack_no_claws_form_409(
+    gm_client, krieger_beast,
+):
+    """Control: with the BITE form installed (not claws), the claws
+    extra-attack endpoint 409s no_claws_form — the form gate holds."""
+    krieger = krieger_beast
+    await _seed_krieger_in_battle(gm_client, krieger)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "bite"},
+    )
+    assert r.status_code == 200, r.text
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast_claws_attack",
+        json={"character_id": krieger["id"], "override": True},
+    )
+    assert r.status_code == 409, r.text
+    assert r.json().get("error") == "no_claws_form"
+
+
+async def test_claws_extra_attack_missing_character_id_400(
+    gm_client,
+):
+    """Error path: missing character_id → 400."""
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast_claws_attack",
+        json={"override": True},
+    )
+    assert r.status_code == 400, r.text
+
+
 async def test_fb_buff_payload_carries_form_parameter_flags(
     gm_client, gm_ws, krieger_beast,
 ):
