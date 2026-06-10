@@ -48,6 +48,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-eldritch-knight" in resp.text
     assert "/wiki/doc/plan-battle-master" in resp.text
     assert "/wiki/doc/plan-paladin-oaths" in resp.text
+    # v2.158.71: magic-item automation plan listed (SRD audit P1).
+    assert "/wiki/doc/plan-magic-items-automation" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.49.168: targeting system visual guide listed.
@@ -507,6 +509,21 @@ async def test_wiki_doc_serves_todone():
     assert "text/html" in resp.headers.get("content-type", "")
     # The archive's H1 is "SimpleVTT — Completed To-Dos".
     assert "completed to-dos" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_magic_items_automation_plan():
+    """v2.158.71: GET /wiki/doc/plan-magic-items-automation — 200 +
+    body contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/magic-items-automation.md``. Filed
+    by the 2026-06-10 SRD audit (TODO.md) as the top P1 gap: 292 SRD
+    magic items shipped as data with empty ``actions`` arrays."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-magic-items-automation")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "magic-item automation" in resp.text.lower()
+    assert "pearl of power" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

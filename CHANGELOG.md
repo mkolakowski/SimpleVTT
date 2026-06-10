@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.71] - 2026-06-10 — "The Empty Charges" — File the magic-item automation design plan and surface it through the wiki — the top P1 finding of the v2.158.69 SRD audit (292 SRD magic items shipped under `app/data/local/dnd5e/items/` with `actions: []` on every entry, no attunement gating, no charge tracking, no spell-effect dispatch)
+
+**Schema version:** 69
+**Commit summary:** **New design plan `docs/plans/magic-items-automation.md` lays out the four-phase wiring strategy for the 292 SRD magic items: Phase 0 (audit + canonical schema for `attunement`, `charges`, `charge_recovery`, `actions[]`, `passives[]` on item JSON), Phase 1 (first-slice roster — Pearl of Power / Wand of Magic Missiles / Cloak of Protection / Bracers of Defense — exercising spell-slot recovery, charge-spend → spell dispatch, passive AC/save adders, AC-without-armor), Phase 2 (attunement UI on the character sheet + per-rest charge recovery hook), Phase 3 (bulk-wire the remaining ~288 items by item-type clusters). Per CLAUDE.md wiki rule the plan is surfaced four ways in the same commit: (1) `_DOC_ALLOWLIST` entry `plan-magic-items-automation` in `app/routes/wiki_routes.py`, (2) "Design plans" row in `app/templates/wiki.html` between paladin-oaths and test-harness, (3) mirror row in `docs/wiki/README.md`, (4) per-slug smoke test `test_wiki_doc_serves_magic_items_automation_plan` in `tests/harness/test_wiki.py` + landing-page assertion line added to `test_wiki_home_renders`. `docs/test-harness-coverage.md` bumped to 2164 + new row. No engine code change — plan-only commit; the wiring lands later under the plan's Phase 1.**
+**Description:** The 2026-06-10 SRD audit (see TODO.md "SRD 5e Audit") identified items as the single biggest mechanical-coverage gap — ~25% vs ~80% for class features. A GM who hands a player a Wand of Magic Missiles today gets a description card; the player still casts the spell "by hand" from a sheet list they don't have, and the 7 charges live in someone's head. This commit doesn't fix that — it files the plan that does, and surfaces it on the wiki so the work has a discovery surface for contributors. The first-slice roster (Pearl / Wand / Cloak / Bracers) was picked because the four items collectively exercise all four of the missing wiring shapes (spell-slot recovery, charge-spend-and-cast, passive AC/save adders, AC-without-armor) — finishing them validates the schema before bulk-wiring the long tail.
+
+### Added
+- `docs/plans/magic-items-automation.md` — new design plan (top P1 of the 2026-06-10 SRD audit). Phases 0–3 + first-slice roster + risks + per-phase test plan.
+- `app/routes/wiki_routes.py` — `_DOC_ALLOWLIST` entry `plan-magic-items-automation` → `docs/plans/magic-items-automation.md`.
+- `app/templates/wiki.html` — "Design plans" table row for the new plan between paladin-oaths and test-harness (status: ⚪ proposed).
+- `docs/wiki/README.md` — matching row in the on-disk mirror so the two indexes stay in lock-step.
+- `tests/harness/test_wiki.py` — `test_wiki_doc_serves_magic_items_automation_plan` smoke test (200 + recognizable substring + nav menu) + `test_wiki_home_renders` landing-page assertion line.
+- `docs/test-harness-coverage.md` — new row + total bumped 2163 → 2164.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.158.70 → 2.158.71. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.71.
+
+### Notes
+- Plan-only commit; the engine surface (item schema, dispatch, attunement UI) lands later under the plan's Phase 1. The four-item first-slice roster is the natural next bump after this filing.
+
+---
+
 ## [2.158.70] - 2026-06-10 — "The Ledger Squared" — Doc-only follow-up to v2.158.69's SRD audit: sync the wiki Design-plans status columns (the `/wiki` landing-page table in `app/templates/wiki.html` + the on-disk mirror in `docs/wiki/README.md`) with where the plans actually landed — eight rows in each file had fallen behind the v2.99.x → v2.158.x shipping arc
 
 **Schema version:** 69

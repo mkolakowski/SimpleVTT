@@ -55,6 +55,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Eldritch Knight (Fighter subclass)](../plans/eldritch-knight.md) | Markdown (design) | Contributors | 🟠 Phase 1 + Arcane Charge P1 + Improved War Magic P1 shipped (v2.158.11–.12); War Magic + Eldritch Strike remain |
 | [Battle Master (Fighter subclass)](../plans/battle-master.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped (v2.99.233); 2-5 + 15 maneuvers deferred |
 | [Paladin oaths (non-Devotion)](../plans/paladin-oaths.md) | Markdown (design) | Contributors | 🟠 4 oaths partially shipped (Warding / Rebuke / Avenger / Guardian, v2.99.245–v2.158.10); Lv 15/20 capstones + Glory remain |
+| [Magic-item automation](../plans/magic-items-automation.md) | Markdown (design) | Contributors | ⚪ proposed (v2.158.71) · top P1 of 2026-06-10 SRD audit · 292 items unwired |
 | [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
 | [Unified mini-sheet](../plans/unified-mini-sheet.md) | Markdown (design) | Contributors | ⚪ proposed · 3 mockups · Phase 1–3 unstarted |
 | [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |
