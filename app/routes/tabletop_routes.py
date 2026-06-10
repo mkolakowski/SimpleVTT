@@ -5050,6 +5050,42 @@ def _eligible_reactions(
                         "available": True,
                         "unavailable_reason": None,
                     })
+                # v2.158.31 — Form of the Beast (Tail). Path of the
+                # Beast Barbarian Lv 3+ (TCE p.9): while the tail form
+                # is active the barbarian can use its reaction to swat
+                # an attack aside, granting +1d8 to AC against one
+                # attack that would hit. v1 surfaces the +1d8 AC swing
+                # and a miss/hit verdict (rolled at resolution); the
+                # retroactive damage undo is GM-adjudicated, matching
+                # the Shield / Defensive Duelist announce-only contract.
+                try:
+                    _tail_nat = _pc_active_natural_weapons(
+                        char.sheet, campaign_id, int(watcher_char_id),
+                    )
+                except Exception:
+                    _tail_nat = []
+                if any(str(w.get("form")) == "tail" for w in _tail_nat):
+                    tail_ac = (char.sheet.get("ac") or 0)
+                    tail_atk_total = context.get("attack_total")
+                    tail_hint = ""
+                    if isinstance(tail_atk_total, int) and tail_ac:
+                        need = max(1, int(tail_atk_total) - int(tail_ac) + 1)
+                        tail_hint = (
+                            f" — +1d8 AC vs d20 {tail_atk_total}; "
+                            f"roll {need}+ on the d8 to MISS."
+                        )
+                    opts.append({
+                        "key": "use-form-of-the-beast-tail",
+                        "label": f"🦎 Tail Swat (+1d8 AC){tail_hint}",
+                        "kind": "class_feature",
+                        "resource_cost": "Reaction",
+                        "params": {
+                            "ac": tail_ac,
+                            "attack_total": tail_atk_total,
+                        },
+                        "available": True,
+                        "unavailable_reason": None,
+                    })
                 # v2.78.0 Phase 5 — Item reactions. Walks equipped
                 # inventory items for `_reactions[]` entries binding
                 # to the attack_targeted trigger.
@@ -23423,6 +23459,75 @@ async def use_reaction(
                     "source": "defensive-duelist",
                     "reaction_kind": "feat",
                     "pb_bonus": pb,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "use-form-of-the-beast-tail" and watcher_char_id:
+        # v2.158.31 — Form of the Beast (Tail). Path of the Beast
+        # Barbarian Lv 3+ (TCE p.9). Pure reaction spend (no slot
+        # cost). Rolls 1d8 server-side, computes the boosted AC, and
+        # reports a concrete miss/hit verdict against the triggering
+        # attack. Retroactive damage undo is GM-adjudicated, matching
+        # the Shield / Defensive Duelist announce-only contract.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (
+                    o for o in options
+                    if o.get("key") == "use-form-of-the-beast-tail"
+                ),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            try:
+                base_ac = int(params.get("ac") or watcher_char.sheet.get("ac") or 0)
+            except (TypeError, ValueError):
+                base_ac = 0
+            d8 = max(1, int(dice_mod.roll("1d8").total))
+            new_ac = base_ac + d8
+            atk_total = params.get("attack_total")
+            verdict = None
+            if isinstance(atk_total, int):
+                verdict = "miss" if atk_total < new_ac else "hit"
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            if verdict == "miss":
+                verdict_txt = (
+                    f" The d20 {atk_total} now MISSES AC {new_ac}."
+                )
+            elif verdict == "hit":
+                verdict_txt = (
+                    f" The d20 {atk_total} still HITS AC {new_ac}."
+                )
+            else:
+                verdict_txt = ""
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": f"🦎 Tail Swat (+{d8} AC)",
+                    "feature_desc": (
+                        f"Reaction. +1d8 AC (rolled {d8}: {base_ac} → "
+                        f"{new_ac}) against the triggering attack.{verdict_txt}"
+                    ),
+                    "source": "form-of-the-beast-tail",
+                    "reaction_kind": "class_feature",
+                    "ac_bonus": d8,
+                    "base_ac": base_ac,
+                    "new_ac": new_ac,
+                    "attack_total": atk_total,
+                    "verdict": verdict,
                 },
             })
         except HTTPException:

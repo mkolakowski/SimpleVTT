@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.31] - 2026-06-09 — "Tail Swat" — Phase 2 tail rider for Form of the Beast: reaction-framework `use-form-of-the-beast-tail` option grants +1d8 AC against a hitting attack with a server-rolled miss/hit verdict
+
+**Schema version:** 69
+**Commit summary:** **Third and final per-form rider for the v2.158.20 Form of the Beast buff, closing the rider trio (bite/claws/tail). When a Path of the Beast Barbarian with the tail form active is hit by an attack, the v2.67.x reaction pipeline now surfaces a `use-form-of-the-beast-tail` option on the `attack_targeted` prompt. Resolving it via `/use_reaction` rolls 1d8 server-side, computes the boosted AC, reports a concrete miss/hit verdict against the triggering d20, marks the reaction slot, and broadcasts `feature_used` (source `form-of-the-beast-tail`).**
+**Description:** v2.158.28/29 shipped the bite self-heal and claws extra attack; v2.158.31 ships the tail rider (RAW TCE p.9: "Reaction: when a creature you can see within 10 ft hits you with an attack, add 1d8 to your AC against it — possibly causing the attack to miss"). The tail option is gated on an active **tail**-form Form-of-the-Beast buff via the v2.158.25 `_pc_active_natural_weapons` read site, mirroring the form-gates on the bite/claws riders.
+
+Following the established v1 announce-only reaction contract (Shield / Defensive Duelist), the tail surfaces the +1d8 AC swing and — because it rolls the d8 server-side at resolution — a concrete miss/hit verdict against the triggering attack's d20 total. Retroactive damage undo of an attack the boosted AC would have missed stays GM-adjudicated, consistent with the rest of the AC-boost reaction surface.
+
+### Added
+- `app/routes/tabletop_routes.py::_eligible_reactions` — `attack_targeted` branch now appends a `use-form-of-the-beast-tail` option when the watcher has an active tail-form natural weapon (`_pc_active_natural_weapons` → `form == "tail"`). Label shows the +1d8 AC swing and the d8 roll needed to flip the hit to a miss.
+- `app/routes/tabletop_routes.py::use_reaction` — new `use-form-of-the-beast-tail` resolution branch: rolls 1d8, computes `base_ac → new_ac`, reports a miss/hit verdict, marks the reaction economy slot, and broadcasts `feature_used` source `form-of-the-beast-tail` with `{ac_bonus, base_ac, new_ac, attack_total, verdict}`.
+- `tests/harness/test_form_of_the_beast.py` — two new tests: (1) happy path (install tail → attacker hits Krieger → assert the `use-form-of-the-beast-tail` option surfaces, POST `/use_reaction`, assert `feature_used` source `form-of-the-beast-tail` + `new_ac == base_ac + ac_bonus` + reaction economy flips); (2) control (claws form installed → tail option absent on the prompt).
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2114** (was 2112).
+
+### Notes
+- This closes the Form of the Beast rider trio. Bite (v2.158.28), claws (v2.158.29/30), and tail (this commit) all now have Phase-2 mechanical hooks.
+- **Total harness count: 2114** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.30] - 2026-06-09 — "Paw Print" — Phase 2 frontend wiring for the v2.158.29 claws rider: a "🐾 +1 Claw" bonus-action button on the Natural Weapons panel claws row
 
 **Schema version:** 69

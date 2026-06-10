@@ -564,6 +564,161 @@ async def test_claws_extra_attack_missing_character_id_400(
     assert r.status_code == 400, r.text
 
 
+async def _seed_attacker_vs_tail_watcher(
+    gm_client, attacker, krieger, *, tok_prefix,
+):
+    """Seed a 2-PC battle: an attacker PC plus Krieger (tail-form
+    watcher) with a free reaction. Returns Krieger's combatant id."""
+    kr_cid = f"{tok_prefix}_kr_{krieger['id']}"
+    atk_cid = f"{tok_prefix}_atk_{attacker['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": atk_cid, "char_id": attacker["id"],
+             "name": attacker["name"], "initiative": 20,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": kr_cid, "char_id": krieger["id"],
+             "name": krieger["name"], "initiative": 10,
+             "hp_current": 75, "hp_max": 75, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    return kr_cid
+
+
+async def test_tail_reaction_prompt_and_resolve(
+    gm_client, gm_ws, krieger_beast, roster,
+):
+    """v2.158.31 — Phase 2 tail rider: install tail form on Krieger,
+    then have an attacker PC hit him. The attack_targeted prompt
+    surfaces a `use-form-of-the-beast-tail` option; resolving it via
+    /use_reaction emits a feature_used(source=form-of-the-beast-tail)
+    and flips Krieger's reaction economy."""
+    krieger = krieger_beast
+    attacker = roster["Garrik Ironside"]
+    kr_cid = await _seed_attacker_vs_tail_watcher(
+        gm_client, attacker, krieger, tok_prefix="tok_fb_tail",
+    )
+    # Install tail form on Krieger (no economy cost).
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "tail"},
+    )
+    assert r.status_code == 200, r.text
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+    # Swing until the attacker lands a hit on Krieger.
+    for _ in range(20):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": attacker["id"],
+                "attack_index": 0,
+                "target_combatant_id": kr_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed on Krieger in 20 swings")
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("watcher_char_id") == krieger["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, (
+        f"expected attack_targeted prompt for Krieger; got "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in gm_ws.buffered('reaction_prompt')]}"
+    )
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "use-form-of-the-beast-tail" in keys, (
+        f"expected use-form-of-the-beast-tail option; got {keys}"
+    )
+    prompt_id = prompts[0]["data"]["prompt_id"]
+    gm_ws.mark()
+    rx = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "use-form-of-the-beast-tail",
+            "watcher_char_id": krieger["id"],
+        },
+    )
+    assert rx.status_code == 200, rx.text
+    await asyncio.sleep(0.2)
+    feats = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "form-of-the-beast-tail"
+        and (m.get("data") or {}).get("character_id") == krieger["id"]
+    ]
+    assert feats, "expected form-of-the-beast-tail feature_used broadcast"
+    last = feats[-1]["data"]
+    assert 1 <= int(last.get("ac_bonus") or 0) <= 8
+    assert int(last.get("new_ac")) == int(last.get("base_ac")) + int(last.get("ac_bonus"))
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == krieger["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ and econ[-1]["data"]["used"] is True, (
+        "expected Krieger's reaction economy to flip to used"
+    )
+
+
+async def test_tail_reaction_absent_with_claws_form(
+    gm_client, gm_ws, krieger_beast, roster,
+):
+    """Control: with CLAWS form (not tail), the use-form-of-the-beast-
+    tail option does NOT surface on the attack_targeted prompt — the
+    form gate holds."""
+    krieger = krieger_beast
+    attacker = roster["Garrik Ironside"]
+    kr_cid = await _seed_attacker_vs_tail_watcher(
+        gm_client, attacker, krieger, tok_prefix="tok_fb_tailctl",
+    )
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_form_of_the_beast",
+        json={"character_id": krieger["id"], "form": "claws"},
+    )
+    assert r.status_code == 200, r.text
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+    for _ in range(20):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": attacker["id"],
+                "attack_index": 0,
+                "target_combatant_id": kr_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed on Krieger in 20 swings")
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("watcher_char_id") == krieger["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    for p in prompts:
+        keys = [o.get("key") for o in p["data"].get("options", [])]
+        assert "use-form-of-the-beast-tail" not in keys, (
+            f"tail option should be absent with claws form; got {keys}"
+        )
+
+
 async def test_fb_buff_payload_carries_form_parameter_flags(
     gm_client, gm_ws, krieger_beast,
 ):
