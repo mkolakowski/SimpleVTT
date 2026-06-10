@@ -1,6 +1,6 @@
 # Automation coverage — feature-endpoint audit
 
-**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, last refreshed v2.158.21 (curated backlog only — auto-generated counts still pin v2.99.460; rerun the classifier after the next batch)
+**Status:** ✅ shipped (Phase 0 of [full-feature-automation.md](plans/full-feature-automation.md)) · generated v2.99.447, counts regenerated v2.158.35 by [`scripts/classify_feature_endpoints.py`](../scripts/classify_feature_endpoints.py)
 **What this is:** the living tally of every `use_*` / `cast_*` class-feature
 endpoint in `app/routes/tabletop_routes.py`, tagged **tracked** (server-applies
 its mechanical effect and/or spends its resource) vs **announce-only** (validates
@@ -17,19 +17,25 @@ This table is **heuristic + machine-generated** — an endpoint is tagged
 resource/economy decrement (`_mark_battle_economy`, `resource_update`,
 `flag_modified(char…)`, a spell-slot `used` bump). `announce-only` = only a
 `feature_used` broadcast with no state mutation detected. Re-run the classifier
-after a batch of retrofits and update the counts below. Treat the split as
+after a batch of retrofits and update the counts below — the heuristic lives in
+[`scripts/classify_feature_endpoints.py`](../scripts/classify_feature_endpoints.py)
+(`python3 scripts/classify_feature_endpoints.py`). Treat the split as
 **±a few**: a few `announce-only`-tagged features are *narration-only by design*
-(archetype J — passive senses, language grants), and a few `tracked`-tagged ones
-only spend a resource without a downstream effect.
+(archetype J — passive senses, language grants), a few are retrofitted but apply
+their effect in a *different* code path (e.g. `scornful_rebuke`, `supreme_healing`,
+`ancestral_protectors`, `assassinate` fire inside `_apply_damage_to_combatant` or
+via a Phase-1 install + deferred read, so the endpoint body itself reads
+announce-only to the classifier), and a few `tracked`-tagged ones only spend a
+resource without a downstream effect.
 
-## Summary (as of v2.99.460)
+## Summary (as of v2.158.35)
 
 | Status | Count | Meaning |
 |---|---|---|
-| ✅ **tracked** | **203** | server-applies effect and/or spends resource |
-| ⚪ **announce-only** | **34** | validates + broadcasts; effect left to the GM |
+| ✅ **tracked** | **210** | server-applies effect and/or spends resource |
+| ⚪ **announce-only** | **30** | validates + broadcasts; effect left to the GM |
 | 🔧 mechanical | **2** | helper endpoints (not `feature_used` features) |
-| **Total** | **239** | `use_*` / `cast_*` endpoints |
+| **Total** | **242** | `use_*` / `cast_*` endpoints |
 
 At the plan's baseline (v2.99.385) the split was **~60 tracked / ~156
 announce-only**. Phases 1–6 (feature-use registry, on-hit riders, feature

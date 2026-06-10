@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.35] - 2026-06-10 — "The Recount" — Automation-coverage classifier regenerated: the tracked/announce-only counts that pinned v2.99.460 are refreshed to the current suite, and the heuristic is now a committed script
+
+**Schema version:** 69
+**Commit summary:** **Reruns the automation-coverage audit that `docs/automation-coverage.md` had been carrying as stale v2.99.460 counts. The previously-ad-hoc heuristic is now a committed, repeatable tool — `scripts/classify_feature_endpoints.py` parses every `use_*` / `cast_*` route in `tabletop_routes.py` and tags each tracked / announce-only / mechanical by the documented mutation-primitive heuristic. Fresh split: 210 tracked / 30 announce-only / 2 mechanical (242 total), up from 203 / 34 / 2 (239).**
+**Description:** The audit doc's auto-generated counts had been pinned at v2.99.460 since the Phase-8 retrofit arc began, with a standing "rerun the classifier after the next batch" note. This commit does that — and makes the next rerun trivial by committing the classifier as a script rather than leaving it as an unreproducible one-off. The heuristic matches the doc's "How to regenerate" section: an endpoint is `tracked` when its body calls a state-mutating primitive (`_install_buff`, `_apply_damage_to_combatant`, `_grant_temp_hp`, `_mark_battle_economy`, a spell-slot `used` bump, …), `announce-only` when it only broadcasts a `feature_used` card, `mechanical` otherwise.
+
+The net since v2.99.460: +7 endpoints flipped to tracked and +3 new endpoints added across the diversification arc, shrinking the announce-only tail from 34 to 30. As the doc notes (and now spells out per-feature), a handful of the remaining announce-only rows are retrofitted features whose effect fires in a *different* code path (`scornful_rebuke`, `supreme_healing`, `ancestral_protectors`, `assassinate`, …), so the endpoint body itself reads announce-only to the heuristic — the ±a-few caveat is unchanged.
+
+### Added
+- `scripts/classify_feature_endpoints.py` — committed classifier implementing the doc's mutation-primitive heuristic via `ast` + line-slice. Prints the tracked/announce-only/mechanical split plus the announce-only and mechanical slug lists. Re-run with `python3 scripts/classify_feature_endpoints.py`.
+
+### Changed
+- `docs/automation-coverage.md` — Summary counts refreshed to **210 tracked / 30 announce-only / 2 mechanical (242 total)** (was 203 / 34 / 2 / 239); status + "How to regenerate" lines now point at the committed script; the ±a-few caveat now names the retrofitted-but-different-path features explicitly.
+
+### Notes
+- Doc + tooling only — no endpoint or broadcast-shape change, so no harness count change. **Total harness count: 2117** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.34] - 2026-06-10 — "Reading the Swing" — Form of the Beast tail-swat `feature_used` card now renders a glanceable colored MISS/HIT verdict pill, instead of burying the AC-swing outcome in prose
 
 **Schema version:** 69
