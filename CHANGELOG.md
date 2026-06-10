@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.33] - 2026-06-09 — "Bolt From the Mind" — Empowered Evocation now also fires on the spell-attack-roll path (Fire Bolt / Scorching Ray), closing the gap the v2.158.32 read site inherited from Elemental Affinity
+
+**Schema version:** 69
+**Commit summary:** **Extends the v2.158.32 Empowered Evocation read site to the spell-attack-roll path. `/cast_spell`'s attack-roll beam aggregator now adds +INT to one damage roll of a wizard evocation spell when any beam hits, broadcasting `feature_used` (source `empowered-evocation-bonus`). This covers Fire Bolt / Scorching Ray — the attack-roll evocation spells that v2.158.32 left unwired (because it mirrored Elemental Affinity's exact, save-path-only reach).**
+**Description:** v2.158.32 wired Empowered Evocation into the save-spell + AoE paths (Fireball, Cone of Cold), matching the Elemental Affinity precedent's reach. This commit closes the remaining gap: the spell-attack-roll path (Fire Bolt cantrip, Scorching Ray's multi-beam). The +INT is added to the aggregate damage once, after the Empowered Spell pool reroll (so the flat bonus isn't itself rerolled), and only when at least one beam hits — equivalent to RAW "one damage roll" for damage application.
+
+This makes Empowered Evocation a complete read site across all three server-side spell-damage resolution paths (attack-roll, save, AoE/place_aoe).
+
+### Added
+- `app/routes/tabletop_routes.py::cast_spell` — attack-roll beam aggregator now reads `_empowered_evocation_bonus(...)` and folds +INT into `agg_damage_rolled` once when `any_hit`, appending an "Empowered Evocation +N" breakdown part and broadcasting `feature_used` source `empowered-evocation-bonus`.
+- `tests/harness/test_evocation_school.py` — one new test: Thalindra (Evocation Wizard PATCH'd to Lv 10) with the buff installed casts Fire Bolt at an NPC until a beam hits → asserts the `empowered-evocation-bonus` broadcast fires with the +3 label.
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2117** (was 2116).
+
+### Notes
+- Empowered Evocation now fires on attack-roll, save, and AoE evocation spells — the read site is complete across all three server-side damage paths.
+- **Total harness count: 2117** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.32] - 2026-06-09 — "Intelligent Fire" — Phase 8 Wizard read site: `/cast_spell` now reads the v2.158.19 Empowered Evocation buff and adds +INT to one damage roll of an evocation spell
 
 **Schema version:** 69

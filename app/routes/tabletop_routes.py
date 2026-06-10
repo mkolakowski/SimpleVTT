@@ -18425,6 +18425,23 @@ async def cast_spell(
                         f"beam {_beam['beam']}: {_beam['damage_breakdown']}"
                         if total_beams > 1 else _beam["damage_breakdown"]
                     )
+            # v2.158.33 — Empowered Evocation on the spell-attack-roll path
+            # (Fire Bolt / Scorching Ray). +INT to one damage roll of a
+            # wizard evocation spell. Added to the aggregate once when any
+            # beam hit — equivalent to RAW "one damage roll" for damage
+            # application. Runs AFTER the Empowered Spell pool reroll so
+            # the flat bonus isn't itself rerolled.
+            _ee_atk_bonus = _empowered_evocation_bonus(
+                campaign_id, char.id, payload.get("spell_school") or "",
+            )
+            if _ee_atk_bonus > 0 and any_hit and _dmg_base:
+                agg_damage_rolled += _ee_atk_bonus
+                agg_damage_breakdown_parts.append(
+                    f"Empowered Evocation +{_ee_atk_bonus}"
+                )
+                await _broadcast_empowered_evocation_bonus(
+                    campaign_id, char, _ee_atk_bonus,
+                )
             headline = max(beams, key=lambda b: b["total"]) if beams else {}
             auto_attack_total = int(headline.get("total") or 0)
             auto_attack_breakdown = headline.get("breakdown") or ""

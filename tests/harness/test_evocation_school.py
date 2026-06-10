@@ -199,6 +199,18 @@ async def _fireball_index(gm_client, char_id):
     raise AssertionError("Thalindra has no Fireball in her spell list")
 
 
+async def _spell_index_by_slug(gm_client, char_id, slug):
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    assert r.status_code == 200, r.text
+    spells = (r.json().get("sheet") or {}).get("spells") or []
+    for i, s in enumerate(spells):
+        if (s.get("_slug") or "").lower() == slug:
+            return i
+    raise AssertionError(f"Thalindra has no {slug} in her spell list")
+
+
 async def _seed_thal_vs_bandit(gm_client, thal):
     """Seed Thalindra + a 1-HP bandit NPC for a near-guaranteed
     Fireball save-path damage application. Returns the bandit id."""
@@ -273,6 +285,65 @@ async def test_empowered_evocation_adds_int_to_fireball_damage(
             f"expected +3 (INT mod) in the bonus label; got "
             f"{bonus[-1]['data']['feature_name']!r}"
         )
+    finally:
+        await _patch_sheet(
+            gm_client, thal["id"], {"level": 7}, class_slug="wizard",
+        )
+
+
+async def test_empowered_evocation_adds_int_on_attack_roll_path(
+    gm_client, gm_ws, roster, auto_apply_on,
+):
+    """v2.158.33 — attack-roll read site: Thalindra (Evocation Wizard
+    PATCH'd to Lv 10) with the buff installed casts Fire Bolt (evocation
+    cantrip, spell attack roll) at an NPC bandit. When a beam hits, the
+    /cast_spell attack-roll path adds +INT (3) to the aggregate damage
+    and fires feature_used(source=empowered-evocation-bonus). Fire Bolt
+    is a cantrip → no slot, so loop until a hit lands."""
+    thal = roster["Thalindra Moonwhisper"]
+    await _patch_sheet(
+        gm_client, thal["id"], {"level": 10}, class_slug="wizard",
+    )
+    try:
+        bandit_id = await _seed_thal_vs_bandit(gm_client, thal)
+        fb_index = await _spell_index_by_slug(
+            gm_client, thal["id"], "fire-bolt",
+        )
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_empowered_evocation",
+            json={"character_id": thal["id"]},
+        )
+        assert r.status_code == 200, r.text
+        gm_ws.mark()
+        fired = False
+        for _ in range(20):
+            r = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+                json={
+                    "character_id": thal["id"],
+                    "spell_index": fb_index,
+                    "target_combatant_id": bandit_id,
+                    "override": True,
+                    "override_range": True,
+                },
+            )
+            assert r.status_code == 200, r.text
+            if r.json().get("auto_attack_hit"):
+                fired = True
+                break
+        assert fired, "Fire Bolt never hit the bandit in 20 casts"
+        await asyncio.sleep(0.3)
+        bonus = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source")
+            == "empowered-evocation-bonus"
+            and (m.get("data") or {}).get("character_id") == thal["id"]
+        ]
+        assert bonus, (
+            "expected empowered-evocation-bonus after a Fire Bolt hit "
+            "with the buff active"
+        )
+        assert "+3" in bonus[-1]["data"]["feature_name"]
     finally:
         await _patch_sheet(
             gm_client, thal["id"], {"level": 7}, class_slug="wizard",
