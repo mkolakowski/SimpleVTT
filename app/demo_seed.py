@@ -1078,6 +1078,123 @@ def _paladin_sheet(name: str) -> dict:
     }
 
 
+def _paladin_vengeance_sheet(name: str) -> dict:
+    """v2.158.56: demo Paladin Lv 3 (Oath of Vengeance) for the GM.
+    Added so the v2.158.55 Vow of Enmity sheet button (Vengeance
+    Paladin Lv 3+ Channel Divinity → /use_vow_of_enmity) is actually
+    reachable in the live demo — Sir Caelan is Oath of Devotion, whose
+    CD options filter out Vow of Enmity. This PC's `channel-divinity`
+    resource carries `subclass_slug: "vengeance"` so the picker's
+    class+subclass+min_level filter surfaces Vow of Enmity (and Abjure
+    Enemy). Lv 3 is the Vow of Enmity unlock level. Distinct from
+    Caelan so his Devotion-feature harness coverage stays untouched.
+    """
+    return {
+        "class": "Paladin",
+        "subclass": "Oath of Vengeance",
+        "level": 3,
+        "race": "Human",
+        "alignment": "Lawful Neutral",
+        "background": "Soldier",
+        "abilities": {"STR": 16, "DEX": 10, "CON": 14, "INT": 10, "WIS": 11, "CHA": 16},
+        "ac": 18,  # chain mail 16 + shield 2
+        "speed": 30,
+        "hp": {"current": 28, "max": 28, "temp": 0},  # 10 + 2×(6+CON 2) Lv 3 paladin
+        "initiative_bonus": 0,
+        "proficiency_bonus": 2,
+        "hit_dice": {"current": 3, "max": 3},
+        "class_hit_die": "d10",
+        "class_spellcasting": "CHA",
+        "saving_throws": {"WIS": True, "CHA": True},
+        "skills": {
+            "Intimidation": {"ability": "CHA", "proficient": True, "expertise": False},
+            "Athletics":    {"ability": "STR", "proficient": True, "expertise": False},
+            "Perception":   {"ability": "WIS", "proficient": True, "expertise": False},
+        },
+        # Dueling: +2 damage when wielding a single one-handed weapon
+        # with no other weapon in hand (chosen at Paladin Lv 2).
+        "fighting_style": "dueling",
+        "attacks": [
+            {"name": "Longsword", "attack_bonus": "+5", "damage": "1d8+5",
+             "damage_type": "slashing", "range": "5 ft", "desc": "Versatile (1d10). +2 damage from Dueling."},
+            {"name": "Javelin", "attack_bonus": "+5", "damage": "1d6+3",
+             "damage_type": "piercing", "range": "30/120 ft", "desc": "Thrown."},
+        ],
+        # Oath of Vengeance Lv 3 always-prepared spells: Bane + Hunter's
+        # Mark (PHB p.88), plus a couple of core paladin picks.
+        "spells": [
+            {"name": "Bane", "level": 1, "prepared": True, "_slug": "bane", "casting_time": "1 action",
+             "save_ability": "CHA",
+             "_subclass_granted": True, "_granted_by": "Oath of Vengeance"},
+            {"name": "Hunter's Mark", "level": 1, "prepared": True, "_slug": "hunters-mark", "casting_time": "1 bonus action",
+             "_subclass_granted": True, "_granted_by": "Oath of Vengeance"},
+            {"name": "Cure Wounds", "level": 1, "prepared": True, "_slug": "cure-wounds", "casting_time": "1 action"},
+            {"name": "Shield of Faith", "level": 1, "prepared": True, "_slug": "shield-of-faith", "casting_time": "1 bonus action"},
+        ],
+        "spell_slots": {
+            "paladin": {
+                "1": {"total": 3, "used": 0},
+            },
+        },
+        "inventory": [
+            {"name": "Longsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d8", "damage_type": "slashing",
+             "properties": "versatile (1d10)", "_slug": "longsword"},
+            {"name": "Javelin", "type": "weapon", "qty": 4,
+             "equippable": True, "equipped": False, "hands": 1,
+             "damage": "1d6", "damage_type": "piercing",
+             "range": "30/120 ft", "properties": "thrown", "_slug": "javelin"},
+            {"name": "Shield", "type": "shield", "qty": 1,
+             "equippable": True, "equipped": True,
+             "ac_value": 2, "_slug": "shield"},
+            {"name": "Chain mail", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": True,
+             "armor_type": "heavy", "ac_value": 16,
+             "_slug": "chain-mail"},
+            {"name": "Holy symbol (amulet)", "type": "gear", "qty": 1,
+             "desc": "Divine focus — replaces material components for paladin spells."},
+        ],
+        "resources": [
+            {
+                "key": "lay-on-hands",
+                "name": "Lay on Hands",
+                "current": 15, "max": 15, "reset": "long",
+                "source": "paladin Lv 1",
+                "class_slug": "paladin",
+                "desc": "Touch-heal pool (5 × Lv = 15 HP). Refreshes on a long rest.",
+                "manual": False,
+            },
+            {
+                "key": "divine-sense",
+                "name": "Divine Sense",
+                "current": 4, "max": 4, "reset": "long",
+                "source": "paladin Lv 1",
+                "class_slug": "paladin",
+                "desc": "Action — detect celestials / fiends / undead within 60 ft until end of next turn. 1 + CHA mod uses per long rest.",
+                "manual": False,
+            },
+            {
+                "key": "channel-divinity",
+                "name": "Channel Divinity",
+                "current": 1, "max": 1, "reset": "short",
+                "source": "paladin Lv 3",
+                "class_slug": "paladin",
+                "subclass_slug": "vengeance",
+                "desc": "Channel an oath effect (Abjure Enemy, Vow of Enmity). One use per short rest.",
+                "manual": False,
+            },
+        ],
+        "class_features": [
+            {
+                "key": "vow-of-enmity",
+                "name": "Vow of Enmity",
+                "desc": "Channel Divinity (bonus action) — utter a vow against a creature within 10 ft. Gain advantage on attack rolls against it for 1 minute. Fire via the Channel Divinity resource pill → /use_vow_of_enmity.",
+            },
+        ],
+    }
+
+
 def _bard_sheet(name: str) -> dict:
     """v2.15.1: demo Bard Lv 6 (College of Lore) for the GM. Bumped
     from Lv 5 (v2.14.1) so the v2.15.0 Magical Secrets toggle in the
@@ -3209,9 +3326,22 @@ def seed_characters(
         sheet=_warlock_sheet("Magnus Hexbinder"),
         color="#6a3a8e",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc])
+    # v2.158.56: 13th PC — demo Vengeance Paladin (Dame Seraphine Vael).
+    # Oath of Vengeance Lv 3 so the v2.158.55 Vow of Enmity sheet button
+    # (Vengeance Paladin Lv 3+ Channel Divinity → /use_vow_of_enmity) is
+    # reachable in the live demo. Caelan is Oath of Devotion, whose CD
+    # options filter out Vow of Enmity. GM-owned like the other party PCs.
+    vengeance_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Dame Seraphine Vael",
+        template="dnd5e",
+        sheet=_paladin_vengeance_sheet("Dame Seraphine Vael"),
+        color="#b03a4a",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:

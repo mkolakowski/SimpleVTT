@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2151 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.54, 2026-06-10).
+**Total tests:** 2153 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.56, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1300,6 +1300,14 @@ v2.99.246 — Oath of Vengeance (Paladin subclass, PHB p.87) Vow of Enmity bonus
 | `test_use_voe_target_not_in_battle` | Unknown target_combatant_id → 404 `target_not_in_battle`. |
 | `test_use_voe_out_of_cd` | `channel-divinity.current = 0` → 409 `out_of_uses`. |
 | `test_use_voe_wrong_subclass` | Default Caelan (Devotion) → 409 `wrong_subclass_or_level`. |
+
+### `test_demo_vengeance_paladin.py`
+v2.158.56 — Demo Vengeance Paladin (Dame Seraphine Vael, 13th demo PC) so the v2.158.55 Vow of Enmity sheet button has a live demo fixture. Exercises the REAL seeded PC (no PATCH), unlike `test_vow_of_enmity.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_demo_vengeance_paladin_seed_contract` | Seeded PC exists, is Paladin / Oath of Vengeance Lv 3, and carries a `channel-divinity` resource with `subclass_slug == "vengeance"` (the field the CD picker filter reads to surface Vow of Enmity). |
+| `test_demo_vengeance_paladin_can_fire_vow` | Reset CD to 1 + target in battle → `/use_vow_of_enmity` → 200, `uses_remaining == 0`, `buff_installed: True`, `target_name == "Bandit Quarry"`, `feature_used(source=vow-of-enmity)` broadcast. |
 
 ### `test_turn_the_faithless.py`
 v2.99.272 — Ancients Paladin (PHB p.87) Turn the Faithless CD (H.2 Phase 2). Sibling CD to Nature's Wrath (v2.99.245). 30-ft AOE Wis save vs fey/fiend or Turned 1 minute.

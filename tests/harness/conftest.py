@@ -67,12 +67,14 @@ async def roster(gm_client: httpx.AsyncClient) -> dict[str, dict]:
     assert resp.status_code == 200, f"roster fetch failed: {resp.status_code}"
     data = resp.json()
     by_name = {c["name"]: c for c in data["characters"]}
-    # Smoke-check: the twelve demo PCs are present — Phase A wraps
-    # with v2.18.4 covering all 12 PHB classes (Barbarian / Bard /
-    # Cleric / Druid / Fighter / Monk / Paladin / Ranger / Rogue /
-    # Sorcerer / Warlock / Wizard). If this fails the demo seed has
-    # drifted and every downstream test will fail mysteriously —
-    # better to fail fast here.
+    # Smoke-check: the demo PCs are present — Phase A wraps with
+    # v2.18.4 covering all 12 PHB classes (Barbarian / Bard / Cleric /
+    # Druid / Fighter / Monk / Paladin / Ranger / Rogue / Sorcerer /
+    # Warlock / Wizard); v2.158.56 adds a 13th PC, a Vengeance Paladin
+    # (Dame Seraphine Vael), so the Vow of Enmity sheet button has a
+    # live demo fixture. If this fails the demo seed has drifted and
+    # every downstream test will fail mysteriously — better to fail
+    # fast here.
     expected = {
         "Pip Quickfingers",
         "Thalindra Moonwhisper",
@@ -86,6 +88,7 @@ async def roster(gm_client: httpx.AsyncClient) -> dict[str, dict]:
         "Krieger Stonefist",
         "Rowan Quickbow",
         "Magnus Hexbinder",
+        "Dame Seraphine Vael",
     }
     missing = expected - set(by_name)
     if missing:

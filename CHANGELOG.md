@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.56] - 2026-06-10 — "The Avenging Knight" — The v2.158.55 Vow of Enmity sheet button had no live demo fixture — Sir Caelan is Oath of Devotion, whose Channel Divinity options filter Vow of Enmity out. This adds a 13th demo PC, a Lv 3 Oath of Vengeance Paladin, so the button is reachable and verifiable in the demo
+
+**Schema version:** 69
+**Commit summary:** **New demo PC: Dame Seraphine Vael, a Lv 3 Oath of Vengeance Paladin (GM-owned, 13th party member). Her `channel-divinity` resource carries `subclass_slug: "vengeance"`, which is the field the v2.158.55 Channel Divinity picker filter reads to surface Vow of Enmity — so the new sheet button is now reachable in the live demo (Sir Caelan, Oath of Devotion, filters it out). Adds `_paladin_vengeance_sheet` to `app/demo_seed.py`, registers the PC in the seed party list, extends the `roster` conftest smoke-check to expect the 13th PC, and lands a seed-contract + happy-path harness test that fires `/use_vow_of_enmity` against the real seeded PC (no PATCH).**
+**Description:** v2.158.55 wired Vow of Enmity into the Channel Divinity resource-pill picker, but the picker filters CD options by class + subclass + level, and no demo PC was a Vengeance Paladin — so the button never appeared. This commit gives it a home: Dame Seraphine Vael, Oath of Vengeance Lv 3 (the Vow of Enmity unlock level), with the standard paladin kit (Lay on Hands 15-pool, Divine Sense, Channel Divinity 1/short tagged `vengeance`, 3× L1 slots, Bane + Hunter's Mark always-prepared, Dueling fighting style, longsword + javelins). She's a distinct PC from Sir Caelan so his Oath-of-Devotion harness coverage (Sacred Weapon, Aura of Devotion, Holy Nimbus) stays untouched. The seed reseeds on boot, so the rebuild creates her automatically. Unlike `test_vow_of_enmity.py` (which PATCHes Caelan into Vengeance), the new test exercises the genuinely-seeded PC, proving the demo fixture is shaped correctly for the picker filter.
+
+### Added
+- `app/demo_seed.py` — `_paladin_vengeance_sheet` builder + registration of **Dame Seraphine Vael** (13th demo PC, Oath of Vengeance Lv 3, GM-owned).
+- `tests/harness/test_demo_vengeance_paladin.py` — `test_demo_vengeance_paladin_seed_contract` asserts the seeded PC is Paladin / Oath of Vengeance Lv 3 with a `channel-divinity` resource tagged `subclass_slug == "vengeance"` (the picker-filter field); `test_demo_vengeance_paladin_can_fire_vow` resets her CD to 1, seeds a target in battle, and fires `/use_vow_of_enmity` → 200, CD 1 → 0, buff installed, `feature_used(source=vow-of-enmity)` broadcast.
+
+### Changed
+- `tests/harness/conftest.py` — the `roster` fixture's demo-seed smoke-check now expects the 13th PC (Dame Seraphine Vael) so a dropped seed fails fast.
+
+### Notes
+- Total harness count: **2153** in `tests/harness/` (was 2151); **`tests/harness_ui/` 19** (unchanged).
+- Reseed-on-boot (`demo_reset_on_boot`) creates the new PC on container restart; no migration / schema change (still v69).
+
+---
+
 ## [2.158.55] - 2026-06-10 — "The Sworn Button" — Invoke Duplicity and Vow of Enmity had working endpoints (`/use_invoke_duplicity`, `/use_vow_of_enmity`) but no sheet UI — players could only fire them announce-style. This wires both Channel Divinity options into the resource-pill picker so a click installs the real buff
 
 **Schema version:** 69
