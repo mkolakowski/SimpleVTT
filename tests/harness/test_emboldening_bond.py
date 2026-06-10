@@ -129,6 +129,114 @@ async def test_use_eb_two_targets_happy(
     assert feats
 
 
+async def _seed_dice(gm_client, seed: int):
+    r = await gm_client.post(
+        "/api/test/dice/seed", json={"seed": seed},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_eb_adds_d4_to_ability_check_and_persists(
+    gm_client, tavik_peace_with_party,
+):
+    """v2.158.47 — Phase 2 read site for the v2.99.243
+    `emboldening-bond-active` buff. Bond Pip, then roll an ability
+    check for her → total gains +1d4 + breakdown mentions 'Emboldening
+    Bond'. Unlike a consumer buff, the bond is PERSISTENT: a second
+    ability check the same session also gets the +1d4."""
+    tavik, pip, _, _ = tavik_peace_with_party
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_emboldening_bond",
+        json={
+            "character_id": tavik["id"],
+            "target_combatant_ids": [f"tok_pp_{pip['id']}"],
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    await _seed_dice(gm_client, 11)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20",
+            "character_id": pip["id"],
+            "stat_key": "dex_check",
+            "stat_ability": "DEX",
+            "visibility": "public",
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    breakdown = data.get("breakdown") or ""
+    total = int(data.get("total") or 0)
+    assert "Emboldening Bond" in breakdown, (
+        f"expected breakdown to mention 'Emboldening Bond'; got {breakdown!r}"
+    )
+    # d20 (1-20) + d4 (1-4) → 2-24.
+    assert 2 <= total <= 24, (
+        f"total should be d20 + d4; got {total}, breakdown={breakdown!r}"
+    )
+    # Persistent: a second ability check also gets the +1d4.
+    r2 = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20",
+            "character_id": pip["id"],
+            "stat_key": "dex_check",
+            "stat_ability": "DEX",
+            "visibility": "public",
+        },
+    )
+    assert r2.status_code == 200, r2.text
+    assert "Emboldening Bond" in (r2.json().get("breakdown") or ""), (
+        "bond is persistent — the +1d4 should apply on every qualifying roll"
+    )
+
+
+async def test_eb_not_applied_to_unbonded_or_non_check(
+    gm_client, tavik_peace_with_party,
+):
+    """Control: an unbonded creature's ability check gets no +1d4, and
+    a generic dice-tray roll (no stat_ability) gets no bonus even for a
+    bonded creature."""
+    tavik, pip, caelan, _ = tavik_peace_with_party
+    # Bond only Pip.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_emboldening_bond",
+        json={
+            "character_id": tavik["id"],
+            "target_combatant_ids": [f"tok_pp_{pip['id']}"],
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    await _seed_dice(gm_client, 5)
+    # Unbonded Caelan → no bonus.
+    r_unbonded = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20",
+            "character_id": caelan["id"],
+            "stat_key": "str_check",
+            "stat_ability": "STR",
+            "visibility": "public",
+        },
+    )
+    assert r_unbonded.status_code == 200, r_unbonded.text
+    assert "Emboldening Bond" not in (r_unbonded.json().get("breakdown") or "")
+    # Bonded Pip but a generic roll (no stat_ability) → no bonus.
+    r_generic = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={
+            "expression": "1d20",
+            "character_id": pip["id"],
+            "visibility": "public",
+        },
+    )
+    assert r_generic.status_code == 200, r_generic.text
+    assert "Emboldening Bond" not in (r_generic.json().get("breakdown") or "")
+
+
 async def test_use_eb_too_many_targets(
     gm_client, tavik_peace_with_party,
 ):

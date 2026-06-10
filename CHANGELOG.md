@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.47] - 2026-06-10 — "Bonds of Peace" — Emboldening Bond's installed buff was inert: the `/roll` handler never read it, so the bonded-creature +1d4 was announce-only. Wiring the read site adds 1d4 to a bonded creature's ability checks, skill checks, and saving throws
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.99.243 Emboldening Bond buff (Peace Domain Cleric Lv 1+, TCE p.40): "While bonded creatures are within 30 feet of one another, they can each roll a d4 whenever they make an ability check, attack roll, or saving throw." v2.99.243 installed a 1-hour `emboldening-bond-active` buff on each bonded creature carrying `bonus_d4: True`, but the cast claimed a `/roll` consumer that never existed — so the buff sat inert. This commit wires the read into the `/roll` post-result intercept: when a bonded creature makes an ability check / skill check / saving throw (any `/roll` carrying a `stat_ability`), 1d4 is rolled and added to the total with an "Emboldening Bond 1d4" breakdown suffix. The bond is persistent (not consumed) — it fires on every qualifying roll for its duration.**
+**Description:** v2.99.243 shipped `/use_emboldening_bond` to install the `emboldening-bond-active` buff (+1d4 to attack/check/save while bonded), but the consumer was never wired — the `/roll` handler ignored the buff. This commit closes that gap for the check/save surface. The `/roll` handler now, after resolving the roll, checks the caster's `_buffs_active` for `emboldening-bond-active` on any d20 roll that carries a `stat_ability` (ability check, skill check, or saving throw — attack rolls route through `/attack`, deferred), rolls 1d4, adds it to `result.total`, and appends `+ N (Emboldening Bond 1d4)` to the breakdown. Unlike the consumer buffs (Supreme Sneak, Tides of Chaos), the bond is NOT removed — it persists for the buff's duration and fires on every qualifying roll. The 30-ft proximity check stays deferred per the install endpoint (no automatic range enforcement in v1).
+
+This flips Emboldening Bond from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `tests/harness/test_emboldening_bond.py::test_eb_adds_d4_to_ability_check_and_persists` — Phase 2 read-site test: bond Pip → her DEX check gains +1d4 + breakdown mentions "Emboldening Bond"; a second check also gets the bonus (persistent, not one-shot). `test_eb_not_applied_to_unbonded_or_non_check` — control: an unbonded creature gets no bonus, and a bonded creature's generic dice-tray roll (no `stat_ability`) gets no bonus.
+
+### Changed
+- `app/routes/tabletop_routes.py::roll` — post-result intercept now adds +1d4 for `emboldening-bond-active` carriers on ability/skill/save rolls (persistent; breakdown suffix).
+
+### Notes
+- Total harness count: **2132** in `tests/harness/` (was 2130); **`tests/harness_ui/` 19** (unchanged).
+- Attack rolls (`/attack`) and the 30-ft proximity enforcement stay deferred; the read composes additively with the existing roll pipeline (Bless/Bane, roll_state, etc.).
+
+---
+
 ## [2.158.46] - 2026-06-10 — "Bend the Odds" — Tides of Chaos's installed buff was inert: the `/roll` handler never read it, so the "advantage on your next roll" feature was announce-only. Wiring the consumer grants advantage on a Wild Magic sorcerer's next d20 check/save and one-shot removes the buff
 
 **Schema version:** 69

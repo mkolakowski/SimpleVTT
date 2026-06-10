@@ -16274,6 +16274,46 @@ async def roll_dice(
                 pass
             break
 
+    # v2.158.47 — Emboldening Bond (Peace Domain Cleric Lv 1+, TCE
+    # p.40) +1d4 read site for the v2.99.243 `emboldening-bond-active`
+    # buff: bonded creatures add 1d4 to ability checks, attack rolls,
+    # and saving throws while within 30 ft of one another. This read
+    # covers the ability-check / skill / save surface (any /roll that
+    # carries a `stat_ability` — attack rolls route through /attack,
+    # deferred). Unlike the consumer buffs above, the bond is
+    # PERSISTENT (no removal) — it fires on every qualifying roll for
+    # its duration. The 30-ft proximity check stays deferred per the
+    # install endpoint (no automatic range enforcement in v1).
+    if (
+        _char
+        and stat_ability_raw
+        and "d20" in expr.lower()
+        and isinstance(_char.sheet, dict)
+    ):
+        for _b in (_char.sheet.get("_buffs_active") or []):
+            if not isinstance(_b, dict):
+                continue
+            if (
+                (_b.get("key") or "").strip().lower()
+                != "emboldening-bond-active"
+            ):
+                continue
+            _eff = _b.get("effects") or {}
+            if not (isinstance(_eff, dict) and _eff.get("bonus_d4")):
+                continue
+            try:
+                _eb_d4 = dice_mod.roll("1d4")
+                import copy
+                result = copy.copy(result)
+                result.total = int(result.total or 0) + int(_eb_d4.total or 0)
+                result.breakdown = (
+                    f"{result.breakdown} + {int(_eb_d4.total or 0)} "
+                    f"(Emboldening Bond 1d4)"
+                )
+            except Exception:
+                pass
+            break
+
     # v2.99.204 — Indomitable Might (Barbarian Lv 18+). Phase F.1
     # cont'd of the v2.99.193 phased completion plan. RAW PHB
     # p.49: when a STR check's total is less than the PC's STR
