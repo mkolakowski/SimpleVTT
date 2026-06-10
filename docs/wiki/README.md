@@ -32,29 +32,29 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 
 | Plan | Format | Audience | Status |
 |------|--------|----------|--------|
-| [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped · 2 + 3 deferred |
+| [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phases 1 + 2a–2f shipped (v2.2.0–v2.157.0); Phase 3 blocked on Maps 2.0 |
 | [Class / subclass / feat / race content](../plans/class-content-status.md) | Markdown (inventory) | Contributors | 🟢 / 🟠 / ⚪ living inventory |
-| [Full class-feature automation](../plans/full-feature-automation.md) | Markdown (design) | Contributors | 🟠 Phases 1–5 shipped · 6–9 pending |
+| [Full class-feature automation](../plans/full-feature-automation.md) | Markdown (design) | Contributors | 🟠 Phases 0–7 shipped; Phase 8 in progress (v2.158.x) |
 | [On-hit damage riders (automation Phase 2)](../plans/on-hit-riders.md) | Markdown (design) | Contributors | ✅ shipped |
 | [Feature saving throws (automation Phase 3)](../plans/feature-saves.md) | Markdown (design) | Contributors | ✅ shipped |
 | [Temp HP + roll bonuses (automation Phase 4)](../plans/temp-hp-and-bonuses.md) | Markdown (design) | Contributors | ✅ shipped |
 | [Auras (automation Phase 5)](../plans/auras.md) | Markdown (design) | Contributors | ✅ shipped |
-| [Forced movement, speed & summons (automation Phase 6)](../plans/movement-and-summons.md) | Markdown (design) | Contributors | ⚪ proposed |
-| [Death saving throws](../plans/death-saves.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped · 2–4 deferred |
+| [Forced movement, speed & summons (automation Phase 6)](../plans/movement-and-summons.md) | Markdown (design) | Contributors | ✅ shipped (v2.99.431–.446) |
+| [Death saving throws](../plans/death-saves.md) | Markdown (design) | Contributors | 🟠 Phases 1 + 3a + 3b shipped (v2.150.0–v2.151.0); 3c + 4 deferred |
 | [Demo mode](../plans/demo-mode.md) | Markdown (design) | Contributors | ✅ shipped (v2.3.0) |
 | [Encounter-sim test suite](../plans/encounter-sim-test-suite.md) | Markdown (design) | Contributors | ⚪ plan finalized · Phase 1 PoC pending |
 | [Movement-OA flow](../plans/movement-oa-flow.md) | Markdown (design) | Contributors | ✅ All phases (1–6) shipped (v2.99.52–v2.99.57) |
 | [Player simulacrum](../plans/player-simulacrum.md) | Markdown (design) | Contributors | ⚪ design only · all phases unstarted |
-| [Reactions automation](../plans/reactions-automation.md) | Markdown (design) | Contributors | 🟠 Phases 1a + 1b + 2a-partial shipped (v2.67.0–v2.67.2); 2b-7 pending |
+| [Reactions automation](../plans/reactions-automation.md) | Markdown (design) | Contributors | 🟠 Phases 1–6 shipped (v2.67.0–v2.78.0); v3 auto-resolution backlog filed |
 | [Ruler & range enforcement](../plans/ruler-and-range.md) | Markdown (design) | Contributors | ✅ All phases shipped (1, 2, 3A–E) |
 | [Spell up-casting](../plans/spell-upcasting.md) | Markdown (design) | Contributors | 🟠 Mechanisms shipped (A+B+C, v2.108.0–v2.110.0); + higher_level prose parser (v2.125.0) auto-covers the tail; 34/319 hand-annotated |
 | [Spell-validation test suite](../plans/spell-validation-suite.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
-| [Sorcery Points + Metamagic](../plans/sorcery-points-and-metamagic.md) | Markdown (design) | Contributors | 🟠 Phase 0 shipped (v2.49.120); 1-5 unstarted |
+| [Sorcery Points + Metamagic](../plans/sorcery-points-and-metamagic.md) | Markdown (design) | Contributors | 🟢 Font of Magic + 7/8 metamagics + Sorcerous Restoration shipped (v2.49.120–v2.99.x); Quickened + AoE Empowered remain |
 | [Warlock Pact Boon](../plans/warlock-pact-boon.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
 | [Wild Magic (Sorcerer subclass)](../plans/wild-magic.md) | Markdown (design) | Contributors | ✅ All 5 phases shipped (v2.99.227–231) |
-| [Eldritch Knight (Fighter subclass)](../plans/eldritch-knight.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped (v2.99.232); 2-4 deferred |
+| [Eldritch Knight (Fighter subclass)](../plans/eldritch-knight.md) | Markdown (design) | Contributors | 🟠 Phase 1 + Arcane Charge P1 + Improved War Magic P1 shipped (v2.158.11–.12); War Magic + Eldritch Strike remain |
 | [Battle Master (Fighter subclass)](../plans/battle-master.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped (v2.99.233); 2-5 + 15 maneuvers deferred |
-| [Paladin oaths (non-Devotion)](../plans/paladin-oaths.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped (v2.99.245); 2-6 + 5 oaths deferred |
+| [Paladin oaths (non-Devotion)](../plans/paladin-oaths.md) | Markdown (design) | Contributors | 🟠 4 oaths partially shipped (Warding / Rebuke / Avenger / Guardian, v2.99.245–v2.158.10); Lv 15/20 capstones + Glory remain |
 | [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
 | [Unified mini-sheet](../plans/unified-mini-sheet.md) | Markdown (design) | Contributors | ⚪ proposed · 3 mockups · Phase 1–3 unstarted |
 | [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |

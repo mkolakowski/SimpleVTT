@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.70] - 2026-06-10 — "The Ledger Squared" — Doc-only follow-up to v2.158.69's SRD audit: sync the wiki Design-plans status columns (the `/wiki` landing-page table in `app/templates/wiki.html` + the on-disk mirror in `docs/wiki/README.md`) with where the plans actually landed — eight rows in each file had fallen behind the v2.99.x → v2.158.x shipping arc
+
+**Schema version:** 69
+**Commit summary:** **Eight status-column rows updated identically in both `app/templates/wiki.html` ("Design plans" table) and `docs/wiki/README.md` (the on-disk mirror): (1) advantage-disadvantage "Phase 1 shipped · 2 + 3 deferred" → "Phases 1 + 2a–2f shipped (v2.2.0–v2.157.0); Phase 3 blocked on Maps 2.0"; (2) full-feature-automation "Phases 1–5 shipped · 6–9 pending" → "Phases 0–7 shipped; Phase 8 in progress (v2.158.x)"; (3) movement-and-summons "⚪ proposed" → "✅ shipped (v2.99.431–.446)"; (4) death-saves "Phase 1 shipped · 2–4 deferred" → "Phases 1 + 3a + 3b shipped (v2.150.0–v2.151.0); 3c + 4 deferred"; (5) reactions-automation "Phases 1a + 1b + 2a-partial shipped; 2b-7 pending" → "Phases 1–6 shipped (v2.67.0–v2.78.0); v3 auto-resolution backlog filed"; (6) sorcery-points-and-metamagic "Phase 0 shipped; 1-5 unstarted" → "🟢 Font of Magic + 7/8 metamagics + Sorcerous Restoration shipped; Quickened + AoE Empowered remain"; (7) eldritch-knight "Phase 1 shipped; 2-4 deferred" → "Phase 1 + Arcane Charge P1 + Improved War Magic P1 shipped (v2.158.11–.12); War Magic + Eldritch Strike remain"; (8) paladin-oaths "Phase 1 shipped; 2-6 + 5 oaths deferred" → "4 oaths partially shipped (Warding / Rebuke / Avenger / Guardian); Lv 15/20 capstones + Glory remain". No code change beyond the template text, no schema change, no new endpoint.**
+**Description:** v2.158.69 refreshed the status headers inside three plan docs but missed the corresponding Status columns in the two wiki surfaces (the CLAUDE.md wiki rule says "Update the status as the underlying work moves through phases"). While syncing those three, the audit pass also caught five more rows that had quietly gone stale — most notably movement-and-summons still listed "⚪ proposed" despite all of Phase 6 shipping in the v2.99.431–.446 arc, and reactions-automation still describing the v2.67.x partial state despite Phases 1–6 closing at v2.78.0. The wiki landing page is the discovery surface contributors actually read, so its status vocabulary now matches the plan docs themselves.
+
+### Changed
+- `app/templates/wiki.html` — eight "Design plans" table Status cells updated per the summary above; `status-proposed` → `status-shipped` class flip on the movement-and-summons row.
+- `docs/wiki/README.md` — the same eight rows updated in the on-disk mirror table so the two indexes stay in lock-step.
+- `app/version.py` — `APP_VERSION` 2.158.69 → 2.158.70. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.70.
+
+### Notes
+- Total harness count: **2163** in `tests/harness/` (unchanged — doc/template-text-only commit; no endpoint or broadcast change).
+- The existing `test_wiki_home_renders` + per-slug wiki tests assert link presence, not status-cell text, so no test updates are required.
+
+---
+
 ## [2.158.69] - 2026-06-10 — "The Charter Pass" — Doc-only commit: a full SRD 5e (CC BY 4.0) audit pass against the project's `app/data/local/dnd5e/` content layer + a re-prioritisation of `TODO.md` + status-header corrections on three plan docs whose headers had fallen behind the v2.99.x → v2.158.x shipping work
 
 **Schema version:** 69
