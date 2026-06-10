@@ -3,9 +3,35 @@
 Phase H.2 of the [v2.99.193 class-content completion plan](class-content-status.md).
 Path: per-oath subclass shipping for the non-Devotion sacred oaths.
 
-> **Status (v2.99.245):** 🟠 Phase 1 (Ancients — Nature's Wrath
-> Channel Divinity) shipped. Phases 2–6 deferred (one oath per
-> commit, plus per-oath Lv 7/15/20 deep features).
+> **Status (re-audited 2026-06-10, v2.158.68):** 🟢 substantial
+> progress — non-Devotion oath work shipped in chunks across the
+> v2.99.245 → v2.158.x window:
+>
+> - **Ancients** — Nature's Wrath Channel Divinity ✅ (v2.99.245);
+>   Aura of Warding Lv 7+ ✅ (v2.133.0–v2.135.1: full RAW chain
+>   plumbing + endpoint + spell-damage resistance through the
+>   `is_spell` damage-pipeline kwarg).
+> - **Vengeance** — Relentless Avenger Lv 7+ ✅ Phase 1 (v2.149.0:
+>   free-move budget + OA-immune flag buff). Phase 2 deferred:
+>   `/token/move` consumes the budget + skips OA prompts.
+> - **Conquest** — Scornful Rebuke Lv 15+ ✅ (v2.142.0: first
+>   on-damage-taken hook in the codebase — recursive CHA-mod psychic
+>   to attacker through `_apply_damage_to_combatant`).
+> - **Redemption** — Aura of the Guardian Lv 7+ ✅ (v2.99.281).
+> - **Devotion (already shipped)** — Purity of Spirit Lv 15+ ✅
+>   (v2.158.10: permanent buff with `pfeag_*` payload reusing the
+>   Protection from Evil and Good spell-buff engine).
+>
+> **Outstanding:** (1) Ancients Lv 15/20 (Undying Sentinel / Elder
+> Champion); (2) Vengeance Phase 2 OA-flow gate + Lv 15/20 (Soul of
+> Vengeance / Avenging Angel — frightful aura partially shipped
+> Phase 5 v2.99.428); (3) Conquest Lv 3/7/20 (Conquering Presence /
+> Aura of Conquest / Invincible Conqueror); (4) Redemption Lv 3/15/20
+> (Emissary of Peace + Rebuke the Violent / Protective Spirit /
+> Emissary of Redemption); (5) Glory full oath (Peerless Athlete /
+> Inspiring Smite / Aura of Alacrity / Glorious Defense / Living
+> Legend); (6) Devotion Lv 20 Holy Nimbus ✅ (v2.99.166) — verify
+> shipped per the v2.99.192 audit, not re-tested in this header.
 
 ## Why a plan doc
 

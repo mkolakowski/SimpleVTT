@@ -17,10 +17,64 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) — the headline backlog re-prioritisation pass against SRD 5.1 content. Re-shapes Design Plans Backlog priorities; surfaces the magic-items + Exhaustion-level + Pact-Boon gaps as P1.
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (2026-06-10)
+
+**Audit scope.** Walk every piece of SRD 5.1 (CC BY 4.0 — the "free" 5e release from Wizards of the Coast) content shipped under `app/data/local/dnd5e/` and confirm whether the mechanical wiring is in place to automate it. The audit excludes setting-specific / post-SRD content (Tasha's, Xanathar's beyond the bits already in SRD, Strixhaven, etc.) and homebrew. Findings below feed directly into the [Design Plans Backlog](#design-plans-backlog) re-priorities.
+
+### Headline state
+
+| Layer | Shipped count | Automated count | Coverage |
+|---|---|---|---|
+| Spells (319 SRD entries) | 319 ✅ data | ~210 cast endpoints route through the engine; ~110 still cast-and-broadcast-only or partial scaling | ~66% mechanical |
+| Monsters (322 SRD) | 322 ✅ data + structured actions | `/npc_attack` + `/npc_cast_spell` route most actions through the damage pipeline; legendary / lair actions still ⚪ | ~75% mechanical |
+| Conditions (15/15 SRD) | 15 ✅ data | 10 fully wired; **Exhaustion levels ⚪** (single-flag today, RAW has 6 stacking levels with cumulative penalties); Deafened/Petrified-detail/Restrained-grapple-source partial | ~70% mechanical |
+| Items (292 SRD equipment + magic items) | 292 ✅ data | **0% magic-item automation** — every magic item's `actions` array is empty; no attunement gate, no charges, no spell effects, no on-hit riders | <25% mechanical (weapons + armor only) |
+| Class features (133 per-row entries) | 107 ✅ / 5 🟢 / 1 🟡 / 20 ⚪ | ~80% ✅ across the 12 classes (per `docs/plans/class-content-status.md`) | ~80% mechanical |
+| SRD feats (1 in SRD 5.1 — Grappler) | 1 ✅ data (`grappler.json`) | Grappler 🟡 announce-only; 6 PHB-not-SRD feats (Lucky, Defensive Duelist, War Caster, Mage Slayer, Sentinel, Polearm Master) wired via the reactions framework but data layer doesn't list them | N/A — SRD 5.1 only ships 1 feat |
+| SRD backgrounds (1 in SRD 5.1 — Acolyte) | 1 ✅ data (`acolyte.json`) | Pure descriptive, RAW-correct | 100% (RAW backgrounds carry no mechanical effect server-side) |
+| SRD races (9/9) | 9 ✅ data + traits curated | 8 wired through `_RACE_SAVE_ADVANTAGES` + damage-resistance + sleep-immunity + Relentless Endurance + Halfling Lucky (all 5 surfaces) | ~90% mechanical |
+
+### Headline gaps (RAW-implementable, no system blocker)
+
+🔴 **P1 — Magic-item automation (NEW — no plan doc today).** 292 SRD magic items shipped as data but `actions: []` on every entry. RAW shape is identical to spell endpoints: attunement gate, charges-per-day, spell-effect dispatch, on-hit rider buffs (Flame Tongue, Frost Brand), passive AC/save bonuses (Cloak of Protection — partially shipped as Cloak of Displacement reaction in v2.78.0 but item-walk doesn't read `sheet.inventory[*]._reactions[]` yet). **Suggested first slice:** Pearl of Power (recover one spell slot — already a primitive); Wand of Magic Missiles (auto-cast with charges); Cloak of Protection (+1 AC + saves passive); Bracers of Defense (+2 AC unarmored). Write `docs/plans/magic-items-automation.md` before starting; this is the largest single un-planned SRD surface.
+
+🔴 **P1 — Exhaustion-level tracking (NEW — no plan doc today).** RAW: 6 cumulative levels with disadvantage on ability checks (Lv 1), speed halved (Lv 2), disadvantage on attacks + saves (Lv 3), HP max halved (Lv 4), speed → 0 (Lv 5), death (Lv 6). Today's engine treats Exhaustion as a single-flag buff. Unlocks: Barbarian Frenzy (Lv 3 Berserker — gain exhaustion on rage end), Wizard Spell Mastery overuse, environmental-hazard hooks. **Suggested approach:** `sheet.conditions.exhaustion.level` int field + a `_exhaustion_disadvantage` helper that composes with the v2.152.0–v2.155.0 condition-disadvantage stack at the same construction sites.
+
+🔴 **P1 — Spell-validation suite Phase 1+** ([`docs/plans/spell-validation-suite.md`](docs/plans/spell-validation-suite.md)). 319 spells shipped, only ~25 have explicit harness tests. Phase 2A v1 (Fire Bolt) is the only shipped slice. CI-gated catalog iteration is the cheapest way to catch SRD-content drift; closes the audit's "spell mechanics ~66% mechanical" gap one batch at a time.
+
+🟡 **P2 — Pact Boon (Warlock Lv 3)** ([`docs/plans/warlock-pact-boon.md`](docs/plans/warlock-pact-boon.md)). Plan exists ⚪ proposed. RAW SRD content; Tome is the cheapest first ship (+3 cantrips picker); Chain unlocks the familiar-summon primitive (extends v2.99.443 summon-companion); Blade adds a CHA-based summoned weapon. Unblocks ~8 Pact-gated invocations downstream.
+
+🟡 **P2 — Battle Master 15 maneuvers** ([`docs/plans/battle-master.md`](docs/plans/battle-master.md)). All 16 maneuvers are SRD RAW; Phase 1 shipped Trip Attack. Remaining 15 compose on the v2.99.405–.414 feature-save resolver + the v2.99.395–.401 on-hit rider primitive — each maneuver is mostly a thin endpoint over those primitives. ~15 commits at one-per-day cadence.
+
+🟡 **P2 — Wizard capstone Spell Mastery / Signature Spells (Lv 18/20).** Both are SRD; both need a spell-picker (pattern: v2.16.1 Arcane Recovery) + a per-rest counter. Two small endpoints unblock Thalindra's Lv 18+ capstones.
+
+🟡 **P2 — Aura of Courage (Paladin Lv 10/18).** Same gate shape as Aura of Devotion (v2.55.0). One commit when a Paladin Lv 10+ fixture lands. Filed in Class Features (next cycle) below.
+
+🟡 **P2 — Reactions v3 pending-damage state machine** ([`docs/plans/reactions-automation.md`](docs/plans/reactions-automation.md) v3 backlog). Closes auto-resolution for Shield AC negation, HR damage-to-attacker, Lucky / SB d20 reroll, Counterspell undo. The framework is shipped (Phases 1–6); v3 replaces the advisory chat-card with state-machine auto-resolution.
+
+🟡 **P2 — Sorcerer Quickened Spell.** The one of 8 SRD metamagics still announce-only. Bonus-action cast routing needs a `/cast_spell` action-economy override path; small lift.
+
+🟢 **P3 — Eldritch Knight Phase 2 read sites** ([`docs/plans/eldritch-knight.md`](docs/plans/eldritch-knight.md)). The Lv 15/18 Phase 1 flag buffs shipped v2.158.11/.12; the Lv 7/10 War Magic + Eldritch Strike are the next slice.
+
+🟢 **P3 — Non-Devotion Paladin Lv 15/20 capstones** ([`docs/plans/paladin-oaths.md`](docs/plans/paladin-oaths.md)). Ancients Undying Sentinel / Elder Champion; Vengeance Soul of Vengeance / Avenging Angel; Conquest Invincible Conqueror; Redemption Protective Spirit / Emissary of Redemption; full Glory oath. Phase 1 plumbing for each landed in v2.99.245–v2.158.x.
+
+🟢 **P3 — Class-feature ⚪ tail** (~20 rows per the [class-content-status](docs/plans/class-content-status.md) re-audit): Barbarian Lv 9–20, Monk Deflect Missiles + Diamond Soul + Empty Body + Perfect Self, Ranger Lv 10–20 (Hide in Plain Sight, Vanish, Feral Senses, Foe Slayer — Vanish Phase 1 shipped v2.158.21), Rogue Reliable Talent / Slippery Mind / Elusive / Stroke of Luck. Most are RAW-implementable but blocked on a Lv 10+ demo fixture for the relevant class. Group by demo-PC bump rather than by class.
+
+### Out-of-scope-by-design (RAW intentionally narrative)
+
+These show up as ⚪ / 🟡 in the per-class tables but RAW is "narrative description, no mechanical effect server-side": Beast Speech, Devil's Sight (Phase 1 install ✅ v2.158.14; engine read site filed), Mask of Many Faces, Pact of the Tome cantrip selection (data-only — counted under Pact Boon plan), Druid Land's Stride (blocked on difficult terrain F11), Monk Slow Fall (blocked on fall-damage F4), Cleric Divine Health / Paladin Divine Health (blocked on disease F5). These stay descriptive until the framework lands — not part of the SRD audit's "should automate" list.
+
+### Out-of-scope (not in SRD 5.1)
+
+Setting-specific subclasses (Tasha's: Beast Barbarian Phase 1 shipped v2.158.20 but the rest of the subclass is Tasha's-only and stays gated on user choice); post-SRD feats (Tough, Resilient, Skilled, Magic Initiate — the data layer correctly carries only Grappler); backgrounds beyond Acolyte. None of these belong in this audit; they're the future-3.x scope per the long-standing user direction.
 
 ---
 
@@ -292,7 +346,9 @@ The remaining ~30 announce-only rows are **archetype J** (narration-only-by-desi
 
 ## Design Plans Backlog
 
-Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning docs (`docs/encounters-plan.md` + `docs/multi-system-refactor.md`). Priorities reflect the post-v2.149.1 state of each plan — **🔥 IN PROGRESS** = a plan with ongoing commits this session; **🔴 P1** = next-up substantial work; **🟡 P2** = substantial deferred phases or proposed work; **🟢 P3** = lower-priority or living-doc style.
+Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning docs (`docs/encounters-plan.md` + `docs/multi-system-refactor.md`). Priorities reflect the post-v2.158.68 / 2026-06-10 SRD-audit re-rank — **🔥 IN PROGRESS** = a plan with ongoing commits this session; **🔴 P1** = next-up substantial work that closes a real SRD-implementable gap; **🟡 P2** = substantial deferred phases or proposed work; **🟢 P3** = lower-priority or living-doc style.
+
+> **2026-06-10 SRD-audit re-rank.** Priorities for this section were re-shaped against the [SRD 5e Audit](#srd-5e-audit-2026-06-10) above. The P1 column now leads with **NEW: magic-items automation** + **NEW: Exhaustion-level tracking** (no plan doc exists yet — write one before starting) and **spell-validation-suite** (CI-gated catalog tests for the 319-spell drift surface). The previous "all P1 shipped" line is replaced with concrete, audit-driven next slices. Pact Boon + Battle Master maneuvers stay in P2 but ranked above the other oath/EK deferred phases because they close larger SRD surfaces per commit. Maps-2.0-blocked work (advantage-disadvantage Phase 3) sits at the bottom of P2 since the unblocker is itself a multi-session lift.
 
 ### 🔥 IN PROGRESS
 
@@ -302,24 +358,25 @@ Every design doc under [`docs/plans/`](docs/plans/) + the two repo-root planning
 
 Now lives in [`TODONE.md`](TODONE.md#design-plans-backlog--shipped-end-to-end) — 12 plans (auras, death-saves, demo-mode, feature-saves, movement-and-summons, movement-oa-flow, on-hit-riders, ruler-and-range, spell-upcasting, temp-hp-and-bonuses, test-harness, wild-magic).
 
-### 🔴 P1 — Next substantial work
+### 🔴 P1 — Next substantial work (SRD-audit driven)
 
-- *(All previous P1 design plans have either shipped or moved to P2 — advantage-disadvantage Phase 2a + 2b shipped in v2.152.0 + v2.153.0; Phase 3 is gated on Maps 2.0 so it sits in P2 below.)*
+- **NEW: Magic-item automation** — no plan doc today. 292 SRD magic items shipped as data with empty `actions` arrays; zero have mechanical wiring. Single biggest un-planned SRD surface. Write `docs/plans/magic-items-automation.md`; suggested first slice: Pearl of Power (recover one spell slot) + Wand of Magic Missiles (charges-per-day cast) + Cloak of Protection (+1 AC + saves passive buff).
+- **NEW: Exhaustion-level tracking** — no plan doc today. RAW is 6 cumulative levels with disadvantage on ability checks (Lv 1) → speed halved (Lv 2) → disadvantage on attacks + saves (Lv 3) → HP max halved (Lv 4) → speed → 0 (Lv 5) → death (Lv 6). Today's engine treats Exhaustion as a single-flag buff. Write `docs/plans/exhaustion-levels.md`; the composition site is the v2.152.0–v2.155.0 condition-disadvantage helper stack — should be a small lift once the data shape lands.
+- [`spell-validation-suite.md`](docs/plans/spell-validation-suite.md) — Phase 2A v1 ✅ v2.49.108; **Phase 1 (smoke catalog) + Phase 2B–2H (per-mechanic assertion suite) + Phase 5 (CI integration) pending**. Closes the audit's "spell mechanics ~66% mechanical" gap by gating drift on every push.
+- [`warlock-pact-boon.md`](docs/plans/warlock-pact-boon.md) — **Phase 0–5 unstarted**. Promoted from P2 per the SRD audit; closes a high-visibility ⚪ row on the Warlock and unblocks ~8 Pact-gated invocations. Pact of the Tome is the cheapest first ship (data + picker UI).
+- [`reactions-automation.md`](docs/plans/reactions-automation.md) — **Phases 1–6 all ✅ partial**; v3 backlog (pending-damage state machine for auto-resolution) is the substantial remaining slice. Adjusted up from "Phase 7" framing in the prior P2 list — Phase 7 already shipped per v2.118.0–v2.122.0.
 
 ### 🟡 P2 — Substantial deferred phases
 
-- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phase 1 ✅ v2.2.0; Phase 2a ✅ v2.152.0; Phase 2b ✅ v2.153.0; Phase 2c ✅ v2.154.0; Phase 2d ✅ v2.155.0; Phase 2e ✅ v2.156.0; Phase 2f ✅ v2.157.0; **only Phase 3 (positional / 5-ft prone-melee advantage) remains, blocked on Maps 2.0**.
-- [`paladin-oaths.md`](docs/plans/paladin-oaths.md) — Phase 1 ✅ v2.99.245; this session shipped Aura of Warding (Ancients) v2.133.0–v2.135.1 + Scornful Rebuke (Conquest) v2.142.0 + Relentless Avenger (Vengeance) v2.149.0 + Aura of the Guardian (Redemption) per v2.99.281; **Phase 2–6 + 2 oaths (Crown, Treachery) deferred**.
-- [`battle-master.md`](docs/plans/battle-master.md) — Phase 1 ✅ v2.99.233; **Phase 2–5 + 15 maneuvers deferred**.
-- [`eldritch-knight.md`](docs/plans/eldritch-knight.md) — Phase 1 ✅ v2.99.232; **Phase 2–4 deferred**.
-- [`warlock-pact-boon.md`](docs/plans/warlock-pact-boon.md) — **Phase 0–5 unstarted** (this session partially touched the Warlock surface via Ascendant Step v2.147.0 but the pact-boon plan itself is unshipped).
-- [`sorcery-points-and-metamagic.md`](docs/plans/sorcery-points-and-metamagic.md) — Phase 0 ✅ v2.49.120; **Phase 1–5 unstarted**.
-- [`spell-validation-suite.md`](docs/plans/spell-validation-suite.md) — **Phase 0–5 unstarted**. Would close the spell-upcasting backfill audit gap.
-- [`reactions-automation.md`](docs/plans/reactions-automation.md) — Phase 1a + 1b + 2a-partial ✅ v2.67.0–.2 + Phase 7 ✅ v2.118.0–.122.0; **Phase 2b–6 + the proactive-prompt machinery deferred**.
-- [`encounter-sim-test-suite.md`](docs/plans/encounter-sim-test-suite.md) — design finalized; **Phase 1 PoC pending**.
+- [`battle-master.md`](docs/plans/battle-master.md) — Phase 1 ✅ v2.99.233 (Trip Attack); **Phase 2–5 + 15 maneuvers deferred**. All RAW SRD; composes on the v2.99.405–.414 feature-save resolver + v2.99.395–.401 on-hit rider primitive.
+- [`sorcery-points-and-metamagic.md`](docs/plans/sorcery-points-and-metamagic.md) — header re-audited 2026-06-10; **7 of 8 PHB metamagics shipped end-to-end through the v2.99.x window** + Sorcerous Restoration ✅. Outstanding: Quickened Spell (action-economy override path) + AoE multi-target Empowered loop. Down-ranked from P2's prior position because most scope has already shipped.
+- [`paladin-oaths.md`](docs/plans/paladin-oaths.md) — header re-audited 2026-06-10; **Ancients Aura of Warding ✅** (v2.133.0–v2.135.1), **Conquest Scornful Rebuke ✅** (v2.142.0), **Vengeance Relentless Avenger Phase 1 ✅** (v2.149.0), **Redemption Aura of the Guardian ✅** (v2.99.281), **Devotion Purity of Spirit ✅** (v2.158.10). Outstanding: Lv 3/7/15/20 capstones for the four oaths (Glory full oath + Conquest Lv 3/7/20 + Vengeance Phase 2 + Ancients Lv 15/20 + Redemption Lv 3/15/20).
+- [`eldritch-knight.md`](docs/plans/eldritch-knight.md) — header re-audited 2026-06-10; Phase 1 ✅ + **Arcane Charge Phase 1 ✅** (v2.158.11) + **Improved War Magic Phase 1 ✅** (v2.158.12). Outstanding: Lv 7 War Magic (cantrip → bonus-action weapon attack) + Lv 10 Eldritch Strike (per-target save-dis install) + the Phase 2 read sites for Arcane Charge / Improved War Magic.
 - [`unified-mini-sheet.md`](docs/plans/unified-mini-sheet.md) — 3 mockups landed; **Phase 1–3 unstarted**. Pairs naturally with Class Resource Tracking + Combat 2.0.
-- [`docs/encounters-plan.md`](docs/encounters-plan.md) — **proposed, not started**.
-- [`docs/multi-system-refactor.md`](docs/multi-system-refactor.md) — **proposed, not started**. Big architectural lift.
+- [`encounter-sim-test-suite.md`](docs/plans/encounter-sim-test-suite.md) — **substantial progress** (Level 1 smoke + Level 2 encounter sim shipped through v2.49.x); Level 3 edge-case framework seeded; Phase 4 (Level 3 completion, ~40 tests) pending.
+- [`docs/encounters-plan.md`](docs/encounters-plan.md) — **proposed, not started**. Save/load encounter state.
+- [`docs/multi-system-refactor.md`](docs/multi-system-refactor.md) — **proposed, not started**. Big architectural lift; out of SRD-audit scope but tracked here for completeness.
+- [`advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) — Phases 1, 2a–2f all ✅ (v2.2.0–v2.157.0); **only Phase 3 (positional / 5-ft prone-melee advantage) remains, blocked on Maps 2.0**. Down-ranked within P2 because the unblocker is itself a multi-session lift.
 
 ### 🟢 P3 — Lower-priority / living docs
 

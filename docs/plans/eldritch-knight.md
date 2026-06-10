@@ -3,8 +3,20 @@
 Phase E.2 of the [v2.99.193 class-content completion plan](class-content-status.md).
 Path: Fighter Martial Archetype: Eldritch Knight (PHB p.74).
 
-> **Status (v2.99.232):** 🟠 Phase 1 (Weapon Bond picker + announce)
-> shipped. Phases 2–4 deferred.
+> **Status (re-audited 2026-06-10, v2.158.68):** 🟢 partial — Phase 1
+> (Weapon Bond picker + announce) shipped v2.99.232. **Arcane Charge
+> Lv 15+ Phase 1 ✅** (v2.158.11: permanent `arcane-charge-active`
+> buff with `teleport_max_ft=30` + `requires_action_surge=True`
+> effect keys). **Improved War Magic Lv 18+ Phase 1 ✅** (v2.158.12:
+> `improved-war-magic-active` flag buff with `min_spell_level=1`).
+> **Outstanding:** Lv 7 War Magic (bonus-action weapon attack after
+> cantrip cast — `/cast_spell` post-cast bonus-attack rider);
+> Lv 10 Eldritch Strike (target disadvantage on next save vs an EK
+> spell — install per-target buff after weapon hit, consume in the
+> save resolver); Arcane Charge Phase 2 (`/use_action_surge` reads
+> the buff + surfaces a teleport budget); Improved War Magic Phase 2
+> (`/cast_spell` reads the buff + allows the bonus-action weapon
+> attack when `spell_level >= 1`).
 
 ## Why a plan doc
 

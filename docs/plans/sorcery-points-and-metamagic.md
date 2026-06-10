@@ -1,8 +1,8 @@
 # Sorcery Points + Metamagic — design plan
 
-**Status:** 🟠 in progress (v2.49.125, 2026-05-22) — Phase 0 shipped (v2.49.120-123): both Font of Magic endpoints + multiclass `class_slug` + ephemeral slot creation, 13 harness tests. Phase 1 shipped (v2.49.124-125): `/use_metamagic_empowered_spell` endpoint + `/cast_spell` integration on save-for-half single-target NPC path AND multi-beam attack-roll spells (Scorching Ray / Eldritch Blast / Fire Bolt) with pool reroll across all beams, 7 harness tests. AoE multi-target loop integration deferred to Phase 1.5. Phase 2+ unstarted.
+**Status:** 🟢 substantially shipped (re-audited 2026-06-10, v2.158.68) — Phase 0 shipped (v2.49.120-123): both Font of Magic endpoints + multiclass `class_slug` + ephemeral slot creation, 13 harness tests. Phase 1 shipped (v2.49.124-125): `/use_metamagic_empowered_spell` endpoint + `/cast_spell` integration on save-for-half single-target NPC path AND multi-beam attack-roll spells (Scorching Ray / Eldritch Blast / Fire Bolt) with pool reroll across all beams, 7 harness tests. **7 of 8 PHB metamagics shipped end-to-end during the v2.99.x window** (per the v2.99.192 class-content re-audit): Empowered (v2.49.124), Twinned (v2.99.33/.167/.174/.181/.183/.184/.187/.189), Distant (v2.99.34/.159), Heightened (v2.99.35-.36/.41), Careful (v2.99.38/.42), Extended (v2.99.37/.161/.165), Subtle (v2.99.162/.173/.186). **Sorcerous Restoration ✅** (v2.99.39) closes the Lv 20 capstone. **Outstanding:** Quickened Spell still announce-only (the 8th metamagic — bonus-action cast routing needs a `/cast_spell` action-economy override path); AoE multi-target Empowered loop integration (Phase 1.5) is the remaining Empowered scope finisher. The plan body below pre-dates the v2.99.x shipping arc — treat it as historical context.
 **Authors:** rolling
-**Last updated:** 2026-05-22
+**Last updated:** 2026-06-10 (status header re-audit; body unchanged)
 
 A plan to ship the two interlocked Sorcerer features — **Font of
 Magic** (Lv 2, the Sorcery Points pool + slot ↔ point conversion)
