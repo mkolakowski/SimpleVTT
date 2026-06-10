@@ -150,6 +150,114 @@ async def test_ml_buff_payload_carries_parameter_flags(
     assert int(ml_buff.get("duration_rounds") or 0) >= 1000
 
 
+async def _sheet_spells(gm_client, char_id):
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    assert r.status_code == 200, r.text
+    return list((r.json().get("sheet") or {}).get("spells") or [])
+
+
+async def _spell_index_by_slug(gm_client, char_id, slug):
+    for i, s in enumerate(await _sheet_spells(gm_client, char_id)):
+        if (s.get("_slug") or "").lower() == slug:
+            return i
+    return None
+
+
+async def test_ml_cast_surfaces_legerdemain_params(
+    gm_client, pip_arcane_trickster,
+):
+    """v2.158.42 — Phase 2 read site for the v2.158.17 Mage Hand
+    Legerdemain buff. An Arcane Trickster Pip carrying
+    `mage-hand-legerdemain-active` who casts Mage Hand (injected into
+    his spell list for the test) sees `/cast_spell` surface the
+    Legerdemain parameters: `mage_hand_legerdemain == True`, range 30,
+    invisible True, bonus-action control True, unnoticed-check named."""
+    pip = pip_arcane_trickster
+    await _seed_pip_in_battle(gm_client, pip)
+    original = await _sheet_spells(gm_client, pip["id"])
+    injected = original + [{
+        "name": "Mage Hand", "level": 0, "prepared": True,
+        "_slug": "mage-hand", "casting_time": "1 action",
+    }]
+    await _patch_sheet(gm_client, pip["id"], {"spells": injected})
+    try:
+        mh_index = await _spell_index_by_slug(
+            gm_client, pip["id"], "mage-hand")
+        assert mh_index is not None, "Mage Hand not injected"
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_mage_hand_legerdemain",
+            json={"character_id": pip["id"]},
+        )
+        assert r.status_code == 200, r.text
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": pip["id"],
+                "spell_index": mh_index,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("mage_hand_legerdemain") is True, (
+            f"buff + Mage Hand → legerdemain True; got {data}"
+        )
+        assert data.get("mage_hand_legerdemain_range_ft") == 30
+        assert data.get("mage_hand_legerdemain_invisible") is True
+        assert data.get("mage_hand_legerdemain_bonus_action_control") is True
+        assert data.get("mage_hand_legerdemain_unnoticed_check") == (
+            "sleight_of_hand_vs_passive_perception"
+        )
+    finally:
+        await _patch_sheet(gm_client, pip["id"], {"spells": original})
+
+
+async def test_ml_not_surfaced_on_other_spell(
+    gm_client, pip_arcane_trickster,
+):
+    """Control: with the Legerdemain buff installed, casting a
+    non-Mage-Hand spell (Fire Bolt, injected) reports
+    `mage_hand_legerdemain == False`. Pins the spell gate (the buff
+    alone isn't enough — only a Mage Hand cast surfaces it)."""
+    pip = pip_arcane_trickster
+    await _seed_pip_in_battle(gm_client, pip)
+    original = await _sheet_spells(gm_client, pip["id"])
+    injected = original + [{
+        "name": "Fire Bolt", "level": 0, "prepared": True,
+        "_slug": "fire-bolt", "casting_time": "1 action",
+    }]
+    await _patch_sheet(gm_client, pip["id"], {"spells": injected})
+    try:
+        fb_index = await _spell_index_by_slug(
+            gm_client, pip["id"], "fire-bolt")
+        assert fb_index is not None, "Fire Bolt not injected"
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_mage_hand_legerdemain",
+            json={"character_id": pip["id"]},
+        )
+        assert r.status_code == 200, r.text
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": pip["id"],
+                "spell_index": fb_index,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("mage_hand_legerdemain") is False, (
+            f"non-Mage-Hand spell → legerdemain False; got {data}"
+        )
+        assert data.get("mage_hand_legerdemain_range_ft") == 0
+    finally:
+        await _patch_sheet(gm_client, pip["id"], {"spells": original})
+
+
 async def test_use_ml_wrong_subclass(
     gm_client, roster,
 ):

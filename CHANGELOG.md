@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.42] - 2026-06-10 — "The Invisible Hand" — Mage Hand Legerdemain's installed buff was inert: `/cast_spell` never read it. Wiring the read site surfaces the Legerdemain parameters when an Arcane Trickster casts Mage Hand
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.158.17 Mage Hand Legerdemain buff (Arcane Trickster Rogue Lv 3+, PHB p.97): "When you cast Mage Hand, you can make the spectral hand invisible, and you can perform [Legerdemain] tasks with it ... unnoticed on a Sleight of Hand check." v2.158.17 installed a permanent `mage-hand-legerdemain-active` buff carrying the four Legerdemain parameter flags, but the Mage Hand cast flow never read them — so the upgrade was announce-only. This commit adds `_pc_mage_hand_legerdemain_params` and, when a buff-carrying caster casts Mage Hand, surfaces `mage_hand_legerdemain: True` + the range/invisible/bonus-action-control/unnoticed-check parameters on the cast response so the client can render the Legerdemain task picker.**
+**Description:** v2.158.17 flipped Mage Hand Legerdemain from announce-only to a buff-installing endpoint (Phase 1), placing a permanent `mage-hand-legerdemain-active` buff on the rogue that names the Legerdemain parameters (invisible hand, 30 ft range, bonus-action control, unnoticed-on-Sleight check). But the consumer was deferred: `/cast_spell` never inspected the buff on a Mage Hand cast. This commit wires the read. `/cast_spell` now reads the caster's `mage-hand-legerdemain-active` buff via `_pc_mage_hand_legerdemain_params` when the cast spell's slug is `mage-hand`, and surfaces `mage_hand_legerdemain: True` + `mage_hand_legerdemain_range_ft: 30` + `mage_hand_legerdemain_invisible: True` + `mage_hand_legerdemain_bonus_action_control: True` + `mage_hand_legerdemain_unnoticed_check` on the payload + response. Casts that don't qualify (other spells, or no buff) report `mage_hand_legerdemain: False`. The Legerdemain task resolution (which task, the Sleight-vs-passive-Perception check) stays GM/client-driven for v1 (advisory model).
+
+This flips Mage Hand Legerdemain from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `app/routes/tabletop_routes.py::_pc_mage_hand_legerdemain_params` — read gate returning the buff's Legerdemain parameters (`range_ft`, `invisible`, `bonus_action_control`, `unnoticed_check`) when the caster carries an active `mage-hand-legerdemain-active` buff; None otherwise.
+- `tests/harness/test_mage_hand_legerdemain.py::test_ml_cast_surfaces_legerdemain_params` — Phase 2 read-site test: an Arcane Trickster Pip carrying the buff who casts Mage Hand (injected into the spell list) sees `/cast_spell` return `mage_hand_legerdemain: True` + range 30 + invisible True + bonus-action control True + the unnoticed-check name. `test_ml_not_surfaced_on_other_spell` — control: casting Fire Bolt with the buff installed reports `mage_hand_legerdemain: False`.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_spell` — reads the Mage Hand Legerdemain buff on a Mage Hand cast and surfaces the Legerdemain parameters on the payload + response.
+
+### Notes
+- Total harness count: **2129** in `tests/harness/` (was 2127); **`tests/harness_ui/` 19** (unchanged).
+- Advisory scope: the Legerdemain task selection + Sleight-of-Hand-vs-passive-Perception resolution stays GM/client-driven for v1.
+
+---
+
 ## [2.158.41] - 2026-06-10 — "The Second Reaping" — Improved Reaper's installed buff was inert: `/cast_spell` never read it. Wiring the read site surfaces an advisory dual-target flag when a Death Domain cleric casts a single-target Lv 1-5 necromancy spell
 
 **Schema version:** 69

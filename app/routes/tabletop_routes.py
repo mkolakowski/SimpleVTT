@@ -17339,6 +17339,46 @@ def _pc_improved_reaper_params(
     return None
 
 
+def _pc_mage_hand_legerdemain_params(
+    campaign_id: int, character_id: "int | None",
+) -> "dict | None":
+    """v2.158.42 — Phase 2 read site for the v2.158.17
+    ``mage-hand-legerdemain-active`` buff (Arcane Trickster Rogue
+    Lv 3+, PHB p.97): "When you cast Mage Hand, you can make the
+    spectral hand invisible, and you can perform [Legerdemain]
+    tasks with it ... unnoticed on a Sleight of Hand check."
+
+    Returns the buff's Legerdemain parameter dict (``range_ft``,
+    ``invisible``, ``bonus_action_control``, ``unnoticed_check``)
+    when the caster carries the active buff, else None. The cast
+    flow uses these to surface the Legerdemain task picker on a
+    Mage Hand cast.
+    """
+    if not character_id:
+        return None
+    for b in _get_buffs(campaign_id, int(character_id)):
+        eff = (b or {}).get("effects") or {}
+        if (
+            (b or {}).get("key") == "mage-hand-legerdemain-active"
+            and isinstance(eff, dict)
+        ):
+            try:
+                range_ft = int(
+                    eff.get("mage_hand_legerdemain_range_ft") or 30)
+            except (TypeError, ValueError):
+                range_ft = 30
+            return {
+                "range_ft": range_ft,
+                "invisible": bool(
+                    eff.get("mage_hand_legerdemain_invisible")),
+                "bonus_action_control": bool(
+                    eff.get("mage_hand_legerdemain_bonus_action_control")),
+                "unnoticed_check": str(
+                    eff.get("mage_hand_legerdemain_unnoticed_check") or ""),
+            }
+    return None
+
+
 @router.post("/api/campaign/{campaign_id}/cast_spell")
 async def cast_spell(
     campaign_id: int,
@@ -17895,6 +17935,30 @@ async def cast_spell(
         _ir_params["max_target_separation_ft"]
         if (_ir_eligible and _ir_params) else 0
     )
+
+    # v2.158.42 — Phase 2 read site for the v2.158.17 Mage Hand
+    # Legerdemain buff (Arcane Trickster Rogue Lv 3+). When a caster
+    # carrying `mage-hand-legerdemain-active` casts Mage Hand, surface
+    # the Legerdemain parameters (invisible hand, 30 ft range, bonus-
+    # action control, unnoticed-on-Sleight check) so the client can
+    # render the Legerdemain task picker.
+    _ml_params = (
+        _pc_mage_hand_legerdemain_params(campaign_id, char.id)
+        if spell_slug == "mage-hand" else None
+    )
+    payload["mage_hand_legerdemain"] = bool(_ml_params)
+    if _ml_params:
+        payload["mage_hand_legerdemain_range_ft"] = _ml_params["range_ft"]
+        payload["mage_hand_legerdemain_invisible"] = _ml_params["invisible"]
+        payload["mage_hand_legerdemain_bonus_action_control"] = (
+            _ml_params["bonus_action_control"])
+        payload["mage_hand_legerdemain_unnoticed_check"] = (
+            _ml_params["unnoticed_check"])
+    else:
+        payload["mage_hand_legerdemain_range_ft"] = 0
+        payload["mage_hand_legerdemain_invisible"] = False
+        payload["mage_hand_legerdemain_bonus_action_control"] = False
+        payload["mage_hand_legerdemain_unnoticed_check"] = ""
 
     # v2.110.0 — up-cast dice scaling (Approach B). When casting above
     # the spell's base level, grow the damage / healing dice by the
@@ -20195,6 +20259,19 @@ async def cast_spell(
             "improved_reaper_max_targets", 1),
         "improved_reaper_max_target_separation_ft": payload.get(
             "improved_reaper_max_target_separation_ft", 0),
+        # v2.158.42 — Mage Hand Legerdemain advisory (Arcane Trickster
+        # Rogue Lv 3+). True when a buff-carrying rogue casts Mage Hand;
+        # the client renders the Legerdemain task picker.
+        "mage_hand_legerdemain": payload.get(
+            "mage_hand_legerdemain", False),
+        "mage_hand_legerdemain_range_ft": payload.get(
+            "mage_hand_legerdemain_range_ft", 0),
+        "mage_hand_legerdemain_invisible": payload.get(
+            "mage_hand_legerdemain_invisible", False),
+        "mage_hand_legerdemain_bonus_action_control": payload.get(
+            "mage_hand_legerdemain_bonus_action_control", False),
+        "mage_hand_legerdemain_unnoticed_check": payload.get(
+            "mage_hand_legerdemain_unnoticed_check", ""),
     }
 
 
