@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.36] - 2026-06-10 — "The Velvet Floor" — Silver Tongue's installed buff now actually does something: a low d20 on a Cha (Persuasion/Deception) check is floored to 10 on `/roll`, flipping the Eloquence Bard feature from announce-only to a live mechanical read site
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.158.16 Silver Tongue buff (Eloquence College Bard Lv 3+, TCE p.28). The `/roll` endpoint now reads the `silver-tongue-active` buff via a new `_pc_silver_tongue_floor_applies` gate and floors the kept d20 to 10 on a Cha (Persuasion) / Cha (Deception) check — reusing the generic `_apply_reliable_talent_floor` mechanic. Fires after the Reliable Talent intercept so a Bard/Rogue multiclass never double-floors (the helper no-ops when the d20 is already ≥ 10). A `feature_used(source=silver-tongue)` broadcast surfaces the trigger on the chat-card.**
+**Description:** v2.158.16 installed the `silver-tongue-active` buff with its three `silver_tongue_*` parameter flags but left the read site deferred, so the feature was announce-only — the buff existed on the sheet but nothing consumed it. This commit wires the consumer. The floor is the same RAW mechanic as Reliable Talent ("treat a d20 of 9 or lower as a 10"), so the read site reuses `_apply_reliable_talent_floor` directly and gates on the mirrored `_buffs_active` buff + the roll's `stat_key` matching the buff's `silver_tongue_skills` list (persuasion / deception by RAW) instead of Rogue proficiency. The note-string and broadcast mirror the Reliable Talent surface so the chat-card reads consistently.
+
+This flips Silver Tongue from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `app/routes/tabletop_routes.py::_pc_silver_tongue_floor_applies` — read gate returning True when the rolling PC carries an active `silver-tongue-active` buff and the roll's `stat_key` is in the buff's `silver_tongue_skills`. Reads the mirrored `_char.sheet["_buffs_active"]` (same source as the Hide-in-Plain-Sight Stealth consumer), no hub fetch.
+- `app/routes/tabletop_routes.py::_broadcast_silver_tongue` — companion `feature_used` broadcast (source `silver-tongue`) mirroring `_broadcast_reliable_talent`.
+- `app/routes/tabletop_routes.py::roll` — post-roll intercept floors the kept d20 to 10 via `_apply_reliable_talent_floor` when the gate passes, after the Reliable Talent block; appends a "💬 Silver Tongue floored N → 10" note suffix and emits the broadcast.
+- `tests/harness/test_silver_tongue.py` — one new Phase-2 test: with the buff installed, a seeded low d20 on a Persuasion check is floored to 10 and the `silver-tongue` broadcast fires (Athletics control left untouched).
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2118** (was 2117).
+
+### Notes
+- Reuses the existing `silver-tongue-active` buff shape pinned by the v2.158.16 state-contract test — no buff/broadcast schema change beyond the new read.
+
+---
+
 ## [2.158.35] - 2026-06-10 — "The Recount" — Automation-coverage classifier regenerated: the tracked/announce-only counts that pinned v2.99.460 are refreshed to the current suite, and the heuristic is now a committed script
 
 **Schema version:** 69

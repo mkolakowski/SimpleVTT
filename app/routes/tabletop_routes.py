@@ -16055,6 +16055,24 @@ async def roll_dice(
             result, expr,
         )
 
+    # v2.158.36 — Silver Tongue (Eloquence College Bard Lv 3+, TCE
+    # p.28). Phase 2 read site for the v2.158.16 `silver-tongue-active`
+    # buff: floor the kept d20 of a Cha (Persuasion) / Cha (Deception)
+    # check at 10. Same floor mechanic as Reliable Talent — reuse
+    # `_apply_reliable_talent_floor` (it floors the kept d20 to 10
+    # generically) but gate on the buff + skill instead of Rogue
+    # proficiency. Fires AFTER Reliable Talent so a Bard/Rogue
+    # multiclass doesn't double-floor: the helper no-ops (returns None)
+    # when the kept d20 is already >= 10.
+    _st_old_d20: "int | None" = None
+    _st_new_d20: "int | None" = None
+    if _char and _pc_silver_tongue_floor_applies(
+        _char.sheet, stat_key_raw, stat_ability_raw,
+    ):
+        result, _st_old_d20, _st_new_d20 = _apply_reliable_talent_floor(
+            result, expr,
+        )
+
     # v2.99.214 — Hide in Plain Sight (Ranger Lv 10+) Stealth
     # consumer. When the PC has an active
     # `hide-in-plain-sight-active` buff (installed by
@@ -16139,6 +16157,11 @@ async def roll_dice(
             + (
                 f" | 🎯 Reliable Talent floored {_rt_old_d20} → 10"
                 if _rt_old_d20 is not None
+                else ""
+            )
+            + (
+                f" | 💬 Silver Tongue floored {_st_old_d20} → 10"
+                if _st_old_d20 is not None
                 else ""
             )
             + (
@@ -16255,6 +16278,13 @@ async def roll_dice(
     if _rt_old_d20 is not None and _char is not None:
         await _broadcast_reliable_talent(
             campaign_id, _char, _rt_old_d20, stat_key_raw,
+        )
+    # v2.158.36 — Silver Tongue companion broadcast. Fires only when
+    # the floor applied (kept d20 was < 10 + Eloquence Bard Lv 3+ buff
+    # + Cha Persuasion/Deception check).
+    if _st_old_d20 is not None and _char is not None:
+        await _broadcast_silver_tongue(
+            campaign_id, _char, _st_old_d20, stat_key_raw,
         )
     # v2.99.204 — Indomitable Might companion broadcast. Fires
     # when the floor applied (STR-check total was below STR score
@@ -32623,6 +32653,76 @@ async def _broadcast_reliable_talent(
                 f"(Rogue Lv 11+ class feature)."
             ),
             "source": "reliable-talent",
+            "stat_key": stat_key or "",
+        },
+    })
+
+
+def _pc_silver_tongue_floor_applies(
+    sheet: "dict | None", stat_key: str, stat_ability: str = "",
+) -> bool:
+    """v2.158.36 — Phase 2 read gate for the v2.158.16 Silver Tongue
+    buff (Eloquence College Bard Lv 3+, TCE p.28): "When you make a
+    Charisma (Persuasion) or Charisma (Deception) check, you can treat
+    a d20 roll of 9 or lower as a 10."
+
+    Returns True when the rolling PC carries an active
+    `silver-tongue-active` buff AND the roll's `stat_key` is one of the
+    buff's `effects.silver_tongue_skills` (persuasion / deception by
+    RAW). The skill list is inherently Cha-based, so `stat_ability` is
+    accepted for symmetry with the other roll hooks but not required.
+
+    Reads the mirrored sheet buff (`_buffs_active`) — same source the
+    Hide-in-Plain-Sight Stealth consumer reads — so it works off the
+    `/roll` endpoint's already-loaded `_char.sheet` without a hub fetch.
+    """
+    if not isinstance(sheet, dict):
+        return False
+    skn = (stat_key or "").strip().lower()
+    if not skn:
+        return False
+    for b in (sheet.get("_buffs_active") or []):
+        if not isinstance(b, dict):
+            continue
+        if (str(b.get("key") or "").strip().lower() != "silver-tongue-active"):
+            continue
+        eff = b.get("effects") or {}
+        if not isinstance(eff, dict):
+            continue
+        skills = eff.get("silver_tongue_skills") or ["persuasion", "deception"]
+        skills_lc = {str(s).strip().lower() for s in skills}
+        if skn in skills_lc:
+            return True
+    return False
+
+
+async def _broadcast_silver_tongue(
+    campaign_id: int,
+    char: "Character | None",
+    old_d20: int,
+    stat_key: str,
+) -> None:
+    """v2.158.36 — Companion broadcast for the Silver Tongue floor.
+    Mirrors `_broadcast_reliable_talent`: emits a `feature_used` event
+    with `source: "silver-tongue"` so the chat-card surfaces the trigger.
+    """
+    if not char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                f"💬 Silver Tongue — d20 {old_d20} → 10"
+            ),
+            "feature_desc": (
+                f"{char.name} treated the d20 roll of {old_d20} as a "
+                f"10 for {stat_key or 'a Cha (Persuasion/Deception) check'} "
+                f"(Eloquence College Bard Lv 3+ class feature)."
+            ),
+            "source": "silver-tongue",
             "stat_key": stat_key or "",
         },
     })
@@ -64429,10 +64529,10 @@ async def use_silver_tongue(
       * `effects.silver_tongue_min_d20: 10`
       * `effects.silver_tongue_skills: ["persuasion", "deception"]`
       * `effects.silver_tongue_ability: "CHA"`
-    Phase 2 (deferred): the ability-check roll resolver reads
-    the buff and applies the min-10 floor to the d20 result on
-    Persuasion / Deception (CHA) checks. The buff captures the
-    parameters so the read site has a stable contract.
+    Phase 2 (shipped v2.158.36): the `/roll` endpoint reads the
+    buff via `_pc_silver_tongue_floor_applies` and applies the
+    min-10 floor to the kept d20 on Cha Persuasion / Deception
+    checks (reusing the Reliable Talent floor mechanic).
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -64464,7 +64564,7 @@ async def use_silver_tongue(
 
     # v2.158.16 — install the parameter-flag buff. Permanent
     # passive (idempotent on re-press via key dedupe). Phase 2
-    # (deferred): ability-check roll resolver reads
+    # (shipped v2.158.36): the `/roll` endpoint reads
     # `effects.silver_tongue_*` off the caster's `_buffs_active`
     # and applies the min-10 floor on CHA Persuasion/Deception.
     buff_installed = await _install_buff(campaign_id, char.id, {
