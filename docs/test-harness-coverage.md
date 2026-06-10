@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2134 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.48, 2026-06-10).
+**Total tests:** 2137 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.49, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -434,6 +434,15 @@ v2.158.48 — Phase 2 read site for the v2.71.0 Absorb Elements reaction buff (P
 |------|-----------------|
 | `test_absorb_elements_halves_matching_type` | Pip (Halfling, no innate fire resistance) carrying `absorb-elements-active` (resistance to fire); Thalindra's Fire Bolt hit is halved (`damage_applied == damage_total // 2`, `< damage_total`). |
 | `test_absorb_elements_no_resistance_without_buff` | Control: Pip with no buff → Fire Bolt damage is not halved (`damage_applied == damage_total`). |
+
+### `test_absorb_elements_melee_rider.py`
+v2.158.49 — Phase 2 read site for the SECOND half of the v2.71.0 Absorb Elements reaction buff (PHB p.211): the +`next_melee_bonus_dice`d6 of `next_melee_bonus_type` on the carrier's first melee hit. New block (6b) in `_compute_attack_auto_uplifts` appends an `absorb-elements` uplift on a melee-weapon hit (gated on `_attack_is_melee_weapon`), stamped with a once-per-turn flag so it fires once and is stripped on a miss.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_absorb_elements_rider_fires_on_melee_hit` | Sir Caelan carrying `absorb-elements-active` lands a Longsword (melee) hit on Krieger → `auto_uplifts` has an `absorb-elements` entry, `damage_type` "fire", `total` in [1, 6]. |
+| `test_absorb_elements_rider_skipped_without_buff` | Control: Caelan with no buff → no `absorb-elements` uplift even on a melee hit. |
+| `test_absorb_elements_rider_skipped_on_ranged_spell` | Melee gate: Thalindra carrying the buff casts Fire Bolt (ranged spell) → no `absorb-elements` uplift (proves the `_attack_is_melee_weapon` gate). |
 
 ### `test_cast_sleep_multi_class.py`
 v2.49.63 — closes the "add Sleep to Bard / Sorcerer / Warlock lists" filed item. Seed-list backfill verified via one happy-path cast per class. Sleep is RAW on bard / sorcerer / warlock / wizard lists; pre-v2.49.63 only Thalindra (wizard) had it.

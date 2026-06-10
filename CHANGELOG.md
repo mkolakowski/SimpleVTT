@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.49] - 2026-06-10 — "Returned to Sender" — Absorb Elements' reaction buff also carried a `next_melee_bonus_dice`/`next_melee_bonus_type` rider for the carrier's next melee hit, but `/attack` never read it. Wiring it into `_compute_attack_auto_uplifts` adds +Nd6 of the triggering type to the first melee-weapon hit
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the SECOND half of the v2.71.0 Absorb Elements reaction buff (PHB p.211): "the first time you hit with a melee attack on your next turn, the target takes extra [slot-level]d6 damage of the triggering type." v2.71.0 installed `absorb-elements-active` carrying `next_melee_bonus_dice` (int count of d6) + `next_melee_bonus_type`, and v2.158.48 wired the resistance half, but the melee-hit rider was still deferred. This commit wires it into `_compute_attack_auto_uplifts`: on a melee-weapon hit by the buff carrier, a `next_melee_bonus_dice`d6 uplift of `next_melee_bonus_type` is appended (source "absorb-elements"). Gated on `_attack_is_melee_weapon` (mirrors Improved Divine Smite) and stamped with a once-per-turn flag so it fires exactly once; the buff's 1-round duration handles overall expiry. On a miss the existing once-per-turn filter strips it.**
+**Description:** Completes the Absorb Elements feature. v2.158.48 wired the resistance half (in `_resistance_halve`); this commit wires the melee bonus-damage rider. The new block (6b) in `_compute_attack_auto_uplifts` reads the attacker's combatant buffs for `absorb-elements-active`, and — when the attack is a melee weapon attack (`_attack_is_melee_weapon`: physical damage type + range ≤ 30 ft) — rolls `next_melee_bonus_dice`d6 of `next_melee_bonus_type` and appends it as an uplift (source "absorb-elements"). The uplift carries a `once_per_turn_flag` ("absorb-elements-melee"), so the established hit-handler machinery (a) strips it on a miss (RAW: only on a hit) and (b) marks the flag on a confirmed hit so it can't fire twice. The buff's resistance half is independent and is NOT consumed here — it persists for the buff's 1-round duration.
+
+This flips the Absorb Elements melee rider from announce-only to tracked, completing the feature alongside v2.158.48's resistance half.
+
+### Added
+- `tests/harness/test_absorb_elements_melee_rider.py::test_absorb_elements_rider_fires_on_melee_hit` — happy path: Sir Caelan carrying the buff lands a Longsword (melee) hit on Krieger → `auto_uplifts` has an `absorb-elements` entry, damage_type "fire", total in [1, 6]. `test_absorb_elements_rider_skipped_without_buff` — control: no buff → no rider. `test_absorb_elements_rider_skipped_on_ranged_spell` — melee gate: Thalindra carrying the buff casts Fire Bolt (ranged spell) → no rider (proves `_attack_is_melee_weapon` gate).
+
+### Changed
+- `app/routes/tabletop_routes.py::_compute_attack_auto_uplifts` — new block (6b) appends the Absorb Elements next-melee `Nd6` uplift on a melee-weapon hit; once-per-turn flag handles single-fire + strip-on-miss via the existing hit-handler.
+
+### Notes
+- Total harness count: **2137** in `tests/harness/` (was 2134); **`tests/harness_ui/` 19** (unchanged).
+- Absorb Elements is now fully wired (resistance + melee rider). The once-per-turn flag resets on turn-advance, but the buff's 1-round duration means it can't re-arm on a later turn.
+
+---
+
 ## [2.158.48] - 2026-06-10 — "Elemental Ward" — Absorb Elements' reaction buff carried a `resistance_damage_type` string, but the damage path never read it — the resistance was announce-only. Wiring the read site into `_resistance_halve` halves matching elemental damage for the buff's duration
 
 **Schema version:** 69

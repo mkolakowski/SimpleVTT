@@ -25717,6 +25717,56 @@ def _compute_attack_auto_uplifts(
             except dice_mod.DiceParseError:
                 pass
 
+    # 6b. v2.158.49 — Absorb Elements next-melee rider (PHB p.211).
+    #     The v2.71.0 reaction installs `absorb-elements-active`
+    #     carrying `next_melee_bonus_dice` (an int count of d6) +
+    #     `next_melee_bonus_type`. RAW: "the first time you hit with a
+    #     melee attack on your next turn, the target takes extra
+    #     [slot-level]d6 damage of the triggering type." We gate on a
+    #     melee-weapon attack (mirrors Improved Divine Smite) and stamp
+    #     a once-per-turn flag so the rider fires exactly once; the
+    #     buff's 1-round duration handles overall expiry (so it can't
+    #     re-arm on a later turn even though the flag resets on
+    #     turn-advance). On-hit only: the `once_per_turn_flag` filter in
+    #     the /attack handler strips it on a miss, so a missed swing
+    #     neither inflates the card nor burns the rider. The resistance
+    #     half (v2.158.48, read in `_resistance_halve`) is independent
+    #     and is NOT consumed here — it persists for the buff's duration.
+    if attack and _attack_is_melee_weapon(attack):
+        attacker_econ_ae = (attacker_combatant or {}).get("economy") or {}
+        ae_flag = "absorb-elements-melee"
+        for b in attacker_buffs:
+            if not isinstance(b, dict) or b.get("key") != "absorb-elements-active":
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            try:
+                n_dice = int(effects.get("next_melee_bonus_dice") or 0)
+            except (TypeError, ValueError):
+                n_dice = 0
+            if n_dice <= 0:
+                continue
+            if attacker_econ_ae.get(f"{ae_flag}_used"):
+                break
+            rider_type = (effects.get("next_melee_bonus_type")
+                          or attack_damage_type or "force")
+            expr = f"{n_dice}d6"
+            try:
+                r = dice_mod.roll(expr)
+            except dice_mod.DiceParseError:
+                break
+            uplifts.append({
+                "label": "Absorb Elements",
+                "expression": expr,
+                "total": int(r.total),
+                "breakdown": r.breakdown,
+                "damage_type": rider_type,
+                "source": "absorb-elements",
+                "once_per_turn_flag": ae_flag,
+            })
+            break
+
     # 7. v2.99.23 — Half-Orc Savage Attacks. RAW (PHB p.41): "When
     #    you score a critical hit with a melee weapon attack, you
     #    can roll one of the weapon's damage dice one additional
