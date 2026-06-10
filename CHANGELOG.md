@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.41] - 2026-06-10 — "The Second Reaping" — Improved Reaper's installed buff was inert: `/cast_spell` never read it. Wiring the read site surfaces an advisory dual-target flag when a Death Domain cleric casts a single-target Lv 1-5 necromancy spell
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.158.9 Improved Reaper buff (Death Domain Cleric Lv 17+, DMG p.97): "when you cast a necromancy spell of 1st through 5th level that targets only one creature, the spell can instead target two creatures within range and within 5 feet of each other." v2.158.9 installed a permanent `improved-reaper-active` buff carrying the necromancy dual-target parameters, but `/cast_spell` never read it — so the upgrade was announce-only. This commit adds `_pc_improved_reaper_params` and, when a buff-carrying caster casts a qualifying single-target Lv-1-5 necromancy spell, surfaces an advisory `improved_reaper_eligible: True` + `improved_reaper_max_targets: 2` (separation 5 ft) on the cast response so the client can prompt the GM to add the second creature by hand (the same advisory contract as Sculpt Spells).**
+**Description:** v2.158.9 flipped Improved Reaper from announce-only to a buff-installing endpoint (Phase 1), placing a permanent `improved-reaper-active` buff on the cleric that names the necromancy dual-target parameters (school, Lv 1-5 band, 2 targets, 5 ft separation). But the consumer was deferred: `/cast_spell` never inspected the buff, so the RAW "target two creatures" upgrade was inert. This commit wires an advisory read. `/cast_spell` now reads the caster's `improved-reaper-active` buff via `_pc_improved_reaper_params` and, when the cast is a single-target (non-AoE) necromancy spell of Lv 1-5, surfaces `improved_reaper_eligible: True` + `improved_reaper_max_targets: 2` + `improved_reaper_max_target_separation_ft: 5` on the payload + response. Casts that don't qualify (wrong school, AoE shape, or no buff) report `improved_reaper_eligible: False` + `improved_reaper_max_targets: 1`. The second-target damage routing stays GM-applied (advisory model, mirroring Sculpt Spells' "GM excludes them by hand").
+
+This flips Improved Reaper from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `app/routes/tabletop_routes.py::_pc_improved_reaper_params` — read gate returning the buff's dual-target parameters (`min_level`, `max_level`, `school`, `max_targets`, `max_target_separation_ft`) when the caster carries an active `improved-reaper-active` buff; None otherwise.
+- `tests/harness/test_improved_reaper.py::test_ir_eligible_on_necromancy_cast` — Phase 2 read-site test: a Lv 17 Death Domain cleric carrying the buff who casts Inflict Wounds (Lv 1 necromancy, injected into the spell list) sees `improved_reaper_eligible: True` + `max_targets: 2` + separation 5 ft on the cast response. `test_ir_not_eligible_on_non_necromancy_cast` — control: casting Cure Wounds (evocation) with the buff installed reports `improved_reaper_eligible: False` + `max_targets: 1`.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_spell` — reads the Improved Reaper buff and, when the cast is a qualifying single-target Lv-1-5 necromancy spell, surfaces `improved_reaper_eligible` + `improved_reaper_max_targets` + `improved_reaper_max_target_separation_ft` on the payload + response.
+
+### Notes
+- Total harness count: **2127** in `tests/harness/` (was 2125); **`tests/harness_ui/` 19** (unchanged).
+- Advisory scope: the second-target selection + damage stays GM-applied for v1; full automatic dual-target damage routing is deferred.
+
+---
+
 ## [2.158.40] - 2026-06-10 — "The Wider Door" — Improved War Magic's installed buff was inert: `/use_war_magic` never read it. Wiring the read site widens the bonus-action weapon-attack prerequisite from cantrips only to any Lv 1+ spell
 
 **Schema version:** 69

@@ -205,3 +205,126 @@ async def test_ir_buff_payload_carries_necromancy_dual_target_flags(
     # Permanent passive — no concentration, very long duration.
     assert ir_buff.get("concentration") in (False, None)
     assert int(ir_buff.get("duration_rounds") or 0) >= 1000
+
+
+async def _sheet_spells(gm_client, char_id):
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    assert r.status_code == 200, r.text
+    return list((r.json().get("sheet") or {}).get("spells") or [])
+
+
+async def _spell_index_by_slug(gm_client, char_id, slug):
+    for i, s in enumerate(await _sheet_spells(gm_client, char_id)):
+        if (s.get("_slug") or "").lower() == slug:
+            return i
+    return None
+
+
+async def _seed_tavik_vs_bandit(gm_client, tavik):
+    """Seed Tavik + an NPC bandit so a single-target spell has a
+    valid combatant target. Returns the bandit combatant id."""
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    bandit_id = f"tok_ir_bandit_{tavik['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(f"tok_ir_tavik_{tavik['id']}", tavik),
+            {"id": bandit_id, "char_id": None,
+             "token_template_id": bandit_tmpl["id"],
+             "name": bandit_tmpl["name"], "initiative": 5,
+             "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    return bandit_id
+
+
+async def test_ir_eligible_on_necromancy_cast(
+    gm_client, tavik_death_lv17,
+):
+    """v2.158.41 — Phase 2 read site for the v2.158.9 Improved Reaper
+    buff. A Lv 17 Death Domain Tavik carrying `improved-reaper-active`
+    who casts a single-target Lv 1-5 necromancy spell (Inflict Wounds,
+    injected into his spell list for the test) sees `/cast_spell`
+    surface the advisory dual-target flags: `improved_reaper_eligible
+    == True`, `improved_reaper_max_targets == 2`, separation 5 ft."""
+    tavik = tavik_death_lv17
+    original = await _sheet_spells(gm_client, tavik["id"])
+    injected = original + [{
+        "name": "Inflict Wounds", "level": 1, "prepared": True,
+        "_slug": "inflict-wounds", "casting_time": "1 action",
+    }]
+    await _patch_sheet(gm_client, tavik["id"], {"spells": injected})
+    try:
+        bandit_id = await _seed_tavik_vs_bandit(gm_client, tavik)
+        iw_index = await _spell_index_by_slug(
+            gm_client, tavik["id"], "inflict-wounds")
+        assert iw_index is not None, "Inflict Wounds not injected"
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_improved_reaper",
+            json={"character_id": tavik["id"]},
+        )
+        assert r.status_code == 200, r.text
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": tavik["id"],
+                "spell_index": iw_index,
+                "target_combatant_id": bandit_id,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("improved_reaper_eligible") is True, (
+            f"buff + necromancy Lv 1 → eligible True; got {data}"
+        )
+        assert data.get("improved_reaper_max_targets") == 2
+        assert data.get("improved_reaper_max_target_separation_ft") == 5
+    finally:
+        await _patch_sheet(gm_client, tavik["id"], {"spells": original})
+
+
+async def test_ir_not_eligible_on_non_necromancy_cast(
+    gm_client, tavik_death_lv17,
+):
+    """Control: with the Improved Reaper buff installed, casting a
+    non-necromancy spell (Cure Wounds — evocation, already in Tavik's
+    list) reports `improved_reaper_eligible == False` and falls back to
+    `improved_reaper_max_targets == 1`. Pins the school gate (the buff
+    alone isn't enough)."""
+    tavik = tavik_death_lv17
+    bandit_id = await _seed_tavik_vs_bandit(gm_client, tavik)
+    cw_index = await _spell_index_by_slug(
+        gm_client, tavik["id"], "cure-wounds")
+    assert cw_index is not None, "Tavik has no Cure Wounds"
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_improved_reaper",
+        json={"character_id": tavik["id"]},
+    )
+    assert r.status_code == 200, r.text
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": cw_index,
+            "target_combatant_id": bandit_id,
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("improved_reaper_eligible") is False, (
+        f"non-necromancy spell → eligible False; got {data}"
+    )
+    assert data.get("improved_reaper_max_targets") == 1

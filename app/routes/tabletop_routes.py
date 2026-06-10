@@ -17294,6 +17294,51 @@ async def respond_roll_request(
 
 # ----------- API: cast spell -----------
 
+def _pc_improved_reaper_params(
+    campaign_id: int, character_id: "int | None",
+) -> "dict | None":
+    """v2.158.41 — Phase 2 read site for the v2.158.9
+    ``improved-reaper-active`` buff (Death Domain Cleric Lv 17+,
+    DMG p.97): "when you cast a necromancy spell of 1st through 5th
+    level that targets only one creature, the spell can instead
+    target two creatures within range and within 5 feet of each
+    other."
+
+    Returns the buff's parameter dict (``min_level``, ``max_level``,
+    ``school``, ``max_targets``, ``max_target_separation_ft``) when
+    the caster carries the active buff, else None. The cast flow uses
+    these to surface an advisory ``improved_reaper_eligible`` flag on
+    qualifying single-target necromancy casts — the GM applies the
+    second target by hand (same advisory contract as Sculpt Spells).
+    """
+    if not character_id:
+        return None
+    for b in _get_buffs(campaign_id, int(character_id)):
+        eff = (b or {}).get("effects") or {}
+        if (
+            (b or {}).get("key") == "improved-reaper-active"
+            and eff.get("improved_reaper_active")
+        ):
+            try:
+                return {
+                    "min_level": int(
+                        eff.get("improved_reaper_min_spell_level") or 1),
+                    "max_level": int(
+                        eff.get("improved_reaper_max_spell_level") or 5),
+                    "school": str(
+                        eff.get("improved_reaper_school") or "necromancy"
+                    ).strip().lower(),
+                    "max_targets": int(
+                        eff.get("improved_reaper_max_targets") or 2),
+                    "max_target_separation_ft": int(
+                        eff.get("improved_reaper_max_target_separation_ft")
+                        or 5),
+                }
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
 @router.post("/api/campaign/{campaign_id}/cast_spell")
 async def cast_spell(
     campaign_id: int,
@@ -17824,6 +17869,32 @@ async def cast_spell(
     from ..content.range_parser import max_range_ft, parse_range_ft
     _parsed_range = max_range_ft(parse_range_ft(spell.get("range") or ""))
     payload["range_ft"] = int(_parsed_range) if _parsed_range else 0
+
+    # v2.158.41 — Phase 2 read site for the v2.158.9 Improved Reaper
+    # buff (Death Domain Cleric Lv 17+). Advisory read: when a caster
+    # carrying `improved-reaper-active` casts a qualifying single-target
+    # necromancy spell of Lv 1-5, surface `improved_reaper_eligible` +
+    # `improved_reaper_max_targets` so the cast card can prompt the GM
+    # to add the second creature by hand (RAW lets the spell target two
+    # creatures within range and within 5 ft of each other). A
+    # single-target shape means the spell carries no AoE area block.
+    _ir_params = _pc_improved_reaper_params(campaign_id, char.id)
+    _ir_eligible = bool(
+        _ir_params
+        and not _aoe_area_info
+        and (spell.get("school", "") or "").strip().lower()
+        == _ir_params["school"]
+        and _ir_params["min_level"] <= int(spell_level)
+        <= _ir_params["max_level"]
+    )
+    payload["improved_reaper_eligible"] = _ir_eligible
+    payload["improved_reaper_max_targets"] = (
+        _ir_params["max_targets"] if (_ir_eligible and _ir_params) else 1
+    )
+    payload["improved_reaper_max_target_separation_ft"] = (
+        _ir_params["max_target_separation_ft"]
+        if (_ir_eligible and _ir_params) else 0
+    )
 
     # v2.110.0 — up-cast dice scaling (Approach B). When casting above
     # the spell's base level, grow the damage / healing dice by the
@@ -20114,6 +20185,16 @@ async def cast_spell(
         "area_shape": payload.get("area_shape", ""),
         "area_size_ft": payload.get("area_size_ft", 0),
         "area_secondary_ft": payload.get("area_secondary_ft", 0),
+        # v2.158.41 — Improved Reaper advisory (Death Domain Cleric Lv
+        # 17+). True when a buff-carrying caster casts a qualifying
+        # single-target Lv-1-5 necromancy spell; the client prompts the
+        # GM to add a second creature within 5 ft of the first.
+        "improved_reaper_eligible": payload.get(
+            "improved_reaper_eligible", False),
+        "improved_reaper_max_targets": payload.get(
+            "improved_reaper_max_targets", 1),
+        "improved_reaper_max_target_separation_ft": payload.get(
+            "improved_reaper_max_target_separation_ft", 0),
     }
 
 
