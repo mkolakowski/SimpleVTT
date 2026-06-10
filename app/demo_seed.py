@@ -2562,6 +2562,113 @@ def _barbarian_beast_sheet(name: str) -> dict:
     }
 
 
+def _monk_drunken_sheet(name: str) -> dict:
+    """v2.158.62: demo Monk Lv 5 (Way of the Drunken Master, XGE) —
+    the 15th demo PC. Kael Brightleaf is Way of the Open Hand, whose
+    class-features list has no Drunken Technique entry, so the
+    v2.158.61 Drunken Technique sheet button (Way of the Drunken
+    Master Monk Lv 3+ → /use_drunken_technique) was unreachable in the
+    live demo. This PC carries a `drunken-technique` class feature so
+    the button renders + the Disengage + 10 ft speed rider install is
+    verifiable.
+
+    A distinct PC from Kael so his Open Hand coverage (Flurry / Patient
+    Defense / Step of the Wind / Wholeness of Body / Stillness of Mind)
+    stays untouched — mirrors the v2.158.60 Beast Barbarian decision (a
+    new PC rather than converting the existing one).
+    """
+    return {
+        "class": "Monk",
+        "subclass": "Way of the Drunken Master",
+        "level": 5,
+        "race": "Human",
+        "alignment": "Chaotic Good",
+        "background": "Folk Hero",
+        "abilities": {"STR": 12, "DEX": 16, "CON": 14, "INT": 10, "WIS": 15, "CHA": 8},
+        # Unarmored Defense: 10 + DEX +3 + WIS +2 = 15.
+        "ac": 15,
+        # Base 30 + Unarmored Movement +10 (Lv 2+) = 40.
+        "speed": 40,
+        # Lv 1 max d8 (8) + 4× avg d8 (5) + CON +2 × 5 = 8 + 20 + 10 = 38.
+        "hp": {"current": 38, "max": 38, "temp": 0},
+        "initiative_bonus": 3,  # DEX 16 mod
+        "proficiency_bonus": 3,  # PB +3 at Lv 5
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d8",
+        "saving_throws": {"STR": True, "DEX": True},
+        "skills": {
+            "Acrobatics": {"ability": "DEX", "proficient": True, "expertise": False},
+            "Performance": {"ability": "CHA", "proficient": True, "expertise": False},
+            "Animal Handling": {"ability": "WIS", "proficient": True, "expertise": False},
+            "Survival": {"ability": "WIS", "proficient": True, "expertise": False},
+        },
+        "attacks": [
+            {"name": "Unarmed Strike", "attack_bonus": "+6", "damage": "1d6+3",
+             "damage_type": "bludgeoning", "range": "5 ft",
+             "desc": "Martial Arts: DEX replaces STR; Lv 5 die is 1d6. Counts as a monk weapon (qualifies for Flurry of Blows + Stunning Strike)."},
+            {"name": "Quarterstaff (Martial Arts)", "attack_bonus": "+6", "damage": "1d6+3",
+             "damage_type": "bludgeoning", "range": "5 ft",
+             "desc": "Versatile (1d8 two-handed). Martial Arts allows DEX in place of STR. Counts as a monk weapon."},
+        ],
+        "inventory": [
+            {"name": "Quarterstaff", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "bludgeoning",
+             "versatile": True, "properties": "versatile (1d8), monk weapon",
+             "_slug": "quarterstaff"},
+            {"name": "10 darts", "type": "weapon", "qty": 10,
+             "equippable": True, "equipped": False, "hands": 1,
+             "damage": "1d4", "damage_type": "piercing",
+             "range": "20/60 ft", "properties": "finesse, thrown, monk weapon",
+             "_slug": "dart"},
+            {"name": "Explorer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
+            {"name": "Jug of cheap wine", "type": "gear", "qty": 1,
+             "desc": "Folk Hero flair — the prop the drunken weave hides behind."},
+        ],
+        "feats": [],
+        "resources": [
+            {
+                "key": "ki",
+                "name": "Ki",
+                "current": 5, "max": 5, "reset": "short",
+                "source": "monk Lv 2",
+                "class_slug": "monk",
+                "desc": "Spend 1 Ki for Flurry of Blows / Patient Defense / Step of the Wind (bonus action). 5 points at Lv 5; refreshes on short rest.",
+                "manual": False,
+            },
+        ],
+        "class_features": [
+            {
+                "key": "flurry-of-blows",
+                "name": "Flurry of Blows",
+                "desc": "Bonus action — spend 1 Ki to make two unarmed strikes (1d6+DEX each at Lv 5).",
+            },
+            {
+                "key": "patient-defense",
+                "name": "Patient Defense",
+                "desc": "Bonus action — spend 1 Ki to take the Dodge action.",
+            },
+            {
+                "key": "step-of-the-wind",
+                "name": "Step of the Wind",
+                "desc": "Bonus action — spend 1 Ki to take the Disengage or Dash action; jump distance doubles for the turn.",
+            },
+            # v2.158.62: Drunken Technique (Way of the Drunken Master
+            # Lv 3+, XGE). The Use button routes to
+            # /use_drunken_technique (v2.158.61 wiring) and installs the
+            # 1-turn rider buff — Disengage + 10 ft speed until end of
+            # turn — that the OA-prompt flow + `effective_speed_walk`
+            # read.
+            {
+                "key": "drunken-technique",
+                "name": "Drunken Technique",
+                "desc": "Whenever you use Flurry of Blows, you gain the benefit of the Disengage action and your walking speed increases by 10 ft until the end of the current turn.",
+            },
+        ],
+    }
+
+
 def _monk_sheet(name: str) -> dict:
     """v2.18.0: demo Monk Kael Brightleaf (Way of the Open Hand).
     Bumped to Lv 6 in v2.49.227 to unlock Wholeness of Body. Bumped to
@@ -3458,9 +3565,22 @@ def seed_characters(
         sheet=_barbarian_beast_sheet("Brakka Wildmane"),
         color="#7a4a2a",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc])
+    # v2.158.62: 15th PC — demo Way of the Drunken Master Monk (Quan
+    # Reelstep). Lv 5 so the v2.158.61 Drunken Technique sheet button
+    # (Way of the Drunken Master Lv 3+ → /use_drunken_technique) is
+    # reachable in the live demo. Kael is Way of the Open Hand, whose
+    # class-features list has no Drunken Technique entry. GM-owned.
+    drunken_monk_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Quan Reelstep",
+        template="dnd5e",
+        sheet=_monk_drunken_sheet("Quan Reelstep"),
+        color="#6b2d3c",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc, drunken_monk_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc, drunken_monk_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:

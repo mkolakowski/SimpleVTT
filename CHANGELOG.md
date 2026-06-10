@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.62] - 2026-06-10 — "The Reeling Master" — v2.158.61 wired the Drunken Technique sheet button to its dedicated endpoint, but no demo PC was a Way of the Drunken Master Monk, so the button never rendered and couldn't be click-tested. This seeds a 15th demo PC (Quan Reelstep, Way of the Drunken Master Lv 5) carrying a `drunken-technique` class feature, then covers the seed contract + the now-reachable button in both the HTTP and Playwright harnesses
+
+**Schema version:** 69
+**Commit summary:** **New demo PC Quan Reelstep (Way of the Drunken Master Monk Lv 5) + the harness coverage the v2.158.61 button needed. `app/demo_seed.py` gains `_monk_drunken_sheet` (DEX 16 / WIS 15, Ki 5/short, and a `class_features` list whose entries include `drunken-technique`) and registers Quan as the 15th seeded PC. The roster fixture's `expected` set in `tests/harness/conftest.py` grows to 15 so a seed drift fails fast. Two HTTP tests (`tests/harness/test_demo_drunken_monk.py`) assert the seed shape the `.cf-use` button depends on, then fire `/use_drunken_technique` against the REAL seeded PC — no PATCH, unlike `test_drunken_technique.py` which PATCHes Kael. One Playwright test (`tests/harness_ui/test_drunken_technique_picker_ui.py`) expands Quan's class-features row, clicks the Drunken Technique Use button, and asserts a `/use_drunken_technique` POST fired (never `/use_feature`) with no console errors.**
+**Description:** This makes the v2.158.61 Drunken Technique wiring reachable and regression-tested in the demo — mirroring the v2.158.60 Beast Barbarian arc that gave the Form of the Beast button a live fixture. The existing demo Monk (Kael Brightleaf, Way of the Open Hand) has no `drunken-technique` class feature, so the button never rendered for any seeded PC; converting Kael would break his Open Hand harness coverage, so a new PC is the right call. Quan's `class_features` list carries the `drunken-technique` entry the `.cf-use` button renders + routes from, so the button now appears in the live demo. Unlike Form of the Beast (which opens a Bite/Claws/Tail picker), Drunken Technique has no options — the click POSTs the dedicated endpoint directly. No endpoint, broadcast, or schema change — the new PC is additive seed data and the tests exercise the already-shipped `/use_drunken_technique` contract and v2.158.61 sheet wiring.
+
+### Added
+- `app/demo_seed.py` — `_monk_drunken_sheet` + a 15th seeded PC, Quan Reelstep (Way of the Drunken Master Monk Lv 5), whose `class_features` list carries the `drunken-technique` entry so the v2.158.61 Use button renders + routes in the live demo.
+- `tests/harness/test_demo_drunken_monk.py` — seed-contract test (PC is a Lv 5 Way of the Drunken Master Monk carrying a `drunken-technique` class feature) + happy-path test (firing `/use_drunken_technique` against the real seeded PC returns 200, installs the buff, and broadcasts `feature_used(source=drunken-technique)`).
+- `tests/harness_ui/test_drunken_technique_picker_ui.py` — `test_cf_button_routes_drunken_technique` expands Quan's class-features row, clicks the Drunken Technique Use button, and asserts a `/use_drunken_technique` POST fired (never `/use_feature`) with no console errors.
+
+### Changed
+- `tests/harness/conftest.py` — the `roster` fixture's `expected` set grows to 15 PCs (adds "Quan Reelstep") so a missing/renamed seed fails fast at fixture setup.
+
+### Notes
+- Total harness count: **2157** in `tests/harness/` (was 2155, +2 HTTP tests); **`tests/harness_ui/` 23** (was 22, +1 Playwright test).
+- No endpoint, broadcast, or schema change (still v69) — additive demo seed + harness coverage of the already-shipped `/use_drunken_technique` endpoint and v2.158.61 button wiring.
+
+---
+
 ## [2.158.61] - 2026-06-10 — "The Drunken Weave" — Drunken Technique had a working endpoint (`/use_drunken_technique`) that installs the Disengage + 10 ft speed rider on Flurry of Blows, but the class-features Use button fell through to the announce-only `/use_feature`, so clicking it never installed the buff. This wires the button to the dedicated endpoint
 
 **Schema version:** 69
