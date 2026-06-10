@@ -15,5 +15,8 @@
   "properties": {
     "category": "Weapon (any sword that deals slashing damage)"
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }

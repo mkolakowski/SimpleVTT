@@ -17,5 +17,8 @@
     "ac_base": 11,
     "stealth_disadvantage": true
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }

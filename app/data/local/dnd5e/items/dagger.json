@@ -21,5 +21,8 @@
       "thrown (range 20/60)"
     ]
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }

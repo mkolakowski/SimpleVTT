@@ -15,5 +15,8 @@
   "properties": {
     "category": "Staff"
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }

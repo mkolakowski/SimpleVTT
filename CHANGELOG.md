@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.73] - 2026-06-10 — "The Empty Sockets" — Magic-items-automation Phase 0: extend the SRD item content schema with the three keys Phase 1 needs (`charges` / `charge_recovery` / `passives`) on every shipped item under `app/data/local/dnd5e/items/` (all 292 files walked) and on the `Item` Pydantic model in `app/content_schemas.py`. All three default to "no mechanical wiring" so the catalog ships a uniform shape without behavior change — Phase 1 populates the values for the first-slice roster
+
+**Schema version:** 69
+**Commit summary:** **(A) Extend the `Item` model in `app/content_schemas.py` with three new fields: `charges: Optional[int] = None`, `charge_recovery: Optional[str] = None`, `passives: list[dict] = Field(default_factory=list)`. Pydantic-v2's existing `populate_by_name=True` + `extra="allow"` provenance config means the new fields are additive — every shipped item still validates. (B) Walk all 292 JSONs under `app/data/local/dnd5e/items/` and write the three keys with their "no wiring" defaults (`null` / `null` / `[]`) in canonical order right before the existing `actions: []` trailer. Re-orders the keys so the trailer reads `charges → charge_recovery → passives → actions` consistently across the whole catalog (same order Phase 1+ will populate top-down). (C) New harness test file `tests/harness/test_item_schema.py` with 3 tests hitting `/api/content/items/{slug}` and asserting the three keys are present on the public read endpoint: Cloak of Protection (Phase 1 passive-wearable canary), Wand of Magic Missiles (Phase 4 charge-caster canary), and an unknown-slug 404 error path. (D) Harness total bumped 2165 → 2168 in `docs/test-harness-coverage.md` + new `### test_item_schema.py` block in the "Items" section. No engine change, no `_MAGIC_ITEM_EFFECTS` table yet — that lands in Phase 1.**
+**Description:** v2.158.71 filed the magic-items-automation plan; this commit kicks off Phase 0 by giving every SRD item the three top-level keys Phase 1's wiring needs. Choosing the "walk all 292 + add keys explicitly" slice (vs. relying on Pydantic to fill defaults at load time) means the data layer carries the shape the catalog editor + future content authors will see when authoring a homebrew magic item — the keys appear in the JSON, not just in the model. Phase 1 lands next: the `_MAGIC_ITEM_EFFECTS` table + `_equipped_item_effects` walker + populating `passives` on Cloak / Bracers / Ring of Protection for read-time +AC / +save bonuses.
+
+### Added
+- `tests/harness/test_item_schema.py` — three Phase 0 schema-shape tests on `/api/content/items/{slug}`.
+
+### Changed
+- `app/content_schemas.py` — `Item` model gains `charges: Optional[int] = None`, `charge_recovery: Optional[str] = None`, `passives: list[dict] = Field(default_factory=list)`. Inline comment explains the Phase 1 / Phase 4 wiring contract.
+- `app/data/local/dnd5e/items/*.json` — all 292 SRD items written with `charges: null`, `charge_recovery: null`, `passives: []` in canonical order before `actions: []`. Key-order normalized across the whole catalog so the diff lines up.
+- `docs/test-harness-coverage.md` — `test_item_schema.py` block added under "Items"; total bumped 2165 → 2168.
+- `app/version.py` — `APP_VERSION` 2.158.72 → 2.158.73. `SCHEMA_VERSION` unchanged (still 69 — this is a content-layer schema addition, not a database migration).
+- `README.md` — version badge bumped to 2.158.73.
+
+### Notes
+- This is a PATCH bump (not MINOR) because Phase 0 is groundwork — no user-visible feature, no new behavior. Phase 1 (the first item that actually does something mechanical) is the natural MINOR-worthy moment.
+- The canonical key order is `head fields → charges → charge_recovery → passives → actions`. Future Phase 0+ additions should slot in just before `actions` to keep the catalog diff readable.
+
+---
+
 ## [2.158.72] - 2026-06-10 — "The Six Tides" — File the Exhaustion-levels design plan and surface it through the wiki — P1 finding of the v2.158.69 SRD audit: the engine today treats `exhaustion` as a single-flag condition buff, but RAW SRD 5.1 has six cumulative levels (disadvantage on checks → speed halved → disadvantage on attacks + saves → HP max halved → speed 0 → death)
 
 **Schema version:** 69

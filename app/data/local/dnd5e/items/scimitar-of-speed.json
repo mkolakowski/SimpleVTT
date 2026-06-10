@@ -15,5 +15,8 @@
   "properties": {
     "category": "Weapon (scimitar)"
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }

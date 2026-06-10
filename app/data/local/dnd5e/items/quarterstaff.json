@@ -19,5 +19,8 @@
       "versatile (1d8)"
     ]
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }

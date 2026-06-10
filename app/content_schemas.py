@@ -123,6 +123,17 @@ class Item(_ProvenanceMixin):
     cost: str = ""
     desc: str = ""
     properties: dict = Field(default_factory=dict)
+    # v2.158.73 — magic-items-automation Phase 0 schema additions.
+    # ``charges`` / ``charge_recovery`` carry the RAW charge contract for
+    # wand / staff / ring-of-spell-storing style items so Phase 4 can
+    # auto-bootstrap a ``sheet.resources[]`` row keyed off the item slug.
+    # ``passives`` carries always-on bonuses (e.g. Cloak of Protection's
+    # +1 AC + saves) merged at read-time by Phase 1's ``_equipped_item_effects``.
+    # All three default to "no mechanical wiring" so the 292 SRD items
+    # ship a uniform shape without behavior change.
+    charges: Optional[int] = None
+    charge_recovery: Optional[str] = None
+    passives: list[dict] = Field(default_factory=list)
     actions: list[Action] = Field(default_factory=list)
 
 

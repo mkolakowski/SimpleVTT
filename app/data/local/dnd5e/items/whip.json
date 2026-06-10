@@ -20,5 +20,8 @@
       "reach"
     ]
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }

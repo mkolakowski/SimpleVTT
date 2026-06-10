@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2165 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.72, 2026-06-10).
+**Total tests:** 2168 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.73, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1961,6 +1961,15 @@ Generic `/use_feature` endpoint — Rogue Cunning Action, Channel Divinity optio
 | `test_use_item_non_consumable` | Story item (qty 1, non-consumable) → fires feature_used but doesn't decrement. |
 
 > Heal-potion happy path is covered indirectly via `heal_applied` broadcasts in `test_cast_spell_heal.py` and the v2.27.1 routing logic. A dedicated potion-heal test is **filed**.
+
+### `test_item_schema.py`
+v2.158.73 magic-items-automation Phase 0 — the SRD item content layer now ships three new top-level keys (`charges` / `charge_recovery` / `passives`) on every item under `app/data/local/dnd5e/items/`. The `Item` Pydantic model in `app/content_schemas.py` declares the new fields; the public `/api/content/items/{slug}` read endpoint surfaces them. Phase 1 will populate the values for the first-slice roster (Cloak / Bracers / Ring / Pearl); this commit's tests just assert the shape is present and uniform.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_item_schema_cloak_of_protection_has_phase0_keys` | `GET /api/content/items/cloak-of-protection` → 200 + the record carries `charges: null`, `charge_recovery: null`, `passives: []` (Phase 1's passive-wearable canary). |
+| `test_item_schema_wand_of_magic_missiles_has_phase0_keys` | `GET /api/content/items/wand-of-magic-missiles` → 200 + same shape on a charge-tracked archetype (Phase 4's charge-caster canary). |
+| `test_item_schema_unknown_slug_404` | `GET /api/content/items/no-such-srd-item` → 404 — error contract unchanged by the Phase 0 additions. |
 
 ---
 

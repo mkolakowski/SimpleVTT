@@ -19,5 +19,8 @@
       "ammunition (range 30/120)"
     ]
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }

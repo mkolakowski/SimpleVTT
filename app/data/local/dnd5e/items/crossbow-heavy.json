@@ -22,5 +22,8 @@
       "two-handed"
     ]
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }

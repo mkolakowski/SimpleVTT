@@ -15,5 +15,8 @@
   "properties": {
     "category": "Armor (plate)"
   },
+  "charges": null,
+  "charge_recovery": null,
+  "passives": [],
   "actions": []
 }
