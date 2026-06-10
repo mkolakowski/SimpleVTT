@@ -163,6 +163,163 @@ async def test_use_empowered_evocation_at_lv10(
         )
 
 
+async def _set_auto_apply(gm_client, on: bool):
+    form = {
+        "name": "Demo Campaign", "description": "demo",
+        "game_system": "dnd5e", "gm_tab_color": "", "font_override": "",
+        "default_encounter_id": "", "hp_threshold_1": "",
+        "hp_threshold_2": "", "hp_threshold_3": "", "hp_threshold_4": "",
+        "auto_play_playlist_id": "", "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+        follow_redirects=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def auto_apply_on(gm_client):
+    await _set_auto_apply(gm_client, True)
+    yield
+    await _set_auto_apply(gm_client, False)
+
+
+async def _fireball_index(gm_client, char_id):
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    assert r.status_code == 200, r.text
+    spells = (r.json().get("sheet") or {}).get("spells") or []
+    for i, s in enumerate(spells):
+        if (s.get("_slug") or "").lower() == "fireball":
+            return i
+    raise AssertionError("Thalindra has no Fireball in her spell list")
+
+
+async def _seed_thal_vs_bandit(gm_client, thal):
+    """Seed Thalindra + a 1-HP bandit NPC for a near-guaranteed
+    Fireball save-path damage application. Returns the bandit id."""
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    bandit_id = f"tok_ee_bandit_{thal['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(f"tok_ee_thal_{thal['id']}", thal),
+            {"id": bandit_id, "char_id": None,
+             "token_template_id": bandit_tmpl["id"],
+             "name": bandit_tmpl["name"], "initiative": 5,
+             "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    return bandit_id
+
+
+async def test_empowered_evocation_adds_int_to_fireball_damage(
+    gm_client, gm_ws, roster, auto_apply_on,
+):
+    """v2.158.32 — Phase 2 read site: Thalindra (Evocation Wizard,
+    PATCH'd to Lv 10) installs the empowered-evocation-active buff,
+    then casts Fireball (evocation, DEX save) at an NPC bandit. The
+    /cast_spell save path reads the buff via the spell's school and
+    fires a feature_used(source=empowered-evocation-bonus) with the
+    +INT (3) bonus + applies damage."""
+    thal = roster["Thalindra Moonwhisper"]
+    await _patch_sheet(
+        gm_client, thal["id"], {"level": 10}, class_slug="wizard",
+    )
+    try:
+        bandit_id = await _seed_thal_vs_bandit(gm_client, thal)
+        fb_index = await _fireball_index(gm_client, thal["id"])
+        # Install the Empowered Evocation buff.
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_empowered_evocation",
+            json={"character_id": thal["id"]},
+        )
+        assert r.status_code == 200, r.text
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": thal["id"],
+                "spell_index": fb_index,
+                "target_combatant_id": bandit_id,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        await asyncio.sleep(0.3)
+        bonus = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source")
+            == "empowered-evocation-bonus"
+            and (m.get("data") or {}).get("character_id") == thal["id"]
+        ]
+        assert bonus, (
+            "expected empowered-evocation-bonus feature_used after a "
+            "Fireball cast with the buff active"
+        )
+        assert "+3" in bonus[-1]["data"]["feature_name"], (
+            f"expected +3 (INT mod) in the bonus label; got "
+            f"{bonus[-1]['data']['feature_name']!r}"
+        )
+    finally:
+        await _patch_sheet(
+            gm_client, thal["id"], {"level": 7}, class_slug="wizard",
+        )
+
+
+async def test_empowered_evocation_bonus_absent_without_buff(
+    gm_client, gm_ws, roster, auto_apply_on,
+):
+    """Control: Thalindra at Lv 10 but WITHOUT installing the buff —
+    casting Fireball does NOT emit an empowered-evocation-bonus. Pins
+    the buff-gate (school alone isn't enough)."""
+    thal = roster["Thalindra Moonwhisper"]
+    await _patch_sheet(
+        gm_client, thal["id"], {"level": 10}, class_slug="wizard",
+    )
+    try:
+        bandit_id = await _seed_thal_vs_bandit(gm_client, thal)
+        fb_index = await _fireball_index(gm_client, thal["id"])
+        gm_ws.mark()
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": thal["id"],
+                "spell_index": fb_index,
+                "target_combatant_id": bandit_id,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        await asyncio.sleep(0.3)
+        bonus = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source")
+            == "empowered-evocation-bonus"
+        ]
+        assert not bonus, (
+            f"empowered-evocation-bonus should NOT fire without the "
+            f"buff installed; got {bonus}"
+        )
+    finally:
+        await _patch_sheet(
+            gm_client, thal["id"], {"level": 7}, class_slug="wizard",
+        )
+
+
 async def test_use_empowered_evocation_level_gate(
     gm_client, roster,
 ):

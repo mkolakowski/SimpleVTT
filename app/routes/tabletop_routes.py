@@ -18973,9 +18973,20 @@ async def cast_spell(
         # of the server's reach in v1).
         _ea_bonus = _elemental_affinity_bonus(char.sheet, damage_type)
         _ea_fired = False
+        # v2.158.32 — Empowered Evocation (+INT mod to one damage roll of
+        # a wizard evocation spell). Reads the v2.158.19 buff via the
+        # spell's school. Threaded through the same "+N once per cast"
+        # plumbing as Elemental Affinity (own `_ee_fired` flag so the
+        # AoE loop below applies it to exactly one damage roll).
+        _ee_bonus = _empowered_evocation_bonus(
+            campaign_id, char.id, payload.get("spell_school") or "",
+        )
+        _ee_fired = False
         _ea_damage_expr = damage_expr
         if _ea_bonus > 0 and damage_expr:
-            _ea_damage_expr = f"{damage_expr}+{_ea_bonus}"
+            _ea_damage_expr = f"{_ea_damage_expr}+{_ea_bonus}"
+        if _ee_bonus > 0 and damage_expr:
+            _ea_damage_expr = f"{_ea_damage_expr}+{_ee_bonus}"
         if (
             damage_expr
             and auto_save_target_kind == "npc"
@@ -18994,6 +19005,11 @@ async def cast_spell(
                         campaign_id, char, damage_type, _ea_bonus,
                     )
                     _ea_fired = True
+                if _ee_bonus > 0:
+                    await _broadcast_empowered_evocation_bonus(
+                        campaign_id, char, _ee_bonus,
+                    )
+                    _ee_fired = True
             except dice_mod.DiceParseError:
                 auto_save_damage_rolled = 0
             if auto_save_damage_rolled > 0:
@@ -19344,11 +19360,21 @@ async def cast_spell(
             # unmodified damage_expr per RAW "one damage roll".
             _aoe_dmg_expr = damage_expr
             if _ea_bonus > 0 and not _ea_fired and damage_expr:
-                _aoe_dmg_expr = f"{damage_expr}+{_ea_bonus}"
+                _aoe_dmg_expr = f"{_aoe_dmg_expr}+{_ea_bonus}"
                 await _broadcast_elemental_affinity_bonus(
                     campaign_id, char, damage_type, _ea_bonus,
                 )
                 _ea_fired = True
+            # v2.158.32 — Empowered Evocation AoE wire. Same "fire on the
+            # first NPC that the single-target path didn't cover" logic
+            # as Elemental Affinity, so the +INT lands on exactly one
+            # damage roll per cast (RAW "one damage roll").
+            if _ee_bonus > 0 and not _ee_fired and damage_expr:
+                _aoe_dmg_expr = f"{_aoe_dmg_expr}+{_ee_bonus}"
+                await _broadcast_empowered_evocation_bonus(
+                    campaign_id, char, _ee_bonus,
+                )
+                _ee_fired = True
             if damage_expr and bool(campaign.auto_apply_damage):
                 try:
                     _dr = dice_mod.roll(_aoe_dmg_expr)
@@ -19632,6 +19658,10 @@ async def cast_spell(
             "dc": int(_pending_dc),
             "damage_expr": _pending_dmg_expr,
             "damage_type": _pending_dmg_type,
+            # v2.158.32 — stash the school so /place_aoe can apply the
+            # Empowered Evocation +INT bonus (the spell dict is gone by
+            # place_aoe time, mirroring the range_str note below).
+            "spell_school": payload.get("spell_school") or "",
             "auto_apply_damage": bool(campaign.auto_apply_damage),
             "area": _aoe_area_info or {},
             "is_concentration": _is_concentration,
@@ -20180,6 +20210,16 @@ async def place_aoe(
             _caster_char_for_broadcast.sheet, damage_type,
         )
     _place_ea_fired = False
+    # v2.158.32 — Empowered Evocation +INT in the /place_aoe NPC loop.
+    # Mirrors the EA wire above; applies to the first NPC saver in
+    # iteration order so the +INT lands on exactly one damage roll.
+    _place_ee_bonus = 0
+    if _caster_char_for_broadcast:
+        _place_ee_bonus = _empowered_evocation_bonus(
+            campaign_id, int(ctx.get("caster_char_id") or 0),
+            ctx.get("spell_school") or "",
+        )
+    _place_ee_fired = False
 
     auto_save_targets: list[dict] = []
     # v2.48.5 — track whether we auto-added any NPCs to the battle
@@ -20539,12 +20579,21 @@ async def place_aoe(
         if (
             _place_ea_bonus > 0 and not _place_ea_fired and damage_expr
         ):
-            _place_aoe_dmg_expr = f"{damage_expr}+{_place_ea_bonus}"
+            _place_aoe_dmg_expr = f"{_place_aoe_dmg_expr}+{_place_ea_bonus}"
             await _broadcast_elemental_affinity_bonus(
                 campaign_id, _caster_char_for_broadcast,
                 damage_type, _place_ea_bonus,
             )
             _place_ea_fired = True
+        # v2.158.32 — Empowered Evocation +INT at /place_aoe NPC site.
+        if (
+            _place_ee_bonus > 0 and not _place_ee_fired and damage_expr
+        ):
+            _place_aoe_dmg_expr = f"{_place_aoe_dmg_expr}+{_place_ee_bonus}"
+            await _broadcast_empowered_evocation_bonus(
+                campaign_id, _caster_char_for_broadcast, _place_ee_bonus,
+            )
+            _place_ee_fired = True
         if damage_expr and auto_apply_damage:
             try:
                 dr = dice_mod.roll(_place_aoe_dmg_expr)
@@ -37421,6 +37470,65 @@ async def _broadcast_elemental_affinity_bonus(
                 f"to the spell's {damage_type} damage."
             ),
             "source": "elemental-affinity-bonus",
+        },
+    })
+
+
+def _empowered_evocation_bonus(
+    campaign_id: int, character_id: "int | None", spell_school: str,
+) -> int:
+    """v2.158.32 — Phase 2 read site for the v2.158.19
+    ``empowered-evocation-active`` buff (Evocation Wizard Lv 10+,
+    PHB p.117): "you can add your Intelligence modifier to one damage
+    roll of any wizard evocation spell you cast."
+
+    Returns the +INT mod the buff should add to one damage roll, or 0
+    when the gate doesn't fire. Gate: the spell's school is evocation
+    AND the caster carries the buff (whose
+    ``effects.empowered_evocation_int_mod`` was computed at install).
+    Mirrors the ``_elemental_affinity_bonus`` "+N to one damage roll"
+    contract so it threads through the same cast_spell / place_aoe
+    application sites.
+    """
+    if not character_id:
+        return 0
+    if (spell_school or "").strip().lower() != "evocation":
+        return 0
+    for b in _get_buffs(campaign_id, int(character_id)):
+        eff = (b or {}).get("effects") or {}
+        if (
+            (b or {}).get("key") == "empowered-evocation-active"
+            and eff.get("empowered_evocation_active")
+        ):
+            try:
+                return int(eff.get("empowered_evocation_int_mod") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+async def _broadcast_empowered_evocation_bonus(
+    campaign_id: int, caster_char: "Character | None", bonus: int,
+) -> None:
+    """Companion broadcast when Empowered Evocation adds +INT to a
+    damage roll. Emits `feature_used(source=empowered-evocation-bonus)`.
+    """
+    if not caster_char or bonus == 0:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": caster_char.id,
+            "character_name": caster_char.name,
+            "user_color": caster_char.color,
+            "feature_name": (
+                f"💥 Empowered Evocation (+{bonus} damage)"
+            ),
+            "feature_desc": (
+                f"{caster_char.name} adds +{bonus} (INT mod) to one "
+                f"damage roll of this wizard evocation spell."
+            ),
+            "source": "empowered-evocation-bonus",
         },
     })
 

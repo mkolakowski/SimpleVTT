@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.32] - 2026-06-09 — "Intelligent Fire" — Phase 8 Wizard read site: `/cast_spell` now reads the v2.158.19 Empowered Evocation buff and adds +INT to one damage roll of an evocation spell
+
+**Schema version:** 69
+**Commit summary:** **Flips the v2.158.19 Empowered Evocation buff from installed-but-inert to a live mechanical hook. `/cast_spell` (and `/place_aoe`) now read the `empowered-evocation-active` buff via the cast spell's school: when an Evocation Wizard Lv 10+ casts a wizard evocation spell, +INT mod is folded into one damage roll server-side and a `feature_used` (source `empowered-evocation-bonus`) is broadcast. Mirrors the Draconic Sorcerer Elemental Affinity "+N to one damage roll" plumbing exactly (own once-per-cast `_ee_fired` flag across the save path + AoE loop + place_aoe NPC loop).**
+**Description:** v2.158.19 installed the `empowered-evocation-active` buff (carrying `empowered_evocation_int_mod` / `empowered_evocation_school`) but deferred the read site. This commit wires it: `_empowered_evocation_bonus(campaign_id, char_id, spell_school)` returns the stored +INT when the spell's school is evocation and the caster carries the buff, and the cast pipeline appends it to the damage expression at the same three sites Elemental Affinity uses (save-spell NPC path, the AoE multi-target loop, and the `/place_aoe` NPC loop). Per RAW ("one damage roll") the bonus fires exactly once per cast via an `_ee_fired` flag.
+
+Following the Elemental Affinity precedent, the bonus auto-applies on save-based and AoE evocation spells (Fireball, Burning Hands, Cone of Cold); the spell-attack-roll path (Fire Bolt / Scorching Ray) stays unwired in v1, matching EA's exact reach. The `/place_aoe` deferred-placement path reads the school from a new `spell_school` field stashed in the pending-cast context (the spell dict is gone by placement time).
+
+### Added
+- `app/routes/tabletop_routes.py::_empowered_evocation_bonus` / `_broadcast_empowered_evocation_bonus` — Phase 2 read helpers mirroring the Elemental Affinity pair. Gate: spell school == evocation AND the caster carries `empowered-evocation-active`; returns the buff's stored INT mod.
+- `app/routes/tabletop_routes.py::cast_spell` — applies the +INT in the save-spell NPC path and the AoE multi-target loop (own `_ee_fired` once-per-cast flag); stashes `spell_school` in the pending-AoE cast context.
+- `app/routes/tabletop_routes.py::place_aoe` — applies the +INT in the deferred-placement NPC loop, reading the stashed school.
+- `tests/harness/test_evocation_school.py` — two new tests: (1) Thalindra (Evocation Wizard PATCH'd to Lv 10) installs the buff → Fireball at an NPC fires `feature_used` source `empowered-evocation-bonus` with the +3 label; (2) control — same cast WITHOUT the buff installed emits no bonus (pins the buff-gate).
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2116** (was 2114).
+
+### Notes
+- The spell-attack-roll path (Fire Bolt / Scorching Ray) is left unwired in v1 to match Elemental Affinity's reach. Wiring the per-beam attack path is filed as a follow-up.
+- **Total harness count: 2116** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.31] - 2026-06-09 — "Tail Swat" — Phase 2 tail rider for Form of the Beast: reaction-framework `use-form-of-the-beast-tail` option grants +1d8 AC against a hitting attack with a server-rolled miss/hit verdict
 
 **Schema version:** 69
