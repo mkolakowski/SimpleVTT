@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.27] - 2026-06-09 — "Strike With Claws" — Phase 2 frontend wiring for the v2.158.20–26 Form of the Beast trio: new Natural Weapons panel under the Attacks list surfaces Bite/Claws/Tail click-to-strike buttons when the buff is active
+
+**Schema version:** 69
+**Commit summary:** **First-class UI surface for the v2.158.20 Form of the Beast natural weapons. Adds a new `#natural-weapons-list-container` div below the Attacks panel + a JS module that fetches `/api/campaign/{cid}/active_natural_weapons` on page load (and on a 30s polling fallback), renders each entry as a compact click-to-strike row with a "⚔ Strike" button, and POSTs the v2.158.26 merged `attack_index` (= `len(sheet.attacks) + i`) to `/attack` on click. Reads the shared target-picker localStorage so single/multi-target picks ride through cleanly, plus handles 409 over_budget via `window.handleOverBudget` like the regular Attacks panel.**
+**Description:** v2.158.25 shipped the read endpoint, v2.158.26 wired the merge into `/attack`'s attack_index. v2.158.27 closes the loop: a Path of the Beast Barbarian with the buff active now sees Bite/Claws/Tail rendered as proper attack buttons below their regular weapons. Click → `1d20 + STR-mod + proficiency` attack roll vs. AC, weapon-die + STR-mod damage on hit, applied to the picked target, broadcast as `weapon_attack` for the chat card. No new attack-resolution code path — the buff-derived entry rides the same pipeline as a sheet weapon.
+
+The natural-weapons panel is purely a click-to-fire surface — no edit affordances, no remove buttons. The entries are transient buff state; when the buff drops at next turn-start (or when the rage ends per RAW), the next 30s poll clears the panel. A future commit can dispatch a same-window CustomEvent on `buff_update` for sub-second refresh, but the polling fallback is acceptable for the v1 because players trigger `/use_form_of_the_beast` then naturally see the panel populate within one tick.
+
+Visual style is a yellow-accent border + a 🦷 icon + "from active buff" subtitle so the player can tell at a glance that these are buff-derived (not sheet-authored) attacks. The attack-row inner layout (name + attack_bonus + damage + range chips) mirrors the regular Attacks panel rows for consistency.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — new `#natural-weapons-list-container` div below the Attacks panel + a JS module (~150 LOC) that handles fetch + render + click + 30s polling + 409 over_budget handling + multi-target body fields read from the shared targeting localStorage.
+
+### Changed
+- No behavior changes for non-Beast-Barbarian PCs (empty list → container stays empty, no render).
+- `docs/test-harness-coverage.md` — count unchanged (UI-only commit; no harness test added — the v2.158.26 attack-pipeline merge has full backend coverage). Bumped header to v2.158.27 to track the release.
+
+### Notes
+- The Phase 2 read-site fan-out for the buff's `form_of_the_beast_special` text (claws extra-attack, bite self-heal on hit below half HP, tail reaction-AC) is still TBD — today the special string rides in the entry's `desc` field as GM-readable tooltip text via the `title` attribute on the natural-weapon row, not as engine-fired riders.
+- **Total harness count: 2105** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.26] - 2026-06-09 — "Bite In Place" — Phase 2 attack-pipeline read site for the v2.158.20 Form of the Beast buff: /attack now merges sheet.attacks + buff-derived natural weapons so an attack_index past the regular weapons resolves Bite/Claws/Tail through the standard attack flow
 
 **Schema version:** 69
