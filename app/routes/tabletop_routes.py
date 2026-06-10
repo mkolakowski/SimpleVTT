@@ -25995,6 +25995,60 @@ _TARGET_ADV_CONDITION_KEYS = frozenset({
 })
 
 
+def _pc_sees_in_darkness(sheet: "dict | None") -> bool:
+    """v2.158.50 — Devil's Sight read site (Phase 2). Returns True
+    when the PC's ``_buffs_active`` mirror carries the
+    ``devils-sight-active`` buff installed by ``/use_devils_sight``
+    (v2.158.14). The buff carries ``devils_sight_range_ft: 120`` +
+    ``devils_sight_through_magical_darkness: True``; RAW (PHB p.110)
+    the invocation lets the warlock see normally in both magical and
+    nonmagical darkness out to 120 ft.
+
+    v1 simplification: presence of the buff = "sees in darkness". The
+    120-ft range gate is NOT enforced because the attack path has no
+    reliable attacker↔darkness-source distance (Maps 2.0 positional
+    work, filed). The buff is permanent/passive, so presence is the
+    stable signal.
+    """
+    if not sheet:
+        return False
+    for b in (sheet.get("_buffs_active") or []):
+        if not isinstance(b, dict):
+            continue
+        if (b.get("key") or "").strip().lower() == "devils-sight-active":
+            return True
+        effects = b.get("effects")
+        if isinstance(effects, dict) and effects.get("devils_sight_range_ft"):
+            return True
+    return False
+
+
+def _buff_is_darkness_sourced(b: dict) -> bool:
+    """v2.158.50 — True when a ``blinded`` condition buff originates
+    from darkness (a heavily-obscured area / the Darkness spell)
+    rather than another source (Blindness/Deafness spell, a creature's
+    blinding gaze, etc.). Devil's Sight only negates the disadvantage
+    from being *unable to see in darkness* — it does NOT cure blindness
+    from those other sources.
+
+    The darkness origin is signalled by ``effects.from_darkness: True``
+    or a ``source_spell``/``source`` naming darkness — the marker a
+    future Darkness-spell / heavily-obscured install would stamp on the
+    blinded buff. No such install site exists yet; this read defines
+    the contract for it.
+    """
+    if not isinstance(b, dict):
+        return False
+    effects = b.get("effects")
+    if isinstance(effects, dict) and effects.get("from_darkness") is True:
+        return True
+    if (b.get("source_spell") or "").strip().lower() == "darkness":
+        return True
+    if "darkness" in (b.get("source") or "").strip().lower():
+        return True
+    return False
+
+
 def _attacker_has_condition_disadvantage(
     sheet: "dict | None",
 ) -> "str | None":
@@ -26004,15 +26058,32 @@ def _attacker_has_condition_disadvantage(
     imposes disadvantage on its attack rolls (Blinded, Poisoned,
     Restrained, Frightened, Prone — PHB Appendix A). Returns None
     when no such condition is active.
+
+    v2.158.50 — Devil's Sight (Warlock invocation) negates the
+    disadvantage from being *blinded by darkness specifically*. A
+    ``blinded`` condition that is darkness-sourced
+    (``_buff_is_darkness_sourced``) is skipped when the attacker
+    carries ``devils-sight-active`` (``_pc_sees_in_darkness``). Other
+    disadvantage conditions — and blindness from non-darkness sources —
+    are unaffected, so an attacker who is both darkness-blinded AND
+    poisoned still rolls at disadvantage from the Poisoned condition.
     """
     if not sheet:
         return None
+    sees_in_darkness = _pc_sees_in_darkness(sheet)
     for b in (sheet.get("_buffs_active") or []):
         if not isinstance(b, dict):
             continue
         key = (b.get("key") or "").strip().lower()
-        if key in _ATTACKER_DIS_CONDITION_KEYS:
-            return key
+        if key not in _ATTACKER_DIS_CONDITION_KEYS:
+            continue
+        if (
+            key == "blinded"
+            and sees_in_darkness
+            and _buff_is_darkness_sourced(b)
+        ):
+            continue
+        return key
     return None
 
 

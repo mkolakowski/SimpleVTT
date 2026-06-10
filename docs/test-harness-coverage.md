@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2137 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.49, 2026-06-10).
+**Total tests:** 2140 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.50, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -443,6 +443,15 @@ v2.158.49 — Phase 2 read site for the SECOND half of the v2.71.0 Absorb Elemen
 | `test_absorb_elements_rider_fires_on_melee_hit` | Sir Caelan carrying `absorb-elements-active` lands a Longsword (melee) hit on Krieger → `auto_uplifts` has an `absorb-elements` entry, `damage_type` "fire", `total` in [1, 6]. |
 | `test_absorb_elements_rider_skipped_without_buff` | Control: Caelan with no buff → no `absorb-elements` uplift even on a melee hit. |
 | `test_absorb_elements_rider_skipped_on_ranged_spell` | Melee gate: Thalindra carrying the buff casts Fire Bolt (ranged spell) → no `absorb-elements` uplift (proves the `_attack_is_melee_weapon` gate). |
+
+### `test_devils_sight_resolver.py`
+v2.158.50 — Phase 2 read site for the v2.158.14 Devil's Sight buff (Warlock invocation, PHB p.110). `_attacker_has_condition_disadvantage` now skips a darkness-sourced `blinded` condition (`_buff_is_darkness_sourced`: `effects.from_darkness: True` or a `source_spell`/`source` naming darkness) when the attacker carries `devils-sight-active` (`_pc_sees_in_darkness`). Other disadvantage conditions and non-darkness blindness are unaffected. The 120-ft range gate is not enforced (no positional distance yet); buff presence is the v1 signal.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_devils_sight_negates_darkness_blinded_disadvantage` | Pip with a darkness-sourced `blinded` (`from_darkness: True`) + `devils-sight-active` → attack roll stays straight 1d20, `roll_state_applied` != `disadvantage_attacker_blinded`. |
+| `test_darkness_blinded_without_devils_sight_imposes_disadvantage` | Control: darkness-blinded, no Devil's Sight → 2d20kl1 + `roll_state_applied` == `disadvantage_attacker_blinded`. |
+| `test_devils_sight_does_not_cure_non_darkness_blindness` | Guard: Devil's Sight + a non-darkness `blinded` (no `from_darkness`) → disadvantage STILL applies (2d20kl1 + `disadvantage_attacker_blinded`). |
 
 ### `test_cast_sleep_multi_class.py`
 v2.49.63 — closes the "add Sleep to Bard / Sorcerer / Warlock lists" filed item. Seed-list backfill verified via one happy-path cast per class. Sleep is RAW on bard / sorcerer / warlock / wizard lists; pre-v2.49.63 only Thalindra (wizard) had it.

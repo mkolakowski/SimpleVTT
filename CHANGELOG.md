@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.50] - 2026-06-10 — "Eyes in the Dark" — Devil's Sight installed a permanent `devils-sight-active` buff (see normally in darkness out to 120 ft), but the attack-roll disadvantage adjudicator never read it. Wiring the read site lets a Devil's Sight carrier ignore the disadvantage from being blinded *by darkness* — while still suffering blindness from other sources
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.158.14 Devil's Sight buff (Warlock Eldritch Invocation, PHB p.110): "You can see normally in darkness, both magical and nonmagical, to a distance of 120 feet." v2.158.14 installed a permanent `devils-sight-active` buff carrying `devils_sight_range_ft: 120` + `devils_sight_through_magical_darkness: True`, but no resolver consumed it — the buff was announce-only. This commit wires it into `_attacker_has_condition_disadvantage`: a `blinded` condition that is *darkness-sourced* (`effects.from_darkness: True`, or a `source_spell`/`source` naming darkness) is now skipped when the attacker carries Devil's Sight, so the attack roll stays straight instead of dropping to disadvantage. Blindness from any other source, and every other disadvantage condition, are unaffected.**
+**Description:** v2.158.14 shipped `/use_devils_sight` to install the `devils-sight-active` buff, but nothing read it — a Devil's Sight warlock still rolled at disadvantage when "blinded" by darkness. This commit adds the read. Two helpers are introduced: `_pc_sees_in_darkness(sheet)` returns True when `_buffs_active` carries `devils-sight-active` (or a buff with `effects.devils_sight_range_ft`), and `_buff_is_darkness_sourced(b)` returns True for a blinded buff marked `effects.from_darkness: True` (or a `source_spell`/`source` naming darkness) — the contract a future Darkness-spell / heavily-obscured install would stamp. `_attacker_has_condition_disadvantage` now skips a `blinded` entry that is darkness-sourced when the attacker sees in darkness, but still returns other disadvantage conditions (poisoned, restrained, …) and blindness from non-darkness sources. The 120-ft range gate is not enforced (the attack path has no attacker↔darkness-source distance yet — Maps 2.0 positional work, filed); presence of the permanent buff is the stable v1 signal.
+
+This flips Devil's Sight from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `tests/harness/test_devils_sight_resolver.py::test_devils_sight_negates_darkness_blinded_disadvantage` — happy path: Pip carrying a darkness-sourced `blinded` buff (`from_darkness: True`) AND `devils-sight-active` → attack roll stays a straight 1d20 and `roll_state_applied` is not `disadvantage_attacker_blinded`. `test_darkness_blinded_without_devils_sight_imposes_disadvantage` — control: darkness-blinded, no Devil's Sight → 2d20kl1 + `disadvantage_attacker_blinded`. `test_devils_sight_does_not_cure_non_darkness_blindness` — guard: Devil's Sight + a non-darkness `blinded` (no `from_darkness` marker) → disadvantage STILL applies.
+
+### Changed
+- `app/routes/tabletop_routes.py` — added `_pc_sees_in_darkness` + `_buff_is_darkness_sourced` helpers; `_attacker_has_condition_disadvantage` now skips a darkness-sourced `blinded` condition when the attacker carries Devil's Sight.
+
+### Notes
+- Total harness count: **2140** in `tests/harness/` (was 2137); **`tests/harness_ui/` 19** (unchanged).
+- The `_buff_is_darkness_sourced` markers (`from_darkness` / `source_spell` / `source`) define the contract for a future Darkness-spell or heavily-obscured-area install that would stamp the `blinded` buff. No such install site exists yet; until one lands, the guard test proves a generic `blinded` buff is unaffected by Devil's Sight.
+
+---
+
 ## [2.158.49] - 2026-06-10 — "Returned to Sender" — Absorb Elements' reaction buff also carried a `next_melee_bonus_dice`/`next_melee_bonus_type` rider for the carrier's next melee hit, but `/attack` never read it. Wiring it into `_compute_attack_auto_uplifts` adds +Nd6 of the triggering type to the first melee-weapon hit
 
 **Schema version:** 69
