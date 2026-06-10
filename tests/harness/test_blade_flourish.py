@@ -220,3 +220,143 @@ async def test_bf_damage_without_target_announce_only(
     assert data["flourish"] == "defensive"
     assert data.get("bonus_rolled") is None
     assert data.get("bonus_applied") is None
+    # v2.158.66 — Phase 2 fields stay zero/False when announce-only.
+    assert data["defensive_ac_bonus"] == 0
+    assert data["defensive_buff_installed"] is False
+
+
+async def test_bf_defensive_installs_ac_buff(
+    gm_client, gm_ws, lyra_swords, roster,
+):
+    """v2.158.66 — Phase 2 Defensive Flourish AC self-buff. When the
+    flourish is "defensive" AND a BI die was rolled (target_combatant_id
+    provided), the endpoint installs a 1-round
+    `blade-flourish-defensive-active` buff on the bard with
+    `effects.ac_bonus` matching the BI roll. Asserts: (a) response carries
+    `defensive_ac_bonus == bonus_rolled` and `defensive_buff_installed
+    is True`; (b) the feature_used broadcast surfaces the same; (c) a
+    `buff_update` broadcast lands the buff on Lyra's combatant entry
+    with the expected `effects.ac_bonus` and `key`."""
+    lyra = lyra_swords
+    pip = roster["Pip Quickfingers"]
+    pip_tok = f"tok_bfd_p_{pip['id']}"
+    lyra_tok = f"tok_bfd_l_{lyra['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(lyra_tok, lyra),
+            _pc(pip_tok, pip),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_blade_flourish",
+        json={"character_id": lyra["id"],
+              "flourish": "defensive",
+              "target_combatant_id": pip_tok,
+              "damage_type": "slashing"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    br = data.get("bonus_rolled")
+    assert br is not None and 1 <= br <= 8, (
+        f"BI die should roll 1-8; got {br}"
+    )
+    # Response surfaces the Phase 2 AC-buff fields.
+    assert data["defensive_buff_installed"] is True
+    assert data["defensive_ac_bonus"] == br, (
+        f"defensive_ac_bonus should match bonus_rolled; "
+        f"got ac={data['defensive_ac_bonus']}, rolled={br}"
+    )
+
+    # The feature_used broadcast carries the same Phase 2 fields so
+    # the chat card can render the AC bonus alongside the damage.
+    await asyncio.sleep(0.3)
+    feats = _bf_broadcasts(gm_ws, lyra["id"])
+    assert feats, "no feature_used(source=blade-flourish) broadcast fired"
+    feat_data = feats[-1].get("data") or {}
+    assert feat_data.get("defensive_buff_installed") is True
+    assert feat_data.get("defensive_ac_bonus") == br
+
+    # The buff_update broadcast carries the installed buff on Lyra's
+    # combatant entry — `effects.ac_bonus` is what the
+    # _read_target_ac walker (v2.97.39) sums into the bard's AC.
+    # `_install_buff` keys the broadcast by `character_id` (not by
+    # combatant id) because the install path looks up the combatant
+    # via the PC's char_id under the hood.
+    bu_msgs = [
+        m for m in gm_ws.buffered("buff_update")
+        if int((m.get("data") or {}).get("character_id") or 0) == int(lyra["id"])
+    ]
+    assert bu_msgs, (
+        "no buff_update broadcast fired for Lyra's combatant after the "
+        "defensive flourish"
+    )
+    last_buffs = (bu_msgs[-1].get("data") or {}).get("buffs") or []
+    bf_entries = [
+        b for b in last_buffs
+        if b.get("key") == "blade-flourish-defensive-active"
+    ]
+    assert bf_entries, (
+        f"blade-flourish-defensive-active not in Lyra's buffs; got "
+        f"keys={[b.get('key') for b in last_buffs]}"
+    )
+    bf = bf_entries[-1]
+    assert (bf.get("effects") or {}).get("ac_bonus") == br, (
+        f"installed buff's effects.ac_bonus should match bonus_rolled; "
+        f"got buff={bf}, rolled={br}"
+    )
+    assert bf.get("duration_rounds") == 1
+    assert bf.get("concentration") is False
+
+
+async def test_bf_slashing_does_not_install_ac_buff(
+    gm_client, gm_ws, lyra_swords, roster,
+):
+    """v2.158.66 — Regression guard: the AC buff is gated on
+    `flourish == "defensive"`. A Slashing Flourish with a target still
+    rolls + applies BI damage to the secondary target, but MUST NOT
+    install the defensive AC self-buff on the bard. Asserts: (a)
+    response has `defensive_ac_bonus == 0` + `defensive_buff_installed
+    is False`; (b) no `blade-flourish-defensive-active` buff appears
+    in any buff_update broadcast for Lyra's combatant."""
+    lyra = lyra_swords
+    pip = roster["Pip Quickfingers"]
+    pip_tok = f"tok_bfs_p_{pip['id']}"
+    lyra_tok = f"tok_bfs_l_{lyra['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            _pc(lyra_tok, lyra),
+            _pc(pip_tok, pip),
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_blade_flourish",
+        json={"character_id": lyra["id"],
+              "flourish": "slashing",
+              "target_combatant_id": pip_tok,
+              "damage_type": "slashing"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Damage half still fires for slashing (Phase 1).
+    assert data["flourish"] == "slashing"
+    assert data.get("bonus_rolled") is not None
+    # Phase 2 AC buff stays off — it's defensive-only.
+    assert data["defensive_ac_bonus"] == 0
+    assert data["defensive_buff_installed"] is False
+
+    await asyncio.sleep(0.3)
+    bu_msgs = [
+        m for m in gm_ws.buffered("buff_update")
+        if int((m.get("data") or {}).get("character_id") or 0) == int(lyra["id"])
+    ]
+    for m in bu_msgs:
+        buffs = (m.get("data") or {}).get("buffs") or []
+        for b in buffs:
+            assert b.get("key") != "blade-flourish-defensive-active", (
+                "Slashing Flourish must NOT install the defensive AC "
+                f"buff on Lyra; got buff={b}"
+            )

@@ -65590,6 +65590,35 @@ async def use_blade_flourish(
                 )
                 bonus_applied = int(_dr.get("applied") or 0)
 
+    # v2.158.66 — Phase 2 Defensive Flourish AC self-buff. When the
+    # flourish is "defensive" AND a BI die was rolled (meaning the
+    # caller passed a target_combatant_id, i.e. the post-hit BI-
+    # consumption fired), install a 1-round AC bonus on the bard via
+    # the v2.97.39 `effects.ac_bonus` read site in `_read_target_ac`.
+    # RAW XGE p.16: "+BI to damage and AC until the start of your
+    # next turn." `duration_rounds=1` decrements at the bard's next
+    # turn-start so the buff is live exactly for the post-hit window.
+    defensive_ac_bonus = 0
+    defensive_buff_installed = False
+    if flourish == "defensive" and bonus_rolled and bonus_rolled > 0:
+        defensive_ac_bonus = int(bonus_rolled)
+        _bf_buff = {
+            "key": "blade-flourish-defensive-active",
+            "name": "Defensive Flourish",
+            "icon": "🛡️",
+            "duration_rounds": 1,
+            "duration_max": 1,
+            "concentration": False,
+            "effects": {"ac_bonus": defensive_ac_bonus},
+            "desc": (
+                f"+{defensive_ac_bonus} AC until start of next turn "
+                f"(Defensive Flourish, Swords Bard Lv {bard_lv})."
+            ),
+        }
+        defensive_buff_installed = await _install_buff(
+            campaign_id, char.id, _bf_buff,
+        )
+
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -65643,6 +65672,11 @@ async def use_blade_flourish(
             "bonus_applied": bonus_applied,
             "bonus_breakdown": bonus_breakdown,
             "damage_type": damage_type if bonus_rolled is not None else "",
+            # v2.158.66 — Phase 2 Defensive Flourish AC self-buff fields.
+            # Zero/False on non-defensive flourishes or when no BI die
+            # rolled (no target_combatant_id provided).
+            "defensive_ac_bonus": defensive_ac_bonus,
+            "defensive_buff_installed": defensive_buff_installed,
         },
     })
 
@@ -65659,6 +65693,9 @@ async def use_blade_flourish(
         "bonus_rolled": bonus_rolled,
         "bonus_applied": bonus_applied,
         "bonus_breakdown": bonus_breakdown,
+        # v2.158.66 — Phase 2 Defensive Flourish AC self-buff response.
+        "defensive_ac_bonus": defensive_ac_bonus,
+        "defensive_buff_installed": defensive_buff_installed,
     }
 
 
