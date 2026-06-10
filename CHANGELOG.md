@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.34] - 2026-06-10 — "Reading the Swing" — Form of the Beast tail-swat `feature_used` card now renders a glanceable colored MISS/HIT verdict pill, instead of burying the AC-swing outcome in prose
+
+**Schema version:** 69
+**Commit summary:** **Frontend parity for the v2.158.31 tail-swat reaction. The roll-log `feature_used` renderer now reads the `ac_bonus` / `new_ac` / `verdict` fields the tail reaction already broadcasts and surfaces them as a colored `result-pill` — green (chip-hit) when the boosted AC turns the triggering attack into a MISS, red (chip-miss) when it still HITS, neutral (chip-buff) when the attack total was unknown. Generic on the broadcast fields, so any future announce-only AC-boost reaction shipping `ac_bonus` + `new_ac` gets the pill for free.**
+**Description:** The v2.158.31 tail swat already surfaced its button via the generic reaction popup and broadcast a `feature_used` carrying the full AC-swing detail (`ac_bonus`, `base_ac`, `new_ac`, `attack_total`, `verdict`), but the client only rendered the feature name + a prose `feature_desc`. The MISS/HIT outcome — the one thing a GM scanning the log wants at a glance — was buried in the sentence. This commit adds an AC-swing verdict pill to `_appendFeatureUsed`, mirroring the verdict coloring the attack cards already use, so the tail-swat result reads with the same glance-and-go parity. Pure presentation: the broadcast shape is unchanged (and already covered by the v2.158.31 tail harness test), so no new harness test or endpoint surface.
+
+### Added
+- `app/static/tabletop.js::_appendFeatureUsed` — AC-swing verdict pill rendered when a `feature_used` broadcast carries a positive `ac_bonus` and a non-null `new_ac`. Colors by `verdict`: `miss` → green `chip-hit` (defender wins), `hit` → red `chip-miss`, unknown → neutral `chip-buff`. Generic across any announce-only AC-boost reaction.
+
+### Notes
+- Frontend-only, reading already-broadcast fields — the `feature_used` shape from `form-of-the-beast-tail` is unchanged, so the existing v2.158.31 harness test still covers the broadcast contract. No harness count change.
+- **Total harness count: 2117** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.33] - 2026-06-09 — "Bolt From the Mind" — Empowered Evocation now also fires on the spell-attack-roll path (Fire Bolt / Scorching Ray), closing the gap the v2.158.32 read site inherited from Elemental Affinity
 
 **Schema version:** 69

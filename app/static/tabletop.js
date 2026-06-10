@@ -6715,6 +6715,22 @@
             const icon = isLast ? '⚪' : '🔋';
             featurePills.push(`<span class="result-pill ${cls}">${icon} ${rem}/${mx} uses left</span>`);
         }
+        // v2.158.34 — AC-swing verdict pill for announce-only AC-boost
+        // reactions (Form of the Beast tail swat; generic for any future
+        // reaction shipping ac_bonus + new_ac). Gives the GM the same
+        // glanceable MISS/HIT outcome the attack cards show, instead of
+        // burying it in the feature_desc prose. From the defender's seat
+        // a resulting MISS is the win → green chip-hit; a still-landing
+        // HIT is red chip-miss; an unknown attack total stays neutral.
+        if (typeof d.ac_bonus === 'number' && d.ac_bonus > 0 && d.new_ac != null) {
+            let acCls, acTail;
+            if (d.verdict === 'miss')      { acCls = 'chip-hit';  acTail = ' · ✅ MISS'; }
+            else if (d.verdict === 'hit')  { acCls = 'chip-miss'; acTail = ' · ❌ HIT'; }
+            else                           { acCls = 'chip-buff'; acTail = ''; }
+            featurePills.push(
+                `<span class="result-pill ${acCls}">🛡️ +${Number(d.ac_bonus)} AC → AC ${escapeHTML(String(d.new_ac))}${acTail}</span>`
+            );
+        }
         // v2.96.0 / v2.97.0 — ↶ Undo pill for feature_used cards
         // that carry a cast_id. Clicking POSTs to
         // /undo_attack_damage which dispatches one of the v2.92+ refund
