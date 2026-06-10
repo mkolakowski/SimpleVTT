@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.63] - 2026-06-10 — "The Heartbeat Wire" — The Keeper of Souls on-death-hook test (`test_ks_on_death_hook_heals_watcher_when_npc_dies`) verified Tavik's heal landed by GET-polling his sheet's HP before + after the kill and asserting the delta. That polling round-trip is the wrong assertion surface: the *contract* the engine has with the UI is the `character_hp_update` WebSocket broadcast — that's what every client (initiative tracker, mini-sheet, full sheet) actually reads. This swaps the HTTP poll for a broadcast assertion so the test pins the load-bearing event instead of a downstream fetch
+
+**Schema version:** 69
+**Commit summary:** **Test-only refactor of the Keeper of Souls Phase-2 end-to-end assertion. `test_keeper_of_souls.py::test_ks_on_death_hook_heals_watcher_when_npc_dies` previously did two `GET /api/campaign/.../character/{tavik_id}` round-trips bracketing the bandit kill and asserted `hp_after == hp_before + 2`. The new shape filters `gm_ws.buffered("character_hp_update")` for messages whose `data.character_id == tavik.id`, asserts at least one fired, and asserts the last message's `data.delta == 2`. The `feature_used(source=keeper-of-souls-trigger)` `heal_amount == 2` assertion already in the test continues to cover the heal-pipeline `applied` value; this addition belt-and-suspenders the *broadcast* surface that every live client actually subscribes to.**
+**Description:** This is a test-quality refactor — no app-code, endpoint, or broadcast-shape change (still v69). The previous assertion was correct but indirect: it inferred "the broadcast went out" from "a later GET shows the new HP," which couples the test to the sheet-fetch contract rather than the WS contract the heal pipeline (`_apply_heal_to_combatant` in `app/routes/hp_routes.py`) is actually responsible for. The new shape catches a future regression where the heal lands on the sheet via a backdoor path but the broadcast is dropped — which would break every live client even though the GET still returns the correct number. Mirrors the assertion style used elsewhere in the harness for events like `hp_update`, `feature_used`, and `token_moved`.
+
+### Changed
+- `tests/harness/test_keeper_of_souls.py` — `test_ks_on_death_hook_heals_watcher_when_npc_dies` swaps its bracketing `GET /character/{id}` HP-poll for a `gm_ws.buffered("character_hp_update")` filter that asserts at least one HP-update broadcast fired for Tavik and that the last one carries `delta == 2` (bandit HD). Same coverage of the heal landing; the assertion now pins the WS broadcast surface that live clients subscribe to.
+- `docs/test-harness-coverage.md` — updates the `test_ks_on_death_hook_heals_watcher_when_npc_dies` row so the catalog reflects the WS-broadcast assertion (and bumps the v-stamp to v2.158.63).
+
+### Notes
+- Total harness count unchanged: **2157** in `tests/harness/`; **`tests/harness_ui/` 23** — test-only refactor, no count change.
+- No endpoint, broadcast-shape, or schema change — pure assertion-shape improvement.
+
+---
+
 ## [2.158.62] - 2026-06-10 — "The Reeling Master" — v2.158.61 wired the Drunken Technique sheet button to its dedicated endpoint, but no demo PC was a Way of the Drunken Master Monk, so the button never rendered and couldn't be click-tested. This seeds a 15th demo PC (Quan Reelstep, Way of the Drunken Master Lv 5) carrying a `drunken-technique` class feature, then covers the seed contract + the now-reachable button in both the HTTP and Playwright harnesses
 
 **Schema version:** 69

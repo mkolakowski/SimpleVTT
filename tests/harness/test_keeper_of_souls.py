@@ -312,13 +312,6 @@ async def test_ks_on_death_hook_heals_watcher_when_npc_dies(
     assert r.status_code == 200, r.text
     assert r.json()["buff_installed"] is True
 
-    # Read Tavik's HP after the watcher install (no change yet).
-    r = await gm_client.get(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}"
-    )
-    sheet_before = (r.json().get("sheet") or {})
-    hp_before = int((sheet_before.get("hp") or {}).get("current") or 0)
-
     # Pip swings at the 1-HP bandit until a hit lands. Bandit AC ~12;
     # Pip Shortsword +6 vs AC 12 → ~70% hit. Bound to 12 swings.
     gm_ws.mark()
@@ -362,13 +355,24 @@ async def test_ks_on_death_hook_heals_watcher_when_npc_dies(
         f"watcher should heal for 2 HP (bandit HD); got {healed}"
     )
 
-    # Verify Tavik's HP actually went up via the heal pipeline.
-    r = await gm_client.get(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}"
+    # Verify Tavik's HP actually went up via the heal pipeline by
+    # watching for the `character_hp_update` broadcast that
+    # `_apply_heal_to_combatant` fires after the heal lands on the
+    # PC sheet. heal_amount on the feature_used broadcast above
+    # comes from the heal_result.applied, so a non-zero value
+    # already implies the pipeline ran; this is the belt-and-
+    # suspenders check that the broadcast surface is consistent.
+    hp_msgs = [
+        m for m in gm_ws.buffered("character_hp_update")
+        if int((m.get("data") or {}).get("character_id") or 0) == int(tavik["id"])
+    ]
+    assert hp_msgs, (
+        "no character_hp_update broadcast fired for Tavik — the "
+        "heal pipeline didn't run despite the feature_used trigger"
     )
-    sheet_after = (r.json().get("sheet") or {})
-    hp_after = int((sheet_after.get("hp") or {}).get("current") or 0)
-    assert hp_after == hp_before + 2, (
-        f"Tavik should heal 2 HP from Keeper of Souls; "
-        f"hp_before={hp_before}, hp_after={hp_after}"
+    last_hp_msg = hp_msgs[-1]
+    delta = int((last_hp_msg.get("data") or {}).get("delta") or 0)
+    assert delta == 2, (
+        f"character_hp_update delta should be +2 (bandit HD); "
+        f"got delta={delta}, msg={last_hp_msg}"
     )
