@@ -5128,6 +5128,107 @@ def _eligible_reactions(
                         "available": True,
                         "unavailable_reason": None,
                     })
+                # v2.158.67 — Combat Inspiration Phase 3a: surface a
+                # `use-combat-inspiration-ac` option on `attack_targeted`
+                # when the watcher carries a `bardic-inspiration-die`
+                # buff whose `source_char_id` is a Valor College Bard
+                # Lv 3+. RAW PHB p.55: a creature holding a Bardic
+                # Inspiration die from a Valor Bard may, as a reaction,
+                # roll the die and add it to its AC vs the triggering
+                # attack. The dispatch (rolling the die + verdict +
+                # consuming the BI die buff + marking the reaction) is
+                # deferred to the Phase 3b follow-up commit; this slice
+                # only ships the option's surfacing so the picker offers
+                # it automatically. Without this gate, the player had to
+                # manually call `/use_combat_inspiration?mode=ac` and
+                # plug attack_total + target_ac in by hand (v2.145.0).
+                try:
+                    _ci_watcher_buffs = _get_buffs(
+                        campaign_id, int(watcher_char_id),
+                    )
+                except Exception:
+                    _ci_watcher_buffs = []
+                for _ci_bi in _ci_watcher_buffs or []:
+                    if not isinstance(_ci_bi, dict):
+                        continue
+                    if _ci_bi.get("key") != "bardic-inspiration-die":
+                        continue
+                    _ci_src_id = _ci_bi.get("source_char_id")
+                    if not _ci_src_id:
+                        continue
+                    try:
+                        _ci_src_char = db.query(Character).filter(
+                            Character.id == int(_ci_src_id),
+                        ).first()
+                    except Exception:
+                        _ci_src_char = None
+                    if not _ci_src_char or not _ci_src_char.sheet:
+                        continue
+                    if not _pc_has_valor_bard(_ci_src_char.sheet, 3):
+                        continue
+                    _ci_die_raw = (
+                        ((_ci_bi.get("effects") or {})
+                         .get("bardic_inspiration_die")) or ""
+                    )
+                    if not _ci_die_raw:
+                        continue
+                    # BI stores the die as "d8" / "d10" etc. (no "1"
+                    # prefix). Normalize to "1dN" so the label + params
+                    # match the convention used by every other dice
+                    # expression in the codebase (Tail Swat → "1d8",
+                    # Defensive Duelist → "+PB AC", Lucky → "1d20").
+                    try:
+                        _ci_die_max = int(
+                            str(_ci_die_raw).lower().rsplit("d", 1)[-1]
+                        )
+                    except (ValueError, AttributeError):
+                        _ci_die_max = 0
+                    if _ci_die_max <= 0:
+                        continue
+                    _ci_die_expr = f"1d{_ci_die_max}"
+                    _ci_ac = int(char.sheet.get("ac") or 0)
+                    _ci_atk_total = context.get("attack_total")
+                    _ci_hint = ""
+                    if (
+                        isinstance(_ci_atk_total, int)
+                        and _ci_ac
+                    ):
+                        _ci_need = max(
+                            1, int(_ci_atk_total) - _ci_ac + 1,
+                        )
+                        if _ci_need <= _ci_die_max:
+                            _ci_hint = (
+                                f" — +{_ci_die_expr} AC vs d20 "
+                                f"{_ci_atk_total}; roll {_ci_need}+ on "
+                                f"the die to MISS."
+                            )
+                        else:
+                            _ci_hint = (
+                                f" — +{_ci_die_expr} AC vs d20 "
+                                f"{_ci_atk_total}; can't reach miss "
+                                f"threshold (need {_ci_need}+)."
+                            )
+                    opts.append({
+                        "key": "use-combat-inspiration-ac",
+                        "label": (
+                            f"🎺 Combat Inspiration "
+                            f"(+{_ci_die_expr} AC){_ci_hint}"
+                        ),
+                        "kind": "class_feature",
+                        "resource_cost": "Reaction + 1× BI die",
+                        "params": {
+                            "die_expression": _ci_die_expr,
+                            "die_size": _ci_die_max,
+                            "source_char_id": int(_ci_src_id),
+                            "target_ac": _ci_ac,
+                            "attack_total": _ci_atk_total,
+                        },
+                        "available": True,
+                        "unavailable_reason": None,
+                    })
+                    # Only surface ONE option even if the watcher
+                    # somehow carries multiple BI-die buffs.
+                    break
                 # v2.78.0 Phase 5 — Item reactions. Walks equipped
                 # inventory items for `_reactions[]` entries binding
                 # to the attack_targeted trigger.

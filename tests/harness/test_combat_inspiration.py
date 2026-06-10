@@ -291,3 +291,209 @@ async def test_use_ci_level_gate(
             {"subclass": "College of Lore", "level": 6},
             class_slug="bard",
         )
+
+
+async def test_ci_phase3a_attack_targeted_prompt_surfaces_option(
+    gm_client, gm_ws, lyra_valor, roster,
+):
+    """v2.158.67 — Phase 3a: when a watcher carries a
+    `bardic-inspiration-die` buff sourced by a Valor College Bard
+    Lv 3+, the `attack_targeted` reaction prompt surfaces a
+    `use-combat-inspiration-ac` option automatically. Pre-fix, the
+    player had to manually invoke `/use_combat_inspiration?mode=ac`
+    with attack_total + target_ac plugged in by hand (v2.145.0).
+
+    Setup: Lyra (PATCHed to Valor Lv 6) casts Bardic Inspiration on
+    Garrik (Fighter — deliberately a non-Rogue so Uncanny Dodge's
+    auto-fire doesn't pre-consume his reaction before the
+    attack_targeted prompt resolves), landing a
+    `bardic-inspiration-die` buff on Garrik's combatant with
+    `source_char_id == lyra.id`. Pip (attacker) then swings at
+    Garrik until a hit lands; the resulting `reaction_prompt` for
+    Garrik lists `use-combat-inspiration-ac` with the BI die
+    expression and the source bard's char_id in the option's params.
+    The dispatch half (rolling the die + verdict + consuming the BI
+    buff + marking the reaction) is deferred to Phase 3b — this
+    test only asserts the option's surfacing. A separate follow-up
+    commit will also suppress UD's auto-fire when the watcher
+    carries a BI buff so the option surfaces for Rogue-Bard pairs
+    too (mirrors the v2.80.0 Shield/DD/Lucky suppression pattern).
+    """
+    lyra = lyra_valor
+    pip = roster["Pip Quickfingers"]
+    garrik = roster["Garrik Ironside"]
+    # Refill Lyra's BI counter so the cast doesn't 409 on depletion.
+    refill = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+        json={"type": "long"},
+    )
+    assert refill.status_code == 200, refill.text
+    # Seed a 3-PC battle. Pip (initiative 20) acts first as the
+    # attacker; Lyra (15) casts BI on Garrik (10); then Pip swings
+    # at Garrik. Garrik is the BI recipient because he's a Fighter
+    # with no UD auto-fire to pre-consume his reaction.
+    lyra_tok = f"tok_ci3a_l_{lyra['id']}"
+    pip_tok = f"tok_ci3a_p_{pip['id']}"
+    garrik_tok = f"tok_ci3a_g_{garrik['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": pip_tok, "char_id": pip["id"],
+             "name": pip["name"], "initiative": 20,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": lyra_tok, "char_id": lyra["id"],
+             "name": lyra["name"], "initiative": 15,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": garrik_tok, "char_id": garrik["id"],
+             "name": garrik["name"], "initiative": 10,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    # Lyra casts BI on Garrik → installs the bardic-inspiration-die
+    # buff on Garrik's combatant with source_char_id = lyra.id.
+    bi = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration",
+        json={
+            "character_id": lyra["id"],
+            "target_character_id": garrik["id"],
+            "override": True,
+        },
+    )
+    assert bi.status_code == 200, bi.text
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+    # Pip swings at Garrik until a hit lands so attack_targeted fires.
+    for _ in range(20):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": pip["id"],
+                "attack_index": 0,
+                "target_combatant_id": garrik_tok,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit"):
+            break
+    else:
+        raise AssertionError(
+            "Pip failed to hit Garrik in 20 swings — BI prompt never fired"
+        )
+    await asyncio.sleep(0.3)
+    prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, (
+        f"expected attack_targeted reaction_prompt for Garrik; got "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in gm_ws.buffered('reaction_prompt')]}"
+    )
+    options = prompts[0]["data"].get("options") or []
+    ci_opts = [o for o in options if o.get("key") == "use-combat-inspiration-ac"]
+    assert ci_opts, (
+        f"expected use-combat-inspiration-ac option on Garrik's prompt; "
+        f"got option keys {[o.get('key') for o in options]}"
+    )
+    ci_opt = ci_opts[0]
+    assert ci_opt.get("kind") == "class_feature"
+    assert ci_opt.get("available") is True
+    # The label surfaces the die expression so the player sees the
+    # AC boost size at a glance.
+    label = ci_opt.get("label") or ""
+    assert "Combat Inspiration" in label
+    assert "+1d8 AC" in label, (
+        f"expected '+1d8 AC' in label for Lv 6 Valor Bard; got {label!r}"
+    )
+    # Params carry the data the (Phase 3b) dispatch will need to
+    # roll the die + compute the verdict + drop the buff.
+    params = ci_opt.get("params") or {}
+    assert params.get("die_expression") == "1d8", (
+        f"die_expression should be 1d8 for Lv 6 Valor; got {params!r}"
+    )
+    assert params.get("die_size") == 8
+    assert int(params.get("source_char_id") or 0) == int(lyra["id"]), (
+        f"source_char_id should be Lyra's id; got {params.get('source_char_id')!r}"
+    )
+    # attack_total + target_ac surface so the future dispatch can
+    # roll the verdict without re-reading the sheet.
+    assert isinstance(params.get("attack_total"), int)
+    assert isinstance(params.get("target_ac"), int)
+
+
+async def test_ci_phase3a_no_bi_buff_no_option(
+    gm_client, gm_ws, lyra_valor, roster,
+):
+    """v2.158.67 — Regression guard: when the watcher has NO
+    `bardic-inspiration-die` buff installed (e.g. Lyra never cast BI
+    on them), the Combat Inspiration AC option MUST NOT surface on
+    `attack_targeted`. Without this gate the picker would offer the
+    option to anyone, breaking RAW.
+
+    Setup: Garrik (attacker) + Pip (watcher, NO BI buff) + Lyra
+    (Valor Bard but didn't cast BI). Garrik hits Pip; the
+    attack_targeted prompt has Pip's other reactions (if any), but
+    `use-combat-inspiration-ac` is NOT in the options."""
+    lyra = lyra_valor  # noqa: F841 — fixture sets Lyra to Valor for symmetry
+    pip = roster["Pip Quickfingers"]
+    garrik = roster["Garrik Ironside"]
+    pip_tok = f"tok_ci3a_no_p_{pip['id']}"
+    garrik_tok = f"tok_ci3a_no_g_{garrik['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": garrik_tok, "char_id": garrik["id"],
+             "name": garrik["name"], "initiative": 20,
+             "hp_current": 60, "hp_max": 60, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+            {"id": pip_tok, "char_id": pip["id"],
+             "name": pip["name"], "initiative": 10,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+    gm_ws.mark()
+    for _ in range(20):
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": garrik["id"],
+                "attack_index": 0,
+                "target_combatant_id": pip_tok,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("hit"):
+            break
+    else:
+        raise AssertionError(
+            "Garrik failed to hit Pip in 20 swings — prompt never fired"
+        )
+    await asyncio.sleep(0.3)
+    prompts = [
+        m for m in gm_ws.buffered("reaction_prompt")
+        if (m.get("data") or {}).get("watcher_char_id") == pip["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    # A prompt may or may not fire (Pip may have no eligible reactions
+    # without the BI buff); either way, no use-combat-inspiration-ac
+    # option may surface.
+    for p in prompts:
+        options = (p.get("data") or {}).get("options") or []
+        keys = [o.get("key") for o in options]
+        assert "use-combat-inspiration-ac" not in keys, (
+            f"use-combat-inspiration-ac must NOT surface without a BI "
+            f"buff; got keys={keys}"
+        )
