@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2153 in `tests/harness/` + 20 in `tests/harness_ui/` (as of v2.158.57, 2026-06-10).
+**Total tests:** 2153 in `tests/harness/` + 21 in `tests/harness_ui/` (as of v2.158.58, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2778,6 +2778,13 @@ v2.158.57 — browser coverage of the v2.158.55 Channel Divinity picker wiring a
 | Test | What it asserts |
 |------|-----------------|
 | `test_cd_picker_routes_vow_of_enmity` | PATCHes Dame Seraphine Vael's CD full + seeds a one-combatant battle into `localStorage`, clicks `.res-use[data-key="channel-divinity"]`, asserts `#resource-option-picker` surfaces a `.rop-opt` labelled "Vow of Enmity" (the class+subclass+level filter matches her Oath of Vengeance Lv 3), picks it, asserts the `.target-picker-overlay` opens (the distinguisher — generic CD options never open a target picker), taps the seeded Bandit row, and asserts a POST fired to `/use_vow_of_enmity` (never `/use_feature`) with no console errors. |
+
+### `test_invoke_duplicity_picker_ui.py`
+v2.158.58 — the targetless sibling of the Vow-of-Enmity UI test. Proves Invoke Duplicity takes the same v2.158.55 `_fireCDDedicated` path but opens NO target picker. PATCHes Tavik into Trickery Domain Lv 2 (no demo Trickery Cleric exists) and restores him afterward.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cd_picker_routes_invoke_duplicity` | PATCHes Brother Tavik Stonebrow into Trickery Domain Lv 2 (CD full) + seeds a battle, clicks `.res-use[data-key="channel-divinity"]`, asserts `#resource-option-picker` surfaces a `.rop-opt` labelled "Invoke Duplicity", picks it, asserts the option picker closes with NO `.target-picker-overlay` opening (the distinguisher from the vow branch), and asserts a POST fired to `/use_invoke_duplicity` (never `/use_feature`) with no console errors. Restores Tavik to Life Domain Lv 8 in a `finally`. |
 
 ---
 

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.58] - 2026-06-10 — "The Illusory Twin" — The Vow of Enmity browser path got a Playwright test in v2.158.57, but its sibling CD option — Invoke Duplicity — was still UI-untested. This adds the matching test for the *targetless* dedicated branch, proving Invoke Duplicity routes to /use_invoke_duplicity WITHOUT opening a target picker
+
+**Schema version:** 69
+**Commit summary:** **New Playwright UI test `tests/harness_ui/test_invoke_duplicity_picker_ui.py` covering the other half of the v2.158.55 Channel Divinity dispatch. Where v2.158.57 proved Vow of Enmity opens a target picker, this proves Invoke Duplicity (Trickery Cleric Lv 2+) takes the same `_fireCDDedicated` path but is targetless: picking it closes the option picker, opens NO `.target-picker-overlay`, and POSTs `/use_invoke_duplicity` (never `/use_feature`). No demo PC is a Trickery Cleric, so — like the HTTP test `test_invoke_duplicity.py` — it PATCHes Brother Tavik Stonebrow (Life Domain) into Trickery Domain Lv 2 for the duration, seeds a battle so the endpoint's buff install has live state, and restores him to Life Domain Lv 8 in a `finally` so the shared session isn't left mutated.**
+**Description:** v2.158.57 pinned the target-taking dedicated CD branch in a real browser; this pins the targetless one, so both halves of the `onPick` dispatch added in v2.158.55 now have UI regression coverage. The "no target picker opens" assertion is the load-bearing distinguisher: a generic `/use_feature` CD option closes the picker with no follow-up modal, and the Vow-of-Enmity branch opens a target picker — Invoke Duplicity must do neither-then-the-other (close picker, no target modal, dedicated POST). The request-capture step nails the routing to `/use_invoke_duplicity`. No app-code change — test-only coverage of already-shipped UI.
+
+### Added
+- `tests/harness_ui/test_invoke_duplicity_picker_ui.py` — `test_cd_picker_routes_invoke_duplicity` PATCHes Tavik into Trickery Domain Lv 2, opens the CD option picker, asserts "Invoke Duplicity" surfaces, picks it, asserts the option picker closes with NO target picker opening, and asserts a `/use_invoke_duplicity` POST fired (never `/use_feature`) with no console errors; restores Tavik to Life Domain Lv 8 afterward.
+
+### Notes
+- Total harness count: **2153** in `tests/harness/` (unchanged); **`tests/harness_ui/` 21** (was 20).
+- Test-only commit — no endpoint, broadcast, schema, or app-code change (still v69).
+
+---
+
 ## [2.158.57] - 2026-06-10 — "The Witnessed Vow" — The /use_vow_of_enmity endpoint and its sheet button are both harness-covered server-side, but no test drives the actual browser click path: open the Channel Divinity picker, see Vow of Enmity surface for a Vengeance Paladin, pick it, and confirm it routes to the dedicated endpoint. This adds that Playwright UI test
 
 **Schema version:** 69
