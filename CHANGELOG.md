@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.55] - 2026-06-10 — "The Sworn Button" — Invoke Duplicity and Vow of Enmity had working endpoints (`/use_invoke_duplicity`, `/use_vow_of_enmity`) but no sheet UI — players could only fire them announce-style. This wires both Channel Divinity options into the resource-pill picker so a click installs the real buff
+
+**Schema version:** 69
+**Commit summary:** **Frontend wiring for the two Phase-8 Channel Divinity endpoints that previously had no button. The CD resource-pill picker in `sheet_dnd5e.html` filters options by class/subclass/level and, on pick, POSTed the generic `/use_feature` announce for every option. This commit routes two of them to their dedicated endpoints instead: Invoke Duplicity (Trickery Cleric Lv 2+) → `/use_invoke_duplicity`, and Vow of Enmity (Vengeance Paladin Lv 3+) → `/use_vow_of_enmity` (opening the init-tracker target picker first, since the vow needs a `target_combatant_id`). Both share the standard 409 `over_budget` → `handleOverBudget` retry-with-override flow and surface a confirmation toast. Vow of Enmity is also newly registered as a `channel-divinity` option in `dnd5e_feature_economy.js` (class `paladin`, subclass `vengeance`, `min_level: 3`) so it appears in the picker for a Vengeance Paladin.**
+**Description:** Across v2.158.52–.54 the install-then-deferred-read arc gave Invoke Duplicity and Vow of Enmity real, buff-installing endpoints — but no way to fire them from the character sheet, so a player still had to call them announce-style (or via the GM). This closes that last gap. The Channel Divinity picker's `onPick` now branches: the two option keys with dedicated endpoints route through a new `_fireCDDedicated(chosen)` helper (target picker for the vow, none for the duplicate; both hit the over-budget retry path), while every other CD option keeps the unchanged generic `/use_feature` path. Invoke Duplicity already existed in the JS feature-economy table (v2.158.3); Vow of Enmity is added there now so the subclass/level filter surfaces it. No endpoint or WebSocket-broadcast shape changes — this is pure sheet UI wiring of two already-shipped, already-harness-tested endpoints (`test_invoke_duplicity.py`, `test_vow_of_enmity.py`).
+
+This makes both diversification features reachable from the sheet, not just from `curl` / GM narration.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — the Channel Divinity resource-pill picker routes Invoke Duplicity → `/use_invoke_duplicity` and Vow of Enmity → `/use_vow_of_enmity` (via the `_promptTargetPicker` init-tracker picker) through a new `_fireCDDedicated` helper, with the standard over-budget retry + a confirmation toast; all other CD options keep the generic `/use_feature` announce.
+- `app/static/dnd5e_feature_economy.js` — added the `vow-of-enmity` entry to the `channel-divinity` options (Vengeance Paladin Lv 3+ bonus action) so the picker filter surfaces it.
+
+### Notes
+- No new endpoint or broadcast surface, so no new harness test is required — the underlying endpoints are already covered by `tests/harness/test_invoke_duplicity.py` and `tests/harness/test_vow_of_enmity.py`. Total harness count unchanged: **2151** in `tests/harness/`; **`tests/harness_ui/` 19**.
+- Browser click-through was not performed (no demo Vengeance Paladin exists for Vow of Enmity; Caelan is Oath of Devotion). The JS routing, target-picker contract, and over-budget retry mirror the existing Bardic Inspiration / Cutting Words wiring verbatim.
+
+---
+
 ## [2.158.54] - 2026-06-10 — "The Knight's Opening" — Eldritch Strike installed an `eldritch-strike-target` buff on the struck creature (disadvantage on its next save vs the EK's spell), but the spell-save resolver never read it — the disadvantage was GM-tracked. Wiring the read site rolls the marked saver's save at disadvantage and consumes the mark. This closes the last Phase-8 straggler
 
 **Schema version:** 69

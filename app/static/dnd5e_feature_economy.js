@@ -161,6 +161,11 @@ window._FEATURE_ECONOMY = {
             // ── Paladin options (v2.14.3) ─────────────────────
             'sacred-weapon': { label: 'Sacred Weapon', desc: 'Imbue a weapon you hold with positive energy for 1 minute: +CHA mod to attack rolls, deals magical damage, emits 20 ft bright light.', class: 'paladin', subclass: 'devotion' },
             'turn-the-unholy': { label: 'Turn the Unholy', desc: 'Each fiend or undead within 30 ft that can see/hear you must succeed on a Wisdom save or be turned for 1 minute.', class: 'paladin', subclass: 'devotion' },
+            // v2.158.55: Vengeance Paladin Lv 3+ (bonus action). Routes
+            // to the dedicated /use_vow_of_enmity endpoint (not the
+            // generic /use_feature announce) so the vow-of-enmity-active
+            // attack-advantage buff actually installs.
+            'vow-of-enmity': { label: 'Vow of Enmity', desc: 'Bonus action — utter a vow against a creature you can see within 10 ft. Gain advantage on attack rolls against it for 1 minute (or until it drops to 0 HP / falls unconscious).', class: 'paladin', subclass: 'vengeance', min_level: 3 },
         },
     },
 

@@ -8095,6 +8095,77 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const subtitle = cdRow
                     ? `${cdRow.current} / ${cdRow.max} use${cdRow.max == 1 ? '' : 's'} remaining — pick what to channel:`
                     : 'Pick what to channel:';
+
+                // v2.158.55: dispatch for the two CD options that own
+                // dedicated endpoints. Invoke Duplicity takes no target;
+                // Vow of Enmity needs a target combatant (the picker reads
+                // the init tracker via _promptTargetPicker). Both share the
+                // 409 over_budget → handleOverBudget retry-with-override
+                // flow used everywhere else.
+                const _fireCDDedicated = async (chosen) => {
+                    const isVoe = chosen.key === 'vow-of-enmity';
+                    const endpoint = isVoe ? 'use_vow_of_enmity'
+                                           : 'use_invoke_duplicity';
+                    let voeTarget = null;
+                    if (isVoe) {
+                        if (typeof window._promptTargetPicker !== 'function') {
+                            _toast('Vow of Enmity needs the target picker (open the tabletop).', 'error');
+                            return;
+                        }
+                        const picked = await window._promptTargetPicker({
+                            title: '⚔️ Vow of Enmity — pick a target',
+                            subtitle: 'Bonus action: gain advantage on attack rolls against this creature for 1 minute.',
+                            excludeCharId: CHAR_ID,
+                            allowMulti: false,
+                        });
+                        // null = cancelled; {} = skip (no target). The
+                        // endpoint requires a target, so both abort.
+                        if (!picked || !picked.target_combatant_id) {
+                            if (picked && !picked.target_combatant_id) {
+                                _toast('Vow of Enmity needs a target combatant.', 'error');
+                            }
+                            return;
+                        }
+                        voeTarget = picked;
+                    }
+                    const _body = (override) => {
+                        const b = { character_id: CHAR_ID, override: !!override };
+                        if (isVoe) b.target_combatant_id = voeTarget.target_combatant_id;
+                        return b;
+                    };
+                    const doFetch = (override) => fetch(`/api/campaign/${_CAMPAIGN_ID}/${endpoint}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(_body(override)),
+                    });
+                    try {
+                        let resp = await doFetch(false);
+                        if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
+                            let peek; try { peek = await resp.clone().json(); } catch { peek = null; }
+                            if (peek && peek.error === 'over_budget') {
+                                const retried = await window.handleOverBudget(resp, () => doFetch(true));
+                                if (!retried) return;
+                                resp = retried;
+                            } else if (peek && peek.error === 'out_of_uses') {
+                                _toast('Channel Divinity: no uses remaining', 'error');
+                                return;
+                            }
+                        }
+                        if (!resp.ok) {
+                            let body; try { body = await resp.json(); } catch { body = null; }
+                            _toast(`${chosen.label} failed: ` + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                            return;
+                        }
+                        if (isVoe) {
+                            _toast(`⚔️ Vow of Enmity vs ${voeTarget.target_name || 'target'}: advantage on attacks for 1 min.`, 'info');
+                        } else {
+                            _toast(`🎭 Invoke Duplicity: illusory duplicate created (concentration, 1 min).`, 'info');
+                        }
+                    } catch (e) {
+                        _toast(`${chosen.label} broadcast failed: ` + e.message, 'error');
+                    }
+                };
+
                 window.showResourceOptionPicker({
                     title: 'Channel Divinity',
                     subtitle,
@@ -8110,6 +8181,20 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         // extra `await postUse(k, -1, false)` here that
                         // would now cause a double-decrement).
                         if (typeof _CAMPAIGN_ID === 'undefined' || !_CAMPAIGN_ID) return;
+
+                        // v2.158.55: two CD options own dedicated endpoints
+                        // that install a parameter-carrying buff (Invoke
+                        // Duplicity → invoke-duplicity-active; Vow of Enmity
+                        // → vow-of-enmity-active). Route them there instead
+                        // of the generic /use_feature announce so the buff
+                        // (and the attack/save hooks that read it) fire.
+                        // Each still decrements the shared channel-divinity
+                        // counter + marks its slot server-side.
+                        if (chosen.key === 'invoke-duplicity'
+                                || chosen.key === 'vow-of-enmity') {
+                            await _fireCDDedicated(chosen);
+                            return;
+                        }
                         try {
                             const resp = await fetch(`/api/campaign/${_CAMPAIGN_ID}/use_feature`, {
                                 method: 'POST',
