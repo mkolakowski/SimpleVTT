@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2121 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.38, 2026-06-10).
+**Total tests:** 2123 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.39, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1368,7 +1368,7 @@ v2.99.234 — Light Domain Cleric (PHB p.60) Warding Flare reaction (Phase H.1 f
 | `test_use_warding_flare_no_resource` | Light Cleric without the `warding-flare` resource entry → 404. |
 
 ### `test_eldritch_knight_capstones.py`
-v2.99.269 — Eldritch Knight Fighter (PHB p.74) Arcane Charge + Improved War Magic announces (Phase E.2 Phase 4, **closes E.2**). Lv 15 Arcane Charge (teleport 30 ft with Action Surge); Lv 18 Improved War Magic (Lv 1+ spell variant of War Magic). v2.158.11 (Phase 8 Lv-15 tier): Arcane Charge endpoint now installs a permanent `arcane-charge-active` buff carrying the two `arcane_charge_*` teleport-budget flags. Phase 2 (deferred): `/use_action_surge` reads the buff + surfaces the teleport option.
+v2.99.269 — Eldritch Knight Fighter (PHB p.74) Arcane Charge + Improved War Magic announces (Phase E.2 Phase 4, **closes E.2**). Lv 15 Arcane Charge (teleport 30 ft with Action Surge); Lv 18 Improved War Magic (Lv 1+ spell variant of War Magic). v2.158.11 (Phase 8 Lv-15 tier): Arcane Charge endpoint now installs a permanent `arcane-charge-active` buff carrying the two `arcane_charge_*` teleport-budget flags. v2.158.39 (Phase 2 shipped): `/use_action_surge` reads the buff via `_pc_arcane_charge_teleport_ft` + surfaces the 30 ft teleport budget on its response + broadcast.
 
 | Test | What it asserts |
 |------|-----------------|
@@ -1378,6 +1378,8 @@ v2.99.269 — Eldritch Knight Fighter (PHB p.74) Arcane Charge + Improved War Ma
 | `test_use_iwm_level_gate` | Lv 17 → 409. |
 | `test_ac_buff_payload_carries_teleport_flags` | v2.158.11 — installed buff carries `effects.arcane_charge_teleport_max_ft == 30` + `effects.arcane_charge_requires_action_surge == True`. Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). Pins the Phase-2 contract so the future `/use_action_surge` read site has stable flag names to look up. |
 | `test_iwm_buff_payload_carries_min_spell_level_flag` | v2.158.12 — installed `improved-war-magic-active` buff carries `effects.improved_war_magic_active == True` + `effects.improved_war_magic_min_spell_level == 1`. Plus permanence sanity. State-change contract (Phase 9). Pins the Phase-2 contract so the future War Magic / `/cast_spell` read site has stable flag names. Closes EK 2/2 Phase 8 tracked features. |
+| `test_action_surge_surfaces_arcane_charge_teleport` | v2.158.39 Phase 2 — a Lv 15 EK carrying `arcane-charge-active` sees `/use_action_surge` return `arcane_charge_teleport_ft == 30` on the response + `feature_used` broadcast, with an Arcane Charge note in the desc. |
+| `test_action_surge_no_teleport_without_arcane_charge` | v2.158.39 control — buff installed then ended → `/use_action_surge` reports `arcane_charge_teleport_ft == 0`; the read is scoped to the buff. |
 
 ### `test_eldritch_strike.py`
 v2.99.268 — Eldritch Knight Fighter (PHB p.74) Eldritch Strike buff install (Phase E.2 Phase 3). Lv 10+; on hit, target has disadvantage on next save vs an EK spell before end of next turn.

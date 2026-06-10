@@ -39536,6 +39536,38 @@ async def use_second_wind(
 
 # ----------- API: Action Surge (Fighter Lv 2) -----------
 
+def _pc_arcane_charge_teleport_ft(sheet: "dict | None") -> int:
+    """v2.158.39 — Phase 2 read gate for the v2.158.11 Arcane Charge
+    buff (Eldritch Knight Fighter Lv 15+, PHB p.74): "you gain the
+    ability to teleport up to 30 feet to an unoccupied space you can
+    see when you use your Action Surge."
+
+    Returns the teleport budget (ft) when the PC carries an active
+    `arcane-charge-active` buff whose `effects.arcane_charge_*` flags
+    require Action Surge; 0 when absent. Reads the mirrored sheet buff
+    (`_buffs_active`) — same source the other Phase-8 read sites use —
+    so it works off `/use_action_surge`'s already-loaded `char.sheet`
+    without a hub fetch.
+    """
+    if not isinstance(sheet, dict):
+        return 0
+    for b in (sheet.get("_buffs_active") or []):
+        if not isinstance(b, dict):
+            continue
+        if (str(b.get("key") or "").strip().lower() != "arcane-charge-active"):
+            continue
+        eff = b.get("effects") or {}
+        if not isinstance(eff, dict):
+            continue
+        if not eff.get("arcane_charge_requires_action_surge"):
+            continue
+        try:
+            return int(eff.get("arcane_charge_teleport_max_ft") or 0)
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
 @router.post("/api/campaign/{campaign_id}/use_action_surge")
 async def use_action_surge(
     campaign_id: int,
@@ -39645,6 +39677,25 @@ async def use_action_surge(
     )
     caster_color = char.color or player_color
 
+    # v2.158.39 — Phase 2 read site for the v2.158.11 Arcane Charge
+    # buff. An Eldritch Knight Lv 15+ carrying `arcane-charge-active`
+    # may teleport up to 30 ft (before or after the additional action)
+    # when using Action Surge; surface the budget on the response +
+    # broadcast so the client can offer the teleport.
+    arcane_charge_ft = _pc_arcane_charge_teleport_ft(sheet)
+
+    feature_desc = (
+        "Action chip refunded. Take another weapon attack, "
+        "cast a spell, or fire any other action — your "
+        "normal Act for this turn is back."
+    )
+    if arcane_charge_ft > 0:
+        feature_desc += (
+            f" 🌀 Arcane Charge: you may also teleport up to "
+            f"{arcane_charge_ft} ft to an unoccupied space you can see "
+            f"(before or after the additional action)."
+        )
+
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -39652,17 +39703,14 @@ async def use_action_surge(
             "character_name": char.name,
             "user_color": caster_color,
             "feature_name": "⚡ Action Surge → +1 action this turn",
-            "feature_desc": (
-                "Action chip refunded. Take another weapon attack, "
-                "cast a spell, or fire any other action — your "
-                "normal Act for this turn is back."
-            ),
+            "feature_desc": feature_desc,
             "source": "action-surge",
             "cast_id": as_cast_id,
             "remaining": as_cur - 1,
             "max": as_max,
             "over_budget": False,
             "over_budget_slot": "",
+            "arcane_charge_teleport_ft": arcane_charge_ft,
         },
     })
 
@@ -39680,6 +39728,7 @@ async def use_action_surge(
         "ok": True,
         "remaining": as_cur - 1,
         "action_chip_refunded": True,
+        "arcane_charge_teleport_ft": arcane_charge_ft,
     }
 
 
@@ -44763,10 +44812,12 @@ async def use_arcane_charge(
     parameters Phase 2's Action Surge teleport flow will read:
       * `effects.arcane_charge_teleport_max_ft: 30`
       * `effects.arcane_charge_requires_action_surge: True`
-    Phase 2 (deferred): `/use_action_surge` reads the buff and
-    offers the teleport option (before/after the additional
-    action per RAW); the actual token move uses the existing
-    `_force_move` / movement primitives.
+    v2.158.39 — Phase 2 (shipped): `/use_action_surge` reads the
+    buff via `_pc_arcane_charge_teleport_ft` and surfaces the 30 ft
+    teleport budget on its response + `feature_used` broadcast
+    (`arcane_charge_teleport_ft`), so the client can offer the
+    teleport (before/after the additional action per RAW). The actual
+    token move uses the existing movement primitives.
     """
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
@@ -44796,9 +44847,9 @@ async def use_arcane_charge(
 
     # v2.158.11 — install the permanent parameter-carrying buff.
     # Idempotent on re-press via `_install_buff`'s key dedupe.
-    # Phase 2 (deferred): `/use_action_surge` reads
+    # v2.158.39 — Phase 2 (shipped): `/use_action_surge` reads
     # `effects.arcane_charge_*` off the caster's `_buffs_active`
-    # and surfaces the teleport budget.
+    # via `_pc_arcane_charge_teleport_ft` and surfaces the budget.
     buff_installed = await _install_buff(campaign_id, char.id, {
         "key": "arcane-charge-active",
         "name": "🌀 Arcane Charge",

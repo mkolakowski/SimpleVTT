@@ -159,6 +159,80 @@ async def test_use_ac_level_gate(
     assert r.status_code == 409, r.text
 
 
+async def test_action_surge_surfaces_arcane_charge_teleport(
+    gm_client, gm_ws, garrik_ek_in_battle,
+):
+    """v2.158.39 — Phase 2 read site for the v2.158.11 Arcane Charge
+    buff. A Lv 15 EK carrying `arcane-charge-active` sees
+    `/use_action_surge` surface the 30 ft teleport budget on both its
+    JSON response (`arcane_charge_teleport_ft`) and the `feature_used`
+    broadcast, and the broadcast desc mentions Arcane Charge."""
+    garrik = garrik_ek_in_battle
+    await _patch_sheet(
+        gm_client, garrik["id"], {"level": 15}, class_slug="fighter",
+    )
+    # Refill the Action Surge counter.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+    # Phase 1: install the Arcane Charge buff (mirrors to _buffs_active).
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_arcane_charge",
+        json={"character_id": garrik["id"]},
+    )
+    assert r.status_code == 200, r.text
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_action_surge",
+        json={"character_id": garrik["id"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json().get("arcane_charge_teleport_ft") == 30, (
+        f"Action Surge should surface the 30 ft teleport budget; got "
+        f"{r.json()}"
+    )
+    msg = await gm_ws.wait_for("feature_used")
+    assert msg["data"]["source"] == "action-surge"
+    assert msg["data"].get("arcane_charge_teleport_ft") == 30
+    assert "Arcane Charge" in (msg["data"].get("feature_desc") or "")
+
+
+async def test_action_surge_no_teleport_without_arcane_charge(
+    gm_client, garrik_ek_in_battle,
+):
+    """Control: with the `arcane-charge-active` buff removed,
+    `/use_action_surge` reports a 0 ft teleport budget — the read is
+    scoped to the buff, not granted to every Action Surge. Installs
+    then ends the buff so the sheet mirror is clean regardless of
+    prior test state (the buff is permanent)."""
+    garrik = garrik_ek_in_battle
+    await _patch_sheet(
+        gm_client, garrik["id"], {"level": 15}, class_slug="fighter",
+    )
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_arcane_charge",
+        json={"character_id": garrik["id"]},
+    )
+    end = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+        json={"character_id": garrik["id"], "key": "arcane-charge-active"},
+    )
+    assert end.status_code == 200, end.text
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_action_surge",
+        json={"character_id": garrik["id"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json().get("arcane_charge_teleport_ft") == 0, (
+        f"no buff → 0 ft teleport budget; got {r.json()}"
+    )
+
+
 async def test_use_iwm_happy_lv18(
     gm_client, gm_ws, garrik_ek_in_battle,
 ):

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.39] - 2026-06-10 — "Blink Step" — Arcane Charge's installed buff was inert: `/use_action_surge` never read it. Wiring the read site surfaces the 30 ft teleport budget when an Eldritch Knight uses Action Surge
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.158.11 Arcane Charge buff (Eldritch Knight Fighter Lv 15+, PHB p.74): "you gain the ability to teleport up to 30 feet to an unoccupied space you can see when you use your Action Surge." v2.158.11 installed a permanent `arcane-charge-active` buff carrying `effects.arcane_charge_teleport_max_ft: 30` + `effects.arcane_charge_requires_action_surge: True`, but `/use_action_surge` never read it — so the teleport was announce-only. This commit adds `_pc_arcane_charge_teleport_ft` and surfaces the teleport budget on the Action Surge response (`arcane_charge_teleport_ft`) + its `feature_used` broadcast (with a teleport note in the desc) so the client can offer the move.**
+**Description:** v2.158.11 flipped Arcane Charge from announce-only to a buff-installing endpoint (Phase 1), placing a permanent `arcane-charge-active` buff on the EK that names the 30 ft teleport budget gated on Action Surge. But the consumer was deferred: `/use_action_surge` refunded the action chip and broadcast as normal, never inspecting the buff, so the RAW "teleport up to 30 ft when you use Action Surge" rider was inert. This commit wires the read. `/use_action_surge` now reads the mirrored `_buffs_active` via `_pc_arcane_charge_teleport_ft` and, when the EK carries the buff, appends the teleport budget to the `feature_used` desc and returns `arcane_charge_teleport_ft` on both the response and the broadcast. Non-EK fighters (no buff) get `arcane_charge_teleport_ft: 0` — the read is scoped to the buff, not granted to every Action Surge.
+
+This flips Arcane Charge from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `app/routes/tabletop_routes.py::_pc_arcane_charge_teleport_ft` — read gate returning the teleport budget (ft) when the PC carries an active `arcane-charge-active` buff whose `effects.arcane_charge_requires_action_surge` is set; 0 otherwise. Reads the mirrored sheet `_buffs_active`, no hub fetch.
+- `tests/harness/test_eldritch_knight_capstones.py::test_action_surge_surfaces_arcane_charge_teleport` — Phase 2 read-site test: a Lv 15 EK carrying the buff sees `/use_action_surge` return `arcane_charge_teleport_ft: 30` on the response + broadcast with an Arcane Charge note in the desc. `test_action_surge_no_teleport_without_arcane_charge` — control: with the buff removed, the budget is 0.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_action_surge` — reads the Arcane Charge buff and surfaces the teleport budget on the response (`arcane_charge_teleport_ft`) + `feature_used` broadcast; appends a teleport note to the desc when present. `use_arcane_charge` docstring/comment updated to mark the Phase 2 finisher.
+
+### Notes
+- Total harness count: **2123** in `tests/harness/` (was 2121); **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.38] - 2026-06-10 — "The Cobbler's Bill" — Fancy Footwork's `fancy-footwork-blocked` mark was install-only dead weight: the OA-detection flow never read it. Wiring the read site makes the marked creature actually unable to make opportunity attacks against the swashbuckler
 
 **Schema version:** 69
