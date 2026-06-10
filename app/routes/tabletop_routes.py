@@ -26563,6 +26563,44 @@ def _attacker_marked_by_ancestral_protectors_vs_other(
     return False
 
 
+def _attacker_has_vow_of_enmity_vs_target(
+    campaign_id: int,
+    attacker_char_id: "int | None",
+    target_combatant_id: "str | None",
+) -> bool:
+    """v2.158.53 — Phase 2 read site for the v2.99.x Vow of Enmity buff
+    (Vengeance Paladin Lv 3+ Channel Divinity, PHB p.88): "you gain
+    advantage on attack rolls against the creature for 1 minute." The
+    `/use_vow_of_enmity` endpoint installs a `vow-of-enmity-active` buff
+    on the caster's combatant carrying
+    `effects.attack_advantage_vs_target_combatant_id` (the marked
+    target's combatant id). This reads it back: returns True when the
+    attacker carries the buff AND the current target's combatant id
+    matches, granting advantage on the d20 attack roll.
+
+    Reads the attacker's combatant buffs from hub state (mirrors the
+    `_attacker_marked_by_ancestral_protectors_vs_other` precedent) so
+    the /attack caller can pass IDs already in scope.
+    """
+    if not attacker_char_id or not target_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != attacker_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects") or {}
+            marked = effects.get("attack_advantage_vs_target_combatant_id")
+            if marked and str(marked) == str(target_combatant_id):
+                return True
+        return False
+    return False
+
+
 def _target_grants_advantage_to_attackers(
     campaign_id: int, target_combatant_id: str | None,
 ) -> bool:
@@ -77034,18 +77072,25 @@ async def use_attack(
         _target_adv_condition = _target_has_condition_advantage(
             campaign_id, target_combatant_id,
         )
+        # v2.158.53 — Vow of Enmity Phase 2 read (Vengeance Paladin Lv 3+
+        # CD, PHB p.88): advantage on attacks vs the marked combatant.
+        _voe_advantage = _attacker_has_vow_of_enmity_vs_target(
+            campaign_id, char.id, target_combatant_id,
+        )
         has_adv = (
             rage_advantage or target_grants_advantage
             or assassinate_target_hasnt_acted
             or _attacker_invisible_adv
             or bool(_target_adv_condition)
+            or _voe_advantage
         )
         adv_label = (
             "rage" if rage_advantage else
             "reckless" if target_grants_advantage else
             "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else
             "invisible" if _attacker_invisible_adv else
-            f"target_{_target_adv_condition}" if _target_adv_condition else ""
+            f"target_{_target_adv_condition}" if _target_adv_condition else
+            "vow_of_enmity" if _voe_advantage else ""
         )
         # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
         # attack roll has advantage against you while you aren't
@@ -77156,18 +77201,24 @@ async def use_attack(
         _target_adv_condition = _target_has_condition_advantage(
             campaign_id, target_combatant_id,
         )
+        # v2.158.53 — Vow of Enmity Phase 2 read (bonusless branch mirror).
+        _voe_advantage = _attacker_has_vow_of_enmity_vs_target(
+            campaign_id, char.id, target_combatant_id,
+        )
         has_adv = (
             rage_advantage or target_grants_advantage
             or assassinate_target_hasnt_acted
             or _attacker_invisible_adv
             or bool(_target_adv_condition)
+            or _voe_advantage
         )
         adv_label = (
             "rage" if rage_advantage else
             "reckless" if target_grants_advantage else
             "assassinate_hasnt_acted" if assassinate_target_hasnt_acted else
             "invisible" if _attacker_invisible_adv else
-            f"target_{_target_adv_condition}" if _target_adv_condition else ""
+            f"target_{_target_adv_condition}" if _target_adv_condition else
+            "vow_of_enmity" if _voe_advantage else ""
         )
         # v2.99.207 — Elusive (Rogue Lv 18+). RAW PHB p.96: "No
         # attack roll has advantage against you while you aren't

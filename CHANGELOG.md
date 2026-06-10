@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.53] - 2026-06-10 — "The Sworn Foe" — Vow of Enmity installed a `vow-of-enmity-active` buff carrying the marked target's combatant id, but `/attack` never read it — the advantage was GM-tracked. Wiring the read site grants the Vengeance Paladin advantage on attack rolls against the sworn target
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.99.246 Vow of Enmity buff (Vengeance Paladin Lv 3+ Channel Divinity, PHB p.88): "you gain advantage on attack rolls against the creature for 1 minute, or until the target drops to 0 HP." `/use_vow_of_enmity` installs a `vow-of-enmity-active` buff on the caster's combatant carrying `effects.attack_advantage_vs_target_combatant_id` (the marked target's combatant id), but no resolver read it — a Vengeance Paladin still rolled straight against their sworn foe. This commit wires it into `/attack`: a new helper `_attacker_has_vow_of_enmity_vs_target` walks the attacker's combatant buffs and, when `vow-of-enmity-active` names the current target's combatant id, folds advantage onto the d20 attack roll (label `advantage_vow_of_enmity`). The match is per-target, so the vow grants advantage ONLY against the marked creature.**
+**Description:** v2.99.246 shipped the Channel Divinity endpoint that installs the buff, but the advantage half was inert — the `attack_advantage_vs_target_combatant_id` effect param had no read site (one of two Phase-8 stragglers surfaced by the v2.158.52 re-audit). This commit closes the gap. The new `_attacker_has_vow_of_enmity_vs_target(campaign_id, attacker_char_id, target_combatant_id)` helper (modeled on `_attacker_marked_by_ancestral_protectors_vs_other`) reads the attacker's combatant buffs from hub state and returns True when a `vow-of-enmity-active` buff's `effects.attack_advantage_vs_target_combatant_id` matches the current target. It's folded into both `/attack` branches (bonused + bonusless) as an advantage source alongside Rage / Reckless / Invisible, with label `vow_of_enmity`. The existing RAW cancel logic (advantage + disadvantage → straight) and Elusive suppression apply unchanged.
+
+This flips Vow of Enmity's advantage from announce-only to tracked, continuing the Phase 8 diversification arc (1 straggler — Eldritch Strike — remains).
+
+### Added
+- `tests/harness/test_vow_of_enmity_resolver.py::test_vow_of_enmity_grants_advantage_vs_marked_target` — Pip's combatant carries `vow-of-enmity-active` naming Tavik's combatant id → attack vs Tavik → `2d20kh1` + `roll_state_applied == "advantage_vow_of_enmity"`. `test_vow_of_enmity_no_advantage_vs_other_target` — per-target guard: the vow names a different combatant → attack vs Tavik stays a straight `1d20`, no vow advantage.
+
+### Changed
+- `app/routes/tabletop_routes.py` — added `_attacker_has_vow_of_enmity_vs_target` helper; both `/attack` adv/dis branches now fold it into `has_adv` (label `vow_of_enmity`).
+
+### Notes
+- Total harness count: **2149** in `tests/harness/` (was 2147); **`tests/harness_ui/` 19** (unchanged).
+- Per-target match: the vow's combatant id is compared as a string against the attack's `target_combatant_id`, so the advantage is scoped to the marked creature. The "until the target drops to 0 HP" early-expiry and the bonus-action re-vow on a new target stay GM-adjudicated; the buff's 10-round duration is the backstop.
+
+---
+
 ## [2.158.52] - 2026-06-10 — "The Mirror Step" — Invoke Duplicity (Trickery Domain Cleric Lv 2 Channel Divinity) had no server endpoint at all — the Lv-17 `improved-duplicity` upgrade buff installed in v2.158.3 was doubly-deferred with nothing to read it. This commit ships the base `/use_invoke_duplicity` endpoint AND wires it to read that buff, raising the duplicate count from 1 to 4 at Lv 17
 
 **Schema version:** 69
