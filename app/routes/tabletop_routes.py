@@ -12260,6 +12260,33 @@ async def move_token(
         grid_size_px, grid_type, from_x, from_y, x, y,
     )
 
+    # v2.158.51 — Relentless Avenger (Vengeance Paladin Lv 7+, PHB
+    # p.88) Phase 2 read site. The v2.149.0 install lands a 1-round
+    # `relentless-avenger-bonus-move` buff carrying
+    # `free_movement_remaining_ft` (= half walking speed) +
+    # `oa_immune_during_move`. RAW: "When you hit a creature with an
+    # opportunity attack, you can move up to half your speed
+    # immediately after the attack ... This movement doesn't provoke
+    # opportunity attacks." This read (a) exempts up to
+    # `free_movement_remaining_ft` of this drag from the over-speed
+    # cap and (b) suppresses OA triggers for the move, then consumes
+    # the buff (single-use — the install desc says "consumed on next
+    # move"). Detected on the moving PC's combatant via `_get_buffs`.
+    _ra_buff = None
+    _ra_free_ft = 0.0
+    if token.character_id and distance_ft > 0:
+        for _rb in _get_buffs(campaign_id, int(token.character_id)):
+            if (_rb or {}).get("key") != "relentless-avenger-bonus-move":
+                continue
+            _reff = _rb.get("effects") or {}
+            if _reff.get("oa_immune_during_move"):
+                _ra_buff = _rb
+                try:
+                    _ra_free_ft = float(_reff.get("free_movement_remaining_ft") or 0)
+                except (TypeError, ValueError):
+                    _ra_free_ft = 0.0
+            break
+
     # v2.99.99 — server-side over-speed gate. Mirrors the OA 409
     # pattern: if this move would put the active combatant's
     # cumulative `economy.movement` past the EFFECTIVE cap
@@ -12299,7 +12326,15 @@ async def move_token(
                     )
                     _eff_speed = _effective_speed_walk(_active_cap)
                     _eff_cap = _eff_speed + _dash_bonus_ft
-                    _projected_total = _used_ft + distance_ft
+                    # v2.158.51 — Relentless Avenger's bonus move is a
+                    # separate movement that doesn't count against the
+                    # turn's normal speed. Exempt up to the buff's
+                    # remaining free budget from the projected total.
+                    _ra_exempt = (
+                        min(distance_ft, _ra_free_ft)
+                        if _ra_buff is not None else 0.0
+                    )
+                    _projected_total = _used_ft + distance_ft - _ra_exempt
                     # Tolerance: 0.01 ft to absorb float drift in the
                     # Chebyshev / Euclidean distance derivation.
                     if _projected_total > _eff_cap + 0.01:
@@ -12335,6 +12370,13 @@ async def move_token(
             )
         except Exception:
             oa_triggers = []
+    # v2.158.51 — Relentless Avenger: the bonus move doesn't provoke
+    # opportunity attacks. Drop any triggers this drag would have
+    # raised so the 409 gate + advisory below both see an empty list.
+    _ra_applied = False
+    if _ra_buff is not None and distance_ft > 0:
+        _ra_applied = True
+        oa_triggers = []
     if oa_triggers and not bool(body.get("oa_confirmed")):
         return JSONResponse(status_code=409, content={
             "error": "oa_confirmation_required",
@@ -12373,6 +12415,29 @@ async def move_token(
             "token_template_id": token.token_template_id,
         }},
     )
+
+    # v2.158.51 — Relentless Avenger: consume the single-use buff after
+    # the move and announce the OA-free movement. Removing the buff
+    # broadcasts a `buff_update`; a `feature_used` advisory documents
+    # the OA suppression so the table sees why no OA fired.
+    if _ra_applied:
+        await _remove_buff(
+            campaign_id, int(token.character_id),
+            "relentless-avenger-bonus-move",
+        )
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": token.character_id,
+                "character_name": token.label or "Paladin",
+                "feature_name": "🏃 Relentless Avenger",
+                "feature_desc": (
+                    f"Moved {round(distance_ft, 1)} ft without provoking "
+                    f"opportunity attacks (Vengeance Paladin, half speed)."
+                ),
+                "source": "relentless-avenger",
+            },
+        })
 
     # v2.66.0 — F1 follow-up: Opportunity Attack trigger advisory.
     # When the mover leaves a watcher's 5 ft reach mid-move, broadcast
@@ -12634,6 +12699,9 @@ async def move_token(
     return {
         "ok": True,
         "distance_ft": distance_ft,
+        # v2.158.51 — Relentless Avenger applied to this move (OAs
+        # suppressed + buff consumed). False on every other move.
+        "relentless_avenger_applied": _ra_applied,
         # v2.66.0 — F1 OA: surface trigger advisories on the move
         # response too so harness tests + future client UI can assert
         # on them without watching the WS broadcast.

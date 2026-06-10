@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.51] - 2026-06-10 — "The Unprovoked Step" — Relentless Avenger installed a `relentless-avenger-bonus-move` buff (half-speed move that doesn't provoke OAs), but `/token/move` never read it — the OA-free movement was GM-tracked. Wiring the read site suppresses the move's opportunity attacks, exempts the bonus distance from the speed cap, and consumes the buff
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.149.0 Relentless Avenger buff (Vengeance Paladin Lv 7+, PHB p.88): "When you hit a creature with an opportunity attack, you can move up to half your speed immediately after the attack and as part of the same reaction. This movement doesn't provoke opportunity attacks." v2.149.0 installed a 1-round `relentless-avenger-bonus-move` buff carrying `free_movement_remaining_ft` (= half walking speed) + `oa_immune_during_move: True`, but `/token/move` never consumed it. This commit wires the read: when the moving PC's combatant carries the buff, the drag (a) suppresses any opportunity-attack triggers it would raise (no `oa_confirmation_required` 409, no OA advisory), (b) exempts up to `free_movement_remaining_ft` of the distance from the over-speed cap (the bonus move is separate from normal speed), and (c) consumes the buff (single-use, per the install desc "consumed on next move") via `_remove_buff`, plus a `feature_used` advisory documenting the OA-free move.**
+**Description:** v2.149.0 shipped `/use_relentless_avenger` to install the buff, but the half-speed-without-provoke movement was never read — a player announced it and the GM tracked it manually. This commit closes the gap in `move_token` (`/token/move`). After computing the drag distance, the handler reads the mover's combatant buffs (`_get_buffs` by `char_id`) for `relentless-avenger-bonus-move` with `oa_immune_during_move`. When present: the over-speed cap gate subtracts `min(distance, free_movement_remaining_ft)` from the projected total (the bonus move doesn't count against the turn's normal speed); the OA-trigger list is cleared before the 409 gate + advisory loop (the move doesn't provoke); and after the move commits the buff is removed (broadcasting a `buff_update`) with a `feature_used` advisory. The move response gains a `relentless_avenger_applied` boolean. The 120-ft / hit-an-OA-first preconditions stay GM-adjudicated — the buff's presence (installed by the player after their OA lands) is the signal.
+
+This flips Relentless Avenger from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `tests/harness/test_relentless_avenger_move.py::test_relentless_avenger_suppresses_oa_and_consumes_buff` — Caelan carrying the buff moves out of Tavik's reach with no `oa_confirmed` → 200, `relentless_avenger_applied` True, empty `opportunity_attack_triggers`, and a `buff_update` removing the buff. `test_move_provokes_oa_without_relentless_avenger` — control: same move without the buff → 409 `oa_confirmation_required`. `test_relentless_avenger_exempts_free_move_from_speed_cap` — at-cap combatant + RA buff moves +5 ft → 200 (exempt); identical drag without the buff → 409 `over_speed_cap`.
+
+### Changed
+- `app/routes/tabletop_routes.py::move_token` — reads `relentless-avenger-bonus-move` on the mover; exempts the bonus distance from the over-speed cap, suppresses OA triggers, consumes the buff, and returns `relentless_avenger_applied`.
+
+### Notes
+- Total harness count: **2143** in `tests/harness/` (was 2140); **`tests/harness_ui/` 19** (unchanged).
+- Single-use per the install desc: the buff is consumed on the first qualifying move. Its 1-round duration is the backstop if the player never moves.
+
+---
+
 ## [2.158.50] - 2026-06-10 — "Eyes in the Dark" — Devil's Sight installed a permanent `devils-sight-active` buff (see normally in darkness out to 120 ft), but the attack-roll disadvantage adjudicator never read it. Wiring the read site lets a Devil's Sight carrier ignore the disadvantage from being blinded *by darkness* — while still suffering blindness from other sources
 
 **Schema version:** 69
