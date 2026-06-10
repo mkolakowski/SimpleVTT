@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.59] - 2026-06-10 — "Claws Out" — Form of the Beast had a working endpoint (`/use_form_of_the_beast`), a read site (the natural-weapons panel), and a bonus claw-attack button — but no way to *install* the buff from the sheet. The class-features Use button fell through to the announce-only `/use_feature`, so the natural-weapon UI never populated. This wires the button to the dedicated endpoint with a Bite/Claws/Tail picker
+
+**Schema version:** 69
+**Commit summary:** **Frontend wiring for the Form of the Beast install gap surfaced by the Phase-8 re-audit. The class-features Use button (`.cf-use` → `_bindUseButtons` in `sheet_dnd5e.html`) routed a fixed allowlist of features to dedicated endpoints and everything else to `/use_feature` (announce-only, no buff). Form of the Beast (Path of the Beast Barbarian Lv 3+) was in the fall-through bucket, so clicking it never installed the `form-of-the-beast-active` buff — leaving the v2.158.25 natural-weapons panel and the `/use_form_of_the_beast_claws_attack` bonus attack with nothing to read. This adds an `isFormOfTheBeast` branch that opens a Bite/Claws/Tail option picker (via `showResourceOptionPicker`) and POSTs the chosen `form` to `/use_form_of_the_beast`, with the standard 409 `over_budget` → `handleOverBudget` retry and a confirmation toast.**
+**Description:** This is the install-half fix for one of the five "read site works, but the buff can't be installed from the UI" stragglers the re-audit found (the same class of bug fixed for Vow of Enmity / Invoke Duplicity in v2.158.55). The read half shipped across v2.158.25–.30 (natural-weapons panel + bonus claw attack), but the activation trigger was missing: a player could see the feature in their class-features list and click Use, but it only announced. Now the click opens a form picker (Bite self-heal / Claws extra-attack / Tail reaction-AC) and installs the parameter-carrying buff, which the natural-weapons panel then renders within one poll tick. No endpoint or broadcast-shape change — pure sheet wiring of the already-shipped, already-harness-tested `/use_form_of_the_beast` (covered by `tests/harness/test_form_of_the_beast.py`).
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — the class-features Use button routes Form of the Beast → `/use_form_of_the_beast` through a new `isFormOfTheBeast` branch, opening a Bite/Claws/Tail picker first and surfacing a confirmation toast; all other features keep the generic `/use_feature` announce.
+
+### Notes
+- No new endpoint or broadcast surface, so no new harness test is required — `/use_form_of_the_beast` is already covered by `tests/harness/test_form_of_the_beast.py`. Total harness count unchanged: **2153** in `tests/harness/`; **`tests/harness_ui/` 21**.
+- Browser click-through was not performed: the only demo Barbarian (Krieger Stonefist) is Path of the Berserker, so no demo PC carries a `form-of-the-beast` class feature for the button to render. Seeding a Path of the Beast Barbarian (mirroring the v2.158.56 Vengeance Paladin) is the natural follow-up that makes this click-testable. The picker → endpoint → over-budget retry mirrors the existing Rage / Reckless Attack / Vanish wiring verbatim.
+
+---
+
 ## [2.158.58] - 2026-06-10 — "The Illusory Twin" — The Vow of Enmity browser path got a Playwright test in v2.158.57, but its sibling CD option — Invoke Duplicity — was still UI-untested. This adds the matching test for the *targetless* dedicated branch, proving Invoke Duplicity routes to /use_invoke_duplicity WITHOUT opening a target picker
 
 **Schema version:** 69

@@ -5543,6 +5543,17 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // /use_feature which only flips the chip + emits
                     // an announce-style broadcast — missing the buff.
                     const isVanish = featureKey === 'vanish';
+                    // v2.158.59: Form of the Beast (Path of the Beast
+                    // Barbarian Lv 3+). Routes to /use_form_of_the_beast
+                    // so the v2.158.20 `form-of-the-beast-active` buff
+                    // installs — the v2.158.25 natural-weapons panel +
+                    // the /use_form_of_the_beast_claws_attack bonus
+                    // attack both read that buff, so without this route
+                    // the /use_feature fallback would only announce and
+                    // the natural-weapon UI would never populate. Opens
+                    // a Bite/Claws/Tail picker first (the endpoint takes
+                    // a `form` parameter).
+                    const isFormOfTheBeast = featureKey === 'form-of-the-beast';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -5678,6 +5689,31 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         }
                     }
 
+                    // v2.158.59: pick the natural-weapon form before
+                    // building the fetch closure (mirrors the cutting-
+                    // words target-pick-first pattern). Cancel aborts.
+                    let fotbForm = null;
+                    if (isFormOfTheBeast) {
+                        if (typeof window.showResourceOptionPicker === 'function') {
+                            fotbForm = await new Promise((resolve) => {
+                                window.showResourceOptionPicker({
+                                    title: '🐾 Form of the Beast',
+                                    subtitle: 'Manifest a natural weapon for the duration of your rage:',
+                                    options: [
+                                        { key: 'bite', label: '🦷 Bite (1d8 piercing)', desc: 'Once per turn, when you damage a creature with the bite and have less than half your HP, regain HP equal to your proficiency bonus.' },
+                                        { key: 'claws', label: '🐾 Claws (1d6 slashing)', desc: 'When you attack with the claws using the Attack action, make one additional claw attack as part of that action.' },
+                                        { key: 'tail', label: '🦎 Tail (1d8 piercing, 10 ft)', desc: 'Reaction: when a creature within 10 ft hits you, add 1d8 to your AC against that attack — possibly causing it to miss.' },
+                                    ],
+                                    onPick: (opt) => resolve(opt && opt.key),
+                                    onCancel: () => resolve(null),
+                                });
+                            });
+                            if (!fotbForm) { btn.disabled = false; return; }
+                        } else {
+                            fotbForm = 'claws';
+                        }
+                    }
+
                     const endpoint = isCuttingWords ? 'use_cutting_words'
                                    : isSecondWind ? 'use_second_wind'
                                    : isActionSurge ? 'use_action_surge'
@@ -5694,6 +5730,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                           : 'use_font_of_magic_to_slot')
                                    : isMetamagicEmpowered ? 'use_metamagic_empowered_spell'
                                    : isVanish ? 'use_vanish'
+                                   : isFormOfTheBeast ? 'use_form_of_the_beast'
                                    : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
@@ -5740,6 +5777,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 character_id: MY_CHAR_ID,
                             } : isVanish ? {
                                 character_id: MY_CHAR_ID,
+                                override: !!override,
+                            } : isFormOfTheBeast ? {
+                                character_id: MY_CHAR_ID,
+                                form: fotbForm,
                                 override: !!override,
                             } : {
                                 character_id: MY_CHAR_ID,
@@ -5812,6 +5853,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 ? ' — vanish-active buff installed'
                                 : '';
                             window.showToast(`🌑 Vanish: Hide as bonus action${buffNote}. Roll Stealth normally.`, 'info');
+                        } else if (isFormOfTheBeast) {
+                            const formIcon = { bite: '🦷', claws: '🐾', tail: '🦎' }[data.form] || '🐾';
+                            const dmg = data.damage_die
+                                ? ` (${data.damage_die} ${data.damage_type || ''}, reach ${data.reach_ft || 5} ft)`
+                                : '';
+                            const buffNote = data.buff_installed ? ' — natural weapon manifested' : '';
+                            window.showToast(`${formIcon} Form of the Beast — ${String(data.form || '').replace(/^\w/, c => c.toUpperCase())}${dmg}${buffNote}. Lasts until your rage ends.`, 'info');
                         } else {
                             const lbl = data.feature_label || 'Feature used';
                             const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';
