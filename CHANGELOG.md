@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.30] - 2026-06-09 — "Paw Print" — Phase 2 frontend wiring for the v2.158.29 claws rider: a "🐾 +1 Claw" bonus-action button on the Natural Weapons panel claws row
+
+**Schema version:** 69
+**Commit summary:** **Closes the loop on v2.158.29. The Natural Weapons panel (v2.158.27) now renders a dedicated "🐾 +1 Claw" button alongside the "⚔ Strike" button on any claws-form natural-weapon row. Clicking it POSTs `/api/campaign/{cid}/use_form_of_the_beast_claws_attack` with the shared single-target pick, handling the endpoint's 409 branches (`over_budget` → `window.handleOverBudget` retry; `already_used` / `no_claws_form` → toast) and surfacing the hit/miss + damage result via the toast.**
+**Description:** v2.158.29 shipped the backend endpoint for the RAW bonus-action extra claw attack; v2.158.30 surfaces it. A Path of the Beast Barbarian with the claws form active now sees two buttons on the claws row: "⚔ Strike" (the normal Attack-action claw swing via `/attack`) and "🐾 +1 Claw" (the bonus-action follow-up via the new endpoint). The bonus button only renders when the entry's `form === "claws"` (bite/tail rows show just Strike), reads the shared target-picker localStorage so the picked enemy rides through, and routes 409s through the same over-budget handler the rest of the sheet uses.
+
+UI-only commit — the backend endpoint has full harness coverage from v2.158.29 (happy path, once-per-turn, wrong-form, missing-field), so no new harness test is added (same convention as the v2.158.27 Natural Weapons panel commit).
+
+### Added
+- `app/templates/sheet_dnd5e.html` — claws-form rows in the Natural Weapons panel now render a "🐾 +1 Claw" button + a `_bindClawsBonusButtons()` handler that POSTs `/use_form_of_the_beast_claws_attack`, plus a shared `_readSingleTarget()` helper. Handles `over_budget` / `already_used` / `no_claws_form` 409s and toasts the hit/miss + damage_applied result.
+
+### Changed
+- No behavior change for non-claws natural weapons (bite/tail rows still show only the Strike button) or non-Beast-Barbarian PCs (empty panel).
+- `docs/test-harness-coverage.md` — count unchanged at **2112** (UI-only commit); header bumped to v2.158.30.
+
+### Notes
+- Tail reaction-AC rider is still the last outstanding Form of the Beast rider (needs reaction-framework + post-roll AC modifier hook). Filed for a follow-up commit.
+- **Total harness count: 2112** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.29] - 2026-06-09 — "One More Swipe" — Phase 2 claws rider for Form of the Beast: dedicated bonus-action extra-claw-attack endpoint, resolved server-side with a once-per-turn gate
 
 **Schema version:** 69

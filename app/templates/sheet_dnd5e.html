@@ -5893,6 +5893,23 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             if (w.range) bits.push(
                 `<span class="muted" style="font-size:11px;">${_esc(w.range)}</span>`);
             const ttl = _esc(w.desc || '');
+            // v2.158.30 — Claws form grants one additional claw attack as
+            // a bonus action (Path of the Beast Lv 3+ TCE). Surface a
+            // dedicated button that POSTs the v2.158.29
+            // /use_form_of_the_beast_claws_attack endpoint (server-side
+            // once-per-turn + bonus-slot gate).
+            const clawsBonusBtn = (String(w.form) === 'claws') ? `
+                    <button type="button" class="nw-claws-bonus"
+                        data-name="${_esc(w.name)}"
+                        title="One additional claw attack as a bonus action (once per turn)"
+                        style="font-size:11px;padding:4px 10px;min-height:32px;
+                               background:rgba(255,200,80,0.14);
+                               border:1px solid var(--s-accent);
+                               color:var(--s-accent);
+                               border-radius:4px;cursor:pointer;
+                               flex-shrink:0;">
+                        🐾 +1 Claw
+                    </button>` : '';
             return `
             <div class="nw-row" style="border:1px solid var(--s-accent);
                   border-radius:4px;margin-bottom:3px;
@@ -5920,6 +5937,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                flex-shrink:0;">
                         ⚔ Strike
                     </button>
+                    ${clawsBonusBtn}
                 </div>
             </div>`;
         }).join('');
@@ -5929,6 +5947,98 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 ⚡ Natural Weapons (from active buff)
             </div>${rows}`;
         _bindStrikeButtons();
+        _bindClawsBonusButtons();
+    }
+
+    // Shared target-read: mirror the Strike button so a single-target
+    // pick rides through to the claws bonus-attack endpoint.
+    function _readSingleTarget() {
+        try {
+            const key = `simplevtt:targeting:${CAMPAIGN_ID}`;
+            const raw = localStorage.getItem(key);
+            if (!raw) return {};
+            const arr = JSON.parse(raw);
+            if (!Array.isArray(arr) || !arr.length) return {};
+            const head = arr[0];
+            return {
+                target_combatant_id: head.combatant_id || '',
+                target_character_id: head.character_id || null,
+                target_name: head.name || '',
+            };
+        } catch (_) { return {}; }
+    }
+
+    function _bindClawsBonusButtons() {
+        container.querySelectorAll('.nw-claws-bonus').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (typeof CAMPAIGN_ID === 'undefined') return;
+                const wname = btn.dataset.name || 'Claws';
+                btn.disabled = true;
+                try {
+                    const targetBody = _readSingleTarget();
+                    const doFetch = (override) => fetch(
+                        `/api/campaign/${CAMPAIGN_ID}/use_form_of_the_beast_claws_attack`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                character_id: MY_CHAR_ID,
+                                ...targetBody,
+                                override: !!override,
+                            }),
+                        },
+                    );
+                    let resp = await doFetch(false);
+                    if (resp.status === 409
+                            && typeof window.handleOverBudget === 'function') {
+                        let peek; try { peek = await resp.clone().json(); }
+                        catch { peek = null; }
+                        if (peek && peek.error === 'over_budget') {
+                            const retried = await window.handleOverBudget(
+                                resp, () => doFetch(true),
+                            );
+                            if (!retried) return;
+                            resp = retried;
+                        } else if (peek && peek.error === 'already_used') {
+                            (window.showToast || alert)(
+                                `${wname}: extra claw attack already used this turn`,
+                                'warn',
+                            );
+                            return;
+                        } else if (peek && peek.error === 'no_claws_form') {
+                            (window.showToast || alert)(
+                                `${wname}: no active claws form`, 'error',
+                            );
+                            return;
+                        }
+                    }
+                    if (!resp.ok) {
+                        let body; try { body = await resp.json(); }
+                        catch { body = null; }
+                        (window.showToast || alert)(
+                            `${wname}: ${body ? JSON.stringify(body) : 'claw attack failed'}`,
+                            'error',
+                        );
+                        return;
+                    }
+                    const data = await resp.json().catch(() => null);
+                    if (data && typeof window.showToast === 'function') {
+                        const dmg = data.damage_applied
+                            ? ` — ${data.damage_applied} ${data.damage_type || ''}`
+                            : '';
+                        const verdict = data.attacked
+                            ? (data.hit ? `hit (1d20→${data.attack_total})${dmg}`
+                                        : `miss (1d20→${data.attack_total})`)
+                            : 'announced';
+                        window.showToast(
+                            `🐾 +1 Claw (bonus): ${verdict}`, 'info',
+                        );
+                    }
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        });
     }
 
     function _bindStrikeButtons() {
