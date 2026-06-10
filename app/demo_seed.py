@@ -2110,6 +2110,22 @@ def _ranger_sheet(name: str) -> dict:
                 "name": "Colossus Slayer (Hunter's Prey)",
                 "desc": "Passive — once per turn, add +1d6 damage to a creature already below its HP maximum. Hunter's Prey pick at Lv 3 (Hunter subclass).",
             },
+            # v2.158.24 — Vanish (Ranger Lv 14+). Surfaces a curated
+            # "🌑 Vanish" button in the Class abilities panel via the
+            # v2.158.23 `_FEATURE_ECONOMY['vanish']` entry. Rowan is
+            # Lv 7 by default, so clicking the button returns 409
+            # level_too_low until she's PATCH-bumped to Lv 14
+            # (see tests/harness/test_use_vanish.py for the fixture).
+            # Listed unconditionally so the picker button is a
+            # discoverable visual cue that the feature exists at Lv
+            # 14 — the test fixture flow + any future Lv-14 demo
+            # Ranger fixture (or homebrew bump) immediately unlocks
+            # it without needing a separate class_features insertion.
+            {
+                "key": "vanish",
+                "name": "Vanish (Lv 14+)",
+                "desc": "Hide as a bonus action; can't be tracked by nonmagical means unless you choose to leave a trail. Routes to /use_vanish which installs the permanent `vanish-active` parameter buff (v2.158.21) and marks the bonus chip. Currently 409 level_too_low for Rowan (Lv 7); bump to Lv 14+ to unlock.",
+            },
         ],
         # Hunter Lv 7 features (Defensive Tactics / Multiattack Defense /
         # Escape the Horde) and Lv 11 Multiattack pick wait on a Lv 7+

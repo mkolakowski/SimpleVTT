@@ -123,6 +123,29 @@ async def test_use_vanish_level_gate(
     assert data.get("required") == 14
 
 
+async def test_rowan_demo_seed_has_vanish_in_class_features(
+    gm_client, roster,
+):
+    """v2.158.24 — demo seed contract: Rowan's `class_features` list
+    includes a ``"vanish"`` entry so the v2.158.23 curated picker
+    button is surfaced unconditionally in the demo. (Rowan is Lv 7
+    by default — clicking still 409s level_too_low until she's
+    PATCH-bumped to Lv 14, but the button itself is discoverable.)
+    """
+    rowan = roster["Rowan Quickbow"]
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-json",
+    )
+    assert r.status_code == 200, r.text
+    sheet = r.json().get("sheet") or {}
+    class_features = sheet.get("class_features") or []
+    keys = [(f or {}).get("key") for f in class_features]
+    assert "vanish" in keys, (
+        f"v2.158.24: demo seed should include 'vanish' in Rowan's "
+        f"class_features; got keys={keys}"
+    )
+
+
 async def test_use_feature_vanish_curated_entry_resolves_bonus_slot(
     gm_client, rowan_lv14,
 ):

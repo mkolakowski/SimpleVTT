@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.24] - 2026-06-09 — "Visible Vanish" — Demo seed adds the Vanish entry to Rowan's `class_features` list so the v2.158.23 picker button is discoverable without manual sheet edits (Rowan is Lv 7; the button 409s until she's bumped to Lv 14)
+
+**Schema version:** 69
+**Commit summary:** **Completes the user-facing loop for the v2.158.21–23 Vanish trio. Adds `{"key": "vanish", "name": "Vanish (Lv 14+)", "desc": ...}` to Rowan Quickbow's `class_features` list in `app/demo_seed.py::_ranger_sheet`. The v2.158.23 curated `_FEATURE_ECONOMY['vanish']` entry now renders a "🌑 Vanish" button in the Class abilities panel for any campaign reseeded against this commit. Rowan is still Lv 7, so clicking the button returns 409 `level_too_low` until she's PATCH-bumped to Lv 14 (the same fixture path test_use_vanish.py exercises). The entry is listed unconditionally so it serves as a discoverable visual cue that the feature exists at Lv 14+ — and a future Lv-14 demo Ranger fixture (or a homebrew bump) immediately unlocks it without needing a separate class_features insertion.**
+**Description:** v2.158.21 shipped the buff-install backend, v2.158.22 shipped the `can_hide_as_bonus` query endpoint, v2.158.23 shipped the curated picker entry + cf-use routing. v2.158.24 surfaces the button on the demo without any manual setup so it's discoverable in a click-through walkthrough of the demo campaign.
+
+Listing `vanish` in Rowan's class_features at Lv 7 is a deliberate documentation choice: the feature exists, the player can see the button, and the 409 response surfaces a clear "level_too_low" toast explaining the gate. The alternative — bumping Rowan to Lv 14 by default — would have wide blast radius on existing fixture tests (Rowan is depended on by ~20 harness tests at Lv 7). The picker entry serves as documentation for the feature; the Phase-9 PATCH-to-14 fixture in `test_use_vanish.py` covers the actual exercise path.
+
+### Added
+- `app/demo_seed.py::_ranger_sheet` — new `{"key": "vanish", "name": "Vanish (Lv 14+)", "desc": ...}` entry in Rowan's `class_features` list, with a comment explaining the listed-but-gated rationale.
+- `tests/harness/test_use_vanish.py::test_rowan_demo_seed_has_vanish_in_class_features` — pins the demo-seed contract: Rowan's `class_features` includes a `"vanish"` entry so the picker button is surfaced unconditionally for the demo Ranger.
+
+### Changed
+- `docs/test-harness-coverage.md` — total harness count bumped to **2099** (was 2098).
+
+### Notes
+- Clicking the Vanish button on Rowan Lv 7 returns 409 `level_too_low` with `required: 14` — the existing economy_messaging error-toast path surfaces "Vanish: required Lv 14, got 7" via the standard 409 handler.
+- The Phase 2 "non-magical tracking-check resolver" read site for the buff's `vanish_untrackable_nonmagical` flag still doesn't have a primitive in the codebase. Filed.
+- **Total harness count: 2099** in `tests/harness/`; **`tests/harness_ui/` 19** (unchanged).
+
+---
+
 ## [2.158.23] - 2026-06-09 — "One-Click Vanish" — Phase 2 frontend wiring: Vanish (Ranger Lv 14+) now has a curated `_FEATURE_ECONOMY` entry on both sides; cf-use picker routes featureKey === 'vanish' to /use_vanish so the v2.158.21 buff install fires from the class-features button
 
 **Schema version:** 69
