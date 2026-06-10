@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2129 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.42, 2026-06-10).
+**Total tests:** 2131 in `tests/harness/` + 19 in `tests/harness_ui/` (as of v2.158.43, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -932,7 +932,7 @@ v2.99.315 — Shepherd Druid (XGE p.24) Spirit Totem Lv 2+ (E.4 Druid batch). Bo
 | `test_use_st_out_of_uses` | Back-to-back → 409 `no_uses_left`. |
 
 ### `test_star_map.py`
-v2.99.316 — Stars Druid (TCE p.37) Star Map Lv 2+ (E.4 Druid batch). Star chart focus + Guidance & Guiding Bolt always prepared. Guiding Bolt castable WIS_mod times (min 1) per long rest without slot. v2.158.13 (Phase 8 Druid diversification — first Druid subclass feature flipped to tracked): endpoint installs a permanent `star-map-active` buff with three `star_map_*` effect keys + auto-bootstraps a `guiding-bolt-charges` resource on the sheet (delivering on the original v2.99.316 docstring promise).
+v2.99.316 — Stars Druid (TCE p.37) Star Map Lv 2+ (E.4 Druid batch). Star chart focus + Guidance & Guiding Bolt always prepared. Guiding Bolt castable WIS_mod times (min 1) per long rest without slot. v2.158.13 (Phase 8 Druid diversification — first Druid subclass feature flipped to tracked): endpoint installs a permanent `star-map-active` buff with three `star_map_*` effect keys + auto-bootstraps a `guiding-bolt-charges` resource on the sheet (delivering on the original v2.99.316 docstring promise). v2.158.43 (Phase 2): `/cast_spell` reads the buff's `star_map_free_guiding_bolt_uses_max` effect via `_pc_star_map_free_guiding_bolt_charges` on a Guiding Bolt cast and surfaces a free-cast advisory (slot suppression stays player/GM-driven; the buff effect is read instead of the `guiding-bolt-charges` resource, which `normalize_dnd5e_sheet` drops).
 
 | Test | What it asserts |
 |------|-----------------|
@@ -940,6 +940,8 @@ v2.99.316 — Stars Druid (TCE p.37) Star Map Lv 2+ (E.4 Druid batch). Star char
 | `test_use_sm_wrong_subclass` | Default Mira (Moon) → 409. |
 | `test_use_sm_level_gate` | Stars at Lv 1 → 409. |
 | `test_sm_buff_payload_carries_parameter_flags` | v2.158.13 — installed buff carries the three `star_map_*` effect keys (active=True, free_guiding_bolt_uses_max=3, always_prepared list with Guidance + Guiding Bolt). Plus permanence sanity: `concentration` falsy + `duration_rounds >= 1000`. State-change contract (Phase 9). Pins the Phase-2 contract so the future `/cast_spell` read site has stable flag names to look up. |
+| `test_sm_cast_guiding_bolt_surfaces_free_cast` | v2.158.43 — Phase 2 read site: a Lv 5 Stars Mira carrying `star-map-active` (resource at 3) who casts Guiding Bolt (injected into the spell list) sees `/cast_spell` return `star_map_free_guiding_bolt == True` + `star_map_guiding_bolt_charges_remaining == 3`. |
+| `test_sm_free_cast_not_surfaced_on_other_spell` | v2.158.43 — control: with the buff + charges, casting Druidcraft reports `star_map_free_guiding_bolt == False` + `star_map_guiding_bolt_charges_remaining == 0`. Pins the spell gate. |
 
 ### `test_halo_of_spores.py`
 v2.99.317 — Spores Druid (TCE p.36) Halo of Spores Lv 2+ (E.4 Druid batch). Reaction when creature moves into or starts turn within 10 ft → necrotic damage on failed CON save. Die scales 1d4/1d6/1d8/1d10 at Lv 2/6/10/14. v1 announce-only.

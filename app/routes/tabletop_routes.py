@@ -17379,6 +17379,41 @@ def _pc_mage_hand_legerdemain_params(
     return None
 
 
+def _pc_star_map_free_guiding_bolt_charges(
+    campaign_id: int, character_id: "int | None",
+) -> "int | None":
+    """v2.158.43 — Phase 2 read site for the v2.158.13 ``star-map-active``
+    buff (Circle of Stars Druid Lv 2+, TCE p.37): the Starry Form /
+    Star Map grants a number of free Guiding Bolt casts (WIS mod, min 1)
+    per long rest.
+
+    Returns the per-long-rest free-cast allotment (>= 1) carried on the
+    buff's ``star_map_free_guiding_bolt_uses_max`` effect when the caster
+    has the active buff; None otherwise. The cast flow uses this to
+    surface an advisory "you can cast Guiding Bolt without a slot" flag on
+    a Guiding Bolt cast (the player ticks the ``guiding-bolt-charges``
+    resource via the existing decrement flow; slot suppression stays
+    player/GM-driven for v1). We read the buff effect rather than the
+    sheet resource because ``normalize_dnd5e_sheet`` re-derives the
+    ``resources`` list from class/subclass data and drops the
+    bootstrapped manual entry, whereas the buff effect is stable.
+    """
+    if not character_id:
+        return None
+    for b in _get_buffs(campaign_id, int(character_id)):
+        if (b or {}).get("key") != "star-map-active":
+            continue
+        eff = (b or {}).get("effects") or {}
+        if not eff.get("star_map_active"):
+            continue
+        try:
+            uses = int(eff.get("star_map_free_guiding_bolt_uses_max") or 0)
+        except (TypeError, ValueError):
+            uses = 0
+        return uses if uses > 0 else None
+    return None
+
+
 @router.post("/api/campaign/{campaign_id}/cast_spell")
 async def cast_spell(
     campaign_id: int,
@@ -17959,6 +17994,22 @@ async def cast_spell(
         payload["mage_hand_legerdemain_invisible"] = False
         payload["mage_hand_legerdemain_bonus_action_control"] = False
         payload["mage_hand_legerdemain_unnoticed_check"] = ""
+
+    # v2.158.43 — Phase 2 read site for the v2.158.13 Star Map buff
+    # (Circle of Stars Druid Lv 2+). When a buff-carrying druid casts
+    # Guiding Bolt, surface an advisory flag + the per-long-rest free-cast
+    # allotment (read off the stable buff effect, not the sheet resource)
+    # so the client can offer "cast without spending a slot" (the player
+    # ticks the `guiding-bolt-charges` resource via the existing decrement
+    # flow).
+    _star_map_charges = (
+        _pc_star_map_free_guiding_bolt_charges(campaign_id, char.id)
+        if spell_slug == "guiding-bolt" else None
+    )
+    payload["star_map_free_guiding_bolt"] = _star_map_charges is not None
+    payload["star_map_guiding_bolt_charges_remaining"] = (
+        int(_star_map_charges) if _star_map_charges is not None else 0
+    )
 
     # v2.110.0 — up-cast dice scaling (Approach B). When casting above
     # the spell's base level, grow the damage / healing dice by the
@@ -20272,6 +20323,13 @@ async def cast_spell(
             "mage_hand_legerdemain_bonus_action_control", False),
         "mage_hand_legerdemain_unnoticed_check": payload.get(
             "mage_hand_legerdemain_unnoticed_check", ""),
+        # v2.158.43 — Star Map advisory (Circle of Stars Druid Lv 2+).
+        # True when a buff-carrying druid casts Guiding Bolt with free
+        # charges left; the client offers a no-slot cast.
+        "star_map_free_guiding_bolt": payload.get(
+            "star_map_free_guiding_bolt", False),
+        "star_map_guiding_bolt_charges_remaining": payload.get(
+            "star_map_guiding_bolt_charges_remaining", 0),
     }
 
 

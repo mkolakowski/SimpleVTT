@@ -121,6 +121,101 @@ async def test_use_sm_happy_lv5(
     assert feats
 
 
+async def _sheet_spells(gm_client, char_id):
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    assert r.status_code == 200, r.text
+    return list((r.json().get("sheet") or {}).get("spells") or [])
+
+
+async def _spell_index_by_slug(gm_client, char_id, slug):
+    for i, s in enumerate(await _sheet_spells(gm_client, char_id)):
+        if (s.get("_slug") or "").lower() == slug:
+            return i
+    return None
+
+
+async def test_sm_cast_guiding_bolt_surfaces_free_cast(
+    gm_client, mira_stars,
+):
+    """v2.158.43 — Phase 2 read site for the v2.158.13 Star Map buff.
+    A Lv 5 Circle of Stars Mira carrying `star-map-active` (with the
+    bootstrapped `guiding-bolt-charges` resource at 3) who casts Guiding
+    Bolt (injected into her spell list) sees `/cast_spell` surface
+    `star_map_free_guiding_bolt == True` +
+    `star_map_guiding_bolt_charges_remaining == 3`."""
+    mira = mira_stars
+    await _seed_mira_in_battle(gm_client, mira)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_star_map",
+        json={"character_id": mira["id"]},
+    )
+    assert r.status_code == 200, r.text
+    original = await _sheet_spells(gm_client, mira["id"])
+    injected = original + [{
+        "name": "Guiding Bolt", "level": 1, "prepared": True,
+        "_slug": "guiding-bolt", "casting_time": "1 action",
+    }]
+    await _patch_sheet(gm_client, mira["id"], {"spells": injected})
+    try:
+        gb_index = await _spell_index_by_slug(
+            gm_client, mira["id"], "guiding-bolt")
+        assert gb_index is not None, "Guiding Bolt not injected"
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": mira["id"],
+                "spell_index": gb_index,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("star_map_free_guiding_bolt") is True, (
+            f"buff + charges + Guiding Bolt → free cast True; got {data}"
+        )
+        assert data.get("star_map_guiding_bolt_charges_remaining") == 3
+    finally:
+        await _patch_sheet(gm_client, mira["id"], {"spells": original})
+
+
+async def test_sm_free_cast_not_surfaced_on_other_spell(
+    gm_client, mira_stars,
+):
+    """Control: with the Star Map buff + charges, casting a non-Guiding-
+    Bolt spell (Druidcraft, already in Mira's list) reports
+    `star_map_free_guiding_bolt == False` +
+    `star_map_guiding_bolt_charges_remaining == 0`. Pins the spell
+    gate (the buff alone isn't enough)."""
+    mira = mira_stars
+    await _seed_mira_in_battle(gm_client, mira)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_star_map",
+        json={"character_id": mira["id"]},
+    )
+    assert r.status_code == 200, r.text
+    dc_index = await _spell_index_by_slug(
+        gm_client, mira["id"], "druidcraft")
+    assert dc_index is not None, "Mira has no Druidcraft"
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": mira["id"],
+            "spell_index": dc_index,
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data.get("star_map_free_guiding_bolt") is False, (
+        f"non-Guiding-Bolt spell → free cast False; got {data}"
+    )
+    assert data.get("star_map_guiding_bolt_charges_remaining") == 0
+
+
 async def test_use_sm_wrong_subclass(
     gm_client, roster,
 ):

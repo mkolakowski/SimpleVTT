@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.43] - 2026-06-10 — "Free Stars" — Star Map's installed buff was inert in the cast flow: `/cast_spell` never read it. Wiring the read site surfaces a free-Guiding-Bolt advisory when a Circle of Stars druid casts Guiding Bolt
+
+**Schema version:** 69
+**Commit summary:** **Phase 2 read site for the v2.158.13 Star Map buff (Circle of Stars Druid Lv 2+, TCE p.37): the Starry Form / Star Map grants WIS-mod (min 1) free Guiding Bolt casts per long rest. v2.158.13 installed a permanent `star-map-active` buff carrying the `star_map_free_guiding_bolt_uses_max` count + auto-bootstrapped a `guiding-bolt-charges` resource, but the cast flow never read them — so the free cast was tracked-but-not-surfaced. This commit adds `_pc_star_map_free_guiding_bolt_charges` and, when a buff-carrying druid casts Guiding Bolt, surfaces an advisory `star_map_free_guiding_bolt: True` + `star_map_guiding_bolt_charges_remaining` (the per-long-rest free-cast allotment, read off the stable buff effect) on the cast response so the client can offer a no-slot cast (the player ticks the resource via the existing decrement flow).**
+**Description:** v2.158.13 flipped Star Map from announce-only to a buff-installing endpoint (Phase 1), placing a permanent `star-map-active` buff on the druid (carrying `star_map_free_guiding_bolt_uses_max` = WIS mod, min 1) and bootstrapping a `guiding-bolt-charges` resource. But the consumer was deferred: `/cast_spell` never inspected the buff on a Guiding Bolt cast. This commit wires an advisory read. `/cast_spell` now reads the caster's `star-map-active` buff via `_pc_star_map_free_guiding_bolt_charges` when the cast spell's slug is `guiding-bolt`, and surfaces `star_map_free_guiding_bolt: True` + `star_map_guiding_bolt_charges_remaining: <n>` on the payload + response. The read pulls the count off the buff's `star_map_free_guiding_bolt_uses_max` effect rather than the `guiding-bolt-charges` sheet resource, because `normalize_dnd5e_sheet` re-derives the `resources` list from class/subclass data and drops the bootstrapped manual entry — the buff effect is stable. Casts that don't qualify (other spells or no buff) report `star_map_free_guiding_bolt: False` + `0`. The actual slot suppression / charge decrement stays player/GM-driven for v1 (advisory model — the player ticks the resource).
+
+This flips Star Map from announce-only to tracked, continuing the Phase 8 diversification arc.
+
+### Added
+- `app/routes/tabletop_routes.py::_pc_star_map_free_guiding_bolt_charges` — read gate returning the per-long-rest free-cast allotment (≥1) from the active `star-map-active` buff's `star_map_free_guiding_bolt_uses_max` effect; None when the buff is absent. Reads the buff effect (stable) rather than the `guiding-bolt-charges` sheet resource (dropped by `normalize_dnd5e_sheet`).
+- `tests/harness/test_star_map.py::test_sm_cast_guiding_bolt_surfaces_free_cast` — Phase 2 read-site test: a Lv 5 Circle of Stars Mira carrying the buff (resource at 3) who casts Guiding Bolt (injected into the spell list) sees `/cast_spell` return `star_map_free_guiding_bolt: True` + `star_map_guiding_bolt_charges_remaining: 3`. `test_sm_free_cast_not_surfaced_on_other_spell` — control: casting Druidcraft reports `False` + `0`.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_spell` — reads the Star Map buff on a Guiding Bolt cast and surfaces the free-cast advisory on the payload + response.
+
+### Notes
+- Total harness count: **2131** in `tests/harness/` (was 2129); **`tests/harness_ui/` 19** (unchanged).
+- Advisory scope: the slot suppression / `guiding-bolt-charges` decrement stays player/GM-driven for v1 (the existing resource-decrement flow ticks the free cast).
+
+---
+
 ## [2.158.42] - 2026-06-10 — "The Invisible Hand" — Mage Hand Legerdemain's installed buff was inert: `/cast_spell` never read it. Wiring the read site surfaces the Legerdemain parameters when an Arcane Trickster casts Mage Hand
 
 **Schema version:** 69
