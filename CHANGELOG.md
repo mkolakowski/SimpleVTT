@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.85] - 2026-06-10 — "The Wand-and-Pearl Tray" — Magic-items-automation Phase 3b polish: surface the v2.158.82 (Pearl) + v2.158.84 (Wand) `/use_item_action` endpoint as a 🔮 / 🪄 Use button on each catalog-action item's inventory row. Click prompts the player for the action parameter (slot_level for Pearl, charges for Wand) via `window.prompt`, then POSTs to the endpoint and surfaces 4xx errors via alert. Two new Playwright tests assert both buttons render on Thalindra's sheet (who carries both items)
+
+**Schema version:** 69
+**Commit summary:** **(A) `app/templates/sheet_dnd5e.html` — new client-side `ITEM_ACTION_SLUGS` const inside the inventory `rowHtml` builder. Hardcoded per-slug config (action_key, param name, prompt text, button label) mirroring the server-side `_MAGIC_ITEM_ACTIONS` catalog. A future Phase 4d polish consolidates this into a single source of truth via a `/api/item_action_catalog` endpoint or a per-item JSON read at sheet-load time. (B) New `actionBtn` slot in the row HTML between `useBtn` (consumables) and `qtyCtrl`. Renders the button only when (a) `_slug` is in `ITEM_ACTION_SLUGS`, (b) item is equipped, (c) sheet is not readonly. (C) `.inv-item-action` click handler: parses inputs via `window.prompt`, validates as positive integer, builds the POST body with `inventory_index` + `action_key` + the per-slug param (`slot_level` for Pearl, `charges` for Wand), surfaces the endpoint's 4xx error labels via alert, lets WS broadcast handle the roll-log card update. (D) `.inv-item-action` added to the click-to-expand exclusion list so clicking the button doesn't also expand the row. (E) New Playwright file `tests/harness_ui/test_use_item_action_buttons.py` with 2 tests: `test_pearl_use_button_renders` (Thalindra's Pearl row shows a button containing "Pearl"), `test_wand_use_button_renders` (her Wand row shows a button containing "Cast"). Both prove the per-slug action map scales without code change. (F) `docs/test-harness-coverage.md` UI total bumped 24 → 26.**
+**Description:** Closes the most-visible Phase 3 + 4 gap: until now the endpoints worked but players had to call them by hand via curl / dev tools. The button surface is intentionally minimal (window.prompt is uglier than a modal, but the prompt's "how many?" flow fits Pearl + Wand on one line of UX). Phase 3c polish later replaces the prompt with a proper modal + slot-picker for Pearl + charge-picker for Wand. The hardcoded slug map mirrors the server catalog because the alternative (an `/api/item_action_catalog` GET) is a meaningful endpoint surface that needs its own tests; deferred to Phase 4d when there are 6+ catalog entries to justify it.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `ITEM_ACTION_SLUGS` client config, `actionBtn` row slot, `.inv-item-action` click handler, click-to-expand exclusion entry.
+- `tests/harness_ui/test_use_item_action_buttons.py` — 2 Playwright tests covering Pearl + Wand button render.
+
+### Changed
+- `docs/test-harness-coverage.md` — UI total bumped 24 → 26.
+- `app/version.py` — `APP_VERSION` 2.158.84 → 2.158.85. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.85.
+
+### Notes
+- The `window.prompt` UX is intentionally placeholder — Phase 3c will swap it for a proper modal with a slot-level picker (Pearl) and a charge-spinner (Wand) for parity with the action-economy modals.
+- The button only renders when the item is equipped — same gate as the endpoint enforces server-side. If a player unequips Pearl, the button disappears.
+- Demo PC tally: Thalindra now visually carries Cloak (passive) + Pearl (action) + Wand (action). All four magic-items-automation archetypes (passive bonus, gated passive, single-charge active, multi-charge active) are exercised by the demo party.
+
+---
+
 ## [2.158.84] - 2026-06-10 — "The Seven Sparks" — Magic-items-automation Phase 4a: wire Wand of Magic Missiles (7 charges, multi-charge spend, RAW DMG p.213) through `/use_item_action`. Different shape from Phase 3's Pearl: multi-charge spend per use (1-7 → Lv 1-7 cast). Refactors the dispatch into per-slug handler functions (`_use_item_action_pearl`, `_use_item_action_wand_of_magic_missiles`) so future items grow the catalog without growing one giant endpoint body. Thalindra gets the Wand + a 7-charge resource row. Dice-expression recharge (1d6+1 at dawn) deferred to Phase 4b; for now reset=long fully refills
 
 **Schema version:** 69
