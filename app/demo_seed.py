@@ -4027,6 +4027,27 @@ def seed_tokens(
             x=x, y=y, size=1, team="villain",
         ))
 
+    # v2.158.99 — Magic-items Phase 6c: cinematic "boss-vs-heroes"
+    # spawn. The Young Red Dragon template (v2.158.98) gets dropped
+    # at the top of the room — having just crashed through the
+    # tavern roof above the bandits. CR 10 vs. Lv 5-9 PCs is
+    # deliberately unbalanced; this is a showcase for Caelan's
+    # Dragon Slayer rider (v2.158.93 +3d6 fires automatically via
+    # the v2.158.96 helper resolution + v2.158.98 template type),
+    # not a winnable encounter. A demo GM who wants the playable
+    # bandit fight can right-click the dragon → Remove.
+    _yrd_tmpl = templates.get("young-red-dragon")
+    if _yrd_tmpl is not None:
+        tokens.append(Token(
+            map_id=map_.id,
+            character_id=None,
+            token_template_id=_yrd_tmpl.id,
+            label="Drakkasha (Young Red Dragon)",
+            color="#aa3322",
+            image_url=None,  # color ring + label only — no portrait jpg yet
+            x=700, y=200, size=2, team="villain",
+        ))
+
     db.add_all(tokens)
     db.flush()
     return tokens
@@ -4563,6 +4584,7 @@ def seed_encounter(
     #   tokens[10]  Thug                     — was 16
     #   tokens[11]  Grixxa (Goblin Captain)  — was 17
     #   tokens[12]  Soren (Cult Acolyte)     — was 18
+    #   tokens[13]  Drakkasha (Young Red Dragon)  — v2.158.99
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
@@ -4573,6 +4595,12 @@ def seed_encounter(
         (1,  13, 27, 2),   # Thalindra Moonwhisper
         (10, 11, 32, 0),   # Thug
         (3,  10, 37, 2),   # Zara Emberfire
+        # v2.158.99 — Drakkasha (Young Red Dragon, CR 10). DEX 10
+        # (+0 mod, so init = pure d20 roll). HP 178 RAW. Initiative
+        # 10 lands her mid-pack so the dragon isn't a one-shot
+        # threat on round 1 — a few PCs act first (Caelan's Dragon
+        # Slayer can land before Drakkasha breathes fire).
+        (13, 10, 178, 0),  # Drakkasha (Young Red Dragon)
         (7,   9, 11, 1),   # Bandit Alpha
         (8,   7, 11, 1),   # Bandit Beta
         (4,   6, 55, 2),   # Krieger Stonefist
@@ -4692,7 +4720,10 @@ def seed_encounter(
             "The bandits have you cornered against the bar. Vex barks "
             "orders, Grixxa the goblin captain hops onto a tabletop with "
             "scimitar drawn, and the thug cracks his knuckles. Brother "
-            "Tavik unslings his warhammer behind you. Initiative is rolled."
+            "Tavik unslings his warhammer behind you. Then the roof caves "
+            "in: Drakkasha, a young red dragon, crashes down from the rafters "
+            "in a shower of timbers — and suddenly nobody cares about the "
+            "bandits any more. Initiative is rolled."
         ),
         map_id=map_.id,
         payload=payload,

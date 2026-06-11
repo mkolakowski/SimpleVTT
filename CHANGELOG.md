@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.99] - 2026-06-11 — "The Crashing Boss" — Magic-items-automation Phase 6c: drop Drakkasha (the v2.158.98 Young Red Dragon template) onto the Tavern Brawl map by default + add her to the pre-rolled initiative. A demo GM loading the campaign now sees Caelan's Dragon Slayer +3d6 rider auto-fire on the first attack with zero clicks of setup — the cinematic payoff of Phases 5c (condition substrate) + 5f (helper resolution) + 6b (template type field). CR 10 vs. Lv 5-9 PCs is deliberately unbalanced — the encounter is a showcase, not a winnable fight. The encounter description gets a one-line narrative beat about the dragon crashing through the rafters; a GM who wants the original playable bandit fight can right-click Drakkasha → Remove.
+
+**Schema version:** 69
+**Commit summary:** **(A) `seed_tokens` in `app/demo_seed.py` appends one more Token after the bandits/thug/goblin/cult-acolyte block: Drakkasha (Young Red Dragon), color `#aa3322`, position `(700, 200)` (top of room, above the bandit cluster), size=2 (Large), team=villain, image_url=None (color ring + label until a portrait jpg lands). Uses `templates.get("young-red-dragon")` so the spawn is no-op-safe if the template ever drops out of the seed. (B) `seed_encounter`'s `init_specs` list grows from 13 to 14 entries — Drakkasha at token_idx 13, initiative roll 10 (RAW DEX 10 = +0 mod, so init = pure d20), hp_max 178 (RAW Young Red Dragon), dex_mod 0. Init 10 lands her mid-pack so a few PCs (Caelan can act before her — Dragon Slayer can land before Drakkasha breathes fire). (C) Encounter description gets a one-line beat: "The roof caves in: Drakkasha, a young red dragon, crashes down from the rafters…" so the demo's read flows from bandit ambush → dragon boss without feeling tonally jarring. (D) New harness file `tests/harness/test_demo_dragon_spawn.py` with 2 tests: encounter payload contains a Drakkasha Token (size=2, team=villain); battle_state.combatants contains Drakkasha at hp_max=178 with `token_template_id` set so the Phase 5f resolver can fire Caelan's rider. (E) `docs/test-harness-coverage.md` adds the new section + total bumped 2226 → 2228.**
+**Description:** Closes Phase 6c. The full Phase 5+6 conditional-rider story ships out of the box: launch the demo, log in as GM, click "Load encounter" — Caelan can immediately swing his Dragon Slayer Longsword at Drakkasha and see the +3d6 fire automatically. No template drag-spawn, no battle PUT plumbing, no creature_type override. The catalog substrate's payoff: a real demo encounter that lights up a Phase 5c condition predicate through the Phase 5f helper through the Phase 6b template field — three commits stacked into one cinematic moment. Phase 7 (Vorpal nat-20 decap + Demon Slayer frighten — both post-hit hook substrates rather than damage uplifts) remains queued.
+
+### Added
+- `app/demo_seed.py` — Drakkasha (Young Red Dragon) Token spawn at (700, 200) size=2 villain; init_specs entry at slot 8 (initiative 10).
+- `tests/harness/test_demo_dragon_spawn.py` — 2 tests (encounter payload contains Drakkasha Token; battle_state.combatants contains Drakkasha with template_id).
+
+### Changed
+- `app/demo_seed.py` — encounter description gains a one-line dragon-crashes-in beat for narrative continuity.
+- `docs/test-harness-coverage.md` — new test block + total 2226 → 2228.
+- `app/version.py` — `APP_VERSION` 2.158.98 → 2.158.99. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.99.
+
+### Notes
+- The token-index comment block in `seed_encounter` was updated to add the `tokens[13]  Drakkasha` line so future maintainers know the slot.
+- Drakkasha's portrait jpg is intentionally absent — the color ring + "Drakkasha (Young Red Dragon)" label is enough to identify her for the demo. A future commit could ship a portrait under `/static/demo/tokens/young-red-dragon.jpg` and wire it via the `image` element in the npc_placements tuple (today it's hardcoded `None` outside the loop).
+- Demo Tavern Brawl is now 14 combatants (13 prior + dragon). No existing harness test counts combatants by total — they look up by id or name — so this expansion is non-breaking.
+- The Phase 6c tests query `GET /battle` (the persisted/hub-mirrored state seeded via `reset_and_reseed`). Other harness tests `PUT /battle` to seed synthetic battles, so a serial harness run will see a polluted state by the time `test_demo_dragon_spawn.py` fires. Standing recipe (already documented at the top of `docs/test-harness-coverage.md`): `docker compose restart app` to re-trigger the demo reseed before the run; CI hits this naturally with its fresh-container-per-push pattern.
+
+---
+
 ## [2.158.98] - 2026-06-10 — "The Drake at the Door" — Magic-items-automation Phase 6b: Young Red Dragon NPC token template + Caelan's Dragon Slayer auto-fires in the demo. Demos the v2.158.96 Phase 5f helper resolution at its full scope — the third resolution branch (`token_template.sheet["type"]`) which Phase 5f wired but couldn't exercise out-of-the-box because no demo NPC carried a `type` field. The dragon template is NOT placed on the demo map by default (CR 10 vs. Lv 5-9 PCs would steamroll the Tavern Brawl); the GM drag-spawns it from the Templates drawer when they want to showcase the rider.
 
 **Schema version:** 69
