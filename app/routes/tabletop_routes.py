@@ -30592,21 +30592,28 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
     },
     # v2.159.9 — Phase 8i: first sphere-AoE item. Necklace of
     # Fireballs (RAW DMG p.183). Each bead is a 3rd-level Fireball
-    # (8d6 fire, DC 15 DEX save half, 20-ft sphere). RAW lets the
-    # wearer hurl multiple beads at once to upcast; v1 ships single-
-    # bead throws — the multi-bead picker is filed as Phase 8j.
-    # Charges live in the standard ``resource_key`` row.
+    # (8d6 fire, DC 15 DEX save half, 20-ft sphere). v2.159.10 —
+    # Phase 8j: RAW also lets the wearer hurl multiple beads at once
+    # to upcast: 8d6 base + (N-1)d6 per extra bead. The handler now
+    # reads body.charges (1-current) and computes ``dice_fn(N) =
+    # (7+N)d6``. min/max charges live on the action; max=6 matches
+    # the full-necklace throw RAW.
     "necklace-of-fireballs": {
         "requires_attunement": False,
         "resource_key": "necklace-of-fireballs",
         "actions": {
             "throw-bead": {
-                "name": "Throw Fireball Bead",
+                "name": "Throw Fireball Bead(s)",
                 "save_dc": 15,
                 "save_ability": "DEX",
-                "dice": "8d6",
+                # ``dice_fn`` returns the damage expression for the
+                # spent-bead count. v2.159.10: 1 bead = 8d6 base
+                # Fireball, +1d6 per extra bead per RAW upcast.
+                "dice_fn": lambda n: f"{7 + int(n)}d6",
                 "damage_type": "fire",
                 "save_for_half": True,
+                "min_charges": 1,
+                "max_charges": 6,
             },
         },
     },
@@ -77363,6 +77370,7 @@ async def use_item_action(
             db, campaign_id, char, item, sheet, catalog,
             action_key, action_def,
             target_combatant_ids=body.get("target_combatant_ids") or [],
+            charges=body.get("charges"),
             campaign=campaign,
             prompt_user=user,
         )
@@ -77972,20 +77980,34 @@ async def _use_item_action_necklace_of_fireballs(
     db, campaign_id, char, item, sheet, catalog,
     action_key, action_def,
     target_combatant_ids: list,
+    charges=None,
     campaign=None,
     prompt_user=None,
 ):
     """v2.159.9 — Phase 8i Necklace of Fireballs handler. RAW DMG
     p.183: each bead is a 3rd-level Fireball (8d6 fire, DC 15 DEX
-    save half, 20-ft sphere). v1 ships single-bead throws — multi-
-    bead upcast picker is filed as Phase 8j. Charges live in the
-    ``necklace-of-fireballs`` resource row; depletes on use, no
-    automatic recharge RAW. Returns the per-target save outcomes.
+    save half, 20-ft sphere). v2.159.10 — Phase 8j: hurl multiple
+    beads at once to upcast — 8d6 + (N-1)d6 per extra bead, max 6
+    beads (full necklace = 13d6). Reads body.charges; defaults to 1.
     """
     slug = "necklace-of-fireballs"
     res_key = str(catalog.get("resource_key") or slug)
 
-    # Resource lookup + decrement (1 charge per bead).
+    # v2.159.10 — Phase 8j: validate bead count from body.charges.
+    try:
+        n_charges = int(charges or 1)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "charges must be an int")
+    min_c = int(action_def.get("min_charges") or 1)
+    max_c = int(action_def.get("max_charges") or 1)
+    if n_charges < min_c or n_charges > max_c:
+        raise HTTPException(
+            400,
+            f"charges must be {min_c}..{max_c} for "
+            f"{action_def.get('name') or action_key}",
+        )
+
+    # Resource lookup + decrement.
     resources = list(sheet.get("resources") or [])
     res_idx = -1
     for i, r in enumerate(resources):
@@ -78000,13 +78022,13 @@ async def _use_item_action_necklace_of_fireballs(
     res_row = dict(resources[res_idx])
     cur = int(res_row.get("current") or 0)
     res_max = int(res_row.get("max") or 0)
-    if cur < 1:
+    if cur < n_charges:
         return JSONResponse(
             status_code=409,
             content={
                 "error": "insufficient_charges",
                 "current": cur,
-                "requested": 1,
+                "requested": n_charges,
                 "label": item.get("name") or slug,
             },
         )
@@ -78018,7 +78040,12 @@ async def _use_item_action_necklace_of_fireballs(
 
     save_dc = int(action_def.get("save_dc") or 15)
     save_ability = str(action_def.get("save_ability") or "DEX").upper()
-    dice = str(action_def.get("dice") or "8d6")
+    # v2.159.10 — Phase 8j: dice scales with bead count via dice_fn.
+    dice_fn = action_def.get("dice_fn")
+    if callable(dice_fn):
+        dice = str(dice_fn(n_charges))
+    else:
+        dice = str(action_def.get("dice") or "8d6")
     damage_type = str(action_def.get("damage_type") or "fire")
     save_for_half = bool(action_def.get("save_for_half"))
 
@@ -78087,8 +78114,8 @@ async def _use_item_action_necklace_of_fireballs(
             "damage_dealt": damage_dealt,
         })
 
-    # Decrement the bead charge.
-    res_row["current"] = cur - 1
+    # Decrement the bead charges (v2.159.10: by n_charges, not by 1).
+    res_row["current"] = cur - n_charges
     resources[res_idx] = res_row
     sheet["resources"] = resources
     from sqlalchemy.orm.attributes import flag_modified
@@ -78117,8 +78144,9 @@ async def _use_item_action_necklace_of_fireballs(
                 "source": f"item-{slug}",
                 "label": "💥 Necklace of Fireballs",
                 "summary": (
-                    f"{char.name} hurls a bead from the "
-                    f"{item.get('name')} — fireball erupts. "
+                    f"{char.name} hurls "
+                    f"{n_charges} bead{'s' if n_charges > 1 else ''} from the "
+                    f"{item.get('name')} — fireball erupts ({dice} fire). "
                     f"({len(results)} save(s) resolved; "
                     f"{res_row['current']}/{res_max} beads left.)"
                 ),
@@ -78131,6 +78159,8 @@ async def _use_item_action_necklace_of_fireballs(
         "ok": True,
         "item_name": item.get("name") or slug,
         "action_key": action_key,
+        "charges_spent": n_charges,
+        "dice": dice,
         "save_dc": save_dc,
         "save_ability": save_ability,
         "results": results,

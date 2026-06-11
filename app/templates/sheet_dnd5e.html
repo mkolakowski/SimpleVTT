@@ -7061,9 +7061,20 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         'necklace-of-fireballs': {kind: 'aoe-sphere',
                           action_key: 'throw-bead',
                           label: '💥 Throw Bead',
-                          title: 'Hurl a Fireball Bead — 20-ft sphere, DC 15 DEX save (half on pass).',
+                          title: 'Hurl Fireball Bead(s) — 20-ft sphere, DC 15 DEX save (half on pass).',
                           radius_ft: 20,
-                          max_range_ft: 60},
+                          max_range_ft: 60,
+                          // v2.159.10 — Phase 8j: multi-bead upcast.
+                          // Pre-step prompts for bead count (1-6).
+                          // Reuses _showItemActionModal's spinner.
+                          charge_picker: {
+                              kind: 'spinner', min: 1, max: 6,
+                              title: '💥 Necklace of Fireballs',
+                              body: 'Hurl 1-6 beads. Damage = (7+N)d6 fire — 1 bead = 8d6 (Lv 3 Fireball), 6 beads = 13d6 (Lv 8 upcast).',
+                              submit_label: 'Pick target',
+                              control_label: 'Beads to spend',
+                              cast_level: (n) => 2 + n,  // Lv = 3 base, +1 per extra
+                          }},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
@@ -7523,6 +7534,15 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // burst center (a target combatant), call
                     // /battle/sphere-targets, show the confirm modal,
                     // POST /use_item_action.
+                    // v2.159.10 — Phase 8j: optional charge picker
+                    // step before the target picker. The Necklace of
+                    // Fireballs uses this to let the GM pick how many
+                    // beads to throw (1-6 = Lv 3-8 Fireball upcast).
+                    let pickedCharges = null;
+                    if (cfg.charge_picker) {
+                        pickedCharges = await _showItemActionModal(cfg.charge_picker);
+                        if (pickedCharges === null) return;
+                    }
                     if (typeof window.vttOpenMultiTargetPicker !== 'function') {
                         alert('Target picker unavailable. Reload the page.');
                         return;
@@ -7562,6 +7582,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     if (aoePicked === null) return;
                     body.action_key = cfg.action_key;
                     body.target_combatant_ids = aoePicked;
+                    if (pickedCharges !== null) {
+                        body.charges = pickedCharges;
+                    }
                 } else {
                     const n = await _showItemActionModal(cfg);
                     if (n === null) return;

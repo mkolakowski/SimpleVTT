@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2258 in `tests/harness/` + 40 in `tests/harness_ui/` (as of v2.159.9, 2026-06-11).
+**Total tests:** 2260 in `tests/harness/` + 40 in `tests/harness_ui/` (as of v2.159.10, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2106,6 +2106,16 @@ v2.159.3 magic-items-automation Phase 8c — Javelin of Lightning (RAW DMG p.178
 | `test_javelin_lightning_hurl_two_targets` | Hurl with 2 synthetic targets → 200 with `results` carrying both ids, `spent_until_dawn: True`; sheet's inventory item shows `_used_today: True`. |
 | `test_javelin_lightning_double_use_409` | First hurl 200; second hurl → 409 `error: "spent_until_dawn"`. |
 | `test_javelin_lightning_long_rest_resets` | After first hurl + long rest, second hurl returns 200 (flag was cleared). |
+
+### `test_necklace_of_fireballs.py`
+v2.159.9 magic-items-automation Phase 8i — Necklace of Fireballs (RAW DMG p.183). First sphere-AoE magic item via `/use_item_action`. Each bead is a 3rd-level Fireball (8d6 fire, DC 15 DEX save half, 20-ft sphere). Handler decrements a `necklace-of-fireballs` resource row (current 6 / max 6 / reset='none' — beads don't regenerate RAW); returns 409 `insufficient_charges` when bead count = 0. Thalindra Moonwhisper carries it at inventory_index 11. v2.159.10 Phase 8j: multi-bead upcast — `body.charges` 1-6 spends N beads for `(7+N)d6` fire damage (1 bead = Lv 3 Fireball; 6 beads = Lv 8 upcast / 13d6).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_necklace_throw_bead_2_targets` | v2.159.9 single-bead happy path. Throw at 2 targets → 200 with `save_dc: 15`, `save_ability: "DEX"`, `resource.current: 5` (6→5), `results` carries both target ids. |
+| `test_necklace_3_bead_upcast` | v2.159.10 Phase 8j: POST with `charges: 3` → 200, `charges_spent: 3`, `dice: "10d6"`, resource current drops 6→3 (steps by N, not 1). |
+| `test_necklace_over_cap_returns_400` | v2.159.10: POST with `charges: 7` when `max_charges=6` → 400 (out-of-range validation in the handler). |
+| `test_necklace_empty_returns_409` | Drain the necklace to 0 beads via `/sheet-fields` PATCH, then throw → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
 
 ### `test_arrow_of_slaying.py`
 v2.159.1 magic-items-automation Phase 8a — Arrow of Slaying (Giants) (RAW DMG p.151). First ammunition-shape catalog row, extending the v2.158.102 `on_hit_save` substrate with a new `effect: "damage"` variant for save-for-half damage. Rowan Quickbow's Longbow (Arrow of Slaying — Giants) attack at attack_index 2 fires the rider via `_slug` match. New Hill Giant token template (`sheet.type="giant"`) gives the helper-resolution path a real RAW target.

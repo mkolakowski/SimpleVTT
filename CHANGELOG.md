@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.10] - 2026-06-11 — "The Beadstorm" — Magic-items-automation Phase 8j: multi-bead upcast for the Necklace of Fireballs (RAW DMG p.183). The wearer can now hurl 1-6 beads at once — damage scales `(7+N)d6` (1 bead = 8d6 / Lv 3 Fireball; 6 beads = 13d6 / Lv 8 upcast). New `charge_picker` step in the `aoe-sphere` click handler prompts for bead count via the existing `_showItemActionModal` spinner before the sphere target picker. Backend reads `body.charges`, validates against `min_charges`/`max_charges` on the action def, computes dice via a `dice_fn(n) → (7+n)d6` lambda, and decrements the resource by N instead of 1.
+
+**Schema version:** 69
+**Commit summary:** **(A) `_use_item_action_necklace_of_fireballs` handler in `tabletop_routes.py` extended with a `charges` kwarg (default 1). Reads + validates against `action_def["min_charges"]` / `action_def["max_charges"]` (1..6 RAW), returns 400 on out-of-range. Insufficient-charges check now compares `current < n_charges` (not `current < 1`). Dice expression resolved via `action_def["dice_fn"](n_charges)` when callable, falling back to the static `"dice"` field. Resource decrement steps by `n_charges` instead of 1. Response payload gains `charges_spent` + `dice` fields; `feature_used` broadcast summary now reports "hurls N bead(s)". (B) `_MAGIC_ITEM_ACTIONS["necklace-of-fireballs"]["actions"]["throw-bead"]` catalog entry swaps the static `"dice": "8d6"` for `"dice_fn": lambda n: f"{7+n}d6"` + `"min_charges": 1` + `"max_charges": 6`. (C) `ITEM_ACTION_SLUGS['necklace-of-fireballs']` in `sheet_dnd5e.html` gains a `charge_picker` sub-config (spinner kind, min 1 / max 6, body text explaining the upcast scaling, `cast_level: (n) => 2+n` advisory). (D) `.inv-item-action` click handler's `aoe-sphere` branch awaits `_showItemActionModal(cfg.charge_picker)` BEFORE opening the sphere target picker if `charge_picker` is set, then forwards the picked integer as `body.charges` into the `/use_item_action` POST. (E) New HTTP harness tests in `tests/harness/test_necklace_of_fireballs.py`: `test_necklace_3_bead_upcast` (POST with `charges: 3` → 200, `charges_spent: 3`, `dice: "10d6"`, resource current 6→3) + `test_necklace_over_cap_returns_400` (POST with `charges: 7` when max=6 → 400). (F) HTTP test total bumped 2258 → 2260. UI total unchanged at 40.**
+**Description:** Closes Phase 8j and the magic-items-automation Phase 8 arc. The necklace is now the densest single magic item in the demo — single-target damage, sphere AoE geometry, multi-charge upcast, save resolution, per-target damage, broadcast surface, and a 2-modal UX (charge picker → target picker → confirm). The `charge_picker` sub-config is a reusable substrate: any future multi-charge AoE item (Wand of Lightning Bolts upcasted, etc.) can wire the same way by adding a `charge_picker: {...}` block to its `ITEM_ACTION_SLUGS` row + a `dice_fn` to its catalog action.
+
+### Added
+- `tests/harness/test_necklace_of_fireballs.py` — `test_necklace_3_bead_upcast`, `test_necklace_over_cap_returns_400`.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_use_item_action_necklace_of_fireballs` gains `charges` kwarg + min/max validation + `dice_fn` resolution + N-step decrement; dispatch passes `body.get("charges")`. `_MAGIC_ITEM_ACTIONS` necklace row: `dice` → `dice_fn` + `min_charges`/`max_charges`.
+- `app/templates/sheet_dnd5e.html` — `ITEM_ACTION_SLUGS` necklace row gains `charge_picker`; aoe-sphere click branch awaits the picker before the target picker.
+- `app/version.py` — `APP_VERSION` 2.159.9 → 2.159.10. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.10.
+- `docs/test-harness-coverage.md` — HTTP total 2258 → 2260; new `test_necklace_of_fireballs.py` entry covering Phase 8i + 8j.
+
+### Notes
+- RAW DMG p.183 says "hurl more than one fireball … increase the level of the fireball by 1 for each bead beyond the first." A Lv 3 Fireball is 8d6; +1d6 per upcast level → `(7+N)d6`. 6 beads = Lv 8 cast = 13d6.
+- The 1-bead path is unchanged — single-bead clicks still resolve as 8d6 Lv 3 Fireball, matching the v2.159.9 happy-path test.
+- Future multi-charge AoE items (Wand of Lightning Bolts upcast, Cone of Cold scroll multi-spend, etc.) follow this pattern: `ITEM_ACTION_SLUGS.charge_picker` + `action_def.dice_fn` + handler `charges` kwarg. No new substrate needed.
+
+---
+
 ## [2.159.9] - 2026-06-11 — "The Beaded Sky" — Magic-items-automation Phase 8i: first sphere-AoE magic item — Necklace of Fireballs (RAW DMG p.183). Generalizes the v2.159.7 AoE confirm modal from line-only to shape-agnostic (rename `_showAoELineConfirmModal` → `_showAoEConfirmModal`), then adds an `aoe-sphere` `ITEM_ACTION_SLUGS` kind that wraps the v2.159.5 `/battle/sphere-targets` endpoint into the click chain. Thalindra gets the necklace — first non-attuneable magic item with a permanent (no-recharge) charge counter in the demo.
 
 **Schema version:** 69

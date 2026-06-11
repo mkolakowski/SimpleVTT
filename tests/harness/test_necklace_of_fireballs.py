@@ -126,6 +126,57 @@ async def test_necklace_throw_bead_2_targets(
     assert {a_cid, b_cid}.issubset(target_ids)
 
 
+async def test_necklace_3_bead_upcast(
+    gm_client, thalindra_full_necklace,
+):
+    """v2.159.10 Phase 8j: hurl 3 beads → 10d6 fire, charges drop
+    from 6 to 3. Response carries dice='10d6' and charges_spent=3."""
+    thalindra = thalindra_full_necklace
+    thal_cid = f"tok_nef3_thal_{thalindra['id']}"
+    a_cid = "tok_nef3_a"
+    await _seed_battle(gm_client, [
+        _mkc(thal_cid, thalindra["id"], name=thalindra["name"]),
+        _mkc(a_cid, None, name="Bandit", hp_max=500),
+    ])
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/use_item_action",
+        json={
+            "inventory_index": THAL_NECKLACE_INV_IDX,
+            "action_key": "throw-bead",
+            "charges": 3,
+            "target_combatant_ids": [a_cid],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["charges_spent"] == 3
+    assert data["dice"] == "10d6"
+    assert data["resource"]["current"] == 3  # 6 → 3
+
+
+async def test_necklace_over_cap_returns_400(
+    gm_client, thalindra_full_necklace,
+):
+    """v2.159.10: hurl 7 beads when max_charges=6 → 400."""
+    thalindra = thalindra_full_necklace
+    thal_cid = f"tok_nef4_thal_{thalindra['id']}"
+    a_cid = "tok_nef4_a"
+    await _seed_battle(gm_client, [
+        _mkc(thal_cid, thalindra["id"], name=thalindra["name"]),
+        _mkc(a_cid, None, name="Bandit"),
+    ])
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/use_item_action",
+        json={
+            "inventory_index": THAL_NECKLACE_INV_IDX,
+            "action_key": "throw-bead",
+            "charges": 7,
+            "target_combatant_ids": [a_cid],
+        },
+    )
+    assert resp.status_code == 400, resp.text
+
+
 async def test_necklace_empty_returns_409(
     gm_client, thalindra,
 ):
