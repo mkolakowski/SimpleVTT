@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2171 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.74, 2026-06-10).
+**Total tests:** 2172 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.75, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1967,7 +1967,8 @@ v2.158.73 magic-items-automation Phase 0 — the SRD item content layer now ship
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_item_schema_cloak_of_protection_has_phase0_keys` | `GET /api/content/items/cloak-of-protection` → 200 + the record carries `charges: null`, `charge_recovery: null`, `passives: []` (Phase 1's passive-wearable canary). |
+| `test_item_schema_cloak_of_protection_has_phase1a_passives` | v2.158.75 update of the original Phase 0 assertion: Phase 1a (v2.158.74) populated the Cloak's `passives` with `[{ac_bonus:1, save_bonus:1, requires_attunement:true}]`. Test now asserts the wired shape. Charges still null. |
+| `test_item_schema_ring_of_protection_has_empty_passives` | v2.158.75: empty-passives canary moved from Cloak (now wired) to Ring of Protection (Phase 1b target, still unwired). Asserts `passives == []`. Flips when Phase 1b ships. |
 | `test_item_schema_wand_of_magic_missiles_has_phase0_keys` | `GET /api/content/items/wand-of-magic-missiles` → 200 + same shape on a charge-tracked archetype (Phase 4's charge-caster canary). |
 | `test_item_schema_unknown_slug_404` | `GET /api/content/items/no-such-srd-item` → 404 — error contract unchanged by the Phase 0 additions. |
 

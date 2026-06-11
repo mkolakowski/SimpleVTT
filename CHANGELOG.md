@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.75] - 2026-06-10 — "The Stale Canary" — Test-fix follow-up to v2.158.74: the Phase 0 cloak schema test asserted `passives == []`, which v2.158.74's Phase 1a wiring flipped to a populated payload — the assertion was stale by the time Phase 1a landed. Rename the test to reflect the wired shape and add a new "empty passives" canary on Ring of Protection (the Phase 1b target, still unwired)
+
+**Schema version:** 69
+**Commit summary:** **`test_item_schema_cloak_of_protection_has_phase0_keys` → `test_item_schema_cloak_of_protection_has_phase1a_passives` in `tests/harness/test_item_schema.py`. The original test asserted that Cloak's `passives` was `[]` (Phase 0 default) — but v2.158.74 populated it with the +1 AC / +1 saves payload. Renamed assertion now checks the wired shape (`len(passives) == 1`, `ac_bonus=1`, `save_bonus=1`, `requires_attunement=True`). Added `test_item_schema_ring_of_protection_has_empty_passives` as the new empty-passives canary — Ring of Protection is the Phase 1b target so it'll flip the same way once that lands. Charges fields stay null on both items (passives are not charge-tracked). `docs/test-harness-coverage.md` reflects both changes + count bumped 2171 → 2172. The actual Phase 1a wiring + the v2.158.74 cloak tests are untouched.**
+**Description:** Caught when the v2.158.74 container rebuild ran the Phase 0 + Phase 1a tests side-by-side and the stale Phase 0 assertion red-lit. Should have been part of the v2.158.74 commit, but per CLAUDE.md no-amend rule it ships as its own bump. Future Phase 1+ commits that populate an item's `passives` should remember to refresh the matching Phase 0 schema assertion in the same commit — adding a comment to the new Ring of Protection test as the per-item reminder.
+
+### Changed
+- `tests/harness/test_item_schema.py` — `test_item_schema_cloak_of_protection_has_phase0_keys` renamed + assertions flipped to the Phase 1a populated shape; new `test_item_schema_ring_of_protection_has_empty_passives` added as the moved canary.
+- `docs/test-harness-coverage.md` — both rows updated to reflect the new test names + intent; total bumped 2171 → 2172.
+- `app/version.py` — `APP_VERSION` 2.158.74 → 2.158.75. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.75.
+
+### Notes
+- No engine change, no schema change, no new endpoint — pure test-content refresh.
+
+---
+
 ## [2.158.74] - 2026-06-10 — "The Whispered Cloak" — Magic-items-automation Phase 1a: wire Cloak of Protection (+1 AC, +1 saves) through both read sites. New `_MAGIC_ITEM_PASSIVES` catalog + `_equipped_item_effects` walker in `app/routes/tabletop_routes.py` (the M1 primitive from the plan). `_read_target_ac` adds the walker's `ac_bonus`; the `/roll` endpoint appends the walker's `save_bonus` to `*_save` expressions and tags the breakdown with the source item name. Thalindra gets a permanent equipped+attuned Cloak in the demo seed so the test surface needs no setup PATCH. First actually-mechanical magic item
 
 **Schema version:** 69

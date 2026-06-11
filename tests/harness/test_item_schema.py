@@ -27,12 +27,13 @@ import httpx
 from .helpers import BASE_URL
 
 
-async def test_item_schema_cloak_of_protection_has_phase0_keys():
-    """v2.158.73: GET /api/content/items/cloak-of-protection — 200 +
-    the response record carries the three Phase 0 keys with their
-    "no wiring" defaults. Cloak of Protection is one of the four
-    first-slice items the plan's Phase 1 will wire, so this is the
-    canary that the data layer is Phase-1-ready."""
+async def test_item_schema_cloak_of_protection_has_phase1a_passives():
+    """v2.158.73 originally: assert Phase 0's "no wiring" defaults
+    on Cloak of Protection. v2.158.75: Phase 1a (v2.158.74) populated
+    the Cloak's passives with the +1 AC / +1 save payload, so the
+    assertion now reflects the wired shape instead. Charges remain
+    null (Phase 4 won't touch the Cloak — it's a passive, not a
+    charge-tracked item)."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
         resp = await client.get("/api/content/items/cloak-of-protection")
     assert resp.status_code == 200
@@ -40,10 +41,34 @@ async def test_item_schema_cloak_of_protection_has_phase0_keys():
     assert body["source"] == "local-srd"
     record = body["record"]
     assert record["slug"] == "cloak-of-protection"
-    # The three Phase 0 schema additions:
+    # Charges fields stay null — Cloak is a passive item, not charge-tracked.
     assert "charges" in record and record["charges"] is None
     assert "charge_recovery" in record and record["charge_recovery"] is None
-    assert "passives" in record and record["passives"] == []
+    # Phase 1a payload: +1 AC, +1 saves, requires attunement.
+    assert "passives" in record
+    passives = record["passives"]
+    assert isinstance(passives, list) and len(passives) == 1, (
+        f"expected exactly one passive entry, got {passives!r}"
+    )
+    p = passives[0]
+    assert p.get("ac_bonus") == 1
+    assert p.get("save_bonus") == 1
+    assert p.get("requires_attunement") is True
+
+
+async def test_item_schema_ring_of_protection_has_empty_passives():
+    """v2.158.75: empty-passives canary moved from Cloak (now wired by
+    Phase 1a) to Ring of Protection (Phase 1b target, still unwired
+    in v2.158.74). When Phase 1b ships, this assertion flips the same
+    way the Cloak's did."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/api/content/items/ring-of-protection")
+    assert resp.status_code == 200
+    record = resp.json()["record"]
+    assert record["slug"] == "ring-of-protection"
+    assert record["charges"] is None
+    assert record["charge_recovery"] is None
+    assert record["passives"] == []
 
 
 async def test_item_schema_wand_of_magic_missiles_has_phase0_keys():
