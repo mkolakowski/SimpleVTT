@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.21] - 2026-06-11 — "The Frenzied Cost" — Exhaustion-levels Phase 4 (CLOSES the plan): Berserker Frenzy rage-end retrofit. RAW PHB p.49: "When your rage ends, you suffer one level of exhaustion (which you can't remove until you finish a long rest)." Closes the v2.99.226 filed TODO + Phase E.8 of `class-content-status.md` (the Berserker class-content-completeness blocker that motivated the exhaustion-levels plan). `/use_frenzy` now stamps `sheet._frenzied_this_rage: True`; `/end_buff` with `key="rage"` detects the flag, bumps `sheet.exhaustion_level` by 1 (level 6 → death via `_set_death_save_state`), mirrors to the combatant, broadcasts `exhaustion_update`, and clears the flag.
+
+**Schema version:** 69
+**Commit summary:** **(A) `/use_frenzy` extended: after `_mark_battle_economy(bonus)`, write `sheet._frenzied_this_rage = True` via `flag_modified` if not already set. Idempotent — calling /use_frenzy twice in one rage doesn't double-stamp. The desc-line in the broadcast now says "rage-end will auto-apply +1 exhaustion" instead of "GM tracks the +1 exhaustion at rage-end." (B) `/end_buff` extended: after `_remove_buff(rage)` + sheet mirror, check `sheet._frenzied_this_rage`. If set: read current exhaustion, bump min(6, cur + 1), apply Phase 3b HP-clamp if transitioning to ≥ 4, clear the flag, persist via `flag_modified`. Route level 6 through `_set_death_save_state(status="dead")`. Mirror the new level to the PC's combatant in hub state. Broadcast `exhaustion_update` with `source: "frenzy_rage_end"`. Death-saves broadcast carries `source: "frenzy_exhaustion_lv6"`. (C) Flag clears AFTER the bump fires, so a subsequent rage WITHOUT frenzy doesn't double-bump. (D) New HTTP harness `tests/harness/test_frenzy_exhaustion.py` with 4 tests: happy path (rage → frenzy → end rage → exhaustion 0→1 + flag cleared), no-frenzy (rage without frenzy → end rage → exhaustion stays 0), flag-cleanup regression (first rage frenzied → +1; second rage NOT frenzied → +0), death routing (exhaustion=5 → frenzy → end rage → level 6 + death_saves.status="dead"). (E) HTTP test total bumped 2294 → 2298.**
+**Description:** Closes Phase 4 + the entire exhaustion-levels plan. The framework is now complete from data shape → mutation endpoint → all six level effects → first consumer (Berserker Frenzy). Future consumers (forced-march environmental hazard, homebrew "gain a level of exhaustion" effects, Greater Restoration auto-decrement) drop in by calling `/set_exhaustion` directly — the existing plumbing handles the rest. Closes the Phase E.8 blocker that motivated this plan.
+
+### Added
+- `app/routes/tabletop_routes.py` — `/use_frenzy` flag stamp; `/end_buff` rage-detection block applying +1 exhaustion + clamp + death routing + broadcast.
+- `tests/harness/test_frenzy_exhaustion.py` — 4 HTTP tests.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.20 → 2.159.21. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.21.
+- `docs/test-harness-coverage.md` — HTTP total 2294 → 2298; new `test_frenzy_exhaustion.py` entry.
+
+### Notes
+- The flag's only writer/reader is `/use_frenzy` (writes True) and `/end_buff` (reads + clears). It's not a sheet field a player should see in the UI; the sheet renderer treats it as opaque metadata. The naming with the leading underscore is the existing convention for sheet metadata (mirrors `_used_today`, `_lit`, `_frenzied_this_rage`).
+- The level 6 death case routes through `_set_death_save_state` (same v2.1.0 machinery `/set_exhaustion` uses), so the existing UI (init tracker skull, sheet death-saves modal) lights up. The frenzy broadcast adds `source: "frenzy_exhaustion_lv6"` so future GM logs can correlate the death to the rage-end.
+- If a player drops their own rage via `/end_buff` (the standard "I'm done raging" UX) the flag fires; the GM ending the rage on a hostile PC does the same. There is no separate /end_rage endpoint — `/end_buff` is the canonical path.
+- A future short-rest-doesn't-clear-exhaustion is already correct — the `rest_character` long-rest decrement is the only exhaustion-clearing path, and it correctly only fires on `type: "long"`.
+
+---
+
 ## [2.159.20] - 2026-06-11 — "The Smaller Vessel" — Exhaustion-levels Phase 3b: HP-max halving at Lv 4. Mirrors the v2.97.42 Aid max-HP plumbing in reverse — instead of extending the effective max with `+ buff_bonus`, the helper halves the (already buff-augmented) max when `exhaustion_level >= 4`. Two behaviors land: (1) heal-clamp at the `_apply_heal_to_combatant` PC + NPC paths; (2) on-level-change current-HP clamp at the `/set_exhaustion` endpoint that drops in-place to `floor(max/2)` when transitioning across the Lv 4 threshold from below. Going BACK below 4 does NOT auto-restore HP (RAW: the player has to heal up to the new ceiling). Closes Phase 3 of `docs/plans/exhaustion-levels.md`.
 
 **Schema version:** 69

@@ -45218,6 +45218,79 @@ async def end_buff(
     # v2.19.2 Phase C.3: sync sheet mirror.
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
+    # v2.159.21 — exhaustion Phase 4: Berserker Frenzy rage-end hook.
+    # When the rage buff is removed AND the sheet carries the
+    # _frenzied_this_rage flag (set at /use_frenzy time), apply +1
+    # exhaustion via the existing sheet field. Clamps 0-6; the level
+    # 6 → death routing matches /set_exhaustion. Clears the flag after
+    # firing so a subsequent rage without Frenzy does NOT auto-bump.
+    if key == "rage":
+        rage_sheet = dict(char.sheet or {})
+        if rage_sheet.get("_frenzied_this_rage"):
+            cur_ex = int(rage_sheet.get("exhaustion_level") or 0)
+            new_ex = min(6, cur_ex + 1)
+            rage_sheet["exhaustion_level"] = new_ex
+            # v2.159.20 Phase 3b: clamp HP on transition across Lv 4.
+            if new_ex >= 4 and cur_ex < 4:
+                hp_field = dict(rage_sheet.get("hp") or {})
+                hp_max_field = int(hp_field.get("max") or 0)
+                hp_cur_field = int(hp_field.get("current") or 0)
+                if hp_max_field > 0:
+                    new_ceiling = hp_max_field // 2
+                    if hp_cur_field > new_ceiling:
+                        hp_field["current"] = new_ceiling
+                        rage_sheet["hp"] = hp_field
+            rage_sheet["_frenzied_this_rage"] = False
+            from sqlalchemy.orm.attributes import flag_modified
+            char.sheet = rage_sheet
+            flag_modified(char, "sheet")
+            died_frenzy = False
+            if new_ex >= 6:
+                _set_death_save_state(char, status="dead")
+                died_frenzy = True
+            db.commit()
+            # Mirror to combatant for the v2.159.19 speed helper.
+            try:
+                state = hub.get_battle(campaign_id)
+                if state:
+                    changed = False
+                    for c in state.get("combatants") or []:
+                        if c.get("char_id") == char.id:
+                            c["exhaustion_level"] = new_ex
+                            changed = True
+                    if changed:
+                        hub.set_battle(campaign_id, state)
+            except Exception:
+                pass
+            try:
+                await hub.broadcast(campaign_id, {
+                    "type": "exhaustion_update",
+                    "data": {
+                        "character_id": char.id,
+                        "level": new_ex,
+                        "previous": cur_ex,
+                        "source": "frenzy_rage_end",
+                    },
+                })
+            except Exception:
+                pass
+            if died_frenzy:
+                ds = dict(char.sheet.get("death_saves") or {})
+                try:
+                    await hub.broadcast(campaign_id, {
+                        "type": "character_death_save",
+                        "data": {
+                            "character_id": char.id,
+                            "status": ds.get("status", "dead"),
+                            "successes": int(ds.get("successes") or 0),
+                            "failures": int(ds.get("failures") or 0),
+                            "hp": dict(char.sheet.get("hp") or {}),
+                            "source": "frenzy_exhaustion_lv6",
+                        },
+                    })
+                except Exception:
+                    pass
+
     # v2.49.52: ✋ GM-only log for voluntary concentration end. Only
     # fires when the removed buff was an anchor the character owned
     # (source_char_id absent or == self). Paired conditions removed
@@ -46232,6 +46305,17 @@ async def use_frenzy(
         })
 
     await _mark_battle_economy(campaign_id, char.id, "bonus")
+    # v2.159.21 — exhaustion Phase 4: stamp the sheet with
+    # `_frenzied_this_rage: True` so the rage-end hook in /end_buff
+    # bumps `exhaustion_level` by 1. The flag is cleared by /end_buff
+    # AFTER the bump fires. RAW: "When your rage ends, you suffer
+    # one level of exhaustion."
+    if not sheet.get("_frenzied_this_rage"):
+        sheet["_frenzied_this_rage"] = True
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
     membership = (
         db.query(CampaignMembership)
         .filter(CampaignMembership.campaign_id == campaign_id,
@@ -46253,8 +46337,8 @@ async def use_frenzy(
             "feature_desc": (
                 f"{char.name} frenzies — one melee weapon attack "
                 f"as a bonus action this turn. "
-                f"(Berserker Lv 3+ class feature; GM tracks the "
-                f"+1 exhaustion at rage-end.)"
+                f"(Berserker Lv 3+ class feature; rage-end will "
+                f"auto-apply +1 exhaustion.)"
             ),
             "source": "frenzy",
             "over_budget": was_used,
