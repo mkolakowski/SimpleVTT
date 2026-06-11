@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2202 in `tests/harness/` + 26 in `tests/harness_ui/` (as of v2.158.87, 2026-06-10).
+**Total tests:** 2209 in `tests/harness/` + 26 in `tests/harness_ui/` (as of v2.158.88, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2058,6 +2058,19 @@ v2.158.87 magic-items-automation Phase 4c — Wand of Fireballs through the same
 | `test_fireball_wand_single_charge_casts_lv3` | 1 charge → `cast_slot_level: 3` (base=3 + 0). |
 | `test_fireball_wand_multi_charge_casts_higher` | 3 charges → `cast_slot_level: 5` (base=3 + 2). |
 | `test_fireball_wand_requires_attunement_409` | Detune the wand via /attune; invoke /use_item_action → 409 attunement required. Restores attunement in teardown. |
+
+### `test_use_item_action_staff_of_healing.py`
+v2.158.88 magic-items-automation Phase 4d — Staff of Healing (RAW DMG p.202). First multi-action item in the catalog: 3 distinct `action_keys` (`cast-cure-wounds` 1-4 charges → Lv 1-4, `cast-lesser-restoration` fixed 2 charges, `cast-mass-cure-wounds` fixed 5 charges). New `actions` sub-map shape in `_MAGIC_ITEM_ACTIONS` lets the dispatch look up per-action min/max charges + spell slug + base slot level without coupling the per-item handler to a single action. Tavik gets the staff in his seed (attuned alongside Ring of Protection → 2 attuned, well under the cap) + a `staff-of-healing` resource row with `charge_recovery: "1d6+4"`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_staff_cure_wounds_single_charge` | `cast-cure-wounds` with 1 charge → `cast_slot_level: 1`. |
+| `test_staff_cure_wounds_max_charges` | 4 charges → `cast_slot_level: 4` (upcast max). |
+| `test_staff_cure_wounds_over_max_400` | 5 charges to `cast-cure-wounds` → 400 (RAW: this action caps at 4). |
+| `test_staff_lesser_restoration_fixed_2` | `cast-lesser-restoration` with 2 charges → 200, `cast_slot_level: 2`. |
+| `test_staff_lesser_restoration_wrong_charges_400` | 3 charges to `cast-lesser-restoration` → 400 (RAW fixed at 2). |
+| `test_staff_mass_cure_wounds_lv5` | `cast-mass-cure-wounds` with 5 charges → `cast_slot_level: 5`. |
+| `test_staff_unknown_action_404` | `cast-fireball` action_key on a Staff of Healing → 404 (catalog mismatch). Tests the multi-action sub-dispatch validation. |
 
 ---
 

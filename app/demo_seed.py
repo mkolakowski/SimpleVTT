@@ -869,6 +869,16 @@ def _cleric_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ring-of-protection",
              "desc": "Rare ring, attunement. +1 AC and +1 to saving throws."},
+            # v2.158.88 — Magic-items Phase 4d demo fixture. Staff
+            # of Healing (rare, attunement). 10 charges, recharge
+            # 1d6+4 at dawn. Multi-action: cast-cure-wounds 1-4
+            # charges (Lv 1-4), cast-lesser-restoration 2, cast-mass-
+            # cure-wounds 5. Thematic on Tavik (Cleric). Paired with
+            # the staff-of-healing resource row below.
+            {"name": "Staff of Healing", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "staff-of-healing",
+             "desc": "Rare staff, attunement. 10 charges. Cast Cure Wounds (1-4 charges → Lv 1-4), Lesser Restoration (2 charges), or Mass Cure Wounds (5 charges). Regains 1d6+4 charges at dawn (long rest)."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action
@@ -913,6 +923,21 @@ def _cleric_sheet(name: str) -> dict:
                 "source": "cleric Lv 10 / Divine Intervention",
                 "class_slug": "cleric",
                 "desc": "Action (Lv 10+): roll d100, if ≤ cleric level your deity intervenes. Lv 20 auto-succeeds. 1/long rest in v1 (RAW: 7-day cooldown on success — simplified). Use /use_divine_intervention.",
+                "manual": False,
+            },
+            # v2.158.88 — Magic-items Phase 4d: Staff of Healing
+            # charge counter. 10 starting charges, regains 1d6+4 at
+            # dawn (long rest) via the Phase 4b dice-expression
+            # recharge path. Multi-action item — the cure-wounds /
+            # lesser-restoration / mass-cure-wounds actions all spend
+            # from this single resource.
+            {
+                "key": "staff-of-healing",
+                "name": "Staff of Healing",
+                "current": 10, "max": 10, "reset": "long",
+                "charge_recovery": "1d6+4",
+                "source": "item-staff-of-healing",
+                "desc": "10 charges. Cast Cure Wounds (1-4 charges), Lesser Restoration (2), or Mass Cure Wounds (5). Regains 1d6+4 charges on long rest.",
                 "manual": False,
             },
         ],

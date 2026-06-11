@@ -15,8 +15,24 @@
   "properties": {
     "category": "Staff"
   },
-  "charges": null,
-  "charge_recovery": null,
+  "charges": 10,
+  "charge_recovery": "1d6+4",
   "passives": [],
-  "actions": []
+  "actions": [
+    {
+      "id": "cast-cure-wounds",
+      "name": "Cast Cure Wounds (Staff)",
+      "desc": "Expend 1-4 charges to cast Cure Wounds at the matching slot level (1 charge = Lv 1, ..., 4 charges = Lv 4). Uses your spellcasting ability modifier."
+    },
+    {
+      "id": "cast-lesser-restoration",
+      "name": "Cast Lesser Restoration (Staff)",
+      "desc": "Expend exactly 2 charges to cast Lesser Restoration."
+    },
+    {
+      "id": "cast-mass-cure-wounds",
+      "name": "Cast Mass Cure Wounds (Staff)",
+      "desc": "Expend exactly 5 charges to cast Mass Cure Wounds (Lv 5)."
+    }
+  ]
 }

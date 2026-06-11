@@ -30035,6 +30035,42 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
         "max_charges": 7,
         "base_slot_level": 3,
     },
+    # v2.158.88 — Phase 4d: first multi-action item. Different shape
+    # from the wands: 3 distinct action_keys on one item, each with
+    # its own charge cost + spell. Uses the ``actions`` subkey to
+    # name each per-action sub-config; the dispatch looks up the
+    # body's `action_key` in this sub-map. RAW DMG p.202.
+    "staff-of-healing": {
+        "resource_key": "staff-of-healing",
+        "requires_attunement": True,
+        "actions": {
+            "cast-cure-wounds": {
+                "name": "Cast Cure Wounds (Staff)",
+                "spell_slug": "cure-wounds",
+                # RAW: 1 charge per spell level, up to 4 charges
+                # (Lv 4 Cure Wounds — 5d8+spellcasting mod).
+                "min_charges": 1,
+                "max_charges": 4,
+                "base_slot_level": 1,
+            },
+            "cast-lesser-restoration": {
+                "name": "Cast Lesser Restoration (Staff)",
+                "spell_slug": "lesser-restoration",
+                # RAW: exactly 2 charges, no upcast.
+                "min_charges": 2,
+                "max_charges": 2,
+                "base_slot_level": 2,
+            },
+            "cast-mass-cure-wounds": {
+                "name": "Cast Mass Cure Wounds (Staff)",
+                "spell_slug": "mass-cure-wounds",
+                # RAW: exactly 5 charges, no upcast.
+                "min_charges": 5,
+                "max_charges": 5,
+                "base_slot_level": 5,
+            },
+        },
+    },
 }
 
 
@@ -76544,7 +76580,21 @@ async def use_item_action(
     if not slug:
         raise HTTPException(409, "item has no _slug; no action available")
     catalog = _MAGIC_ITEM_ACTIONS.get(slug)
-    if not catalog or catalog.get("key") != action_key:
+    if not catalog:
+        raise HTTPException(
+            404, f"no action {action_key!r} for item {slug!r}",
+        )
+    # v2.158.88 — Phase 4d: multi-action items declare an `actions`
+    # sub-map; legacy single-action entries declare a top-level `key`.
+    # The dispatch validates the action_key against whichever shape
+    # the catalog uses.
+    actions_map = catalog.get("actions") if isinstance(catalog.get("actions"), dict) else None
+    if actions_map is not None:
+        if action_key not in actions_map:
+            raise HTTPException(
+                404, f"no action {action_key!r} for item {slug!r}",
+            )
+    elif catalog.get("key") != action_key:
         raise HTTPException(
             404, f"no action {action_key!r} for item {slug!r}",
         )
@@ -76568,6 +76618,12 @@ async def use_item_action(
         return await _use_item_action_charge_wand(
             db, campaign_id, char, item, sheet, catalog, slug,
             body.get("charges"),
+        )
+    if slug == "staff-of-healing":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_staff_of_healing(
+            db, campaign_id, char, item, sheet, catalog,
+            action_key, action_def, body.get("charges"),
         )
     raise HTTPException(409, "unknown item action handler")
 
@@ -76821,6 +76877,121 @@ async def _use_item_action_charge_wand(
     return {
         "ok": True,
         "item_name": item.get("name") or slug,
+        "spell_slug": spell_slug,
+        "charges_spent": charges,
+        "cast_slot_level": cast_slot_level,
+        "resource": {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
+    }
+
+
+async def _use_item_action_staff_of_healing(
+    db, campaign_id, char, item, sheet, catalog,
+    action_key, action_def, charges_raw,
+):
+    """v2.158.88 — Phase 4d Staff of Healing handler. Multi-action
+    item with 3 distinct action_keys (cast-cure-wounds 1-4 charges,
+    cast-lesser-restoration 2, cast-mass-cure-wounds 5). The
+    action_def carries the per-action min/max charges + base slot
+    level. RAW DMG p.202.
+    """
+    slug = "staff-of-healing"
+    try:
+        charges = int(charges_raw or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "charges must be an int")
+    min_c = int(action_def.get("min_charges") or 1)
+    max_c = int(action_def.get("max_charges") or 1)
+    if charges < min_c or charges > max_c:
+        raise HTTPException(
+            400,
+            f"charges must be {min_c}..{max_c} for "
+            f"{action_def.get('name') or action_key}",
+        )
+
+    # Resource row lookup (mirror of the other handlers).
+    resources = list(sheet.get("resources") or [])
+    res_key = str(catalog.get("resource_key") or "")
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    if cur < charges:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "insufficient_charges",
+                "current": cur,
+                "requested": charges,
+                "label": item.get("name") or slug,
+            },
+        )
+
+    res_row["current"] = cur - charges
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    spell_slug = action_def.get("spell_slug") or ""
+    base_slot = int(action_def.get("base_slot_level") or 1)
+    # Cast slot level scales only for cure-wounds (variable charges).
+    # For fixed-charge actions (lesser-rest / mass-cure), cast level
+    # equals base_slot.
+    if max_c > min_c:
+        cast_slot_level = base_slot + (charges - min_c)
+    else:
+        cast_slot_level = base_slot
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": action_def.get("name") or "Use Staff",
+                "summary": (
+                    f"{char.name} expended {charges} charge(s) from the "
+                    f"{item.get('name')} to cast {spell_slug} at Lv "
+                    f"{cast_slot_level}."
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "action_key": action_key,
         "spell_slug": spell_slug,
         "charges_spent": charges,
         "cast_slot_level": cast_slot_level,

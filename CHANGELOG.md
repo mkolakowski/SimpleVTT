@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.88] - 2026-06-10 — "The Threefold Staff" — Magic-items-automation Phase 4d: first multi-action item — Staff of Healing (RAW DMG p.202). Different shape from every prior catalog entry: 3 distinct `action_keys` on one item (`cast-cure-wounds` 1-4 charges → Lv 1-4 / `cast-lesser-restoration` fixed 2 / `cast-mass-cure-wounds` fixed 5). New `actions` sub-map shape in `_MAGIC_ITEM_ACTIONS` lets a single catalog row name multiple per-action handler configs. Tavik gets the staff (attuned alongside his Ring of Protection)
+
+**Schema version:** 69
+**Commit summary:** **(A) New `staff-of-healing` row in `_MAGIC_ITEM_ACTIONS` with `actions: {cast-cure-wounds, cast-lesser-restoration, cast-mass-cure-wounds}` sub-map. First multi-action shape — each sub-key carries its own `min_charges`, `max_charges`, `base_slot_level`, `spell_slug`. (B) Dispatch validation in `/use_item_action` extended: if the catalog has an `actions` sub-map, look up `action_key` there; otherwise fall back to the legacy single-action `key` check. Legacy single-action items (Pearl, both Wands) unchanged. (C) New handler `_use_item_action_staff_of_healing` that takes the action_def + charges, validates per-action min/max (e.g. cure-wounds: 1-4; lesser-restoration: 2 exactly; mass-cure: 5 exactly), decrements the staff's shared 10-charge resource row, broadcasts `resource_update` + `feature_used` with the action's spell + cast slot level. The `cast_slot_level` formula treats fixed-charge actions as fixed level (lesser-rest = 2, mass-cure = 5) and variable-charge actions as `base + (charges - min)` (cure-wounds = 1 + (charges - 1) = charges). (D) `app/data/local/dnd5e/items/staff-of-healing.json` populated with `charges: 10`, `charge_recovery: "1d6+4"`, and 3 `actions[]` entries (`cast-cure-wounds`, `cast-lesser-restoration`, `cast-mass-cure-wounds` — RAW IDs). (E) `_cleric_sheet` in `app/demo_seed.py` appends a Staff of Healing inventory entry on Tavik (equipped + attuned) + a `staff-of-healing` resource row (current 10, max 10, reset long, `charge_recovery: "1d6+4"`). Tavik now wears 2 attuned items (Ring + Staff), well under the cap. (F) New harness file `tests/harness/test_use_item_action_staff_of_healing.py` with 7 tests: 3 cure-wounds paths (min, max, over-cap-400) + 2 lesser-restoration (fixed-charge happy + wrong-charge-400) + 1 mass-cure-wounds (cast_slot_level=5) + 1 multi-action dispatch guard (unknown action_key → 404). (G) `docs/test-harness-coverage.md` adds the new section + total bumped 2202 → 2209.**
+**Description:** Closes the magic-items plan's Phase 4 with the most-complex catalog shape so far. The multi-action sub-map abstraction means a single item slug can serve multiple distinct spells, each with its own per-cast resource cost and slot scaling. Future items like Wand of Polymorph (which would only cast Polymorph but at a fixed level) or Staff of Power (which has ~8 different actions) fit cleanly into this shape without further dispatch refactor. The handler distinguishes "fixed charges" (max_charges == min_charges) from "variable charges" (max > min) via the `max_c > min_c` branch in the cast_slot_level computation — so a fixed-charge action like Lesser Restoration always casts at its declared base level (2), while a variable-charge action like Cure Wounds scales the slot with charges spent.
+
+### Added
+- `app/routes/tabletop_routes.py` — `staff-of-healing` multi-action row in `_MAGIC_ITEM_ACTIONS`; multi-action sub-dispatch in `/use_item_action`; new `_use_item_action_staff_of_healing` handler.
+- `app/data/local/dnd5e/items/staff-of-healing.json` — populated `charges: 10`, `charge_recovery: "1d6+4"`, 3 actions entries.
+- `app/demo_seed.py` — Tavik gets a Staff of Healing (equipped + attuned) + a `staff-of-healing` resource row.
+- `tests/harness/test_use_item_action_staff_of_healing.py` — 7 tests covering 3 cure-wounds paths, lesser-restoration fixed/wrong, mass-cure-wounds happy, unknown-action 404.
+
+### Changed
+- `docs/test-harness-coverage.md` — new test block + total 2202 → 2209.
+- `app/version.py` — `APP_VERSION` 2.158.87 → 2.158.88. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.88.
+
+### Notes
+- Magic-items plan's Phase 4 is now fully shipped (a + b + c + d). All four wand/staff archetypes from the catalog wired: single-action 1-charge (Pearl), single-action multi-charge (MM wand + Fireball wand), single-spell multi-charge with attunement (Fireball), multi-action (Staff). 48 HTTP harness tests across the magic-items work.
+- Demo PCs each now wear genuinely useful magic items: Pip (Cloak + Ring stack), Thalindra (Cloak + Pearl + MM Wand + Fireball Wand — 3 attuned at the cap), Tavik (Ring + Staff — 2 attuned), Kael (Bracers). All 4 plan archetypes (passive, gated passive, single-charge active, multi-charge active with dice recharge, multi-action active) exercised by the demo party at session start.
+- Phase 5 (on-hit rider weapons like Flame Tongue) is the next major shape — hooks `_ATTACK_RIDERS` instead of `_MAGIC_ITEM_ACTIONS`.
+
+---
+
 ## [2.158.87] - 2026-06-10 — "The Twin Wands" — Magic-items-automation Phase 4c: add Wand of Fireballs as a second multi-charge wand using the same `/use_item_action` endpoint. Generalize the MM-specific handler into `_use_item_action_charge_wand` parameterized on `base_slot_level` (1 for MM → charges == slot; 3 for Fireball → 1 charge = Lv 3). Cast slot level = base + (charges - 1). Validates that the catalog scales without endpoint changes — adding a third wand (Wand of Lightning Bolts, say) is now just a JSON populate + a catalog row + a demo seed line. Thalindra reaches the RAW DMG p.138 3-attuned cap (Cloak + Pearl + Wand of Fireballs)
 
 **Schema version:** 69
