@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.102] - 2026-06-11 — "The Quailing Imp" — Magic-items-automation Phase 7b: second post-hit hook type — Demon Slayer DC 15 WIS save-or-frightened on every fiend hit (RAW DMG p.166 — the deferred half of the v2.158.97 Phase 6a Demon Slayer rider). Catalog row gains an `on_hit_save: {dc, ability, effect, duration_rounds}` sub-map. New helper `_apply_magic_item_on_hit_save_effect` delegates to the v2.99.406 `_resolve_feature_save` substrate which auto-rolls NPC saves server-side + installs the frightened buff on failure. New Quasit NPC template gives the demo a real RAW-fiend target for Lyra's Demon Slayer Rapier.
+
+**Schema version:** 69
+**Commit summary:** **(A) `_MAGIC_ITEM_ATTACK_RIDERS["demon-slayer"]` extended with `on_hit_save: {dc: 15, ability: "WIS", effect: "frighten", duration_rounds: 1}`. Shares the rider's existing `condition` predicate (fiend-only) so the save only fires when the +2d6 rider also fires — RAW couples both effects to the same hit. (B) New helper `_apply_magic_item_on_hit_save_effect(db, campaign_id, char, attacker_sheet, attack, target_combatant, campaign, prompt_user)`. Gates on slug → catalog → `on_hit_save` row → attunement → condition predicate (resolves target.creature_type via the v2.97.48 helper). Builds a condition_buff template per the `effect` (today: `frighten` → frightened condition with duration_rounds). Delegates to `_resolve_feature_save` so NPC targets get a server-side d20+save_mod roll vs. DC and (on fail) the buff installed inline; PC targets get the v2.99.407 Phase 3.2 prompt path. (C) New section in /attack post-hit handler (after Vorpal nat-20 block, before Repelling Blast) calls the helper + broadcasts `feature_used` with `source: "item-demon-slayer-save"` summarizing the save DC + ability. Exception-safe per the handler pattern. (D) Section 6c in `_compute_attack_auto_uplifts` keeps the existing v2.158.93/96 condition predicate — the rider damage uplift still fires normally; the save is an additive post-hit hook, not a replacement. (E) New demo NPC template "Quasit" (CR 1 fiend) in `seed_token_templates` with `sheet.type: "fiend"`. Not placed on the demo map — drag-spawn from Templates to showcase. (F) New harness file `tests/harness/test_demon_slayer_frighten.py` with 3 tests: hit fiend (Quasit) → save broadcast + (on dice-seeded fail) frightened buff installed; hit humanoid → no save attempted, no frightened; detuned Demon Slayer → no save attempted even vs. fiend. All teardowns restore attunement. (G) `docs/test-harness-coverage.md` adds the new section + total bumped 2231 → 2234.**
+**Description:** Closes Phase 7b. The post-hit handler block now has two slug-keyed hook patterns: `on_nat_20` (Phase 7a — fires only on literal d20=20, applies an effect to the target) and `on_hit_save` (Phase 7b — fires on any hit, target rolls save vs. DC, failure installs a condition buff). Together they cover the two most common post-hit RAW shapes for magic weapons. Future items like Sword of Sharpness (`on_nat_20` with `effect: "damage"`), Sun Blade's flash (`on_hit_save` with `effect: "blinded"`), Frost Brand (`on_hit_save` with `effect: "restrained"`) drop into the same shape with zero code change beyond catalog rows + condition_buff template extensions in the helper's effect dispatch.
+
+### Added
+- `app/routes/tabletop_routes.py` — `on_hit_save` field on Demon Slayer catalog row; `_apply_magic_item_on_hit_save_effect` helper; new section in /attack post-hit handler.
+- `app/demo_seed.py` — Quasit (CR 1 fiend) token template spec.
+- `tests/harness/test_demon_slayer_frighten.py` — 3 tests (fiend hit fires save, humanoid hit doesn't, detune suppresses).
+
+### Changed
+- `docs/test-harness-coverage.md` — new test block + total 2231 → 2234.
+- `app/version.py` — `APP_VERSION` 2.158.101 → 2.158.102. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.102.
+
+### Notes
+- The save fires regardless of the +2d6 rider damage actually being applied — RAW couples both effects to the same hit, but section 6c's rider damage might be vetoed (e.g. exempt condition) while the save still fires from the post-hit handler. v1 doesn't try to harmonize this; both gate on the same `condition` predicate so they fire together or not at all under standard play. A future Phase 7d could unify the gate-passing into a single per-rider state object passed between section 6c and the post-hit handler.
+- For PC targets, `_resolve_feature_save` builds a roll-request prompt (the player rolls in their client and the response handler installs the buff). The Phase 7b harness only covers NPC targets — PC-target tests would need the v2.99.407 prompt/respond loop wired in.
+- The Demon Slayer rider's full RAW behavior now ships: +2d6 piercing on hit AND DC 15 WIS save-or-frightened. The frighten condition uses `duration_rounds=1` per RAW "until the end of your next turn"; the existing buff-tick machinery decrements it on the attacker's turn end.
+
+---
+
 ## [2.158.101] - 2026-06-11 — "The Severed Crown" — Magic-items-automation Phase 7a: first post-hit hook in the rider substrate — Vorpal Sword nat-20 decapitation (RAW DMG p.209). Different shape from Phases 5/6: those added damage uplifts via `_compute_attack_auto_uplifts`. Phase 7 hooks the /attack post-hit handler block (where Unwavering Mark / Lance of Lethargy / Repelling Blast live) so an effect can mutate target state — not just append damage. Vorpal v1: on a literal natural 20 attack roll, target's HP drops to 0 (instant kill) unless its creature_type is on the exempt list (construct / ooze / plant — RAW "creatures with at least one head"). Mira Greenleaf (Druid Lv 5) gets the Vorpal Scimitar — her first magic item.
 
 **Schema version:** 69

@@ -3905,6 +3905,16 @@ def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate
         # PCs would steamroll the Tavern Brawl); GM drags from the
         # Templates tab when they want to showcase the rider.
         ("young-red-dragon", "Young Red Dragon", "dragon"),
+        # v2.158.102 — Magic-items Phase 7b demo fixture. Quasit
+        # (CR 1, fiend). Lyra's Demon Slayer Rapier's +2d6 fiend
+        # rider (v2.158.97 Phase 6a) + the Phase 7b DC 15 WIS save-
+        # or-frighten both auto-fire when she attacks one. Quasit
+        # is small (size=1) and squishy (CR 1, HP 7 RAW), so it
+        # doesn't crowd the demo's tactical-balance picture the way
+        # a Pit Fiend would. Like the Young Red Dragon, it's not
+        # placed on the demo map by default — drag-spawn from
+        # Templates when showcasing the rider.
+        ("quasit", "Quasit", "fiend"),
     ]
     # v2.158.98 — specs now mixes 2-tuples and 3-tuples; the third
     # element is the optional creature_type. Unpack with a default so

@@ -28775,6 +28775,144 @@ async def _apply_magic_item_nat_20_effect(
     }
 
 
+async def _apply_magic_item_on_hit_save_effect(
+    db: Session,
+    campaign_id: int,
+    char,
+    attacker_sheet: dict,
+    attack: dict,
+    target_combatant: dict | None,
+    campaign=None,
+    prompt_user=None,
+) -> dict | None:
+    """v2.158.102 — Phase 7b: post-hit save-or-effect hook for magic
+    items with an ``on_hit_save`` field in ``_MAGIC_ITEM_ATTACK_RIDERS``
+    (Demon Slayer today; future Frost Brand chill, Sun Blade undead
+    flash, etc. fit the same shape). Different shape from Phase 7a's
+    ``on_nat_20`` — fires on EVERY hit (not just nat 20), gates on the
+    rider's existing ``condition`` predicate (Demon Slayer = fiend),
+    rolls the target's save vs. the catalog DC, and on a fail
+    installs a condition buff via the v2.99.406 ``_resolve_feature_save``
+    helper. RAW Demon Slayer DMG p.166: DC 15 WIS save or frightened
+    of wielder until end of wielder's next turn (duration_rounds=1).
+    """
+    if not target_combatant:
+        return None
+    attack_slug = (attack.get("_slug") or "").strip().lower()
+    if not attack_slug:
+        return None
+    rider_spec = _MAGIC_ITEM_ATTACK_RIDERS.get(attack_slug)
+    if not rider_spec:
+        return None
+    save_spec = rider_spec.get("on_hit_save")
+    if not save_spec:
+        return None
+
+    # Attunement gate (same as the rider's damage uplift).
+    has_attuned = False
+    for inv in (attacker_sheet or {}).get("inventory") or []:
+        if not isinstance(inv, dict):
+            continue
+        if (inv.get("_slug") or "") != attack_slug:
+            continue
+        if not inv.get("equipped"):
+            continue
+        if (rider_spec.get("requires_attunement")
+                and not inv.get("attuned")):
+            continue
+        has_attuned = True
+        break
+    if not has_attuned:
+        return None
+
+    # Condition predicate (Demon Slayer reuses the same lambda the
+    # +2d6 rider uses — RAW couples the +2d6 + save to the same
+    # fiend gate). Resolve target.creature_type via the v2.97.48
+    # helper for the template-only path (mirror v2.158.96 Phase 5f).
+    condition = rider_spec.get("condition")
+    if condition is not None:
+        tgt = target_combatant
+        if not (tgt.get("creature_type") or "").strip():
+            try:
+                resolved = _attacker_creature_type(
+                    db, tgt.get("char_id"), tgt,
+                )
+            except Exception:
+                resolved = ""
+            if resolved:
+                tgt = dict(target_combatant)
+                tgt["creature_type"] = resolved
+        try:
+            if not bool(condition(tgt)):
+                return None
+        except Exception:
+            return None
+
+    # Build the condition buff template per RAW. Today the only
+    # effect is ``frighten`` → install frightened. Future effects
+    # (``poison``, ``stun``, etc.) extend the if-chain below.
+    effect = (save_spec.get("effect") or "").strip().lower()
+    duration_rounds = int(save_spec.get("duration_rounds") or 1)
+    if effect == "frighten":
+        condition_buff = {
+            "key": "frightened",
+            "name": "Frightened",
+            "icon": "😱",
+            "duration_rounds": duration_rounds,
+            "duration_max": duration_rounds,
+            "concentration": False,
+            "effects": [
+                "disadvantage on ability checks / attacks while attacker in sight",
+                "can't willingly move closer to attacker",
+            ],
+            "source": f"item-{attack_slug}",
+        }
+    else:
+        # Unknown effect — log and bail rather than half-installing.
+        logging.warning(
+            "Unknown on_hit_save effect %r for slug %r",
+            effect, attack_slug,
+        )
+        return None
+
+    dc = int(save_spec.get("dc") or 10)
+    ability = str(save_spec.get("ability") or "WIS").strip().upper()
+    label = str(save_spec.get("label") or rider_spec.get("label") or "Item save")
+
+    try:
+        sr = await _resolve_feature_save(
+            db, campaign_id,
+            caster_char_id=int(char.id),
+            caster_char_name=str(char.name or ""),
+            target_combatant=target_combatant,
+            save_ability=ability,
+            dc=dc,
+            note_label=label,
+            condition_buff=condition_buff,
+            repeated_save=False,
+            source=f"item-{attack_slug}-save",
+            campaign=campaign,
+            prompt_user=prompt_user,
+            feature_name=label,
+        )
+    except Exception:
+        logging.exception(
+            "on_hit_save resolve failed for slug=%s char_id=%s",
+            attack_slug, char.id,
+        )
+        return None
+
+    return {
+        "target_combatant_id": target_combatant.get("id"),
+        "target_name": target_combatant.get("name") or "Target",
+        "slug": attack_slug,
+        "label": label,
+        "dc": dc,
+        "ability": ability,
+        "save_resolved": sr,
+    }
+
+
 async def _apply_lance_of_lethargy(
     campaign_id: int, attacker_char_id: int, attacker_name: str,
     attacker_sheet: dict, attack: dict, target_combatant: dict | None,
@@ -30355,6 +30493,19 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
         "condition": lambda tgt: bool(tgt) and (
             (tgt.get("creature_type") or "").strip().lower() == "fiend"
         ),
+        # v2.158.102 — Phase 7b: second post-hit hook type. RAW DMG
+        # p.166: "the fiend ... must succeed on a DC 15 Wisdom
+        # saving throw or be frightened of you until the end of your
+        # next turn." Shares the rider's condition predicate
+        # (fiend-only) so the save only fires when the rider also
+        # fires — RAW couples the +2d6 and the save to the same hit.
+        "on_hit_save": {
+            "dc": 15,
+            "ability": "WIS",
+            "effect": "frighten",
+            "duration_rounds": 1,
+            "label": "Demon Slayer — Frighten Save",
+        },
     },
     # v2.158.101 — Phase 7a: first post-hit hook (vs. Phase 5/6
     # damage-uplift hooks). Vorpal Sword (RAW DMG p.209): on a
@@ -79456,6 +79607,48 @@ async def use_attack(
             except Exception:
                 logging.exception(
                     "Vorpal nat-20 decap failed for char_id=%s",
+                    char.id,
+                )
+
+        # v2.158.102 — Phase 7b: magic-item on-hit save-or-effect
+        # hooks. Demon Slayer (RAW DMG p.166): on every hit vs. a
+        # fiend, the target makes a DC 15 WIS save or is frightened
+        # of the wielder until the end of the wielder's next turn.
+        # The helper gates on attunement + the rider's condition
+        # (fiend) + reads the catalog's on_hit_save row, then
+        # delegates to _resolve_feature_save which auto-rolls NPC
+        # saves + installs the frightened buff on failure.
+        if hit and not target_dead:
+            try:
+                save_result = await _apply_magic_item_on_hit_save_effect(
+                    db, campaign_id, char, sheet, attack,
+                    target_combatant,
+                    campaign=campaign,
+                    prompt_user=user,
+                )
+                if save_result is not None:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "feature_name": save_result["label"],
+                            "feature_desc": (
+                                f"{save_result['target_name']} rolls a "
+                                f"DC {save_result['dc']} "
+                                f"{save_result['ability']} save vs. "
+                                f"{save_result['label']}."
+                            ),
+                            "source": f"item-{save_result['slug']}-save",
+                            "target_combatant_id": save_result["target_combatant_id"],
+                            "target_name": save_result["target_name"],
+                            "dc": save_result["dc"],
+                            "ability": save_result["ability"],
+                        },
+                    })
+            except Exception:
+                logging.exception(
+                    "on_hit_save resolve failed for char_id=%s",
                     char.id,
                 )
 
