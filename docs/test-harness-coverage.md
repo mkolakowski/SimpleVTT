@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2197 in `tests/harness/` + 26 in `tests/harness_ui/` (as of v2.158.85, 2026-06-10).
+**Total tests:** 2199 in `tests/harness/` + 26 in `tests/harness_ui/` (as of v2.158.86, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2041,6 +2041,14 @@ v2.158.84 magic-items-automation Phase 4a — Wand of Magic Missiles (RAW DMG p.
 | `test_use_wand_over_max_charges_400` | Requesting 8 charges (over RAW max of 7) → 400. |
 | `test_use_wand_insufficient_charges_409` | Burn 6 charges (resource at 1); request 2 → 409 `insufficient_charges` with `current: 1, requested: 2`. |
 | `test_use_wand_unknown_action_404` | Pearl action_key `restore-slot` on a Wand → 404 (catalog mismatch). |
+
+### `test_wand_recharge.py`
+v2.158.86 magic-items-automation Phase 4b — dice-expression recharge on long rest. The rest loop's resource-refill path now reads an optional `charge_recovery` field (a dice expression like `"1d6+1"`) on each resource row + rolls it on long rest, adding to current capped at max, instead of the standard full refill. Wand of Magic Missiles' resource row carries `charge_recovery: "1d6+1"` (RAW DMG p.213); Pearl of Power has no `charge_recovery` and falls back to full refill (the regression-protection canary).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_wand_dice_recharge_within_raw_range` | Burn wand to 0 → long rest → current must be in 2..7 (RAW 1d6+1 range). Iterates 5 times to detect a parser regression vs. dice-fluke OOB. |
+| `test_pearl_still_full_refills_on_long_rest` | Regression: items without a `charge_recovery` field must still full-refill (Pearl's `current: 0 → 1`). Catches accidental walker behavior change. |
 
 ---
 

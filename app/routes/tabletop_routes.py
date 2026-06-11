@@ -75954,7 +75954,27 @@ async def rest_character(
             reset_kind == "long" and rest_type == "long"
         )
         if should_refill and int(r.get("max") or 0) > 0:
-            updated = {**r, "current": int(r.get("max") or 0)}
+            # v2.158.86 — Magic-items Phase 4b: dice-expression
+            # recharge. If the resource row carries a
+            # ``charge_recovery`` field (a dice expression like
+            # "1d6+1" — Wand of Magic Missiles' RAW recharge),
+            # roll it and add to current (capped at max) instead
+            # of the standard full refill. Items with simpler
+            # 1-use-per-rest cadence (Pearl of Power) leave the
+            # field absent and get the standard refill.
+            cur_v = int(r.get("current") or 0)
+            max_v = int(r.get("max") or 0)
+            recovery_expr = str(r.get("charge_recovery") or "").strip()
+            if recovery_expr:
+                try:
+                    roll_result = dice_mod.roll(recovery_expr)
+                    add_n = int(roll_result.total)
+                except (dice_mod.DiceParseError, Exception):
+                    add_n = max_v - cur_v  # fall back to full refill
+                new_cur = min(max_v, cur_v + max(0, add_n))
+            else:
+                new_cur = max_v
+            updated = {**r, "current": new_cur}
             new_resources.append(updated)
             refilled_resources.append(updated)
         else:

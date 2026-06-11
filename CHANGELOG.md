@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.86] - 2026-06-10 — "The Rolling Spark" — Magic-items-automation Phase 4b: dice-expression recharge on long rest. Adds a parser hook to the rest loop's resource-refill path that reads an optional `charge_recovery` field (dice expression like `"1d6+1"`) on each resource row + rolls it on long rest, adding to current (capped at max) instead of the standard full refill. Wand of Magic Missiles' resource row carries `charge_recovery: "1d6+1"` (RAW DMG p.213); Pearl of Power has no `charge_recovery` and falls back to full refill (regression-protection canary). Phase 4 of the magic-items plan is now fully shipped (charges + multi-charge spend + dice-expression recharge)
+
+**Schema version:** 69
+**Commit summary:** **(A) `rest_character` endpoint in `app/routes/tabletop_routes.py` (line ~75940 — the resource-refill loop): the per-resource branch now reads `r.get("charge_recovery")` as an optional dice expression. If present (truthy), rolls the expression via the shared `dice_mod.roll` helper, adds the result to `current` (capped at max). If absent, falls back to the existing full-refill behavior (current = max). Try/except around the roll falls back to full-refill on any dice-parse error to avoid stranding a player's rest. (B) `_wizard_sheet` in `app/demo_seed.py` adds `"charge_recovery": "1d6+1"` to Thalindra's `wand-of-magic-missiles` resource row + updates the row's `desc` to match the new RAW-correct behavior. The Pearl resource row stays unchanged (no `charge_recovery` field) as the regression canary. (C) New harness file `tests/harness/test_wand_recharge.py` with 2 tests: `test_wand_dice_recharge_within_raw_range` (burn wand to 0, long rest, assert 2 ≤ current ≤ 7 across 5 iterations to catch a parser regression vs. dice-fluke OOB), `test_pearl_still_full_refills_on_long_rest` (deplete Pearl to 0, long rest, assert current is back to 1 = max). The Pearl test is the regression canary — if a future commit accidentally broke the `if recovery_expr` branch's fallback, items without the field would lose their refill behavior. (D) `docs/test-harness-coverage.md` adds the new section + total bumped 2197 → 2199.**
+**Description:** Closes Phase 4 of the magic-items plan with the second half of the wand wiring. Phase 4a (v2.158.84) shipped the multi-charge spend dispatch; Phase 4b (this) ships the RAW-correct recharge. The implementation is intentionally additive — the existing `current = max` full-refill remains the default; items opt into dice recharge by populating the `charge_recovery` field on their resource row. This means no other resource (Channel Divinity, Lay on Hands pool, Sneak Attack-once-per-turn flags, etc.) is affected. The fallback-on-parse-error behavior (catch DiceParseError + Exception, full-refill instead) guards against a future homebrew item shipping a malformed expression like "garbage+1" — the player's rest still works, just without the dice recharge. The 5-iteration test loop is the standard pattern for dice-driven assertions: a single OOB result might be the parser working but the loop scaring it, but 5 consecutive OOBs is a 100% parser regression signal.
+
+### Added
+- `app/routes/tabletop_routes.py` — `charge_recovery` parser hook in the rest loop's resource-refill branch.
+- `app/demo_seed.py` — `"charge_recovery": "1d6+1"` field on Thalindra's wand resource row + updated `desc` string.
+- `tests/harness/test_wand_recharge.py` — 2 tests covering happy path (Wand) + regression canary (Pearl).
+
+### Changed
+- `docs/test-harness-coverage.md` — new `### test_wand_recharge.py` block + total 2197 → 2199.
+- `app/version.py` — `APP_VERSION` 2.158.85 → 2.158.86. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.86.
+
+### Notes
+- Magic-items plan Phase 4 is now fully shipped: charges + multi-charge spend (Phase 4a v2.158.84) + dice-expression recharge (Phase 4b this commit) + UI Use button (Phase 3b polish v2.158.85).
+- The phase ledger now reads Phase 0 + 1 (a-d) + 2 (a-b) + 3 (a-b) + 4 (a-b) all shipped. Total: 38 HTTP harness tests + 6 Playwright UI tests across all magic-items work.
+- Phase 4c queues Wand of Fireballs + Staff of Healing as additional catalog rows (no new walker / endpoint changes needed). Phase 5 introduces on-hit rider weapons (Flame Tongue) — different shape, hooks into `_ATTACK_RIDERS` instead.
+
+---
+
 ## [2.158.85] - 2026-06-10 — "The Wand-and-Pearl Tray" — Magic-items-automation Phase 3b polish: surface the v2.158.82 (Pearl) + v2.158.84 (Wand) `/use_item_action` endpoint as a 🔮 / 🪄 Use button on each catalog-action item's inventory row. Click prompts the player for the action parameter (slot_level for Pearl, charges for Wand) via `window.prompt`, then POSTs to the endpoint and surfaces 4xx errors via alert. Two new Playwright tests assert both buttons render on Thalindra's sheet (who carries both items)
 
 **Schema version:** 69

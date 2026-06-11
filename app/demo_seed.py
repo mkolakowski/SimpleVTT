@@ -690,8 +690,13 @@ def _wizard_sheet(name: str) -> dict:
                 "key": "wand-of-magic-missiles",
                 "name": "Wand of Magic Missiles",
                 "current": 7, "max": 7, "reset": "long",
+                # v2.158.86 — Phase 4b: dice-expression recharge.
+                # The rest loop's refill path reads this expression
+                # at long rest and rolls add-to-current capped at
+                # max instead of the standard full refill.
+                "charge_recovery": "1d6+1",
                 "source": "item-wand-of-magic-missiles",
-                "desc": "7 charges. Spend 1-7 to cast Magic Missile at the matching slot level. Regains 1d6+1 charges at dawn (long rest; full refill in v2.158.84, dice recharge in Phase 4b).",
+                "desc": "7 charges. Spend 1-7 to cast Magic Missile at the matching slot level. Regains 1d6+1 charges on long rest.",
                 "manual": False,
             },
         ],
