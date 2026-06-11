@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.14] - 2026-06-11 — "The First Spell Through" — Magic-items-automation Phase 8n: first SPELL wired into the AoE-line confirm-modal substrate that v2.159.7-v2.159.13 built for items. After the v2.46.0 canvas `_openAoePicker` drags a line shape and resolves the in-area combatants, the sheet's `.sp-cast` click handler now opens `_showAoEConfirmModal` between the picker and the `/cast_spell` POST — giving GMs the same per-target deselect power the Javelin already has (line-edge cases: half-cover, prone behind cover, etc.). Lightning Bolt is the first spell to exercise this. Sphere/cone spells (Fireball, Burning Hands, Cone of Cold) stay on the legacy flow for now — the v2.49.146 in-canvas placement already gives enough visual feedback that an additional confirm step would be friction.
+
+**Schema version:** 69
+**Commit summary:** **(A) `sheet_dnd5e.html` `.sp-cast` click handler at the post-`_openAoePicker` branch now opens `_showAoEConfirmModal` when `_spArea.shape === 'line'` AND `_ids.length > 0` AND `typeof window._showAoEConfirmModal === 'function'`. Name lookup pre-fills the modal's checkbox-row text via `/api/campaign/${CAMPAIGN_ID}/battle` GET — the picker only reports `target_combatant_ids`, not names, so we re-fetch. Cancel reverts the optimistic slot decrement (same as the existing `_placed === null` path). The final `_ids` (deselected subset) flows into the POST body's `target_combatant_ids`. (B) `_showAoEConfirmModal` helper gains a per-row distance-column guard: when `c.distance_ft` is missing/0, the column is hidden — the item-side flow pre-computes distance via `/battle/{shape}-targets`, but the spell-side flow doesn't (the canvas picker reports membership, not distance), and showing "0.0 ft" for every target would be misleading. Existing item callers (Javelin / Necklace / Wand of Fear) are unchanged because they always pass a positive distance_ft. (C) New HTTP harness `tests/harness/test_cast_lightning_bolt.py` — Thalindra casts Lightning Bolt at 2 bandits via `/cast_spell` with `target_combatant_ids`, asserts `auto_save_targets` carries 2 entries with `damage_type: "lightning"` + `damage_applied > 0`. Proves the server-side multi-target loop (live since v2.44.0 for Fireball-sphere) also works for line spells. Thalindra Lv 7 has L3 + L4 slots; the test casts at L3 with `override: True` to skip the action-economy gate. (D) New UI test `test_lightning_bolt_confirm_modal_renders_target_names` — drives the v2.159.14 confirm modal end-to-end. Stubs `_openAoePicker` + intercepts `/battle` + `/cast_spell` + `/api/open5e/spells` (the spell-detail lookup that drives `_spArea`), clicks Lvl 3 in the upcast picker, asserts the confirm modal renders both bandit names, then clicks Cast and asserts the `/cast_spell` POST carries `target_combatant_ids: ["tok_test_b1", "tok_test_b2"]`. (E) HTTP test total bumped 2263 → 2264; UI test total bumped 43 → 44.**
+**Description:** Closes Phase 8n. The AoE substrate's spell side was already functional via the v2.44.0 multi-target cast_spell loop (Fireball-sphere has been working since then), but the CLIENT side was missing the per-target deselect modal. This commit closes that gap for line-shape spells specifically. Sphere/cone spells stay on the legacy flow — those AoE shapes have stronger center-placement cues on the canvas (the Fireball ring is a clear visual; a Lightning Bolt 100 ft × 5 ft band can graze edge cases that the GM may want to drop). Future work: a settings toggle to opt the sphere/cone flows into the same modal if a GM prefers the extra step.
+
+### Added
+- `tests/harness/test_cast_lightning_bolt.py` — Lightning Bolt 2-target multi-target loop verification.
+- `tests/harness_ui/test_use_item_action_buttons.py` — `test_lightning_bolt_confirm_modal_renders_target_names`.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — `.sp-cast` post-`_openAoePicker` branch gains the `_showAoEConfirmModal` step for line-shape spells; `_showAoEConfirmModal` per-row distance column now optional.
+- `app/version.py` — `APP_VERSION` 2.159.13 → 2.159.14. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.14.
+- `docs/test-harness-coverage.md` — HTTP total 2263 → 2264; UI total 43 → 44.
+
+### Notes
+- The confirm modal is gated on `shape === 'line'` for now. Adding sphere/cone later is a one-condition flip; the modal helper already handles arbitrary combatant lists.
+- The UI test stubs `/api/open5e/spells` to ensure `_spArea` resolves to a line shape regardless of the live Open5e proxy's cache state. The contract under test is the chain integrity, not the spell-detail fetch path.
+- The optimistic L3 slot decrement happens BEFORE the AoE picker fires (v2.108.0 pattern); on Cancel through either the upcast picker or the new confirm modal, the slot is reverted. This is the same revert path the existing `_placed === null` branch uses.
+
+---
+
 ## [2.159.13] - 2026-06-11 — "The Three-Shape Pin" — Magic-items-automation Phase 8m: end-to-end Playwright integration test for the full Necklace of Fireballs click-to-fire chain — completing the AoE E2E parity matrix (line: v2.159.8 javelin, cone: v2.159.12 wand-of-fear, sphere: this commit). The necklace is the only AoE flow with a pre-target `charge_picker` step (the v2.159.10 multi-bead upcast spinner), so this test drives one more click stage than the line/cone E2Es. With this commit, every AoE substrate has both an HTTP harness and a click-to-fire UI pin.
 
 **Schema version:** 69

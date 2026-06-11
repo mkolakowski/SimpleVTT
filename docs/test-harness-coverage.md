@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2263 in `tests/harness/` + 43 in `tests/harness_ui/` (as of v2.159.13, 2026-06-11).
+**Total tests:** 2264 in `tests/harness/` + 44 in `tests/harness_ui/` (as of v2.159.14, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -300,6 +300,13 @@ Phase T.5a — AoE multi-target dispatch on `/cast_spell`. New `target_combatant
 | `test_aoe_cast_without_targets_lands_pending_then_place_aoe_resolves` | v2.48.0 Phase T.5e caster-gated placement. `/cast_spell` without `target_combatant_ids` returns `pending_aoe_placement: True` + the spell's `area_shape`/`area_size_ft`. Then POST `/place_aoe` with the cast_id + target list resolves NPC saves + damage and broadcasts `spell_cast_aoe_resolved` with the resolved targets. |
 | `test_place_aoe_auto_rolls_pc_save_and_applies_damage` | v2.48.3 — `/place_aoe` auto-rolls PC saves alongside NPCs (no more roll_request prompt for the new flow). PC entry has `rolled`/`passed`/`damage_applied` populated, `pc_skipped` and `pending_request_id` absent. v2.158.64 — the "PC's HP dropped server-side" check moved from a `_pc_hp()` roster GET-poll to a `gm_ws.buffered("character_hp_update")` filter on the PC's `character_id` (scoped by a `gm_ws.mark()` before `/place_aoe`) asserting the last HP-update broadcast has `delta < 0`. |
 | `test_place_aoe_rejects_non_caster_non_gm` | v2.48.0 Phase T.5e auth gate. `/place_aoe` with a bogus cast_id returns 404 (stash-not-found). |
+
+### `test_cast_lightning_bolt.py`
+v2.159.14 magic-items-automation Phase 8n — first SPELL wired into the AoE-line confirm-modal substrate that v2.159.7-v2.159.13 built for items. The v2.44.0 cast_spell multi-target loop has been live for Fireball-sphere since then; this commit proves the loop also works for line-shape spells (Lightning Bolt). The accompanying UI work adds `_showAoEConfirmModal` between `_openAoePicker` and the `/cast_spell` POST for line-shape spells only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_lightning_bolt_hits_two_bandits` | Thalindra Lightning Bolt at 2 bandits → `auto_save_targets` has 2 entries, each with rolled/passed/damage_applied/damage_type, every bandit took non-zero lightning damage (8d6 min 8, half = min 4). Cast at slot_level=3 with override=True to skip action-economy gate. |
 
 ### `test_shake_awake.py`
 v2.49.62 — `POST /shake_awake`. Closes the v2.49.61 filed "wake-via-shake" item. RAW Sleep's third wake branch: another creature uses an action to shake the sleeper awake. Any class can shake (RAW "someone"); costs 1 action. Scoped to Sleep-sourced Unconscious buffs only — shaking a dying-at-0-HP creature isn't a wake.

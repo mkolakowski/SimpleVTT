@@ -3083,8 +3083,56 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             btn.disabled = false;
                             return;
                         }
-                        const _ids = Array.isArray(_placed.target_combatant_ids)
+                        let _ids = Array.isArray(_placed.target_combatant_ids)
                             ? _placed.target_combatant_ids : [];
+                        // v2.159.14 — first spell wired into the
+                        // magic-items AoE confirm-modal substrate.
+                        // For line-shape spells (Lightning Bolt
+                        // initially), show the same per-target
+                        // deselect modal the Javelin uses. The picker
+                        // tells us WHO is in the area; the GM picks
+                        // which of those actually take the save chain
+                        // (line-edge cases: half-cover, prone behind
+                        // cover, etc.). Sphere/cone spells skip the
+                        // modal for now — they have richer center-
+                        // placement cues on the canvas, and adding a
+                        // confirm step there would force an extra
+                        // click on every Fireball.
+                        if (_spArea.shape === 'line'
+                                && _ids.length
+                                && typeof window._showAoEConfirmModal === 'function') {
+                            // Fetch the battle for name lookup; the
+                            // _placed payload only carries ids.
+                            let _nameById = {};
+                            try {
+                                const _bResp = await fetch(`/api/campaign/${CAMPAIGN_ID}/battle`);
+                                const _bData = await _bResp.json();
+                                const _cs = (_bData.battle || {}).combatants || [];
+                                _cs.forEach(c => {
+                                    if (c && c.id) _nameById[c.id] = c.name || c.id;
+                                });
+                            } catch (_) {}
+                            const _picked = await window._showAoEConfirmModal({
+                                title: `${s.name || 'Spell'}`,
+                                body: `Each creature in the line must make a save. Uncheck to remove from the save chain.`,
+                                combatants: _ids.map(id => ({
+                                    combatant_id: id,
+                                    name: _nameById[id] || id,
+                                })),
+                                submit_label: '⚡ Cast',
+                            });
+                            if (_picked === null) {
+                                // Cancelled — revert optimistic slot decrement.
+                                if (slotRow) {
+                                    slotRow.dataset.used = prevUsed;
+                                    if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
+                                    if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                                }
+                                btn.disabled = false;
+                                return;
+                            }
+                            _ids = _picked;
+                        }
                         _spTgt = {
                             target_combatant_id: _ids[0] || '',
                             target_character_id: null,
@@ -7318,7 +7366,15 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     html += `<label class="aoe-tgt-row" style="display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:6px;border:1px solid var(--s-border,#444);border-radius:4px;cursor:pointer;">`;
                     html += `<input type="checkbox" class="aoe-tgt-cb" data-idx="${i}" id="aoe-cb-${i}" data-cid="${_esc(c.combatant_id)}" checked style="margin:0;cursor:pointer;">`;
                     html += `<span style="font-size:13px;font-weight:600;flex:1;">${_esc(c.name || c.combatant_id)}</span>`;
-                    html += `<span style="font-size:11px;color:var(--s-mute,#aaa);">${(c.distance_ft || 0).toFixed(1)} ft</span>`;
+                    // v2.159.14: distance is optional. The item-side
+                    // flow passes distance_ft from /battle/{shape}-
+                    // targets; the spell-side flow doesn't pre-compute
+                    // it (the AoE picker reports membership, not
+                    // distance), so we hide the column when it's
+                    // missing.
+                    if (typeof c.distance_ft === 'number' && c.distance_ft > 0) {
+                        html += `<span style="font-size:11px;color:var(--s-mute,#aaa);">${c.distance_ft.toFixed(1)} ft</span>`;
+                    }
                     html += `</label>`;
                 });
             }

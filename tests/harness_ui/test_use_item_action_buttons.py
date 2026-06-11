@@ -758,6 +758,142 @@ def test_wand_of_fear_use_button_renders(gm_page: Page, roster: dict):
     expect(btn).to_contain_text("Cast Fear")
 
 
+def test_lightning_bolt_confirm_modal_renders_target_names(
+    gm_page: Page, roster: dict,
+):
+    """v2.159.14 Phase 8n: first SPELL wired into the AoE-line confirm
+    modal substrate that v2.159.7 built for items.
+
+    Click ✨ Cast on Thalindra's Lightning Bolt → stubbed
+    _openAoePicker returns {target_combatant_ids: ['tok_test_b1',
+    'tok_test_b2']} → /battle GET (intercepted) returns synthetic
+    combatants so the name lookup works → _showAoEConfirmModal opens
+    with both names → click Cast → /cast_spell POST fires with the
+    final target_combatant_ids list.
+
+    Intercepts /cast_spell so the test doesn't actually burn
+    Thalindra's L3 slot — the contract under test is the click chain's
+    POST body shape, not the server-side multi-target loop (covered by
+    test_cast_lightning_bolt.py).
+    """
+    import httpx, json
+    thalindra = roster["Thalindra Moonwhisper"]
+    LIGHTNING_BOLT_IDX = 11
+
+    # Force-rest so Thalindra has a L3 slot available (the sp-cast
+    # handler does an optimistic slot decrement before opening the
+    # picker; if the slot's already spent, the button no-ops).
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        c.post(
+            f"/api/campaign/1/character/{thalindra['id']}/rest",
+            json={"type": "long"},
+        )
+
+    page = gm_page
+
+    def _handle_battle(route):
+        if route.request.method == "GET":
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "battle": {
+                        "combatants": [
+                            {"id": "tok_test_thal", "char_id": thalindra["id"], "name": thalindra["name"], "source_token_id": 1},
+                            {"id": "tok_test_b1", "name": "Bandit Alpha", "source_token_id": 2},
+                            {"id": "tok_test_b2", "name": "Bandit Beta", "source_token_id": 3},
+                        ],
+                    },
+                }),
+            )
+        else:
+            route.continue_()
+    page.route("**/api/campaign/1/battle", _handle_battle)
+
+    # Intercept the cast itself so we don't actually burn the slot.
+    def _handle_cast(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "ok": True,
+                "auto_save_targets": [],
+            }),
+        )
+    page.route("**/api/campaign/1/cast_spell", _handle_cast)
+
+    # Intercept the Open5e proxy so the spell-detail lookup returns
+    # the line-AoE shape regardless of cache state — `_fetchSpellDetail`
+    # reads from this endpoint and the v2.159.14 confirm-modal branch
+    # gates on `_spArea.shape === 'line'`.
+    def _handle_open5e(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "results": [{
+                    "name": "Lightning Bolt",
+                    "range": "100 feet",
+                    "actions": [{
+                        "area": {"shape": "line", "size_ft": 100, "secondary_ft": 5},
+                        "damage": "8d6",
+                    }],
+                }],
+            }),
+        )
+    page.route("**/api/open5e/spells**", _handle_open5e)
+
+    page.goto(sheet_url(thalindra["id"]))
+
+    # Stub the canvas AoE picker. The real picker drags a line shape
+    # on the tabletop; here we just resolve with the synthetic ids.
+    # Also stub _promptUpcastLevel — Thalindra Lv 7 has both L3 + L4
+    # slots so the sp-cast handler would open the upcast picker first.
+    page.evaluate("""
+        window._openAoePicker = async () => ({
+            target_combatant_ids: ['tok_test_b1', 'tok_test_b2'],
+            center: {x: 100, y: 100},
+        });
+        window._promptUpcastLevel = async () => 3;
+    """)
+
+    lb_btn = page.locator(f'.sp-cast[data-idx="{LIGHTNING_BOLT_IDX}"]')
+    expect(lb_btn).to_be_visible(timeout=5000)
+
+    with page.expect_request(
+        lambda req: (
+            req.url.endswith(f"/cast_spell")
+            and req.method == "POST"
+        ),
+        timeout=10000,
+    ) as req_info:
+        lb_btn.click()
+        # Thalindra has L3 + L4 slots free post-rest, so the upcast
+        # picker (modal at role="dialog" aria-label="Choose spell slot
+        # level") opens first. Pick the base Lv 3.
+        upcast_modal = page.locator('[role="dialog"][aria-label="Choose spell slot level"]')
+        expect(upcast_modal).to_be_visible(timeout=5000)
+        upcast_modal.locator('button', has_text="Lvl 3").click()
+        # Then the v2.159.14 AoE-line confirm modal opens.
+        modal = page.locator("#aoe-line-confirm-modal")
+        expect(modal).to_be_visible(timeout=5000)
+        expect(modal).to_contain_text("Bandit Alpha")
+        expect(modal).to_contain_text("Bandit Beta")
+        modal.locator("#aoe-confirm").click()
+
+    posted = req_info.value
+    payload = posted.post_data_json
+    assert payload.get("character_id") == thalindra["id"], payload
+    assert payload.get("spell_index") == LIGHTNING_BOLT_IDX, payload
+    assert payload.get("target_combatant_ids") == ["tok_test_b1", "tok_test_b2"], payload
+
+
 def test_necklace_fireballs_click_fires_use_item_action(
     gm_page: Page, roster: dict,
 ):
