@@ -1,10 +1,13 @@
 name: Docker Image CI
 
+# v2.158.100 — Auto-trigger disabled per project owner request. The
+# project standing rule is to build the Docker image from the local
+# Dockerfile rather than pulling from ghcr.io, so the publish side of
+# this workflow was unused; the PR-build cross-compile sanity check
+# was the only remaining signal. Re-enable by restoring the push: +
+# pull_request: entries below.
 on:
-  push:
-    branches: [ "main", "dev" ]
-  pull_request:
-    branches: [ "main", "dev" ]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io

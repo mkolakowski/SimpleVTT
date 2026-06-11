@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.100] - 2026-06-11 — "The Quiet Yard" — CI-housekeeping follow-up to v2.158.95. The user noticed GitHub Actions was still running on every push despite v2.158.95's test-harness disable; investigation found a second workflow file (`docker-image.yml`, separate from `test-harness.yml`) still firing on `push` + `pull_request`. That workflow cross-compiles a multi-arch (amd64 + arm64) Docker image and pushes it to `ghcr.io/mkolakowski/simplevtt`. The project's standing rule (encoded in user-memory `feedback_avoid_ghcr_prefer_local_build.md`) is to always build the image from the local Dockerfile rather than pulling from ghcr.io, so the publish side has been unused; the PR-build cross-compile sanity check was the only remaining live signal. Swapped its triggers to `workflow_dispatch:` so the workflow stays intact for manual fires but no longer auto-runs on commits.
+
+**Schema version:** 69
+**Commit summary:** **(A) `.github/workflows/docker-image.yml` triggers swapped: `on: push: [main, dev]` + `on: pull_request: [main, dev]` → `on: workflow_dispatch:`. Job/step body unchanged. (B) Header comment in the workflow file explains the why + how to re-enable (restore the push: + pull_request: blocks). No code changes outside `.github/workflows/`.**
+**Description:** Closes the gap left by v2.158.95. With both workflows now manual-only, a push to `main` fires zero GitHub Actions jobs. Re-enable either workflow individually by editing its `on:` block.
+
+### Changed
+- `.github/workflows/docker-image.yml` — auto-trigger disabled; manual `workflow_dispatch` only. Header comment explains the rationale.
+- `app/version.py` — `APP_VERSION` 2.158.99 → 2.158.100. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.100.
+
+### Notes
+- The ghcr.io image tags (`latest`, `<version>`, `dev`, `sha-<short>`) stop being updated until the workflow is manually fired. Anyone who happens to pull `ghcr.io/mkolakowski/simplevtt:latest` would get the pre-v2.158.100 image until then. Per the project's local-build-only standing rule, this is the intended state.
+- Versioning side-note: per CLAUDE.md, PATCH-bumps to 2.158.99 → 2.158.100 are normal — the MINOR segment can exceed 99, the version is real SemVer, and the auto memory note `feedback_minor_can_exceed_99.md` confirms this exact shape.
+
+---
+
 ## [2.158.99] - 2026-06-11 — "The Crashing Boss" — Magic-items-automation Phase 6c: drop Drakkasha (the v2.158.98 Young Red Dragon template) onto the Tavern Brawl map by default + add her to the pre-rolled initiative. A demo GM loading the campaign now sees Caelan's Dragon Slayer +3d6 rider auto-fire on the first attack with zero clicks of setup — the cinematic payoff of Phases 5c (condition substrate) + 5f (helper resolution) + 6b (template type field). CR 10 vs. Lv 5-9 PCs is deliberately unbalanced — the encounter is a showcase, not a winnable fight. The encounter description gets a one-line narrative beat about the dragon crashing through the rafters; a GM who wants the original playable bandit fight can right-click Drakkasha → Remove.
 
 **Schema version:** 69
