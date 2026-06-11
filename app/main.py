@@ -207,22 +207,6 @@ async def on_startup() -> None:
     except Exception as e:  # noqa: BLE001 — never block boot on the validator
         log.exception("Content validator crashed: %s", e)
 
-
-@app.get("/api/content-health")
-def content_health():
-    """v2.159.16 — public read-only mirror of the boot-time content-
-    schema validator. v2.159.23 extends from items-only to a nested
-    map keyed by content type. The harness asserts every type has
-    empty errors on every CI run; an operator polling after a content
-    drop can use it to confirm new records parse before cutting
-    traffic over.
-
-    Returns ``{<type_name>: {checked, errors}}`` for each of the nine
-    content types. Top-level keys mirror ``content_schemas.TYPE_REGISTRY``
-    (races / class_features / subclass_features / spells / items /
-    feats / backgrounds / monsters / conditions).
-    """
-    return {k: dict(v) for k, v in _CONTENT_VALIDATION_RESULT.items()}
     if settings.admins:
         log.info("Admins from env: %s", ", ".join(settings.admins))
     else:
@@ -248,6 +232,23 @@ def content_health():
                 log.exception("demo seed (boot) failed: %s", e)
         from .demo_scheduler import start_demo_scheduler
         start_demo_scheduler(app)
+
+
+@app.get("/api/content-health")
+def content_health():
+    """v2.159.16 — public read-only mirror of the boot-time content-
+    schema validator. v2.159.23 extends from items-only to a nested
+    map keyed by content type. The harness asserts every type has
+    empty errors on every CI run; an operator polling after a content
+    drop can use it to confirm new records parse before cutting
+    traffic over.
+
+    Returns ``{<type_name>: {checked, errors}}`` for each of the nine
+    content types. Top-level keys mirror ``content_schemas.TYPE_REGISTRY``
+    (races / class_features / subclass_features / spells / items /
+    feats / backgrounds / monsters / conditions).
+    """
+    return {k: dict(v) for k, v in _CONTENT_VALIDATION_RESULT.items()}
 
 
 @app.on_event("shutdown")

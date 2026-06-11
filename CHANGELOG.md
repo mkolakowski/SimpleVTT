@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.24] - 2026-06-11 — "The Re-Awakened Seed" — Hotfix for a latent regression introduced in v2.159.16: the on_startup hook in `app/main.py` accidentally fell off after the early `return` of the new `/api/content-health` endpoint, so the admins-log + demo-mode block + demo-scheduler-start sat as unreachable dead code AFTER the endpoint function rather than inside `on_startup`. As a result: (1) the demo-mode reset-and-reseed never fired at boot, so the DB held the v2.159.16 snapshot indefinitely (subsequent demo-seed updates — Wand of Fear / Necklace of Fireballs / exhaustion fixture additions / this commit's Goggles addition — never reached the running app); (2) the demo scheduler that periodically resets stale state never started; (3) the admins-from-env log line went silent. Restores all three behaviors by moving the misplaced block back inside `on_startup`. Detected when v2.159.24's Goggles-of-Night work added an item to Pip's seed and the test couldn't find it — Pip's inventory was still the v2.158.103 shape.
+
+**Schema version:** 69
+**Commit summary:** **(A) Moved the orphaned `if settings.admins / log.warning` + `if settings.demo_mode / start_demo_scheduler` block from AFTER the `/api/content-health` endpoint's `return` (where it was unreachable) BACK INTO the `on_startup` async function body, just after the content-validator try-block. No new code — purely a re-indentation/placement fix. (B) The bug was technically present since v2.159.16 (when `/api/content-health` was added), but only surfaced when v2.159.24's seed-data addition needed the demo-seed reset to fire. Operators running with `DEMO_MODE=true` will see the warning + seed counts in the boot log again. Containers with `DEMO_RESET_ON_BOOT=true` get a fresh seed at every restart.**
+**Description:** A latent bug that hid for 8 commits because the in-flight demo data already had the magic items / exhaustion fixtures the harness tests asserted against. The seed-reset only became necessary when a NEW commit (Goggles) added something the existing DB didn't have. Filed for future-me: when adding a function above an existing `return`-terminated block, double-check the indentation of the BELOW block, because Python won't complain about dead code after a return — it's syntactically valid and the linter doesn't flag it.
+
+### Changed
+- `app/main.py` — moved the misplaced admins-log + demo-mode block back into `on_startup`.
+- `app/version.py` — `APP_VERSION` 2.159.23 → 2.159.24. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.24.
+
+### Notes
+- No new tests — the bug is in startup glue, not in business logic. The existing harness suite (2299 tests) running against a freshly-seeded container is the regression check: if the demo seed weren't firing, the next session's tests that touch newly-added demo data would fail (as the Goggles test in v2.159.25 will demonstrate).
+- The v2.159.16 — v2.159.23 commits all booted, served traffic, and passed CI against their bundled tests; the bug was silent because no harness assertion required fresh demo data within that window. (Tests use the same shared container the demo PCs live in, and the existing PCs had the fixtures from the v2.159.15 → v2.159.16 reset.)
+- Filed as part of the v2.159.25 Goggles work — the lesson is that adding seed-data-dependent items requires verifying the seed actually reapplied at boot, not just that the code change looks right.
+
+---
+
 ## [2.159.23] - 2026-06-11 — "The Sentry Spreads" — Phase 8q follow-up: extends the v2.159.16 boot-time content validator from items-only to ALL nine SRD content types (races / class_features / subclass_features / spells / items / feats / backgrounds / monsters / conditions). Walks each `app/data/local/dnd5e/<type>/*.json` and validates against the corresponding Pydantic schema via `content_schemas.TYPE_REGISTRY`. The `/api/content-health` endpoint response shape evolved from `{items: {checked, errors}}` to a nested per-type map; existing harness assertions that read `data["items"]["errors"]` keep working because the items key is still present in the response. 984 records validated across the 9 types — all pass on the v2.159.23 boot.
 
 **Schema version:** 69
