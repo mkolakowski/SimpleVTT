@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.94] - 2026-06-10 — "The Single Spark" — Magic-items-automation Phase 5d: inventory-row UI for the v2.158.92 Flame Tongue ignite/extinguish toggle. Different shape from Phases 3c/3d modals — there's no parameter to ask for, just a state flip. Garrik's inventory row now shows a dynamic ❄ Extinguish / 🔥 Ignite button whose label tracks the item's `_lit` flag in real time. Click fires `/use_item_action` directly (no modal) and the response's `lit` field updates local state so the button re-labels immediately.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `ITEM_ACTION_SLUGS["flame-tongue"]` row in `sheet_dnd5e.html` using a new `kind: 'state-toggle'` shape. Carries `state_field: "_lit"`, `label_fn(item)`, `action_key_fn(item)`, `title_fn(item)` — all read the current item state and return the right string. No modal config (no `body`, no `actions`). (B) `rowHtml` extended: the `actionLabel` + `actionTitle` strings are computed via `label_fn` / `title_fn` when the cfg is a state-toggle; other kinds (Pearl single-action, Staff multi-action) keep the static `label` / `body`. (C) Click handler at `.inv-item-action` gets a new branch above the existing modal logic: when `cfg.kind === 'state-toggle'`, skip the modal entirely + assemble the POST body with `action_key: cfg.action_key_fn(inventory[idx])`. On success, mutate `inventory[idx][cfg.state_field]` from the response's `lit` field (or invert as fallback) + call `renderInventory()` so the button re-labels. (D) 2 new Playwright tests in `test_use_item_action_buttons.py`: 🩹 button renders with the "Extinguish" label on Garrik (seed default lit); clicking it flips to "Ignite" then back to "Extinguish", with a httpx finally-block force-restore so the seed default survives test order shuffling. UI total 33 → 35.**
+**Description:** Closes the modal-UX-for-every-shipped-rider work that started in Phase 3c. Every magic item in the demo party now has a click-through Use button: Pearl (slot dropdown), Wand of MM (charge spinner), Wand of Fireballs (charge spinner + Lv+2 preview), Staff of Healing (2-stage action picker + adaptive spinner), Flame Tongue (1-click state toggle). The state-toggle shape stays minimal — it's literally a button whose label is computed from the item state. Future state-toggle items (Lantern of Revealing for "on/off see-invisibility", Boots of Levitation, Brooch of Shielding etc.) drop into the same `kind` with their own `label_fn` / `action_key_fn`. Phase 5e (route condition predicates through the `_attacker_creature_type` helper) is next on the plan.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `flame-tongue` row in `ITEM_ACTION_SLUGS` (state-toggle); state-aware label + title computation in `rowHtml`; state-toggle branch in the click handler.
+- `tests/harness_ui/test_use_item_action_buttons.py` — 2 Flame Tongue button tests (renders Extinguish on seed-lit Garrik; click toggles label between Ignite and Extinguish).
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.158.93 → 2.158.94. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.94.
+- `docs/test-harness-coverage.md` — UI total 33 → 35; Flame Tongue button tests appended to the `test_use_item_action_buttons.py` section.
+
+### Notes
+- The state-toggle button has no progress / loading state beyond the brief `btn.disabled = true` during the fetch. The label-flip on success is the success indicator. A failed fetch surfaces via the existing `alert(...)` path.
+- The 1-click flow also bypasses the v2.158.88 multi-action dispatch UX (no need to pick between ignite + extinguish — the wielder's current state determines which is meaningful). The server-side `_use_item_action_flame_tongue` handler still returns 409 `no_state_change` if a stale UI somehow POSTs the wrong action_key.
+
+### Fixed
+- Inventory hydration in `sheet_dnd5e.html` enumerates known item fields explicitly (`name`, `qty`, `equipped`, ...) and drops anything else. `_lit` was being silently stripped on the JS side even though the server stored it correctly — Garrik's button rendered "🔥 Ignite" regardless of state. Added a lazy passthrough mirroring the v2.158.80 `attuned` line: `...(s._lit !== undefined ? {_lit: !!s._lit} : {})`. Any future state-toggle item with a state field would need the same one-liner; filed as a Phase 5e candidate to spread-pass-through the full source dict instead.
+
+---
+
 ## [2.158.93] - 2026-06-10 — "The Wyrmbane" — Magic-items-automation Phase 5c: first conditional on-hit rider — Dragon Slayer Longsword (RAW DMG p.166). Different shape from Phase 5a/5b: the rider only fires when the target's `creature_type` matches a predicate. New `condition(target_combatant) → bool` callable on rider catalog entries; section 6c in `_compute_attack_auto_uplifts` invokes it after the slug + attunement + lit-state checks. Always-on riders (Flame Tongue) omit the field and behave unchanged. Sir Caelan Lightbringer gets the longsword — his first magic item, attuned alongside his shield.
 
 **Schema version:** 69

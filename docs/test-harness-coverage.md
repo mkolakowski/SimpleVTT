@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2220 in `tests/harness/` + 33 in `tests/harness_ui/` (as of v2.158.93, 2026-06-10).
+**Total tests:** 2220 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.94, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2979,6 +2979,8 @@ v2.158.85 magic-items-automation Phase 3b — Use buttons render on the inventor
 | `test_staff_use_button_opens_action_picker_modal` | Click opens modal with 3 radios (Cure Wounds / Lesser Restoration / Mass Cure Wounds); charge block hidden + submit disabled until a pick. |
 | `test_staff_pick_cure_wounds_shows_variable_spinner` | Picking Cure Wounds reveals a `min=1 max=4` spinner with Lv-X preview tracking the value (1→1, 3→3). |
 | `test_staff_pick_lesser_restoration_locks_at_2` | Picking Lesser Restoration locks the spinner readonly at value=2 (min==max==2); preview reads "Lesser Restoration" + "Lv 2". |
+| `test_flame_tongue_use_button_renders` | v2.158.94: Flame Tongue button visible on Garrik's row with "Extinguish" label (seed default _lit: True). |
+| `test_flame_tongue_click_toggles_label_and_relabels` | Click flips label Extinguish → Ignite; second click flips back. httpx finally-block force-restores via the API so test order doesn't matter. |
 
 ---
 

@@ -261,3 +261,79 @@ def test_staff_pick_lesser_restoration_locks_at_2(gm_page: Page, roster: dict):
 
     modal.locator("#ia-cancel").click()
     expect(modal).to_be_hidden()
+
+
+# v2.158.94 — Phase 5d: Flame Tongue ignite/extinguish 1-click
+# button. Different shape from Phase 3c/3d modals — there's no
+# parameter to ask for, just a state flip. Button label adapts to
+# Garrik's Flame Tongue's current `_lit` field.
+
+
+def _force_garrik_flame_tongue_lit(char_id: int, lit: bool) -> None:
+    """Force Garrik's Flame Tongue to a known state via the API.
+    Used by the Phase 5d tests to neutralize prior _lit state left
+    behind by the test_flame_tongue_ignite.py HTTP harness when both
+    suites run against the same shared container."""
+    import httpx
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        action_key = "ignite" if lit else "extinguish"
+        # 409 (no_state_change) is fine — means already in the
+        # desired state.
+        c.post(
+            f"/api/campaign/1/character/{char_id}/use_item_action",
+            json={"inventory_index": 7, "action_key": action_key},
+        )
+
+
+def test_flame_tongue_use_button_renders(gm_page: Page, roster: dict):
+    """v2.158.94: Garrik's inventory shows the Flame Tongue 1-click
+    toggle button. Force-lit before asserting so prior tests that
+    may have left the staff extinguished don't poison the assertion."""
+    garrik = roster["Garrik Ironside"]
+    _force_garrik_flame_tongue_lit(garrik["id"], True)
+
+    page = gm_page
+    page.goto(sheet_url(garrik["id"]))
+
+    ft_row = page.locator(".inv-row", has_text="Flame Tongue Longsword")
+    expect(ft_row).to_be_visible(timeout=5000)
+
+    btn = ft_row.locator(".inv-item-action")
+    expect(btn).to_be_visible()
+    expect(btn).to_contain_text("Extinguish")
+
+
+def test_flame_tongue_click_toggles_label_and_relabels(gm_page: Page, roster: dict):
+    """v2.158.94: clicking the Extinguish button flips the label to
+    🔥 Ignite (and the underlying _lit state to false). Then clicking
+    again flips back to ❄ Extinguish, restoring the lit state."""
+    garrik = roster["Garrik Ironside"]
+    _force_garrik_flame_tongue_lit(garrik["id"], True)
+
+    page = gm_page
+    page.goto(sheet_url(garrik["id"]))
+
+    ft_row = page.locator(".inv-row", has_text="Flame Tongue Longsword")
+    expect(ft_row).to_be_visible(timeout=5000)
+
+    btn = ft_row.locator(".inv-item-action")
+    expect(btn).to_contain_text("Extinguish")
+
+    try:
+        # First click: extinguish → label flips to Ignite.
+        btn.click()
+        expect(btn).to_contain_text("Ignite", timeout=3000)
+
+        # Second click: ignite → label flips back to Extinguish.
+        btn.click()
+        expect(btn).to_contain_text("Extinguish", timeout=3000)
+    finally:
+        # Hard-force lit so downstream tests see Garrik with the
+        # seed-default state regardless of which click path failed.
+        _force_garrik_flame_tongue_lit(garrik["id"], True)

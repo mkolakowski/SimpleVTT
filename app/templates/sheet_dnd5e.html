@@ -6575,6 +6575,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // chip; items with the key (true OR false) get the
                     // chip rendered.
                     ...(s.attuned !== undefined ? {attuned: !!s.attuned} : {}),
+                    // v2.158.94 — Magic-items Phase 5d: pass through
+                    // the `_lit` state for Flame-Tongue-style state
+                    // toggles. Same lazy-pass-through pattern as
+                    // attuned: only present when the source set it.
+                    ...(s._lit !== undefined ? {_lit: !!s._lit} : {}),
                 };
             });
         }
@@ -6785,11 +6790,21 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         // "ITEM_ACTION_SLUGS is not defined" but no test exercised
         // the click path until v2.158.89's Playwright additions.
         const itemAction = item._slug ? ITEM_ACTION_SLUGS[item._slug] : null;
+        // v2.158.94 — Phase 5d: state-toggle items (Flame Tongue)
+        // compute label + title from the item's current state via
+        // ``label_fn`` / ``title_fn``. Other kinds use the static
+        // ``label`` / ``body``/``title`` strings.
+        const actionLabel = (itemAction && itemAction.kind === 'state-toggle' && itemAction.label_fn)
+            ? itemAction.label_fn(item)
+            : (itemAction ? itemAction.label : '');
+        const actionTitle = (itemAction && itemAction.kind === 'state-toggle' && itemAction.title_fn)
+            ? itemAction.title_fn(item)
+            : (itemAction ? (itemAction.body || itemAction.title || '') : '');
         const actionBtn = (itemAction && !isReadonly && item.equipped &&
                           typeof CAMPAIGN_ID !== 'undefined' && typeof MY_CHAR_ID !== 'undefined')
             ? `<button type="button" class="inv-item-action" data-idx="${idx}" data-slug="${_esc(item._slug)}"
-                       title="${_esc(itemAction.label)} — ${_esc(itemAction.body || itemAction.title || '')}"
-                       style="font-size:11px;padding:3px 8px;min-height:32px;background:rgba(184,135,255,0.12);border:1px solid rgba(184,135,255,0.45);color:#b887ff;border-radius:4px;cursor:pointer;flex-shrink:0;font-weight:600;">${_esc(itemAction.label)}</button>`
+                       title="${_esc(actionLabel)} — ${_esc(actionTitle)}"
+                       style="font-size:11px;padding:3px 8px;min-height:32px;background:rgba(184,135,255,0.12);border:1px solid rgba(184,135,255,0.45);color:#b887ff;border-radius:4px;cursor:pointer;flex-shrink:0;font-weight:600;">${_esc(actionLabel)}</button>`
             : '';
 
         // Modifier badges shown only when equipped
@@ -6990,6 +7005,19 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                min: 5, max: 5,
                                cast_level: () => 5},
                           ]},
+        // v2.158.94 — Phase 5d: state-toggle shape. The Flame Tongue
+        // is a 1-click toggle between two persistent states. ``label_fn(item)``
+        // computes the button caption from the inventory item's
+        // ``_lit`` flag; ``action_key_fn(item)`` chooses ``ignite`` or
+        // ``extinguish`` so the click handler doesn't have to branch.
+        // No modal — the action has no parameter to ask for.
+        'flame-tongue': {kind: 'state-toggle',
+                          state_field: '_lit',
+                          label_fn: (item) => item._lit ? '❄ Extinguish' : '🔥 Ignite',
+                          action_key_fn: (item) => item._lit ? 'extinguish' : 'ignite',
+                          title_fn: (item) => item._lit
+                              ? 'Extinguish the Flame Tongue (bonus action)'
+                              : 'Ignite the Flame Tongue (bonus action)'},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
@@ -7292,6 +7320,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         // items (Staff of Healing) call the 2-stage modal which
         // returns {action_key, charges}; single-action items keep the
         // 1-stage modal returning a plain int.
+        // v2.158.94 — Phase 5d: 'state-toggle' items (Flame Tongue)
+        // skip the modal entirely — they have no parameter to ask
+        // for. `action_key_fn(item)` picks ignite vs. extinguish from
+        // the item's current state. On success, mutate the local
+        // inventory state field so the button label re-renders
+        // immediately (otherwise the user sees stale ❄/🔥 until they
+        // reload).
         container.querySelectorAll('.inv-item-action').forEach(btn =>
             btn.addEventListener('click', async () => {
                 if (typeof CAMPAIGN_ID === 'undefined' || typeof MY_CHAR_ID === 'undefined') return;
@@ -7300,7 +7335,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const cfg = ITEM_ACTION_SLUGS[slug];
                 if (!cfg) return;
                 let body = { inventory_index: idx };
-                if (cfg.kind === 'multi-action') {
+                if (cfg.kind === 'state-toggle') {
+                    body.action_key = cfg.action_key_fn(inventory[idx]);
+                } else if (cfg.kind === 'multi-action') {
                     const picked = await _showItemActionMultiModal(cfg);
                     if (picked === null) return;
                     body.action_key = picked.action_key;
@@ -7323,8 +7360,22 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     );
                     const data = await resp.json().catch(() => ({}));
                     if (!resp.ok) {
-                        alert(`${cfg.label} failed: ${data.error || resp.statusText}`);
+                        alert(`${cfg.label || slug} failed: ${data.error || resp.statusText}`);
                         return;
+                    }
+                    // State-toggle: update the local state field so
+                    // the button label re-renders. Server response
+                    // carries the new state under e.g. `lit` (Flame
+                    // Tongue's response shape).
+                    if (cfg.kind === 'state-toggle' && cfg.state_field) {
+                        // Read the new state from a known response key
+                        // (currently flame-tongue returns ``lit``); fall
+                        // back to flipping the field.
+                        const newState = (typeof data.lit === 'boolean')
+                            ? data.lit
+                            : !inventory[idx][cfg.state_field];
+                        inventory[idx][cfg.state_field] = newState;
+                        renderInventory();
                     }
                     // Roll log card will auto-update via feature_used WS.
                 } catch (e) {
