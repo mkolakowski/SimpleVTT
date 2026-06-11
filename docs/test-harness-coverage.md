@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2234 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.102, 2026-06-11).
+**Total tests:** 2236 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.103, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2076,6 +2076,14 @@ v2.158.97 magic-items-automation Phase 6a — Demon Slayer Rapier (RAW DMG p.166
 | `test_demon_slayer_fires_on_fiend_target` | Attack a `creature_type: "fiend"` combatant → `auto_uplifts` carries `source: "item-demon-slayer"`, `damage_type: "piercing"` (RAW fallback to weapon type), `expression: "2d6"`, total in [2, 24] (crit-doubled cap). |
 | `test_demon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-demon-slayer` uplift. |
 | `test_demon_slayer_suppressed_when_detuned` | /attune detune → no rider even vs. fiends. Restores attunement in teardown. |
+
+### `test_sword_of_sharpness.py`
+v2.158.103 magic-items-automation Phase 7c — Sword of Sharpness +4d6 slashing on natural 20 (RAW DMG p.206). Second `on_nat_20` item using a new `effect: "damage"` variant alongside Vorpal's `effect: "decap"`. Same `_apply_magic_item_nat_20_effect` helper dispatches both. Pip's seed at attunement cap (3/3).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_sharpness_no_rider_when_detuned` | Detune the Sword of Sharpness → nat-20 rider suppressed even with d20=20 seeded. Re-attunes in teardown. |
+| `test_sharpness_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 on Pip's first attack; asserts `feature_used` with `source: "item-sword-of-sharpness-nat20"` fires and `hp_dealt` is in [4, 24] (4d6 range). |
 
 ### `test_demon_slayer_frighten.py`
 v2.158.102 magic-items-automation Phase 7b — Demon Slayer DC 15 WIS save-or-frightened on every fiend hit (RAW DMG p.166). Second post-hit hook type via `on_hit_save: {dc, ability, effect, duration_rounds}` catalog field. New helper `_apply_magic_item_on_hit_save_effect` delegates to v2.99.406 `_resolve_feature_save` which auto-rolls NPC saves + installs frightened buff on failure. New Quasit (CR 1 fiend) NPC template (`sheet.type='fiend'`) provides the test fiend target.

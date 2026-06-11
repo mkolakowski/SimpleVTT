@@ -330,6 +330,18 @@ def _rogue_sheet(name: str) -> dict:
              "damage_type": "piercing", "range": "5 ft", "desc": "Finesse, light"},
             {"name": "Dagger (thrown)", "attack_bonus": "+6", "damage": "1d4+3",
              "damage_type": "piercing", "range": "20/60 ft"},
+            # v2.158.103 — Magic-items Phase 7c demo fixture. Sword
+            # of Sharpness Shortsword (RAW DMG p.206). +1 attack /
+            # damage RAW-style baked in. On a natural 20, the
+            # v2.158.101 + 7c post-hit handler rolls +4d6 slashing
+            # via the on_nat_20 effect="damage" branch (Pip's
+            # existing Sneak Attack 4d6 still doubles on crit too —
+            # massive nat-20 swing). The "lop off a limb on a second
+            # nat 20" RAW follow-up is GM narrative, not modeled.
+            {"name": "Sword of Sharpness", "attack_bonus": "+7",
+             "damage": "1d6+4", "damage_type": "slashing",
+             "range": "5 ft", "_slug": "sword-of-sharpness",
+             "desc": "Very rare shortsword, attunement. +1 attack/damage; on a natural 20, deal +4d6 slashing (RAW DMG p.206). Magical glow at command."},
         ],
         "spells": [],
         # v2.4.13: rich inventory items (was bare strings). Weapons /
@@ -386,6 +398,19 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ring-of-protection",
              "desc": "Rare ring, attunement. +1 AC and +1 to saving throws."},
+            # v2.158.103 — Magic-items Phase 7c demo fixture. Sword of
+            # Sharpness Shortsword (very rare, attunement). Pip caps
+            # her attunement at 3/3 (Cloak + Ring + Sharpness — RAW
+            # DMG p.138 cap exactly). Showcases a PC at the cap for
+            # the attunement-pressure mechanic. The nat-20 rider
+            # fires from the v2.158.101 + 7c post-hit handler via
+            # the catalog's on_nat_20 = effect:"damage" branch.
+            {"name": "Sword of Sharpness", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d6", "damage_type": "slashing",
+             "properties": "finesse, light, magic",
+             "_slug": "sword-of-sharpness",
+             "desc": "Very rare shortsword, attunement. +1 attack/damage; on a natural 20 attack roll, deal +4d6 slashing damage (RAW DMG p.206). On a second nat 20 — GM discretion — lop off a limb."},
         ],
         "feats": [],
         "resources": [],

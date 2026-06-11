@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.103] - 2026-06-11 — "The Glittering Edge" — Magic-items-automation Phase 7c: Sword of Sharpness +4d6 on nat 20 (RAW DMG p.206) — second item to use the v2.158.101 `on_nat_20` post-hit hook substrate, exercising a new `effect: "damage"` variant alongside Vorpal's `effect: "decap"`. The same `_apply_magic_item_nat_20_effect` helper now dispatches both. Pip Quickfingers caps her attunement at 3/3 (Cloak + Ring + Sharpness — the RAW DMG p.138 cap exactly) — first demo PC at the attunement ceiling, useful showcase of the attunement-pressure mechanic.
+
+**Schema version:** 69
+**Commit summary:** **(A) `_MAGIC_ITEM_ATTACK_RIDERS["sword-of-sharpness"]` row uses the v2.158.101 `on_nat_20` shape with a new `effect: "damage"` variant + `dice: "4d6"` + `damage_type: "slashing"` siblings. (B) `_apply_magic_item_nat_20_effect` rewritten as an effect-dispatch helper: shared gates (slug, d20=20, attunement, exempt_creature_types) followed by per-effect damage calc — "decap" deals current_hp damage (existing Vorpal path), "damage" rolls dice from the catalog row + applies via the same `_apply_damage_to_combatant` call. Returns a richer result dict carrying `effect`, `hp_dealt`, `damage_type` so the broadcast can vary copy per item. (C) Post-hit handler broadcast section now branches on `vorpal_result["effect"]`: "decap" sets `target_dead = True` + Vorpal narrative copy; "damage" leaves target_dead unset + Sharpness narrative copy. Unknown effects fall through to a generic message. (D) `_rogue_sheet` (Pip) gets a "Sword of Sharpness" attack entry at attack_index 2 (+7/1d6+4 — RAW +1 attack/damage baked in, _slug="sword-of-sharpness") + a matching inventory entry at inventory_index 9 (equipped + attuned). Pip's attunement count goes 2/3 → 3/3 (cap exactly). (E) New harness file `tests/harness/test_sword_of_sharpness.py` with 2 tests: detune suppresses rider even on potential d20=20; nat-20 happy path iterates seeds 0-199, asserts `feature_used` with `source="item-sword-of-sharpness-nat20"` fires and `hp_dealt` is in [4, 24] (4d6 range). All teardowns restore attunement + reset dice seed. (F) `docs/test-harness-coverage.md` adds the new section + total bumped 2234 → 2236.**
+**Description:** Closes the second `on_nat_20` item. Substrate now supports two effect types: `decap` (instant kill via current HP damage — Vorpal) and `damage` (roll catalog dice + apply — Sharpness). Future on_nat_20 items (Vicious Weapon's +7 on nat 20, Dragon Slayer's "additional damage on a crit" interpretation, etc.) reuse `effect: "damage"` with different dice. Phase 7d (Sun Blade's lit-state + on_hit_save vs. undead) is next on the plan — composes Phase 5b (lit-state from Flame Tongue) + Phase 7b (on_hit_save from Demon Slayer) without further substrate changes.
+
+### Added
+- `app/routes/tabletop_routes.py` — `sword-of-sharpness` catalog row; effect-dispatch in `_apply_magic_item_nat_20_effect`; per-effect broadcast branching in the post-hit handler.
+- `app/demo_seed.py` — Pip's Sword of Sharpness attack entry + matching inventory item.
+- `tests/harness/test_sword_of_sharpness.py` — 2 tests (detune suppression, nat-20 +4d6 happy path with dice-seed iteration).
+
+### Changed
+- `docs/test-harness-coverage.md` — new test block + total 2234 → 2236.
+- `app/version.py` — `APP_VERSION` 2.158.102 → 2.158.103. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.103.
+
+### Notes
+- Pip's 3/3 attunement cap is the first demo showcase of the RAW DMG p.138 ceiling. A future demo guide could highlight this — "can't add more attuned items until you un-attune one" as a teaching moment for new players.
+- RAW Sword of Sharpness's "On a second nat 20 roll, lop off a limb (GM discretion)" follow-up is NOT modeled — it's narrative + GM call, and the substrate has no clean way to capture "limb loss" mechanically. Filed as Phase 7e narrative-only work.
+- The 4d6 dice on nat 20 are NOT crit-doubled (they're a post-hit rider added AFTER the base attack damage roll). The base shortsword 1d6+4 IS doubled by the crit, and Pip's Sneak Attack 4d6 also doubles. Pip at full power on a nat-20 sneak attack: (1d6+4)x2 base + 8d6 sneak attack (doubled) + 4d6 sharpness rider = up to 67 damage.
+
+---
+
 ## [2.158.102] - 2026-06-11 — "The Quailing Imp" — Magic-items-automation Phase 7b: second post-hit hook type — Demon Slayer DC 15 WIS save-or-frightened on every fiend hit (RAW DMG p.166 — the deferred half of the v2.158.97 Phase 6a Demon Slayer rider). Catalog row gains an `on_hit_save: {dc, ability, effect, duration_rounds}` sub-map. New helper `_apply_magic_item_on_hit_save_effect` delegates to the v2.99.406 `_resolve_feature_save` substrate which auto-rolls NPC saves server-side + installs the frightened buff on failure. New Quasit NPC template gives the demo a real RAW-fiend target for Lyra's Demon Slayer Rapier.
 
 **Schema version:** 69

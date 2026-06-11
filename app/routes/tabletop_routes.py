@@ -28744,34 +28744,64 @@ async def _apply_magic_item_nat_20_effect(
     if target_ct in exempt:
         return None
 
-    # Apply the kill. Damage = current HP so the death-save state
-    # machine + the v2.49.243 Uncanny Dodge gate + resistance halving
-    # all fire RAW. Heavy resistance (slashing + nonmagical, etc.)
-    # may not actually kill — that's a v2 polish.
+    # v2.158.103 — Phase 7c: dispatch on the effect field. Two
+    # variants today:
+    #   - "decap" (Vorpal Sword): damage = target's current HP →
+    #     instant kill. Routes through `_apply_damage_to_combatant`
+    #     so the death-save state machine + UD + resistance fire.
+    #   - "damage" (Sword of Sharpness): roll dice from the catalog
+    #     row + apply via the same helper. Damage type falls back to
+    #     the attack's type if not declared.
+    effect = (on_nat_20.get("effect") or "").strip().lower()
     current_hp = int(target_combatant.get("hp_current") or 0)
     if current_hp <= 0:
+        return None
+    damage_amount = 0
+    damage_type = (
+        on_nat_20.get("damage_type")
+        or attack.get("damage_type")
+        or "slashing"
+    )
+    if effect == "decap":
+        damage_amount = current_hp
+    elif effect == "damage":
+        dice = on_nat_20.get("dice") or ""
+        if not dice:
+            return None
+        try:
+            r = dice_mod.roll(dice)
+            damage_amount = int(r.total)
+        except dice_mod.DiceParseError:
+            return None
+    else:
+        logging.warning(
+            "Unknown on_nat_20 effect %r for slug %r",
+            effect, attack_slug,
+        )
         return None
     try:
         await _apply_damage_to_combatant(
             db, campaign_id, target_combatant,
-            damage_amount=current_hp,
-            damage_type=(attack.get("damage_type") or "slashing"),
+            damage_amount=damage_amount,
+            damage_type=damage_type,
             is_attack=True, is_magical=True,
             attacker_char_id=char.id,
         )
     except Exception:
         logging.exception(
-            "Vorpal nat-20 decap apply failed for char_id=%s",
-            char.id,
+            "Magic-item nat-20 apply failed for char_id=%s slug=%s",
+            char.id, attack_slug,
         )
         return None
 
     return {
         "target_combatant_id": target_combatant.get("id"),
         "target_name": target_combatant.get("name") or "Target",
-        "label": on_nat_20.get("label", "Vorpal Decap"),
+        "label": on_nat_20.get("label", "Nat-20 Effect"),
         "slug": attack_slug,
-        "hp_dealt": current_hp,
+        "effect": effect,
+        "hp_dealt": damage_amount,
+        "damage_type": damage_type,
     }
 
 
@@ -30526,6 +30556,24 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             "effect": "decap",
             "label": "🗡 Vorpal Decapitation",
             "exempt_creature_types": ["construct", "ooze", "plant"],
+        },
+    },
+    # v2.158.103 — Phase 7c: second on_nat_20 item, stress-testing the
+    # Phase 7a substrate with a different effect type. RAW DMG p.206
+    # Sword of Sharpness: on a natural 20 attack roll, deal an extra
+    # 4d6 slashing damage. (The "roll another d20, on 20 lop off a
+    # limb" follow-up is GM-discretion narrative — skipped v1.) The
+    # ``effect: "damage"`` variant uses ``dice`` + ``damage_type``
+    # alongside it; the same helper dispatches both ``decap`` and
+    # ``damage`` based on the effect field.
+    "sword-of-sharpness": {
+        "label": "Sword of Sharpness",
+        "requires_attunement": True,
+        "on_nat_20": {
+            "effect": "damage",
+            "label": "✨ Sword of Sharpness",
+            "dice": "4d6",
+            "damage_type": "slashing",
         },
     },
 }
@@ -79580,30 +79628,44 @@ async def use_attack(
                     target_combatant, attack_breakdown,
                 )
                 if vorpal_result is not None:
+                    # v2.158.103 — Phase 7c: per-effect desc + target
+                    # death determination. Vorpal's "decap" sets
+                    # target_dead True; Sharpness's "damage" leaves it
+                    # to the underlying damage helper's HP read.
+                    _eff = vorpal_result.get("effect", "decap")
+                    if _eff == "decap":
+                        _desc = (
+                            f"{char.name} rolls a natural 20 and "
+                            f"cleaves {vorpal_result['target_name']}'s "
+                            f"head clean off. (Vorpal Sword, RAW DMG p.209.)"
+                        )
+                        target_dead = True
+                    elif _eff == "damage":
+                        _desc = (
+                            f"{char.name} rolls a natural 20 — the blade "
+                            f"flares with arcane light, dealing "
+                            f"{vorpal_result['hp_dealt']} extra "
+                            f"{vorpal_result['damage_type']} damage. "
+                            f"(Sword of Sharpness, RAW DMG p.206.)"
+                        )
+                    else:
+                        _desc = (
+                            f"{char.name} rolls a natural 20 against "
+                            f"{vorpal_result['target_name']}."
+                        )
                     await hub.broadcast(campaign_id, {
                         "type": "feature_used",
                         "data": {
                             "character_id": char.id,
                             "character_name": char.name,
                             "feature_name": vorpal_result["label"],
-                            "feature_desc": (
-                                f"{char.name} rolls a natural 20 and "
-                                f"cleaves "
-                                f"{vorpal_result['target_name']}'s head "
-                                f"clean off. (Vorpal Sword, RAW DMG p.209.)"
-                            ),
+                            "feature_desc": _desc,
                             "source": f"item-{vorpal_result['slug']}-nat20",
                             "target_combatant_id": vorpal_result["target_combatant_id"],
                             "target_name": vorpal_result["target_name"],
                             "hp_dealt": vorpal_result["hp_dealt"],
                         },
                     })
-                    # Re-resolve target_dead so downstream post-hit
-                    # hooks (Repelling Blast, etc.) skip on the now-
-                    # corpse target. The local variable was computed
-                    # earlier; refresh from the freshly-mutated
-                    # combatant dict.
-                    target_dead = True
             except Exception:
                 logging.exception(
                     "Vorpal nat-20 decap failed for char_id=%s",
