@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.5] - 2026-06-11 — "The Compass and the Burst" — Magic-items-automation Phase 8e: server-side sphere + cone AoE geometry. Mirrors of the v2.159.4 Phase 8d `/battle/line-targets` endpoint for the other two RAW AoE shapes. Two new endpoints in one commit: `/battle/sphere-targets` (Fireball / Shatter / Sleep / etc.) and `/battle/cone-targets` (Burning Hands / Cone of Cold / Frost Brand cantrip-variant). Both reuse the same Token-position read pattern + grid-aware distance primitives from Phase 8d.
+
+**Schema version:** 69
+**Commit summary:** **(A) New endpoint `POST /api/campaign/{campaign_id}/battle/sphere-targets`. Body: `{center_combatant_id? | (center_x, center_y), radius_ft}`. Returns combatants within `radius_ft` of the center, excluding the center combatant if supplied by id. Uses `_distance_ft_between_points` for the inclusion check — square-grid Chebyshev, hex Euclidean. (B) New endpoint `POST /api/campaign/{campaign_id}/battle/cone-targets`. Body: `{apex_combatant_id, direction_combatant_id, length_ft, apex_half_angle_deg=26.57}`. RAW PHB p.204: a cone's width at distance D equals D, so the half-angle is `arctan(0.5) ≈ 26.57°`. Algorithm: read apex + direction token centers, compute the direction vector; for each other combatant, check (a) distance from apex ≤ length_ft AND (b) angle between (apex→combatant) and (apex→direction) ≤ apex_half_angle_deg via cosine-similarity (`cos(angle) = (u·v)/(|u||v|)`). Combatants exactly at the apex are included. Apex + direction combatants are excluded from results (target-picker convenience). (C) Both endpoints reuse the v2.159.4 Phase 8d token-centering math (add `size × grid_px / 2` to top-left) so a Large token's midpoint is the actual midpoint. Grid + map validation gates mirror Phase 8d. (D) New harness file `tests/harness/test_battle_sphere_cone_targets.py` with 6 tests using the v2.159.4 4-combatant layout pattern (`/token/{id}/move` with `oa_confirmed: true`). Sphere: B at 10 ft inside radius 20 → in results; C at 50 ft outside → not in results; A (the center) excluded. Cone: D at 90° off-axis → NOT in results (outside ~26.57° half-angle); C 50 ft east outside length 20 ft → not in results; A + B (apex + direction) explicitly excluded. (E) `docs/test-harness-coverage.md` adds the new section + total bumped 2250 → 2256.**
+**Description:** Closes Phase 8e. The three RAW AoE shapes (line v2.159.4, sphere + cone v2.159.5) now have server-side target-picker helpers using the same Token-position read pattern + grid-aware distance primitives. Future spell + magic-item UIs (Fireball, Lightning Bolt, Burning Hands, Cone of Cold, Decanter of Endless Water, Bag of Tricks) can call these endpoints to pre-fill the target list. Phase 9 (Wand of Wonder random table) is queued next — different shape entirely (random effect dispatch, not AoE geometry).
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /battle/sphere-targets` + `POST /battle/cone-targets` endpoints.
+- `tests/harness/test_battle_sphere_cone_targets.py` — 6 tests (3 sphere, 3 cone).
+
+### Changed
+- `docs/test-harness-coverage.md` — new test block + total 2250 → 2256.
+- `app/version.py` — `APP_VERSION` 2.159.4 → 2.159.5. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.5.
+
+### Notes
+- The cone endpoint uses cosine similarity directly (no `acos`) for the angle test — comparing `cos(angle)` against `cos(half_angle)` avoids the floating-point error of repeated `acos` calls and is the standard cone-containment idiom.
+- The 26.57° default RAW half-angle gives a cone whose open end has width equal to its length — Burning Hands' "15-foot cone" means a 15-ft-long cone whose open end is 15 ft wide. Other cone widths (10-ft wide) can be supplied via the `apex_half_angle_deg` body field.
+- The endpoints are independent — Phase 8c's Javelin client (and future Lightning Bolt / Fireball UIs) call them on-demand; the existing /use_item_action endpoint still accepts the target_combatant_ids list directly. Wiring the UIs to call these helpers is a separate client-only commit.
+
+---
+
 ## [2.159.4] - 2026-06-11 — "The Bolt's Path" — Magic-items-automation Phase 8d: server-side line-AoE geometry. New `POST /api/campaign/{cid}/battle/line-targets` endpoint takes a caster + target combatant + width_ft + max_length_ft and returns the combatants whose tokens fall within a width-ft band of the segment between them. Used by the v2.159.3 Javelin of Lightning client (and future Lightning Bolt / Burning Hands UIs) to pre-fill `target_combatant_ids` automatically instead of asking the GM to enumerate "who's in the line" by hand.
 
 **Schema version:** 69

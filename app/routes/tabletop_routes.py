@@ -82853,6 +82853,260 @@ async def battle_line_targets(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/battle/sphere-targets")
+async def battle_sphere_targets(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.159.5 — Phase 8e: server-side sphere-AoE geometry. Takes
+    a center (either a combatant id OR raw map x/y) + radius_ft and
+    returns the combatants whose tokens fall within that radius.
+    RAW 5e spheres (Fireball / Shatter / Sleep / Burning Hands when
+    interpreted as a sphere variant): "a sphere with a 20-foot
+    radius centered on a point you choose within range."
+
+    Body: ``{center_combatant_id?, center_x?, center_y?, radius_ft}``.
+    Either ``center_combatant_id`` OR ``(center_x, center_y)`` must
+    be supplied. When both are supplied, the combatant wins.
+
+    Returns ``{center_id?, center_x, center_y, radius_ft, results:
+    [{combatant_id, name, distance_ft}]}``. The center combatant
+    (if supplied via id) is excluded from results — RAW Fireball
+    includes the caster's space (this is a target-picker helper,
+    so the caller will typically NOT want to include themselves in
+    the auto-pick).
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    body = await request.json()
+    center_id = str(body.get("center_combatant_id") or "").strip()
+    try:
+        radius_ft = float(body.get("radius_ft") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "radius_ft must be a number")
+    if radius_ft <= 0:
+        raise HTTPException(400, "radius_ft must be positive")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    if not campaign.active_map_id:
+        raise HTTPException(400, "Campaign has no active map")
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        raise HTTPException(400, "Active map has no grid_size_px")
+    grid_px = int(map_row.grid_size_px)
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+
+    def _xy_for_combatant(c: dict) -> "tuple[float, float] | None":
+        tok_id = c.get("source_token_id")
+        if not tok_id:
+            return None
+        tok = db.query(Token).filter(
+            Token.id == int(tok_id), Token.map_id == map_row.id,
+        ).first()
+        if not tok:
+            return None
+        size = int(tok.size or 1)
+        cx = float(tok.x or 0) + (size * grid_px) / 2.0
+        cy = float(tok.y or 0) + (size * grid_px) / 2.0
+        return (cx, cy)
+
+    combatants = state.get("combatants") or []
+    by_id = {str(c.get("id")): c for c in combatants if isinstance(c, dict)}
+
+    if center_id:
+        center_c = by_id.get(center_id)
+        if not center_c:
+            raise HTTPException(404, "center combatant not in battle")
+        center_xy = _xy_for_combatant(center_c)
+        if center_xy is None:
+            raise HTTPException(400, "center combatant has no token position")
+    else:
+        try:
+            cx = float(body.get("center_x"))
+            cy = float(body.get("center_y"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Either center_combatant_id or center_x+center_y required")
+        center_xy = (cx, cy)
+
+    ax, ay = center_xy
+    results: list[dict] = []
+    for c in combatants:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "")
+        if not cid or (center_id and cid == center_id):
+            continue
+        xy = _xy_for_combatant(c)
+        if xy is None:
+            continue
+        px, py = xy
+        dist = _distance_ft_between_points(grid_px, grid_type, ax, ay, px, py)
+        if dist > radius_ft:
+            continue
+        results.append({
+            "combatant_id": cid,
+            "name": c.get("name") or "",
+            "distance_ft": dist,
+        })
+
+    return {
+        "center_id": center_id or None,
+        "center_x": ax,
+        "center_y": ay,
+        "radius_ft": radius_ft,
+        "results": results,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/battle/cone-targets")
+async def battle_cone_targets(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.159.5 — Phase 8e: server-side cone-AoE geometry. RAW PHB
+    p.204: "A cone extends in a direction you choose from its point
+    of origin. A cone's width at a given point along its length is
+    equal to that point's distance from the point of origin." Width
+    == distance from apex means the cone's half-angle is
+    arctan(0.5) ≈ 26.57° (apex angle ≈ 53.13°).
+
+    Body: ``{apex_combatant_id, direction_combatant_id, length_ft,
+    apex_half_angle_deg=26.57}``. The apex is at the apex combatant's
+    token center; the cone points from there through the direction
+    combatant's token center, extending ``length_ft`` from the apex.
+
+    Returns ``{apex_id, direction_id, length_ft, apex_half_angle_deg,
+    results: [{combatant_id, name, distance_ft}]}``. Apex + direction
+    combatants are excluded from results (RAW spell text on
+    Burning Hands etc. covers them via the cone shape; this endpoint
+    is a target-picker helper, not a damage applier).
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    body = await request.json()
+    apex_id = str(body.get("apex_combatant_id") or "").strip()
+    direction_id = str(body.get("direction_combatant_id") or "").strip()
+    if not apex_id or not direction_id:
+        raise HTTPException(400, "apex_combatant_id + direction_combatant_id required")
+    try:
+        length_ft = float(body.get("length_ft") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "length_ft must be a number")
+    if length_ft <= 0:
+        raise HTTPException(400, "length_ft must be positive")
+    try:
+        apex_half_angle_deg = float(body.get("apex_half_angle_deg") or 26.57)
+    except (TypeError, ValueError):
+        apex_half_angle_deg = 26.57
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    if not campaign.active_map_id:
+        raise HTTPException(400, "Campaign has no active map")
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        raise HTTPException(400, "Active map has no grid_size_px")
+    grid_px = int(map_row.grid_size_px)
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+
+    def _xy_for_combatant(c: dict) -> "tuple[float, float] | None":
+        tok_id = c.get("source_token_id")
+        if not tok_id:
+            return None
+        tok = db.query(Token).filter(
+            Token.id == int(tok_id), Token.map_id == map_row.id,
+        ).first()
+        if not tok:
+            return None
+        size = int(tok.size or 1)
+        cx = float(tok.x or 0) + (size * grid_px) / 2.0
+        cy = float(tok.y or 0) + (size * grid_px) / 2.0
+        return (cx, cy)
+
+    combatants = state.get("combatants") or []
+    by_id = {str(c.get("id")): c for c in combatants if isinstance(c, dict)}
+    apex_c = by_id.get(apex_id)
+    direction_c = by_id.get(direction_id)
+    if not apex_c or not direction_c:
+        raise HTTPException(404, "apex or direction combatant not in battle")
+    apex_xy = _xy_for_combatant(apex_c)
+    direction_xy = _xy_for_combatant(direction_c)
+    if apex_xy is None or direction_xy is None:
+        raise HTTPException(400, "apex or direction combatant has no token position")
+
+    import math as _math_cone
+    ax, ay = apex_xy
+    dx, dy = direction_xy
+    vec_dir_x = dx - ax
+    vec_dir_y = dy - ay
+    vec_dir_len = (vec_dir_x ** 2 + vec_dir_y ** 2) ** 0.5
+    if vec_dir_len == 0:
+        raise HTTPException(400, "apex + direction combatants share a position; cone direction undefined")
+    half_angle_rad = _math_cone.radians(max(0.0, min(89.9, apex_half_angle_deg)))
+    cos_half = _math_cone.cos(half_angle_rad)
+
+    results: list[dict] = []
+    for c in combatants:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "")
+        if not cid or cid == apex_id or cid == direction_id:
+            continue
+        xy = _xy_for_combatant(c)
+        if xy is None:
+            continue
+        px, py = xy
+        # Distance from apex (ft).
+        dist_ft = _distance_ft_between_points(grid_px, grid_type, ax, ay, px, py)
+        if dist_ft > length_ft:
+            continue
+        # Angle test: vec from apex to combatant vs. cone direction.
+        vec_pt_x = px - ax
+        vec_pt_y = py - ay
+        vec_pt_len = (vec_pt_x ** 2 + vec_pt_y ** 2) ** 0.5
+        if vec_pt_len == 0:
+            # Combatant sits exactly on the apex — include.
+            results.append({
+                "combatant_id": cid,
+                "name": c.get("name") or "",
+                "distance_ft": 0.0,
+            })
+            continue
+        cos_pt = (
+            (vec_pt_x * vec_dir_x + vec_pt_y * vec_dir_y)
+            / (vec_pt_len * vec_dir_len)
+        )
+        if cos_pt < cos_half:
+            # Outside the cone's angular span.
+            continue
+        results.append({
+            "combatant_id": cid,
+            "name": c.get("name") or "",
+            "distance_ft": dist_ft,
+        })
+
+    return {
+        "apex_id": apex_id,
+        "direction_id": direction_id,
+        "length_ft": length_ft,
+        "apex_half_angle_deg": apex_half_angle_deg,
+        "results": results,
+    }
+
+
 @router.put("/api/campaign/{campaign_id}/battle")
 async def update_battle(
     campaign_id: int,

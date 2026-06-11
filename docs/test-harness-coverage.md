@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2250 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.159.4, 2026-06-11).
+**Total tests:** 2256 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.159.5, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2076,6 +2076,18 @@ v2.158.97 magic-items-automation Phase 6a — Demon Slayer Rapier (RAW DMG p.166
 | `test_demon_slayer_fires_on_fiend_target` | Attack a `creature_type: "fiend"` combatant → `auto_uplifts` carries `source: "item-demon-slayer"`, `damage_type: "piercing"` (RAW fallback to weapon type), `expression: "2d6"`, total in [2, 24] (crit-doubled cap). |
 | `test_demon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-demon-slayer` uplift. |
 | `test_demon_slayer_suppressed_when_detuned` | /attune detune → no rider even vs. fiends. Restores attunement in teardown. |
+
+### `test_battle_sphere_cone_targets.py`
+v2.159.5 magic-items-automation Phase 8e — server-side sphere + cone AoE geometry. Two new endpoints: `/battle/sphere-targets` (center + radius_ft) and `/battle/cone-targets` (apex + direction + length_ft + half-angle). Same Token-position read pattern as the Phase 8d line endpoint. Used by Fireball / Burning Hands / Cone of Cold UIs to pre-fill target lists.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_sphere_includes_within_radius` | Sphere(A, 20 ft) with B at 10 ft east → B in results. |
+| `test_sphere_excludes_beyond_radius` | Sphere(A, 20 ft) with C at 50 ft east → C NOT in results. |
+| `test_sphere_excludes_center_combatant` | Center combatant A excluded from its own sphere's results. |
+| `test_cone_includes_combatant_in_angular_span` | Cone(A → B, 60 ft) with D at 90° off-axis (30 ft south) → D NOT in results (outside 26.57° half-angle). |
+| `test_cone_excludes_beyond_length` | Cone(A → B, 20 ft) with C at 50 ft east → C NOT in results (past length). |
+| `test_cone_excludes_apex_and_direction` | A (apex) + B (direction) both excluded from cone results. |
 
 ### `test_battle_line_targets.py`
 v2.159.4 magic-items-automation Phase 8d — server-side line-AoE geometry. POST /api/campaign/{cid}/battle/line-targets takes caster + target combatant ids + width_ft + max_length_ft, returns combatants within the band. Used by Javelin of Lightning client + future Lightning Bolt UIs. Uses /token/{id}/move to position 4 combatants in a controlled layout; teardown moves them to (200, 200).
