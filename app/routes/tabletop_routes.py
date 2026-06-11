@@ -26164,7 +26164,19 @@ def _compute_attack_auto_uplifts(
                     continue
                 has_item_attuned = True
                 break
-            if has_item_attuned:
+            # v2.158.93 — Phase 5c: per-target condition gate. When
+            # the rider declares a ``condition`` callable, it receives
+            # the target combatant dict and must return truthy for the
+            # rider to fire (e.g. Dragon Slayer: target.creature_type
+            # == "dragon"). Always-on riders omit the field.
+            condition = rider_spec.get("condition")
+            condition_passed = True
+            if condition is not None:
+                try:
+                    condition_passed = bool(condition(target_combatant))
+                except Exception:
+                    condition_passed = False
+            if has_item_attuned and condition_passed:
                 try:
                     r = dice_mod.roll(rider_spec["dice"])
                     uplifts.append({
@@ -30166,6 +30178,21 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
         "damage_type": "fire",
         "requires_attunement": True,
         "requires_lit": True,
+    },
+    # v2.158.93 — Phase 5c: Dragon Slayer (RAW DMG p.166). Rare,
+    # attunement. +1 to attack + damage (baked into the demo attack
+    # entry, not the rider) plus 3d6 extra damage *vs. dragons only*.
+    # Introduces the ``condition(target_combatant)`` gate to the
+    # catalog — first conditional rider. Omitting ``damage_type``
+    # falls back to the weapon's damage type (slashing for the
+    # longsword), matching RAW "extra damage of the weapon's type."
+    "dragon-slayer": {
+        "label": "Dragon Slayer",
+        "dice": "3d6",
+        "requires_attunement": True,
+        "condition": lambda tgt: bool(tgt) and (
+            (tgt.get("creature_type") or "").strip().lower() == "dragon"
+        ),
     },
 }
 

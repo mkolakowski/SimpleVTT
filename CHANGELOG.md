@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.93] - 2026-06-10 — "The Wyrmbane" — Magic-items-automation Phase 5c: first conditional on-hit rider — Dragon Slayer Longsword (RAW DMG p.166). Different shape from Phase 5a/5b: the rider only fires when the target's `creature_type` matches a predicate. New `condition(target_combatant) → bool` callable on rider catalog entries; section 6c in `_compute_attack_auto_uplifts` invokes it after the slug + attunement + lit-state checks. Always-on riders (Flame Tongue) omit the field and behave unchanged. Sir Caelan Lightbringer gets the longsword — his first magic item, attuned alongside his shield.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `dragon-slayer` row in `_MAGIC_ITEM_ATTACK_RIDERS` carrying `dice: "3d6"`, `requires_attunement: True`, and a `condition` lambda that checks `target_combatant.get("creature_type")` against `"dragon"`. Omits `damage_type` so the rider falls back to the attack's slashing per RAW "extra damage of the weapon's type." (B) Section 6c in `_compute_attack_auto_uplifts` extended: after the attunement/lit checks, if the rider declares a `condition`, invoke it with the target combatant and skip the uplift on falsy. Exception-safe (wrapped predicates can't crash /attack). Existing always-on riders (Flame Tongue) untouched. (C) `_paladin_sheet` adds a "Dragon Slayer Longsword" attack entry at attack_index 2 (+7/1d8+4, _slug="dragon-slayer" — RAW's +1 attack/damage baked in) + a matching inventory entry at inventory_index 7 (equipped + attuned). Caelan now wears 1 attuned item (cap 3 unchanged). (D) New harness file `tests/harness/test_dragon_slayer_rider.py` with 3 tests using the existing battle-seed pattern: dragon target → +3d6 slashing rider with `damage_type: "slashing"` (RAW fallback); humanoid target → no rider despite same wielder + weapon; detune via /attune → no rider even vs. dragons (attunement gate runs before the condition predicate). All teardowns restore Caelan's attunement so test order doesn't matter. (E) `docs/test-harness-coverage.md` adds the new section + total bumped 2217 → 2220.**
+**Description:** Closes Phase 5c. The catalog substrate now supports three rider shapes from a single entry: always-on (Flame Tongue v2.158.91), state-gated (Flame Tongue v2.158.92 + `_lit`), and target-conditional (Dragon Slayer v2.158.93 + predicate). Future conditional riders fit cleanly without further substrate changes: Demon Slayer (DMG p.166, +2d6 vs. fiends), Vorpal Sword (DMG p.209, decapitates on nat 20 vs. creatures with a head), Sun Blade (DMG p.205 — partial overlap with Flame Tongue's lit state for "blade extinguished" + extra damage vs. undead). The condition gate fires *after* the attunement check, so a detuned magic weapon is mechanically mundane (RAW); a player can keep the weapon equipped but un-attune to "blend in" with a non-magic loadout. Phase 5d (the inventory-row UI for ignite/extinguish, the next missing piece) is next.
+
+### Added
+- `app/routes/tabletop_routes.py` — `dragon-slayer` row in `_MAGIC_ITEM_ATTACK_RIDERS` with a `condition` lambda; section 6c calls the predicate.
+- `app/demo_seed.py` — Caelan's Dragon Slayer Longsword attack entry + matching inventory item.
+- `tests/harness/test_dragon_slayer_rider.py` — 3 tests (dragon target → rider, humanoid → no rider, detune → no rider on dragon).
+
+### Changed
+- `docs/test-harness-coverage.md` — new test block + total 2217 → 2220.
+- `app/version.py` — `APP_VERSION` 2.158.92 → 2.158.93. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.93.
+
+### Notes
+- Demo PC magic-item story: Pip (Cloak), Thalindra (Cloak + Pearl + 2 Wands), Tavik (Ring + Staff), Garrik (Flame Tongue), Caelan (Dragon Slayer), Kael (Bracers). Every shipped rider/passive/active archetype is represented in the live demo.
+- The `creature_type` field on combatants is set via the v2.97.48 `_attacker_creature_type` helper for PCs/NPCs auto-resolved from sheet/template. Tests bypass the helper by setting it directly on the synthetic combatant in the battle PUT, which is why the predicate reads `target_combatant.get("creature_type")` directly. A future Phase 5e could route the read through the helper so demo monsters with their type set in the template auto-trigger the rider without a battle-PUT override.
+
+---
+
 ## [2.158.92] - 2026-06-10 — "The Command Word" — Magic-items-automation Phase 5b: Flame Tongue ignite/extinguish state toggle. RAW DMG p.170: "you can use a bonus action to speak this magic sword's command word, causing flames to erupt from the blade. ... The flames last until you use a bonus action to speak the command word again." Adds a per-item ``_lit`` boolean field on the inventory entry (not a combatant buff — buffs reset between battles, but lit state must persist across rests + sessions). The Phase 5a rider gate gains a third check (``requires_lit``) so the rider only fires while the item carries ``_lit: True``. Two new action_keys on the existing `/use_item_action` endpoint (``ignite`` / ``extinguish``) flip the state and broadcast a `feature_used` event.
 
 **Schema version:** 69

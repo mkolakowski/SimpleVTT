@@ -1042,6 +1042,16 @@ def _paladin_sheet(name: str) -> dict:
              "damage_type": "slashing", "range": "5 ft", "desc": "Versatile (1d10). Sir Caelan's family blade."},
             {"name": "Javelin", "attack_bonus": "+6", "damage": "1d6+3",
              "damage_type": "piercing", "range": "30/120 ft", "desc": "Thrown finesse — keep a few in the bandolier."},
+            # v2.158.93 — Magic-items Phase 5c demo fixture. Dragon
+            # Slayer Longsword (RAW DMG p.166). +1 to attack + damage
+            # baked into this entry; the +3d6-vs-dragons rider fires
+            # from `_compute_attack_auto_uplifts` section 6c when the
+            # target carries ``creature_type: "dragon"``. The
+            # ``_slug`` field is the rider gate.
+            {"name": "Dragon Slayer Longsword", "attack_bonus": "+7",
+             "damage": "1d8+4", "damage_type": "slashing",
+             "range": "5 ft", "_slug": "dragon-slayer",
+             "desc": "Rare longsword, attunement. +1 attack/damage; +3d6 slashing vs. dragons (DMG p.166)."},
         ],
         # Paladin spells per Oath of Devotion (always prepared) + a few
         # core picks. Slugs reference the shipped SRD JSON. Casting
@@ -1106,6 +1116,19 @@ def _paladin_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+            # v2.158.93 — Magic-items Phase 5c demo fixture. Dragon
+            # Slayer Longsword (rare, attunement). First conditional-
+            # rider item: the +3d6 only fires when the target carries
+            # ``creature_type: "dragon"`` (any of the chromatic /
+            # metallic / gem ancestries). Paired with the attack entry
+            # above via ``_slug``. Caelan ships equipped + attuned;
+            # cap of 3 attuned unchanged (1 / 3).
+            {"name": "Dragon Slayer Longsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d8", "damage_type": "slashing",
+             "properties": "versatile (1d10), magic",
+             "_slug": "dragon-slayer",
+             "desc": "Rare longsword, attunement. +1 attack/damage; while attuned, deals +3d6 slashing damage to dragons (RAW DMG p.166)."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:
