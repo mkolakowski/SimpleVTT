@@ -6494,7 +6494,19 @@ def _read_target_ac(
     # v2.99.95 — Fighting Style: Defense (+1 AC when wearing armor).
     # Only applies to PC combatants — NPC templates don't carry a
     # fighting_style. Stacks with buff ac_bonus (Shield of Faith etc.).
-    return base_ac + buff_ac_bonus + _pc_defense_ac_bonus(char_sheet)
+    # v2.158.74 — Magic-items Phase 1a: equipped+attuned magic items
+    # add their ``ac_bonus`` payload alongside the buff walk + Defense
+    # style. Cloak of Protection (+1 AC) is the first catalog entry;
+    # NPCs don't carry inventory so the walker is PC-only.
+    item_ac_bonus = 0
+    if char_id and char_sheet:
+        item_ac_bonus = int(_equipped_item_effects(char_sheet).get("ac_bonus") or 0)
+    return (
+        base_ac
+        + buff_ac_bonus
+        + _pc_defense_ac_bonus(char_sheet)
+        + item_ac_bonus
+    )
 
 
 def _pick_damage_tier(scaling: list | None, level: int) -> dict | None:
@@ -16299,10 +16311,45 @@ async def roll_dice(
         elif "1d20" in expr and "2d20kh1" not in expr:
             expr = expr.replace("1d20", "2d20kh1", 1)
 
+    # v2.158.74 — Magic-items Phase 1a: passive save bonuses from
+    # equipped+attuned items get appended to the expression for
+    # ``*_save`` rolls. Cloak of Protection (+1) is the first catalog
+    # entry; future entries (Ring of Protection, etc.) stack additively
+    # through the same _equipped_item_effects walker. NPC-mini-sheet
+    # rolls (skip_roll_state + no _char) are out of scope — NPCs don't
+    # carry the inventory shape this hook reads.
+    _item_save_bonus = 0
+    _item_save_sources: list[str] = []
+    if (
+        _char is not None
+        and stat_key_lc.endswith("_save")
+        and isinstance(_char.sheet, dict)
+    ):
+        _item_eff = _equipped_item_effects(_char.sheet)
+        _item_save_bonus = int(_item_eff.get("save_bonus") or 0)
+        _item_save_sources = list(_item_eff.get("save_bonus_sources") or [])
+    if _item_save_bonus > 0:
+        expr = f"{expr}+{_item_save_bonus}"
+
     try:
         result = dice_mod.roll(expr)
     except dice_mod.DiceParseError as e:
         raise HTTPException(400, str(e))
+
+    # v2.158.74 — annotate the breakdown so the roll log attributes
+    # the +N to the item name (e.g. "Cloak of Protection"). The
+    # pre-roll branch above already added the +N to the expression;
+    # this branch is purely cosmetic for the roll log.
+    if _item_save_bonus > 0 and _item_save_sources:
+        try:
+            import copy as _copy_item_save
+            result = _copy_item_save.copy(result)
+            _src_label = " + ".join(_item_save_sources)
+            result.breakdown = (
+                f"{result.breakdown} (+{_item_save_bonus} {_src_label})"
+            )
+        except Exception:
+            pass
 
     # v2.158.46 — Tides of Chaos consume + breakdown annotation. The
     # advantage swap happened pre-roll above; here we tag the breakdown
@@ -29875,6 +29922,88 @@ def _pc_defense_ac_bonus(sheet: dict) -> int:
     if _pc_fighting_style(sheet) != "defense":
         return 0
     return 1 if _pc_is_wearing_armor(sheet) else 0
+
+
+# ── Magic-item passives walker (v2.158.74 — Phase 1a M1) ─────────────────────
+# Maps an SRD item slug to a list of passive payloads — the read-time
+# vocabulary _read_target_ac and the /roll endpoint know how to consume.
+# Phase 1a ships Cloak of Protection only. Phase 1b adds Ring of Protection
+# (same +1 AC / +1 saves) and Bracers of Defense (+2 AC, no-armor gate).
+# Each payload may declare ``requires_attunement: True`` so unattuned-
+# but-equipped items grant nothing (RAW DMG p.138).
+_MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
+    "cloak-of-protection": [
+        {"ac_bonus": 1, "save_bonus": 1, "requires_attunement": True},
+    ],
+}
+
+
+def _equipped_item_effects(sheet: dict) -> dict:
+    """v2.158.74 — Phase 1a M1: walk a PC sheet's ``inventory`` for
+    equipped (+ attuned where required) magic items and merge their
+    passive payloads from ``_MAGIC_ITEM_PASSIVES``.
+
+    Pure function on the sheet — no battle state — so every read site
+    (AC at ``_read_target_ac``, saves at ``/roll``, etc.) can call it
+    cheaply. Item identity uses the ``_slug`` field set when the sheet
+    or item-browser added the item; items without a slug or not in the
+    catalog contribute nothing.
+
+    Returns a uniform dict::
+
+        {
+            "ac_bonus": int,
+            "save_bonus": int,
+            "ac_bonus_sources": [item_name, ...],
+            "save_bonus_sources": [item_name, ...],
+        }
+
+    Sources lists let the consumer annotate the breakdown so the
+    roll-log entry can attribute the +N to the named item.
+    """
+    out: dict = {
+        "ac_bonus": 0,
+        "save_bonus": 0,
+        "ac_bonus_sources": [],
+        "save_bonus_sources": [],
+    }
+    if not isinstance(sheet, dict):
+        return out
+    inv = sheet.get("inventory") or []
+    if not isinstance(inv, list):
+        return out
+    for item in inv:
+        if not isinstance(item, dict):
+            continue
+        if not item.get("equipped"):
+            continue
+        slug = str(item.get("_slug") or "").strip().lower()
+        if not slug:
+            continue
+        passives = _MAGIC_ITEM_PASSIVES.get(slug)
+        if not passives:
+            continue
+        item_name = str(item.get("name") or slug)
+        for p in passives:
+            if not isinstance(p, dict):
+                continue
+            if p.get("requires_attunement") and not item.get("attuned"):
+                continue
+            try:
+                ac = int(p.get("ac_bonus") or 0)
+            except (TypeError, ValueError):
+                ac = 0
+            if ac:
+                out["ac_bonus"] += ac
+                out["ac_bonus_sources"].append(item_name)
+            try:
+                sv = int(p.get("save_bonus") or 0)
+            except (TypeError, ValueError):
+                sv = 0
+            if sv:
+                out["save_bonus"] += sv
+                out["save_bonus_sources"].append(item_name)
+    return out
 
 
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:

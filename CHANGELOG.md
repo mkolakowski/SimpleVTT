@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.74] - 2026-06-10 — "The Whispered Cloak" — Magic-items-automation Phase 1a: wire Cloak of Protection (+1 AC, +1 saves) through both read sites. New `_MAGIC_ITEM_PASSIVES` catalog + `_equipped_item_effects` walker in `app/routes/tabletop_routes.py` (the M1 primitive from the plan). `_read_target_ac` adds the walker's `ac_bonus`; the `/roll` endpoint appends the walker's `save_bonus` to `*_save` expressions and tags the breakdown with the source item name. Thalindra gets a permanent equipped+attuned Cloak in the demo seed so the test surface needs no setup PATCH. First actually-mechanical magic item
+
+**Schema version:** 69
+**Commit summary:** **(A) New catalog `_MAGIC_ITEM_PASSIVES: dict[str, list[dict]]` and walker `_equipped_item_effects(sheet) -> dict` added near `_pc_defense_ac_bonus` (line 29878+) in `app/routes/tabletop_routes.py`. The walker iterates `sheet.inventory[*]` for `equipped: True` items, matches `_slug` against the catalog, gates each payload on `requires_attunement` vs the item's `attuned` flag, and merges `ac_bonus` + `save_bonus` + `*_sources` lists. Pure function on the sheet — no battle state needed. (B) `_read_target_ac` (the existing v2.97.39 buff walker + v2.99.95 Defense style site) adds `_equipped_item_effects(char_sheet)["ac_bonus"]` to the returned AC. PC-only — NPC templates don't carry inventory. (C) `/api/campaign/{cid}/roll` (the central d20 endpoint that handles all checks/saves/initiative/death-saves) gains a pre-roll hook: when `stat_key.endswith("_save")` AND `_char` is set, the walker's `save_bonus` is appended as a flat `+N` to the expression, then the breakdown is annotated with the source item name(s) for the roll log. (D) `app/data/local/dnd5e/items/cloak-of-protection.json` populated: `passives: [{"ac_bonus": 1, "save_bonus": 1, "requires_attunement": true}]`. (E) `_wizard_sheet` in `app/demo_seed.py` appends a Cloak of Protection inventory entry on Thalindra Moonwhisper with `equipped: True, attuned: True, _slug: "cloak-of-protection"`. (F) New harness file `tests/harness/test_item_cloak_of_protection.py` with 3 tests: AC test (Krieger swings at Thalindra → `target_ac == 13` = base 12 + Cloak +1), save test (`/roll` `int_save` for Thalindra → breakdown contains "Cloak of Protection" + "+1" attribution), guard test (`int_check` with same expression → breakdown does NOT pick up the Cloak bonus, because saves and checks are RAW-distinct). Harness total 2168 → 2171 + new block in `docs/test-harness-coverage.md`.**
+**Description:** v2.158.73 shipped the Phase 0 schema; this commit lights up the first actually-mechanical magic item. Choosing Cloak of Protection first (vs Ring of Protection, which has the same +1/+1 effect) because the Cloak's name carries less Tolkienic association — it reads "magic item" rather than "specific lore item" — and because Thalindra's flat AC 12 (no armor) makes the +1 cloak bonus show up cleanly without the Defense Fighting Style mask the Fighter PCs have. The save-rewrite approach (append `+1` to the `/roll` expression rather than maintaining a separate side channel) reuses the v2.158.46 Tides of Chaos + v2.97.31 Bless pattern for in-place expression mutation — same plumbing, new payload. Phase 1b ships Ring of Protection (same shape, second catalog row) + Bracers of Defense (+2 AC with the no-armor + no-shield gate). Phase 2 lands the attunement UI checkbox + the RAW 3-item server-side cap.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_MAGIC_ITEM_PASSIVES` catalog dict (line 29878+) keyed by item slug; `_equipped_item_effects(sheet)` walker function returning `{ac_bonus, save_bonus, ac_bonus_sources, save_bonus_sources}`.
+- `tests/harness/test_item_cloak_of_protection.py` — three tests covering AC + save halves + the saves-only guard.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_read_target_ac` adds the walker's `ac_bonus` to the returned AC; `/roll` endpoint mutates the expression for `*_save` rolls + annotates breakdown with item source names.
+- `app/data/local/dnd5e/items/cloak-of-protection.json` — `passives` populated with the +1 AC / +1 save / `requires_attunement: true` payload.
+- `app/demo_seed.py` — `_wizard_sheet` inventory gains a Cloak of Protection entry (equipped + attuned) so Thalindra is the test canary.
+- `docs/test-harness-coverage.md` — new `### test_item_cloak_of_protection.py` block + total bumped 2168 → 2171.
+- `app/version.py` — `APP_VERSION` 2.158.73 → 2.158.74. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.74.
+
+### Notes
+- First magic-items-automation commit where the engine actually does something at runtime, not just schema prep.
+- The `/roll` expression rewrite for saves means a client-side breakdown viewer that re-parses the expression will see `1d20+6+1` (Thalindra's int save with cloak) instead of `1d20+6`. The breakdown annotation makes the source legible.
+- Save hook is intentionally `stat_key.endswith("_save")`-gated (not just "any d20 with character_id") so ability checks, attack rolls (which go through `/attack`), and initiative don't accidentally pick up save bonuses.
+
+---
+
 ## [2.158.73] - 2026-06-10 — "The Empty Sockets" — Magic-items-automation Phase 0: extend the SRD item content schema with the three keys Phase 1 needs (`charges` / `charge_recovery` / `passives`) on every shipped item under `app/data/local/dnd5e/items/` (all 292 files walked) and on the `Item` Pydantic model in `app/content_schemas.py`. All three default to "no mechanical wiring" so the catalog ships a uniform shape without behavior change — Phase 1 populates the values for the first-slice roster
 
 **Schema version:** 69

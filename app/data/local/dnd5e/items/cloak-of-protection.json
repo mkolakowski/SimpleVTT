@@ -17,6 +17,12 @@
   },
   "charges": null,
   "charge_recovery": null,
-  "passives": [],
+  "passives": [
+    {
+      "ac_bonus": 1,
+      "save_bonus": 1,
+      "requires_attunement": true
+    }
+  ],
   "actions": []
 }

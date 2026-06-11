@@ -601,6 +601,17 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "hands": 1,
              "damage": "1d4", "damage_type": "piercing",
              "properties": "finesse, light", "_slug": "dagger"},
+            # v2.158.74 — Magic-items Phase 1a demo fixture. Cloak of
+            # Protection (+1 AC, +1 saves) on Thalindra, equipped +
+            # attuned, exercises the new _equipped_item_effects walker
+            # at attack hit-determination time (_read_target_ac) and
+            # at save-roll time (the /roll endpoint's *_save hook).
+            # Appended at END so existing inventory-index assertions
+            # stay valid.
+            {"name": "Cloak of Protection", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "cloak-of-protection",
+             "desc": "Uncommon wondrous item, attunement. +1 AC and +1 to saving throws."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
