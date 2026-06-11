@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.91] - 2026-06-10 — "The Kindled Edge" — Magic-items-automation Phase 5a: first on-hit rider weapon — Flame Tongue Longsword (RAW DMG p.170). Different shape from every prior magic item: no `/use_item_action` endpoint — the rider fires from the existing attack pipeline via a new `_MAGIC_ITEM_ATTACK_RIDERS` catalog. `_compute_attack_auto_uplifts` gains a new section that reads `attack._slug`, looks it up in the catalog, and rolls the rider's dice if the wielder has the matching item equipped + attuned in their inventory. Garrik gets the Flame Tongue Longsword (rare, attunement) — his first magic item.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `_MAGIC_ITEM_ATTACK_RIDERS` dict in `app/routes/tabletop_routes.py` near `_MAGIC_ITEM_ACTIONS`. Per-slug entries carry `label`, `dice`, `damage_type`, `requires_attunement`. (B) New section 6c in `_compute_attack_auto_uplifts`: reads `attack._slug`, looks up the rider, double-gates on (slug-on-attack AND matching equipped+attuned inventory item) so the rider can't leak across weapons or fire post-detune. Rolls the rider dice, appends to `uplifts[]` with `source: f"item-{slug}"`. The existing broadcast pipeline carries it as a separate line in `auto_uplifts` — no client-side change needed; the chat card already renders extra uplifts. (C) Garrik's seed (`_fighter_sheet` in `app/demo_seed.py`) gets a Flame Tongue Longsword attack entry at `attack_index 3` (1d8+4 slashing, _slug="flame-tongue") + an inventory entry at index 7 (equipped + attuned). He goes from 0 → 1 attuned items; cap of 3 unchanged. (D) New harness file `tests/harness/test_flame_tongue_rider.py` with 3 tests: attack with Flame Tongue → `auto_uplifts` carries `source: "item-flame-tongue"`, `damage_type: "fire"`, expression `"2d6"`, total in [2, 24] (crit-doubled cap); detuning via /attune → rider suppressed on the next attack (restored in teardown); swinging the Greatsword (no _slug) → no rider despite Flame Tongue still attuned. (E) `docs/test-harness-coverage.md` adds the new section + total bumped 2209 → 2212.**
+**Description:** Opens Phase 5 of the magic-items plan with the cleanest possible on-hit rider archetype: a fixed dice expression rolled on every hit while the weapon is wielded + attuned. The catalog shape mirrors the v2.158.74+ `_MAGIC_ITEM_PASSIVES` / v2.158.82+ `_MAGIC_ITEM_ACTIONS` patterns — slug-keyed dict, declarative entries, server-authoritative. Future on-hit rider items (Frost Brand → 1d6 cold, Dragon Slayer → +3d6 vs. dragons with a `condition` callable) fit cleanly into the same shape — just new dict rows + (for conditional riders) the optional condition gate. The double-gate matters: a single PC might attack alternately with a magic weapon and a regular one, and the rider must follow the swung weapon, not the inventory. Detuning a magic weapon also suppresses the rider while leaving the attack entry intact — RAW: a Flame Tongue without attunement is "just a sword" mechanically.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_MAGIC_ITEM_ATTACK_RIDERS` catalog with the Flame Tongue entry; new section 6c in `_compute_attack_auto_uplifts` that reads `attack._slug` and rolls the rider after the standard buff/feature uplifts.
+- `app/demo_seed.py` — Garrik's "Flame Tongue Longsword" attack entry + matching inventory item.
+- `tests/harness/test_flame_tongue_rider.py` — 3 tests (happy path, detune suppression, non-magic weapon regression).
+
+### Changed
+- `docs/test-harness-coverage.md` — new test block + total 2209 → 2212.
+- `app/version.py` — `APP_VERSION` 2.158.90 → 2.158.91. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.91.
+
+### Notes
+- Phase 5a is "always-on while attuned." Phase 5b will add the bonus-action ignite/extinguish toggle so the GM can leave the sword cold for stealth scenes — a `flame-tongue-lit` buff on the wielder gates the rider in front of the inventory check.
+- Conditional riders like Dragon Slayer (+3d6 vs. dragons) want a `condition(target_combatant)` callable in the catalog entry. The existing `_ATTACK_RIDERS` table (Colossus Slayer, Divine Strike) already has this shape — Phase 5c will harmonize.
+- Demo PCs now have a magic item across every shipped archetype: Pip (Cloak — passive), Thalindra (Cloak + Pearl + 2 Wands — passive + active), Tavik (Ring + Staff — passive + multi-action active), Garrik (Flame Tongue — on-hit rider). Kael's Bracers (Lv 1 baseline) round out the demo magic-item story.
+
+---
+
 ## [2.158.90] - 2026-06-10 — "The Apothecary's Choice" — Magic-items-automation Phase 3d polish: Staff of Healing Use button + 2-stage modal. Surfaces 🩹 Use Staff on Tavik's inventory and introduces a new `_showItemActionMultiModal(cfg)` helper for catalog rows that declare an `actions: [...]` array. Stage 1: 3 radio options (Cure Wounds / Lesser Restoration / Mass Cure Wounds) each with their RAW-flavored body copy. Stage 2: a charge spinner that adapts to the picked action's min/max — variable-charge Cure Wounds (1-4) gets the live "Cast at Lv X" preview, fixed-charge actions render the spinner readonly with a "Cast Spell (Lv X)" preview. Closes the modal UX gap for every magic-item shipped to date.
 
 **Schema version:** 69

@@ -3367,6 +3367,17 @@ def _fighter_sheet(name: str) -> dict:
             {"name": "Glaive", "attack_bonus": "+8", "damage": "1d10+4",
              "damage_type": "slashing", "range": "10 ft",
              "desc": "Two-handed, heavy, reach 10 ft. Polearm Master: enter-reach OA + bonus-action butt-end strike (1d4)."},
+            # v2.158.91 — Magic-items Phase 5a demo fixture. Flame
+            # Tongue Longsword (RAW DMG p.170). The ``_slug`` field is
+            # the rider gate: ``_compute_attack_auto_uplifts`` reads it
+            # at /attack time and matches against the wielder's
+            # equipped+attuned inventory item to fire the +2d6 fire
+            # uplift. RAW versatile (1d8/1d10) — sheet expression uses
+            # the 1-handed line since Garrik holds it solo.
+            {"name": "Flame Tongue Longsword", "attack_bonus": "+8",
+             "damage": "1d8+4", "damage_type": "slashing",
+             "range": "5 ft", "_slug": "flame-tongue",
+             "desc": "Rare longsword, attunement. 1d8+4 slashing + 2d6 fire on hit (always-on while attuned)."},
         ],
         # Fighter is non-casting RAW (Champion subclass doesn't grant
         # spells either). No spells / spell_slots fields needed.
@@ -3403,6 +3414,20 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+            # v2.158.91 — Magic-items Phase 5a demo fixture. Flame
+            # Tongue Longsword (rare, attunement). Pair-bound with
+            # the attack entry above via ``_slug``. The rider fires
+            # only when (a) the attack carries _slug="flame-tongue",
+            # AND (b) the inventory item with the same slug is
+            # equipped + attuned. Detuning the item via /attune
+            # suppresses the rider without removing the attack
+            # option — RAW: weapon still works mundane.
+            {"name": "Flame Tongue Longsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d8", "damage_type": "slashing",
+             "properties": "versatile (1d10), magic",
+             "_slug": "flame-tongue",
+             "desc": "Rare longsword, attunement. Speak the command word (bonus action — flavor) to ignite; while ablaze, +2d6 fire damage on every hit. v1: always-on while attuned."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

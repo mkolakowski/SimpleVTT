@@ -26133,6 +26133,47 @@ def _compute_attack_auto_uplifts(
             except dice_mod.DiceParseError:
                 pass
 
+    # 6c. v2.158.91 — Phase 5a: magic-item on-hit attack riders.
+    #     Reads the attack dict's ``_slug`` (e.g. "flame-tongue"), looks
+    #     it up in ``_MAGIC_ITEM_ATTACK_RIDERS``, and verifies the
+    #     attacker actually has the matching item attuned + equipped in
+    #     their inventory. The double-gate (slug-on-attack AND inventory
+    #     attunement) prevents a stale attack entry from carrying a
+    #     rider after the wielder detunes the weapon. Always-on while
+    #     attuned — Phase 5b's bonus-action ignite/extinguish toggle
+    #     hooks the wielding state in front of this check.
+    if attack:
+        attack_slug = (attack.get("_slug") or "").strip()
+        rider_spec = _MAGIC_ITEM_ATTACK_RIDERS.get(attack_slug)
+        if rider_spec:
+            has_item_attuned = False
+            for inv_item in (attacker_sheet.get("inventory") or []):
+                if not isinstance(inv_item, dict):
+                    continue
+                if (inv_item.get("_slug") or "") != attack_slug:
+                    continue
+                if not inv_item.get("equipped"):
+                    continue
+                if (rider_spec.get("requires_attunement")
+                        and not inv_item.get("attuned")):
+                    continue
+                has_item_attuned = True
+                break
+            if has_item_attuned:
+                try:
+                    r = dice_mod.roll(rider_spec["dice"])
+                    uplifts.append({
+                        "label": rider_spec.get("label", attack_slug),
+                        "expression": rider_spec["dice"],
+                        "total": r.total,
+                        "breakdown": r.breakdown,
+                        "damage_type": rider_spec.get(
+                            "damage_type", attack_damage_type or "fire"),
+                        "source": f"item-{attack_slug}",
+                    })
+                except dice_mod.DiceParseError:
+                    pass
+
     # 6b. v2.158.49 — Absorb Elements next-melee rider (PHB p.211).
     #     The v2.71.0 reaction installs `absorb-elements-active`
     #     carrying `next_melee_bonus_dice` (an int count of d6) +
@@ -30070,6 +30111,31 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                 "base_slot_level": 5,
             },
         },
+    },
+}
+
+
+# v2.158.91 — Phase 5a: magic-item on-hit attack riders. Keyed by the
+# weapon's ``_slug`` (matched against ``attack._slug`` at /attack time).
+# Different shape from ``_MAGIC_ITEM_PASSIVES`` / ``_MAGIC_ITEM_ACTIONS``
+# — these fire from the attack pipeline (`_compute_attack_auto_uplifts`)
+# rather than from a player-triggered endpoint. The rider rolls + appends
+# to ``auto_uplifts`` so the broadcast naturally carries "+2d6 fire" as a
+# separate line in the damage breakdown (no client-side change needed).
+#
+# Phase 5a is always-on while attuned. Phase 5b will add the
+# bonus-action ignite/extinguish state for items like Flame Tongue
+# (RAW DMG p.170: "Bonus action to speak a command word; flames
+# blaze on the weapon").
+_MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
+    # v2.158.91 — Flame Tongue (RAW DMG p.170). Any sword variant;
+    # demo seeds a Flame Tongue Longsword on Garrik. +2d6 fire on
+    # every hit while attuned. Rare item, requires attunement.
+    "flame-tongue": {
+        "label": "Flame Tongue",
+        "dice": "2d6",
+        "damage_type": "fire",
+        "requires_attunement": True,
     },
 }
 
