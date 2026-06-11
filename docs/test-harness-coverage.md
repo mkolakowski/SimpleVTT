@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2340 in `tests/harness/` + 51 in `tests/harness_ui/` (as of v2.159.28, 2026-06-11).
+**Total tests:** 2341 in `tests/harness/` + 51 in `tests/harness_ui/` (as of v2.159.30, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -98,6 +98,13 @@ v2.159.18 exhaustion-levels Phase 2 — disadvantage wiring at Lv 1 (ability che
 | `test_exhaustion_lv3_imposes_save_disadvantage` | Lv 3 imposes ALL save disadvantage (not just DEX-gated like Restrained). WIS save → 2d20kl1, `roll_state_applied == "auto_disadvantage_exhaustion-3"`. |
 | `test_exhaustion_lv0_no_disadvantage` | Regression. At level=0 the helpers must NOT fire any exhaustion label. |
 | `test_exhaustion_lv3_npc_imposes_check_disadvantage` | NPC mirror path — set exhaustion via `combatant_id` + skip_roll_state + /roll → response carries an exhaustion label. |
+
+### `test_bag_of_holding.py`
+v2.159.30 carrying-capacity Phase 3 (CLOSES the plan) — Bag of Holding (RAW DMG p.153, uncommon, no attunement). The bag weighs 15 lb regardless of contents; items "inside" don't count against the wielder's carry capacity. The v2.159.27 leaf module's `sheet_inventory_weight_lb` already skips items flagged `_in_bag_of_holding: True`; this commit lands the catalog row + demo seed + assertive test. Brakka Wildmane's Explorer's pack (59 lb) is tagged `_in_bag_of_holding: True` so it contributes 0 lb.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_brakka_bag_of_holding_discounts_pack_weight` | `/sheet-json` for Brakka returns `derived.carry.inventory_weight_lb == 30` (7 greataxe + 8 javelins + 15 bag, NOT 89 with Explorer's pack counted), `carry_capacity_lb == 255` (STR 17 × 15), `is_over_capacity == False`. Catches a regression in the substrate's `_in_bag_of_holding` skip. |
 
 ### `test_goggles_of_night.py`
 v2.159.25 magic-items follow-up — Goggles of Night (RAW DMG p.172, uncommon, no attunement). First sensory-passive item in `_MAGIC_ITEM_PASSIVES` with `sees_in_darkness: True`. Composes with the v2.158.50 Devil's Sight darkness-blinded helper (`_pc_sees_in_darkness`) so a Goggles-equipped PC who's blinded by darkness shrugs off attack disadvantage exactly as a Devil's-Sight Warlock does. Pip Quickfingers (Halfling Rogue Lv 5 — no racial darkvision) carries the Goggles at inventory_index 10 in the demo seed.

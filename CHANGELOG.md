@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.30] - 2026-06-11 — "The Boundless Sack" — Carrying-capacity Phase 3 (CLOSES the plan): Bag of Holding catalog row + Brakka demo + integration test. RAW DMG p.153 (uncommon, no attunement): the bag weighs 15 lb regardless of contents; items "inside" don't count against the wielder's carry capacity. The v2.159.27 leaf module's `sheet_inventory_weight_lb` already skips items flagged `_in_bag_of_holding: True` — this commit lands the catalog row, the demo seed, and the assertive test. Bag-of-Holding integration is now end-to-end: catalog row → demo seed flag → leaf helper read-time skip → /sheet-json derived response → carry meter UI.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `bag-of-holding` row in `_MAGIC_ITEM_PASSIVES`. Empty payload (`requires_attunement: False`) — the weight-discount fires from the substrate's read-time skip in `sheet_inventory_weight_lb` (which has known about `_in_bag_of_holding: True` since v2.159.27), not from this catalog entry. Catalog entry exists so the slug is reachable by future code paths that walk `_MAGIC_ITEM_PASSIVES` for the bag-name lookup. (B) Brakka Wildmane (Barbarian Path of the Beast Lv 5) gets a Bag of Holding (15 lb, equipped) appended at the end of her inventory. Her Explorer's pack (59 lb) is now tagged `_in_bag_of_holding: True` so it contributes 0 lb to the carry sum. Net inventory weight: 7 (greataxe) + 8 (4 javelins × 2) + 15 (bag itself) = 30 lb instead of 89 lb. The 59-lb delta == Explorer's pack weight. (C) New HTTP harness `tests/harness/test_bag_of_holding.py::test_brakka_bag_of_holding_discounts_pack_weight`: assert `/sheet-json` returns `derived.carry.inventory_weight_lb == 30`, `carry_capacity_lb == 255` (STR 17 × 15), `is_over_capacity == False`. (D) HTTP test total bumped 2340 → 2341.**
+**Description:** Closes Phase 3 + the entire carrying-capacity plan. Every piece is shipped: weight parser (Phase 1), `/sheet-json` exposure (Phase 1), demo PCs backfilled (Phases 2a + 2b), carry meter UI (Phase 2a), Bag of Holding (this commit). The 500-lb internal-capacity gate + the "drag through a portal → Astral Plane" mechanic stay descriptive in v1 — they're GM-adjudicated narrative rules, not engine surface. Future "Heward's Handy Haversack" (DMG p.174) drops in as `_MAGIC_ITEM_PASSIVES['heward-haversack']` + the same `_in_bag_of_holding`-style tag — no new substrate.
+
+### Added
+- `app/routes/tabletop_routes.py` — `bag-of-holding` row in `_MAGIC_ITEM_PASSIVES`.
+- `app/demo_seed.py` — Brakka's Bag of Holding inventory item + `_in_bag_of_holding: True` flag on her Explorer's pack.
+- `tests/harness/test_bag_of_holding.py` — 1 HTTP test.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.29 → 2.159.30. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.30.
+- `docs/test-harness-coverage.md` — HTTP total 2340 → 2341.
+
+### Notes
+- The carry-capacity plan is now ✅ shipped end-to-end. Future weight-related magic items (Belt of Giant Strength → STR override compose with `sheet_carry_capacity_lb`; Heroes' Feast +5 STR temporary buff; Bag of Devouring punishment item) all drop in via the existing substrate without new helper work.
+- The bag's catalog entry is intentionally empty. The weight-discount is a SEED-side flag (`_in_bag_of_holding: True` on whichever inventory item the player tags). A future Phase 4 UI (filed) would expose a sheet-side "stuff into bag" button that mass-tags equipped items.
+- The Encumbered variant rule (Phase 4 in the plan, optional) remains unstarted. Most demo PCs are well under cap so the engine surface for over-cap isn't load-bearing yet.
+
+---
+
 ## [2.159.29] - 2026-06-11 — "The Catalogued Loadout" — Carrying-capacity Phase 2b: weight backfill for the remaining 11 demo PCs (excluding Krieger, who was done in v2.159.28). RAW PHB pp.149-151 (weapons + armor + adventuring gear) and the standard pack weights from p.151. Each PC's primary 3-7 inventory items now carry a `weight_lb` numeric field so the v2.159.28 carry meter renders a meaningful current/cap reading on every demo PC sheet (Pip 78 lb cap 150, Thalindra 23 lb cap 120, Tavik 88 lb cap 210, etc.). Magic items + consumables left at 0 lb for simplicity — the bulk weight is what matters for "do I exceed cap?" purposes, and most magic items are descriptively weightless RAW (Cloak of Protection, rings, etc.). Phase 3 (Bag of Holding catalog row) is the natural next step — its `_in_bag_of_holding` skip is already in the helper.
 
 **Schema version:** 69

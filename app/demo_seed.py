@@ -2924,8 +2924,18 @@ def _barbarian_beast_sheet(name: str) -> dict:
              "range": "30/120 ft", "properties": "thrown",
              "_slug": "javelin", "weight_lb": 2},
             {"name": "Explorer's pack", "type": "gear", "qty": 1,
-             "weight_lb": 59,
+             "weight_lb": 59, "_in_bag_of_holding": True,
              "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
+            # v2.159.30 — Phase 3 Bag of Holding demo fixture. Brakka
+            # tags her Explorer's pack as `_in_bag_of_holding: True`
+            # so the v2.159.27 substrate skips its 59 lb in the carry
+            # sum. The bag itself adds 15 lb. Net: 7 (greataxe) + 8
+            # (javelins) + 15 (bag) = 30 lb instead of 74 lb without
+            # the bag. RAW DMG p.153 (uncommon, no attunement).
+            {"name": "Bag of Holding", "type": "gear", "qty": 1,
+             "equippable": True, "equipped": True,
+             "_slug": "bag-of-holding", "weight_lb": 15,
+             "desc": "RAW DMG p.153 (uncommon, no attunement). Holds up to 500 lb (not enforced in v1). Bag weighs 15 lb regardless of contents. Tag items `_in_bag_of_holding: True` to discount their weight from the carry meter."},
         ],
         "resources": [
             {
