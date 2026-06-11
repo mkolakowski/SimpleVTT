@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.83] - 2026-06-10 — "The Mis-Keyed Slot" — Bug-fix follow-up to v2.158.82: the new Pearl of Power action entry in `app/data/local/dnd5e/items/pearl-of-power.json` used `"key": "restore-slot"`, but the shared `Action` Pydantic model in `app/action_schema.py` requires `id` (not `key`). Result: Pearl failed schema validation at content-load time, so `/api/content/items/pearl-of-power` returned 404 and the v2.158.82 Pearl schema test red-lit. Rename the action field to `id`; update the matching assertion in `test_item_schema.py`
+
+**Schema version:** 69
+**Commit summary:** **One-line field rename in `pearl-of-power.json` (`"key"` → `"id"`) + one-line assertion update in `test_item_schema.py` (`actions[0].get("key")` → `actions[0].get("id")`). Caught when the v2.158.82 test suite ran post-rebuild and the schema test 404'd — the Action model's required `id` field was missing, so the local-content resolver dropped the record entirely. The catalog dispatch ('action_key' in the v2.158.82 endpoint body) is unaffected; it's a server-side label, not a JSON-shape field. Filing a TODO to add a content-validation smoke test that loads every shipped item through the Pydantic model at boot — this regression should have been caught by import-time validation, not by the per-item endpoint test.**
+**Description:** Same lesson as v2.158.81's stale-loader fix: when adding a new item content shape, audit the shared schema (`app/action_schema.py`) as well as the consumer code. The `Action` model has 30+ optional fields but only 2 required ones (`id`, `name`); the v2.158.82 commit happened to skip `id` and use the contextually-natural `key`, which Pydantic silently rejected because `id` was missing. The /use_item_action endpoint itself was correct — the dispatch catalog wasn't tied to the JSON action's `id`/`key` field.
+
+### Changed
+- `app/data/local/dnd5e/items/pearl-of-power.json` — action's `"key": "restore-slot"` → `"id": "restore-slot"`.
+- `tests/harness/test_item_schema.py` — Pearl schema assertion updated to read `actions[0].get("id")`.
+- `app/version.py` — `APP_VERSION` 2.158.82 → 2.158.83. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.83.
+
+### Notes
+- v2.158.82's other 6 Pearl tests already passed (the endpoint contract works correctly); only the schema test was broken because Pearl was missing from the content store.
+- Filing TODO: add a `test_all_shipped_items_validate.py` that walks `app/data/local/dnd5e/items/*.json` and asserts every record passes `Item(**record)`. Would have caught this in CI at the item-add time rather than at the per-item endpoint test.
+
+---
+
 ## [2.158.82] - 2026-06-10 — "The Speaking Pearl" — Magic-items-automation Phase 3: ship the `/use_item_action` endpoint (M2 primitive from the plan) + the first dispatched item — Pearl of Power (1/day at dawn, restore one expended spell slot of 3rd level or lower; simplified to long rest per the plan's no-clock assumption). New `_MAGIC_ITEM_ACTIONS` catalog dict mirrors the Phase 1 `_MAGIC_ITEM_PASSIVES` pattern. Thalindra Moonwhisper (Wizard Lv 7) gets a permanent Pearl in her seed inventory + a `pearl-of-power` resource row (max 1, reset long)
 
 **Schema version:** 69

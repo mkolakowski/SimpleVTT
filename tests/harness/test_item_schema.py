@@ -119,7 +119,7 @@ async def test_item_schema_pearl_of_power_has_phase3_action():
     assert record["passives"] == []
     actions = record["actions"]
     assert isinstance(actions, list) and len(actions) == 1
-    assert actions[0].get("key") == "restore-slot"
+    assert actions[0].get("id") == "restore-slot"
 
 
 
