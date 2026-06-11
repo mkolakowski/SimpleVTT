@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.90] - 2026-06-10 — "The Apothecary's Choice" — Magic-items-automation Phase 3d polish: Staff of Healing Use button + 2-stage modal. Surfaces 🩹 Use Staff on Tavik's inventory and introduces a new `_showItemActionMultiModal(cfg)` helper for catalog rows that declare an `actions: [...]` array. Stage 1: 3 radio options (Cure Wounds / Lesser Restoration / Mass Cure Wounds) each with their RAW-flavored body copy. Stage 2: a charge spinner that adapts to the picked action's min/max — variable-charge Cure Wounds (1-4) gets the live "Cast at Lv X" preview, fixed-charge actions render the spinner readonly with a "Cast Spell (Lv X)" preview. Closes the modal UX gap for every magic-item shipped to date.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `staff-of-healing` row in client-side `ITEM_ACTION_SLUGS` with `kind: 'multi-action'` + `actions: [...]` array mirroring the server-side `_MAGIC_ITEM_ACTIONS["staff-of-healing"]["actions"]` sub-map. Each entry carries name/body/min/max/cast_level mapper. (B) New `_showItemActionMultiModal(cfg)` helper — overlay + card matching v2.158.89 single-action modal styling. Renders all `cfg.actions` as radio rows; charge block is hidden until a radio is picked. `onPick(i)` switches the spinner's min/max + reset-value + readonly state to the picked action, and rewrites the preview ("Cast at Lv X" for variable, "Cast (Lv X)" for fixed). (C) `.inv-item-action` click handler routed by `cfg.kind`: 'multi-action' → 2-stage modal returning `{action_key, charges}`; everything else → 1-stage modal returning a plain int. POST body assembled accordingly. (D) `actionBtn` title attribute swapped from `itemAction.prompt` (Phase 3c removed) to `itemAction.body || itemAction.title` so the staff button's hover text reads its body copy. (E) 4 new Playwright tests in `test_use_item_action_buttons.py`: 🩹 button renders on Tavik's staff row; click opens modal with 3 radios + charge block hidden + submit disabled; picking Cure Wounds reveals a `min=1 max=4` spinner with the Lv-X preview tracking the value; picking Lesser Restoration locks the spinner at value=2 readonly with the "Lesser Restoration" + "Lv 2" preview. UI total 29 → 33.**
+**Description:** Closes the magic-items plan's Phase 3 UX work. Every shipped catalog item now has a modal-driven Use button — Pearl (slot dropdown), MM wand + Fireball wand (charge spinner with live cast-Lv), Staff of Healing (action picker → adaptive charge spinner). The 2-stage flow is the first step toward future items like Staff of Power (~8 actions) and Wand of Wonder (random-target → action selector) — the radio-then-control shape scales to N actions without code change, just config rows. Variable-vs-fixed action handling stays in one place (the `onPick(i)` callback) so a future content pack can ship a new staff by adding a row to `ITEM_ACTION_SLUGS` + the matching server catalog row with no template edits.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `staff-of-healing` row in `ITEM_ACTION_SLUGS` (multi-action shape, 3 sub-actions); `_showItemActionMultiModal(cfg)` helper; click handler routing by `cfg.kind`.
+- `tests/harness_ui/test_use_item_action_buttons.py` — 4 staff modal tests.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — `actionBtn` title text reads `itemAction.body || itemAction.title` (Phase 3c removed the legacy `prompt` field).
+- `app/version.py` — `APP_VERSION` 2.158.89 → 2.158.90. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.90.
+- `docs/test-harness-coverage.md` — UI total 29 → 33; staff modal tests appended to the `test_use_item_action_buttons.py` section.
+
+### Notes
+- Future multi-action items (Staff of Power's 8 actions, etc.) reuse the same `_showItemActionMultiModal` — only the `ITEM_ACTION_SLUGS` row + the server catalog entry need new code. Radio list grows naturally; the 480-px max-width card scales to ~6 actions before scroll becomes needed.
+- Tavik now has both a 🩹 Use Staff button and the existing class-feature buttons (Channel Divinity, Preserve Life). The action-economy gate doesn't fire on /use_item_action yet (Phase 5 plan candidate) — using the staff doesn't currently consume his action slot.
+
+---
+
 ## [2.158.89] - 2026-06-10 — "The Velvet Picker" — Magic-items-automation Phase 3c polish: replace the placeholder `window.prompt` slot/charge picker on the inventory Use buttons (v2.158.85) with a proper in-page modal. Pearl gets a slot-level dropdown (L1/L2/L3); both wands get a numeric spinner (1-7 charges) with a live "Cast at Lv X" preview that recomputes on input via per-slug `cast_level(n)` mapper functions in `ITEM_ACTION_SLUGS`. The Staff of Healing modal (multi-action) is deferred to Phase 3d — it needs an action picker first.
 
 **Schema version:** 69
