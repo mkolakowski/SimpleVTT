@@ -15,8 +15,14 @@
   "properties": {
     "category": "Wand"
   },
-  "charges": null,
-  "charge_recovery": null,
+  "charges": 7,
+  "charge_recovery": "1d6+1",
   "passives": [],
-  "actions": []
+  "actions": [
+    {
+      "id": "cast-magic-missile",
+      "name": "Cast Magic Missile",
+      "desc": "Expend 1-7 charges. Casts Magic Missile at slot level equal to the number of charges expended (1 charge = Lv 1, 2 charges = Lv 2, etc.). Wand regains 1d6+1 expended charges daily at dawn (long rest)."
+    }
+  ]
 }

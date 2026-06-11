@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2192 in `tests/harness/` + 24 in `tests/harness_ui/` (as of v2.158.82, 2026-06-10).
+**Total tests:** 2197 in `tests/harness/` + 24 in `tests/harness_ui/` (as of v2.158.84, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1971,7 +1971,7 @@ v2.158.73 magic-items-automation Phase 0 — the SRD item content layer now ship
 | `test_item_schema_ring_of_protection_has_phase1b_passives` | v2.158.76: Phase 1b populated Ring with the same +1/+1 payload as Cloak. Test asserts the wired shape. |
 | `test_item_schema_bracers_of_defense_has_phase1c_passives` | v2.158.77: Phase 1c populated Bracers with `[{ac_bonus:2, requires_attunement:true, requires_no_armor:true, requires_no_shield:true}]`. Different shape from Cloak/Ring (no save_bonus key, +2 AC, two new gate flags). Plan's Phase 1 fully shipped after this entry. |
 | `test_item_schema_pearl_of_power_has_phase3_action` | v2.158.82: Phase 3 wired Pearl with `charges: 1`, `charge_recovery: "long-rest"`, and one `actions[]` entry (`restore-slot`). Passives stays `[]` (Pearl is active-only). Canary moves on to Wand of Magic Missiles (Phase 4 target). |
-| `test_item_schema_wand_of_magic_missiles_has_phase0_keys` | `GET /api/content/items/wand-of-magic-missiles` → 200 + same shape on a charge-tracked archetype (Phase 4's charge-caster canary). |
+| `test_item_schema_wand_of_magic_missiles_has_phase4_action` | v2.158.84: Phase 4a populated Wand with `charges: 7`, `charge_recovery: "1d6+1"`, and one `actions[]` entry (`cast-magic-missile`). |
 | `test_item_schema_unknown_slug_404` | `GET /api/content/items/no-such-srd-item` → 404 — error contract unchanged by the Phase 0 additions. |
 
 ### `test_item_cloak_of_protection.py`
@@ -2030,6 +2030,17 @@ v2.158.82 magic-items-automation Phase 3 — the `POST /api/campaign/{cid}/chara
 | `test_use_pearl_no_expended_slot_409` | After long rest (all slots full), invoking Pearl → 409 `no_expended_slot`. |
 | `test_use_pearl_unknown_action_404` | `action_key: "fireball"` on a Pearl → 404. |
 | `test_use_item_action_missing_fields_400` | Empty body → 400. |
+
+### `test_use_item_action_wand.py`
+v2.158.84 magic-items-automation Phase 4a — Wand of Magic Missiles (RAW DMG p.213) through the same `/use_item_action` endpoint. Different shape from Pearl: multi-charge spend per use (1-7 charges → Lv 1-7 Magic Missile cast). Endpoint dispatch refactored: a per-slug handler function (`_use_item_action_wand_of_magic_missiles`) is called based on item `_slug`. Wand doesn't require attunement (uncommon RAW); Thalindra carries an equipped (not attuned) Wand + a `wand-of-magic-missiles` resource row (current 7, max 7, reset long). The dice-expression recharge (`1d6+1` on long rest) ships in Phase 4b; for now reset=long fully refills.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_wand_single_charge` | Spending 1 charge → `charges_spent: 1`, `cast_slot_level: 1`, resource 7→6. |
+| `test_use_wand_multi_charge` | Spending 3 charges → `cast_slot_level: 3`, resource 7→4. |
+| `test_use_wand_over_max_charges_400` | Requesting 8 charges (over RAW max of 7) → 400. |
+| `test_use_wand_insufficient_charges_409` | Burn 6 charges (resource at 1); request 2 → 409 `insufficient_charges` with `current: 1, requested: 2`. |
+| `test_use_wand_unknown_action_404` | Pearl action_key `restore-slot` on a Wand → 404 (catalog mismatch). |
 
 ---
 

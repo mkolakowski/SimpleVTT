@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.84] - 2026-06-10 — "The Seven Sparks" — Magic-items-automation Phase 4a: wire Wand of Magic Missiles (7 charges, multi-charge spend, RAW DMG p.213) through `/use_item_action`. Different shape from Phase 3's Pearl: multi-charge spend per use (1-7 → Lv 1-7 cast). Refactors the dispatch into per-slug handler functions (`_use_item_action_pearl`, `_use_item_action_wand_of_magic_missiles`) so future items grow the catalog without growing one giant endpoint body. Thalindra gets the Wand + a 7-charge resource row. Dice-expression recharge (1d6+1 at dawn) deferred to Phase 4b; for now reset=long fully refills
+
+**Schema version:** 69
+**Commit summary:** **(A) `app/data/local/dnd5e/items/wand-of-magic-missiles.json` populated with `charges: 7`, `charge_recovery: "1d6+1"`, one `actions[]` entry (`id: "cast-magic-missile"`, name, desc). Schema canary on this item flips from Phase 0 defaults to the Phase 4 wired shape. (B) `_MAGIC_ITEM_ACTIONS` gains a `wand-of-magic-missiles` row with `spell_slug`, `min_charges: 1`, `max_charges: 7`, and `requires_attunement: False` (the SRD JSON says attunement:false for this uncommon wand). (C) `/use_item_action` endpoint refactored: the Pearl logic extracted into `_use_item_action_pearl` + new `_use_item_action_wand_of_magic_missiles` added alongside. The main dispatch is now a 2-branch slug switch that grows by adding handler functions, not endpoint body. (D) Wand handler validates `charges` is `1..max_charges` (400 on under/over), validates the resource row exists (409), validates `current >= charges` (409 `insufficient_charges` with current + requested in the body), decrements the resource by `charges`, broadcasts `resource_update` + `feature_used` with the cast slot level summary, returns `{ok, item_name, spell_slug, charges_spent, cast_slot_level, resource}`. (E) `_wizard_sheet` in `app/demo_seed.py` appends a Wand inventory entry on Thalindra (equipped, NOT attuned — uncommon doesn't require) + a `wand-of-magic-missiles` resource row (current 7, max 7, reset long). (F) New harness file `tests/harness/test_use_item_action_wand.py` with 5 tests: single-charge (resource 7→6), multi-charge (7→4 for 3-charge cast), over-max (8 → 400), insufficient (deplete to 1, request 2 → 409 with current+requested), unknown action_key for this slug (404). (G) Schema canary on the Wand updated to assert the wired shape. (H) `docs/test-harness-coverage.md` adds the new section + canary update + total bumped 2192 → 2197.**
+**Description:** Phase 4 polished into a clean two-step: 4a (this commit) ships the charge-spend dispatch + the wand-of-magic-missiles entry. 4b will ship the dice-expression recharge (`charge_recovery: "1d6+1"` parsed + rolled at long-rest time, applied to the resource row). The per-slug handler refactor was the key abstraction — Phase 3's single 200-line handler would have grown to 400+ lines if I'd added Wand inline; splitting it makes Phase 4b's dice-recharge + Phase 4c's Wand of Fireballs / Staff of Healing each land as a single handler function. Phase 4a defers the actual Magic Missile damage roll (player invokes /cast_spell separately after the wand decrement) since the existing /cast_spell machinery already handles MM's auto-damage + multi-target picker; wiring it through /use_item_action with a `source_item` bypass is a Phase 4b polish.
+
+### Added
+- `app/data/local/dnd5e/items/wand-of-magic-missiles.json` — `charges: 7`, `charge_recovery: "1d6+1"`, one `actions[]` entry.
+- `app/routes/tabletop_routes.py` — `wand-of-magic-missiles` row in `_MAGIC_ITEM_ACTIONS`; new `_use_item_action_wand_of_magic_missiles` handler function.
+- `app/demo_seed.py` — Thalindra gets a Wand of Magic Missiles inventory entry (equipped) + a `wand-of-magic-missiles` resource row.
+- `tests/harness/test_use_item_action_wand.py` — 5 tests covering happy + multi-charge + 3 error paths.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/use_item_action` body refactored: Pearl logic extracted into `_use_item_action_pearl`; main endpoint is now a 2-branch slug dispatch.
+- `tests/harness/test_item_schema.py` — Wand schema canary flipped to the Phase 4 wired shape.
+- `docs/test-harness-coverage.md` — Wand test section added + Wand canary updated; total 2192 → 2197.
+- `app/version.py` — `APP_VERSION` 2.158.83 → 2.158.84. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.84.
+
+### Notes
+- Phase 4b ships the dice-expression `charge_recovery: "1d6+1"` parser hook in the rest loop's resource-refill path, replacing the standard reset=long full-refill for items whose resource row carries a `dice_expression` reset rule.
+- Phase 4c queues Wand of Fireballs (7 charges, ≤Lv 3 cast level) + Staff of Healing (10 charges, healing-spell payload).
+- Wand auto-destroy on last-charge d20==1 (RAW DMG p.213) is filed as Phase 4d — the current implementation skips the d20 roll entirely.
+
+---
+
 ## [2.158.83] - 2026-06-10 — "The Mis-Keyed Slot" — Bug-fix follow-up to v2.158.82: the new Pearl of Power action entry in `app/data/local/dnd5e/items/pearl-of-power.json` used `"key": "restore-slot"`, but the shared `Action` Pydantic model in `app/action_schema.py` requires `id` (not `key`). Result: Pearl failed schema validation at content-load time, so `/api/content/items/pearl-of-power` returned 404 and the v2.158.82 Pearl schema test red-lit. Rename the action field to `id`; update the matching assertion in `test_item_schema.py`
 
 **Schema version:** 69

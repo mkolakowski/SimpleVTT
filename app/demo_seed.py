@@ -639,6 +639,16 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "pearl-of-power",
              "desc": "Uncommon wondrous item, attunement. 1/day at dawn (long rest), regain one expended spell slot of 3rd level or lower."},
+            # v2.158.84 — Magic-items Phase 4a demo fixture. Wand of
+            # Magic Missiles (7 charges, recharge 1d6+1 on long rest).
+            # No attunement RAW (it's uncommon). Equipped so the
+            # /use_item_action endpoint can fire against it. Paired
+            # with the wand-of-magic-missiles resource row added to
+            # her ``resources`` array below.
+            {"name": "Wand of Magic Missiles", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": False,
+             "_slug": "wand-of-magic-missiles",
+             "desc": "Uncommon wand. 7 charges. Expend N (1-7) charges to cast Magic Missile at slot level N. Regains 1d6+1 charges daily at dawn (long rest)."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -669,6 +679,19 @@ def _wizard_sheet(name: str) -> dict:
                 "current": 1, "max": 1, "reset": "long",
                 "source": "item-pearl-of-power",
                 "desc": "1/day at dawn (long rest): regain one expended spell slot of 3rd level or lower.",
+                "manual": False,
+            },
+            # v2.158.84 — Magic-items Phase 4a: Wand of Magic Missiles
+            # charge counter. Decremented by /use_item_action per
+            # charge spent. The dice-expression recharge (1d6+1 at
+            # dawn) lands in Phase 4b; for now the rest loop's
+            # reset=long path refills it to max.
+            {
+                "key": "wand-of-magic-missiles",
+                "name": "Wand of Magic Missiles",
+                "current": 7, "max": 7, "reset": "long",
+                "source": "item-wand-of-magic-missiles",
+                "desc": "7 charges. Spend 1-7 to cast Magic Missile at the matching slot level. Regains 1d6+1 charges at dawn (long rest; full refill in v2.158.84, dice recharge in Phase 4b).",
                 "manual": False,
             },
         ],

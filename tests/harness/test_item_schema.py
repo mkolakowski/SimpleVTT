@@ -123,21 +123,25 @@ async def test_item_schema_pearl_of_power_has_phase3_action():
 
 
 
-async def test_item_schema_wand_of_magic_missiles_has_phase0_keys():
-    """v2.158.73: same shape assertion on a charge-tracked item so
-    both archetypes (passive wearable / charge-tracked caster) prove
-    the schema landed uniformly across all 292 items, not just the
-    wearables."""
+async def test_item_schema_wand_of_magic_missiles_has_phase4_action():
+    """v2.158.84: Phase 4a populated the Wand with `charges: 7`,
+    `charge_recovery: "1d6+1"`, and one `actions[]` entry
+    (`cast-magic-missile`). Different shape from Pearl (Phase 3 —
+    1 charge, no spell_slug needed on the action JSON; the catalog
+    holds the dispatch). When Phase 4b lands the dice-recharge at
+    long rest, no schema change is needed — the recharge string is
+    already populated."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
         resp = await client.get("/api/content/items/wand-of-magic-missiles")
     assert resp.status_code == 200
     record = resp.json()["record"]
     assert record["slug"] == "wand-of-magic-missiles"
-    # Phase 0 ships the keys with null defaults; Phase 4 will populate
-    # charges=7 + charge_recovery="1d6+1" on this exact item.
-    assert record["charges"] is None
-    assert record["charge_recovery"] is None
+    assert record["charges"] == 7
+    assert record["charge_recovery"] == "1d6+1"
     assert record["passives"] == []
+    actions = record["actions"]
+    assert isinstance(actions, list) and len(actions) == 1
+    assert actions[0].get("id") == "cast-magic-missile"
 
 
 async def test_item_schema_unknown_slug_404():

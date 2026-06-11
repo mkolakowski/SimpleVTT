@@ -29999,6 +29999,24 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
         "max_slot_level": 3,
         "requires_attunement": True,
     },
+    # v2.158.84 — Phase 4a: charge-tracked wand. Different shape from
+    # Pearl: multi-charge spend per use (1-7 charges) → spell cast at
+    # the matching slot level. RAW DMG p.213: regains 1d6+1 expended
+    # charges daily at dawn (simplified to long rest; recharge dice
+    # roll happens server-side at rest time in Phase 4b — for now
+    # Phase 4a's harness uses the existing pearl-style full refill via
+    # the rest loop's resource refill path).
+    "wand-of-magic-missiles": {
+        "key": "cast-magic-missile",
+        "name": "Cast Magic Missile (Wand)",
+        "resource_key": "wand-of-magic-missiles",
+        "spell_slug": "magic-missile",
+        # Wand doesn't require attunement RAW (uncommon — attunement
+        # is for rare+ wands). The shipped JSON has `attunement: false`.
+        "requires_attunement": False,
+        "min_charges": 1,
+        "max_charges": 7,
+    },
 }
 
 
@@ -76501,10 +76519,26 @@ async def use_item_action(
             409, f"{item.get('name') or slug} must be equipped",
         )
 
-    # Dispatch by slug (Phase 3 only has Pearl of Power).
-    if slug != "pearl-of-power":
-        raise HTTPException(409, "unknown item action handler")
+    # Dispatch by slug. Phase 3 had only Pearl of Power; Phase 4a adds
+    # Wand of Magic Missiles. Future items get their own branch here.
+    if slug == "pearl-of-power":
+        return await _use_item_action_pearl(
+            db, campaign_id, char, item, sheet, catalog, slot_level_raw,
+            class_slug, inventory, inv_idx,
+        )
+    if slug == "wand-of-magic-missiles":
+        return await _use_item_action_wand_of_magic_missiles(
+            db, campaign_id, char, item, sheet, catalog,
+            body.get("charges"),
+        )
+    raise HTTPException(409, "unknown item action handler")
 
+
+async def _use_item_action_pearl(
+    db, campaign_id, char, item, sheet, catalog, slot_level_raw,
+    class_slug, inventory, inv_idx,
+):
+    """v2.158.82 → extracted v2.158.84: Pearl of Power handler."""
     # Pearl of Power — restore one expended spell slot of level
     # 1..max_slot_level.
     try:
@@ -76517,6 +76551,7 @@ async def use_item_action(
             400,
             f"slot_level must be 1..{max_lvl} for {item.get('name')}",
         )
+    slug = "pearl-of-power"
 
     # Find the resource row that gates the per-day use. Seeded onto
     # the PC sheet alongside the inventory item.
@@ -76641,6 +76676,118 @@ async def use_item_action(
             "total": total,
             "used": slot["used"],
         },
+        "resource": {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
+    }
+
+
+async def _use_item_action_wand_of_magic_missiles(
+    db, campaign_id, char, item, sheet, catalog, charges_raw,
+):
+    """v2.158.84 — Phase 4a Wand of Magic Missiles handler. Expend
+    N charges (1-7); each charge raises the cast slot level by 1
+    (1 charge = Lv 1 Magic Missile; 7 charges = Lv 7). Decrements
+    the wand resource by N + broadcasts a feature_used summary.
+
+    Phase 4a scope: the slot-level dispatch + charge decrement +
+    broadcast. The actual Magic Missile damage roll routes through
+    the existing client-side cast flow (the v2.49.214 `/cast_spell`
+    endpoint has a separate code path the player can invoke after
+    the wand decrement). Filing as Phase 4b: wire the cast directly
+    through this endpoint with a ``source_item`` flag that skips
+    slot consumption + the "spell not on your list" gate.
+    """
+    slug = "wand-of-magic-missiles"
+    try:
+        charges = int(charges_raw or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "charges must be an int")
+    min_c = int(catalog.get("min_charges") or 1)
+    max_c = int(catalog.get("max_charges") or 7)
+    if charges < min_c or charges > max_c:
+        raise HTTPException(
+            400,
+            f"charges must be {min_c}..{max_c} for {item.get('name')}",
+        )
+
+    # Find the resource row.
+    resources = list(sheet.get("resources") or [])
+    res_key = str(catalog.get("resource_key") or "")
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    if cur < charges:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "insufficient_charges",
+                "current": cur,
+                "requested": charges,
+                "label": item.get("name") or slug,
+            },
+        )
+
+    res_row["current"] = cur - charges
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    spell_slug = catalog.get("spell_slug") or "magic-missile"
+    cast_slot_level = charges  # Charge count == effective slot level.
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": catalog.get("name") or "Use item",
+                "summary": (
+                    f"{char.name} expended {charges} charge(s) from the "
+                    f"{item.get('name')} to cast Magic Missile at Lv "
+                    f"{cast_slot_level}."
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "spell_slug": spell_slug,
+        "charges_spent": charges,
+        "cast_slot_level": cast_slot_level,
         "resource": {
             "key": res_key,
             "current": res_row["current"],
