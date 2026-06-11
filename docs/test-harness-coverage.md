@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2264 in `tests/harness/` + 45 in `tests/harness_ui/` (as of v2.159.15, 2026-06-11).
+**Total tests:** 2266 in `tests/harness/` + 45 in `tests/harness_ui/` (as of v2.159.16, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -37,6 +37,14 @@ Sanity checks that the harness can even talk to the demo app.
 | `test_version` | `GET /version` → 200, matches `app/version.py`. |
 | `test_roster_fixture` | The `roster` fixture loads and contains all 12 demo PCs by name. |
 | `test_gm_can_open_ws` | `WS /ws/campaign/1` as GM accepts connection + emits an opening `state` message. |
+
+### `test_all_items_validate.py`
+v2.159.16 magic-items-automation Phase 8p — boot-time validator for every shipped item JSON under `app/data/local/dnd5e/items/` + the new `/api/content-health` endpoint that mirrors the boot-time result. Filed in the v2.158.83 retro: the Pearl `key`/`id` bug shipped silently because the only runtime validator was per-endpoint at `/api/content/items/{slug}`. The boot-time sweep walks all 292 items at app startup; this harness asserts the result is empty.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_content_health_endpoint_reports_zero_item_errors` | `GET /api/content-health` → 200 with `{items: {checked, errors}}`; `errors` is empty (regression failure dumps offending file + error per row). |
+| `test_content_health_checked_at_least_100_items` | `items.checked >= 100`; regression guard against the validator walking the wrong directory and returning a false-OK over zero files. |
 
 ### `test_concurrency.py`
 Multi-client races and late-joiner behavior. Guards the per-campaign `CampaignHub` + WS broadcast pipeline.

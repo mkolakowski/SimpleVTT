@@ -114,12 +114,91 @@ async def _auth_redirect_handler(request: Request, exc: StarletteHTTPException):
     return await http_exception_handler(request, exc)
 
 
+def _validate_all_local_items() -> tuple[int, list[tuple[str, str]]]:
+    """v2.159.16 — boot-time validator for every shipped SRD item JSON.
+
+    Walks ``app/data/local/dnd5e/items/*.json`` and validates each
+    against the ``Item`` Pydantic schema. Filed in the v2.158.83 retro:
+    the Pearl ``key`` / ``id`` bug shipped silently because the only
+    runtime validator was per-endpoint (``/api/content/items/{slug}``)
+    — items only get checked when fetched. A boot-time sweep catches
+    schema drift the moment a developer adds or edits an item.
+
+    Returns ``(checked_count, errors)`` where ``errors`` is a list of
+    ``(filename, error_message)`` tuples. Callers decide whether to log
+    + continue or crash. The startup hook today only logs — see Phase
+    8p notes.
+    """
+    import json as _json
+    from .content_schemas import Item as _Item
+
+    items_dir = Path(__file__).resolve().parent / "data" / "local" / "dnd5e" / "items"
+    if not items_dir.is_dir():
+        return (0, [])
+    errors: list[tuple[str, str]] = []
+    checked = 0
+    for path in sorted(items_dir.glob("*.json")):
+        checked += 1
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                payload = _json.load(fh)
+        except _json.JSONDecodeError as e:
+            errors.append((path.name, f"invalid JSON: {e}"))
+            continue
+        except OSError as e:
+            errors.append((path.name, f"read error: {e}"))
+            continue
+        try:
+            _Item.model_validate(payload)
+        except Exception as e:  # noqa: BLE001 — pydantic ValidationError or sub-class
+            errors.append((path.name, str(e).splitlines()[0]))
+    return (checked, errors)
+
+
+_ITEM_VALIDATION_RESULT: dict = {"checked": 0, "errors": []}
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     log.info("SimpleVTT %s (schema v%d) starting...", APP_VERSION, SCHEMA_VERSION)
     log.info("Initializing database (create_all)...")
     init_db()
     record_schema_version(SCHEMA_VERSION)
+
+    # v2.159.16 — sweep every shipped item JSON for schema compliance.
+    # We log errors but DON'T crash — a broken item still loads via
+    # ``resolve()`` at request-time and will surface there too; the
+    # boot-time signal just makes the failure loud at deploy time
+    # rather than waiting for a player to fetch the item.
+    try:
+        checked, errors = _validate_all_local_items()
+        _ITEM_VALIDATION_RESULT["checked"] = checked
+        _ITEM_VALIDATION_RESULT["errors"] = [
+            {"file": n, "error": m} for (n, m) in errors
+        ]
+        if errors:
+            log.error(
+                "Item schema validator: %d/%d items failed validation:",
+                len(errors), checked,
+            )
+            for name, msg in errors:
+                log.error("  %s — %s", name, msg)
+        else:
+            log.info("Item schema validator: %d items OK.", checked)
+    except Exception as e:  # noqa: BLE001 — never block boot on the validator
+        log.exception("Item schema validator crashed: %s", e)
+
+
+@app.get("/api/content-health")
+def content_health():
+    """v2.159.16 — public read-only mirror of the boot-time item-schema
+    validator. Returns ``{items: {checked, errors}}`` where ``errors``
+    is a list of ``{file, error}`` dicts (empty list = all good). The
+    harness asserts this is empty on every CI run; an operator polling
+    after a content drop can use it to confirm new items parse before
+    cutting traffic over.
+    """
+    return {"items": dict(_ITEM_VALIDATION_RESULT)}
     if settings.admins:
         log.info("Admins from env: %s", ", ".join(settings.admins))
     else:

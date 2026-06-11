@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.16] - 2026-06-11 — "The Schema Sentry" — Magic-items-automation Phase 8p (also closes the v2.158.83 retro TODO): boot-time schema validator for every shipped item JSON under `app/data/local/dnd5e/items/` + a new `/api/content-health` endpoint that mirrors the boot-time result. Filed in the v2.158.83 retro because the Pearl `key`/`id` bug shipped silently — the only validator was per-endpoint at `/api/content/items/{slug}` so items only got checked when fetched. Now every commit's container build sweeps all 292 items at startup, logs errors, AND the CI harness asserts the result is empty via the new endpoint — schema drift fails fast before merge instead of waiting for a player to fetch the offending item.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `_validate_all_local_items()` helper in `app/main.py`. Walks `app/data/local/dnd5e/items/*.json`, parses each, runs `Item.model_validate(...)` on the payload, returns `(checked, errors)` where errors is a list of `(filename, error_message)` tuples. Wraps `json.JSONDecodeError` and `OSError` so a single broken file doesn't abort the sweep. (B) `on_startup` hook calls the validator + stashes the result in a module-level `_ITEM_VALIDATION_RESULT` dict so the new endpoint can read it without re-sweeping. Errors log via `log.error("  %s — %s", ...)` so they're scannable in the container log; success logs the count via `log.info("Item schema validator: 292 items OK.")`. (C) The validator NEVER crashes boot — wrapped in try/except, errors just get logged. Rationale: a broken item still loads via the per-endpoint `resolve()` path and will surface there too; the boot-time signal is the loud SECONDARY check, not a hard gate. (D) New `GET /api/content-health` endpoint returns `{items: {checked, errors}}` where errors is a list of `{file, error}` dicts. Public read-only (no auth) since the data leaked is just SRD content shape. (E) New HTTP harness `tests/harness/test_all_items_validate.py` with 2 tests: `test_content_health_endpoint_reports_zero_item_errors` (the assertive gate — fails CI if any item JSON regresses) + `test_content_health_checked_at_least_100_items` (regression guard against the validator walking the wrong directory and returning a false-OK). (F) HTTP test total bumped 2264 → 2266.**
+**Description:** Closes the v2.158.83 retro TODO and Phase 8p. The Pearl bug was small but the failure mode — silent until per-endpoint fetch — is the kind that bites every magic-item commit. With this in place, every PR that touches `app/data/local/dnd5e/items/*.json` (or the `Item` Pydantic schema) gets a CI signal the moment validation breaks. The new endpoint also doubles as a content-health probe an operator can poll after a homebrew JSON drop to confirm parse-safety before cutting traffic. The 292-item full sweep takes <200 ms on Apple Silicon — no measurable boot latency.
+
+### Added
+- `app/main.py` — `_validate_all_local_items()` + `on_startup` validator call + `_ITEM_VALIDATION_RESULT` module state + `/api/content-health` endpoint.
+- `tests/harness/test_all_items_validate.py` — 2 HTTP tests.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.15 → 2.159.16. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.16.
+- `docs/test-harness-coverage.md` — HTTP total 2264 → 2266; new `test_all_items_validate.py` entry.
+
+### Notes
+- The validator only covers items today. Spells, monsters, feats, backgrounds etc. all use their own Pydantic schemas + `resolve()` path; extending the sweep is a one-loop addition per content type. Filed as Phase 8q if/when a spell schema drift bug surfaces.
+- The endpoint returns the result of the LAST boot — it does NOT re-sweep on each call. If you patch a JSON file in dev and want a fresh check, restart the container.
+- The harness test only checks shipped items (`app/data/local/dnd5e/items/`). User-supplied homebrew JSONs would go through a different path; their validation lives at the per-character-upload moment.
+
+---
+
 ## [2.159.15] - 2026-06-11 — "The Round Burst" — Magic-items-automation Phase 8o: extends the v2.159.14 spell-side AoE confirm modal from line-only to ALL AoE shapes. Fireball (sphere), Burning Hands (cone), Cone of Cold (cone), Shatter (sphere), Web (cube — Thalindra routes through /cast_web so this won't fire there, but the substrate now supports it), etc. all surface the per-target deselect modal after the canvas `_openAoePicker` resolves. Gate flipped from `_spArea.shape === 'line'` to `_AOE_SHAPES.has(_spArea.shape)`. Modal body text now reflects the shape dynamically ("Each creature in the sphere must make a save") instead of hardcoding "line".
 
 **Schema version:** 69
