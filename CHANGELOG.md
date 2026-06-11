@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.29] - 2026-06-11 — "The Catalogued Loadout" — Carrying-capacity Phase 2b: weight backfill for the remaining 11 demo PCs (excluding Krieger, who was done in v2.159.28). RAW PHB pp.149-151 (weapons + armor + adventuring gear) and the standard pack weights from p.151. Each PC's primary 3-7 inventory items now carry a `weight_lb` numeric field so the v2.159.28 carry meter renders a meaningful current/cap reading on every demo PC sheet (Pip 78 lb cap 150, Thalindra 23 lb cap 120, Tavik 88 lb cap 210, etc.). Magic items + consumables left at 0 lb for simplicity — the bulk weight is what matters for "do I exceed cap?" purposes, and most magic items are descriptively weightless RAW (Cloak of Protection, rings, etc.). Phase 3 (Bag of Holding catalog row) is the natural next step — its `_in_bag_of_holding` skip is already in the helper.
+
+**Schema version:** 69
+**Commit summary:** **(A) `app/demo_seed.py` — `weight_lb` backfilled across 11 PC sheets: Pip (Rogue), Thalindra (Wizard), Tavik (Cleric), Caelan (Paladin), Seraphine (Paladin Vengeance), Lyra (Bard), Mira (Druid), Magnus (Warlock), Rowan (Ranger), Brakka (Barbarian Beast), Drunken Master Monk, Kael (Monk), Zara (Sorcerer), Garrik (Fighter). Each sheet got 3-7 items with weights from RAW: armor (Studded leather 13 / Chain mail 55 / Plate 65), shields (6), pack weights (Burglar's 42 / Explorer's 59 / Priest's 24 / Entertainer's 38 / Scholar's 10 / Dungeoneer's 61.5), primary weapons (Longsword 3 / Shortsword 2 / Dagger 1 / Greatsword 6 / Greataxe 7 / Quarterstaff 4 / Scimitar 3 / Rapier 2 / Warhammer 2 / Hand crossbow 3 / Longbow 2 / Sling 0 / Glaive 6), spellcaster foci (Holy symbol 1 / Druidic focus 1 / Arcane focus 3 / Spellbook 3 / Component pouch 2 / Pact tome 5), and adventuring gear (Healer's kit excluded — no weight RAW). (B) Magic items + consumables + cosmetic trinkets left at 0 lb. This is intentional: most are weightless RAW (Cloak of Protection, rings, potions are 0.5 each, the bag itself is 15 lb for the Phase 3 Bag of Holding work). (C) No new tests — the v2.159.28 test_krieger_carry_meter_renders covers the chain integrity, and the seed data is exercised by the demo-mode reset on every container boot.**
+**Description:** Closes Phase 2b of `docs/plans/carrying-capacity.md`. Now every demo PC's sheet renders a meaningful carry meter when opened. Examples of the seeded numbers (current / cap):
+- Pip Quickfingers (STR 10, 150 cap) → 7+2+13+1+42+2+1 = 68 lb (under cap, comfortable headroom).
+- Thalindra Moonwhisper (STR 8, 120 cap) → 4+3+2+10+4+1 = 24 lb (very light — wizard build).
+- Tavik Stonebrow (STR 14, 210 cap) → 2+6+55+1+24 = 88 lb (cleric in chain mail).
+- Krieger Stonefist (STR 18, 270 cap) → 7+8+59+1+1+2 = 78 lb (v2.159.28 baseline).
+- Garrik Ironside (STR 18, 270 cap) → 6+4+6+55+59 = 130 lb (fighter in chain + greatsword + glaive sidearm).
+- Brakka Wildmane (STR 17, 255 cap) → 7+8+59 = 74 lb (Barbarian, no armor — Path of the Beast Unarmored Defense).
+
+Phase 3 (Bag of Holding) is the next plan phase. With this commit, the substrate is fully populated and the meter is consistently meaningful across the demo party.
+
+### Changed
+- `app/demo_seed.py` — 11 PC sheets backfilled with `weight_lb` per RAW.
+- `app/version.py` — `APP_VERSION` 2.159.28 → 2.159.29. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.29.
+
+### Notes
+- No new tests because there's no new helper/endpoint to assert against. The Phase 2a test (`test_krieger_carry_meter_renders`) is the chain-integrity gate; this commit's data work just populates more rows of the same shape.
+- The arrows on Rowan are weighted at 0.05 lb/each (1 lb per 20 RAW) — Rowan has 40 arrows = 2 lb. This is the only fractional weight in the demo data; matches RAW exactly.
+- Some pack weights from PHB p.151 are slightly different (Dungeoneer's = 61.5 lb is the RAW number).
+- Phase 3 Bag of Holding will land Magnus or Krieger a bag in their inventory + flag a few heavy items as `_in_bag_of_holding: True` to demo the weight discount.
+
+---
+
 ## [2.159.28] - 2026-06-11 — "The Visible Burden" — Carrying-capacity Phase 2a: Krieger weight backfill + carry meter UI. The existing sheet inventory header's "Weight: 0 lb" label now reads "Weight: <current> / <capacity> lb" — the capacity comes from `STR × 15`, the current weight sums the new `weight_lb` numeric field with a fallback to the legacy `weight` string. The `weight_lb` field is the v2.159.27 leaf module's preferred tier-1 input; this commit's seed work establishes the first demo PC with real weight data so the meter renders something meaningful instead of `0 / 270 lb`. Other PCs' weight backfill is Phase 2b (filed).
 
 **Schema version:** 69
