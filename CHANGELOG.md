@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.6] - 2026-06-11 — "The Point and Click" — Magic-items-automation Phase 8f: wire the v2.159.4 AoE-line geometry endpoint into the inventory-row UI. Krieger's Javelin of Lightning gets a ⚡ Hurl Lightning button via a new `aoe-line` kind in `ITEM_ACTION_SLUGS`. Click triggers a 2-stage flow: existing single-target picker (vttOpenMultiTargetPicker) → server-side /battle/line-targets call → window.confirm preview of who's in the line → POST /use_item_action with the auto-picked combatant ids. The button disables + relabels to ⚡ (spent until dawn) after firing, re-enables on long rest.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `javelin-of-lightning` row in `ITEM_ACTION_SLUGS` with `kind: 'aoe-line'`, `action_key: 'hurl-lightning'`, `width_ft: 5`, `max_length_ft: 120`, `state_field: '_used_today'`, `disabled_fn(item) => !!item._used_today`, `disabled_label: '⚡ (spent until dawn)'`. New shape because the action takes a target combatant ID + a server-resolved list of line combatants rather than a slot/charges int. (B) `rowHtml` extended: when `cfg.disabled_fn` is set, the button computes its label from `disabled_label` when disabled (else falls through to the existing label-fn / static-label chain), and renders `disabled + cursor: not-allowed + opacity 0.45` to make the spent state visually clear. (C) `.inv-item-action` click handler gets a new branch for `cfg.kind === 'aoe-line'`: opens `vttOpenMultiTargetPicker(required: 1)` for the target, GETs `/api/campaign/{cid}/battle` to find the caster's combatant_id (matching `c.char_id === MY_CHAR_ID`), POSTs `/api/campaign/{cid}/battle/line-targets` with the caster + target + width_ft + max_length_ft, presents a `window.confirm` summary ("Lightning will save-DC each: N on-line creature(s). Proceed?"), then POSTs `/use_item_action` with the auto-picked `target_combatant_ids`. On success, sets `inventory[idx]._used_today = true` and re-renders so the button switches to disabled + spent label. (D) New Playwright test in `tests/harness_ui/test_use_item_action_buttons.py`: force-rests Krieger via the API (so the seed-default `_used_today: False` is guaranteed regardless of prior test pollution), navigates to his sheet, asserts the ⚡ Hurl Lightning button is visible + enabled on the Javelin of Lightning inventory row. (E) UI test total bumped 35 → 36.**
+**Description:** Closes Phase 8f. The Javelin client now uses the v2.159.4 line-targets endpoint end-to-end: GM clicks ⚡ Hurl Lightning, picks the target in the existing single-target overlay, the server pre-computes who's in the 5-ft × 120-ft line, the GM confirms (or cancels), and the lightning chain fires with auto-picked targets. Before this commit, the only way to fire the javelin was via curl-equivalent — the demo's Use button just rendered the catalog's static label.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `javelin-of-lightning` row in `ITEM_ACTION_SLUGS` (aoe-line kind); disabled-state rendering in rowHtml; aoe-line branch in the click handler; aoe-line post-success state sync.
+- `tests/harness_ui/test_use_item_action_buttons.py` — `test_javelin_lightning_button_renders_when_unspent`.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.5 → 2.159.6. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.6.
+- `docs/test-harness-coverage.md` — UI total bumped 35 → 36.
+
+### Notes
+- The `window.confirm` preview is minimal-viable UX. Phase 8g could replace it with a proper modal showing the auto-picked combatants as a checkbox list so the GM can opt out individual targets (line geometry edge cases: a half-cover wall, a combatant prone behind cover, etc.).
+- The Lightning Bolt spell (RAW PHB p.255) uses the same shape — 5-ft-wide, 100-ft-long line. A future cantrip / spell-action wire-up could reuse the same handler pattern, calling `/battle/line-targets` with `width_ft: 5, max_length_ft: 100` from the cast-spell flow.
+- The Sphere + Cone endpoints from v2.159.5 don't have a corresponding `aoe-sphere` / `aoe-cone` kind in `ITEM_ACTION_SLUGS` yet because no magic item in the demo uses them. Fireball (the canonical sphere) is a spell, not an item; Burning Hands is a cone. When a sphere/cone magic item (Necklace of Fireballs, etc.) lands, the same pattern extends with two more kinds.
+
+---
+
 ## [2.159.5] - 2026-06-11 — "The Compass and the Burst" — Magic-items-automation Phase 8e: server-side sphere + cone AoE geometry. Mirrors of the v2.159.4 Phase 8d `/battle/line-targets` endpoint for the other two RAW AoE shapes. Two new endpoints in one commit: `/battle/sphere-targets` (Fireball / Shatter / Sleep / etc.) and `/battle/cone-targets` (Burning Hands / Cone of Cold / Frost Brand cantrip-variant). Both reuse the same Token-position read pattern + grid-aware distance primitives from Phase 8d.
 
 **Schema version:** 69

@@ -6802,17 +6802,24 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         // compute label + title from the item's current state via
         // ``label_fn`` / ``title_fn``. Other kinds use the static
         // ``label`` / ``body``/``title`` strings.
-        const actionLabel = (itemAction && itemAction.kind === 'state-toggle' && itemAction.label_fn)
-            ? itemAction.label_fn(item)
-            : (itemAction ? itemAction.label : '');
+        // v2.159.6 — Phase 8f: aoe-line items (Javelin of Lightning)
+        // compute disabled state via ``disabled_fn`` and use
+        // ``disabled_label`` when the action is exhausted today.
+        const actionDisabled = !!(itemAction && itemAction.disabled_fn && itemAction.disabled_fn(item));
+        const actionLabel = actionDisabled && itemAction.disabled_label
+            ? itemAction.disabled_label
+            : ((itemAction && itemAction.kind === 'state-toggle' && itemAction.label_fn)
+                ? itemAction.label_fn(item)
+                : (itemAction ? itemAction.label : ''));
         const actionTitle = (itemAction && itemAction.kind === 'state-toggle' && itemAction.title_fn)
             ? itemAction.title_fn(item)
             : (itemAction ? (itemAction.body || itemAction.title || '') : '');
         const actionBtn = (itemAction && !isReadonly && item.equipped &&
                           typeof CAMPAIGN_ID !== 'undefined' && typeof MY_CHAR_ID !== 'undefined')
             ? `<button type="button" class="inv-item-action" data-idx="${idx}" data-slug="${_esc(item._slug)}"
+                       ${actionDisabled ? 'disabled' : ''}
                        title="${_esc(actionLabel)} — ${_esc(actionTitle)}"
-                       style="font-size:11px;padding:3px 8px;min-height:32px;background:rgba(184,135,255,0.12);border:1px solid rgba(184,135,255,0.45);color:#b887ff;border-radius:4px;cursor:pointer;flex-shrink:0;font-weight:600;">${_esc(actionLabel)}</button>`
+                       style="font-size:11px;padding:3px 8px;min-height:32px;background:rgba(184,135,255,0.12);border:1px solid rgba(184,135,255,0.45);color:#b887ff;border-radius:4px;cursor:${actionDisabled ? 'not-allowed' : 'pointer'};flex-shrink:0;font-weight:600;${actionDisabled ? 'opacity:0.45;' : ''}">${_esc(actionLabel)}</button>`
             : '';
 
         // Modifier badges shown only when equipped
@@ -7026,6 +7033,22 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           title_fn: (item) => item._lit
                               ? 'Extinguish the Flame Tongue (bonus action)'
                               : 'Ignite the Flame Tongue (bonus action)'},
+        // v2.159.6 — Phase 8f: Javelin of Lightning AoE-line wire-up.
+        // The Use button opens a 2-stage flow: stage 1 picks the
+        // javelin's target via vttOpenMultiTargetPicker (existing
+        // single-target picker), stage 2 calls the v2.159.4
+        // /battle/line-targets endpoint to auto-pick the on-line
+        // combatants and shows a confirm dialog before POSTing
+        // /use_item_action with the final list.
+        'javelin-of-lightning': {kind: 'aoe-line',
+                          action_key: 'hurl-lightning',
+                          label: '⚡ Hurl Lightning',
+                          title: 'Throw the Javelin of Lightning — 5-ft × 120-ft line, DC 13 DEX save (half on pass).',
+                          width_ft: 5, max_length_ft: 120,
+                          state_field: '_used_today',
+                          // Button stays disabled when item has fired today.
+                          disabled_fn: (item) => !!item._used_today,
+                          disabled_label: '⚡ (spent until dawn)'},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
@@ -7350,6 +7373,71 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     if (picked === null) return;
                     body.action_key = picked.action_key;
                     body.charges = picked.charges;
+                } else if (cfg.kind === 'aoe-line') {
+                    // v2.159.6 — Phase 8f: 2-stage Javelin of Lightning
+                    // flow. Stage 1 picks the javelin's target via the
+                    // existing single-target picker; stage 2 calls the
+                    // v2.159.4 /battle/line-targets endpoint to auto-
+                    // pick the on-line combatants; stage 3 confirms +
+                    // POSTs /use_item_action with the final list.
+                    if (typeof window.vttOpenMultiTargetPicker !== 'function') {
+                        alert('Target picker unavailable. Reload the page.');
+                        return;
+                    }
+                    const picked = await window.vttOpenMultiTargetPicker({
+                        required: 1,
+                        spellName: cfg.label || 'Javelin of Lightning',
+                        casterCharId: MY_CHAR_ID,
+                        rangeStr: `${cfg.max_length_ft || 120} ft`,
+                    });
+                    if (picked === null || !picked.length) return;
+                    const targetCid = picked[0];
+                    // Find the caster's combatant_id from the live
+                    // battle state. The picker returned the target id
+                    // (in combatant_id form); we need the caster's id
+                    // for /battle/line-targets too.
+                    let casterCid = null;
+                    try {
+                        const stateResp = await fetch(`/api/campaign/${CAMPAIGN_ID}/battle`);
+                        const state = (await stateResp.json()).battle || {};
+                        const cs = state.combatants || [];
+                        const me = cs.find(c => c.char_id === MY_CHAR_ID);
+                        if (me) casterCid = me.id;
+                    } catch (e) {}
+                    if (!casterCid) {
+                        alert('Could not find your combatant on the battle map. Make sure the encounter is loaded.');
+                        return;
+                    }
+                    // Query the line-targets helper.
+                    let lineIds = [];
+                    try {
+                        const ltResp = await fetch(
+                            `/api/campaign/${CAMPAIGN_ID}/battle/line-targets`,
+                            {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({
+                                    caster_combatant_id: casterCid,
+                                    target_combatant_id: targetCid,
+                                    width_ft: cfg.width_ft || 5,
+                                    max_length_ft: cfg.max_length_ft || 120,
+                                }),
+                            },
+                        );
+                        if (ltResp.ok) {
+                            const ltData = await ltResp.json();
+                            lineIds = (ltData.results || []).map(r => r.combatant_id);
+                        }
+                    } catch (e) {}
+                    // Confirm: show the list to the player. window.confirm
+                    // is minimal-viable UX; a full target-tweak modal is
+                    // Phase 8g polish.
+                    const summary = lineIds.length
+                        ? `Lightning will save-DC each:\n• ${lineIds.length} on-line creature(s)\n\nProceed?`
+                        : `No creatures auto-detected on the line. Proceed anyway (no save chain)?`;
+                    if (!window.confirm(summary)) return;
+                    body.action_key = cfg.action_key;
+                    body.target_combatant_ids = lineIds;
                 } else {
                     const n = await _showItemActionModal(cfg);
                     if (n === null) return;
@@ -7383,6 +7471,15 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             ? data.lit
                             : !inventory[idx][cfg.state_field];
                         inventory[idx][cfg.state_field] = newState;
+                        renderInventory();
+                    }
+                    // v2.159.6 — Phase 8f: aoe-line items flip their
+                    // state_field (Javelin of Lightning's `_used_today`)
+                    // server-side via `spent_until_dawn: True` response.
+                    // Sync local so the button re-renders disabled.
+                    if (cfg.kind === 'aoe-line' && cfg.state_field
+                            && data.spent_until_dawn) {
+                        inventory[idx][cfg.state_field] = true;
                         renderInventory();
                     }
                     // Roll log card will auto-update via feature_used WS.

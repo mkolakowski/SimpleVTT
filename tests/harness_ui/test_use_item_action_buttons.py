@@ -309,6 +309,54 @@ def test_flame_tongue_use_button_renders(gm_page: Page, roster: dict):
     expect(btn).to_contain_text("Extinguish")
 
 
+# v2.159.6 — Phase 8f: Javelin of Lightning aoe-line wire-up.
+# Krieger gets a ⚡ Hurl Lightning button on his inventory row.
+# Click triggers a 2-stage flow: single-target picker → call
+# /battle/line-targets → window.confirm → POST /use_item_action.
+# v1 test scope is just the render; the full submit chain wraps
+# vttOpenMultiTargetPicker which needs a live battle + map.
+
+
+def test_javelin_lightning_button_renders_when_unspent(
+    gm_page: Page, roster: dict,
+):
+    """v2.159.6: Krieger's Javelin of Lightning inventory row shows
+    a ⚡ Hurl Lightning button. Seed-default `_used_today: False` so
+    the button renders enabled (not the disabled `_(spent until dawn)`
+    label).
+
+    NOTE: this test assumes the demo seed's Krieger has the javelin
+    with _used_today: False. If a prior test left him spent, force
+    a long rest via the API first."""
+    import httpx
+    krieger = roster["Krieger Stonefist"]
+    # Force-rest Krieger so the javelin is un-spent regardless of
+    # prior test order.
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        c.post(
+            f"/api/campaign/1/character/{krieger['id']}/rest",
+            json={"type": "long"},
+        )
+
+    page = gm_page
+    page.goto(sheet_url(krieger["id"]))
+
+    jav_row = page.locator(".inv-row", has_text="Javelin of Lightning")
+    expect(jav_row).to_be_visible(timeout=5000)
+
+    btn = jav_row.locator(".inv-item-action")
+    expect(btn).to_be_visible()
+    # Seed default un-spent → enabled, label "⚡ Hurl Lightning".
+    expect(btn).to_contain_text("Hurl Lightning")
+    expect(btn).to_be_enabled()
+
+
 def test_flame_tongue_click_toggles_label_and_relabels(gm_page: Page, roster: dict):
     """v2.158.94: clicking the Extinguish button flips the label to
     🔥 Ignite (and the underlying _lit state to false). Then clicking
