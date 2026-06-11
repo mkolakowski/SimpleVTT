@@ -317,6 +317,101 @@ def test_flame_tongue_use_button_renders(gm_page: Page, roster: dict):
 # vttOpenMultiTargetPicker which needs a live battle + map.
 
 
+def test_aoe_line_confirm_modal_renders_combatant_list(
+    gm_page: Page, roster: dict,
+):
+    """v2.159.7 Phase 8g: the _showAoELineConfirmModal helper renders
+    a checkbox-per-combatant list, lets the GM uncheck targets to
+    opt them out, and resolves to the final id list on Confirm. Test
+    invokes the helper directly via page.evaluate so we don't need a
+    live battle / positioned tokens.
+
+    Navigates to Krieger's sheet (so sheet_dnd5e.html's script
+    block is loaded), then injects a synthetic cfg + promise to
+    drive the modal."""
+    krieger = roster["Krieger Stonefist"]
+    page = gm_page
+    page.goto(sheet_url(krieger["id"]))
+
+    # Open the modal with 2 synthetic combatants. Wrap in an IIFE
+    # that returns nothing so page.evaluate doesn't await the
+    # modal's promise (which only resolves on user interaction).
+    # page.evaluate awaits the returned value. To fire the modal
+    # without blocking, install an onload-style queued task using
+    # setTimeout(fn, 0). The evaluate returns immediately; the modal
+    # is then triggered + its returned promise is captured into
+    # window._aoeTestPicked when the user (test) interacts.
+    page.evaluate("""
+        window._aoeTestPicked = null;
+        setTimeout(async () => {
+            window._aoeTestPicked = await window._showAoELineConfirmModal({
+                title: '⚡ Test',
+                body: 'Test body copy',
+                combatants: [
+                    {combatant_id: 'tok_A', name: 'Goblin A', distance_ft: 5.0},
+                    {combatant_id: 'tok_B', name: 'Goblin B', distance_ft: 15.0},
+                ],
+                submit_label: '⚡ Fire Test',
+            });
+        }, 0);
+    """)
+
+    modal = page.locator("#aoe-line-confirm-modal")
+    expect(modal).to_be_visible(timeout=2000)
+    expect(modal).to_contain_text("Goblin A")
+    expect(modal).to_contain_text("Goblin B")
+    expect(modal).to_contain_text("5.0 ft")
+    expect(modal).to_contain_text("15.0 ft")
+    # All checkboxes start checked.
+    cbs = modal.locator(".aoe-tgt-cb")
+    expect(cbs).to_have_count(2)
+
+    # Uncheck Goblin B (index 1).
+    modal.locator("#aoe-cb-1").uncheck()
+
+    # Click Fire.
+    modal.locator("#aoe-confirm").click()
+    expect(modal).to_be_hidden()
+
+    # The promise should have resolved to ['tok_A'] only.
+    result = page.evaluate("window._aoeTestPicked")
+    assert result == ["tok_A"], (
+        f"Modal should return only the checked combatants; got {result}"
+    )
+
+
+def test_aoe_line_confirm_modal_cancel_returns_null(
+    gm_page: Page, roster: dict,
+):
+    """v2.159.7: cancel button → modal closes, promise resolves to
+    null."""
+    krieger = roster["Krieger Stonefist"]
+    page = gm_page
+    page.goto(sheet_url(krieger["id"]))
+
+    page.evaluate("""
+        window._aoeTestPicked = 'untouched';
+        setTimeout(async () => {
+            window._aoeTestPicked = await window._showAoELineConfirmModal({
+                title: '⚡ Cancel test',
+                body: 'Should resolve to null',
+                combatants: [
+                    {combatant_id: 'tok_X', name: 'Bandit', distance_ft: 2.5},
+                ],
+            });
+        }, 0);
+    """)
+    modal = page.locator("#aoe-line-confirm-modal")
+    expect(modal).to_be_visible(timeout=2000)
+
+    modal.locator("#aoe-cancel").click()
+    expect(modal).to_be_hidden()
+    result = page.evaluate("window._aoeTestPicked")
+    assert result is None, (
+        f"Cancel should resolve to null; got {result!r}"
+    )
+
+
 def test_javelin_lightning_button_renders_when_unspent(
     gm_page: Page, roster: dict,
 ):

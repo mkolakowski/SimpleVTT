@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.7] - 2026-06-11 — "The Targeting Window" — Magic-items-automation Phase 8g: replace the v2.159.6 `window.confirm` preview with a proper AoE-line target-pick modal. The GM now sees a checkbox list of every auto-picked combatant with name + distance and can opt out individual targets before firing (line-edge cases — half-cover, a prone combatant behind cover, etc.). Cancel button + backdrop click + Cancel/Confirm matches the established v2.158.89/90 modal-shape convention.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `window._showAoELineConfirmModal(cfg)` helper in `sheet_dnd5e.html`. cfg carries `title`, `body`, `combatants: Array<{combatant_id, name, distance_ft}>`, `submit_label`. Renders an overlay + card matching the v2.158.89 single-action modal styling, lists each combatant as a `<label>` row with a checked-by-default checkbox + name + distance_ft (1 decimal place). Returns a Promise resolving to the final `Array<combatant_id>` on Confirm (only checked ones) or `null` on Cancel / backdrop click. The helper is exposed on `window` so the aoe-line click handler can call it without a forward reference. (B) The v2.159.6 aoe-line click handler swaps `window.confirm` for `await window._showAoELineConfirmModal({...})`. The combatants array passed in carries the full v2.159.4 `/battle/line-targets` results (combatant_id + name + distance_ft) so the modal can show distance per row. The final `target_combatant_ids` in the POST body comes from the modal's checked list. (C) 2 new Playwright tests in `test_use_item_action_buttons.py`: drives the modal directly via `page.evaluate` (no live battle / positioned tokens needed); injects 2 synthetic combatants, asserts the modal renders both with name + distance + a default-checked checkbox; unchecks one, clicks Fire, asserts the resolved promise carries only the checked id. Second test: clicks Cancel, asserts the promise resolves to `null`. (D) UI test total bumped 36 → 38.**
+**Description:** Closes Phase 8g. The Javelin client's full flow now: ⚡ Hurl Lightning button → single-target picker (existing) → /battle/line-targets API call → AoE confirm modal with per-combatant checkboxes → POST /use_item_action. Future spell wire-ups (Lightning Bolt, Fireball, etc.) reuse the modal directly — they pass their own combatants array from `/battle/{shape}-targets`.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `window._showAoELineConfirmModal(cfg)` helper.
+- `tests/harness_ui/test_use_item_action_buttons.py` — `test_aoe_line_confirm_modal_renders_combatant_list` + `test_aoe_line_confirm_modal_cancel_returns_null`.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` (aoe-line click handler) — `window.confirm` swapped for the new modal.
+- `app/version.py` — `APP_VERSION` 2.159.6 → 2.159.7. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.7.
+- `docs/test-harness-coverage.md` — UI total 36 → 38.
+
+### Notes
+- The modal helper is generic — it renders combatants from any AoE shape endpoint (line / sphere / cone). Future sphere + cone item wire-ups call the same helper with their own combatants array.
+- The check defaults to "all targets selected" because the Phase 8d server-side geometry is conservative (it already excludes the caster + target + off-band combatants). The GM mostly confirms; opt-outs are the edge cases.
+- `_showAoELineConfirmModal` is exposed on `window` (vs. the other modals which live inside the sheet IIFE scope) because the test helper's `page.evaluate` runs in the page's global context and needs to reach it. Other modals could expose-on-window similarly if a test ever wants to drive them in isolation.
+
+---
+
 ## [2.159.6] - 2026-06-11 — "The Point and Click" — Magic-items-automation Phase 8f: wire the v2.159.4 AoE-line geometry endpoint into the inventory-row UI. Krieger's Javelin of Lightning gets a ⚡ Hurl Lightning button via a new `aoe-line` kind in `ITEM_ACTION_SLUGS`. Click triggers a 2-stage flow: existing single-target picker (vttOpenMultiTargetPicker) → server-side /battle/line-targets call → window.confirm preview of who's in the line → POST /use_item_action with the auto-picked combatant ids. The button disables + relabels to ⚡ (spent until dawn) after firing, re-enables on long rest.
 
 **Schema version:** 69

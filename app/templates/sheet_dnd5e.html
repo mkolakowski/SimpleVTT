@@ -7246,6 +7246,66 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         });
     }
 
+    // v2.159.7 — Phase 8g: AoE-line confirm modal. Replaces the
+    // v2.159.6 minimal `window.confirm` preview with a checkbox list
+    // so the GM can opt out individual auto-picked combatants before
+    // firing the lightning (line geometry edge cases: half-cover, a
+    // prone combatant behind cover, etc.). Returns the final
+    // ``target_combatant_ids`` array on Confirm, or null on Cancel.
+    // ``cfg`` carries: title, body, combatants (Array<{combatant_id,
+    // name, distance_ft}>), submit_label.
+    window._showAoELineConfirmModal = function(cfg) {
+        return new Promise(resolve => {
+            const prev = document.getElementById('aoe-line-confirm-modal');
+            if (prev) prev.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'aoe-line-confirm-modal';
+            overlay.setAttribute('role', 'dialog');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+            const card = document.createElement('div');
+            card.style.cssText = 'background:var(--s-card,#222);color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:8px;padding:18px;min-width:360px;max-width:520px;box-shadow:0 10px 40px rgba(0,0,0,.6);max-height:80vh;overflow:auto;';
+
+            let html = `<div style="font-size:14px;font-weight:700;margin-bottom:6px;">${_esc(cfg.title || '⚡ Confirm Targets')}</div>`;
+            html += `<div style="font-size:12px;color:var(--s-mute,#aaa);margin-bottom:12px;line-height:1.4;">${_esc(cfg.body || '')}</div>`;
+
+            if (!cfg.combatants || !cfg.combatants.length) {
+                html += `<div style="font-size:12px;color:var(--s-mute,#aaa);margin-bottom:14px;font-style:italic;">No creatures auto-detected on the line. Confirm anyway will fire with no save chain.</div>`;
+            } else {
+                html += `<div style="margin-bottom:10px;font-size:11px;color:var(--s-mute,#aaa);">Uncheck to remove from the save chain:</div>`;
+                cfg.combatants.forEach((c, i) => {
+                    html += `<label class="aoe-tgt-row" style="display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:6px;border:1px solid var(--s-border,#444);border-radius:4px;cursor:pointer;">`;
+                    html += `<input type="checkbox" class="aoe-tgt-cb" data-idx="${i}" id="aoe-cb-${i}" data-cid="${_esc(c.combatant_id)}" checked style="margin:0;cursor:pointer;">`;
+                    html += `<span style="font-size:13px;font-weight:600;flex:1;">${_esc(c.name || c.combatant_id)}</span>`;
+                    html += `<span style="font-size:11px;color:var(--s-mute,#aaa);">${(c.distance_ft || 0).toFixed(1)} ft</span>`;
+                    html += `</label>`;
+                });
+            }
+
+            html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">';
+            html += '<button type="button" id="aoe-cancel" style="padding:6px 14px;font-size:12px;background:transparent;color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:4px;cursor:pointer;min-height:32px;">Cancel</button>';
+            html += `<button type="button" id="aoe-confirm" style="padding:6px 14px;font-size:12px;background:var(--accent-bg2,#2a3d5c);color:var(--s-accent,#88c);border:1px solid var(--s-accent,#88c);border-radius:4px;font-weight:600;cursor:pointer;min-height:32px;">${_esc(cfg.submit_label || '⚡ Fire')}</button>`;
+            html += '</div>';
+
+            card.innerHTML = html;
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            const cleanup = () => overlay.remove();
+            const cancel = () => { cleanup(); resolve(null); };
+            document.getElementById('aoe-cancel').addEventListener('click', cancel);
+            overlay.addEventListener('click', e => { if (e.target === overlay) cancel(); });
+            document.getElementById('aoe-confirm').addEventListener('click', () => {
+                const picked = Array.from(
+                    overlay.querySelectorAll('.aoe-tgt-cb:checked'),
+                ).map(cb => cb.dataset.cid);
+                cleanup();
+                resolve(picked);
+            });
+        });
+    };
+
     function renderInventory() {
         if (!container) return;
         container.innerHTML = '';
@@ -7409,7 +7469,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         return;
                     }
                     // Query the line-targets helper.
-                    let lineIds = [];
+                    let lineResults = [];
                     try {
                         const ltResp = await fetch(
                             `/api/campaign/${CAMPAIGN_ID}/battle/line-targets`,
@@ -7426,18 +7486,22 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         );
                         if (ltResp.ok) {
                             const ltData = await ltResp.json();
-                            lineIds = (ltData.results || []).map(r => r.combatant_id);
+                            lineResults = ltData.results || [];
                         }
                     } catch (e) {}
-                    // Confirm: show the list to the player. window.confirm
-                    // is minimal-viable UX; a full target-tweak modal is
-                    // Phase 8g polish.
-                    const summary = lineIds.length
-                        ? `Lightning will save-DC each:\n• ${lineIds.length} on-line creature(s)\n\nProceed?`
-                        : `No creatures auto-detected on the line. Proceed anyway (no save chain)?`;
-                    if (!window.confirm(summary)) return;
+                    // v2.159.7 — Phase 8g: AoE confirm modal replaces
+                    // the v2.159.6 window.confirm preview. The GM gets
+                    // a checkbox list so they can opt out individual
+                    // auto-picked combatants (line-edge cases).
+                    const aoePicked = await window._showAoELineConfirmModal({
+                        title: `${cfg.label || '⚡ Hurl Lightning'}`,
+                        body: `5-ft × ${cfg.max_length_ft || 120}-ft line. Each creature in the line must make a DC 13 DEX save (half on pass).`,
+                        combatants: lineResults,
+                        submit_label: '⚡ Fire',
+                    });
+                    if (aoePicked === null) return;  // user canceled
                     body.action_key = cfg.action_key;
-                    body.target_combatant_ids = lineIds;
+                    body.target_combatant_ids = aoePicked;
                 } else {
                     const n = await _showItemActionModal(cfg);
                     if (n === null) return;

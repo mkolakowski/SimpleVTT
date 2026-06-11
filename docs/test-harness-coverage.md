@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2256 in `tests/harness/` + 36 in `tests/harness_ui/` (as of v2.159.6, 2026-06-11).
+**Total tests:** 2256 in `tests/harness/` + 38 in `tests/harness_ui/` (as of v2.159.7, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3090,6 +3090,8 @@ v2.158.85 magic-items-automation Phase 3b — Use buttons render on the inventor
 | `test_flame_tongue_use_button_renders` | v2.158.94: Flame Tongue button visible on Garrik's row with "Extinguish" label (seed default _lit: True). |
 | `test_flame_tongue_click_toggles_label_and_relabels` | Click flips label Extinguish → Ignite; second click flips back. httpx finally-block force-restores via the API so test order doesn't matter. |
 | `test_javelin_lightning_button_renders_when_unspent` | v2.159.6 Phase 8f: ⚡ Hurl Lightning button visible + enabled on Krieger's Javelin row. Force-rests Krieger via the API first so seed-default `_used_today: False` is guaranteed. |
+| `test_aoe_line_confirm_modal_renders_combatant_list` | v2.159.7 Phase 8g: drives `window._showAoELineConfirmModal` via page.evaluate with 2 synthetic combatants. Asserts modal renders both with name + distance + default-checked checkboxes. Unchecks one, clicks Fire, asserts the resolved promise carries only the checked id. |
+| `test_aoe_line_confirm_modal_cancel_returns_null` | v2.159.7 Phase 8g: Cancel button → promise resolves to `null`. |
 
 ---
 
