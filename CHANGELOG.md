@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.96] - 2026-06-10 — "The Reading Glass" — Magic-items-automation Phase 5f: route Dragon Slayer's `condition` predicate through the v2.97.48 `_attacker_creature_type` helper so the target's creature type can be resolved from the character sheet (PC) or token template (NPC) when the live combatant dict doesn't carry it directly. Pre-Phase 5f, the rider only fired when the synthetic battle PUT explicitly set `creature_type: "dragon"` on the combatant. Post-Phase 5f, the helper falls back to `character.sheet["creature_type"]` for PCs or `token_template.sheet["type"]` for NPCs — so demo monsters (once their templates carry the type) automatically trigger the rider without test fixtures touching combatant fields.
+
+**Schema version:** 69
+**Commit summary:** **(A) `_compute_attack_auto_uplifts` gains an optional `db: Session | None = None` parameter so section 6c can call the v2.97.48 helper. Default None preserves backward-compat with any future caller that doesn't have a DB session. (B) Section 6c (Phase 5c conditional rider gate) extended: before invoking the condition predicate, if `target_combatant.get("creature_type")` is empty AND `db is not None`, call `_attacker_creature_type(db, target.char_id, target_combatant)` to resolve from sheet/template. Inject the resolved value onto a shallow COPY of the target dict so the predicate sees it without polluting battle state. Exception-safe — the resolver wraps in try/except returning "" so a DB error can't crash /attack. (C) `/attack` call site updated to pass `db=db` to `_compute_attack_auto_uplifts`. (D) `_SHEET_PATCH_KEYS` allowlist gains `creature_type` so the harness (and any future GM-side "mark this PC as Half-Dragon" UI) can patch the field via `/sheet-fields`. (E) New harness `tests/harness/test_dragon_slayer_helper.py` with 2 tests: fixture PATCHes Tavik's sheet to `creature_type: "dragon"`, seeds a battle without setting creature_type on the combatant, Caelan's Dragon Slayer attack → rider fires (helper resolution exercised); regression test confirms the rider stays silent when Tavik's sheet doesn't carry the field. Teardown clears via `creature_type: ""`. (F) `docs/test-harness-coverage.md` adds the new section + total bumped 2220 → 2222.**
+**Description:** Closes the Phase 5f deferral from v2.158.95's notes. The substrate change is small but unlocks a meaningful UX: once a demo NPC monster's token template gets `"type": "dragon"` (which the v2.97.48 helper already reads as a creature type fallback), Caelan's Dragon Slayer will fire on attacks against that monster with zero test or seed plumbing. The shallow-copy injection pattern keeps the predicate-readable target dict separate from the live battle state, so the resolved type doesn't accidentally persist via a hub broadcast or a downstream `_mark_*_used` call. The 3 prior Phase 5c tests still pass unchanged because they set `creature_type` on the combatant explicitly — the new helper path only fires when the field is empty. Phase 6 (Demon Slayer + Vorpal Sword) is next on the plan; the substrate now supports them with no further changes beyond their catalog rows.
+
+### Added
+- `app/routes/tabletop_routes.py` — `db` param on `_compute_attack_auto_uplifts`; helper-resolution shim in section 6c; `creature_type` added to `_SHEET_PATCH_KEYS`.
+- `tests/harness/test_dragon_slayer_helper.py` — 2 tests (helper-resolution fires rider; absence keeps rider silent).
+
+### Changed
+- `app/routes/tabletop_routes.py` (/attack call site) — passes `db=db` to `_compute_attack_auto_uplifts`.
+- `docs/test-harness-coverage.md` — new test block + total 2220 → 2222.
+- `app/version.py` — `APP_VERSION` 2.158.95 → 2.158.96. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.96.
+
+### Notes
+- The helper-resolution branch only fires when `db is not None`. Tests that call `_compute_attack_auto_uplifts` directly (no /attack route) get the same behavior as before — useful for unit-test purity if such tests ever land.
+- Demo monsters today carry `"type": "humanoid"` / `"beast"` / etc. on their templates by convention but Dragons aren't seeded yet. Phase 6 candidate: ship a demo Young Red Dragon monster template + add it to the Tavern Brawl encounter. Then Caelan vs. that dragon in the demo would auto-trigger the Dragon Slayer +3d6.
+
+---
+
 ## [2.158.95] - 2026-06-10 — "The Open Tap" — Two-fold housekeeping commit: (1) Magic-items Phase 5e — refactor the inventory hydration in `sheet_dnd5e.html` from enumerate-every-known-field to spread-pass-through-then-override-normalized. The v2.158.94 commit caught a latent bug where `_lit` was being silently dropped on the JS side because the hydration didn't know about it; this commit makes that class of bug impossible by letting any source field pass through. (2) `.github/workflows/test-harness.yml` switches from `on: push + pull_request` to `on: workflow_dispatch` so commits pushed to `main` no longer auto-fire the 2200+-test harness on GitHub Actions. The workflow file stays intact and can still be triggered manually from the Actions tab.
 
 **Schema version:** 69

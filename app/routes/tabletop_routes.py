@@ -25923,6 +25923,7 @@ def _compute_attack_auto_uplifts(
     is_crit: bool = False,
     weapon_damage_expr: str = "",
     attack: dict | None = None,
+    db: Session | None = None,
 ) -> list[dict]:
     """Compute auto-applied uplifts from attacker's buffs + class
     features at /attack time.
@@ -26169,11 +26170,33 @@ def _compute_attack_auto_uplifts(
             # the target combatant dict and must return truthy for the
             # rider to fire (e.g. Dragon Slayer: target.creature_type
             # == "dragon"). Always-on riders omit the field.
+            # v2.158.96 — Phase 5f: if the target combatant dict
+            # lacks ``creature_type`` AND we have ``db`` access,
+            # resolve via the v2.97.48 ``_attacker_creature_type``
+            # helper (which falls back to character.sheet.creature_type
+            # for PCs or token_template.sheet.type for NPCs). Inject
+            # onto a shallow copy of the target dict so the condition
+            # lambda sees it without polluting the battle state.
             condition = rider_spec.get("condition")
             condition_passed = True
             if condition is not None:
+                tgt_for_predicate = target_combatant
+                if (target_combatant is not None
+                        and not (target_combatant.get("creature_type") or "").strip()
+                        and db is not None):
+                    try:
+                        resolved = _attacker_creature_type(
+                            db,
+                            target_combatant.get("char_id"),
+                            target_combatant,
+                        )
+                    except Exception:
+                        resolved = ""
+                    if resolved:
+                        tgt_for_predicate = dict(target_combatant)
+                        tgt_for_predicate["creature_type"] = resolved
                 try:
-                    condition_passed = bool(condition(target_combatant))
+                    condition_passed = bool(condition(tgt_for_predicate))
                 except Exception:
                     condition_passed = False
             if has_item_attuned and condition_passed:
@@ -78834,6 +78857,7 @@ async def use_attack(
         is_crit=is_crit,
         weapon_damage_expr=damage_expr_raw,
         attack=attack,
+        db=db,
     )
     # v2.60.0 — defer the mark-as-used calls for on-hit-only uplifts
     # (Colossus Slayer + Divine Strike) until after hit determination
@@ -84344,6 +84368,15 @@ _SHEET_PATCH_KEYS = {
     # via the sheet edit panel; allowing it here doesn't broaden the
     # attack surface.
     "inventory",
+    # v2.158.96 — Phase 5f: per-PC creature type. Default is empty
+    # (PCs aren't typed for most rider/condition purposes) but the
+    # GM can mark a PC as Half-Dragon / Half-Fiend etc. for
+    # creature_type-keyed riders to fire. Primarily harness use today
+    # (test_dragon_slayer_rider_helper.py PATCHes a target PC to
+    # creature_type="dragon" to exercise the v2.97.48 helper path),
+    # but no reason to gate the field server-side — the v2.97.48
+    # ``_attacker_creature_type`` helper already reads it on PCs.
+    "creature_type",
     # v2.68.11 — high-level identity fields (subclass / fighting style /
     # level). Primarily for the harness to mutate during tests so the
     # GM Reactions catalog gates (subclass + level) can be exercised

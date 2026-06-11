@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2220 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.94, 2026-06-10).
+**Total tests:** 2222 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.96, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2067,6 +2067,14 @@ v2.158.93 magic-items-automation Phase 5c — Dragon Slayer Longsword (RAW DMG p
 | `test_dragon_slayer_fires_on_dragon_target` | Attack a `creature_type: "dragon"` combatant → `auto_uplifts` carries `source: "item-dragon-slayer"`, `damage_type: "slashing"` (RAW fallback to weapon type), `expression: "3d6"`, total in [3, 36]. |
 | `test_dragon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-dragon-slayer` uplift. The condition predicate gates the rider even with the weapon equipped + attuned. |
 | `test_dragon_slayer_suppressed_when_detuned` | /attune detune of the longsword → no rider even when target is `creature_type: "dragon"`. Attunement gate runs before the condition predicate. Restores attunement in teardown. |
+
+### `test_dragon_slayer_helper.py`
+v2.158.96 magic-items-automation Phase 5f — the Dragon Slayer rider's `condition` predicate is now wrapped by a resolver shim: if the target combatant dict lacks `creature_type`, the v2.97.48 `_attacker_creature_type` helper resolves it from `character.sheet["creature_type"]` (PC) or `token_template.sheet["type"]` (NPC). `creature_type` added to `_SHEET_PATCH_KEYS` so tests can PATCH a PC sheet to inject the value.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_dragon_slayer_fires_via_helper_resolution` | Fixture PATCHes Tavik's sheet to `creature_type: "dragon"`. Battle is seeded with Tavik as the target combatant WITHOUT `creature_type` set on the combatant dict. Caelan's Dragon Slayer attack → rider fires (helper resolved). Teardown clears via `creature_type: ""`. |
+| `test_dragon_slayer_no_rider_when_pc_not_dragon` | Tavik's sheet doesn't carry `creature_type` (demo default). Battle seeded same way → rider stays silent. Regression net for the resolver shim. |
 
 ### `test_flame_tongue_ignite.py`
 v2.158.92 magic-items-automation Phase 5b — Flame Tongue ignite/extinguish toggle via `/use_item_action`. Adds a per-item `_lit` boolean field on the inventory entry (persistent across rests + sessions, unlike combatant buffs). The Phase 5a rider gate gains a `requires_lit` check so the rider only fires while `_lit: True`. Two new action_keys (`ignite` / `extinguish`) flip the state; Garrik's seed ships `_lit: True` so the Phase 5a tests + out-of-the-box demo still fire the rider.
