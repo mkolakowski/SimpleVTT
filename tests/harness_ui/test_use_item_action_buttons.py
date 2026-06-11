@@ -756,3 +756,133 @@ def test_wand_of_fear_use_button_renders(gm_page: Page, roster: dict):
     btn = wand_row.locator(".inv-item-action")
     expect(btn).to_be_visible()
     expect(btn).to_contain_text("Cast Fear")
+
+
+def test_necklace_fireballs_click_fires_use_item_action(
+    gm_page: Page, roster: dict,
+):
+    """v2.159.13 Phase 8m: end-to-end Necklace of Fireballs click
+    chain. Completes the AoE E2E parity matrix (line: v2.159.8,
+    cone: v2.159.12, sphere: this commit). Drives the v2.159.10
+    charge_picker spinner step in addition to the sphere target picker
+    + AoE confirm modal — the only AoE flow with a pre-target charge
+    pick.
+
+    Click 💥 Throw Bead → charge_picker spinner (default min=1, leave
+    as 1 for the happy path) → vttOpenMultiTargetPicker stubbed →
+    /battle GET intercepted → /battle/sphere-targets POST intercepted
+    → AoE confirm modal opens with the in-burst combatant → click Fire
+    → POST /use_item_action with `charges: 1` + the right body shape
+    → resource current drops 6 → 5 (verified via re-fetch).
+    """
+    import httpx, json
+    thalindra = roster["Thalindra Moonwhisper"]
+
+    # Force-reseed the necklace to 6 beads so the test is hermetic.
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        sr = c.get(f"/api/campaign/1/character/{thalindra['id']}/sheet-json")
+        sheet = sr.json().get("sheet") or {}
+        resources = list(sheet.get("resources") or [])
+        for i, r in enumerate(resources):
+            if isinstance(r, dict) and r.get("key") == "necklace-of-fireballs":
+                resources[i] = {**r, "current": 6, "max": 6}
+                break
+        c.patch(
+            f"/api/campaign/1/character/{thalindra['id']}/sheet-fields",
+            json={"resources": resources},
+        )
+
+    page = gm_page
+
+    def _handle_battle(route):
+        if route.request.method == "GET":
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "battle": {
+                        "combatants": [
+                            {"id": "tok_test_thal", "char_id": thalindra["id"], "name": thalindra["name"], "source_token_id": 1},
+                            {"id": "tok_test_center", "name": "Bandit", "source_token_id": 2},
+                            {"id": "tok_test_in_burst", "name": "Goblin", "source_token_id": 3},
+                        ],
+                    },
+                }),
+            )
+        else:
+            route.continue_()
+    page.route("**/api/campaign/1/battle", _handle_battle)
+
+    def _handle_sphere(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "center_id": "tok_test_center",
+                "radius_ft": 20,
+                "results": [
+                    {"combatant_id": "tok_test_in_burst", "name": "Goblin", "distance_ft": 8.0},
+                ],
+            }),
+        )
+    page.route("**/api/campaign/1/battle/sphere-targets", _handle_sphere)
+
+    page.goto(sheet_url(thalindra["id"]))
+
+    page.evaluate("""
+        window.vttOpenMultiTargetPicker = async () => ['tok_test_center'];
+    """)
+
+    nec_row = page.locator(".inv-row", has_text="Necklace of Fireballs")
+    expect(nec_row).to_be_visible(timeout=5000)
+    nec_btn = nec_row.locator(".inv-item-action")
+    expect(nec_btn).to_contain_text("Throw Bead")
+
+    with page.expect_request(
+        lambda req: (
+            req.url.endswith(f"/use_item_action")
+            and req.method == "POST"
+        ),
+        timeout=10000,
+    ) as req_info:
+        nec_btn.click()
+        # v2.159.10 charge_picker spinner modal opens first.
+        charge_modal = page.locator("#item-action-modal")
+        expect(charge_modal).to_be_visible(timeout=5000)
+        # Default value is 1 (the spinner's min). Click confirm to
+        # accept the default.
+        charge_modal.locator("#ia-confirm").click()
+        # Then the AoE sphere confirm modal.
+        modal = page.locator("#aoe-line-confirm-modal")
+        expect(modal).to_be_visible(timeout=5000)
+        expect(modal).to_contain_text("Goblin")
+        modal.locator("#aoe-confirm").click()
+
+    posted = req_info.value
+    payload = posted.post_data_json
+    assert payload["action_key"] == "throw-bead", payload
+    assert payload["target_combatant_ids"] == ["tok_test_in_burst"], payload
+    assert payload.get("charges") == 1, payload
+    # Thalindra's necklace inventory_index per v2.159.9 seed.
+    assert payload.get("inventory_index") == 11
+
+    # Confirm the server actually decremented the resource (6 → 5).
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        sr = c.get(f"/api/campaign/1/character/{thalindra['id']}/sheet-json")
+        sheet = sr.json().get("sheet") or {}
+        for r in sheet.get("resources") or []:
+            if isinstance(r, dict) and r.get("key") == "necklace-of-fireballs":
+                assert int(r.get("current") or 0) == 5, r
+                break

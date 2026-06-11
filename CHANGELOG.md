@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.13] - 2026-06-11 — "The Three-Shape Pin" — Magic-items-automation Phase 8m: end-to-end Playwright integration test for the full Necklace of Fireballs click-to-fire chain — completing the AoE E2E parity matrix (line: v2.159.8 javelin, cone: v2.159.12 wand-of-fear, sphere: this commit). The necklace is the only AoE flow with a pre-target `charge_picker` step (the v2.159.10 multi-bead upcast spinner), so this test drives one more click stage than the line/cone E2Es. With this commit, every AoE substrate has both an HTTP harness and a click-to-fire UI pin.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `test_necklace_fireballs_click_fires_use_item_action` Playwright test in `tests/harness_ui/test_use_item_action_buttons.py`. Force-reseeds Thalindra's `necklace-of-fireballs` resource row to current=6 via httpx + /sheet-fields so the test is hermetic. Intercepts GET `/api/campaign/1/battle` to return a synthetic 3-combatant state (caster + sphere-center + in-burst Goblin), and POST `/api/campaign/1/battle/sphere-targets` to return a 1-combatant result (the Goblin). Stubs `vttOpenMultiTargetPicker` via `page.evaluate` to immediately resolve with `['tok_test_center']`. (B) Test flow: navigate to Thalindra's sheet → find Necklace row → click 💥 Throw Bead → v2.159.10 `charge_picker` modal renders (`#item-action-modal` with `#ia-val` spinner defaulting to min=1) → accept default by clicking `#ia-confirm` → AoE sphere confirm modal renders with "Goblin" → click Fire → assert the real `/use_item_action` POST fires with `action_key: "throw-bead"`, `target_combatant_ids: ["tok_test_in_burst"]`, `charges: 1`, `inventory_index: 11`. (C) Post-fire assertion: re-fetch the sheet and verify the `necklace-of-fireballs` resource row's `current` dropped from 6 → 5 — proving the real server processed the request. (D) UI test total bumped 42 → 43.**
+**Description:** Closes Phase 8m and the magic-items-automation AoE E2E coverage matrix. Mirror of v2.159.8 / v2.159.12 but with an additional `charge_picker` stage. The accept-default path here happens to skip the spinner's value change; the v2.159.10 HTTP harness already covers the 3-bead upcast path on the server side (`test_necklace_3_bead_upcast`), so the click-chain pin doesn't need to re-prove the dice scaling — its value is the chain integrity (charge picker → target picker → sphere endpoint → confirm modal → POST). Any future regression that breaks the chain at the charge_picker step (e.g., await deadlock similar to v2.159.7) will fail this test before the bad version ships.
+
+### Added
+- `tests/harness_ui/test_use_item_action_buttons.py` — `test_necklace_fireballs_click_fires_use_item_action`.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.12 → 2.159.13. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.13.
+- `docs/test-harness-coverage.md` — UI total 42 → 43.
+
+### Notes
+- The v2.159.10 `test_necklace_3_bead_upcast` HTTP harness already covers the multi-bead path. A future UI pin for the 3-bead path would need to drive the `#ia-val` spinner to "3" before confirming; the spinner's `input` event handler updates the cast_level preview live (v2.159.10), so a Playwright `fill` + `expect` on `#ia-lvl` would prove that wiring. Left out of this commit to keep the test scope focused on chain integrity, not value scaling.
+- All three AoE shapes now have UI E2E pins: Javelin (line), Wand of Fear (cone), Necklace of Fireballs (sphere). The substrate is regression-tested end-to-end.
+
+---
+
 ## [2.159.12] - 2026-06-11 — "The Cone of Dread" — Magic-items-automation Phase 8l: end-to-end Playwright integration test for the full Wand of Fear click-to-fire chain. Drives the actual 😱 Cast Fear button (no `page.evaluate` shortcut), watches the chain 😱 button → vttOpenMultiTargetPicker (stubbed) → /battle GET (intercepted) → /battle/cone-targets POST (intercepted) → AoE confirm modal → Fire button → /use_item_action POST (real endpoint) → resource counter 7 → 6 verified via /sheet-json.
 
 **Schema version:** 69
