@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.97] - 2026-06-10 — "The Fiendbinder" — Magic-items-automation Phase 6a: second conditional rider via Demon Slayer Rapier (RAW DMG p.166). Stress-tests the Phase 5c/5f substrate at scale — no new code paths, just a catalog row + a demo fixture + 3 tests. Lyra Sunstrider (Bard) gets the rapier: +1 attack/damage RAW baked into the attack entry, +2d6 vs. fiends fires from section 6c via the same `creature_type` predicate shape as Dragon Slayer. Vorpal Sword's nat-20 decap is held for Phase 7 — RAW Vorpal has no "extra damage" rider to model with the current substrate, just the decap, and that needs a nat-20 hook in the attack pipeline rather than a damage-uplift entry.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `demon-slayer` row in `_MAGIC_ITEM_ATTACK_RIDERS`: dice="2d6", requires_attunement=True, condition=lambda tgt: target.creature_type == "fiend". Omits damage_type so the rider falls back to the attack's piercing per RAW "extra damage of the weapon's type." (B) `_bard_sheet` (Lyra Sunstrider) gets a "Demon Slayer Rapier" attack entry at attack_index 3 (+6/1d8+3 — RAW +1 baked in, _slug="demon-slayer") + a matching inventory entry at inventory_index 7 (equipped + attuned). Lyra now wears 2 attuned items (Cloak of Displacement + Demon Slayer); cap 3 unchanged. (C) New harness file `tests/harness/test_demon_slayer_rider.py` with 3 tests mirroring the v2.158.93 Dragon Slayer shape: fiend target → +2d6 piercing rider; humanoid target → no rider; detune → no rider on fiends either. All teardowns restore attunement so test order doesn't matter. (D) `docs/test-harness-coverage.md` adds the new section + total bumped 2222 → 2225.**
+**Description:** Closes the first half of Phase 6 with the cleanest possible scope: one catalog row, one fixture, three regression tests. The substrate built in Phases 5c (condition predicate) + 5f (helper resolution) handled the whole rider without code change — the only edit to `tabletop_routes.py` is the catalog row itself. That's the goal of catalog-driven substrate: future "X-Slayer" items (Giant Slayer, Mage Slayer-as-rider, etc.) become single-PR adds.
+
+### Added
+- `app/routes/tabletop_routes.py` — `demon-slayer` row in `_MAGIC_ITEM_ATTACK_RIDERS`.
+- `app/demo_seed.py` — Lyra's Demon Slayer Rapier attack entry + matching inventory item.
+- `tests/harness/test_demon_slayer_rider.py` — 3 tests (fiend target → rider, humanoid → no rider, detune → no rider on fiends).
+
+### Changed
+- `docs/test-harness-coverage.md` — new test block + total 2222 → 2225.
+- `app/version.py` — `APP_VERSION` 2.158.96 → 2.158.97. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.97.
+
+### Notes
+- Demo magic-item story per PC: Pip (Cloak), Thalindra (Cloak + Pearl + 2 Wands), Tavik (Ring + Staff), Garrik (Flame Tongue), Caelan (Dragon Slayer), Lyra (Cloak of Displacement + Demon Slayer), Kael (Bracers). Lyra leveled up from a 1-magic-item PC to a 2-attuned PC — a useful Lv 6 Bard demo for the "attune cap matters" mechanic.
+- Demon Slayer's frighten-on-hit DC 15 WIS save is deferred. The save-handler hook would slot in via a new `on_hit_save` field on the rider catalog entry — probably a Phase 7 candidate alongside Vorpal Sword's nat-20 decap (both are post-hit hooks rather than damage uplifts).
+- Vorpal Sword scope considered for this commit and held: RAW Vorpal has only the +3 magic and the nat-20 decap, no extra-damage rider. The decap needs a new hook (post-hit, target dies on nat 20 if has-head). Not a catalog row — bigger work. Filed as Phase 7.
+
+---
+
 ## [2.158.96] - 2026-06-10 — "The Reading Glass" — Magic-items-automation Phase 5f: route Dragon Slayer's `condition` predicate through the v2.97.48 `_attacker_creature_type` helper so the target's creature type can be resolved from the character sheet (PC) or token template (NPC) when the live combatant dict doesn't carry it directly. Pre-Phase 5f, the rider only fired when the synthetic battle PUT explicitly set `creature_type: "dragon"` on the combatant. Post-Phase 5f, the helper falls back to `character.sheet["creature_type"]` for PCs or `token_template.sheet["type"]` for NPCs — so demo monsters (once their templates carry the type) automatically trigger the rider without test fixtures touching combatant fields.
 
 **Schema version:** 69

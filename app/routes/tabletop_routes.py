@@ -30217,6 +30217,22 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             (tgt.get("creature_type") or "").strip().lower() == "dragon"
         ),
     },
+    # v2.158.97 — Phase 6a: Demon Slayer (RAW DMG p.166). Same shape
+    # as Dragon Slayer (v2.158.93) but condition predicate keys on
+    # "fiend" instead of "dragon" and the rider dice are 2d6 (vs.
+    # Dragon Slayer's 3d6 — Demon Slayer is the "lesser" of the two
+    # slayer variants per RAW). Frighten-on-hit save (DC 15 WIS) is
+    # deferred — that's a separate save-handler hook, not a rider.
+    # The +1 attack/damage is baked into the demo attack entry on
+    # Lyra (the wielder).
+    "demon-slayer": {
+        "label": "Demon Slayer",
+        "dice": "2d6",
+        "requires_attunement": True,
+        "condition": lambda tgt: bool(tgt) and (
+            (tgt.get("creature_type") or "").strip().lower() == "fiend"
+        ),
+    },
 }
 
 

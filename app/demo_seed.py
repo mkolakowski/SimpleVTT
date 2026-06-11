@@ -1402,6 +1402,18 @@ def _bard_sheet(name: str) -> dict:
             {"name": "Vicious Mockery (cantrip)", "save_dc": 14, "save_ability": "WIS",
              "damage": "1d4", "damage_type": "psychic", "range": "60 ft",
              "desc": "WIS save or take psychic damage AND disadvantage on next attack roll before end of next turn."},
+            # v2.158.97 — Magic-items Phase 6a demo fixture. Demon
+            # Slayer Rapier (RAW DMG p.166). +1 attack/damage baked
+            # in (Rapier +5 → +6, 1d8+2 → 1d8+3); the +2d6 vs. fiends
+            # rider fires from section 6c via `creature_type` predicate
+            # (same shape as Dragon Slayer v2.158.93). RAW's frighten-
+            # on-hit DC 15 WIS save is deferred — that's a separate
+            # save-handler hook, not a rider. The `_slug` field is the
+            # rider gate.
+            {"name": "Demon Slayer Rapier", "attack_bonus": "+6",
+             "damage": "1d8+3", "damage_type": "piercing",
+             "range": "5 ft", "_slug": "demon-slayer",
+             "desc": "Rare rapier, attunement. +1 attack/damage; +2d6 piercing vs. fiends (DMG p.166)."},
         ],
         # Lv 6 Bard known spells: 4 cantrips, 9 leveled (per Bard table)
         # + 2 Magical Secrets picks from any class list (Lore Bard Lv 6
@@ -1517,6 +1529,16 @@ def _bard_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+            # v2.158.97 — Magic-items Phase 6a demo fixture. Demon
+            # Slayer Rapier (rare, attunement). Paired with the
+            # attack entry above via ``_slug``. Lyra now wears 2
+            # attuned items (Cloak of Displacement + Demon Slayer).
+            {"name": "Demon Slayer Rapier", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d8", "damage_type": "piercing",
+             "properties": "finesse, magic",
+             "_slug": "demon-slayer",
+             "desc": "Rare rapier, attunement. +1 attack/damage; while attuned, deals +2d6 piercing damage to fiends (RAW DMG p.166). Frighten-on-hit save deferred."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit
