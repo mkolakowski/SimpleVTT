@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.22] - 2026-06-11 — "The Tired Ruler" — JS-side exhaustion speed wiring. Closes the v2.159.19 filed follow-up: the browser-side `_effectiveSpeedWalk` in `tabletop.html` now mirrors the v2.159.19 server-side formula by reading `combatant.exhaustion_level` and applying the cumulative penalty (Lv >= 5 → 0; Lv >= 2 → `Math.floor(result / 2)`). The canvas move-preview ring now matches the server's 409 over_speed_cap rejection — no more informative-then-rejecting UX.
+
+**Schema version:** 69
+**Commit summary:** **(A) `app/templates/tabletop.html::_effectiveSpeedWalk` extended: after the existing `(base + bonus) × mult − reduction` math, read `c.exhaustion_level` via `Number()` + finite-check + clamp 0-6, then apply Lv 5 → 0 (hard floor), Lv 2 → `Math.floor(result/2)`. Conservative defaults on malformed (Number conversion = NaN → falsy → 0). The hub-state combatant carries `exhaustion_level` via the v2.159.19 PC mirror + Phase 1 NPC writer, so the field is always present when set. (B) New Playwright suite `tests/harness_ui/test_js_exhaustion_speed.py` with 5 tests: Lv 0 baseline, Lv 2 halves (30→15), Lv 5 floors to 0, Lv 5 hard-floor with Haste (`speed_multiplier: 2`) still 0, Lv 2 composes with Slow (`speed_reduction_ft: 10`) → (30-10)//2 = 10. Drives `window._effectiveSpeedWalk` directly via `page.evaluate` on the campaign-tabletop URL. (C) UI test total bumped 45 → 50.**
+**Description:** Closes the v2.159.19 Phase 3a follow-up. With this commit the JS-side speed math is now in lockstep with the server-side helper. A Lv 2 PC dragging their move-preview on the canvas sees a 15-ft ring (was 30 ft); the server's existing speed-cap enforcement at `/token/move` was already rejecting moves over 15, so the UX is now consistent. Future homebrew speed effects (forced-march environmental, Slow-with-exhaustion combos) compose cleanly on both sides via the same `combatant.exhaustion_level` field.
+
+### Added
+- `tests/harness_ui/test_js_exhaustion_speed.py` — 5 Playwright tests for `window._effectiveSpeedWalk`.
+
+### Changed
+- `app/templates/tabletop.html` — `_effectiveSpeedWalk` honors `combatant.exhaustion_level`.
+- `app/version.py` — `APP_VERSION` 2.159.21 → 2.159.22. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.22.
+- `docs/test-harness-coverage.md` — UI total 45 → 50.
+
+### Notes
+- The Number() defensive-conversion path treats both `null` and non-numeric strings as 0 (per JS's NaN propagation) — matches the Python helper's `(TypeError, ValueError) → 0` behavior. So a combatant with no `exhaustion_level` field defaults to 0 (= no penalty).
+- The 5 Playwright tests don't exercise the canvas — they drive the helper directly with synthetic combatant dicts via `page.evaluate`. The canvas integration is implicit: the helper is called from the move-preview path at line 6567 (`effective_speed_walk: _effectiveSpeedWalk(active)`), and the same path renders the ring. A future test could drag a token on the canvas and assert the ring radius, but the unit-level coverage is sufficient for the chain integrity.
+- The exhaustion-levels plan is now 100% complete: Phase 0 (plan) + Phase 1 (data + endpoint) + Phase 2 (disadvantage) + Phase 3a (server speed) + Phase 3b (HP-max) + Phase 4 (Berserker Frenzy) + Phase 3a JS follow-up (this commit) — every piece is shipped.
+
+---
+
 ## [2.159.21] - 2026-06-11 — "The Frenzied Cost" — Exhaustion-levels Phase 4 (CLOSES the plan): Berserker Frenzy rage-end retrofit. RAW PHB p.49: "When your rage ends, you suffer one level of exhaustion (which you can't remove until you finish a long rest)." Closes the v2.99.226 filed TODO + Phase E.8 of `class-content-status.md` (the Berserker class-content-completeness blocker that motivated the exhaustion-levels plan). `/use_frenzy` now stamps `sheet._frenzied_this_rage: True`; `/end_buff` with `key="rage"` detects the flag, bumps `sheet.exhaustion_level` by 1 (level 6 → death via `_set_death_save_state`), mirrors to the combatant, broadcasts `exhaustion_update`, and clears the flag.
 
 **Schema version:** 69

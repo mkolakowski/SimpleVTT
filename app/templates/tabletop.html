@@ -6464,13 +6464,28 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      * `base − reduction` only — the bonus + Haste ×2 terms were missing
      * client-side, so a Hasted / Longstrider'd token's ruler showed the
      * un-buffed cap). Mirror of the server's `effective_speed_walk` so
-     * the canvas move-preview + overrun gate report the same cap. */
+     * the canvas move-preview + overrun gate report the same cap.
+     * v2.159.22 — exhaustion Phase 3a follow-up: applies the
+     * cumulative exhaustion penalty AFTER the bonus / mult / reduction
+     * math: Lv >= 5 → 0 (hard floor, even with Haste); Lv >= 2 →
+     * Math.floor(result / 2). Mirrors the v2.159.19 server-side
+     * extension so the move-preview ring + 409 over_speed_cap
+     * rejection are now in sync. */
     function _effectiveSpeedWalk(c) {
         if (!c) return 30;
         const base = Number(c.speed_walk) > 0 ? Number(c.speed_walk) : 30;
         const bonus = _effectiveSpeedBonusFt(c);
         const mult = _effectiveSpeedMultiplier(c);
-        return Math.max(0, (base + bonus) * mult - _effectiveSpeedReductionFt(c));
+        const result = Math.max(
+            0, (base + bonus) * mult - _effectiveSpeedReductionFt(c),
+        );
+        const exRaw = Number(c.exhaustion_level);
+        const ex = Number.isFinite(exRaw)
+            ? Math.max(0, Math.min(6, Math.floor(exRaw)))
+            : 0;
+        if (ex >= 5) return 0;
+        if (ex >= 2) return Math.floor(result / 2);
+        return result;
     }
     window._effectiveSpeedWalk = _effectiveSpeedWalk;
     window._effectiveSpeedReductionFt = _effectiveSpeedReductionFt;
