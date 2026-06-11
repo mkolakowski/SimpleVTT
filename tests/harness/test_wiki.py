@@ -52,6 +52,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-magic-items-automation" in resp.text
     # v2.158.72: exhaustion-levels plan listed (SRD audit P1).
     assert "/wiki/doc/plan-exhaustion-levels" in resp.text
+    # v2.159.26: carrying-capacity plan listed (unblocks Bag of Holding).
+    assert "/wiki/doc/plan-carrying-capacity" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.49.168: targeting system visual guide listed.
@@ -540,6 +542,20 @@ async def test_wiki_doc_serves_exhaustion_levels_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "exhaustion levels" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_carrying_capacity_plan():
+    """v2.159.26: GET /wiki/doc/plan-carrying-capacity — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/carrying-capacity.md``. Filed to
+    unblock Bag of Holding (RAW DMG p.153) — needs STR × 15 carry-
+    capacity engine to discount."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-carrying-capacity")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "carrying capacity" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

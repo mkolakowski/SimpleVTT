@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.26] - 2026-06-11 — "The Weight on the Shoulders" — Carrying-capacity design plan (Phase 0). Files `docs/plans/carrying-capacity.md` outlining the phased work to add a RAW STR × 15 carry-weight engine so Bag of Holding (RAW DMG p.153) and future weight-related items (Heward's Handy Haversack, Belt of Giant Strength) have a load-bearing surface to compose with. The plan documents weight parser + helpers + sheet exposure + Bag integration across 3 commit phases, plus an optional Phase 4 for the Encumbered variant rule. Surfaces the doc via the wiki per CLAUDE.md's surface-every-doc rule.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `docs/plans/carrying-capacity.md` (Phase 0 design plan). Mirrors the v2.158.72 exhaustion-levels.md shape: RAW summary, Why-this-matters, Design (helpers + data shape + sheet exposure + Bag integration), Phases (0-4), Non-goals, DoD. (B) Wiki surface: `plan-carrying-capacity` slug added to `_DOC_ALLOWLIST` in `wiki_routes.py`; "Carrying capacity" row added to the design-plans table in both `wiki.html` and `docs/wiki/README.md`. Status: ⚪ proposed (v2.159.26). (C) Per CLAUDE.md surface-every-doc rule: new harness `test_wiki_doc_serves_carrying_capacity_plan` in `test_wiki.py` asserts `GET /wiki/doc/plan-carrying-capacity` → 200 with the plan's H1; `test_wiki_home_renders` extended to assert the slug appears in the landing page. (D) Same commit also marks the exhaustion-levels plan as ✅ shipped (Phases 0-4 complete per v2.159.17-.22) in both wiki.html and docs/wiki/README.md — previously listed as ⚪ proposed. (E) HTTP test total bumped 2302 → 2303.**
+**Description:** Closes Phase 0 of `docs/plans/carrying-capacity.md`. The next commit (v2.159.27, Phase 1) ships the engine + helpers + sheet exposure. After several commits ago shipping Goggles of Night (a passive-only item that didn't need new engine surface), Bag of Holding hit a wall: most magic items have empty weight strings, the catalog JSON's weight format is inconsistent (`"3 lb. lb"` is a known SRD typo), and no demo PC tracks inventory weights. Rather than ship Bag as flavor-only (no engine effect), this plan is the route to a real carry-weight surface.
+
+### Added
+- `docs/plans/carrying-capacity.md` — Phase 0 plan.
+- `tests/harness/test_wiki.py` — `test_wiki_doc_serves_carrying_capacity_plan`.
+
+### Changed
+- `app/routes/wiki_routes.py` — `_DOC_ALLOWLIST` gains `plan-carrying-capacity`.
+- `app/templates/wiki.html` — design-plans table gains a Carrying capacity row; the Exhaustion-levels row flips ⚪ proposed → ✅ Phases 0-4 shipped.
+- `docs/wiki/README.md` — design-plans table mirror of the same changes.
+- `tests/harness/test_wiki.py` — `test_wiki_home_renders` asserts the new slug.
+- `app/version.py` — `APP_VERSION` 2.159.25 → 2.159.26. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.26.
+- `docs/test-harness-coverage.md` — HTTP total 2302 → 2303.
+
+### Notes
+- The Encumbered variant rule (Phase 4 in the plan) is OPTIONAL — composes via the existing condition-disadvantage helpers + speed_reduction_ft buffs. No new substrate.
+- The plan's "leaf module" pattern matches `app/content/effective_speed.py` (v2.99.98). Pure-Python helpers run host-side without needing the Docker container, so unit tests are fast.
+- v1 simplification on Bag of Holding: contents tagged with `_in_bag_of_holding: True` are skipped in the weight sum. Player tags them via the sheet UI in Phase 3.
+
+---
+
 ## [2.159.25] - 2026-06-11 — "The Dark Lenses" — Magic-items follow-up: first sensory-passive item, Goggles of Night (RAW DMG p.172, uncommon, no attunement). Demonstrates the v2.158.74 `_MAGIC_ITEM_PASSIVES` substrate scaling to a non-numeric passive shape. While worn, the wearer has darkvision out to 60 ft — composes with the v2.158.50 Devil's Sight darkness-blinded helper (`_pc_sees_in_darkness`) so a Goggles-equipped PC who's blinded by darkness shrugs off attack disadvantage exactly as a Devil's-Sight Warlock does. Future Eyes of the Eagle / True Sight items extend the same dict shape with new sensory fields without needing a new helper.
 
 **Schema version:** 69
