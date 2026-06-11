@@ -6776,18 +6776,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             : '';
 
         // v2.158.85 — Magic-items Phase 3b polish: 🔮 Use button for
-        // catalog-action items (Pearl of Power, Wand of Magic Missiles).
-        // Hardcoded slug list mirrors the server-side
-        // `_MAGIC_ITEM_ACTIONS` catalog; consolidating this into a
-        // single source-of-truth is filed as a Phase 4d polish.
-        const ITEM_ACTION_SLUGS = {
-            'pearl-of-power': {action_key: 'restore-slot', param: 'slot_level',
-                              prompt: 'Slot level to restore? (1-3)', label: '🔮 Use Pearl'},
-            'wand-of-magic-missiles': {action_key: 'cast-magic-missile', param: 'charges',
-                              prompt: 'Charges to spend? (1-7)', label: '🪄 Cast MM'},
-            'wand-of-fireballs': {action_key: 'cast-fireball', param: 'charges',
-                              prompt: 'Charges to spend? (1-7; Lv = 3+N-1)', label: '🔥 Cast Fireball'},
-        };
+        // catalog-action items. The config map ``ITEM_ACTION_SLUGS``
+        // lives at outer scope so both `rowHtml` (rendering the
+        // button) and the inv-item-action click handler (which fires
+        // the v2.158.89 modal) can read it. v2.158.89 fixed scope:
+        // the v2.158.85 declaration sat inside ``rowHtml`` and was
+        // unreachable from the click handler — clicking threw
+        // "ITEM_ACTION_SLUGS is not defined" but no test exercised
+        // the click path until v2.158.89's Playwright additions.
         const itemAction = item._slug ? ITEM_ACTION_SLUGS[item._slug] : null;
         const actionBtn = (itemAction && !isReadonly && item.equipped &&
                           typeof CAMPAIGN_ID !== 'undefined' && typeof MY_CHAR_ID !== 'undefined')
@@ -6933,6 +6929,125 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         window._syncWeaponAttacks(equippedWeapons);
     }
 
+    // v2.158.85 / v2.158.89 — catalog-action item config map. Mirrors
+    // the server-side `_MAGIC_ITEM_ACTIONS` catalog in
+    // `app/routes/tabletop_routes.py`. `kind` distinguishes the modal
+    // control shape: 'select' for Pearl (1/2/3 dropdown), 'spinner'
+    // for the wands (1-7 numeric). `cast_level(n)` (optional) maps
+    // picked charge count → cast slot level for the modal's live
+    // preview text — defined as a real function so we don't eval a
+    // config string at runtime.
+    const ITEM_ACTION_SLUGS = {
+        'pearl-of-power': {action_key: 'restore-slot', param: 'slot_level',
+                          label: '🔮 Use Pearl',
+                          kind: 'select', min: 1, max: 3,
+                          title: '🔮 Pearl of Power',
+                          body: 'Restore one expended spell slot of level 1, 2, or 3.',
+                          submit_label: 'Restore Slot',
+                          control_label: 'Slot level'},
+        'wand-of-magic-missiles': {action_key: 'cast-magic-missile', param: 'charges',
+                          label: '🪄 Cast MM',
+                          kind: 'spinner', min: 1, max: 7,
+                          title: '🪄 Wand of Magic Missiles',
+                          body: 'Spend 1-7 charges to cast Magic Missile at the matching slot level (1 charge = Lv 1, ..., 7 = Lv 7).',
+                          submit_label: 'Cast',
+                          control_label: 'Charges',
+                          cast_level: (n) => n},
+        'wand-of-fireballs': {action_key: 'cast-fireball', param: 'charges',
+                          label: '🔥 Cast Fireball',
+                          kind: 'spinner', min: 1, max: 7,
+                          title: '🔥 Wand of Fireballs',
+                          body: 'Spend 1-7 charges to cast Fireball (1 charge = Lv 3 base; each extra charge upcasts by 1).',
+                          submit_label: 'Cast',
+                          control_label: 'Charges',
+                          cast_level: (n) => n + 2},
+    };
+
+    // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
+    // `window.prompt` slot/charge picker on catalog-action items.
+    // Mirrors the visual shape of `_showUpliftModal` (overlay + card +
+    // Cancel/Confirm) so the sheet feels consistent. Returns a Promise
+    // resolving to the picked integer (1..cfg.max) or null on cancel /
+    // backdrop click.
+    function _showItemActionModal(cfg) {
+        return new Promise(resolve => {
+            const prev = document.getElementById('item-action-modal');
+            if (prev) prev.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'item-action-modal';
+            overlay.setAttribute('role', 'dialog');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+            const card = document.createElement('div');
+            card.style.cssText = 'background:var(--s-card,#222);color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:8px;padding:18px;min-width:320px;max-width:480px;box-shadow:0 10px 40px rgba(0,0,0,.6);';
+
+            let html = `<div style="font-size:14px;font-weight:700;margin-bottom:6px;">${_esc(cfg.title || cfg.label)}</div>`;
+            html += `<div style="font-size:12px;color:var(--s-mute,#aaa);margin-bottom:14px;line-height:1.4;">${_esc(cfg.body || '')}</div>`;
+
+            html += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">`;
+            html += `<label for="ia-val" style="font-size:12px;font-weight:600;min-width:90px;">${_esc(cfg.control_label || 'Value')}</label>`;
+            if (cfg.kind === 'select') {
+                html += `<select id="ia-val" style="font-size:13px;padding:6px;flex:1;background:var(--s-input,#1a1a1a);color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:3px;">`;
+                for (let v = cfg.min; v <= cfg.max; v++) {
+                    html += `<option value="${v}">L${v}</option>`;
+                }
+                html += `</select>`;
+            } else {
+                // 'spinner' — native number input. Browsers render the
+                // up/down arrows; min/max enforce server-side bounds at
+                // the UI tier so a stray "8" never POSTs.
+                html += `<input id="ia-val" type="number" min="${cfg.min}" max="${cfg.max}" step="1" value="${cfg.min}"
+                                 style="font-size:13px;padding:6px;flex:1;background:var(--s-input,#1a1a1a);color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:3px;min-height:32px;">`;
+            }
+            html += `</div>`;
+
+            // Live "cast at Lv X" preview for spinner items with a
+            // cast_level mapper. Pearl restores a slot rather than
+            // casting a spell — no preview row needed there.
+            if (cfg.kind === 'spinner' && typeof cfg.cast_level === 'function') {
+                html += `<div id="ia-preview" style="font-size:11px;color:var(--s-mute,#aaa);margin-bottom:14px;">Cast at Lv <span id="ia-lvl">${cfg.cast_level(cfg.min)}</span>.</div>`;
+            } else {
+                html += `<div style="margin-bottom:14px;"></div>`;
+            }
+
+            html += '<div style="display:flex;gap:8px;justify-content:flex-end;">';
+            html += '<button type="button" id="ia-cancel" style="padding:6px 14px;font-size:12px;background:transparent;color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:4px;cursor:pointer;min-height:32px;">Cancel</button>';
+            html += `<button type="button" id="ia-confirm" style="padding:6px 14px;font-size:12px;background:var(--accent-bg2,#2a3d5c);color:var(--s-accent,#88c);border:1px solid var(--s-accent,#88c);border-radius:4px;font-weight:600;cursor:pointer;min-height:32px;">${_esc(cfg.submit_label || 'OK')}</button>`;
+            html += '</div>';
+
+            card.innerHTML = html;
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            const valEl = document.getElementById('ia-val');
+            const lvlEl = document.getElementById('ia-lvl');
+            if (cfg.kind === 'spinner' && lvlEl && typeof cfg.cast_level === 'function') {
+                valEl.addEventListener('input', () => {
+                    const n = parseInt(valEl.value, 10);
+                    if (Number.isFinite(n)) lvlEl.textContent = cfg.cast_level(n);
+                });
+            }
+            valEl.focus();
+
+            const cleanup = () => overlay.remove();
+            const cancel = () => { cleanup(); resolve(null); };
+            document.getElementById('ia-cancel').addEventListener('click', cancel);
+            overlay.addEventListener('click', e => { if (e.target === overlay) cancel(); });
+            document.getElementById('ia-confirm').addEventListener('click', () => {
+                const n = parseInt(valEl.value, 10);
+                if (!Number.isFinite(n) || n < cfg.min || n > cfg.max) {
+                    // Native input already enforces, but a paste can
+                    // bypass — silently no-op so the user fixes the
+                    // value rather than losing the modal state.
+                    return;
+                }
+                cleanup();
+                resolve(n);
+            });
+        });
+    }
+
     function renderInventory() {
         if (!container) return;
         container.innerHTML = '';
@@ -7031,6 +7146,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         // (slot_level for Pearl, charges for Wand) then POSTs to
         // /use_item_action. On 409 / other failure, alerts the
         // returned error label.
+        // v2.158.89 — Phase 3c: prompt → `_showItemActionModal`
+        // (slot dropdown for Pearl, charge spinner with live cast-Lv
+        // preview for the wands). Server-side bounds unchanged.
         container.querySelectorAll('.inv-item-action').forEach(btn =>
             btn.addEventListener('click', async () => {
                 if (typeof CAMPAIGN_ID === 'undefined' || typeof MY_CHAR_ID === 'undefined') return;
@@ -7038,13 +7156,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const slug = btn.dataset.slug;
                 const cfg = ITEM_ACTION_SLUGS[slug];
                 if (!cfg) return;
-                const raw = window.prompt(cfg.prompt, '1');
-                if (raw === null) return;  // user canceled
-                const n = parseInt(raw, 10);
-                if (!Number.isFinite(n) || n < 1) {
-                    alert('Please enter a positive integer.');
-                    return;
-                }
+                const n = await _showItemActionModal(cfg);
+                if (n === null) return;  // user canceled
                 btn.disabled = true;
                 try {
                     const body = {

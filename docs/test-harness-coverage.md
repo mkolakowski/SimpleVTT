@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2209 in `tests/harness/` + 26 in `tests/harness_ui/` (as of v2.158.88, 2026-06-10).
+**Total tests:** 2209 in `tests/harness/` + 29 in `tests/harness_ui/` (as of v2.158.89, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2935,6 +2935,17 @@ v2.158.62 — browser coverage of the v2.158.61 Drunken Technique class-features
 | Test | What it asserts |
 |------|-----------------|
 | `test_cf_button_routes_drunken_technique` | Seeds a one-combatant server-side battle, expands Quan's Drunken Technique `.cf-row` (clicks `.cf-header`), clicks `.cf-use[data-feature="drunken-technique"]`, and asserts a POST fired to `/use_drunken_technique` (never `/use_feature`) with no console errors. |
+
+### `test_use_item_action_buttons.py`
+v2.158.85 magic-items-automation Phase 3b — Use buttons render on the inventory rows for catalog-action items (Pearl, both wands) on Thalindra. v2.158.89 Phase 3c extended with modal-shape assertions: clicking the button opens an in-page `#item-action-modal` overlay (replaces the placeholder `window.prompt`); Pearl gets a `<select>` of slot levels; both wands get a numeric spinner (1-7) with a live "Cast at Lv X" preview.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_pearl_use_button_renders` | 🔮 Use Pearl button visible on Thalindra's Pearl of Power row. |
+| `test_wand_use_button_renders` | 🪄 Cast MM button visible on Thalindra's Wand of Magic Missiles row. |
+| `test_pearl_use_button_opens_modal_with_slot_select` | Clicking Pearl opens `#item-action-modal` containing the title "Pearl of Power" + a `<select>` with 3 options; Cancel dismisses. |
+| `test_wand_use_button_opens_modal_with_charge_spinner` | Clicking the MM wand opens the modal with a `type=number min=1 max=7` spinner; the preview reads "1" at the default charge, "3" after fill("3"). |
+| `test_fireball_wand_modal_shows_base_3_offset` | Same for Wand of Fireballs but the `cast_level(n) = n + 2` mapper shows "3" at 1 charge / "6" at 4 charges. |
 
 ---
 

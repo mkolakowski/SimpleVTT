@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.89] - 2026-06-10 — "The Velvet Picker" — Magic-items-automation Phase 3c polish: replace the placeholder `window.prompt` slot/charge picker on the inventory Use buttons (v2.158.85) with a proper in-page modal. Pearl gets a slot-level dropdown (L1/L2/L3); both wands get a numeric spinner (1-7 charges) with a live "Cast at Lv X" preview that recomputes on input via per-slug `cast_level(n)` mapper functions in `ITEM_ACTION_SLUGS`. The Staff of Healing modal (multi-action) is deferred to Phase 3d — it needs an action picker first.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `_showItemActionModal(cfg)` helper in `sheet_dnd5e.html` mirrors the visual shape of `_showUpliftModal` (overlay + card + Cancel/Confirm). Returns a Promise resolving to the picked int (1..cfg.max) or null on cancel/backdrop. (B) `ITEM_ACTION_SLUGS` extended per slug with `kind` ('select' for Pearl, 'spinner' for both wands), `min`/`max` bounds, `title`, `body`, `submit_label`, `control_label`, and (spinners only) a `cast_level(n)` mapper function. Mapper functions — not eval'd config strings — drive the live cast-Lv preview shown below the spinner. (C) Inventory click handler at `.inv-item-action` rewritten to `await _showItemActionModal(cfg)` instead of `window.prompt(cfg.prompt, '1') + parseInt`. The "Please enter a positive integer" alert path drops out — the modal's native number input + min/max attributes already enforce bounds. (D) Playwright UI harness `test_use_item_action_buttons.py` gets 3 new tests: Pearl modal opens with `<select>` containing 3 options + cancel dismisses; Wand of MM modal opens with number spinner + spans `min=1`/`max=7` + live preview ("1" → "3" when value bumped to 3); Wand of Fireballs modal preview shows the +2 offset ("3" at 1 charge → "6" at 4 charges). UI test total 26 → 29.**
+**Description:** Closes the v2.158.85 Phase 3b TODO. The `window.prompt` UX was always called placeholder copy — it broke on mobile Safari (focus loss), couldn't show the live "what slot does this cast at?" hint, and gave the player no way to see the action's per-item cap (1-3 vs. 1-7) until they hit the 400. The modal fixes all three: native control with min/max enforcement, live preview computed from a per-slug mapper function, and the body copy carries the RAW description so the player doesn't have to expand the inventory row to see what the button does. Multi-action items (Staff of Healing) keep their existing endpoint wiring intact — the staff Use button still isn't surfaced (deferred to Phase 3d which adds the action-key picker before the slot/charge step). Variable scope held: only the 3 single-action catalog items are wired to the new modal.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `_showItemActionModal(cfg)` helper; expanded `ITEM_ACTION_SLUGS` entries with `kind`/`min`/`max`/`title`/`body`/`submit_label`/`control_label`/`cast_level`.
+- `tests/harness_ui/test_use_item_action_buttons.py` — 3 modal-shape tests (Pearl select, MM wand spinner+preview, Fireball wand spinner+preview).
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — `.inv-item-action` click handler swaps `window.prompt` → `_showItemActionModal`; the post-prompt "positive integer" alert path drops out.
+- `app/version.py` — `APP_VERSION` 2.158.88 → 2.158.89. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.89.
+- `docs/test-harness-coverage.md` — UI total 26 → 29.
+
+### Notes
+- Staff of Healing's 3-action shape needs an action-picker step before the charge spinner. Phase 3d will wire a 2-stage modal (action picker → action-specific control) and add a `🩹 Use Staff` button to the inventory row.
+- The Pearl modal uses a `<select>` rather than 3 buttons because future items with wider slot ranges (Staff of Power's Cone of Cold needs L5+) fit cleanly into the dropdown shape. Buttons would force re-layout per item.
+- The wand preview uses arrow-function mappers in the config object rather than eval'd expression strings — no XSS surface even if a future content-pack ships a malformed `cast_level`.
+
+### Fixed
+- Latent scope bug from v2.158.85: `ITEM_ACTION_SLUGS` was declared `const` inside `rowHtml()` (function scope) but read from the `.inv-item-action` click handler at a different function scope — clicking any catalog-action Use button silently threw `"ITEM_ACTION_SLUGS is not defined"`. The two v2.158.85 Playwright tests only asserted the button rendered, not the click, so the regression was undetected for 4 versions (v2.158.85 → v2.158.88). v2.158.89 hoists the const to the shared outer scope (next to `_showItemActionModal`). The Phase 3c modal-shape tests added in this commit are the regression net that would have caught it.
+
+---
+
 ## [2.158.88] - 2026-06-10 — "The Threefold Staff" — Magic-items-automation Phase 4d: first multi-action item — Staff of Healing (RAW DMG p.202). Different shape from every prior catalog entry: 3 distinct `action_keys` on one item (`cast-cure-wounds` 1-4 charges → Lv 1-4 / `cast-lesser-restoration` fixed 2 / `cast-mass-cure-wounds` fixed 5). New `actions` sub-map shape in `_MAGIC_ITEM_ACTIONS` lets a single catalog row name multiple per-action handler configs. Tavik gets the staff (attuned alongside his Ring of Protection)
 
 **Schema version:** 69
