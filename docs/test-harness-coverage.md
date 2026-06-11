@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2274 in `tests/harness/` + 45 in `tests/harness_ui/` (as of v2.159.17, 2026-06-11).
+**Total tests:** 2279 in `tests/harness/` + 45 in `tests/harness_ui/` (as of v2.159.18, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -37,6 +37,17 @@ Sanity checks that the harness can even talk to the demo app.
 | `test_version` | `GET /version` → 200, matches `app/version.py`. |
 | `test_roster_fixture` | The `roster` fixture loads and contains all 12 demo PCs by name. |
 | `test_gm_can_open_ws` | `WS /ws/campaign/1` as GM accepts connection + emits an opening `state` message. |
+
+### `test_exhaustion_disadvantage.py`
+v2.159.18 exhaustion-levels Phase 2 — disadvantage wiring at Lv 1 (ability checks) + Lv 3 (attacks + saves). Composes with the existing v2.152.0-v2.157.0 condition-disadvantage helpers via the new `_exhaustion_level(sheet_or_combatant)` helper. The five extended helpers return a synthetic key (`"exhaustion-1"` or `"exhaustion-3"`) so the existing label plumbing at the call sites just works.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_exhaustion_lv1_imposes_check_disadvantage` | Pip at level=1 + STR check via /roll → 2d20kl1 in breakdown, `roll_state_applied == "auto_disadvantage_exhaustion-1"`. |
+| `test_exhaustion_lv2_does_not_impose_attack_disadvantage` | Cumulative-floor regression. Pip at level=2 + WIS save → does NOT carry `auto_disadvantage_exhaustion-3` (Lv 3 effects aren't active yet). |
+| `test_exhaustion_lv3_imposes_save_disadvantage` | Lv 3 imposes ALL save disadvantage (not just DEX-gated like Restrained). WIS save → 2d20kl1, `roll_state_applied == "auto_disadvantage_exhaustion-3"`. |
+| `test_exhaustion_lv0_no_disadvantage` | Regression. At level=0 the helpers must NOT fire any exhaustion label. |
+| `test_exhaustion_lv3_npc_imposes_check_disadvantage` | NPC mirror path — set exhaustion via `combatant_id` + skip_roll_state + /roll → response carries an exhaustion label. |
 
 ### `test_exhaustion.py`
 v2.159.17 exhaustion-levels Phase 1 (see [exhaustion-levels.md](../plans/exhaustion-levels.md)) — data shape + `POST /api/campaign/{cid}/set_exhaustion` endpoint + long-rest decrement. Replaces the legacy single-flag exhaustion treatment with RAW SRD 5.1 six-level tracking. Read-site wiring (Lv 1 ability-check disadvantage; Lv 2 speed halved; Lv 3 attack + save disadvantage; Lv 4 HP-max halved; Lv 5 speed 0) is Phase 2-3; this commit lands the data foundation + level-6-death plumbing.

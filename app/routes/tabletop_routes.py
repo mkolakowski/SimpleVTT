@@ -26559,6 +26559,21 @@ def _buff_is_darkness_sourced(b: dict) -> bool:
     return False
 
 
+def _exhaustion_level(sheet_or_combatant) -> int:
+    """v2.159.18 — exhaustion-levels Phase 2 helper. Reads the integer
+    ``exhaustion_level`` field off a PC sheet or NPC combatant dict.
+    Defaults to 0 if missing or malformed. Single source of truth for
+    every read site so the four disadvantage helpers + the upcoming
+    speed/HP-max read sites all agree on the value.
+    """
+    if not isinstance(sheet_or_combatant, dict):
+        return 0
+    try:
+        return max(0, min(6, int(sheet_or_combatant.get("exhaustion_level") or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _attacker_has_condition_disadvantage(
     sheet: "dict | None",
 ) -> "str | None":
@@ -26577,9 +26592,21 @@ def _attacker_has_condition_disadvantage(
     disadvantage conditions — and blindness from non-darkness sources —
     are unaffected, so an attacker who is both darkness-blinded AND
     poisoned still rolls at disadvantage from the Poisoned condition.
+
+    v2.159.18 — exhaustion-levels Phase 2 composition: an attacker at
+    ``exhaustion_level >= 3`` (RAW PHB Appendix A: "Disadvantage on
+    attack rolls and saving throws") returns the synthetic key
+    ``"exhaustion-3"`` so the existing label code at the call site
+    formats it the same way as a condition-key match.
     """
     if not sheet:
         return None
+    # v2.159.18 — exhaustion >= 3 imposes attack disadvantage. Reported
+    # FIRST so the resulting label is unambiguous when both exhaustion
+    # AND a condition would impose disadvantage (the RAW result is the
+    # same — disadvantage; the label just picks one source).
+    if _exhaustion_level(sheet) >= 3:
+        return "exhaustion-3"
     sees_in_darkness = _pc_sees_in_darkness(sheet)
     for b in (sheet.get("_buffs_active") or []):
         if not isinstance(b, dict):
@@ -26669,6 +26696,11 @@ def _npc_attacker_has_condition_disadvantage(
     for c in state.get("combatants") or []:
         if c.get("id") != attacker_combatant_id:
             continue
+        # v2.159.18 — exhaustion-levels Phase 2 composition (NPC mirror
+        # of the PC version). RAW PHB Appendix A: Lv 3 imposes attack
+        # disadvantage. Reported FIRST so the label is unambiguous.
+        if _exhaustion_level(c) >= 3:
+            return "exhaustion-3"
         for b in (c.get("buffs") or []):
             if not isinstance(b, dict):
                 continue
@@ -26739,6 +26771,18 @@ def _roll_condition_disadvantage(
     """
     if not sheet:
         return None
+    # v2.159.18 — exhaustion-levels Phase 2 composition. RAW PHB Appendix
+    # A: Lv 1 imposes ability-check dis; Lv 3 imposes ability-check
+    # AND save dis (cumulative). Reported FIRST so the label is
+    # unambiguous; v1 picks one source when both exhaustion AND a
+    # condition would fire (the dice math is the same — disadvantage).
+    _ex = _exhaustion_level(sheet)
+    is_save = stat_key_lc.endswith("_save")
+    is_check = bool(stat_key_lc) and not is_save
+    if is_check and _ex >= 1:
+        return "exhaustion-1"
+    if is_save and _ex >= 3:
+        return "exhaustion-3"
     buffs_active = sheet.get("_buffs_active") or []
     if not isinstance(buffs_active, list) or not buffs_active:
         return None
@@ -26750,10 +26794,6 @@ def _roll_condition_disadvantage(
     keys.discard("")
     if not keys:
         return None
-    is_save = stat_key_lc.endswith("_save")
-    # An ability check is anything classified that isn't a save —
-    # stat_key like "str_check" / "perception" / "athletics" / "stealth".
-    is_check = bool(stat_key_lc) and not is_save
     if is_check:
         for k in _CHECK_DIS_CONDITION_KEYS:
             if k in keys:
@@ -26837,6 +26877,15 @@ def _npc_roll_condition_disadvantage(
     for c in state.get("combatants") or []:
         if c.get("id") != combatant_id:
             continue
+        # v2.159.18 — exhaustion-levels Phase 2 composition (NPC mirror
+        # of the PC version). Lv 1 → check dis; Lv 3 → save dis.
+        is_save = stat_key_lc.endswith("_save")
+        is_check = bool(stat_key_lc) and not is_save
+        _ex = _exhaustion_level(c)
+        if is_check and _ex >= 1:
+            return "exhaustion-1"
+        if is_save and _ex >= 3:
+            return "exhaustion-3"
         buffs = c.get("buffs") or []
         if not buffs:
             return None
@@ -26848,8 +26897,6 @@ def _npc_roll_condition_disadvantage(
         keys.discard("")
         if not keys:
             return None
-        is_save = stat_key_lc.endswith("_save")
-        is_check = bool(stat_key_lc) and not is_save
         if is_check:
             for k in _CHECK_DIS_CONDITION_KEYS:
                 if k in keys:
@@ -26886,6 +26933,12 @@ def _npc_save_condition_disadvantage(
         return None
     if not stat_key_lc.endswith("_save"):
         return None
+    # v2.159.18 — exhaustion-levels Phase 2: Lv 3 imposes ALL save
+    # disadvantage (not just DEX-gated). Check before the DEX-gate
+    # short-circuit so a WIS / CON / INT / CHA save also picks up the
+    # exhaustion label.
+    if _exhaustion_level(target_combatant) >= 3:
+        return "exhaustion-3"
     ability_part = stat_key_lc.split("_save", 1)[0].upper()
     if ability_part != "DEX":
         return None

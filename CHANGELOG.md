@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.18] - 2026-06-11 — "The Fading Edge" — Exhaustion-levels Phase 2 (see `docs/plans/exhaustion-levels.md`): disadvantage wiring at Lv 1 (ability checks) + Lv 3 (attacks + saves). Composes with the existing v2.152.0-v2.157.0 condition-disadvantage helpers (Blinded/Poisoned/Restrained/Frightened/Prone) — extends each of the four helpers (PC attack, PC roll, NPC attack, NPC roll) + the NPC-save-only helper to also return a synthetic key (`"exhaustion-1"` / `"exhaustion-3"`) so the existing label plumbing at the call sites just works. No schema changes — Phase 1's `sheet.exhaustion_level` integer is the read source.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `_exhaustion_level(sheet_or_combatant)` helper — single source of truth for every read site, clamps to 0-6 defensively, defaults to 0 on missing/malformed. (B) `_attacker_has_condition_disadvantage` extended: at the top of the function, if `_exhaustion_level(sheet) >= 3` returns `"exhaustion-3"` first; otherwise falls through to the existing condition-key matcher. (C) `_npc_attacker_has_condition_disadvantage` mirror — same treatment reading `combatant.exhaustion_level` from the hub state. (D) `_roll_condition_disadvantage` (PC checks/saves) extended: BEFORE the existing buff-key loop, branch on `is_check + level >= 1` → `"exhaustion-1"`, or `is_save + level >= 3` → `"exhaustion-3"`. This makes ALL Lv 3 saves rolled at disadvantage (not just DEX-gated like Restrained — RAW Lv 3 covers all). (E) `_npc_roll_condition_disadvantage` mirror — same treatment for NPC checks/saves via hub state. (F) `_npc_save_condition_disadvantage` (the helper used by the 5 NPC-save call sites including `_resolve_feature_save`) also extended for Lv 3 → `"exhaustion-3"` BEFORE the DEX-only gate so a Frightened NPC's WIS save through a feature also picks up exhaustion disadvantage. (G) New HTTP harness `tests/harness/test_exhaustion_disadvantage.py` with 5 tests: Lv 1 PC check, Lv 2 PC WIS save (negative — proves the cumulative floor — Lv 2 ≠ Lv 3), Lv 3 PC WIS save (all-saves dis, not just DEX), Lv 0 PC no exhaustion label (regression), Lv 3 NPC check (NPC mirror path via `combatant_id` + `skip_roll_state`). (H) HTTP test total bumped 2274 → 2279.**
+**Description:** Closes Phase 2 of `docs/plans/exhaustion-levels.md`. The cumulative-floor test (Lv 2 must NOT trigger Lv 3 effects) is the test that catches an off-by-one in the comparator the most reliably — RAW exhaustion is CUMULATIVE, so Lv 4 includes Lv 1-4 effects but NOT Lv 5; the >= comparator on each branch is the right gate. Sphere of next-phase scope: Phase 3 wires `effective_speed_walk` (Lv 2 halve + Lv 5 zero) and HP-max halving (Lv 4). Phase 4 retrofits Berserker Frenzy's rage-end hook to call `set_exhaustion(delta=+1)`.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_exhaustion_level` helper; exhaustion checks in 5 disadvantage helpers.
+- `tests/harness/test_exhaustion_disadvantage.py` — 5 HTTP tests.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.17 → 2.159.18. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.18.
+- `docs/test-harness-coverage.md` — HTTP total 2274 → 2279; new `test_exhaustion_disadvantage.py` entry.
+
+### Notes
+- Labels: a Lv 3 PC making a STR check rolls `auto_disadvantage_exhaustion-1` (the check rule fires first, not the attack/save rule). A Lv 3 PC swinging a sword rolls `disadvantage_exhaustion-3`. A Lv 3 PC making a CON save rolls `auto_disadvantage_exhaustion-3`. The labels are stable for future UI surfacing of "why am I rolling disadvantage?".
+- The exhaustion check is reported BEFORE the buff-condition loop in each helper. When both a condition (e.g., Frightened) AND exhaustion would impose disadvantage, the label says "exhaustion-N". The dice math is the same (single disadvantage), and the label just picks the higher-priority source.
+- The `_npc_save_condition_disadvantage` extension is what makes `_resolve_feature_save` honor exhaustion on NPC saves — the helper is called from 5 sites including the spell-save and feature-save resolvers.
+- The PC version of `_resolve_feature_save` ultimately routes through `/roll_request/{id}/respond`, which calls the standard `/roll` path — so the PC save branch picks up `_roll_condition_disadvantage` from there with no additional plumbing.
+
+---
+
 ## [2.159.17] - 2026-06-11 — "The Tired Body" — Exhaustion-levels Phase 1 (see `docs/plans/exhaustion-levels.md`): the data shape + mutation endpoint + long-rest decrement. Replaces the legacy single-flag `exhaustion` condition treatment with RAW SRD 5.1 six-level tracking. The read-site wiring (Lv 1 ability-check disadvantage; Lv 2 speed halved; Lv 3 attack + save disadvantage; Lv 4 HP-max halved; Lv 5 speed 0; Lv 6 death) is Phase 2-3 — this commit lands ONLY the integer field + endpoint + rest hook + level-6-death plumbing so Phase 2/3 have a stable foundation to compose with. Closes the Phase E.8 Berserker Frenzy blocker (the framework is here; Phase 4 retrofits Frenzy's rage-end hook).
 
 **Schema version:** 69
