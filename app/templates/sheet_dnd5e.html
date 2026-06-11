@@ -1366,8 +1366,9 @@
                 </label>
                 <span id="cur-total" style="font-size:11px;color:var(--s-mute);flex-shrink:0;"
                       title="Total wealth converted to gold pieces (cp/100 + sp/10 + ep/2 + gp + pp×10)">≈ 0 gp</span>
-                <span style="margin-left:auto;font-size:11px;color:var(--s-mute);flex-shrink:0;">
-                    Weight: <span id="inv-total-weight" style="font-weight:700;color:var(--s-fg);">0</span> lb
+                <span style="margin-left:auto;font-size:11px;color:var(--s-mute);flex-shrink:0;"
+                      title="Current inventory weight / carry capacity (RAW: STR × 15 lb). Turns red when over capacity.">
+                    Weight: <span id="inv-total-weight" style="font-weight:700;color:var(--s-fg);">0</span> / <span id="inv-carry-capacity" style="font-weight:700;color:var(--s-fg);">—</span> lb
                 </span>
             </div>
 
@@ -6775,9 +6776,44 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 
     function updateTotalWeight() {
         if (!totalWeightEl) return;
-        const tot = inventory.reduce((sum, i) =>
-            sum + (parseFloat(i.weight) || 0) * (parseInt(i.qty) || 1), 0);
-        totalWeightEl.textContent = (Math.round(tot * 10) / 10).toString();
+        // v2.159.28 — carrying-capacity Phase 2a: prefer the v2.159.27
+        // numeric `weight_lb` field (the demo seed populates it); fall
+        // back to the legacy string `weight` for items that haven't
+        // been backfilled. Also skip items flagged `_in_bag_of_holding`
+        // (Phase 3 hook landed early in v2.159.27).
+        const tot = inventory.reduce((sum, i) => {
+            if (i._in_bag_of_holding) return sum;
+            const qty = parseInt(i.qty) || 1;
+            const explicit = parseFloat(i.weight_lb);
+            const fromStr = parseFloat(i.weight);
+            const w = Number.isFinite(explicit)
+                ? explicit
+                : (Number.isFinite(fromStr) ? fromStr : 0);
+            return sum + w * qty;
+        }, 0);
+        const totRounded = Math.round(tot * 10) / 10;
+        totalWeightEl.textContent = totRounded.toString();
+        // v2.159.28 — render the carry capacity (STR × 15 lb).
+        // Pulls STR from the sheet's ability scores via the same
+        // multi-key shape the server helper uses.
+        const capEl = document.getElementById('inv-carry-capacity');
+        if (capEl) {
+            const cap = _carryCapacityLb();
+            capEl.textContent = (cap > 0 ? cap : '—').toString();
+            // Color the weight number red when over capacity.
+            const over = cap > 0 && totRounded > cap;
+            totalWeightEl.style.color = over
+                ? 'var(--s-danger, #d33)'
+                : 'var(--s-fg)';
+        }
+    }
+
+    function _carryCapacityLb() {
+        // Read STR from the canonical sheet input. RAW PHB p.176:
+        // carry capacity = STR × 15 lb.
+        const strInput = document.querySelector('[name="abilities.STR"]');
+        const str = strInput ? (parseInt(strInput.value, 10) || 10) : 10;
+        return Math.max(1, Math.min(30, str)) * 15;
     }
 
     // ── Row rendering ──

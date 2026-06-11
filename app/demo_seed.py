@@ -2660,22 +2660,30 @@ def _barbarian_sheet(name: str) -> dict:
         ],
         # Barbarian is non-casting RAW; no spells / spell_slots fields.
         "inventory": [
+            # v2.159.28 — carrying-capacity Phase 2a: backfilled
+            # `weight_lb` per RAW PHB pp.149-151 / DMG p.178 / DMG p.187.
+            # Krieger's full inventory now has real weight numbers so
+            # the v2.159.27 carry meter renders a meaningful 78/270 lb
+            # bar instead of 0/270 lb (Barbarian STR 18 → 270 cap).
             {"name": "Greataxe", "type": "weapon", "qty": 1,
              "equippable": True, "equipped": True, "hands": 2,
              "damage": "1d12", "damage_type": "slashing",
-             "properties": "heavy, two-handed", "_slug": "greataxe"},
+             "properties": "heavy, two-handed", "_slug": "greataxe",
+             "weight_lb": 7},
             {"name": "Javelin", "type": "weapon", "qty": 4,
              "equippable": True, "equipped": True, "hands": 1,
              "damage": "1d6", "damage_type": "piercing",
              "range": "30/120 ft", "properties": "thrown",
-             "_slug": "javelin"},
+             "_slug": "javelin", "weight_lb": 2},
             {"name": "Explorer's pack", "type": "gear", "qty": 1,
+             "weight_lb": 59,  # RAW PHB p.151
              "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
             {"name": "Staff trophy", "type": "gear", "qty": 1,
+             "weight_lb": 1,
              "desc": "Outlander background trinket — gnarled staff carved with kill-marks from Krieger's hunts."},
             {"name": "Potion of Healing", "type": "consumable", "qty": 2,
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
-             "_slug": "potion-of-healing",
+             "_slug": "potion-of-healing", "weight_lb": 0.5,
              "desc": "Drink to regain 2d4+2 HP. RAW: action."},
             # v2.159.3 — Magic-items Phase 8c demo fixture. Javelin
             # of Lightning (RAW DMG p.178). Different shape from
@@ -2691,7 +2699,7 @@ def _barbarian_sheet(name: str) -> dict:
              "equippable": True, "equipped": True,
              "hands": 1, "damage": "1d6", "damage_type": "piercing",
              "properties": "thrown, magic", "range": "30/120 ft",
-             "_used_today": False,
+             "_used_today": False, "weight_lb": 2,
              "_slug": "javelin-of-lightning",
              "desc": "Uncommon thrown magic weapon. Throw + speak the command word: lightning line 5 ft × 120 ft, DC 13 DEX save each creature in line (excluding caster + target) → 4d6 lightning (half on pass). The javelin lands at the target's feet and can be retrieved. Once used, nonmagical until next dawn (long rest)."},
         ],

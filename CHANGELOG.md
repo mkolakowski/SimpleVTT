@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.28] - 2026-06-11 — "The Visible Burden" — Carrying-capacity Phase 2a: Krieger weight backfill + carry meter UI. The existing sheet inventory header's "Weight: 0 lb" label now reads "Weight: <current> / <capacity> lb" — the capacity comes from `STR × 15`, the current weight sums the new `weight_lb` numeric field with a fallback to the legacy `weight` string. The `weight_lb` field is the v2.159.27 leaf module's preferred tier-1 input; this commit's seed work establishes the first demo PC with real weight data so the meter renders something meaningful instead of `0 / 270 lb`. Other PCs' weight backfill is Phase 2b (filed).
+
+**Schema version:** 69
+**Commit summary:** **(A) Krieger Stonefist's inventory backfilled with RAW PHB pp.149-151 / DMG p.178/p.187 weights: Greataxe 7 lb, Javelin 2 lb × 4, Explorer's pack 59 lb, Staff trophy 1 lb, Potion of Healing 0.5 lb × 2, Javelin of Lightning 2 lb. Total 78 lb against his STR 18 → 270 lb cap. (B) `sheet_dnd5e.html` inventory header span extended: `Weight: <inv-total-weight> lb` → `Weight: <inv-total-weight> / <inv-carry-capacity> lb`. New `_carryCapacityLb()` helper reads `STR` from the `name="abilities.STR"` form input and returns `STR × 15`. (C) `updateTotalWeight()` extended: prefers `i.weight_lb` (numeric) over the legacy `i.weight` (string), skips items flagged `_in_bag_of_holding: True` (Phase 3 hook already landed in v2.159.27), turns the weight number red when over capacity. (D) New Playwright test `tests/harness_ui/test_carry_meter.py::test_krieger_carry_meter_renders`: navigate to Krieger's sheet, assert `#inv-carry-capacity` is "270" (STR 18 → 270), assert `#inv-total-weight` is between 70 and 270 lb (validates the backfill landed). (E) UI test total bumped 50 → 51.**
+**Description:** Closes Phase 2a of `docs/plans/carrying-capacity.md`. With Krieger's seed populated the carry meter renders a meaningful "78 / 270 lb" on his sheet. Phase 2b (filed) backfills the remaining 11 demo PCs' inventories — that's tedious data work (~80 line items) so it's a separate commit so the seed-data churn doesn't drown a logic change. Phase 3 (Bag of Holding) can ship next or after 2b — both already have their substrate landed.
+
+### Added
+- `tests/harness_ui/test_carry_meter.py` — Krieger carry meter render test.
+
+### Changed
+- `app/demo_seed.py` — `weight_lb` backfilled on Krieger's 6 inventory items.
+- `app/templates/sheet_dnd5e.html` — inventory-header span shows capacity; `updateTotalWeight()` reads `weight_lb` preferred + reddens over-cap; new `_carryCapacityLb()` helper.
+- `app/version.py` — `APP_VERSION` 2.159.27 → 2.159.28. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.28.
+- `docs/test-harness-coverage.md` — UI total 50 → 51.
+
+### Notes
+- The JS-side `_carryCapacityLb()` mirrors the Python helper's STR-source priority by reading directly from the form input. Form inputs are the canonical source of truth in the sheet template; the value reflects unsaved player edits (e.g. a player editing STR sees the meter update immediately).
+- Items whose `weight_lb` is missing (every PC except Krieger right now) contribute 0 to the sum. The meter shows the partial total honestly — not zero — but other PCs will read 0 / N lb until Phase 2b lands.
+- A future enhancement: read the `derived.carry` field from `/sheet-json` instead of computing client-side. The two should always agree, but the JS approach is cheaper (no extra network call) and matches unsaved edits.
+
+---
+
 ## [2.159.27] - 2026-06-11 — "The Sturdy Stride" — Carrying-capacity Phase 1 (see `docs/plans/carrying-capacity.md`): leaf module + helpers + `/sheet-json` exposure. RAW PHB p.176: carrying capacity = `STR × 15 lb`. New leaf `app/content/carry_weight.py` (mirrors v2.99.98 `effective_speed.py`) with a defensive weight-string parser, a 3-tier item-weight resolver (sheet override → item's `weight` string → catalog fallback), STR-aware capacity helper, and an over-capacity boolean. `/sheet-json` returns a new top-level `derived: {carry: {carry_capacity_lb, inventory_weight_lb, is_over_capacity}}` key parallel to `sheet`. Closes Phase 1; Phase 2 (demo seed weight backfill + sheet UI meter) and Phase 3 (Bag of Holding catalog) build on this surface.
 
 **Schema version:** 69
