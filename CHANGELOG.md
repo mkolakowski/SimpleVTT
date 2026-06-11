@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.8] - 2026-06-11 — "The Bolt's Test" — Magic-items-automation Phase 8h: end-to-end Playwright integration test for the full Javelin click-to-fire chain. Drives the actual ⚡ Hurl Lightning button (no `page.evaluate` shortcut), watches the chain ⚡ button → vttOpenMultiTargetPicker (stubbed) → /battle GET (intercepted) → /battle/line-targets POST (intercepted) → confirm modal → Fire button → /use_item_action POST (real endpoint) → sheet state flip + button relabel.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `test_javelin_lightning_click_fires_use_item_action` Playwright test in `tests/harness_ui/test_use_item_action_buttons.py`. Force-rests Krieger via httpx so the seed-default `_used_today: False` is guaranteed. Intercepts GET `/api/campaign/1/battle` to return a synthetic 3-combatant state (caster + target + on-line "Goblin"), and POST `/api/campaign/1/battle/line-targets` to return a 1-combatant result (the Goblin). Stubs `vttOpenMultiTargetPicker` via `page.evaluate` to immediately resolve with `['tok_test_target']` (the picker normally renders on the tabletop — for this sheet-only test we just resolve). (B) Test flow: navigate to Krieger's sheet → find Javelin row → click ⚡ Hurl Lightning → wait for the v2.159.7 AoE confirm modal to render with "Goblin" inside → click Fire → assert the real `/use_item_action` POST fires with `action_key: "hurl-lightning"`, `target_combatant_ids: ["tok_test_extra"]`, `inventory_index: 5`. (C) Post-fire assertion: the button relabels to "spent until dawn" within 5s — proving the real server flipped `_used_today: True` AND the client's local `inventory[idx]._used_today = true` + renderInventory swap kicked in. (D) UI test total bumped 38 → 39.**
+**Description:** Closes Phase 8h. This is the first FULL click-to-fire integration test in the Phase 8 magic-items work — every prior UI test exercised one stage in isolation (button-render OR modal-shape OR `_showAoELineConfirmModal` directly). The Phase 8f + 8g commits each shipped with a latent bug found ONLY after rebuild-test cycles (v2.158.94's hydration drop, v2.159.6's `picked` shadowing, v2.159.7's `page.evaluate` await deadlock). An end-to-end test would have caught all three before the bad version landed. This test plugs that gap for the Javelin client.
+
+### Added
+- `tests/harness_ui/test_use_item_action_buttons.py` — `test_javelin_lightning_click_fires_use_item_action`.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.7 → 2.159.8. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.8.
+- `docs/test-harness-coverage.md` — UI total 38 → 39.
+
+### Notes
+- The test intercepts `/battle` + `/battle/line-targets` rather than seeding a real battle because the integration test's value is in the click chain, not in the server-side geometry. The Phase 8d + 8e tests already cover the geometry endpoints with real Token positions.
+- The `/use_item_action` POST is NOT intercepted — that's the real server endpoint we want to verify ACTUALLY flips `_used_today`. The button relabel is the observable signal.
+- Pattern is reusable for future spell wire-ups: stub the single-target picker, intercept the `/battle/{shape}-targets` endpoint, drive the click chain to verify the full POST shape + the resulting state flip.
+
+---
+
 ## [2.159.7] - 2026-06-11 — "The Targeting Window" — Magic-items-automation Phase 8g: replace the v2.159.6 `window.confirm` preview with a proper AoE-line target-pick modal. The GM now sees a checkbox list of every auto-picked combatant with name + distance and can opt out individual targets before firing (line-edge cases — half-cover, a prone combatant behind cover, etc.). Cancel button + backdrop click + Cancel/Confirm matches the established v2.158.89/90 modal-shape convention.
 
 **Schema version:** 69

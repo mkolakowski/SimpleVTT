@@ -412,6 +412,122 @@ def test_aoe_line_confirm_modal_cancel_returns_null(
     )
 
 
+def test_javelin_lightning_click_fires_use_item_action(
+    gm_page: Page, roster: dict,
+):
+    """v2.159.8 Phase 8h: end-to-end Javelin click chain.
+    Click ⚡ Hurl Lightning → stubbed vttOpenMultiTargetPicker returns
+    a single target id → /battle/line-targets returns auto-picked
+    combatants → AoE confirm modal opens → click Fire → POST
+    /use_item_action with the right body → sheet's _used_today flag
+    flips and the button relabels to ⚡ (spent until dawn).
+
+    Stubs:
+      - vttOpenMultiTargetPicker: returns [targetCid] immediately
+      - /battle: returns a synthetic combatant list so the click
+        handler finds Krieger's combatant id without needing a real
+        battle to be seeded
+      - /battle/line-targets: returns a 1-combatant result so the
+        modal renders something to confirm
+    """
+    import httpx, json
+    krieger = roster["Krieger Stonefist"]
+
+    # Force-rest so the javelin starts un-spent regardless of test
+    # order.
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        c.post(
+            f"/api/campaign/1/character/{krieger['id']}/rest",
+            json={"type": "long"},
+        )
+
+    page = gm_page
+    # Intercept /api/campaign/1/battle (GET — find caster) +
+    # /battle/line-targets (POST — auto-pick combatants) so the test
+    # doesn't depend on a live battle. The /use_item_action POST is
+    # NOT intercepted — we want the real endpoint to flip the flag.
+    def _handle_battle(route):
+        if route.request.method == "GET":
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "battle": {
+                        "combatants": [
+                            {"id": "tok_test_krieger", "char_id": krieger["id"], "name": krieger["name"], "source_token_id": 1},
+                            {"id": "tok_test_target", "name": "Bandit", "source_token_id": 2},
+                            {"id": "tok_test_extra", "name": "Goblin", "source_token_id": 3},
+                        ],
+                    },
+                }),
+            )
+        else:
+            route.continue_()
+    page.route("**/api/campaign/1/battle", _handle_battle)
+
+    def _handle_line(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "caster_id": "tok_test_krieger",
+                "target_id": "tok_test_target",
+                "width_ft": 5,
+                "max_length_ft": 120,
+                "results": [
+                    {"combatant_id": "tok_test_extra", "name": "Goblin", "distance_ft": 4.0},
+                ],
+            }),
+        )
+    page.route("**/api/campaign/1/battle/line-targets", _handle_line)
+
+    page.goto(sheet_url(krieger["id"]))
+
+    # Stub the global single-target picker BEFORE clicking the
+    # button. The picker normally renders on the tabletop; for this
+    # sheet-only test we just resolve immediately with a known id.
+    page.evaluate("""
+        window.vttOpenMultiTargetPicker = async () => ['tok_test_target'];
+    """)
+
+    jav_row = page.locator(".inv-row", has_text="Javelin of Lightning")
+    expect(jav_row).to_be_visible(timeout=5000)
+    jav_btn = jav_row.locator(".inv-item-action")
+    expect(jav_btn).to_contain_text("Hurl Lightning")
+
+    # Wait for the use_item_action POST so we can confirm the right
+    # body was sent.
+    with page.expect_request(
+        lambda req: (
+            req.url.endswith(f"/use_item_action")
+            and req.method == "POST"
+        ),
+        timeout=10000,
+    ) as req_info:
+        jav_btn.click()
+        # Confirm modal should appear.
+        modal = page.locator("#aoe-line-confirm-modal")
+        expect(modal).to_be_visible(timeout=5000)
+        expect(modal).to_contain_text("Goblin")
+        modal.locator("#aoe-confirm").click()
+
+    posted = req_info.value
+    payload = posted.post_data_json
+    assert payload["action_key"] == "hurl-lightning", payload
+    assert payload["target_combatant_ids"] == ["tok_test_extra"], payload
+    assert payload.get("inventory_index") == 5  # Krieger's javelin idx
+
+    # The real server flipped _used_today: True. Button should now
+    # relabel to ⚡ (spent until dawn) after the local renderInventory.
+    expect(jav_btn).to_contain_text("spent until dawn", timeout=5000)
+
+
 def test_javelin_lightning_button_renders_when_unspent(
     gm_page: Page, roster: dict,
 ):
