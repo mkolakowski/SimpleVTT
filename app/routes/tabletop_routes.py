@@ -76300,6 +76300,101 @@ async def rest_character(
     }
 
 
+# ----------- API: magic-item attunement toggle (v2.158.79 Phase 2) -----
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/attune")
+async def attune_item(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.158.79 — toggle the ``attuned`` flag on an inventory item.
+
+    Body: ``{"inventory_index": int, "attuned": bool}``.
+
+    Enforces the RAW DMG p.138 3-item attunement cap: when setting
+    ``attuned=True``, if the PC already has 3 OTHER items with
+    ``attuned: True``, returns 409 ``{"error": "attunement_cap"}``.
+    Setting ``attuned=False`` always succeeds (you can always break
+    attunement).
+
+    The Phase 1a-c catalog walker (``_equipped_item_effects``) already
+    gates passive payloads on the ``attuned`` flag — this endpoint is
+    the player/GM-facing surface that flips it. Broadcasts a
+    ``character_update`` so any open sheet rerenders.
+    """
+    body = await request.json()
+    if "inventory_index" not in body or "attuned" not in body:
+        raise HTTPException(
+            400, "inventory_index and attuned are required",
+        )
+    try:
+        inv_idx = int(body["inventory_index"])
+    except (TypeError, ValueError):
+        raise HTTPException(400, "inventory_index must be an int")
+    attuned = bool(body["attuned"])
+
+    campaign = (
+        db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    )
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (
+        _user_is_gm(user, campaign, db) or char.owner_user_id == user.id
+    ):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    inventory = list(sheet.get("inventory") or [])
+    if inv_idx < 0 or inv_idx >= len(inventory):
+        raise HTTPException(400, "inventory_index out of range")
+
+    # RAW DMG p.138 — max 3 attuned items. Count CURRENT attuned items
+    # excluding the target index so toggling an already-attuned item to
+    # attuned=True is a no-op rather than a spurious 409.
+    if attuned:
+        attuned_count = sum(
+            1 for i, it in enumerate(inventory)
+            if i != inv_idx and isinstance(it, dict) and it.get("attuned")
+        )
+        if attuned_count >= 3:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": "attunement_cap",
+                    "current_attuned": attuned_count,
+                    "max_attuned": 3,
+                },
+            )
+
+    item = dict(inventory[inv_idx]) if isinstance(inventory[inv_idx], dict) else {}
+    item["attuned"] = attuned
+    inventory[inv_idx] = item
+    sheet["inventory"] = inventory
+    char.sheet = sheet
+    db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "character_update",
+        "data": {"id": char.id, "name": char.name},
+    })
+
+    return {
+        "ok": True,
+        "inventory_index": inv_idx,
+        "attuned": attuned,
+        "item_name": item.get("name") or "",
+    }
+
+
 # ----------- API: class / subclass resource use -----------
 
 @router.post("/api/campaign/{campaign_id}/character/{char_id}/resource")

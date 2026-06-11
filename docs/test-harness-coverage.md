@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2180 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.78, 2026-06-10).
+**Total tests:** 2186 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.79, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2006,6 +2006,18 @@ v2.158.78 magic-items-automation Phase 1d — same-shape stacking validation. Pi
 |------|-----------------|
 | `test_cloak_and_ring_stack_ac_bonus` | Krieger swings at Pip → `target_ac == 16` (14 base + 1 Cloak + 1 Ring). Proves walker sums `ac_bonus` across matched items. |
 | `test_cloak_and_ring_stack_save_bonus` | `/roll` `dex_save` for Pip (`1d20+6`) → breakdown contains BOTH "Cloak of Protection" AND "Ring of Protection" + "+2" total. Proves sources list aggregates + accumulator sums save_bonus. |
+
+### `test_attune_item.py`
+v2.158.79 magic-items-automation Phase 2 — `POST /api/campaign/{cid}/character/{char_id}/attune` endpoint that toggles the `attuned` flag on an inventory item with server-side enforcement of the RAW DMG p.138 3-item attunement cap. The Phase 1 catalog walker already gated payloads on `attuned`; Phase 2 is the player/GM-facing surface that flips it. Phase 2b will surface this as a sheet UI checkbox.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_attune_toggle_off_drops_ac` | Toggle Pip's Cloak attunement off → `target_ac == 15` (Ring still gives +1). Proves the catalog walker re-reads the `attuned` flag at attack-time. |
+| `test_attune_cap_blocks_fourth` | Pip starts with 2 attuned; attune Shortsword (3rd) → 200; attune Dagger (4th) → 409 with `error: attunement_cap`, `max_attuned: 3`, `current_attuned: 3`. |
+| `test_attune_toggle_existing_no_spurious_409` | Cap counts OTHER attuned items so target index is excluded — re-setting `attuned=True` on an already-attuned item at the cap returns 200. Prevents spurious 409 on sheet re-saves. |
+| `test_attune_missing_fields_400` | Empty body → 400. |
+| `test_attune_unknown_char_404` | Unknown char_id → 404. |
+| `test_attune_index_out_of_range_400` | `inventory_index: 999` past end → 400. |
 
 ---
 

@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.79] - 2026-06-10 — "The Bound Three" — Magic-items-automation Phase 2a: ship the `POST /api/campaign/{cid}/character/{char_id}/attune` endpoint that toggles the `attuned` flag on a PC inventory item, with server-side enforcement of the RAW DMG p.138 three-item attunement cap. The Phase 1 catalog walker (`_equipped_item_effects`) already gated payloads on the `attuned` flag; this commit ships the player/GM-facing surface that flips it. Sheet UI checkbox waits for Phase 2b
+
+**Schema version:** 69
+**Commit summary:** **(A) New endpoint `POST /api/campaign/{cid}/character/{char_id}/attune` in `app/routes/tabletop_routes.py` (inserted right before the resource-use endpoint, ~line 76303). Body: `{"inventory_index": int, "attuned": bool}`. Validates body (400 on missing fields, 400 on bad int), looks up campaign + char (403 / 404), enforces inventory bounds (400 on out-of-range), enforces the RAW DMG p.138 max-3-attuned cap (409 with `{error: attunement_cap, current_attuned, max_attuned}`), mutates `char.sheet.inventory[idx].attuned`, commits, broadcasts `character_update`. (B) The cap check counts OTHER attuned items (excluding the target index) so re-saving an already-attuned item at the cap is a no-op rather than a spurious 409 — this is the bug the test `test_attune_toggle_existing_no_spurious_409` guards. (C) Setting `attuned=False` always succeeds (RAW: you can always break attunement, no save / action required). (D) New harness file `tests/harness/test_attune_item.py` with 6 tests: AC-drop on detune (Pip's Cloak off → `target_ac == 15`), cap path (4th attune → 409), no-spurious-409 guard, missing-fields 400, unknown-char 404, out-of-range index 400. Uses a `restore_pip_attunement` pytest fixture for teardown that resets Pip's Cloak/Ring attuned + un-attunes any test-flipped items. (E) `docs/test-harness-coverage.md` adds the new section + total bumped 2180 → 2186.**
+**Description:** Phase 1 (catalog walker + 3 wired items + stacking) made the `attuned` flag mechanically meaningful but readers couldn't change it — the flag came in via demo seed only. Phase 2a ships the toggle endpoint as the smallest possible surface; Phase 2b ships the sheet UI checkbox that calls it. Doing this in two commits keeps the API contract review cleanly separated from the UI/UX work, and the harness tests run against the endpoint contract directly (which is what CI will gate on). The cap is enforced at the endpoint, not in `_equipped_item_effects` — so the walker stays a pure read function, and any future bulk-update surface (sheet POST replace, homebrew import) will independently re-enforce the cap if it cares.
+
+### Added
+- `app/routes/tabletop_routes.py` — `attune_item` endpoint at `POST /api/campaign/{cid}/character/{char_id}/attune`.
+- `tests/harness/test_attune_item.py` — 6 tests covering happy + cap + 4 error paths + the no-spurious-409 guard.
+
+### Changed
+- `docs/test-harness-coverage.md` — new `### test_attune_item.py` block; total bumped 2180 → 2186.
+- `app/version.py` — `APP_VERSION` 2.158.78 → 2.158.79. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.79.
+
+### Notes
+- Endpoint contract: `{ok: True, inventory_index, attuned, item_name}` on success; `{error: "attunement_cap", current_attuned: 3, max_attuned: 3}` on cap-block (409).
+- The cap check excludes the target index so toggling an already-attuned item to `attuned=True` is a no-op (not a 409). This matches how RAW handles re-attunement: there's no "rebind" cost if you're already attuned.
+- Phase 2b natural next step: sheet UI checkbox next to the existing "equipped" toggle that calls this endpoint, with a UX-friendly 409 toast when the cap blocks. UI test goes through Playwright.
+
+---
+
 ## [2.158.78] - 2026-06-10 — "The Doubled Wards" — Magic-items-automation Phase 1d: same-shape stacking validation. Pip Quickfingers (Rogue Lv 7, base AC 14, no prior magic-item assertions in the test suite) gets BOTH a Cloak of Protection (neck) AND a Ring of Protection (finger) in her demo seed — RAW (DMG p.138-191) stacks them for cumulative +2 AC / +2 saves. New harness file `test_item_passive_stacking.py` asserts the catalog's per-payload accumulator works across same-shape entries without dedup. Closes Phase 1 of the magic-items plan
 
 **Schema version:** 69
