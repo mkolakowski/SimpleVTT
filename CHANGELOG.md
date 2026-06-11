@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.98] - 2026-06-10 — "The Drake at the Door" — Magic-items-automation Phase 6b: Young Red Dragon NPC token template + Caelan's Dragon Slayer auto-fires in the demo. Demos the v2.158.96 Phase 5f helper resolution at its full scope — the third resolution branch (`token_template.sheet["type"]`) which Phase 5f wired but couldn't exercise out-of-the-box because no demo NPC carried a `type` field. The dragon template is NOT placed on the demo map by default (CR 10 vs. Lv 5-9 PCs would steamroll the Tavern Brawl); the GM drag-spawns it from the Templates drawer when they want to showcase the rider.
+
+**Schema version:** 69
+**Commit summary:** **(A) `_npc_sheet(slug, label, creature_type="")` in `app/demo_seed.py` gains an optional `creature_type` parameter that, when set, writes `sheet["type"] = creature_type`. Empty default preserves backward-compat with the 7 existing templates. (B) `seed_token_templates`'s specs list expanded to support 3-tuples `(slug, label, creature_type)` alongside the existing 2-tuples. The for-loop unpacks via `(*spec, "")[:3]` so both shapes work without rewriting every entry. New spec: `("young-red-dragon", "Young Red Dragon", "dragon")`. (C) New harness `tests/harness/test_dragon_slayer_template.py` with 1 test: GETs `/templates`, looks up the Young Red Dragon by name, asserts its `sheet["type"] == "dragon"`, PUTs a battle with a combatant referencing the template via `token_template_id` (no `creature_type` on the combatant), POSTs /attack with Caelan's Dragon Slayer attack, asserts the rider fires via the template-resolution path. (D) `docs/test-harness-coverage.md` adds the new section + total bumped 2225 → 2226.**
+**Description:** Closes Phase 6b. The demo party can now showcase the full Phase 5 conditional-rider story end-to-end: drag-spawn a Young Red Dragon from the Templates tab, Caelan's Dragon Slayer +3d6 fires on the first attack with zero test plumbing. The template-resolution branch of the v2.97.48 helper has been wired since Phase 5f but had no test coverage because every existing demo template carried no `type` (they resolve via content JSON instead). This commit lights up that third branch with a real-world fixture.
+
+### Added
+- `app/demo_seed.py` — Young Red Dragon token template spec; `_npc_sheet` `creature_type` parameter.
+- `tests/harness/test_dragon_slayer_template.py` — 1 test exercising the template-resolution branch.
+
+### Changed
+- `app/demo_seed.py` (specs loop) — supports mixed 2-tuple / 3-tuple unpacking.
+- `docs/test-harness-coverage.md` — new test block + total 2225 → 2226.
+- `app/version.py` — `APP_VERSION` 2.158.97 → 2.158.98. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.98.
+
+### Notes
+- A future commit could spawn the Young Red Dragon on the Tavern Brawl map by default, but that's a balance change to the demo encounter (CR 10 alongside the bandits would make the encounter unwinnable). Filed as Phase 6c for a separate "demo-encounter rebalance" pass.
+- The 3-tuple-unpacking pattern in the specs loop is mostly cosmetic — for the dragon alone, an inline conditional would have worked. But other NPC types may grow `type` over time (e.g. once a "Demon" template is added for Lyra's Demon Slayer demo), and the unpacking pattern scales without rewriting existing entries.
+
+---
+
 ## [2.158.97] - 2026-06-10 — "The Fiendbinder" — Magic-items-automation Phase 6a: second conditional rider via Demon Slayer Rapier (RAW DMG p.166). Stress-tests the Phase 5c/5f substrate at scale — no new code paths, just a catalog row + a demo fixture + 3 tests. Lyra Sunstrider (Bard) gets the rapier: +1 attack/damage RAW baked into the attack entry, +2d6 vs. fiends fires from section 6c via the same `creature_type` predicate shape as Dragon Slayer. Vorpal Sword's nat-20 decap is held for Phase 7 — RAW Vorpal has no "extra damage" rider to model with the current substrate, just the decap, and that needs a nat-20 hook in the attack pipeline rather than a damage-uplift entry.
 
 **Schema version:** 69

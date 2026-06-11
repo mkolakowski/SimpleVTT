@@ -3809,15 +3809,28 @@ def seed_characters(
     return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc, vengeance_pc, beast_barbarian_pc, drunken_monk_pc]
 
 
-def _npc_sheet(slug: str, label: str) -> dict:
+def _npc_sheet(slug: str, label: str, creature_type: str = "") -> dict:
     """Minimal NPC sheet that points at a shipped SRD monster slug. The
-    actual stat block resolves via local_content when the GM opens it."""
-    return {
+    actual stat block resolves via local_content when the GM opens it.
+
+    v2.158.98 — optional ``creature_type`` field. When supplied (e.g.
+    ``"dragon"`` on the Young Red Dragon template), the v2.97.48
+    ``_attacker_creature_type`` helper reads it via
+    ``token_template.sheet["type"]`` and the v2.158.96 Phase 5f
+    resolver injects it into the condition predicate, so e.g. Dragon
+    Slayer's rider auto-fires when the GM drag-spawns this template
+    on the map and Caelan attacks it. Existing templates default to
+    empty (unchanged behavior — the helper falls through to the
+    monster's content JSON resolver, which is the v2.97.48 path)."""
+    sheet = {
         "class": "NPC",
         "monster_slug": slug,
         "level": 1,
         "abilities": {"STR": 10, "DEX": 10, "CON": 10, "INT": 10, "WIS": 10, "CHA": 10},
     }
+    if creature_type:
+        sheet["type"] = creature_type
+    return sheet
 
 
 def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate]:
@@ -3859,14 +3872,28 @@ def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate
         # a CR 12 caster), but a GM can drag-spawn it from the
         # Templates tab for set-piece encounters or for testing.
         ("archmage", "Archmage"),
+        # v2.158.98 — Magic-items Phase 6b demo fixture. Young Red
+        # Dragon template carries ``creature_type: "dragon"`` so
+        # Caelan's v2.158.93 Dragon Slayer rider auto-fires when the
+        # GM drag-spawns this template on the map. The 3rd tuple
+        # element is the creature type — defaults to "" for every
+        # other template (helper falls through to content JSON).
+        # Not placed on the demo map by default (CR 10 vs. Lv 5-9
+        # PCs would steamroll the Tavern Brawl); GM drags from the
+        # Templates tab when they want to showcase the rider.
+        ("young-red-dragon", "Young Red Dragon", "dragon"),
     ]
+    # v2.158.98 — specs now mixes 2-tuples and 3-tuples; the third
+    # element is the optional creature_type. Unpack with a default so
+    # both shapes work without rewriting every entry above.
     out: dict[str, TokenTemplate] = {}
-    for slug, label in specs:
+    for spec in specs:
+        slug, label, creature_type = (*spec, "")[:3]
         tt = TokenTemplate(
             campaign_id=camp.id,
             name=label,
             template="dnd5e",
-            sheet=_npc_sheet(slug, label),
+            sheet=_npc_sheet(slug, label, creature_type=creature_type),
             tags=["npc", "demo"],
         )
         db.add(tt)

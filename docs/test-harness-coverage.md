@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2225 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.97, 2026-06-10).
+**Total tests:** 2226 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.98, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2076,6 +2076,13 @@ v2.158.97 magic-items-automation Phase 6a — Demon Slayer Rapier (RAW DMG p.166
 | `test_demon_slayer_fires_on_fiend_target` | Attack a `creature_type: "fiend"` combatant → `auto_uplifts` carries `source: "item-demon-slayer"`, `damage_type: "piercing"` (RAW fallback to weapon type), `expression: "2d6"`, total in [2, 24] (crit-doubled cap). |
 | `test_demon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-demon-slayer` uplift. |
 | `test_demon_slayer_suppressed_when_detuned` | /attune detune → no rider even vs. fiends. Restores attunement in teardown. |
+
+### `test_dragon_slayer_template.py`
+v2.158.98 magic-items-automation Phase 6b — Young Red Dragon NPC token template carries `sheet.type: "dragon"`, exercising the third branch of the v2.97.48 `_attacker_creature_type` helper (`token_template.sheet["type"]`). Validates the path a demo GM hits when they drag-spawn the dragon from the Templates drawer and Caelan attacks the resulting token. The dragon isn't on the demo map by default (CR 10 vs. Lv 5-9 PCs would steamroll the Tavern Brawl); harness GETs `/templates` to look up the id.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_dragon_slayer_fires_via_template_type` | Looks up the Young Red Dragon template id; PUTs a battle with a combatant referencing it via `token_template_id` and NO `creature_type` on the combatant dict; POSTs /attack with Caelan's Dragon Slayer → rider fires via template-resolution. |
 
 ### `test_dragon_slayer_helper.py`
 v2.158.96 magic-items-automation Phase 5f — the Dragon Slayer rider's `condition` predicate is now wrapped by a resolver shim: if the target combatant dict lacks `creature_type`, the v2.97.48 `_attacker_creature_type` helper resolves it from `character.sheet["creature_type"]` (PC) or `token_template.sheet["type"]` (NPC). `creature_type` added to `_SHEET_PATCH_KEYS` so tests can PATCH a PC sheet to inject the value.
