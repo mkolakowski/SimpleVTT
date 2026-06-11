@@ -133,30 +133,56 @@ async def test_darkness_blinded_without_devils_sight_imposes_disadvantage(
 ):
     """Control — Pip is darkness-`blinded` but has NO Devil's Sight →
     the disadvantage applies normally: 2d20kl1 + roll_state_applied ==
-    'disadvantage_attacker_blinded'."""
+    'disadvantage_attacker_blinded'.
+
+    v2.159.25 — Pip's demo seed now includes Goggles of Night (equipped
+    by default) which compose with `_pc_sees_in_darkness` the same way
+    Devil's Sight does. To preserve this control's "no sees-in-darkness
+    source" semantics, unequip the Goggles first; restore on teardown."""
     pip = pip_full
     tavik = roster["Brother Tavik Stonebrow"]
-    pip_cid = f"tok_{pip['id']}"
-    tavik_cid = f"tok_{tavik['id']}"
-    await _seed_battle(gm_client, [
-        _mkc(
-            pip_cid, pip["id"], name="Pip",
-            buffs=[{
-                "key": "blinded",
-                "name": "Blinded (Darkness)",
-                "effects": {"from_darkness": True},
-            }],
-        ),
-        _mkc(tavik_cid, tavik["id"], name="Tavik"),
-    ])
-    data = await _attack(gm_client, pip["id"], tavik_cid)
-    assert "2d20kl1" in (data.get("attack_breakdown") or ""), (
-        f"Expected 2d20kl1 without Devil's Sight; "
-        f"got {data.get('attack_breakdown')!r}"
+    # v2.159.25 — toggle Goggles off so the darkness-blinded
+    # disadvantage actually fires.
+    sheet_resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-json",
     )
-    assert data.get("roll_state_applied") == "disadvantage_attacker_blinded", (
-        f"roll_state_applied mismatch; got {data.get('roll_state_applied')!r}"
+    sheet = sheet_resp.json().get("sheet") or {}
+    inv = list(sheet.get("inventory") or [])
+    snapshot = [dict(it) if isinstance(it, dict) else it for it in inv]
+    for i, it in enumerate(inv):
+        if isinstance(it, dict) and it.get("_slug") == "goggles-of-night":
+            inv[i] = {**it, "equipped": False}
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+        json={"inventory": inv},
     )
+    try:
+        pip_cid = f"tok_{pip['id']}"
+        tavik_cid = f"tok_{tavik['id']}"
+        await _seed_battle(gm_client, [
+            _mkc(
+                pip_cid, pip["id"], name="Pip",
+                buffs=[{
+                    "key": "blinded",
+                    "name": "Blinded (Darkness)",
+                    "effects": {"from_darkness": True},
+                }],
+            ),
+            _mkc(tavik_cid, tavik["id"], name="Tavik"),
+        ])
+        data = await _attack(gm_client, pip["id"], tavik_cid)
+        assert "2d20kl1" in (data.get("attack_breakdown") or ""), (
+            f"Expected 2d20kl1 without Devil's Sight; "
+            f"got {data.get('attack_breakdown')!r}"
+        )
+        assert data.get("roll_state_applied") == "disadvantage_attacker_blinded", (
+            f"roll_state_applied mismatch; got {data.get('roll_state_applied')!r}"
+        )
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+            json={"inventory": snapshot},
+        )
 
 
 async def test_devils_sight_does_not_cure_non_darkness_blindness(

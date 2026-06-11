@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.25] - 2026-06-11 — "The Dark Lenses" — Magic-items follow-up: first sensory-passive item, Goggles of Night (RAW DMG p.172, uncommon, no attunement). Demonstrates the v2.158.74 `_MAGIC_ITEM_PASSIVES` substrate scaling to a non-numeric passive shape. While worn, the wearer has darkvision out to 60 ft — composes with the v2.158.50 Devil's Sight darkness-blinded helper (`_pc_sees_in_darkness`) so a Goggles-equipped PC who's blinded by darkness shrugs off attack disadvantage exactly as a Devil's-Sight Warlock does. Future Eyes of the Eagle / True Sight items extend the same dict shape with new sensory fields without needing a new helper.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `goggles-of-night` row in `_MAGIC_ITEM_PASSIVES`: `[{"sees_in_darkness": True, "darkvision_ft": 60, "requires_attunement": False}]`. First sensory-passive payload — establishes the `sees_in_darkness` boolean flag as the substrate's first non-numeric field. The `darkvision_ft: 60` integer is descriptive today (no engine consumer); a future range-aware vision system would read it. (B) `_equipped_item_effects` walker extended to return `sees_in_darkness: bool` (OR across all equipped passives) + `sees_in_darkness_sources: list[str]` (names for UI attribution like "Goggles of Night"). The OR-aggregation matches the existing `ac_bonus / save_bonus` accumulator pattern. (C) `_pc_sees_in_darkness` helper extended to OR the buff-based check with `_equipped_item_effects(sheet).get("sees_in_darkness")`. Wrapped in try/except since this helper is in the attack hot-path. The existing v2.158.50 Devil's Sight path is unchanged — Goggles compose alongside. (D) Demo seed: Pip Quickfingers (Halfling Rogue Lv 5 — no racial darkvision) gets Goggles of Night at inventory_index 10. Equipped by default. (E) New HTTP harness `tests/harness/test_goggles_of_night.py` with 3 tests mirroring `test_devils_sight_resolver.py`: darkness-blinded + Goggles equipped → disadvantage NEGATED; Goggles unequipped (control) → disadvantage applies; non-darkness blinded + Goggles → disadvantage STILL applies (Goggles only cure darkness-blindness). (F) Updated `tests/harness/test_devils_sight_resolver.py::test_darkness_blinded_without_devils_sight_imposes_disadvantage` to unequip Pip's Goggles before seeding (because the seed default has them equipped) — restores on teardown. (G) HTTP test total bumped 2299 → 2302.**
+**Description:** Closes the Goggles work. The substrate now supports both numeric (AC / save bonus) and boolean (sees_in_darkness) passive shapes. Future items with new sensory fields (truesight, blindsight, advantage-on-perception) only need to add the field to the `_MAGIC_ITEM_PASSIVES` payload + extend `_equipped_item_effects` + thread the new field into the helper that consumes it. The existing Phase 1d test (Pip stacking Cloak + Ring of Protection) still validates the +2 AC / +2 saves stacking math after this commit, because the new `sees_in_darkness` field is orthogonal to the numeric accumulators.
+
+### Added
+- `app/routes/tabletop_routes.py` — `goggles-of-night` passives row; `_equipped_item_effects` returns `sees_in_darkness`; `_pc_sees_in_darkness` honors equipped items.
+- `app/demo_seed.py` — Pip's Goggles of Night inventory entry at index 10.
+- `tests/harness/test_goggles_of_night.py` — 3 HTTP tests.
+
+### Changed
+- `tests/harness/test_devils_sight_resolver.py` — control test now unequips Goggles before asserting "no sees-in-darkness" semantics.
+- `app/version.py` — `APP_VERSION` 2.159.24 → 2.159.25. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.25.
+- `docs/test-harness-coverage.md` — HTTP total 2299 → 2302; new `test_goggles_of_night.py` entry.
+
+### Notes
+- Pip's attunement cap (3/3 — Cloak + Ring + Sword of Sharpness) is unaffected; Goggles don't require attunement (RAW: uncommon items rarely do, and the Goggles are an uncommon).
+- The Goggles' `darkvision_ft: 60` field is metadata-only today. A future commit that adds vision-range awareness to the engine could read it — same way the existing `_MAGIC_ITEM_PASSIVES` ac_bonus values are descriptive on items that gate behind `requires_no_armor`.
+- The v2.158.50 Devil's Sight test had to be updated to unequip the Goggles before asserting "darkness-blinded → disadvantage." This is the same fixture-management pattern the v2.158.103 Sword of Sharpness tests use when toggling Pip's equipped gear.
+
+---
+
 ## [2.159.24] - 2026-06-11 — "The Re-Awakened Seed" — Hotfix for a latent regression introduced in v2.159.16: the on_startup hook in `app/main.py` accidentally fell off after the early `return` of the new `/api/content-health` endpoint, so the admins-log + demo-mode block + demo-scheduler-start sat as unreachable dead code AFTER the endpoint function rather than inside `on_startup`. As a result: (1) the demo-mode reset-and-reseed never fired at boot, so the DB held the v2.159.16 snapshot indefinitely (subsequent demo-seed updates — Wand of Fear / Necklace of Fireballs / exhaustion fixture additions / this commit's Goggles addition — never reached the running app); (2) the demo scheduler that periodically resets stale state never started; (3) the admins-from-env log line went silent. Restores all three behaviors by moving the misplaced block back inside `on_startup`. Detected when v2.159.24's Goggles-of-Night work added an item to Pip's seed and the test couldn't find it — Pip's inventory was still the v2.158.103 shape.
 
 **Schema version:** 69

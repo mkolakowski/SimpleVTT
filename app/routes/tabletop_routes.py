@@ -26541,6 +26541,15 @@ def _pc_sees_in_darkness(sheet: "dict | None") -> bool:
         effects = b.get("effects")
         if isinstance(effects, dict) and effects.get("devils_sight_range_ft"):
             return True
+    # v2.159.24 — magic-item passives: Goggles of Night (and any
+    # future sensory item that sets `sees_in_darkness: True` in
+    # `_MAGIC_ITEM_PASSIVES`) compose with Devil's Sight here. The
+    # _equipped_item_effects walker handles attunement + slot gates.
+    try:
+        if _equipped_item_effects(sheet).get("sees_in_darkness"):
+            return True
+    except Exception:
+        pass
     return False
 
 
@@ -30513,6 +30522,23 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_no_shield": True,
         },
     ],
+    # v2.159.24 — first sensory-passive item. Goggles of Night (RAW
+    # DMG p.172, uncommon, no attunement). While worn, the wearer
+    # has darkvision out to 60 ft — composes with `_pc_sees_in_darkness`
+    # (the v2.158.50 Devil's Sight read-site helper) so a Goggles-
+    # equipped PC who's blinded by darkness shrugs off the attack
+    # disadvantage exactly as a Devil's-Sight Warlock does. The
+    # `sees_in_darkness` payload key is the substrate's first sensory
+    # field — future Eyes of the Eagle / True Sight items extend the
+    # same dict shape with `truesight_ft`, `advantage_on_perception`,
+    # etc. without needing a new helper.
+    "goggles-of-night": [
+        {
+            "sees_in_darkness": True,
+            "darkvision_ft": 60,
+            "requires_attunement": False,
+        },
+    ],
 }
 
 
@@ -30902,6 +30928,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
         "save_bonus": 0,
         "ac_bonus_sources": [],
         "save_bonus_sources": [],
+        # v2.159.24 — sensory passives. `sees_in_darkness` is the
+        # boolean union across all equipped magic-item passives; the
+        # sources list lets a UI surface "darkvision via Goggles of
+        # Night" rather than the generic devil's-sight label.
+        "sees_in_darkness": False,
+        "sees_in_darkness_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -30947,6 +30979,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if sv:
                 out["save_bonus"] += sv
                 out["save_bonus_sources"].append(item_name)
+            # v2.159.24 — sensory passives. Boolean OR across passives;
+            # the source name lets a UI describe which item granted
+            # darkvision.
+            if p.get("sees_in_darkness"):
+                out["sees_in_darkness"] = True
+                out["sees_in_darkness_sources"].append(item_name)
     return out
 
 

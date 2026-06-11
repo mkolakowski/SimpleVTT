@@ -411,6 +411,15 @@ def _rogue_sheet(name: str) -> dict:
              "properties": "finesse, light, magic",
              "_slug": "sword-of-sharpness",
              "desc": "Very rare shortsword, attunement. +1 attack/damage; on a natural 20 attack roll, deal +4d6 slashing damage (RAW DMG p.206). On a second nat 20 — GM discretion — lop off a limb."},
+            # v2.159.24 — first sensory-passive magic item. Goggles of
+            # Night (RAW DMG p.172, uncommon, no attunement). Pip is a
+            # Halfling — no racial darkvision — so the Goggles add a
+            # meaningful sense + compose with the v2.158.50 Devil's
+            # Sight darkness-blinded helper. inventory_index 10.
+            {"name": "Goggles of Night", "type": "gear", "qty": 1,
+             "equippable": True, "equipped": True,
+             "_slug": "goggles-of-night",
+             "desc": "Uncommon wondrous item, no attunement. While you wear these dark lenses, you have darkvision out to 60 ft. Composes with the Devil's Sight attack-disadvantage helper so a darkness-blinded wielder doesn't roll at disadvantage on attacks."},
         ],
         "feats": [],
         "resources": [],

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2299 in `tests/harness/` + 50 in `tests/harness_ui/` (as of v2.159.23, 2026-06-11).
+**Total tests:** 2302 in `tests/harness/` + 50 in `tests/harness_ui/` (as of v2.159.25, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -85,6 +85,15 @@ v2.159.18 exhaustion-levels Phase 2 — disadvantage wiring at Lv 1 (ability che
 | `test_exhaustion_lv3_imposes_save_disadvantage` | Lv 3 imposes ALL save disadvantage (not just DEX-gated like Restrained). WIS save → 2d20kl1, `roll_state_applied == "auto_disadvantage_exhaustion-3"`. |
 | `test_exhaustion_lv0_no_disadvantage` | Regression. At level=0 the helpers must NOT fire any exhaustion label. |
 | `test_exhaustion_lv3_npc_imposes_check_disadvantage` | NPC mirror path — set exhaustion via `combatant_id` + skip_roll_state + /roll → response carries an exhaustion label. |
+
+### `test_goggles_of_night.py`
+v2.159.25 magic-items follow-up — Goggles of Night (RAW DMG p.172, uncommon, no attunement). First sensory-passive item in `_MAGIC_ITEM_PASSIVES` with `sees_in_darkness: True`. Composes with the v2.158.50 Devil's Sight darkness-blinded helper (`_pc_sees_in_darkness`) so a Goggles-equipped PC who's blinded by darkness shrugs off attack disadvantage exactly as a Devil's-Sight Warlock does. Pip Quickfingers (Halfling Rogue Lv 5 — no racial darkvision) carries the Goggles at inventory_index 10 in the demo seed.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_goggles_negate_darkness_blinded_disadvantage` | Pip darkness-blinded + Goggles equipped → attack roll stays 1d20 (no disadvantage). Mirror of Devil's Sight case but powered by the item passive. |
+| `test_goggles_unequipped_does_not_negate_disadvantage` | Unequip the Goggles → darkness-blinded Pip rolls at disadvantage as normal (2d20kl1 + `roll_state_applied == "disadvantage_attacker_blinded"`). |
+| `test_goggles_do_not_cure_non_darkness_blindness` | Goggles equipped + non-darkness blinded (e.g. Blindness/Deafness spell, no `from_darkness` marker) → disadvantage STILL applies. Goggles only negate the inability to see in darkness. |
 
 ### `test_exhaustion.py`
 v2.159.17 exhaustion-levels Phase 1 (see [exhaustion-levels.md](../plans/exhaustion-levels.md)) — data shape + `POST /api/campaign/{cid}/set_exhaustion` endpoint + long-rest decrement. Replaces the legacy single-flag exhaustion treatment with RAW SRD 5.1 six-level tracking. Read-site wiring (Lv 1 ability-check disadvantage; Lv 2 speed halved; Lv 3 attack + save disadvantage; Lv 4 HP-max halved; Lv 5 speed 0) is Phase 2-3; this commit lands the data foundation + level-6-death plumbing.
