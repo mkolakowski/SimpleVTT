@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.17] - 2026-06-11 — "The Tired Body" — Exhaustion-levels Phase 1 (see `docs/plans/exhaustion-levels.md`): the data shape + mutation endpoint + long-rest decrement. Replaces the legacy single-flag `exhaustion` condition treatment with RAW SRD 5.1 six-level tracking. The read-site wiring (Lv 1 ability-check disadvantage; Lv 2 speed halved; Lv 3 attack + save disadvantage; Lv 4 HP-max halved; Lv 5 speed 0; Lv 6 death) is Phase 2-3 — this commit lands ONLY the integer field + endpoint + rest hook + level-6-death plumbing so Phase 2/3 have a stable foundation to compose with. Closes the Phase E.8 Berserker Frenzy blocker (the framework is here; Phase 4 retrofits Frenzy's rage-end hook).
+
+**Schema version:** 69
+**Commit summary:** **(A) New `POST /api/campaign/{cid}/set_exhaustion` endpoint in `tabletop_routes.py`. Body: `{character_id | combatant_id, level | delta}`. Validates exactly-one of each pair (400 on both/neither). Clamps result 0-6. For PCs: writes `sheet.exhaustion_level`, persists via `flag_modified`, returns `{ok, character_id, level, previous, died}`. For NPCs: writes `combatant.exhaustion_level` in the hub state, broadcasts `battle_update`. (B) Level 6 → instant death: PC routes through the existing `_set_death_save_state(char, status="dead")` (v2.1.0 death-saves state machine), broadcasts `character_death_save` card with `source: "exhaustion_lv6"`; NPC gets `hp_current=0` + the standard `battle_update` broadcast. (C) `exhaustion_update` broadcast on every level change with `{character_id|combatant_id, level, previous, source}`. (D) `rest_character` long-rest branch decrements `sheet.exhaustion_level` by 1 (min 0) before the HP-restore step. Broadcast `exhaustion_update` with `source: "long_rest"` only if the level actually changed (no broadcast spam when already at 0). Short rest unchanged (RAW: only long rest reduces exhaustion). (E) New HTTP harness `tests/harness/test_exhaustion.py` with 8 tests: absolute set, delta increment, clamp at 6 + death, clamp at 0, long-rest decrement, long-rest at zero stays zero, missing body fields → 400, both target ids → 400. (F) HTTP test total bumped 2266 → 2274.**
+**Description:** Closes Phase 1 of `docs/plans/exhaustion-levels.md`. The integer field is the source of truth (NOT a buff — exhaustion has no duration and doesn't expire on its own; the buff engine's machinery is the wrong home). All mutations go through the single endpoint so future read-sites can rely on the level being well-formed. Level 6 routing through the existing death-saves state machine means the existing UI (init tracker skull icon, hp bar, death-saves modal) all just work — no new client glue. Phase 2 wires the disadvantage helpers (Lv 1 + Lv 3); Phase 3 wires `effective_speed_walk` (Lv 2 + Lv 5) + HP-max halving (Lv 4); Phase 4 retrofits Berserker Frenzy's rage-end hook to call `set_exhaustion(delta=+1)`. None of the read-site wiring needs schema changes — Phase 1's shape is sufficient.
+
+### Added
+- `app/routes/tabletop_routes.py` — `set_exhaustion` endpoint; `rest_character` long-rest exhaustion decrement + `exhaustion_update` broadcast.
+- `tests/harness/test_exhaustion.py` — 8 HTTP tests.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.16 → 2.159.17. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.17.
+- `docs/test-harness-coverage.md` — HTTP total 2266 → 2274; new `test_exhaustion.py` entry.
+
+### Notes
+- The plan's optional mirror buff (key=exhaustion, effects.exhaustion_level) is NOT shipped yet — the existing condition-badge UI still treats `exhaustion` as an on/off checkbox. Phase 1's sheet field lives alongside the legacy buff; the UI swap to a level spinner is filed as Phase 1b (or rolled into Phase 2 with the disadvantage wiring).
+- Greater Restoration auto-hook (Phase 4 non-goal per the plan) is not in scope. The spell can call the endpoint manually for now.
+- The endpoint is GM-or-owner-gated (same pattern as `/rest`). A player can change their own character's exhaustion; only the GM can change another player's or an NPC's.
+
+---
+
 ## [2.159.16] - 2026-06-11 — "The Schema Sentry" — Magic-items-automation Phase 8p (also closes the v2.158.83 retro TODO): boot-time schema validator for every shipped item JSON under `app/data/local/dnd5e/items/` + a new `/api/content-health` endpoint that mirrors the boot-time result. Filed in the v2.158.83 retro because the Pearl `key`/`id` bug shipped silently — the only validator was per-endpoint at `/api/content/items/{slug}` so items only got checked when fetched. Now every commit's container build sweeps all 292 items at startup, logs errors, AND the CI harness asserts the result is empty via the new endpoint — schema drift fails fast before merge instead of waiting for a player to fetch the offending item.
 
 **Schema version:** 69

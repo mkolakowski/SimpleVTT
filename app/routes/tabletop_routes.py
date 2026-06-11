@@ -76860,6 +76860,13 @@ async def rest_character(
         # v2.99.387 — Tides of Chaos / Restore Balance / Strength of the
         # Grave long-rest refills now run via `_refill_feature_uses` in
         # the shared section above (Phase 1 feature-use registry).
+        # v2.159.17 — exhaustion-levels Phase 1: finishing a long rest
+        # reduces exhaustion by 1 (RAW PHB Appendix A). v1 simplification:
+        # always reduce, no food/water gate (narrative). Min 0.
+        _ex_pre = int(sheet.get("exhaustion_level") or 0)
+        _ex_post = max(0, _ex_pre - 1)
+        if _ex_pre != _ex_post:
+            sheet["exhaustion_level"] = _ex_post
         char.sheet = sheet
         # Long rest restores HP to max and clears any dying/stable state.
         # Route through the death-save state machine so the broadcast +
@@ -76890,6 +76897,21 @@ async def rest_character(
                         "level": lvl,
                         "total": total,
                         "used": 0,
+                    },
+                })
+            except Exception:
+                pass
+
+        # v2.159.17 — exhaustion Phase 1: broadcast exhaustion_update
+        # so any open sheet / init tracker re-renders the level badge.
+        if _ex_pre != _ex_post:
+            try:
+                await hub.broadcast(campaign_id, {
+                    "type": "exhaustion_update",
+                    "data": {
+                        "character_id": char.id,
+                        "level": _ex_post,
+                        "source": "long_rest",
                     },
                 })
             except Exception:
@@ -77160,6 +77182,172 @@ async def rest_character(
             {"die": sor_die, "bard": sor_bard, "bard_level": sor_bard_lv}
             if sor_die > 0 else None
         ),
+    }
+
+
+# ----------- API: exhaustion levels (v2.159.17 Phase 1) ----------------
+
+@router.post("/api/campaign/{campaign_id}/set_exhaustion")
+async def set_exhaustion(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.159.17 — exhaustion-levels Phase 1 (see
+    docs/plans/exhaustion-levels.md). Single mutation endpoint for the
+    `sheet.exhaustion_level` integer (PCs) or
+    `combatant.exhaustion_level` (NPCs). Clamps 0-6. At level 6,
+    routes through the existing death-saves machinery for PCs
+    (status='dead') or 0-HP removal for NPCs.
+
+    Body:
+      - `character_id` (int, optional) — target a PC.
+      - `combatant_id` (str, optional) — target an NPC by hub state id.
+      - `level` (int) — direct set, takes priority over delta.
+      - `delta` (int) — relative change (positive or negative).
+    Exactly one of level/delta must be supplied; exactly one of
+    character_id/combatant_id must be supplied.
+
+    Broadcasts `exhaustion_update` with `{character_id|combatant_id,
+    level, source}`. At level 6, also fires the existing
+    `character_death_save` (PC) or `battle_update` (NPC HP=0) cards.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    body = await request.json()
+
+    char_id = body.get("character_id")
+    combatant_id = body.get("combatant_id")
+    if (char_id is None) == (combatant_id is None):
+        raise HTTPException(
+            400,
+            "exactly one of character_id or combatant_id required",
+        )
+
+    has_level = "level" in body
+    has_delta = "delta" in body
+    if has_level == has_delta:
+        raise HTTPException(
+            400, "exactly one of level or delta required",
+        )
+
+    if char_id is not None:
+        char = db.query(Character).filter(
+            Character.id == int(char_id),
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not char:
+            raise HTTPException(404, "Character not found")
+        if not (_user_is_gm(user, campaign, db)
+                or char.owner_user_id == user.id):
+            raise HTTPException(403, "Not your character")
+        sheet = dict(char.sheet or {})
+        cur = int(sheet.get("exhaustion_level") or 0)
+        if has_level:
+            new_level = int(body.get("level") or 0)
+        else:
+            new_level = cur + int(body.get("delta") or 0)
+        new_level = max(0, min(6, new_level))
+        sheet["exhaustion_level"] = new_level
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        # Level 6 → instant death via the death-save state machine.
+        died = False
+        if new_level >= 6:
+            _set_death_save_state(char, status="dead")
+            died = True
+        db.commit()
+
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "exhaustion_update",
+                "data": {
+                    "character_id": char.id,
+                    "level": new_level,
+                    "previous": cur,
+                    "source": "set_exhaustion",
+                },
+            })
+        except Exception:
+            pass
+        if died:
+            ds = dict(char.sheet.get("death_saves") or {})
+            try:
+                await hub.broadcast(campaign_id, {
+                    "type": "character_death_save",
+                    "data": {
+                        "character_id": char.id,
+                        "status": ds.get("status", "dead"),
+                        "successes": int(ds.get("successes") or 0),
+                        "failures": int(ds.get("failures") or 0),
+                        "hp": dict(char.sheet.get("hp") or {}),
+                        "source": "exhaustion_lv6",
+                    },
+                })
+            except Exception:
+                pass
+        return {
+            "ok": True,
+            "character_id": char.id,
+            "level": new_level,
+            "previous": cur,
+            "died": died,
+        }
+
+    # NPC path — mutate the combatant in the hub state.
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            target = c
+            break
+    if target is None:
+        raise HTTPException(404, "combatant not found in battle")
+    cur = int(target.get("exhaustion_level") or 0)
+    if has_level:
+        new_level = int(body.get("level") or 0)
+    else:
+        new_level = cur + int(body.get("delta") or 0)
+    new_level = max(0, min(6, new_level))
+    target["exhaustion_level"] = new_level
+    npc_killed = False
+    if new_level >= 6:
+        target["hp_current"] = 0
+        npc_killed = True
+    hub.set_battle(campaign_id, state)
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "exhaustion_update",
+            "data": {
+                "combatant_id": combatant_id,
+                "level": new_level,
+                "previous": cur,
+                "source": "set_exhaustion",
+            },
+        })
+    except Exception:
+        pass
+    if npc_killed:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "battle_update",
+                "data": state,
+                "force_gm_sync": True,
+            })
+        except Exception:
+            pass
+    return {
+        "ok": True,
+        "combatant_id": combatant_id,
+        "level": new_level,
+        "previous": cur,
+        "died": npc_killed,
     }
 
 
