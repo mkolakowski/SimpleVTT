@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.23] - 2026-06-11 — "The Sentry Spreads" — Phase 8q follow-up: extends the v2.159.16 boot-time content validator from items-only to ALL nine SRD content types (races / class_features / subclass_features / spells / items / feats / backgrounds / monsters / conditions). Walks each `app/data/local/dnd5e/<type>/*.json` and validates against the corresponding Pydantic schema via `content_schemas.TYPE_REGISTRY`. The `/api/content-health` endpoint response shape evolved from `{items: {checked, errors}}` to a nested per-type map; existing harness assertions that read `data["items"]["errors"]` keep working because the items key is still present in the response. 984 records validated across the 9 types — all pass on the v2.159.23 boot.
+
+**Schema version:** 69
+**Commit summary:** **(A) Renamed `_validate_all_local_items()` → `_validate_all_local_content()`. Now iterates `content_schemas.TYPE_REGISTRY` and walks `app/data/local/dnd5e/<type>/*.json` for each entry. Returns `{type: {checked: int, errors: list[{file, error}]}}`. (B) Renamed module state `_ITEM_VALIDATION_RESULT` → `_CONTENT_VALIDATION_RESULT` to reflect the multi-type shape; the `on_startup` hook walks the result map and logs per-type counts + per-type errors. The success line aggregates: "Content validator: 984 records across 9 types OK." (C) `/api/content-health` endpoint now returns the nested per-type map (top-level keys: races / class_features / subclass_features / spells / items / feats / backgrounds / monsters / conditions). (D) Updated harness `tests/harness/test_all_items_validate.py` with 3 tests replacing the prior 2: `test_content_health_endpoint_reports_zero_errors_for_all_types` (asserts EVERY type has empty errors, regression dumps `<type>/<file>: <error>` per offender), `test_content_health_checked_minimums_per_type` (per-type minimum-count gate), `test_content_health_covers_all_nine_types` (regression guard for missing type keys). (E) HTTP test total bumped 2298 → 2299.**
+**Description:** Closes Phase 8q. The validator now covers every content type the engine reads — schema drift on a spell, monster, or feat is now caught at the same CI cadence as item drift. The boot-time log aggregates per-type so a regression on one type doesn't drown out the other 8. With 984 records validating in <300ms on Apple Silicon, the latency stays in the negligible zone.
+
+### Added
+- `app/main.py` — `_validate_all_local_content()` helper; `_CONTENT_VALIDATION_RESULT` module state.
+- `tests/harness/test_all_items_validate.py` — 3 HTTP tests (replaces the prior 2).
+
+### Changed
+- `app/main.py` — `on_startup` walks the multi-type result; `/api/content-health` returns the nested per-type map.
+- `app/version.py` — `APP_VERSION` 2.159.22 → 2.159.23. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.23.
+- `docs/test-harness-coverage.md` — HTTP total 2298 → 2299; refreshed `test_all_items_validate.py` entry.
+
+### Notes
+- The endpoint response shape changed — clients that read `data["items"]["errors"]` (e.g. the v2.159.16 harness tests) keep working because the items key is still present at the top level. Clients that expected the top-level shape to be `{items: ...}` ONLY would be surprised by the new keys; no such client exists in the repo today.
+- Per-type minimums in `_MIN_COUNTS` are conservative — spells = 100 (319 ship), monsters = 100 (322 ship), items = 100 (292 ship), feats = 1 (only 1 ships today). If the SRD content set ever doubles, the minimums could tighten.
+- The boot-time validator runs ONCE at startup. To re-validate after a hot JSON drop in dev, restart the container. An operator polling `/api/content-health` is reading the cache from the last boot.
+
+---
+
 ## [2.159.22] - 2026-06-11 — "The Tired Ruler" — JS-side exhaustion speed wiring. Closes the v2.159.19 filed follow-up: the browser-side `_effectiveSpeedWalk` in `tabletop.html` now mirrors the v2.159.19 server-side formula by reading `combatant.exhaustion_level` and applying the cumulative penalty (Lv >= 5 → 0; Lv >= 2 → `Math.floor(result / 2)`). The canvas move-preview ring now matches the server's 409 over_speed_cap rejection — no more informative-then-rejecting UX.
 
 **Schema version:** 69

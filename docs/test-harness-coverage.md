@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2298 in `tests/harness/` + 50 in `tests/harness_ui/` (as of v2.159.22, 2026-06-11).
+**Total tests:** 2299 in `tests/harness/` + 50 in `tests/harness_ui/` (as of v2.159.23, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -101,12 +101,13 @@ v2.159.17 exhaustion-levels Phase 1 (see [exhaustion-levels.md](../plans/exhaust
 | `test_set_exhaustion_both_target_ids_returns_400` | Body has both `character_id` AND `combatant_id` → 400 (exactly-one target validator). |
 
 ### `test_all_items_validate.py`
-v2.159.16 magic-items-automation Phase 8p — boot-time validator for every shipped item JSON under `app/data/local/dnd5e/items/` + the new `/api/content-health` endpoint that mirrors the boot-time result. Filed in the v2.158.83 retro: the Pearl `key`/`id` bug shipped silently because the only runtime validator was per-endpoint at `/api/content/items/{slug}`. The boot-time sweep walks all 292 items at app startup; this harness asserts the result is empty.
+v2.159.16 magic-items-automation Phase 8p (items-only) + v2.159.23 Phase 8q (all 9 content types). Boot-time validator walks every shipped JSON under `app/data/local/dnd5e/<type>/` for each type in `content_schemas.TYPE_REGISTRY` (races, class_features, subclass_features, spells, items, feats, backgrounds, monsters, conditions — 984 records total). The `/api/content-health` endpoint mirrors the result as `{type: {checked, errors}}` per type. The harness asserts every type has empty errors on every CI run.
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_content_health_endpoint_reports_zero_item_errors` | `GET /api/content-health` → 200 with `{items: {checked, errors}}`; `errors` is empty (regression failure dumps offending file + error per row). |
-| `test_content_health_checked_at_least_100_items` | `items.checked >= 100`; regression guard against the validator walking the wrong directory and returning a false-OK over zero files. |
+| `test_content_health_endpoint_reports_zero_errors_for_all_types` | `GET /api/content-health` → 200 with per-type maps; EVERY content type's `errors` is empty. Regression failure dumps `<type>/<file>: <error>` per offender. |
+| `test_content_health_checked_minimums_per_type` | Each content type's `checked` count meets a sane minimum (e.g. spells ≥ 100, monsters ≥ 100). Catches a validator that walked the wrong dir. |
+| `test_content_health_covers_all_nine_types` | All nine `TYPE_REGISTRY` keys appear in the response. Catches a missing-type regression. |
 
 ### `test_concurrency.py`
 Multi-client races and late-joiner behavior. Guards the per-campaign `CampaignHub` + WS broadcast pipeline.

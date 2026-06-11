@@ -114,48 +114,54 @@ async def _auth_redirect_handler(request: Request, exc: StarletteHTTPException):
     return await http_exception_handler(request, exc)
 
 
-def _validate_all_local_items() -> tuple[int, list[tuple[str, str]]]:
-    """v2.159.16 — boot-time validator for every shipped SRD item JSON.
+def _validate_all_local_content() -> dict[str, dict]:
+    """v2.159.16 — boot-time validator for every shipped SRD content JSON.
 
-    Walks ``app/data/local/dnd5e/items/*.json`` and validates each
-    against the ``Item`` Pydantic schema. Filed in the v2.158.83 retro:
-    the Pearl ``key`` / ``id`` bug shipped silently because the only
-    runtime validator was per-endpoint (``/api/content/items/{slug}``)
-    — items only get checked when fetched. A boot-time sweep catches
-    schema drift the moment a developer adds or edits an item.
+    v2.159.23 — Phase 8q: extended from items-only to ALL nine content
+    types via the existing ``content_schemas.TYPE_REGISTRY``. Walks
+    ``app/data/local/dnd5e/<type>/*.json`` for each type and validates
+    each file against its Pydantic schema. Filed in the v2.158.83
+    retro: the Pearl ``key`` / ``id`` bug shipped silently because the
+    only runtime validator was per-endpoint
+    (``/api/content/items/{slug}``) — content only got checked when
+    fetched. A boot-time sweep catches schema drift the moment a
+    developer adds or edits any record.
 
-    Returns ``(checked_count, errors)`` where ``errors`` is a list of
-    ``(filename, error_message)`` tuples. Callers decide whether to log
-    + continue or crash. The startup hook today only logs — see Phase
-    8p notes.
+    Returns ``{type: {checked: int, errors: list[{file, error}]}}``
+    keyed by directory name (items / spells / feats / etc.). Callers
+    decide whether to log + continue or crash. The startup hook today
+    only logs — see Phase 8p notes.
     """
     import json as _json
-    from .content_schemas import Item as _Item
+    from .content_schemas import TYPE_REGISTRY as _TYPE_REGISTRY
 
-    items_dir = Path(__file__).resolve().parent / "data" / "local" / "dnd5e" / "items"
-    if not items_dir.is_dir():
-        return (0, [])
-    errors: list[tuple[str, str]] = []
-    checked = 0
-    for path in sorted(items_dir.glob("*.json")):
-        checked += 1
-        try:
-            with path.open("r", encoding="utf-8") as fh:
-                payload = _json.load(fh)
-        except _json.JSONDecodeError as e:
-            errors.append((path.name, f"invalid JSON: {e}"))
-            continue
-        except OSError as e:
-            errors.append((path.name, f"read error: {e}"))
-            continue
-        try:
-            _Item.model_validate(payload)
-        except Exception as e:  # noqa: BLE001 — pydantic ValidationError or sub-class
-            errors.append((path.name, str(e).splitlines()[0]))
-    return (checked, errors)
+    base_dir = Path(__file__).resolve().parent / "data" / "local" / "dnd5e"
+    out: dict[str, dict] = {}
+    for type_name, schema in _TYPE_REGISTRY.items():
+        type_dir = base_dir / type_name
+        errors: list[dict] = []
+        checked = 0
+        if type_dir.is_dir():
+            for path in sorted(type_dir.glob("*.json")):
+                checked += 1
+                try:
+                    with path.open("r", encoding="utf-8") as fh:
+                        payload = _json.load(fh)
+                except _json.JSONDecodeError as e:
+                    errors.append({"file": path.name, "error": f"invalid JSON: {e}"})
+                    continue
+                except OSError as e:
+                    errors.append({"file": path.name, "error": f"read error: {e}"})
+                    continue
+                try:
+                    schema.model_validate(payload)
+                except Exception as e:  # noqa: BLE001 — pydantic ValidationError or sub-class
+                    errors.append({"file": path.name, "error": str(e).splitlines()[0]})
+        out[type_name] = {"checked": checked, "errors": errors}
+    return out
 
 
-_ITEM_VALIDATION_RESULT: dict = {"checked": 0, "errors": []}
+_CONTENT_VALIDATION_RESULT: dict[str, dict] = {}
 
 
 @app.on_event("startup")
@@ -165,40 +171,58 @@ async def on_startup() -> None:
     init_db()
     record_schema_version(SCHEMA_VERSION)
 
-    # v2.159.16 — sweep every shipped item JSON for schema compliance.
-    # We log errors but DON'T crash — a broken item still loads via
-    # ``resolve()`` at request-time and will surface there too; the
-    # boot-time signal just makes the failure loud at deploy time
-    # rather than waiting for a player to fetch the item.
+    # v2.159.16 — sweep every shipped content JSON for schema
+    # compliance. We log errors but DON'T crash — a broken record
+    # still loads via ``resolve()`` at request-time and will surface
+    # there too; the boot-time signal just makes the failure loud at
+    # deploy time rather than waiting for a player to fetch the
+    # record. v2.159.23 — Phase 8q: extended from items-only to all
+    # nine content types via the TYPE_REGISTRY.
     try:
-        checked, errors = _validate_all_local_items()
-        _ITEM_VALIDATION_RESULT["checked"] = checked
-        _ITEM_VALIDATION_RESULT["errors"] = [
-            {"file": n, "error": m} for (n, m) in errors
-        ]
-        if errors:
-            log.error(
-                "Item schema validator: %d/%d items failed validation:",
-                len(errors), checked,
+        result = _validate_all_local_content()
+        _CONTENT_VALIDATION_RESULT.clear()
+        _CONTENT_VALIDATION_RESULT.update(result)
+        total_checked = 0
+        total_errors = 0
+        for type_name, payload in result.items():
+            checked = int(payload.get("checked") or 0)
+            errors = payload.get("errors") or []
+            total_checked += checked
+            total_errors += len(errors)
+            if errors:
+                log.error(
+                    "Content validator [%s]: %d/%d failed validation:",
+                    type_name, len(errors), checked,
+                )
+                for entry in errors:
+                    log.error(
+                        "  %s — %s",
+                        entry.get("file"), entry.get("error"),
+                    )
+        if total_errors == 0:
+            log.info(
+                "Content validator: %d records across %d types OK.",
+                total_checked, len(result),
             )
-            for name, msg in errors:
-                log.error("  %s — %s", name, msg)
-        else:
-            log.info("Item schema validator: %d items OK.", checked)
     except Exception as e:  # noqa: BLE001 — never block boot on the validator
-        log.exception("Item schema validator crashed: %s", e)
+        log.exception("Content validator crashed: %s", e)
 
 
 @app.get("/api/content-health")
 def content_health():
-    """v2.159.16 — public read-only mirror of the boot-time item-schema
-    validator. Returns ``{items: {checked, errors}}`` where ``errors``
-    is a list of ``{file, error}`` dicts (empty list = all good). The
-    harness asserts this is empty on every CI run; an operator polling
-    after a content drop can use it to confirm new items parse before
-    cutting traffic over.
+    """v2.159.16 — public read-only mirror of the boot-time content-
+    schema validator. v2.159.23 extends from items-only to a nested
+    map keyed by content type. The harness asserts every type has
+    empty errors on every CI run; an operator polling after a content
+    drop can use it to confirm new records parse before cutting
+    traffic over.
+
+    Returns ``{<type_name>: {checked, errors}}`` for each of the nine
+    content types. Top-level keys mirror ``content_schemas.TYPE_REGISTRY``
+    (races / class_features / subclass_features / spells / items /
+    feats / backgrounds / monsters / conditions).
     """
-    return {"items": dict(_ITEM_VALIDATION_RESULT)}
+    return {k: dict(v) for k, v in _CONTENT_VALIDATION_RESULT.items()}
     if settings.admins:
         log.info("Admins from env: %s", ", ".join(settings.admins))
     else:
