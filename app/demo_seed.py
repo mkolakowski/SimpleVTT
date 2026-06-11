@@ -3422,12 +3422,19 @@ def _fighter_sheet(name: str) -> dict:
             # equipped + attuned. Detuning the item via /attune
             # suppresses the rider without removing the attack
             # option — RAW: weapon still works mundane.
+            # v2.158.92 — ``_lit: True`` ships the staff already
+            # ablaze at session start so out-of-the-box demos still
+            # produce the +2d6 fire rider without requiring a manual
+            # /use_item_action ignite. RAW: the GM can extinguish with
+            # the Phase 5b endpoint; non-RAW: the sword starts lit
+            # rather than dark. Tradeoff favors discoverability.
             {"name": "Flame Tongue Longsword", "type": "weapon", "qty": 1,
              "equippable": True, "equipped": True, "attuned": True,
+             "_lit": True,
              "hands": 1, "damage": "1d8", "damage_type": "slashing",
              "properties": "versatile (1d10), magic",
              "_slug": "flame-tongue",
-             "desc": "Rare longsword, attunement. Speak the command word (bonus action — flavor) to ignite; while ablaze, +2d6 fire damage on every hit. v1: always-on while attuned."},
+             "desc": "Rare longsword, attunement. Speak the command word (bonus action — /use_item_action ignite|extinguish) to toggle. While ablaze, +2d6 fire damage on every hit."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

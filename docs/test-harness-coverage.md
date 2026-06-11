@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2212 in `tests/harness/` + 33 in `tests/harness_ui/` (as of v2.158.91, 2026-06-10).
+**Total tests:** 2217 in `tests/harness/` + 33 in `tests/harness_ui/` (as of v2.158.92, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2058,6 +2058,17 @@ v2.158.87 magic-items-automation Phase 4c — Wand of Fireballs through the same
 | `test_fireball_wand_single_charge_casts_lv3` | 1 charge → `cast_slot_level: 3` (base=3 + 0). |
 | `test_fireball_wand_multi_charge_casts_higher` | 3 charges → `cast_slot_level: 5` (base=3 + 2). |
 | `test_fireball_wand_requires_attunement_409` | Detune the wand via /attune; invoke /use_item_action → 409 attunement required. Restores attunement in teardown. |
+
+### `test_flame_tongue_ignite.py`
+v2.158.92 magic-items-automation Phase 5b — Flame Tongue ignite/extinguish toggle via `/use_item_action`. Adds a per-item `_lit` boolean field on the inventory entry (persistent across rests + sessions, unlike combatant buffs). The Phase 5a rider gate gains a `requires_lit` check so the rider only fires while `_lit: True`. Two new action_keys (`ignite` / `extinguish`) flip the state; Garrik's seed ships `_lit: True` so the Phase 5a tests + out-of-the-box demo still fire the rider.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_extinguish_then_attack_has_no_rider` | Extinguish → 200 + `lit: false` + the next attack has no `item-flame-tongue` uplift. Re-ignites in teardown. |
+| `test_reignite_restores_rider` | Extinguish → no rider → ignite → 200 + `lit: true` → attack restores rider. Verifies bidirectional toggle. |
+| `test_ignite_when_already_lit_returns_409` | Ignite a lit Flame Tongue → 409 `no_state_change` with `current: true`. Seed default is lit. |
+| `test_extinguish_twice_409_on_second` | First extinguish 200; second extinguish 409 `no_state_change` with `current: false`. Re-ignites in teardown. |
+| `test_unknown_action_key_404` | `cast-fireball` action_key on flame-tongue → 404 (multi-action dispatch guard from v2.158.88). |
 
 ### `test_flame_tongue_rider.py`
 v2.158.91 magic-items-automation Phase 5a — Flame Tongue Longsword (RAW DMG p.170). First on-hit rider weapon: no `/use_item_action` call, the rider fires from `_compute_attack_auto_uplifts` via the new `_MAGIC_ITEM_ATTACK_RIDERS` catalog. Garrik's seed gets the longsword (attack_index 3, inventory_index 7, equipped + attuned). The rider double-gates on `attack._slug == "flame-tongue"` AND the matching inventory item being equipped + attuned, so swapping weapons or detuning suppresses the rider without removing the attack entry.

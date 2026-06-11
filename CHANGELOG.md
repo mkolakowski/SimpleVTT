@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.92] - 2026-06-10 — "The Command Word" — Magic-items-automation Phase 5b: Flame Tongue ignite/extinguish state toggle. RAW DMG p.170: "you can use a bonus action to speak this magic sword's command word, causing flames to erupt from the blade. ... The flames last until you use a bonus action to speak the command word again." Adds a per-item ``_lit`` boolean field on the inventory entry (not a combatant buff — buffs reset between battles, but lit state must persist across rests + sessions). The Phase 5a rider gate gains a third check (``requires_lit``) so the rider only fires while the item carries ``_lit: True``. Two new action_keys on the existing `/use_item_action` endpoint (``ignite`` / ``extinguish``) flip the state and broadcast a `feature_used` event.
+
+**Schema version:** 69
+**Commit summary:** **(A) `_MAGIC_ITEM_ATTACK_RIDERS["flame-tongue"]` gets `requires_lit: True`. (B) Section 6c in `_compute_attack_auto_uplifts` gains an extra gate that skips the rider when the matching inventory item has falsy `_lit` (in addition to the equipped + attuned checks). (C) `_MAGIC_ITEM_ACTIONS` gets a new `flame-tongue` row carrying an `actions: {ignite, extinguish}` sub-map — reuses the v2.158.88 multi-action dispatch shape so action_key validation is shared with Staff of Healing. (D) New handler `_use_item_action_flame_tongue(db, campaign_id, char, item, sheet, action_key, action_def, inv_idx)` flips `inventory[inv_idx]._lit` per `action_def.to_state`. Returns 409 ``no_state_change`` if the requested state matches current. Broadcasts `feature_used` with `source: "item-flame-tongue"`. (E) `_fighter_sheet` Garrik default flipped: Flame Tongue ships with `_lit: True` so the Phase 5a tests (and the out-of-the-box demo) still produce the +2d6 fire without a manual ignite step. Tradeoff: non-RAW starting state for discoverability. (F) New harness `tests/harness/test_flame_tongue_ignite.py` with 5 tests: extinguish → no rider on next attack; re-ignite restores rider; ignite-when-already-lit → 409 with `current: true`; extinguish-twice → 409 on second call with `current: false`; unknown action_key → 404 (multi-action dispatch guard). All teardowns re-ignite Garrik's sword so test order doesn't matter. (G) `docs/test-harness-coverage.md` adds the new section + total bumped 2212 → 2217.**
+**Description:** Closes the lit-state half of Phase 5. The double-gate from Phase 5a (slug match + equipped+attuned) becomes a triple-gate (+ `_lit: True`). Storing state on the inventory item rather than a combatant buff matters: a player could rest between encounters and the sword should still be lit; a GM could extinguish out-of-battle (stealth scene) and the state must persist through initiative roll. Phase 5c (conditional riders like Dragon Slayer +3d6 vs. dragons) and Phase 5d (the inventory-row UI for the toggle — a dynamic 🔥 Ignite / ❄ Extinguish button) are next on the plan. The endpoint contract is ready for both today.
+
+### Added
+- `app/routes/tabletop_routes.py` — `requires_lit: True` on the flame-tongue rider; lit-state gate in section 6c; `flame-tongue` row in `_MAGIC_ITEM_ACTIONS` with ignite/extinguish actions; `_use_item_action_flame_tongue` handler.
+- `tests/harness/test_flame_tongue_ignite.py` — 5 tests.
+
+### Changed
+- `app/demo_seed.py` — Garrik's Flame Tongue inventory entry now carries `_lit: True` by default so out-of-the-box demos still fire the rider. Comment notes the tradeoff vs. strict RAW (which starts the sword unlit).
+- `app/version.py` — `APP_VERSION` 2.158.91 → 2.158.92. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.92.
+- `docs/test-harness-coverage.md` — new test block + total 2212 → 2217.
+
+### Notes
+- The `_lit` state is per-item, not per-PC. A future homebrew where Garrik carries two Flame Tongues would track each independently — which is what RAW would want (each sword has its own command word).
+- Out-of-the-box, Garrik's sword starts lit. To play RAW, GMs can call `POST /api/.../use_item_action` with `action_key: "extinguish"` once at session start; the next ignite is a free bonus action.
+- The Phase 5b commit deliberately ships no UI for the toggle. The inventory-row 🔥/❄ button is filed for Phase 5d alongside Dragon Slayer's lack-of-UI (conditional riders fire automatically with no player input).
+
+---
+
 ## [2.158.91] - 2026-06-10 — "The Kindled Edge" — Magic-items-automation Phase 5a: first on-hit rider weapon — Flame Tongue Longsword (RAW DMG p.170). Different shape from every prior magic item: no `/use_item_action` endpoint — the rider fires from the existing attack pipeline via a new `_MAGIC_ITEM_ATTACK_RIDERS` catalog. `_compute_attack_auto_uplifts` gains a new section that reads `attack._slug`, looks it up in the catalog, and rolls the rider's dice if the wielder has the matching item equipped + attuned in their inventory. Garrik gets the Flame Tongue Longsword (rare, attunement) — his first magic item.
 
 **Schema version:** 69

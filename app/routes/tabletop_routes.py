@@ -26157,6 +26157,11 @@ def _compute_attack_auto_uplifts(
                 if (rider_spec.get("requires_attunement")
                         and not inv_item.get("attuned")):
                     continue
+                # v2.158.92 — Phase 5b: lit-state gate. Flame Tongue
+                # (and future state-toggle items) only fire while lit.
+                if (rider_spec.get("requires_lit")
+                        and not inv_item.get("_lit")):
+                    continue
                 has_item_attuned = True
                 break
             if has_item_attuned:
@@ -30112,6 +30117,25 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.158.92 — Phase 5b: Flame Tongue state-toggle. Two action_keys
+    # ('ignite', 'extinguish') flip the inventory item's ``_lit`` field
+    # — read by the Phase 5a rider gate at /attack time. RAW DMG p.170:
+    # "you can use a bonus action to speak this magic sword's command
+    # word, causing flames to erupt." No charges, no resource row —
+    # just a persistent boolean per item.
+    "flame-tongue": {
+        "requires_attunement": True,
+        "actions": {
+            "ignite": {
+                "name": "Ignite Flame Tongue",
+                "to_state": True,
+            },
+            "extinguish": {
+                "name": "Extinguish Flame Tongue",
+                "to_state": False,
+            },
+        },
+    },
 }
 
 
@@ -30130,12 +30154,18 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
 _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
     # v2.158.91 — Flame Tongue (RAW DMG p.170). Any sword variant;
     # demo seeds a Flame Tongue Longsword on Garrik. +2d6 fire on
-    # every hit while attuned. Rare item, requires attunement.
+    # every hit while attuned + lit. Rare item, requires attunement.
+    # v2.158.92 — Phase 5b: ``requires_lit: True`` means the gate also
+    # checks the inventory item's ``_lit`` field (mutable via the
+    # ignite/extinguish handlers below). Persistent across battles +
+    # rests (unlike combatant buffs), matching RAW "the flames last
+    # until you use a bonus action to speak the command word again."
     "flame-tongue": {
         "label": "Flame Tongue",
         "dice": "2d6",
         "damage_type": "fire",
         "requires_attunement": True,
+        "requires_lit": True,
     },
 }
 
@@ -76691,6 +76721,12 @@ async def use_item_action(
             db, campaign_id, char, item, sheet, catalog,
             action_key, action_def, body.get("charges"),
         )
+    if slug == "flame-tongue":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_flame_tongue(
+            db, campaign_id, char, item, sheet,
+            action_key, action_def, inv_idx,
+        )
     raise HTTPException(409, "unknown item action handler")
 
 
@@ -77066,6 +77102,68 @@ async def _use_item_action_staff_of_healing(
             "current": res_row["current"],
             "max": res_max,
         },
+    }
+
+
+async def _use_item_action_flame_tongue(
+    db, campaign_id, char, item, sheet,
+    action_key, action_def, inv_idx,
+):
+    """v2.158.92 — Phase 5b Flame Tongue ignite/extinguish handler.
+    Flips the inventory item's ``_lit`` field per action_def.to_state.
+    Returns 409 if the requested state matches the current state
+    (already lit / already extinguished). RAW DMG p.170.
+    """
+    slug = "flame-tongue"
+    desired = bool(action_def.get("to_state"))
+    currently_lit = bool(item.get("_lit"))
+    if desired == currently_lit:
+        verb = "lit" if currently_lit else "extinguished"
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "no_state_change",
+                "current": currently_lit,
+                "label": item.get("name") or slug,
+                "detail": f"{item.get('name')} is already {verb}.",
+            },
+        )
+
+    inventory = list(sheet.get("inventory") or [])
+    if inv_idx < 0 or inv_idx >= len(inventory):
+        raise HTTPException(400, "inventory_index out of range")
+    new_item = dict(inventory[inv_idx])
+    new_item["_lit"] = desired
+    inventory[inv_idx] = new_item
+    sheet["inventory"] = inventory
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    summary_verb = "ignites" if desired else "extinguishes"
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": action_def.get("name") or "Toggle Flame Tongue",
+                "summary": (
+                    f"{char.name} {summary_verb} the {item.get('name')}."
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "action_key": action_key,
+        "lit": desired,
     }
 
 
