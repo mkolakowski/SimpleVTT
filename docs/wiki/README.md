@@ -50,14 +50,15 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Spell up-casting](../plans/spell-upcasting.md) | Markdown (design) | Contributors | 🟠 Mechanisms shipped (A+B+C, v2.108.0–v2.110.0); + higher_level prose parser (v2.125.0) auto-covers the tail; 34/319 hand-annotated |
 | [Spell-validation test suite](../plans/spell-validation-suite.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
 | [Sorcery Points + Metamagic](../plans/sorcery-points-and-metamagic.md) | Markdown (design) | Contributors | 🟢 Font of Magic + 7/8 metamagics + Sorcerous Restoration shipped (v2.49.120–v2.99.x); Quickened + AoE Empowered remain |
-| [Warlock Pact Boon](../plans/warlock-pact-boon.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
+| [Warlock Pact Boon](../plans/warlock-pact-boon.md) | Markdown (design) | Contributors | ✅ all three boons shipped (Tome v2.99.200 / Blade v2.99.212 / Chain v2.99.213) |
 | [Wild Magic (Sorcerer subclass)](../plans/wild-magic.md) | Markdown (design) | Contributors | ✅ All 5 phases shipped (v2.99.227–231) |
 | [Eldritch Knight (Fighter subclass)](../plans/eldritch-knight.md) | Markdown (design) | Contributors | 🟠 Phase 1 + Arcane Charge P1 + Improved War Magic P1 shipped (v2.158.11–.12); War Magic + Eldritch Strike remain |
-| [Battle Master (Fighter subclass)](../plans/battle-master.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped (v2.99.233); 2-5 + 15 maneuvers deferred |
-| [Paladin oaths (non-Devotion)](../plans/paladin-oaths.md) | Markdown (design) | Contributors | 🟠 4 oaths partially shipped (Warding / Rebuke / Avenger / Guardian, v2.99.245–v2.158.10); Lv 15/20 capstones + Glory remain |
-| [Magic-item automation](../plans/magic-items-automation.md) | Markdown (design) | Contributors | ⚪ proposed (v2.158.71) · top P1 of 2026-06-10 SRD audit · 292 items unwired |
+| [Battle Master (Fighter subclass)](../plans/battle-master.md) | Markdown (design) | Contributors | ✅ 16/16 maneuvers shipped (v2.99.252–.266); Know Your Enemy + Relentless blocked on Lv 18+ fixture |
+| [Paladin oaths (non-Devotion)](../plans/paladin-oaths.md) | Markdown (design) | Contributors | 🟢 Lv 15/20 capstones all ✅ (v2.99.283–.292); outstanding: Conquest Lv 3/7 + Redemption Lv 3 + Glory Lv 3 + Vengeance Phase 2 |
+| [Magic-item automation](../plans/magic-items-automation.md) | Markdown (design) | Contributors | ✅ framework shipped Phases 1–8 (v2.158.74–v2.159.25); Phase 9 content tail (~250 items) is P2 |
 | [Exhaustion levels](../plans/exhaustion-levels.md) | Markdown (design) | Contributors | ✅ Phases 0–4 shipped (v2.159.17–.22) · 32 tests · framework complete |
 | [Carrying capacity](../plans/carrying-capacity.md) | Markdown (design) | Contributors | ✅ Phases 0-3 shipped (v2.159.26–.30) · 38 tests · Bag of Holding live |
+| [Legendary actions + lair actions](../plans/legendary-actions.md) | Markdown (design) | Contributors | ⚪ proposed (v2.159.32) · top P1 of 2026-06-11 SRD audit refresh · 15 monsters carry data but no dispatch |
 | [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
 | [Unified mini-sheet](../plans/unified-mini-sheet.md) | Markdown (design) | Contributors | ⚪ proposed · 3 mockups · Phase 1–3 unstarted |
 | [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |

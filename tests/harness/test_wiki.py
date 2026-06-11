@@ -54,6 +54,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-exhaustion-levels" in resp.text
     # v2.159.26: carrying-capacity plan listed (unblocks Bag of Holding).
     assert "/wiki/doc/plan-carrying-capacity" in resp.text
+    # v2.159.32: legendary-actions plan listed (top P1 of 2026-06-11 SRD audit refresh).
+    assert "/wiki/doc/plan-legendary-actions" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.49.168: targeting system visual guide listed.
@@ -556,6 +558,21 @@ async def test_wiki_doc_serves_carrying_capacity_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "carrying capacity" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_legendary_actions_plan():
+    """v2.159.32: GET /wiki/doc/plan-legendary-actions — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/legendary-actions.md``. Top P1
+    of the 2026-06-11 SRD audit refresh — 15 SRD monsters carry
+    legendary-action data in their unified ``actions`` array but
+    the engine has no /use_legendary_action dispatch."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-legendary-actions")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "legendary actions" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 
