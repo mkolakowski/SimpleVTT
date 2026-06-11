@@ -3,9 +3,16 @@
 Phase E.1 of the [v2.99.193 class-content completion plan](class-content-status.md).
 Path: Fighter Martial Archetype: Battle Master (PHB p.73).
 
-> **Status (v2.99.233):** 🟠 Phase 1 (Combat Superiority dice +
-> Trip Attack maneuver) shipped. Phases 2–5 deferred (15
-> additional maneuvers + Know Your Enemy + Relentless).
+> **Status (re-audited 2026-06-11, v2.159.31 — SRD audit refresh):**
+> ✅ shipped end-to-end. All 16 PHB Battle Master maneuvers shipped
+> as individual `/use_*` endpoints with per-maneuver harness tests
+> across v2.99.252 → v2.99.266 (Trip Attack v2.99.233 was Phase 1;
+> the per-maneuver batch closed v2.99.252–v2.99.266, with
+> Commander's Strike at v2.99.266 as maneuver 16/16). Know Your
+> Enemy + Relentless (Lv 18) are the only remaining capstones;
+> blocked on a Lv 18+ Fighter demo fixture rather than the engine.
+> The 2026-06-10 SRD audit kept this in P2; the v-numbers actually
+> pre-dated the audit but the header wasn't refreshed.
 
 ## Why a plan doc
 

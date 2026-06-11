@@ -1,6 +1,14 @@
 # Carrying capacity — design plan
 
-**Status:** ⚪ proposed (v2.159.26, 2026-06-11) — no code yet. Filed to unblock the Bag of Holding magic item (v2.159.27+) which needs a load-bearing carry-weight engine to have anything meaningful to discount.
+**Status:** ✅ shipped end-to-end (re-audited 2026-06-11, v2.159.31 — SRD audit refresh). Phases 0–3 all closed:
+- **Phase 0** ✅ v2.159.26 (this plan doc filed + wiki surface).
+- **Phase 1** ✅ v2.159.27 (`app/content/carry_weight.py` leaf module + helpers + `/sheet-json` derived `carry` block; 37 unit tests).
+- **Phase 2a** ✅ v2.159.28 (Krieger weight backfill + carry meter UI; updated `updateTotalWeight()` to prefer `i.weight_lb` numeric + skip `_in_bag_of_holding` items + red-when-over-capacity).
+- **Phase 2b** ✅ v2.159.29 (RAW weight backfill for the remaining 11 demo PCs).
+- **Phase 3** ✅ v2.159.30 (Bag of Holding catalog row + Brakka demo seed + integration test).
+
+Future weight-related items (Heward's Handy Haversack, Belt of Giant Strength, Heroes' Feast +5 STR, Bag of Devouring) drop in via the existing substrate without new helper work. Phase 4 (Encumbered variant rule, PHB p.176) is the only follow-up still on the table.
+
 **Authors:** rolling
 **Last updated:** 2026-06-11
 

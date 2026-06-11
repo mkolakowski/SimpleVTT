@@ -22,16 +22,32 @@ Path: per-oath subclass shipping for the non-Devotion sacred oaths.
 >   (v2.158.10: permanent buff with `pfeag_*` payload reusing the
 >   Protection from Evil and Good spell-buff engine).
 >
-> **Outstanding:** (1) Ancients Lv 15/20 (Undying Sentinel / Elder
-> Champion); (2) Vengeance Phase 2 OA-flow gate + Lv 15/20 (Soul of
-> Vengeance / Avenging Angel — frightful aura partially shipped
-> Phase 5 v2.99.428); (3) Conquest Lv 3/7/20 (Conquering Presence /
-> Aura of Conquest / Invincible Conqueror); (4) Redemption Lv 3/15/20
-> (Emissary of Peace + Rebuke the Violent / Protective Spirit /
-> Emissary of Redemption); (5) Glory full oath (Peerless Athlete /
-> Inspiring Smite / Aura of Alacrity / Glorious Defense / Living
-> Legend); (6) Devotion Lv 20 Holy Nimbus ✅ (v2.99.166) — verify
-> shipped per the v2.99.192 audit, not re-tested in this header.
+> **2026-06-11 SRD audit refresh:** the Lv 15/20 capstones the
+> 2026-06-10 audit had listed as outstanding ACTUALLY shipped
+> v2.99.283 → v2.99.292 (the v-numbers pre-dated that audit but
+> the header wasn't refreshed). Now ✅:
+>
+> - **Ancients** — Undying Sentinel Lv 15 ✅ v2.99.283; Elder
+>   Champion Lv 20 capstone transform ✅ v2.99.288.
+> - **Vengeance** — Soul of Vengeance Lv 15 reactive ✅ v2.99.284;
+>   Avenging Angel Lv 20 capstone transform ✅ v2.99.289.
+> - **Conquest** — Scornful Rebuke Lv 15 passive ✅ v2.142.0 +
+>   v2.99.285; Invincible Conqueror Lv 20 ✅ v2.99.290. Lv 3/7
+>   (Conquering Presence / Aura of Conquest) remain.
+> - **Redemption** — Emissary of Peace Lv 7 CD ✅ v2.99.275;
+>   Protective Spirit Lv 15 self-heal ✅ v2.99.287; Emissary of
+>   Redemption Lv 20 ✅ v2.99.292. Lv 3 (Rebuke the Violent) remains.
+> - **Glory** — Peerless Athlete Lv 3 CD ✅ v2.99.276; Aura of
+>   Alacrity Lv 7 speed aura ✅ v2.99.282; Glorious Defense Lv 15
+>   reactive ✅ v2.99.286; Living Legend Lv 20 capstone ✅ v2.99.291.
+>   Lv 3 Inspiring Smite remains.
+>
+> **Real outstanding scope (post 2026-06-11):** Vengeance Phase 2
+> OA-flow gate (`/token/move` reads `relentless-avenger.free-move`
+> budget + skips OA prompts); Conquest Lv 3 (Conquering Presence
+> frightful CD) + Lv 7 (Aura of Conquest); Redemption Lv 3
+> (Rebuke the Violent on-damage-taken hook); Glory Lv 3 Inspiring
+> Smite (BA spend slot → self-buff). All are RAW PHB / SRD.
 
 ## Why a plan doc
 

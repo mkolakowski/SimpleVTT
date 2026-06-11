@@ -1,9 +1,17 @@
 # Exhaustion levels — design plan
 
-**Status:** ⚪ proposed (v2.158.72, 2026-06-10) — no code yet. Filed as a
-P1 finding of the [TODO.md SRD 5e Audit (2026-06-10)](../../TODO.md#srd-5e-audit-2026-06-10).
+**Status:** ✅ shipped end-to-end (re-audited 2026-06-11, v2.159.31 — SRD audit refresh). Phases 1–4 all closed across v2.159.17 → v2.159.22:
+- **Phase 1** ✅ v2.159.17 (`set_exhaustion` endpoint + 6-level integer field on sheet).
+- **Phase 2** ✅ v2.159.18 (disadvantage wiring — Lv 1 ability checks, Lv 3 attacks + saves).
+- **Phase 3a** ✅ v2.159.19 (speed wiring — Lv 2 halve, Lv 5 → 0; server-side).
+- **Phase 3b** ✅ v2.159.20 (HP-max halving at Lv 4).
+- **Phase 4** ✅ v2.159.21 (Berserker Frenzy rage-end exhaustion +1 hook — closes the Phase E.8 Berserker blocker).
+- **JS speed mirror** ✅ v2.159.22 (client-side move-preview ring consistency).
+
+Closed the second-largest un-planned RAW gap from the 2026-06-10 audit.
+
 **Authors:** rolling
-**Last updated:** 2026-06-10
+**Last updated:** 2026-06-11
 
 A plan to replace the engine's single-flag Exhaustion treatment with
 RAW SRD 5.1 six-level tracking. Today `exhaustion` is just another

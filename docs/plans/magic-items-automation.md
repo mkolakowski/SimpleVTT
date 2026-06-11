@@ -1,9 +1,11 @@
 # Magic-item automation — design plan
 
-**Status:** ⚪ proposed (v2.158.71, 2026-06-10) — no code yet. Filed as the
-top P1 finding of the [TODO.md SRD 5e Audit (2026-06-10)](../../TODO.md#srd-5e-audit-2026-06-10).
+**Status:** ✅ framework shipped end-to-end (re-audited 2026-06-11, v2.159.31 — SRD audit refresh). Phases 1–8 all closed across v2.158.74 → v2.159.25 (32 PATCH commits + the v2.159.0 MINOR milestone): passives → attunement → actions → on-hit riders → uplifts → templates → nat-20 hooks → AoE confirm modals → line/sphere/cone geometry → Javelin of Lightning → Necklace of Fireballs → Wand of Fear → Arrow of Slaying → Sun Blade → Goggles of Night (Phase 8a–8p).
+
+**Content tail (Phase 9 — NEW).** ~42 of 292 items now carry non-empty `actions`/`passives`; 250 still have `actions: []`. The remaining work is content-only — each item is a small commit picking from the established Phase 1–8 templates. See the [SRD 5e Audit (2026-06-11 refresh)](../../TODO.md#srd-5e-audit-2026-06-11-refresh) for the magic-item action backfill prioritisation.
+
 **Authors:** rolling
-**Last updated:** 2026-06-10
+**Last updated:** 2026-06-11
 
 A plan to give the 292 SRD magic items shipped under
 `app/data/local/dnd5e/items/` real mechanical wiring. Today every magic

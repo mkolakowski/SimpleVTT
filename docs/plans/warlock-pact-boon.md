@@ -1,8 +1,14 @@
 # Warlock Pact Boon — design plan
 
-**Status:** ⚪ proposed (v2.49.119, 2026-05-22) — no code yet.
+**Status:** ✅ shipped end-to-end (re-audited 2026-06-11, v2.159.31 — SRD audit refresh). Phase D closed v2.99.213 with all three boons:
+- **Pact of the Tome** ✅ v2.99.200 (3-cantrip picker + per-rest free swap).
+- **Pact of the Blade** ✅ v2.99.212 (CHA-based summoned weapon endpoint).
+- **Pact of the Chain** ✅ v2.99.213 (familiar binding — extends the `/templates` system with imp / quasit / pseudodragon / sprite stat blocks; spawn is GM-driven via `/place_token`).
+
+The 2026-06-10 SRD audit kept this in P2; the v-numbers actually pre-dated the audit but the header wasn't refreshed. ~8 Pact-gated invocations (Tome / Chain prerequisites) are now unblocked downstream.
+
 **Authors:** rolling
-**Last updated:** 2026-05-22
+**Last updated:** 2026-06-11
 
 A plan to ship the **Pact Boon** feature (Warlock Lv 3) — a
 subclass-shaping pick where the warlock chooses one of three gifts
