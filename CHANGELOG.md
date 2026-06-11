@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.87] - 2026-06-10 — "The Twin Wands" — Magic-items-automation Phase 4c: add Wand of Fireballs as a second multi-charge wand using the same `/use_item_action` endpoint. Generalize the MM-specific handler into `_use_item_action_charge_wand` parameterized on `base_slot_level` (1 for MM → charges == slot; 3 for Fireball → 1 charge = Lv 3). Cast slot level = base + (charges - 1). Validates that the catalog scales without endpoint changes — adding a third wand (Wand of Lightning Bolts, say) is now just a JSON populate + a catalog row + a demo seed line. Thalindra reaches the RAW DMG p.138 3-attuned cap (Cloak + Pearl + Wand of Fireballs)
+
+**Schema version:** 69
+**Commit summary:** **(A) Renamed `_use_item_action_wand_of_magic_missiles` → `_use_item_action_charge_wand` in `app/routes/tabletop_routes.py`, parameterized on `slug` + the catalog's `base_slot_level`. New `cast_slot_level = base + (charges - 1)` line replaces the MM-specific `cast_slot_level = charges`. MM keeps base=1 (no behavior change); Fireball gets base=3 (RAW). (B) Main `/use_item_action` dispatch updated: `if slug in ("wand-of-magic-missiles", "wand-of-fireballs"): _use_item_action_charge_wand(...)`. (C) New `wand-of-fireballs` row in `_MAGIC_ITEM_ACTIONS` with `requires_attunement: True` (rare RAW), `min/max_charges: 1/7`, `base_slot_level: 3`, `spell_slug: "fireball"`. (D) `app/data/local/dnd5e/items/wand-of-fireballs.json` populated with the same shape as MM (charges, charge_recovery, actions with `cast-fireball` id). (E) `_wizard_sheet` in `app/demo_seed.py` appends a Wand of Fireballs inventory entry on Thalindra (equipped + attuned — rare RAW requires it) + a `wand-of-fireballs` resource row with `charge_recovery: "1d6+1"`. Thalindra now wears 3 attuned items (Cloak + Pearl + Fireballs wand), exactly at the RAW DMG p.138 cap — a future attune of a 4th item would 409. (F) `app/templates/sheet_dnd5e.html` — `ITEM_ACTION_SLUGS` client config gains a `wand-of-fireballs` entry with prompt + 🔥 label. The sheet inventory row will render a "🔥 Cast Fireball" button alongside the existing 🪄 Cast MM + 🔮 Use Pearl buttons. (G) New harness file `tests/harness/test_use_item_action_fireball_wand.py` with 3 tests: single-charge (cast at Lv 3), multi-charge (3 charges → Lv 5), attunement gate (detune → 409). (H) `docs/test-harness-coverage.md` adds the new section + total bumped 2199 → 2202.**
+**Description:** Validates that the v2.158.84 dispatch table abstraction scales. Two wands sharing 95% of their code paths but differing only in catalog constants (spell slug + base slot level + attunement requirement) is the right shape for the long-tail SRD wand catalog (Wand of Lightning Bolts, Wand of Cold, Wand of Polymorph, etc. all follow the same pattern). Staff of Healing has a fundamentally different shape (3 different action_keys on one item, each with its own charge cost) so it's filed as Phase 4d — that's the first item that genuinely needs a per-action handler subkey, not just a different catalog row.
+
+### Added
+- `app/routes/tabletop_routes.py` — `wand-of-fireballs` row in `_MAGIC_ITEM_ACTIONS`.
+- `app/data/local/dnd5e/items/wand-of-fireballs.json` — populated charges + recovery + cast-fireball action.
+- `app/demo_seed.py` — Thalindra gets a Wand of Fireballs (equipped + attuned) + a `wand-of-fireballs` resource row.
+- `app/templates/sheet_dnd5e.html` — `wand-of-fireballs` entry in `ITEM_ACTION_SLUGS` (🔥 Cast Fireball button).
+- `tests/harness/test_use_item_action_fireball_wand.py` — 3 tests covering happy + multi-charge + attunement gate.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_use_item_action_wand_of_magic_missiles` → `_use_item_action_charge_wand` (generalized). Dispatch updated. `cast_slot_level` formula uses `base_slot_level + (charges - 1)`.
+- `docs/test-harness-coverage.md` — new test block + total 2199 → 2202.
+- `app/version.py` — `APP_VERSION` 2.158.86 → 2.158.87. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.87.
+
+### Notes
+- Thalindra is now at the RAW DMG p.138 cap of 3 attuned items. A future test that attunes a 4th item on her would 409 — useful as a future cap-exercise canary.
+- The generalized `_use_item_action_charge_wand` handler is now ready for any future single-spell multi-charge wand (Wand of Lightning Bolts, etc.) via a catalog row + a JSON populate. No more code changes needed for that archetype.
+- Staff of Healing is filed as Phase 4d — it has 3 distinct action_keys (Cure Wounds = 1 charge / Lesser Restoration = 2 / Mass Cure Wounds = 5), which needs per-action subkey dispatch the catalog doesn't model yet.
+
+---
+
 ## [2.158.86] - 2026-06-10 — "The Rolling Spark" — Magic-items-automation Phase 4b: dice-expression recharge on long rest. Adds a parser hook to the rest loop's resource-refill path that reads an optional `charge_recovery` field (dice expression like `"1d6+1"`) on each resource row + rolls it on long rest, adding to current (capped at max) instead of the standard full refill. Wand of Magic Missiles' resource row carries `charge_recovery: "1d6+1"` (RAW DMG p.213); Pearl of Power has no `charge_recovery` and falls back to full refill (regression-protection canary). Phase 4 of the magic-items plan is now fully shipped (charges + multi-charge spend + dice-expression recharge)
 
 **Schema version:** 69

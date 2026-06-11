@@ -649,6 +649,14 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": False,
              "_slug": "wand-of-magic-missiles",
              "desc": "Uncommon wand. 7 charges. Expend N (1-7) charges to cast Magic Missile at slot level N. Regains 1d6+1 charges daily at dawn (long rest)."},
+            # v2.158.87 — Magic-items Phase 4c demo fixture. Wand of
+            # Fireballs (rare, attunement). 7 charges, same recharge
+            # as MM. Each charge casts Fireball at Lv 3 + (charges-1).
+            # Paired with the wand-of-fireballs resource row below.
+            {"name": "Wand of Fireballs", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-fireballs",
+             "desc": "Rare wand, attunement. 7 charges. Expend N (1-7) charges to cast Fireball (DC 15) at slot level 3+(N-1). Regains 1d6+1 charges at dawn (long rest)."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -697,6 +705,19 @@ def _wizard_sheet(name: str) -> dict:
                 "charge_recovery": "1d6+1",
                 "source": "item-wand-of-magic-missiles",
                 "desc": "7 charges. Spend 1-7 to cast Magic Missile at the matching slot level. Regains 1d6+1 charges on long rest.",
+                "manual": False,
+            },
+            # v2.158.87 — Magic-items Phase 4c: Wand of Fireballs
+            # charge counter. Same shape as the MM wand (7 charges,
+            # 1d6+1 recharge) but the spell + base slot level live
+            # in the catalog (Fireball + base 3).
+            {
+                "key": "wand-of-fireballs",
+                "name": "Wand of Fireballs",
+                "current": 7, "max": 7, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "item-wand-of-fireballs",
+                "desc": "7 charges. Spend 1-7 to cast Fireball at slot level 3+(N-1). Regains 1d6+1 charges on long rest.",
                 "manual": False,
             },
         ],

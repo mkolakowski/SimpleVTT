@@ -6784,7 +6784,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             'pearl-of-power': {action_key: 'restore-slot', param: 'slot_level',
                               prompt: 'Slot level to restore? (1-3)', label: '🔮 Use Pearl'},
             'wand-of-magic-missiles': {action_key: 'cast-magic-missile', param: 'charges',
-                              prompt: 'Charges to spend? (1-7)', label: '🪄 Cast'},
+                              prompt: 'Charges to spend? (1-7)', label: '🪄 Cast MM'},
+            'wand-of-fireballs': {action_key: 'cast-fireball', param: 'charges',
+                              prompt: 'Charges to spend? (1-7; Lv = 3+N-1)', label: '🔥 Cast Fireball'},
         };
         const itemAction = item._slug ? ITEM_ACTION_SLUGS[item._slug] : null;
         const actionBtn = (itemAction && !isReadonly && item.equipped &&

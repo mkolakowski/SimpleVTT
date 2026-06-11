@@ -30016,6 +30016,24 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
         "requires_attunement": False,
         "min_charges": 1,
         "max_charges": 7,
+        # v2.158.87 — Phase 4c: base_slot_level for the generalized
+        # wand handler. MM at 1 charge = Lv 1 spell.
+        "base_slot_level": 1,
+    },
+    # v2.158.87 — Phase 4c: second multi-charge wand. Same shape as
+    # Magic Missiles but spell_slug = "fireball" + base_slot_level = 3
+    # (RAW DMG p.212: 1 charge casts Fireball at 3rd level; each
+    # additional charge bumps the slot up by 1). Generic wand handler
+    # handles both.
+    "wand-of-fireballs": {
+        "key": "cast-fireball",
+        "name": "Cast Fireball (Wand)",
+        "resource_key": "wand-of-fireballs",
+        "spell_slug": "fireball",
+        "requires_attunement": True,  # RAW rare wand → attunement
+        "min_charges": 1,
+        "max_charges": 7,
+        "base_slot_level": 3,
     },
 }
 
@@ -76546,9 +76564,9 @@ async def use_item_action(
             db, campaign_id, char, item, sheet, catalog, slot_level_raw,
             class_slug, inventory, inv_idx,
         )
-    if slug == "wand-of-magic-missiles":
-        return await _use_item_action_wand_of_magic_missiles(
-            db, campaign_id, char, item, sheet, catalog,
+    if slug in ("wand-of-magic-missiles", "wand-of-fireballs"):
+        return await _use_item_action_charge_wand(
+            db, campaign_id, char, item, sheet, catalog, slug,
             body.get("charges"),
         )
     raise HTTPException(409, "unknown item action handler")
@@ -76704,23 +76722,18 @@ async def _use_item_action_pearl(
     }
 
 
-async def _use_item_action_wand_of_magic_missiles(
-    db, campaign_id, char, item, sheet, catalog, charges_raw,
+async def _use_item_action_charge_wand(
+    db, campaign_id, char, item, sheet, catalog, slug, charges_raw,
 ):
-    """v2.158.84 — Phase 4a Wand of Magic Missiles handler. Expend
-    N charges (1-7); each charge raises the cast slot level by 1
-    (1 charge = Lv 1 Magic Missile; 7 charges = Lv 7). Decrements
-    the wand resource by N + broadcasts a feature_used summary.
-
-    Phase 4a scope: the slot-level dispatch + charge decrement +
-    broadcast. The actual Magic Missile damage roll routes through
-    the existing client-side cast flow (the v2.49.214 `/cast_spell`
-    endpoint has a separate code path the player can invoke after
-    the wand decrement). Filing as Phase 4b: wire the cast directly
-    through this endpoint with a ``source_item`` flag that skips
-    slot consumption + the "spell not on your list" gate.
+    """v2.158.84 → generalized v2.158.87: charge-tracked wand handler
+    shared by Wand of Magic Missiles + Wand of Fireballs (+ future
+    multi-charge wands). Expend N charges; cast slot level is
+    ``base_slot_level + (N - 1)`` (MM base=1, Fireball base=3).
+    Decrements the wand resource by N + broadcasts a feature_used
+    summary. The actual spell damage roll routes through the existing
+    client-side /cast_spell flow; wiring the cast directly through
+    this endpoint with a ``source_item`` flag is a future polish.
     """
-    slug = "wand-of-magic-missiles"
     try:
         charges = int(charges_raw or 0)
     except (TypeError, ValueError):
@@ -76770,7 +76783,10 @@ async def _use_item_action_wand_of_magic_missiles(
     db.commit()
 
     spell_slug = catalog.get("spell_slug") or "magic-missile"
-    cast_slot_level = charges  # Charge count == effective slot level.
+    # v2.158.87: cast_slot_level = base + (charges - 1). MM base=1
+    # so 1 charge → Lv 1; Fireball base=3 so 1 charge → Lv 3.
+    base_slot = int(catalog.get("base_slot_level") or 1)
+    cast_slot_level = base_slot + (charges - 1)
 
     try:
         await hub.broadcast(campaign_id, {

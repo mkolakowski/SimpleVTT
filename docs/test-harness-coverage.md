@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2199 in `tests/harness/` + 26 in `tests/harness_ui/` (as of v2.158.86, 2026-06-10).
+**Total tests:** 2202 in `tests/harness/` + 26 in `tests/harness_ui/` (as of v2.158.87, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2049,6 +2049,15 @@ v2.158.86 magic-items-automation Phase 4b — dice-expression recharge on long r
 |------|-----------------|
 | `test_wand_dice_recharge_within_raw_range` | Burn wand to 0 → long rest → current must be in 2..7 (RAW 1d6+1 range). Iterates 5 times to detect a parser regression vs. dice-fluke OOB. |
 | `test_pearl_still_full_refills_on_long_rest` | Regression: items without a `charge_recovery` field must still full-refill (Pearl's `current: 0 → 1`). Catches accidental walker behavior change. |
+
+### `test_use_item_action_fireball_wand.py`
+v2.158.87 magic-items-automation Phase 4c — Wand of Fireballs through the same `/use_item_action` endpoint as the Wand of Magic Missiles, via the generalized `_use_item_action_charge_wand` handler. Catalog entry sets `base_slot_level: 3` so cast slot level = 3 + (charges - 1); spell_slug is `fireball`. RAW DMG p.212 (rare → attunement required). Thalindra is now at the RAW DMG p.138 cap of 3 attuned items: Cloak (Phase 1a), Pearl (Phase 3), Wand of Fireballs (Phase 4c).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_fireball_wand_single_charge_casts_lv3` | 1 charge → `cast_slot_level: 3` (base=3 + 0). |
+| `test_fireball_wand_multi_charge_casts_higher` | 3 charges → `cast_slot_level: 5` (base=3 + 2). |
+| `test_fireball_wand_requires_attunement_409` | Detune the wand via /attune; invoke /use_item_action → 409 attunement required. Restores attunement in teardown. |
 
 ---
 

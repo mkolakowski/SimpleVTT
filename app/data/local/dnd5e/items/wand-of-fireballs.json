@@ -15,8 +15,14 @@
   "properties": {
     "category": "Wand"
   },
-  "charges": null,
-  "charge_recovery": null,
+  "charges": 7,
+  "charge_recovery": "1d6+1",
   "passives": [],
-  "actions": []
+  "actions": [
+    {
+      "id": "cast-fireball",
+      "name": "Cast Fireball",
+      "desc": "Expend 1-7 charges. Casts Fireball at slot level 3 + (charges - 1). DEX save DC 15. Wand regains 1d6+1 expended charges daily at dawn (long rest)."
+    }
+  ]
 }
