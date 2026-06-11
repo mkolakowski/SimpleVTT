@@ -10,6 +10,45 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.0] - 2026-06-11 — "The Reliquary" — MINOR milestone closing the magic-items-automation arc spanning v2.158.74 through v2.158.104 (32 PATCH commits across Phases 1-7). Doc-only commit — no code or behavior change beyond the version bump. Catalogs the full substrate + the shipped catalog + the demo coverage so future contributors can find where the system lives.
+
+**Schema version:** 69
+**Commit summary:** **(A) APP_VERSION 2.158.104 → 2.159.0. No other source changes. (B) MINOR rather than PATCH because the cumulative arc (Phases 1-7) shipped enough additive surface — five new HTTP endpoint patterns, two declarative catalogs, a UI substrate, 38 new tests — that a milestone bump captures the moment cleanly per CLAUDE.md's "new backward-compatible feature" rule. (C) `SCHEMA_VERSION` unchanged at 69 — no migration was needed for any of the magic-items work (item state lives on the existing `sheet.inventory` JSONB column).**
+**Description:** The magic-items-automation plan started in v2.158.74 with the Cloak of Protection passive substrate and closed in v2.158.104 with Sun Blade composing every prior phase. Highlights:
+
+- **Phase 1** (v2.158.74-79) — `_MAGIC_ITEM_PASSIVES` catalog + the equipped-item-effects accumulator. Cloak / Ring of Protection.
+- **Phase 2** (v2.158.79-80) — attunement state + 3-item cap (RAW DMG p.138) + the `/attune` endpoint.
+- **Phase 3** (v2.158.82-90) — active-item action substrate + modal UX. `/use_item_action` endpoint. Pearl of Power (single-action), Wand of Magic Missiles (multi-charge), Wand of Fireballs (second multi-charge), Staff of Healing (multi-action with the 2-stage modal).
+- **Phase 4** (v2.158.84-88) — multi-charge spend + dice-expression recharge on long rest.
+- **Phase 5** (v2.158.91-96) — on-hit rider substrate via `_MAGIC_ITEM_ATTACK_RIDERS`. Flame Tongue (always-on rider + ignite/extinguish lit state + button UI), Dragon Slayer (conditional rider keyed on `creature_type`), `_attacker_creature_type` helper routed in to resolve target type from sheet/template.
+- **Phase 6** (v2.158.97-99) — Demon Slayer second conditional rider, Young Red Dragon (Drakkasha) NPC template + her demo spawn on the Tavern Brawl map (so Caelan's Dragon Slayer auto-fires on session start).
+- **Phase 7** (v2.158.101-104) — post-hit hook substrate via `on_nat_20` (Vorpal Sword decap, Sword of Sharpness +4d6) and `on_hit_save` (Demon Slayer DC 15 WIS save-or-frightened) sub-maps on the rider catalog rows. Sun Blade closes Phase 7 as pure substrate composition.
+
+**Shipped catalog as of v2.159.0:**
+- **Passive** (Cloak of Protection, Ring of Protection, Bracers of Defense): +N AC / +N saves via `_MAGIC_ITEM_PASSIVES`.
+- **Active single-action** (Pearl of Power): restore an expended spell slot.
+- **Active multi-charge** (Wand of Magic Missiles, Wand of Fireballs): spend 1-7 charges → cast at scaling level. Dice-expression recharge on long rest.
+- **Active multi-action** (Staff of Healing): 3 distinct actions (cure-wounds 1-4 charges, lesser-restoration 2, mass-cure-wounds 5) sharing one 10-charge pool.
+- **State-toggle** (Flame Tongue ignite/extinguish): persistent `_lit` field on the inventory item, gating both the damage rider and the inventory-row button label.
+- **On-hit damage rider** (Flame Tongue +2d6 fire, Dragon Slayer +3d6 vs. dragons, Demon Slayer +2d6 vs. fiends, Sun Blade +1d8 vs. undead): dice + optional condition predicate + optional damage type, fires from `_compute_attack_auto_uplifts` section 6c.
+- **Nat-20 post-hit effect** (Vorpal Sword decap, Sword of Sharpness +4d6): triggers on literal d20=20, dispatches on `effect` (decap → instant kill via current HP damage; damage → roll dice).
+- **Save-on-hit effect** (Demon Slayer DC 15 WIS save → frightened): rolls target's save server-side via `_resolve_feature_save`, installs condition buff on failure.
+
+**Demo party covers all archetypes** — Pip (3/3 cap: Cloak + Ring + Sharpness), Thalindra (Cloak + Pearl + 2 Wands), Tavik (Ring + Staff), Garrik (Flame Tongue), Caelan (Dragon Slayer), Lyra (Cloak of Displacement + Demon Slayer), Mira (Vorpal Scimitar), Seraphine (Sun Blade), Kael (Bracers). Drakkasha (Young Red Dragon) spawned on the Tavern Brawl map by default — Caelan's Dragon Slayer +3d6 auto-fires on the first attack with zero setup.
+
+**Test coverage** — 38 new HTTP harness tests + 9 new UI Playwright tests across `test_use_item_action_*.py`, `test_flame_tongue_*.py`, `test_dragon_slayer_*.py`, `test_demon_slayer_*.py`, `test_vorpal_decap.py`, `test_sword_of_sharpness.py`, `test_sun_blade_rider.py`, `test_demo_dragon_spawn.py`, and `test_wand_recharge.py`. Harness total grew 2202 → 2240; UI total 26 → 35.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.158.104 → 2.159.0. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.0.
+
+### Notes
+- Future Phase 8+ work (ammunition catalog for Arrow of Slaying / Javelin of Lightning, sentient items, charged-by-spell items like Wand of Wonder, etc.) builds on the same substrate. The two declarative catalogs (`_MAGIC_ITEM_ACTIONS`, `_MAGIC_ITEM_ATTACK_RIDERS`) are designed to be content-pack-extendable — a future homebrew tier could ship rider rows alongside JSON item descriptions.
+- Latent bugs surfaced + fixed during the arc: v2.158.85 scope bug in `ITEM_ACTION_SLUGS` (declared `const` inside `rowHtml`, invisible to click handler — caught by v2.158.89's Phase 3c click tests); v2.158.94 `_lit` hydration drop in `sheet_dnd5e.html` (inventory hydration enumerated known fields, silently dropped `_lit` — caught by v2.158.94's Phase 5d state-toggle button tests + fixed by the v2.158.95 spread-pass-through refactor). Both were latent for 4+ versions before a higher-coverage test surface caught them.
+- v2.158.95 + v2.158.100 disabled the GitHub Actions auto-trigger for both `test-harness.yml` and `docker-image.yml` per the project owner's local-build-only workflow. The workflows remain intact for manual `workflow_dispatch` fires.
+
+---
+
 ## [2.158.104] - 2026-06-11 — "The Dawning Hilt" — Magic-items-automation Phase 7d: Sun Blade +1d8 radiant vs. undead (RAW DMG p.205). Pure substrate composition — no new mechanism. Reuses the v2.158.93 Phase 5c conditional-rider shape (`dice` + `condition` predicate keyed on `creature_type=="undead"`) and the v2.158.98 Phase 6b template `sheet.type` field (extended Skeleton template to carry `creature_type="undead"`). Dame Seraphine Vael (Vengeance Paladin Lv 3) gets her first magic item — Sun Blade Longsword.
 
 **Schema version:** 69
