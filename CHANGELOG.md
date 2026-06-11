@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.9] - 2026-06-11 — "The Beaded Sky" — Magic-items-automation Phase 8i: first sphere-AoE magic item — Necklace of Fireballs (RAW DMG p.183). Generalizes the v2.159.7 AoE confirm modal from line-only to shape-agnostic (rename `_showAoELineConfirmModal` → `_showAoEConfirmModal`), then adds an `aoe-sphere` `ITEM_ACTION_SLUGS` kind that wraps the v2.159.5 `/battle/sphere-targets` endpoint into the click chain. Thalindra gets the necklace — first non-attuneable magic item with a permanent (no-recharge) charge counter in the demo.
+
+**Schema version:** 69
+**Commit summary:** **(A) `_showAoELineConfirmModal` → `_showAoEConfirmModal` rename. The helper has always been shape-agnostic (cfg.combatants is just `Array<{combatant_id, name, distance_ft}>`), so the rename is cosmetic but matches its new usage from both the line + sphere click handlers. All call sites + Playwright tests updated. (B) New `necklace-of-fireballs` row in `_MAGIC_ITEM_ACTIONS` with `requires_attunement: False`, `resource_key: "necklace-of-fireballs"`, and `actions: {throw-bead: {save_dc: 15, save_ability: "DEX", dice: "8d6", damage_type: "fire", save_for_half: True}}`. (C) New `_use_item_action_necklace_of_fireballs` handler in `tabletop_routes.py`. Mirrors the v2.159.3 javelin handler shape but reads the charge counter from the wielder's resources (RAW: necklace has 1d6+3 beads, demo ships 6) and decrements by 1 per bead thrown. Returns 409 `insufficient_charges` when bead count = 0. Iterates target_combatant_ids: per-target rolls DC 15 DEX save via `_resolve_feature_save`, applies full damage on fail or half on pass via `_apply_damage_to_combatant`. Broadcasts `resource_update` (so the sheet's charge pill drops live) + `feature_used` summary. (D) `_wizard_sheet` (Thalindra) gets a Necklace of Fireballs inventory entry at inventory_index 11 + a matching `necklace-of-fireballs` resource row (current=6, max=6, reset="none" — RAW says beads don't regenerate). (E) New `aoe-sphere` kind in `ITEM_ACTION_SLUGS`: `radius_ft: 20`, `max_range_ft: 60`. (F) Click handler at `.inv-item-action` gets a new `cfg.kind === 'aoe-sphere'` branch mirroring the v2.159.6 line branch but calling `/battle/sphere-targets` (with `center_combatant_id` + `radius_ft`) instead of `/battle/line-targets`. Reuses the renamed `_showAoEConfirmModal` for the confirm step. (G) New HTTP harness `tests/harness/test_necklace_of_fireballs.py` with 2 tests: throw 1 bead at 2 targets → 200 with `resource.current: 5` + per-target save results; empty necklace (forced via /sheet-fields PATCH) → 409 `insufficient_charges`. (H) New UI test `test_necklace_fireballs_use_button_renders`: 💥 Throw Bead button visible on Thalindra's Necklace row. (I) HTTP total bumped 2256 → 2258; UI total bumped 39 → 40.**
+**Description:** Closes Phase 8i. The sphere-AoE substrate is now fully wired: catalog row + handler + ITEM_ACTION_SLUGS kind + click chain + endpoint call. Necklace of Fireballs is the first non-attuneable magic item with a permanent charge counter — the v2.158.86 `charge_recovery` long-rest path doesn't fire because `reset: "none"` short-circuits the refill, RAW-correct since the bead disintegrates after each throw. Phase 8j (multi-bead picker for upcast Fireballs) is the natural next step — the existing single-action modal can prompt for bead count 1-N, the handler multiplies the dice accordingly.
+
+### Added
+- `app/routes/tabletop_routes.py` — `necklace-of-fireballs` row in `_MAGIC_ITEM_ACTIONS`; `_use_item_action_necklace_of_fireballs` handler; dispatch branch.
+- `app/templates/sheet_dnd5e.html` — `necklace-of-fireballs` row in `ITEM_ACTION_SLUGS` (aoe-sphere kind); aoe-sphere click handler branch.
+- `app/demo_seed.py` — Thalindra's Necklace of Fireballs inventory item + necklace-of-fireballs resource row.
+- `tests/harness/test_necklace_of_fireballs.py` — 2 HTTP tests.
+- `tests/harness_ui/test_use_item_action_buttons.py` — `test_necklace_fireballs_use_button_renders`.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — `_showAoELineConfirmModal` → `_showAoEConfirmModal` rename.
+- `tests/harness_ui/test_use_item_action_buttons.py` — same rename in test bodies.
+- `app/version.py` — `APP_VERSION` 2.159.8 → 2.159.9. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.9.
+- `docs/test-harness-coverage.md` — totals 2256/39 → 2258/40.
+
+### Notes
+- The multi-bead upcast picker (RAW: "increase the level of the fireball by 1 for each bead beyond the first") is Phase 8j. v1 ships single-bead throws only — the wizard fires one Lv-3 Fireball per click. Multi-bead would extend the existing `_showItemActionModal` charge spinner with `min: 1, max: <current>` and roll `(8+N-1)d6` per bead spent.
+- The 8d6 dice are rolled ONCE for the whole sphere (RAW Fireball reading), then each target either takes the full damage or half — they don't roll separately. This matches the v2.99.40 spell-cast pipeline's Fireball implementation.
+- Demo PCs at the sphere-AoE archetype: Thalindra now has 4 active magic items (Cloak + Pearl + 2 wands + necklace = 5 if you count the cloak passive). She's the densest demo PC for the magic-items coverage matrix.
+
+---
+
 ## [2.159.8] - 2026-06-11 — "The Bolt's Test" — Magic-items-automation Phase 8h: end-to-end Playwright integration test for the full Javelin click-to-fire chain. Drives the actual ⚡ Hurl Lightning button (no `page.evaluate` shortcut), watches the chain ⚡ button → vttOpenMultiTargetPicker (stubbed) → /battle GET (intercepted) → /battle/line-targets POST (intercepted) → confirm modal → Fire button → /use_item_action POST (real endpoint) → sheet state flip + button relabel.
 
 **Schema version:** 69

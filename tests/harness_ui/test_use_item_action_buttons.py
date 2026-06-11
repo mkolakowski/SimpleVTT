@@ -320,7 +320,7 @@ def test_flame_tongue_use_button_renders(gm_page: Page, roster: dict):
 def test_aoe_line_confirm_modal_renders_combatant_list(
     gm_page: Page, roster: dict,
 ):
-    """v2.159.7 Phase 8g: the _showAoELineConfirmModal helper renders
+    """v2.159.7 Phase 8g: the _showAoEConfirmModal helper renders
     a checkbox-per-combatant list, lets the GM uncheck targets to
     opt them out, and resolves to the final id list on Confirm. Test
     invokes the helper directly via page.evaluate so we don't need a
@@ -344,7 +344,7 @@ def test_aoe_line_confirm_modal_renders_combatant_list(
     page.evaluate("""
         window._aoeTestPicked = null;
         setTimeout(async () => {
-            window._aoeTestPicked = await window._showAoELineConfirmModal({
+            window._aoeTestPicked = await window._showAoEConfirmModal({
                 title: '⚡ Test',
                 body: 'Test body copy',
                 combatants: [
@@ -392,7 +392,7 @@ def test_aoe_line_confirm_modal_cancel_returns_null(
     page.evaluate("""
         window._aoeTestPicked = 'untouched';
         setTimeout(async () => {
-            window._aoeTestPicked = await window._showAoELineConfirmModal({
+            window._aoeTestPicked = await window._showAoEConfirmModal({
                 title: '⚡ Cancel test',
                 body: 'Should resolve to null',
                 combatants: [
@@ -410,6 +410,21 @@ def test_aoe_line_confirm_modal_cancel_returns_null(
     assert result is None, (
         f"Cancel should resolve to null; got {result!r}"
     )
+
+
+def test_necklace_fireballs_use_button_renders(gm_page: Page, roster: dict):
+    """v2.159.9 Phase 8i: Thalindra's Necklace of Fireballs inventory
+    row shows a 💥 Throw Bead button (aoe-sphere kind in
+    ITEM_ACTION_SLUGS)."""
+    thalindra = roster["Thalindra Moonwhisper"]
+    page = gm_page
+    page.goto(sheet_url(thalindra["id"]))
+
+    necklace_row = page.locator(".inv-row", has_text="Necklace of Fireballs")
+    expect(necklace_row).to_be_visible(timeout=5000)
+    btn = necklace_row.locator(".inv-item-action")
+    expect(btn).to_be_visible()
+    expect(btn).to_contain_text("Throw Bead")
 
 
 def test_javelin_lightning_click_fires_use_item_action(

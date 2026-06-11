@@ -682,6 +682,17 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-fireballs",
              "desc": "Rare wand, attunement. 7 charges. Expend N (1-7) charges to cast Fireball (DC 15) at slot level 3+(N-1). Regains 1d6+1 charges at dawn (long rest)."},
+            # v2.159.9 — Magic-items Phase 8i demo fixture. Necklace
+            # of Fireballs (RAW DMG p.183, rare wondrous item, no
+            # attunement). 6 beads in the resource row below. v1
+            # ships single-bead throws (Lv 3 Fireball — 8d6 fire, DC
+            # 15 DEX save half, 20-ft sphere). RAW lets the wearer
+            # hurl multiple beads at once to upcast; Phase 8j will
+            # ship the multi-bead picker.
+            {"name": "Necklace of Fireballs", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True,
+             "_slug": "necklace-of-fireballs",
+             "desc": "Rare wondrous item. 6 fireball beads. Each thrown bead is a 3rd-level Fireball (8d6 fire, DC 15 DEX save half, 20-ft sphere). Beads don't regenerate."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -743,6 +754,20 @@ def _wizard_sheet(name: str) -> dict:
                 "charge_recovery": "1d6+1",
                 "source": "item-wand-of-fireballs",
                 "desc": "7 charges. Spend 1-7 to cast Fireball at slot level 3+(N-1). Regains 1d6+1 charges on long rest.",
+                "manual": False,
+            },
+            # v2.159.9 — Magic-items Phase 8i: Necklace of Fireballs
+            # bead counter. RAW: starts with 1d6+3 beads (we ship 6
+            # for the demo — average roll) and "the necklace is
+            # destroyed" once depleted; the resource row has
+            # ``reset: "none"`` so the rest loop doesn't refill it.
+            # Each thrown bead is a Lv 3 Fireball (DC 15, 8d6 fire).
+            {
+                "key": "necklace-of-fireballs",
+                "name": "Necklace of Fireballs",
+                "current": 6, "max": 6, "reset": "none",
+                "source": "item-necklace-of-fireballs",
+                "desc": "6 fireball beads. Each thrown bead is a Lv 3 Fireball (DC 15 DEX save, 8d6 fire, 20-ft sphere). No regeneration.",
                 "manual": False,
             },
         ],

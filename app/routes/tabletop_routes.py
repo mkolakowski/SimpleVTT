@@ -30590,6 +30590,26 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.159.9 — Phase 8i: first sphere-AoE item. Necklace of
+    # Fireballs (RAW DMG p.183). Each bead is a 3rd-level Fireball
+    # (8d6 fire, DC 15 DEX save half, 20-ft sphere). RAW lets the
+    # wearer hurl multiple beads at once to upcast; v1 ships single-
+    # bead throws — the multi-bead picker is filed as Phase 8j.
+    # Charges live in the standard ``resource_key`` row.
+    "necklace-of-fireballs": {
+        "requires_attunement": False,
+        "resource_key": "necklace-of-fireballs",
+        "actions": {
+            "throw-bead": {
+                "name": "Throw Fireball Bead",
+                "save_dc": 15,
+                "save_ability": "DEX",
+                "dice": "8d6",
+                "damage_type": "fire",
+                "save_for_half": True,
+            },
+        },
+    },
 }
 
 
@@ -77337,6 +77357,15 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
+    if slug == "necklace-of-fireballs":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_necklace_of_fireballs(
+            db, campaign_id, char, item, sheet, catalog,
+            action_key, action_def,
+            target_combatant_ids=body.get("target_combatant_ids") or [],
+            campaign=campaign,
+            prompt_user=user,
+        )
     raise HTTPException(409, "unknown item action handler")
 
 
@@ -77936,6 +77965,180 @@ async def _use_item_action_javelin_of_lightning(
         "save_dc": save_dc,
         "save_ability": save_ability,
         "results": results,
+    }
+
+
+async def _use_item_action_necklace_of_fireballs(
+    db, campaign_id, char, item, sheet, catalog,
+    action_key, action_def,
+    target_combatant_ids: list,
+    campaign=None,
+    prompt_user=None,
+):
+    """v2.159.9 — Phase 8i Necklace of Fireballs handler. RAW DMG
+    p.183: each bead is a 3rd-level Fireball (8d6 fire, DC 15 DEX
+    save half, 20-ft sphere). v1 ships single-bead throws — multi-
+    bead upcast picker is filed as Phase 8j. Charges live in the
+    ``necklace-of-fireballs`` resource row; depletes on use, no
+    automatic recharge RAW. Returns the per-target save outcomes.
+    """
+    slug = "necklace-of-fireballs"
+    res_key = str(catalog.get("resource_key") or slug)
+
+    # Resource lookup + decrement (1 charge per bead).
+    resources = list(sheet.get("resources") or [])
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    if cur < 1:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "insufficient_charges",
+                "current": cur,
+                "requested": 1,
+                "label": item.get("name") or slug,
+            },
+        )
+
+    if not isinstance(target_combatant_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
+    if len(target_combatant_ids) > 24:
+        raise HTTPException(400, "Too many targets for Necklace of Fireballs")
+
+    save_dc = int(action_def.get("save_dc") or 15)
+    save_ability = str(action_def.get("save_ability") or "DEX").upper()
+    dice = str(action_def.get("dice") or "8d6")
+    damage_type = str(action_def.get("damage_type") or "fire")
+    save_for_half = bool(action_def.get("save_for_half"))
+
+    # Per-target save resolution.
+    results = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        target_c = _lookup_combatant(campaign_id, tid)
+        if not target_c:
+            results.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        try:
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=int(char.id),
+                caster_char_name=str(char.name or ""),
+                target_combatant=target_c,
+                save_ability=save_ability,
+                dc=save_dc,
+                note_label=f"Necklace of Fireballs (DC {save_dc} {save_ability})",
+                condition_buff=None,
+                repeated_save=False,
+                source=f"item-{slug}-save",
+                campaign=campaign,
+                prompt_user=prompt_user,
+                feature_name="💥 Necklace of Fireballs",
+            )
+        except Exception:
+            logging.exception(
+                "Necklace save resolve failed for tid=%s", tid,
+            )
+            results.append({"combatant_id": tid, "reason": "save_error"})
+            continue
+
+        damage_dealt = 0
+        if sr.get("passed") is not None:
+            try:
+                r = dice_mod.roll(dice)
+                base = int(r.total)
+            except dice_mod.DiceParseError:
+                base = 0
+            if base > 0:
+                if sr.get("passed"):
+                    if save_for_half:
+                        damage_dealt = base // 2
+                else:
+                    damage_dealt = base
+            if damage_dealt > 0:
+                try:
+                    await _apply_damage_to_combatant(
+                        db, campaign_id, target_c,
+                        damage_amount=damage_dealt,
+                        damage_type=damage_type,
+                        is_attack=False, is_magical=True,
+                        attacker_char_id=char.id,
+                    )
+                except Exception:
+                    logging.exception(
+                        "Necklace damage apply failed for tid=%s", tid,
+                    )
+        results.append({
+            "combatant_id": tid,
+            "name": target_c.get("name") or "Target",
+            "passed": sr.get("passed"),
+            "damage_dealt": damage_dealt,
+        })
+
+    # Decrement the bead charge.
+    res_row["current"] = cur - 1
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": "💥 Necklace of Fireballs",
+                "summary": (
+                    f"{char.name} hurls a bead from the "
+                    f"{item.get('name')} — fireball erupts. "
+                    f"({len(results)} save(s) resolved; "
+                    f"{res_row['current']}/{res_max} beads left.)"
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "action_key": action_key,
+        "save_dc": save_dc,
+        "save_ability": save_ability,
+        "results": results,
+        "resource": {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
     }
 
 

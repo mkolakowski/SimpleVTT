@@ -7049,6 +7049,21 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           // Button stays disabled when item has fired today.
                           disabled_fn: (item) => !!item._used_today,
                           disabled_label: '⚡ (spent until dawn)'},
+        // v2.159.9 — Phase 8i: first sphere-AoE item. Necklace of
+        // Fireballs (RAW DMG p.183) — each bead is a Lv 3 Fireball
+        // (8d6 fire, DC 15 DEX save half, 20-ft sphere). Click chain:
+        // single-target picker (the burst center) → /battle/sphere-
+        // targets with radius=20 → generalized AoE confirm modal →
+        // POST /use_item_action with target_combatant_ids. Charge
+        // counter lives in the existing resources panel; no
+        // disabled_fn since the wand-of-fireballs UI pattern's
+        // existing charge counter UI handles the 0-bead case.
+        'necklace-of-fireballs': {kind: 'aoe-sphere',
+                          action_key: 'throw-bead',
+                          label: '💥 Throw Bead',
+                          title: 'Hurl a Fireball Bead — 20-ft sphere, DC 15 DEX save (half on pass).',
+                          radius_ft: 20,
+                          max_range_ft: 60},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
@@ -7246,15 +7261,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         });
     }
 
-    // v2.159.7 — Phase 8g: AoE-line confirm modal. Replaces the
-    // v2.159.6 minimal `window.confirm` preview with a checkbox list
-    // so the GM can opt out individual auto-picked combatants before
-    // firing the lightning (line geometry edge cases: half-cover, a
-    // prone combatant behind cover, etc.). Returns the final
+    // v2.159.7 — Phase 8g: AoE confirm modal. Replaces the v2.159.6
+    // minimal `window.confirm` preview with a checkbox list so the
+    // GM can opt out individual auto-picked combatants before firing
+    // an AoE (line/sphere/cone edge cases: half-cover, a prone
+    // combatant behind cover, etc.). v2.159.9 renamed
+    // _showAoELineConfirmModal → _showAoEConfirmModal since the
+    // helper is shape-agnostic (cfg.combatants is just a list of
+    // {combatant_id, name, distance_ft}). Returns the final
     // ``target_combatant_ids`` array on Confirm, or null on Cancel.
-    // ``cfg`` carries: title, body, combatants (Array<{combatant_id,
-    // name, distance_ft}>), submit_label.
-    window._showAoELineConfirmModal = function(cfg) {
+    window._showAoEConfirmModal = function(cfg) {
         return new Promise(resolve => {
             const prev = document.getElementById('aoe-line-confirm-modal');
             if (prev) prev.remove();
@@ -7493,13 +7509,57 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // the v2.159.6 window.confirm preview. The GM gets
                     // a checkbox list so they can opt out individual
                     // auto-picked combatants (line-edge cases).
-                    const aoePicked = await window._showAoELineConfirmModal({
+                    const aoePicked = await window._showAoEConfirmModal({
                         title: `${cfg.label || '⚡ Hurl Lightning'}`,
                         body: `5-ft × ${cfg.max_length_ft || 120}-ft line. Each creature in the line must make a DC 13 DEX save (half on pass).`,
                         combatants: lineResults,
                         submit_label: '⚡ Fire',
                     });
                     if (aoePicked === null) return;  // user canceled
+                    body.action_key = cfg.action_key;
+                    body.target_combatant_ids = aoePicked;
+                } else if (cfg.kind === 'aoe-sphere') {
+                    // v2.159.9 — Phase 8i: sphere-AoE flow. Pick the
+                    // burst center (a target combatant), call
+                    // /battle/sphere-targets, show the confirm modal,
+                    // POST /use_item_action.
+                    if (typeof window.vttOpenMultiTargetPicker !== 'function') {
+                        alert('Target picker unavailable. Reload the page.');
+                        return;
+                    }
+                    const picked = await window.vttOpenMultiTargetPicker({
+                        required: 1,
+                        spellName: cfg.label || 'Necklace of Fireballs',
+                        casterCharId: MY_CHAR_ID,
+                        rangeStr: `${cfg.max_range_ft || 60} ft`,
+                    });
+                    if (picked === null || !picked.length) return;
+                    const centerCid = picked[0];
+                    let sphereResults = [];
+                    try {
+                        const stResp = await fetch(
+                            `/api/campaign/${CAMPAIGN_ID}/battle/sphere-targets`,
+                            {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({
+                                    center_combatant_id: centerCid,
+                                    radius_ft: cfg.radius_ft || 20,
+                                }),
+                            },
+                        );
+                        if (stResp.ok) {
+                            const stData = await stResp.json();
+                            sphereResults = stData.results || [];
+                        }
+                    } catch (e) {}
+                    const aoePicked = await window._showAoEConfirmModal({
+                        title: `${cfg.label || '💥 Throw Bead'}`,
+                        body: `${cfg.radius_ft || 20}-ft sphere centered on the picked target. Each creature in the burst must make a DC 15 DEX save (half on pass).`,
+                        combatants: sphereResults,
+                        submit_label: '💥 Fire',
+                    });
+                    if (aoePicked === null) return;
                     body.action_key = cfg.action_key;
                     body.target_combatant_ids = aoePicked;
                 } else {
