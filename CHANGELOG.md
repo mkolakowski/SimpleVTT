@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.19] - 2026-06-11 — "The Halting Stride" — Exhaustion-levels Phase 3a (see `docs/plans/exhaustion-levels.md`): speed wiring at Lv 2 (halved) + Lv 5 (zero). Extends the leaf `effective_speed_walk` helper to apply the cumulative exhaustion penalty AFTER existing buff bonus/multiplier/reduction math. The route layer now mirrors `sheet.exhaustion_level` → `combatant.exhaustion_level` on every mutation (set_exhaustion endpoint + long-rest decrement) so the leaf helper can read the level without DB access. The existing `/token/move` speed-cap enforcement at line 12472 picks up the new penalty for free — no route-layer change needed.
+
+**Schema version:** 69
+**Commit summary:** **(A) `app/content/effective_speed.py::effective_speed_walk` extended: reads `combatant.exhaustion_level`, applies `>= 5 → 0` (hard floor) or `>= 2 → result // 2` (halve, round down). Read AFTER the existing `(base + bonus) × mult − reduction` math so the order matches RAW: "speed halved" applies to the buffed-and-reduced number. Defensive on non-int values (treats as 0). (B) `set_exhaustion` endpoint extended: after writing the level to the PC sheet, ALSO finds the PC's combatant mirror in the hub state (if any) and writes `combatant.exhaustion_level`. No-op if PC isn't in an active battle. NPC path unchanged — Phase 1 already writes to the combatant directly. (C) `rest_character` long-rest exhaustion-decrement branch ALSO mirrors the post-decrement level to the PC's combatant. (D) New pure-Python unit suite `tests/harness/test_exhaustion_speed.py` with 11 tests: Lv 0/1 no penalty, Lv 2 halves, Lv 3/4 still halved (no double-halving), Lv 5 floors to 0 (even with Haste's ×2), Lv 2 composes with Slow's `speed_reduction_ft`, Lv 2 composes with Longstrider's `speed_bonus_ft`, Lv 6 = 0, malformed level defaults to 0. All 19 existing `test_effective_speed_walk.py` tests still pass (regression check). (E) HTTP test total bumped 2279 → 2290.**
+**Description:** Closes Phase 3a. The leaf-helper pattern is the right home for exhaustion's speed math because it composes cleanly with the existing speed-buff plumbing (Lance of Lethargy, Slow, Longstrider, Haste) — adding a buff with `effects.speed_reduction_ft: 15` to a Lv 2 PC produces `(30 - 15) // 2 = 7` ft, which matches RAW intent. The PC mirror is the minimal plumbing required to avoid threading a Character/DB dependency into the leaf module. Phase 3b will land HP-max halving at Lv 4 — a similar pattern via the existing `_buff_hp_max_bonus` helper.
+
+### Added
+- `tests/harness/test_exhaustion_speed.py` — 11 pure-Python unit tests.
+
+### Changed
+- `app/content/effective_speed.py` — `effective_speed_walk` honors `combatant.exhaustion_level`.
+- `app/routes/tabletop_routes.py` — `set_exhaustion` + rest's long-rest branch mirror `sheet.exhaustion_level` → `combatant.exhaustion_level`.
+- `app/version.py` — `APP_VERSION` 2.159.18 → 2.159.19. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.19.
+- `docs/test-harness-coverage.md` — HTTP total 2279 → 2290; new `test_exhaustion_speed.py` entry.
+
+### Notes
+- The mirror is one-direction: sheet → combatant. The combatant value is a cache of the sheet — never a source of truth. If a battle's hub state is wiped (e.g., end of encounter), the next /set_exhaustion or long-rest re-syncs.
+- The PC mirror lookup is by `char_id` match in the combatant list. PCs with multiple combatants in the same battle (extremely rare — divine duplicates / Wild Shape) would all receive the update.
+- The JS-side `_effectiveSpeedWalk` in `tabletop.html` mirrors the Python version. It does NOT yet read exhaustion_level — a Lv 2 PC's UI ring will read 30 ft until the JS side is updated. Filed as Phase 3a follow-up; the server-side enforcement still rejects movement over the halved cap with 409 over_speed_cap, so the UX is informative-then-rejecting rather than silent-success.
+
+---
+
 ## [2.159.18] - 2026-06-11 — "The Fading Edge" — Exhaustion-levels Phase 2 (see `docs/plans/exhaustion-levels.md`): disadvantage wiring at Lv 1 (ability checks) + Lv 3 (attacks + saves). Composes with the existing v2.152.0-v2.157.0 condition-disadvantage helpers (Blinded/Poisoned/Restrained/Frightened/Prone) — extends each of the four helpers (PC attack, PC roll, NPC attack, NPC roll) + the NPC-save-only helper to also return a synthetic key (`"exhaustion-1"` / `"exhaustion-3"`) so the existing label plumbing at the call sites just works. No schema changes — Phase 1's `sheet.exhaustion_level` integer is the read source.
 
 **Schema version:** 69

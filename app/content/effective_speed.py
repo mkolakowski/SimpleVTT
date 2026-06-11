@@ -105,6 +105,14 @@ def effective_speed_walk(combatant: dict | None) -> int:
     / Haste / Eagle Totem); pre-v2.99.431 this was ``base − reduction``
     only. Haste's ×2 applies to the buffed base before reductions
     (RAW "your speed is doubled").
+
+    v2.159.19 — exhaustion-levels Phase 3 added the cumulative
+    exhaustion penalty: Lv >= 2 halves the post-buff/reduction result
+    (round down); Lv >= 5 floors it to 0. Reads ``combatant.
+    exhaustion_level`` (set by ``/set_exhaustion`` for both PCs and
+    NPCs; PCs also write the field to the combatant mirror on every
+    mutation so the move-cap honors it without the helper needing DB
+    access).
     """
     if not combatant:
         return 30
@@ -115,4 +123,14 @@ def effective_speed_walk(combatant: dict | None) -> int:
     bonus = effective_speed_bonus_ft(combatant)
     mult = effective_speed_multiplier(combatant)
     reduction = effective_speed_reduction_ft(combatant)
-    return max(0, (base + bonus) * mult - reduction)
+    result = max(0, (base + bonus) * mult - reduction)
+    # v2.159.19 — exhaustion. Lv 5 wins (speed 0); Lv 2-4 halve.
+    try:
+        ex = max(0, min(6, int(combatant.get("exhaustion_level") or 0)))
+    except (TypeError, ValueError):
+        ex = 0
+    if ex >= 5:
+        return 0
+    if ex >= 2:
+        return result // 2
+    return result

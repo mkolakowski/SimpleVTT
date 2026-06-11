@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2279 in `tests/harness/` + 45 in `tests/harness_ui/` (as of v2.159.18, 2026-06-11).
+**Total tests:** 2290 in `tests/harness/` + 45 in `tests/harness_ui/` (as of v2.159.19, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -37,6 +37,23 @@ Sanity checks that the harness can even talk to the demo app.
 | `test_version` | `GET /version` → 200, matches `app/version.py`. |
 | `test_roster_fixture` | The `roster` fixture loads and contains all 12 demo PCs by name. |
 | `test_gm_can_open_ws` | `WS /ws/campaign/1` as GM accepts connection + emits an opening `state` message. |
+
+### `test_exhaustion_speed.py`
+v2.159.19 exhaustion-levels Phase 3a — pure-Python unit tests against the leaf `effective_speed_walk` helper. RAW PHB Appendix A: Lv 2 halves speed; Lv 5 floors to 0. Applied AFTER the existing buff `(base + bonus) × mult − reduction` math so Lv 2 composes cleanly with Slow / Lance of Lethargy / Longstrider / Haste. The route layer mirrors `sheet.exhaustion_level` → `combatant.exhaustion_level` so the leaf helper has no DB dependency.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_no_exhaustion_no_penalty` | Lv 0 base 30 → 30 (regression). |
+| `test_lv_1_no_penalty` | Lv 1 only affects ability checks; speed unchanged. |
+| `test_lv_2_halves_speed` | Lv 2: 30 → 15. |
+| `test_lv_3_still_halved` | Lv 3 (cumulatively still has Lv 2's halving) → base 40 → 20. |
+| `test_lv_4_still_halved` | Lv 4: 30 → 15 (HP-max halving is Lv 4, speed is NOT halved a second time). |
+| `test_lv_5_floors_to_zero` | Lv 5: 30 → 0. |
+| `test_lv_5_with_haste_still_zero` | Lv 5 hard floor: Haste's ×2 multiplier can't restore speed. |
+| `test_lv_2_composes_with_speed_reduction_buff` | Lv 2 + Slow (-10): (30 - 10) // 2 = 10. |
+| `test_lv_2_composes_with_speed_bonus_buff` | Lv 2 + Longstrider (+10): (30 + 10) // 2 = 20. |
+| `test_lv_6_is_zero` | Lv 6 = 0 (death state; helper just returns 0). |
+| `test_malformed_exhaustion_level_defaults_to_zero` | Non-int level (string / None) → treated as 0. |
 
 ### `test_exhaustion_disadvantage.py`
 v2.159.18 exhaustion-levels Phase 2 — disadvantage wiring at Lv 1 (ability checks) + Lv 3 (attacks + saves). Composes with the existing v2.152.0-v2.157.0 condition-disadvantage helpers via the new `_exhaustion_level(sheet_or_combatant)` helper. The five extended helpers return a synthetic key (`"exhaustion-1"` or `"exhaustion-3"`) so the existing label plumbing at the call sites just works.

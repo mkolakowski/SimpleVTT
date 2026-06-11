@@ -76957,7 +76957,22 @@ async def rest_character(
 
         # v2.159.17 — exhaustion Phase 1: broadcast exhaustion_update
         # so any open sheet / init tracker re-renders the level badge.
+        # v2.159.19 — Phase 3 mirror: also write the new level to the
+        # PC's combatant mirror in the hub state so the leaf
+        # effective_speed_walk helper can read it.
         if _ex_pre != _ex_post:
+            try:
+                state = hub.get_battle(campaign_id)
+                if state:
+                    changed = False
+                    for c in state.get("combatants") or []:
+                        if c.get("char_id") == char.id:
+                            c["exhaustion_level"] = _ex_post
+                            changed = True
+                    if changed:
+                        hub.set_battle(campaign_id, state)
+            except Exception:
+                pass
             try:
                 await hub.broadcast(campaign_id, {
                     "type": "exhaustion_update",
@@ -77313,6 +77328,24 @@ async def set_exhaustion(
             _set_death_save_state(char, status="dead")
             died = True
         db.commit()
+
+        # v2.159.19 — Phase 3 mirror: also write exhaustion_level onto
+        # the PC's combatant mirror in the hub state so the leaf
+        # effective_speed_walk helper can read it without DB access.
+        # No-op when the PC isn't in an active battle.
+        try:
+            state = hub.get_battle(campaign_id)
+            if state:
+                changed = False
+                for c in state.get("combatants") or []:
+                    if c.get("char_id") == char.id:
+                        if int(c.get("exhaustion_level") or 0) != new_level:
+                            c["exhaustion_level"] = new_level
+                            changed = True
+                if changed:
+                    hub.set_battle(campaign_id, state)
+        except Exception:
+            pass
 
         try:
             await hub.broadcast(campaign_id, {
