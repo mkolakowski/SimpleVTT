@@ -1648,6 +1648,17 @@ def _druid_sheet(name: str) -> dict:
              "damage_type": "bludgeoning", "range": "30/120 ft", "desc": "Simple ranged option for when Wild Shape isn't on the table."},
             {"name": "Produce Flame (cantrip)", "attack_bonus": "+6", "damage": "1d8",
              "damage_type": "fire", "range": "30 ft", "desc": "Hurl flame as a ranged spell attack; scales to 2d8 at Lv 5."},
+            # v2.158.101 — Magic-items Phase 7a demo fixture. Vorpal
+            # Scimitar (RAW DMG p.209). +3 attack/damage baked in
+            # (Scimitar +6/1d6+3 → +9/1d6+6). The nat-20 decap fires
+            # from the v2.158.101 post-hit handler via the catalog's
+            # ``on_nat_20`` field. Vorpal RAW is "any sword" — the
+            # Scimitar is a martial sword, perfect Druid fit. The
+            # ``_slug`` field is the rider gate.
+            {"name": "Vorpal Scimitar", "attack_bonus": "+9",
+             "damage": "1d6+6", "damage_type": "slashing",
+             "range": "5 ft", "_slug": "vorpal-sword",
+             "desc": "Legendary scimitar, attunement. +3 attack/damage; on a natural 20 the target's head is cut off (RAW DMG p.209). Constructs / oozes / plants exempt."},
         ],
         # Lv 5 druid prepares WIS mod + level = 3 + 5 = 8 spells.
         # ``casting_time`` tagged for the v2.5.3 action-economy.
@@ -1699,6 +1710,18 @@ def _druid_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+            # v2.158.101 — Magic-items Phase 7a demo fixture. Vorpal
+            # Scimitar (legendary, attunement). Paired with the
+            # attack entry above via ``_slug``. Mira goes from 0 to
+            # 1 attuned item (cap 3 unchanged). The nat-20 decap
+            # only fires from the catalog's ``on_nat_20`` entry —
+            # no UI surface needed (a nat 20 is its own indicator).
+            {"name": "Vorpal Scimitar", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d6", "damage_type": "slashing",
+             "properties": "finesse, light, magic",
+             "_slug": "vorpal-sword",
+             "desc": "Legendary scimitar, attunement. +3 attack/damage; on a natural 20 attack roll, cut off the target's head — the creature dies if it can't survive without a head (RAW DMG p.209). Constructs, oozes, and plants are exempt."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).

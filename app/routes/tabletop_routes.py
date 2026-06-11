@@ -26199,7 +26199,16 @@ def _compute_attack_auto_uplifts(
                     condition_passed = bool(condition(tgt_for_predicate))
                 except Exception:
                     condition_passed = False
-            if has_item_attuned and condition_passed:
+            # v2.158.101 — Phase 7a: some rider catalog rows declare
+            # only a post-hit hook (``on_nat_20`` for Vorpal Sword)
+            # and carry no ``dice`` field — those are pure recipe
+            # markers for the /attack post-hit handler block, not
+            # damage uplifts. Skip the rider-damage push when there's
+            # no ``dice`` to roll.
+            if (
+                has_item_attuned and condition_passed
+                and rider_spec.get("dice")
+            ):
                 try:
                     r = dice_mod.roll(rider_spec["dice"])
                     uplifts.append({
@@ -28652,6 +28661,120 @@ async def _apply_ancestral_protectors_on_hit(
     }
 
 
+async def _apply_magic_item_nat_20_effect(
+    db: Session,
+    campaign_id: int,
+    char,
+    attacker_sheet: dict,
+    attack: dict,
+    target_combatant: dict | None,
+    attack_breakdown: str,
+) -> dict | None:
+    """v2.158.101 — Phase 7a: post-hit hook for magic items with an
+    ``on_nat_20`` field in ``_MAGIC_ITEM_ATTACK_RIDERS`` (Vorpal Sword
+    today; future Sword of Sharpness etc. fit the same shape). Gates:
+      1. Attack's ``_slug`` matches a catalog row with ``on_nat_20``.
+      2. The raw d20 (re-parsed from ``attack_breakdown``) is exactly 20
+         (RAW: nat 20, not the Improved-Critical 19 threshold).
+      3. Wielder has the matching item equipped + attuned (if required).
+      4. Target's creature_type isn't in the rider's
+         ``exempt_creature_types`` list (Vorpal RAW: target must have
+         a head — construct/ooze/plant are exempt).
+
+    Applies the effect (today: ``decap`` → instant kill via
+    ``_apply_damage_to_combatant`` with damage = current HP) and
+    returns a summary dict on success, None on any gate miss.
+    """
+    if not target_combatant:
+        return None
+    attack_slug = (attack.get("_slug") or "").strip().lower()
+    if not attack_slug:
+        return None
+    rider_spec = _MAGIC_ITEM_ATTACK_RIDERS.get(attack_slug)
+    if not rider_spec:
+        return None
+    on_nat_20 = rider_spec.get("on_nat_20")
+    if not on_nat_20:
+        return None
+
+    # Re-parse the raw d20 from the breakdown (the rider needs a
+    # natural 20, not the Improved Critical 19 threshold).
+    import re as _re_n20
+    if not attack_breakdown:
+        return None
+    m = _re_n20.search(
+        r"\d*d20[^d=+ ]*=(\d+)", attack_breakdown, _re_n20.IGNORECASE,
+    )
+    if not m or int(m.group(1)) != 20:
+        return None
+
+    # Verify the wielder has the matching item attuned + equipped.
+    has_attuned = False
+    for inv in (attacker_sheet or {}).get("inventory") or []:
+        if not isinstance(inv, dict):
+            continue
+        if (inv.get("_slug") or "") != attack_slug:
+            continue
+        if not inv.get("equipped"):
+            continue
+        if (rider_spec.get("requires_attunement")
+                and not inv.get("attuned")):
+            continue
+        has_attuned = True
+        break
+    if not has_attuned:
+        return None
+
+    # Verify target creature_type isn't exempt. Resolve via the
+    # v2.97.48 helper so demo monsters with their type on the
+    # template auto-fall-through (mirrors the v2.158.96 Phase 5f
+    # condition-resolution shim).
+    exempt = {
+        s.strip().lower()
+        for s in (on_nat_20.get("exempt_creature_types") or [])
+    }
+    target_ct = (target_combatant.get("creature_type") or "").strip().lower()
+    if not target_ct:
+        try:
+            target_ct = _attacker_creature_type(
+                db, target_combatant.get("char_id"), target_combatant,
+            )
+        except Exception:
+            target_ct = ""
+    if target_ct in exempt:
+        return None
+
+    # Apply the kill. Damage = current HP so the death-save state
+    # machine + the v2.49.243 Uncanny Dodge gate + resistance halving
+    # all fire RAW. Heavy resistance (slashing + nonmagical, etc.)
+    # may not actually kill — that's a v2 polish.
+    current_hp = int(target_combatant.get("hp_current") or 0)
+    if current_hp <= 0:
+        return None
+    try:
+        await _apply_damage_to_combatant(
+            db, campaign_id, target_combatant,
+            damage_amount=current_hp,
+            damage_type=(attack.get("damage_type") or "slashing"),
+            is_attack=True, is_magical=True,
+            attacker_char_id=char.id,
+        )
+    except Exception:
+        logging.exception(
+            "Vorpal nat-20 decap apply failed for char_id=%s",
+            char.id,
+        )
+        return None
+
+    return {
+        "target_combatant_id": target_combatant.get("id"),
+        "target_name": target_combatant.get("name") or "Target",
+        "label": on_nat_20.get("label", "Vorpal Decap"),
+        "slug": attack_slug,
+        "hp_dealt": current_hp,
+    }
+
+
 async def _apply_lance_of_lethargy(
     campaign_id: int, attacker_char_id: int, attacker_name: str,
     attacker_sheet: dict, attack: dict, target_combatant: dict | None,
@@ -30232,6 +30355,27 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
         "condition": lambda tgt: bool(tgt) and (
             (tgt.get("creature_type") or "").strip().lower() == "fiend"
         ),
+    },
+    # v2.158.101 — Phase 7a: first post-hit hook (vs. Phase 5/6
+    # damage-uplift hooks). Vorpal Sword (RAW DMG p.209): on a
+    # natural 20 attack roll against a creature that has at least
+    # one head, the target's head is cut off — the creature dies if
+    # it can't survive without a head. The "has a head" RAW carve-
+    # out is modeled as ``exempt_creature_types``: construct (golems
+    # often have no head you can sever), ooze (no anatomy), and
+    # plant (no head). RAW v1 treats every other creature as having
+    # a head — the "creature that can survive" branch is GM
+    # adjudication and not modeled. ``dice`` omitted because Vorpal
+    # adds no rider damage in RAW; the +3 attack/damage magic bonus
+    # is baked into the demo seed's attack entry, not the rider.
+    "vorpal-sword": {
+        "label": "Vorpal Sword",
+        "requires_attunement": True,
+        "on_nat_20": {
+            "effect": "decap",
+            "label": "🗡 Vorpal Decapitation",
+            "exempt_creature_types": ["construct", "ooze", "plant"],
+        },
     },
 }
 
@@ -79266,6 +79410,52 @@ async def use_attack(
             except Exception:
                 logging.exception(
                     "Lance of Lethargy install failed for char_id=%s",
+                    char.id,
+                )
+
+        # v2.158.101 — Phase 7a: magic-item nat-20 post-hit hooks.
+        # Reads ``attack._slug``, looks for ``on_nat_20`` in
+        # ``_MAGIC_ITEM_ATTACK_RIDERS``, and (when the d20 raw is 20,
+        # the wielder is attuned, and the target's creature_type
+        # isn't on the exempt list) applies the effect — today Vorpal
+        # Sword's decapitation. The helper re-parses the d20 from
+        # the breakdown so this fires only on a literal 20, not on
+        # the Improved Critical 19 threshold. Skipped on dead
+        # targets (already-resolved kill).
+        if hit and not target_dead:
+            try:
+                vorpal_result = await _apply_magic_item_nat_20_effect(
+                    db, campaign_id, char, sheet, attack,
+                    target_combatant, attack_breakdown,
+                )
+                if vorpal_result is not None:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "feature_name": vorpal_result["label"],
+                            "feature_desc": (
+                                f"{char.name} rolls a natural 20 and "
+                                f"cleaves "
+                                f"{vorpal_result['target_name']}'s head "
+                                f"clean off. (Vorpal Sword, RAW DMG p.209.)"
+                            ),
+                            "source": f"item-{vorpal_result['slug']}-nat20",
+                            "target_combatant_id": vorpal_result["target_combatant_id"],
+                            "target_name": vorpal_result["target_name"],
+                            "hp_dealt": vorpal_result["hp_dealt"],
+                        },
+                    })
+                    # Re-resolve target_dead so downstream post-hit
+                    # hooks (Repelling Blast, etc.) skip on the now-
+                    # corpse target. The local variable was computed
+                    # earlier; refresh from the freshly-mutated
+                    # combatant dict.
+                    target_dead = True
+            except Exception:
+                logging.exception(
+                    "Vorpal nat-20 decap failed for char_id=%s",
                     char.id,
                 )
 

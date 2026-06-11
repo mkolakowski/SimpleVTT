@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2228 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.99, 2026-06-11).
+**Total tests:** 2231 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.101, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2076,6 +2076,15 @@ v2.158.97 magic-items-automation Phase 6a — Demon Slayer Rapier (RAW DMG p.166
 | `test_demon_slayer_fires_on_fiend_target` | Attack a `creature_type: "fiend"` combatant → `auto_uplifts` carries `source: "item-demon-slayer"`, `damage_type: "piercing"` (RAW fallback to weapon type), `expression: "2d6"`, total in [2, 24] (crit-doubled cap). |
 | `test_demon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-demon-slayer` uplift. |
 | `test_demon_slayer_suppressed_when_detuned` | /attune detune → no rider even vs. fiends. Restores attunement in teardown. |
+
+### `test_vorpal_decap.py`
+v2.158.101 magic-items-automation Phase 7a — first post-hit hook in the rider substrate (Vorpal Sword nat-20 decapitation, RAW DMG p.209). Catalog row `vorpal-sword` uses a new `on_nat_20` field declaring `{effect: "decap", exempt_creature_types: [construct, ooze, plant]}`. New helper `_apply_magic_item_nat_20_effect` re-parses the raw d20 from breakdown (not the v2.49.231 Improved Critical threshold), verifies attunement, resolves target.creature_type via the v2.97.48 helper, and applies `damage_amount=current_hp` for instant kill. Mira Greenleaf gets the Vorpal Scimitar (attack_index 3, inventory_index 8, +9/1d6+6 — RAW +3 baked in).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_vorpal_no_decap_on_construct` | Target `creature_type: "construct"` is on the exempt list; decap broadcast doesn't fire even on a potential d20=20. |
+| `test_vorpal_no_decap_when_detuned` | /attune detune → decap doesn't fire even on a nat 20. Re-attunes in teardown. |
+| `test_vorpal_decap_on_nat_20` | Iterates dice seeds 0-199 until one lands d20=20 on Mira's first attack; asserts the `feature_used` broadcast with `source: "item-vorpal-sword-nat20"` fires and the label contains "Vorpal." Resets dice seed to entropy mode in cleanup. |
 
 ### `test_demo_dragon_spawn.py`
 v2.158.99 magic-items-automation Phase 6c — Drakkasha (Young Red Dragon) is spawned on the Tavern Brawl map by default + added to the pre-rolled init (token_idx 13, init 10, hp 178). Caelan's Dragon Slayer +3d6 fires automatically when he attacks her, no test plumbing needed. Encounter description gains a one-line dragon-crashes-in beat. CR 10 vs. Lv 5-9 PCs is intentionally unbalanced — this is a showcase.
