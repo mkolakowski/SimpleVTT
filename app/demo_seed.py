@@ -2005,6 +2005,18 @@ def _warlock_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+            # v2.159.11 — Phase 8k: first cone-AoE magic item. Wand of
+            # Fear (RAW DMG p.213 — rare, attunement required). 7
+            # charges; spend 1 to project a 30-ft cone forcing each
+            # creature in the cone to make a DC 15 WIS save or be
+            # Frightened of the wielder for 1 minute. Regains 1d6+1
+            # charges at dawn (Phase 4b dice-expression recharge).
+            # Magnus's Fiend pact already trades in fear flavor — the
+            # wand is on-theme for him. inventory_index 7.
+            {"name": "Wand of Fear", "type": "gear", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-fear",
+             "desc": "RAW DMG p.213 (rare, attunement). 7 charges (regain 1d6+1 at dawn). Action: spend 1 charge to project a 30-ft cone — DC 15 WIS save or Frightened of you for 1 min (repeat save at end of each turn). Wired via /use_item_action with action_key=\"cast-fear\"."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's
@@ -2279,6 +2291,21 @@ def _warlock_sheet(name: str) -> dict:
                 "source": "warlock Lv 20 / Eldritch Master",
                 "class_slug": "warlock",
                 "desc": "1/long rest (Lv 20): spend 1 minute entreating your patron to regain all Pact Magic spell slots. Use /use_eldritch_master to invoke.",
+                "manual": False,
+            },
+            # v2.159.11 — Phase 8k: Wand of Fear charge counter (RAW
+            # DMG p.213). 7 charges, regains 1d6+1 at dawn (Phase 4b
+            # dice-expression recharge — long-rest path reads
+            # ``charge_recovery``). Each /use_item_action cast-fear
+            # decrements by 1. No upcast (single-cast-per-spend).
+            {
+                "key": "wand-of-fear",
+                "name": "Wand of Fear",
+                "current": 7, "max": 7, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "magic item — Wand of Fear",
+                "class_slug": "item",
+                "desc": "RAW DMG p.213. 7 charges. Spend 1 via /use_item_action (cast-fear): 30-ft cone, DC 15 WIS save or Frightened 1 min. Recovers 1d6+1 at dawn.",
                 "manual": False,
             },
         ],

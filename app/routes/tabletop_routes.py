@@ -30617,6 +30617,30 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear (RAW
+    # DMG p.213). 7 charges (regains 1d6+1 at dawn), spend 1 to cast
+    # Fear-Cone: each creature in a 30-ft cone makes a DC 15 WIS save
+    # or becomes Frightened of you for 1 minute (repeated save at end
+    # of each of its turns). No damage — the rider is the condition
+    # install. The handler reuses the v2.99.409 / Conquering Presence
+    # pattern: pass a ``condition_buff`` into ``_resolve_feature_save``
+    # and let that helper install on NPC save-fail / prompt PC targets.
+    "wand-of-fear": {
+        "requires_attunement": True,
+        "resource_key": "wand-of-fear",
+        "actions": {
+            "cast-fear": {
+                "name": "Cast Fear (30-ft cone)",
+                "save_dc": 15,
+                "save_ability": "WIS",
+                "min_charges": 1,
+                "max_charges": 1,
+                "cone_length_ft": 30,
+                "cone_half_angle_deg": 26.5,  # RAW 30-ft cone ≈ 60° apex
+                "duration_rounds": 10,
+            },
+        },
+    },
 }
 
 
@@ -77374,6 +77398,16 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
+    if slug == "wand-of-fear":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_wand_of_fear(
+            db, campaign_id, char, item, sheet, catalog,
+            action_key, action_def,
+            target_combatant_ids=body.get("target_combatant_ids") or [],
+            charges=body.get("charges"),
+            campaign=campaign,
+            prompt_user=user,
+        )
     raise HTTPException(409, "unknown item action handler")
 
 
@@ -78161,6 +78195,180 @@ async def _use_item_action_necklace_of_fireballs(
         "action_key": action_key,
         "charges_spent": n_charges,
         "dice": dice,
+        "save_dc": save_dc,
+        "save_ability": save_ability,
+        "results": results,
+        "resource": {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
+    }
+
+
+async def _use_item_action_wand_of_fear(
+    db, campaign_id, char, item, sheet, catalog,
+    action_key, action_def,
+    target_combatant_ids: list,
+    charges=None,
+    campaign=None,
+    prompt_user=None,
+):
+    """v2.159.11 — Phase 8k Wand of Fear handler. RAW DMG p.213: 7
+    charges, regains 1d6+1 at dawn. Spend 1 charge: each creature in
+    a 30-ft cone makes a DC 15 WIS save or is Frightened of you for
+    1 minute (repeated save at end of each of its turns). No damage —
+    the rider is the condition install. Reuses the
+    ``_resolve_feature_save`` + ``condition_buff`` pattern (same as
+    Conquering Presence / Fear-spell path).
+    """
+    slug = "wand-of-fear"
+    res_key = str(catalog.get("resource_key") or slug)
+
+    # Charge validation (v1: always 1, but kept symmetric with the
+    # necklace so a future "spend N charges to upcast" upgrade is a
+    # 1-line catalog tweak).
+    try:
+        n_charges = int(charges or 1)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "charges must be an int")
+    min_c = int(action_def.get("min_charges") or 1)
+    max_c = int(action_def.get("max_charges") or 1)
+    if n_charges < min_c or n_charges > max_c:
+        raise HTTPException(
+            400,
+            f"charges must be {min_c}..{max_c} for "
+            f"{action_def.get('name') or action_key}",
+        )
+
+    resources = list(sheet.get("resources") or [])
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    if cur < n_charges:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "insufficient_charges",
+                "current": cur,
+                "requested": n_charges,
+                "label": item.get("name") or slug,
+            },
+        )
+
+    if not isinstance(target_combatant_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
+    if len(target_combatant_ids) > 24:
+        raise HTTPException(400, "Too many targets for Wand of Fear")
+
+    save_dc = int(action_def.get("save_dc") or 15)
+    save_ability = str(action_def.get("save_ability") or "WIS").upper()
+    dur_rounds = int(action_def.get("duration_rounds") or 10)
+
+    frightened_buff = {
+        "key": "frightened",
+        "name": f"Frightened (Wand of Fear — {char.name})",
+        "icon": "😱",
+        "duration_rounds": dur_rounds,
+        "duration_max": dur_rounds,
+        "concentration": False,
+        "source_item": slug,
+        "effects": [
+            "disadvantage on ability checks / attacks while source in sight",
+            "can't willingly move closer to source",
+        ],
+    }
+
+    results = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        target_c = _lookup_combatant(campaign_id, tid)
+        if not target_c:
+            results.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        try:
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=int(char.id),
+                caster_char_name=str(char.name or ""),
+                target_combatant=target_c,
+                save_ability=save_ability,
+                dc=save_dc,
+                note_label=f"Wand of Fear (DC {save_dc} {save_ability})",
+                condition_buff=frightened_buff,
+                repeated_save=True,
+                source=f"item-{slug}-save",
+                campaign=campaign,
+                prompt_user=prompt_user,
+                feature_name="😱 Wand of Fear",
+            )
+        except Exception:
+            logging.exception(
+                "Wand of Fear save resolve failed for tid=%s", tid,
+            )
+            results.append({"combatant_id": tid, "reason": "save_error"})
+            continue
+        results.append({
+            "combatant_id": tid,
+            "name": target_c.get("name") or "Target",
+            "passed": sr.get("passed"),
+        })
+
+    res_row["current"] = cur - n_charges
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": "😱 Wand of Fear",
+                "summary": (
+                    f"{char.name} unleashes the {item.get('name')} — "
+                    f"DC {save_dc} {save_ability} cone against "
+                    f"{len(results)} target(s). "
+                    f"({res_row['current']}/{res_max} charges left.)"
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "action_key": action_key,
+        "charges_spent": n_charges,
         "save_dc": save_dc,
         "save_ability": save_ability,
         "results": results,

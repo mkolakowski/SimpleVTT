@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.11] - 2026-06-11 — "The Whispering Wand" — Magic-items-automation Phase 8k: first cone-AoE magic item — Wand of Fear (RAW DMG p.213, rare + attunement). 7 charges (regain 1d6+1 at dawn via Phase 4b dice-expression recharge), spend 1 to project a 30-ft cone — DC 15 WIS save or Frightened for 1 minute (repeated save end-of-turn). No damage — the rider is the condition install via the v2.99.409 `condition_buff` pattern. New `aoe-cone` `ITEM_ACTION_SLUGS` kind wires the v2.159.5 `/battle/cone-targets` endpoint into the click chain. Magnus Hexbinder (Warlock Lv 5) gets the wand at inventory_index 7.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `wand-of-fear` row in `_MAGIC_ITEM_ACTIONS`: `requires_attunement: True`, `resource_key: "wand-of-fear"`, action `cast-fear` carries `save_dc: 15`, `save_ability: "WIS"`, `cone_length_ft: 30`, `cone_half_angle_deg: 26.5`, `duration_rounds: 10`, `min_charges: 1`, `max_charges: 1`. (B) New `_use_item_action_wand_of_fear` handler in `tabletop_routes.py`. Mirrors the v2.159.10 necklace handler shape (charge validation + min/max range check + insufficient_charges 409) but skips the damage path — per target it calls `_resolve_feature_save` with a `frightened` `condition_buff` (key=frightened, duration_rounds=10, source_item=wand-of-fear), so the existing save-resolution helper handles NPC install + PC prompt routing. Decrements the resource by 1, broadcasts `resource_update` + `feature_used`. (C) `_warlock_sheet` (Magnus Hexbinder) gets a Wand of Fear inventory entry at inventory_index 7 (`equippable: True`, `equipped: True`, `attuned: True`, `_slug: "wand-of-fear"`) + a matching `wand-of-fear` resource row (`current: 7`, `max: 7`, `reset: "long"`, `charge_recovery: "1d6+1"`). (D) New `aoe-cone` kind in `ITEM_ACTION_SLUGS`: `length_ft: 30`, `apex_half_angle_deg: 26.57`. (E) `.inv-item-action` click handler gets a new `cfg.kind === 'aoe-cone'` branch — pick a target via `vttOpenMultiTargetPicker` (sets cone direction), fetch caster combatant_id from `/battle`, call `/battle/cone-targets` with `apex_combatant_id`/`direction_combatant_id`/`length_ft`/`apex_half_angle_deg`, reuse `_showAoEConfirmModal` for the per-target checkbox confirm step, POST `/use_item_action`. (F) New HTTP harness `tests/harness/test_wand_of_fear.py` with 3 tests: happy-path 2-target cast (charge 7→6 + save_dc=15/save_ability=WIS), over-cap charges (charges=2 when max=1 → 400), and empty wand (current=0 → 409 `insufficient_charges`). (G) HTTP test total bumped 2260 → 2263.**
+**Description:** Closes the v1 of the magic-items-automation Phase 8 cone arc — the third AoE shape (line + sphere + cone) is now wired end-to-end. The cone branch's flow matches the line branch exactly (caster id from /battle + target via single-target picker + AoE endpoint call + AoE confirm modal); the only differences are the endpoint URL and the body shape (`apex`/`direction` vs. `caster`/`target` vs. `center`). With this commit the three core AoE substrates (line / sphere / cone) are reusable for any future spell or item — Lightning Bolt UI, Cone of Cold UI, Burning Hands UI, Color Spray UI — by adding a `{kind, action_key, label, length_ft|radius_ft, ...}` row to `ITEM_ACTION_SLUGS` and a catalog handler. The dice-expression recharge (Phase 4b) handles the wand's dawn refresh; no new code needed.
+
+### Added
+- `app/routes/tabletop_routes.py` — `wand-of-fear` row in `_MAGIC_ITEM_ACTIONS`; `_use_item_action_wand_of_fear` handler; dispatch branch.
+- `app/templates/sheet_dnd5e.html` — `wand-of-fear` row in `ITEM_ACTION_SLUGS` (aoe-cone kind); aoe-cone click handler branch.
+- `app/demo_seed.py` — Magnus's Wand of Fear inventory item + wand-of-fear resource row.
+- `tests/harness/test_wand_of_fear.py` — 3 HTTP tests.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.10 → 2.159.11. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.11.
+- `docs/test-harness-coverage.md` — HTTP total 2260 → 2263; new `test_wand_of_fear.py` entry.
+
+### Notes
+- Magnus is a Warlock — the wand sits naturally next to his Fiend pact (he already trades in fear flavor). It also gives a Warlock something to do with /use_item_action since his Pact Magic + Eldritch Invocations dominate his combat surface; the wand is at-will fear without burning a Pact slot.
+- The cone's apex-half-angle defaults to 26.57° (the RAW PHB p.204 width-equals-distance rule). The catalog stores 26.5 (rounded) but the endpoint and UI default to 26.57; both produce the same target set at this length.
+- No multi-cast upcast — RAW says 1 charge = 1 cast, no upcast option. The catalog enforces `min_charges == max_charges == 1`; if a future homebrew wand wants per-charge upcasting (multi-charge Fear at increased DC?), the `charge_picker` substrate from v2.159.10 drops in unchanged.
+- Demo PC magic-items density: Magnus joins Thalindra (Pearl + Wands + Necklace), Garrik (Flame Tongue), Caelan (Dragon Slayer), Mira (Vorpal), Pip (Sharpness), Lyra (Demon Slayer), Rowan (Arrow of Slaying), Krieger (Javelin of Lightning) — every demo PC except the cleric/paladin pair now exercises some part of the magic-items substrate.
+
+---
+
 ## [2.159.10] - 2026-06-11 — "The Beadstorm" — Magic-items-automation Phase 8j: multi-bead upcast for the Necklace of Fireballs (RAW DMG p.183). The wearer can now hurl 1-6 beads at once — damage scales `(7+N)d6` (1 bead = 8d6 / Lv 3 Fireball; 6 beads = 13d6 / Lv 8 upcast). New `charge_picker` step in the `aoe-sphere` click handler prompts for bead count via the existing `_showItemActionModal` spinner before the sphere target picker. Backend reads `body.charges`, validates against `min_charges`/`max_charges` on the action def, computes dice via a `dice_fn(n) → (7+n)d6` lambda, and decrements the resource by N instead of 1.
 
 **Schema version:** 69

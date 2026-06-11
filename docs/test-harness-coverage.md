@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2260 in `tests/harness/` + 40 in `tests/harness_ui/` (as of v2.159.10, 2026-06-11).
+**Total tests:** 2263 in `tests/harness/` + 40 in `tests/harness_ui/` (as of v2.159.11, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2106,6 +2106,15 @@ v2.159.3 magic-items-automation Phase 8c — Javelin of Lightning (RAW DMG p.178
 | `test_javelin_lightning_hurl_two_targets` | Hurl with 2 synthetic targets → 200 with `results` carrying both ids, `spent_until_dawn: True`; sheet's inventory item shows `_used_today: True`. |
 | `test_javelin_lightning_double_use_409` | First hurl 200; second hurl → 409 `error: "spent_until_dawn"`. |
 | `test_javelin_lightning_long_rest_resets` | After first hurl + long rest, second hurl returns 200 (flag was cleared). |
+
+### `test_wand_of_fear.py`
+v2.159.11 magic-items-automation Phase 8k — Wand of Fear (RAW DMG p.213, rare + attunement). First cone-AoE magic item via `/use_item_action`. 7 charges (regain 1d6+1 at dawn — v2.158.86 dice-expression recharge); spend 1 to project a 30-ft cone, DC 15 WIS save or Frightened of caster for 1 minute (repeat save end-of-turn). No damage — the rider is the `frightened` `condition_buff` passed through `_resolve_feature_save` (same path Conquering Presence uses). Magnus Hexbinder (Warlock Lv 5) carries it at inventory_index 7.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_wand_of_fear_cast_2_targets` | Cast at 2 NPC targets → 200 with `save_dc: 15`, `save_ability: "WIS"`, `charges_spent: 1`, `resource.current: 6` (7→6), `results` carries both target ids. |
+| `test_wand_of_fear_over_cap_returns_400` | POST with `charges: 2` when `max_charges=1` → 400 (the same min/max validator the necklace upcast picker uses). |
+| `test_wand_of_fear_empty_returns_409` | Drain the wand to 0 charges via `/sheet-fields` PATCH, then cast → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
 
 ### `test_necklace_of_fireballs.py`
 v2.159.9 magic-items-automation Phase 8i — Necklace of Fireballs (RAW DMG p.183). First sphere-AoE magic item via `/use_item_action`. Each bead is a 3rd-level Fireball (8d6 fire, DC 15 DEX save half, 20-ft sphere). Handler decrements a `necklace-of-fireballs` resource row (current 6 / max 6 / reset='none' — beads don't regenerate RAW); returns 409 `insufficient_charges` when bead count = 0. Thalindra Moonwhisper carries it at inventory_index 11. v2.159.10 Phase 8j: multi-bead upcast — `body.charges` 1-6 spends N beads for `(7+N)d6` fire damage (1 bead = Lv 3 Fireball; 6 beads = Lv 8 upcast / 13d6).

@@ -7075,6 +7075,19 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                               control_label: 'Beads to spend',
                               cast_level: (n) => 2 + n,  // Lv = 3 base, +1 per extra
                           }},
+        // v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear
+        // (RAW DMG p.213). 30-ft cone, DC 15 WIS save or Frightened
+        // for 1 minute. Flow: pick a target to define the cone
+        // direction → call /battle/cone-targets → AoE confirm modal
+        // → POST /use_item_action with the picked combatant_ids list.
+        // No multi-charge upcast (single-spend per cast RAW), so no
+        // charge_picker — the catalog enforces min=max=1 charges.
+        'wand-of-fear': {kind: 'aoe-cone',
+                          action_key: 'cast-fear',
+                          label: '😱 Cast Fear',
+                          title: 'Wand of Fear — 30-ft cone, DC 15 WIS save or Frightened 1 min.',
+                          length_ft: 30,
+                          apex_half_angle_deg: 26.57},  // RAW PHB p.204
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
@@ -7585,6 +7598,67 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     if (pickedCharges !== null) {
                         body.charges = pickedCharges;
                     }
+                } else if (cfg.kind === 'aoe-cone') {
+                    // v2.159.11 — Phase 8k: cone-AoE flow. Mirror of
+                    // aoe-line / aoe-sphere but using
+                    // /battle/cone-targets with apex + direction +
+                    // length_ft + apex_half_angle_deg. The caster's
+                    // combatant_id is the apex; the picked target is
+                    // the direction (the cone points from caster
+                    // toward this combatant, extending length_ft).
+                    if (typeof window.vttOpenMultiTargetPicker !== 'function') {
+                        alert('Target picker unavailable. Reload the page.');
+                        return;
+                    }
+                    const picked = await window.vttOpenMultiTargetPicker({
+                        required: 1,
+                        spellName: cfg.label || 'Wand of Fear',
+                        casterCharId: MY_CHAR_ID,
+                        rangeStr: `${cfg.length_ft || 30} ft`,
+                    });
+                    if (picked === null || !picked.length) return;
+                    const directionCid = picked[0];
+                    let casterCid = null;
+                    try {
+                        const stateResp = await fetch(`/api/campaign/${CAMPAIGN_ID}/battle`);
+                        const state = (await stateResp.json()).battle || {};
+                        const cs = state.combatants || [];
+                        const me = cs.find(c => c.char_id === MY_CHAR_ID);
+                        if (me) casterCid = me.id;
+                    } catch (e) {}
+                    if (!casterCid) {
+                        alert('Could not find your combatant on the battle map. Make sure the encounter is loaded.');
+                        return;
+                    }
+                    let coneResults = [];
+                    try {
+                        const ctResp = await fetch(
+                            `/api/campaign/${CAMPAIGN_ID}/battle/cone-targets`,
+                            {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({
+                                    apex_combatant_id: casterCid,
+                                    direction_combatant_id: directionCid,
+                                    length_ft: cfg.length_ft || 30,
+                                    apex_half_angle_deg: cfg.apex_half_angle_deg || 26.57,
+                                }),
+                            },
+                        );
+                        if (ctResp.ok) {
+                            const ctData = await ctResp.json();
+                            coneResults = ctData.results || [];
+                        }
+                    } catch (e) {}
+                    const aoePicked = await window._showAoEConfirmModal({
+                        title: `${cfg.label || '😱 Cast Fear'}`,
+                        body: `${cfg.length_ft || 30}-ft cone (apex at caster). Each creature in the cone must make a DC 15 WIS save or be Frightened of you for 1 min.`,
+                        combatants: coneResults,
+                        submit_label: '😱 Fire',
+                    });
+                    if (aoePicked === null) return;
+                    body.action_key = cfg.action_key;
+                    body.target_combatant_ids = aoePicked;
                 } else {
                     const n = await _showItemActionModal(cfg);
                     if (n === null) return;
