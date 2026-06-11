@@ -29935,6 +29935,12 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "cloak-of-protection": [
         {"ac_bonus": 1, "save_bonus": 1, "requires_attunement": True},
     ],
+    # v2.158.76 — Phase 1b: second catalog entry. Same +1/+1 shape as
+    # the Cloak (RAW DMG p.191) — different slot (finger vs neck),
+    # which RAW lets a PC wear alongside the Cloak for cumulative +2/+2.
+    "ring-of-protection": [
+        {"ac_bonus": 1, "save_bonus": 1, "requires_attunement": True},
+    ],
 }
 
 

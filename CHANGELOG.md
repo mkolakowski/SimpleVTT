@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.76] - 2026-06-10 — "The Second Band" — Magic-items-automation Phase 1b: wire Ring of Protection (+1 AC, +1 saves) — second catalog entry in `_MAGIC_ITEM_PASSIVES`, same shape as Cloak of Protection (v2.158.74), different slot. Tavik Stonebrow (Cleric Lv 8, AC 18, WIS save +6) gets a permanent equipped+attuned Ring in the demo seed, on a different PC from Thalindra's Cloak so the two fixtures' AC + save assertions don't interact. Validates the catalog scales additively before Phase 1c introduces Bracers' no-armor gate complexity
+
+**Schema version:** 69
+**Commit summary:** **(A) `_MAGIC_ITEM_PASSIVES` in `app/routes/tabletop_routes.py` gains a `ring-of-protection` row with the same `[{ac_bonus: 1, save_bonus: 1, requires_attunement: True}]` payload as the Cloak. No walker change — the catalog dispatch was designed for additive growth in v2.158.74. (B) `app/data/local/dnd5e/items/ring-of-protection.json` populated with the matching `passives` array (mirror of the Cloak entry). (C) `_cleric_sheet` in `app/demo_seed.py` appends a Ring of Protection inventory entry on Tavik with `equipped: True, attuned: True, _slug: "ring-of-protection"`. Different PC from Thalindra (who carries the Cloak) so the AC + save assertions in the two test files don't interact. (D) New harness file `tests/harness/test_item_ring_of_protection.py` with 2 tests: AC (Krieger swings at Tavik → `target_ac == 19` = base 18 + Ring +1), save (`/roll wis_save` for Tavik → breakdown contains "Ring of Protection" + "+1" attribution). Pattern mirrors the Cloak tests for symmetry. (E) `tests/harness/test_item_schema.py` rotates the empty-passives canary forward: `test_item_schema_ring_of_protection_has_empty_passives` → `test_item_schema_ring_of_protection_has_phase1b_passives` (now asserts the wired shape) + new `test_item_schema_bracers_of_defense_has_empty_passives` (Bracers is the Phase 1c target). The canary-rotation pattern (move it to the next unwired item each phase) keeps the schema layer informative without rewriting the same test every phase. (F) `docs/test-harness-coverage.md` reflects all the changes + total bumped 2172 → 2175.**
+**Description:** Smaller commit than v2.158.74 because the M1 primitive (`_equipped_item_effects`) already exists; this commit is a catalog row + JSON populate + demo seed entry + test pair. Ring of Protection was picked over Bracers of Defense as the second entry because (a) it shares the +1 AC / +1 saves shape with Cloak, so it validates the catalog scales additively before any structural shape changes, and (b) RAW lets a PC wear both Cloak + Ring for cumulative +2/+2 — a future stacking test is filed for Phase 1d. Tavik's chain-mail-+-shield base AC (18) makes the +1 ring bonus arithmetic clean (target_ac 19 vs base 18), and his Cleric WIS-save proficiency gives the save test a meaningful save mod (+6).
+
+### Added
+- `app/routes/tabletop_routes.py` — `ring-of-protection` row in `_MAGIC_ITEM_PASSIVES` catalog.
+- `app/data/local/dnd5e/items/ring-of-protection.json` — `passives` populated with the +1 AC / +1 save / `requires_attunement: true` payload.
+- `app/demo_seed.py` — `_cleric_sheet` inventory gains a Ring of Protection entry (equipped + attuned) so Tavik is the test canary.
+- `tests/harness/test_item_ring_of_protection.py` — two tests covering the AC + save halves on Tavik.
+- `tests/harness/test_item_schema.py` — new `test_item_schema_bracers_of_defense_has_empty_passives` as the rotated canary.
+
+### Changed
+- `tests/harness/test_item_schema.py` — `test_item_schema_ring_of_protection_has_empty_passives` renamed + assertions flipped to the Phase 1b populated shape (mirror of v2.158.75's Cloak update).
+- `docs/test-harness-coverage.md` — Ring test rows added + Bracers canary added + total bumped 2172 → 2175.
+- `app/version.py` — `APP_VERSION` 2.158.75 → 2.158.76. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.76.
+
+### Notes
+- Second catalog entry — proves the v2.158.74 catalog scales additively (no walker change needed for same-shape items).
+- The canary-rotation pattern (move the empty-passives test to the next unwired item each phase) is now established. Phase 1c will move it from Bracers to a Phase 4 charge-tracked item (probably Pearl of Power).
+- Cloak + Ring stacking RAW lets a PC wear both for cumulative +2/+2; no demo PC carries both today, so the stacking test is filed for Phase 1d.
+
+---
+
 ## [2.158.75] - 2026-06-10 — "The Stale Canary" — Test-fix follow-up to v2.158.74: the Phase 0 cloak schema test asserted `passives == []`, which v2.158.74's Phase 1a wiring flipped to a populated payload — the assertion was stale by the time Phase 1a landed. Rename the test to reflect the wired shape and add a new "empty passives" canary on Ring of Protection (the Phase 1b target, still unwired)
 
 **Schema version:** 69

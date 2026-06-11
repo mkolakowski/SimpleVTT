@@ -56,16 +56,37 @@ async def test_item_schema_cloak_of_protection_has_phase1a_passives():
     assert p.get("requires_attunement") is True
 
 
-async def test_item_schema_ring_of_protection_has_empty_passives():
-    """v2.158.75: empty-passives canary moved from Cloak (now wired by
-    Phase 1a) to Ring of Protection (Phase 1b target, still unwired
-    in v2.158.74). When Phase 1b ships, this assertion flips the same
-    way the Cloak's did."""
+async def test_item_schema_ring_of_protection_has_phase1b_passives():
+    """v2.158.76: Phase 1b wired Ring of Protection with the same +1
+    AC / +1 saves payload as Cloak. Empty-passives canary moves on
+    to Bracers of Defense (Phase 1c target — different shape because
+    of the no-armor + no-shield gate)."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
         resp = await client.get("/api/content/items/ring-of-protection")
     assert resp.status_code == 200
     record = resp.json()["record"]
     assert record["slug"] == "ring-of-protection"
+    assert record["charges"] is None
+    assert record["charge_recovery"] is None
+    passives = record["passives"]
+    assert isinstance(passives, list) and len(passives) == 1
+    p = passives[0]
+    assert p.get("ac_bonus") == 1
+    assert p.get("save_bonus") == 1
+    assert p.get("requires_attunement") is True
+
+
+async def test_item_schema_bracers_of_defense_has_empty_passives():
+    """v2.158.76: empty-passives canary moves from Ring of Protection
+    (now Phase 1b wired) to Bracers of Defense (Phase 1c target —
+    +2 AC with the RAW no-armor + no-shield gate, which needs a
+    new ``requires_no_armor`` walker primitive). When Phase 1c ships,
+    this assertion flips and the canary rolls forward again."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/api/content/items/bracers-of-defense")
+    assert resp.status_code == 200
+    record = resp.json()["record"]
+    assert record["slug"] == "bracers-of-defense"
     assert record["charges"] is None
     assert record["charge_recovery"] is None
     assert record["passives"] == []

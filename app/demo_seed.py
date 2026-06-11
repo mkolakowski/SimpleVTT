@@ -768,6 +768,18 @@ def _cleric_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+            # v2.158.76 — Magic-items Phase 1b demo fixture. Ring of
+            # Protection (+1 AC, +1 saves) on Tavik, equipped +
+            # attuned. Same shape as Thalindra's Cloak (v2.158.74),
+            # second catalog entry, different PC so attack-time AC +
+            # /roll save assertions can target either fixture without
+            # interfering. Tavik's WIS save is wired through the
+            # existing Cleric proficiency so the save half of the
+            # test exercises the same /roll hook.
+            {"name": "Ring of Protection", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ring-of-protection",
+             "desc": "Rare ring, attunement. +1 AC and +1 to saving throws."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action
