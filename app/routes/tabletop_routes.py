@@ -30563,6 +30563,33 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.159.3 — Phase 8c: Javelin of Lightning (RAW DMG p.178). First
+    # line-AoE item — uses the existing /use_item_action endpoint with a
+    # custom handler that takes `target_combatant_ids` (the line creatures
+    # the GM picks). RAW: throw + speak command word → 5-ft-wide line
+    # 120 ft long → each creature in line (excluding caster + target)
+    # makes DC 13 DEX save → 4d6 lightning (half on pass). Then the
+    # javelin lands at the target's feet — the target itself is hit
+    # by a normal melee attack. v1 models the lightning save chain
+    # only; the target's melee attack is a follow-up the player can
+    # fire via their normal Javelin attack. The item ships with a
+    # ``_used_today: False`` field; flipping it True on use blocks
+    # re-use until the next long rest (RAW: "until the next dawn").
+    "javelin-of-lightning": {
+        "requires_attunement": False,
+        "actions": {
+            "hurl-lightning": {
+                "name": "Hurl Lightning Javelin",
+                "save_dc": 13,
+                "save_ability": "DEX",
+                "dice": "4d6",
+                "damage_type": "lightning",
+                "save_for_half": True,
+                "state_field": "_used_today",
+                "state_block_value": True,
+            },
+        },
+    },
 }
 
 
@@ -76752,6 +76779,18 @@ async def rest_character(
             else:
                 new_slots[cslug] = by_lvl
         sheet["spell_slots"] = new_slots
+        # v2.159.3 — Phase 8c: clear per-day item state flags on a
+        # long rest (Javelin of Lightning ``_used_today: True`` → False).
+        # RAW: "until the next dawn" maps to the long-rest dawn boundary.
+        inventory_long = list(sheet.get("inventory") or [])
+        if inventory_long:
+            inv_dirty = False
+            for _i, _inv in enumerate(inventory_long):
+                if isinstance(_inv, dict) and _inv.get("_used_today"):
+                    inventory_long[_i] = {**_inv, "_used_today": False}
+                    inv_dirty = True
+            if inv_dirty:
+                sheet["inventory"] = inventory_long
         sheet["hp"] = hp
         sheet["hit_dice"] = hd
         # v2.99.219 — Portent (Divination Wizard Lv 2+) long-rest
@@ -77289,6 +77328,15 @@ async def use_item_action(
             db, campaign_id, char, item, sheet,
             action_key, action_def, inv_idx,
         )
+    if slug == "javelin-of-lightning":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_javelin_of_lightning(
+            db, campaign_id, char, item, sheet,
+            action_key, action_def, inv_idx,
+            target_combatant_ids=body.get("target_combatant_ids") or [],
+            campaign=campaign,
+            prompt_user=user,
+        )
     raise HTTPException(409, "unknown item action handler")
 
 
@@ -77726,6 +77774,168 @@ async def _use_item_action_flame_tongue(
         "item_name": item.get("name") or slug,
         "action_key": action_key,
         "lit": desired,
+    }
+
+
+async def _use_item_action_javelin_of_lightning(
+    db, campaign_id, char, item, sheet,
+    action_key, action_def, inv_idx,
+    target_combatant_ids: list,
+    campaign=None,
+    prompt_user=None,
+):
+    """v2.159.3 — Phase 8c Javelin of Lightning handler. RAW DMG p.178:
+    on throw + command word, a 5-ft-wide line of lightning extends to
+    the target (120 ft max). Each creature in the line (excluding the
+    caster + target) makes a DC 13 DEX save → 4d6 lightning (half on
+    pass). The javelin then lands at the target's feet — the player
+    fires their normal Javelin attack as a follow-up. v1 models only
+    the lightning save chain; the GM picks `target_combatant_ids`
+    (the creatures in the line per their tactical read of the map).
+
+    Item state: ``_used_today`` flag — flips True on use, blocks
+    re-use until next long rest (RAW: "until the next dawn"). The
+    rest endpoint clears the flag in v2.159.3 alongside its existing
+    resource recharge.
+    """
+    slug = "javelin-of-lightning"
+    state_field = str(action_def.get("state_field") or "_used_today")
+    block_value = action_def.get("state_block_value", True)
+    if item.get(state_field) == block_value:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "spent_until_dawn",
+                "current_state": True,
+                "label": item.get("name") or slug,
+                "detail": (
+                    f"{item.get('name') or 'Javelin of Lightning'} has "
+                    f"already discharged today. Recharges on a long rest."
+                ),
+            },
+        )
+
+    if not isinstance(target_combatant_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
+    # Cap target count for hub safety — the line can plausibly cross
+    # ~10 creatures at most.
+    if len(target_combatant_ids) > 24:
+        raise HTTPException(400, "Too many targets for Javelin of Lightning")
+
+    save_dc = int(action_def.get("save_dc") or 13)
+    save_ability = str(action_def.get("save_ability") or "DEX").upper()
+    dice = str(action_def.get("dice") or "4d6")
+    damage_type = str(action_def.get("damage_type") or "lightning")
+    save_for_half = bool(action_def.get("save_for_half"))
+
+    # Resolve each target's save + apply damage.
+    results = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        target_c = _lookup_combatant(campaign_id, tid)
+        if not target_c:
+            results.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        try:
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=int(char.id),
+                caster_char_name=str(char.name or ""),
+                target_combatant=target_c,
+                save_ability=save_ability,
+                dc=save_dc,
+                note_label=f"Javelin of Lightning (DC {save_dc} {save_ability})",
+                condition_buff=None,
+                repeated_save=False,
+                source=f"item-{slug}-save",
+                campaign=campaign,
+                prompt_user=prompt_user,
+                feature_name="⚡ Javelin of Lightning",
+            )
+        except Exception:
+            logging.exception(
+                "Javelin of Lightning save resolve failed for tid=%s", tid,
+            )
+            results.append({"combatant_id": tid, "reason": "save_error"})
+            continue
+
+        damage_dealt = 0
+        if sr.get("passed") is not None:
+            try:
+                r = dice_mod.roll(dice)
+                base = int(r.total)
+            except dice_mod.DiceParseError:
+                base = 0
+            if base > 0:
+                if sr.get("passed"):
+                    if save_for_half:
+                        damage_dealt = base // 2
+                else:
+                    damage_dealt = base
+            if damage_dealt > 0:
+                try:
+                    await _apply_damage_to_combatant(
+                        db, campaign_id, target_c,
+                        damage_amount=damage_dealt,
+                        damage_type=damage_type,
+                        is_attack=False, is_magical=True,
+                        attacker_char_id=char.id,
+                    )
+                except Exception:
+                    logging.exception(
+                        "Javelin lightning damage apply failed for tid=%s",
+                        tid,
+                    )
+        results.append({
+            "combatant_id": tid,
+            "name": target_c.get("name") or "Target",
+            "passed": sr.get("passed"),
+            "damage_dealt": damage_dealt,
+        })
+
+    # Flip the item's state field to mark spent-until-dawn.
+    inventory = list(sheet.get("inventory") or [])
+    if 0 <= inv_idx < len(inventory):
+        new_item = dict(inventory[inv_idx])
+        new_item[state_field] = block_value
+        inventory[inv_idx] = new_item
+        sheet["inventory"] = inventory
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
+
+    # Broadcast a summary.
+    target_names = ", ".join(
+        r.get("name", "?") for r in results if "name" in r
+    ) or "no targets"
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": "⚡ Javelin of Lightning",
+                "summary": (
+                    f"{char.name} hurls the {item.get('name')} — lightning "
+                    f"arcs through {target_names}. "
+                    f"({len(results)} save(s) resolved.)"
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "action_key": action_key,
+        "spent_until_dawn": True,
+        "save_dc": save_dc,
+        "save_ability": save_ability,
+        "results": results,
     }
 
 

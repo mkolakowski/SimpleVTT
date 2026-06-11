@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2244 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.159.2, 2026-06-11).
+**Total tests:** 2247 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.159.3, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2076,6 +2076,15 @@ v2.158.97 magic-items-automation Phase 6a — Demon Slayer Rapier (RAW DMG p.166
 | `test_demon_slayer_fires_on_fiend_target` | Attack a `creature_type: "fiend"` combatant → `auto_uplifts` carries `source: "item-demon-slayer"`, `damage_type: "piercing"` (RAW fallback to weapon type), `expression: "2d6"`, total in [2, 24] (crit-doubled cap). |
 | `test_demon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-demon-slayer` uplift. |
 | `test_demon_slayer_suppressed_when_detuned` | /attune detune → no rider even vs. fiends. Restores attunement in teardown. |
+
+### `test_javelin_of_lightning.py`
+v2.159.3 magic-items-automation Phase 8c — Javelin of Lightning (RAW DMG p.178). First line-AoE item: fires via `/use_item_action` with `action_key="hurl-lightning"` + a `target_combatant_ids` list. Each target rolls DC 13 DEX save → 4d6 lightning (half on pass) via `_resolve_feature_save`. Item flips to `_used_today: True` after firing; long-rest path clears the flag. Krieger Stonefist gets the javelin (inventory_index 5).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_javelin_lightning_hurl_two_targets` | Hurl with 2 synthetic targets → 200 with `results` carrying both ids, `spent_until_dawn: True`; sheet's inventory item shows `_used_today: True`. |
+| `test_javelin_lightning_double_use_409` | First hurl 200; second hurl → 409 `error: "spent_until_dawn"`. |
+| `test_javelin_lightning_long_rest_resets` | After first hurl + long rest, second hurl returns 200 (flag was cleared). |
 
 ### `test_arrow_of_slaying.py`
 v2.159.1 magic-items-automation Phase 8a — Arrow of Slaying (Giants) (RAW DMG p.151). First ammunition-shape catalog row, extending the v2.158.102 `on_hit_save` substrate with a new `effect: "damage"` variant for save-for-half damage. Rowan Quickbow's Longbow (Arrow of Slaying — Giants) attack at attack_index 2 fires the rider via `_slug` match. New Hill Giant token template (`sheet.type="giant"`) gives the helper-resolution path a real RAW target.

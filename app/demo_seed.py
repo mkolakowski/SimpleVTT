@@ -2616,6 +2616,23 @@ def _barbarian_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+            # v2.159.3 — Magic-items Phase 8c demo fixture. Javelin
+            # of Lightning (RAW DMG p.178). Different shape from
+            # prior items: no inventory equipped state needed (it's
+            # a thrown weapon), no attunement. The use is fired
+            # via the v2.158.82 /use_item_action endpoint with the
+            # new "hurl-lightning" action_key and a list of
+            # target_combatant_ids the GM picks (the creatures in
+            # the 5-ft × 120-ft line). State field ``_used_today``
+            # starts False; flips True on use, blocks re-use until
+            # next long rest (v2.159.3 dawn-reset).
+            {"name": "Javelin of Lightning", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True,
+             "hands": 1, "damage": "1d6", "damage_type": "piercing",
+             "properties": "thrown, magic", "range": "30/120 ft",
+             "_used_today": False,
+             "_slug": "javelin-of-lightning",
+             "desc": "Uncommon thrown magic weapon. Throw + speak the command word: lightning line 5 ft × 120 ft, DC 13 DEX save each creature in line (excluding caster + target) → 4d6 lightning (half on pass). The javelin lands at the target's feet and can be retrieved. Once used, nonmagical until next dawn (long rest)."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature
