@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.78] - 2026-06-10 — "The Doubled Wards" — Magic-items-automation Phase 1d: same-shape stacking validation. Pip Quickfingers (Rogue Lv 7, base AC 14, no prior magic-item assertions in the test suite) gets BOTH a Cloak of Protection (neck) AND a Ring of Protection (finger) in her demo seed — RAW (DMG p.138-191) stacks them for cumulative +2 AC / +2 saves. New harness file `test_item_passive_stacking.py` asserts the catalog's per-payload accumulator works across same-shape entries without dedup. Closes Phase 1 of the magic-items plan
+
+**Schema version:** 69
+**Commit summary:** **(A) `_rogue_sheet` in `app/demo_seed.py` appends BOTH a Cloak of Protection AND a Ring of Protection to Pip's inventory — both equipped + attuned. Different slots (neck + finger) so RAW stacks them. Appended at END so existing inventory-index assertions stay valid (no test asserts pip's exact target_ac today, verified via repo-wide grep). (B) New harness file `tests/harness/test_item_passive_stacking.py` with 2 tests: AC stacking (Krieger swings at Pip → `target_ac == 16` = 14 base + 1 Cloak + 1 Ring) + save stacking (`/roll dex_save` for Pip → breakdown contains BOTH "Cloak of Protection" AND "Ring of Protection" + "+2" total). The save assertion is the stronger test: it proves both the sources-list aggregator (joined by " + " in the breakdown) AND the numeric accumulator (1 + 1 = 2) work together. (C) `docs/test-harness-coverage.md` adds the new section + total bumped 2178 → 2180. No new engine code — v2.158.74's walker was designed for this and additivity is its core abstraction.**
+**Description:** Phase 1 of the magic-items-automation plan was nominally finished at v2.158.77 (Cloak + Ring + Bracers all wired) but had a quiet gap: the v2.158.74 walker's accumulator (which sums numeric payloads + concatenates sources lists across all matched items) had no test asserting that multi-item stacking actually works as RAW expects. A future commit that "optimized" the walker to dedupe by item type or short-circuit on first match would regress stacking silently. This commit closes that gap with the cleanest possible fixture (Pip has no other magic items and no prior AC assertions, so adding both Cloak + Ring is non-invasive).
+
+### Added
+- `app/demo_seed.py` — `_rogue_sheet` inventory gains Cloak of Protection + Ring of Protection entries (both equipped + attuned) at the END so existing tests don't shift.
+- `tests/harness/test_item_passive_stacking.py` — two tests covering AC + save stacking on Pip.
+
+### Changed
+- `docs/test-harness-coverage.md` — new `### test_item_passive_stacking.py` block + total bumped 2178 → 2180.
+- `app/version.py` — `APP_VERSION` 2.158.77 → 2.158.78. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.78.
+
+### Notes
+- Plan's Phase 1 is now fully shipped with explicit stacking coverage. The catalog + walker primitives carry through every Phase 1 shape (passive +AC, passive +AC + +save, gated passive +AC, and now multi-item stacking).
+- Demo PCs each now wear at least one real magic item: Pip (Cloak + Ring stack), Thalindra (Cloak), Tavik (Ring), Kael (Bracers). Phase 2's attunement UI will surface this state to GMs visually.
+- Natural next step is Phase 2 (attunement UI + 3-item cap) — needed before Phase 3 (Pearl + 1/day actives) so the gate the catalog already enforces is exposed in the UI.
+
+---
+
 ## [2.158.77] - 2026-06-10 — "The Empty-Handed Defense" — Magic-items-automation Phase 1c: wire Bracers of Defense (+2 AC ONLY while wearing no armor and using no shield, RAW DMG p.155) — third catalog entry + closes the plan's Phase 1. Different shape from Cloak/Ring: no `save_bonus` key + two new gate primitives (`requires_no_armor`, `requires_no_shield`) checked per-payload by `_equipped_item_effects`. New helper `_pc_is_wearing_shield` mirrors the v2.99.95 `_pc_is_wearing_armor` pattern. Kael Brightleaf (Monk Way of the Open Hand, Lv 7, Unarmored Defense base AC 16, no armor/shield) is the demo fixture
 
 **Schema version:** 69

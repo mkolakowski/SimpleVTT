@@ -370,6 +370,22 @@ def _rogue_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+            # v2.158.78 — Magic-items Phase 1d stacking fixture. Pip
+            # wears BOTH a Cloak of Protection (neck slot) AND a Ring
+            # of Protection (finger slot) — RAW lets a PC stack them
+            # for cumulative +2 AC / +2 saves. Exercises the
+            # _equipped_item_effects accumulator (the walker sums
+            # numeric payloads across all matched items, doesn't
+            # dedupe by item shape). Appended at END so existing
+            # inventory-index assertions stay valid.
+            {"name": "Cloak of Protection", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "cloak-of-protection",
+             "desc": "Uncommon wondrous item, attunement. +1 AC and +1 to saving throws."},
+            {"name": "Ring of Protection", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ring-of-protection",
+             "desc": "Rare ring, attunement. +1 AC and +1 to saving throws."},
         ],
         "feats": [],
         "resources": [],

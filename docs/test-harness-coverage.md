@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2178 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.77, 2026-06-10).
+**Total tests:** 2180 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.78, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1998,6 +1998,14 @@ v2.158.77 magic-items-automation Phase 1c — third catalog entry + closes the p
 |------|-----------------|
 | `test_bracers_of_defense_grants_ac_bonus` | Krieger swings at Kael → `target_ac == 18` (16 base + Bracers +2). |
 | `test_bracers_grant_no_save_bonus` | `/roll` `dex_save` for Kael (`1d20+7`) → breakdown does NOT contain "Bracers of Defense". Shape guard: Bracers grant ONLY AC; the per-payload key shape (no `save_bonus`) must not leak into the save hook. |
+
+### `test_item_passive_stacking.py`
+v2.158.78 magic-items-automation Phase 1d — same-shape stacking validation. Pip Quickfingers (Rogue Lv 7, base AC 14) wears both an equipped+attuned Cloak of Protection (neck slot) AND Ring of Protection (finger slot) in her demo seed; RAW lets both stack for cumulative +2 AC / +2 saves. Closes Phase 1 of the magic-items plan: catalog scales additively (v2.158.74), per-payload gates work (v2.158.77), and now the accumulator handles same-shape multiplicity without dedup.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cloak_and_ring_stack_ac_bonus` | Krieger swings at Pip → `target_ac == 16` (14 base + 1 Cloak + 1 Ring). Proves walker sums `ac_bonus` across matched items. |
+| `test_cloak_and_ring_stack_save_bonus` | `/roll` `dex_save` for Pip (`1d20+6`) → breakdown contains BOTH "Cloak of Protection" AND "Ring of Protection" + "+2" total. Proves sources list aggregates + accumulator sums save_bonus. |
 
 ---
 
