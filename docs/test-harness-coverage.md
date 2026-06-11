@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2186 in `tests/harness/` + 24 in `tests/harness_ui/` (as of v2.158.80, 2026-06-10).
+**Total tests:** 2192 in `tests/harness/` + 24 in `tests/harness_ui/` (as of v2.158.82, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1970,7 +1970,7 @@ v2.158.73 magic-items-automation Phase 0 — the SRD item content layer now ship
 | `test_item_schema_cloak_of_protection_has_phase1a_passives` | v2.158.75 update of the original Phase 0 assertion: Phase 1a (v2.158.74) populated the Cloak's `passives` with `[{ac_bonus:1, save_bonus:1, requires_attunement:true}]`. Test now asserts the wired shape. Charges still null. |
 | `test_item_schema_ring_of_protection_has_phase1b_passives` | v2.158.76: Phase 1b populated Ring with the same +1/+1 payload as Cloak. Test asserts the wired shape. |
 | `test_item_schema_bracers_of_defense_has_phase1c_passives` | v2.158.77: Phase 1c populated Bracers with `[{ac_bonus:2, requires_attunement:true, requires_no_armor:true, requires_no_shield:true}]`. Different shape from Cloak/Ring (no save_bonus key, +2 AC, two new gate flags). Plan's Phase 1 fully shipped after this entry. |
-| `test_item_schema_pearl_of_power_has_empty_passives` | v2.158.77: empty-passives canary rolls forward to Pearl of Power (Phase 3 target — 1/day spell-slot recovery via the planned `/use_item_action` M2 endpoint). Pearl's wiring goes into `actions[]` + `charges`, not `passives`, so the next flip is on those fields instead. |
+| `test_item_schema_pearl_of_power_has_phase3_action` | v2.158.82: Phase 3 wired Pearl with `charges: 1`, `charge_recovery: "long-rest"`, and one `actions[]` entry (`restore-slot`). Passives stays `[]` (Pearl is active-only). Canary moves on to Wand of Magic Missiles (Phase 4 target). |
 | `test_item_schema_wand_of_magic_missiles_has_phase0_keys` | `GET /api/content/items/wand-of-magic-missiles` → 200 + same shape on a charge-tracked archetype (Phase 4's charge-caster canary). |
 | `test_item_schema_unknown_slug_404` | `GET /api/content/items/no-such-srd-item` → 404 — error contract unchanged by the Phase 0 additions. |
 
@@ -2018,6 +2018,18 @@ v2.158.79 magic-items-automation Phase 2 — `POST /api/campaign/{cid}/character
 | `test_attune_missing_fields_400` | Empty body → 400. |
 | `test_attune_unknown_char_404` | Unknown char_id → 404. |
 | `test_attune_index_out_of_range_400` | `inventory_index: 999` past end → 400. |
+
+### `test_use_item_action_pearl.py`
+v2.158.82 magic-items-automation Phase 3 — the `POST /api/campaign/{cid}/character/{char_id}/use_item_action` endpoint with the Pearl of Power dispatch. New `_MAGIC_ITEM_ACTIONS` catalog in `app/routes/tabletop_routes.py` maps `pearl-of-power` to the `restore-slot` action; the endpoint validates attunement + equipped + the `pearl-of-power` resource row, then decrements the resource + the matching expended spell slot. Thalindra (Wizard Lv 7) gets a permanent equipped + attuned Pearl in her seed + the `pearl-of-power` resource row (max 1, reset long).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_pearl_restores_expended_slot` | Pre-expend Thalindra's Lv 2 slot via /sheet-fields; invoke Pearl → response carries `slot_restored.used == 0` + `resource.current == 0`. |
+| `test_use_pearl_out_of_uses_409` | After first use depletes the pearl resource, re-expending a Lv 2 slot + invoking again → 409 `out_of_uses`. |
+| `test_use_pearl_slot_level_over_cap_400` | RAW cap: requesting `slot_level: 4` → 400 (Pearl restores ≤ Lv 3). |
+| `test_use_pearl_no_expended_slot_409` | After long rest (all slots full), invoking Pearl → 409 `no_expended_slot`. |
+| `test_use_pearl_unknown_action_404` | `action_key: "fireball"` on a Pearl → 404. |
+| `test_use_item_action_missing_fields_400` | Empty body → 400. |
 
 ---
 

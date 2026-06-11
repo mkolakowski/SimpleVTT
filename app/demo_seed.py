@@ -628,6 +628,17 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "cloak-of-protection",
              "desc": "Uncommon wondrous item, attunement. +1 AC and +1 to saving throws."},
+            # v2.158.82 — Magic-items Phase 3 demo fixture. Pearl of
+            # Power (1/day spell-slot recovery, ≤ Lv 3) on Thalindra,
+            # equipped + attuned. Exercises the new
+            # /use_item_action endpoint + the _MAGIC_ITEM_ACTIONS
+            # dispatch catalog. Paired with the pearl-of-power
+            # resource row (max 1, reset long) added to her
+            # ``resources`` array below.
+            {"name": "Pearl of Power", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "pearl-of-power",
+             "desc": "Uncommon wondrous item, attunement. 1/day at dawn (long rest), regain one expended spell slot of 3rd level or lower."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -645,6 +656,19 @@ def _wizard_sheet(name: str) -> dict:
                 "source": "wizard Lv 1",
                 "class_slug": "wizard",
                 "desc": "Once per day during a short rest, regain spell slots whose combined level ≤ ⌈wizard_lv/2⌉ (3 levels at Lv 5). L6+ slots aren't eligible.",
+                "manual": False,
+            },
+            # v2.158.82 — Magic-items Phase 3: Pearl of Power gate.
+            # The /use_item_action endpoint decrements this counter on
+            # each use + the rest loop refills it on a long rest via
+            # the standard reset=long path. Pairs with the Pearl entry
+            # in Thalindra's inventory above.
+            {
+                "key": "pearl-of-power",
+                "name": "Pearl of Power",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "item-pearl-of-power",
+                "desc": "1/day at dawn (long rest): regain one expended spell slot of 3rd level or lower.",
                 "manual": False,
             },
         ],

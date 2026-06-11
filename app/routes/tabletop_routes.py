@@ -29979,6 +29979,29 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
 }
 
 
+# ── Magic-item active-action catalog (v2.158.82 — Phase 3 M2) ────────────────
+# Maps an SRD item slug to a dict describing the per-use action: the
+# action_key the client sends to /use_item_action, the resource row
+# the use consumes (auto-created in the seed; refilled by the rest
+# loop), and per-action handler metadata. The endpoint dispatches by
+# slug + action_key. Phase 3 ships only Pearl of Power; Phase 4 will
+# add charge-tracked wands with multi-charge actions.
+_MAGIC_ITEM_ACTIONS: dict[str, dict] = {
+    "pearl-of-power": {
+        "key": "restore-slot",
+        "name": "Use Pearl of Power",
+        "resource_key": "pearl-of-power",
+        # Restore a slot of level ≤ max_slot_level (RAW DMG p.184 —
+        # PEarl restores up to a 3rd-level slot; a higher-level slot
+        # returns as 3rd, but the demo enforces the level cap on the
+        # request side so a player can't "double-dip" a 4th-level
+        # slot via picking 3 + recasting).
+        "max_slot_level": 3,
+        "requires_attunement": True,
+    },
+}
+
+
 def _equipped_item_effects(sheet: dict) -> dict:
     """v2.158.74 — Phase 1a M1: walk a PC sheet's ``inventory`` for
     equipped (+ attuned where required) magic items and merge their
@@ -76392,6 +76415,237 @@ async def attune_item(
         "inventory_index": inv_idx,
         "attuned": attuned,
         "item_name": item.get("name") or "",
+    }
+
+
+# ----------- API: magic-item active action use (v2.158.82 Phase 3) -----
+
+@router.post(
+    "/api/campaign/{campaign_id}/character/{char_id}/use_item_action",
+)
+async def use_item_action(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.158.82 — M2 primitive: invoke a magic item's active action.
+
+    Body: ``{inventory_index: int, action_key: str, slot_level?: int,
+    class_slug?: str, override?: bool}``.
+
+    Dispatches by the inventory item's ``_slug`` against
+    ``_MAGIC_ITEM_ACTIONS``. Phase 3 ships only Pearl of Power's
+    ``restore-slot``: validate the item is equipped + attuned, find
+    the matching resource row (`pearl-of-power`), check `current > 0`
+    (409 ``out_of_uses`` otherwise), decrement it, find an expended
+    spell slot of the requested level (≤ catalog's
+    ``max_slot_level``) on the PC's ``spell_slots[class_slug]``,
+    decrement its ``used``, broadcast `spell_slot_update` +
+    `resource_update` + `feature_used`.
+
+    Phase 4 will add charge-tracked wands (multi-charge spend per
+    use) via the same endpoint with a different action_key.
+    """
+    body = await request.json()
+    if "inventory_index" not in body or "action_key" not in body:
+        raise HTTPException(
+            400, "inventory_index and action_key are required",
+        )
+    try:
+        inv_idx = int(body["inventory_index"])
+    except (TypeError, ValueError):
+        raise HTTPException(400, "inventory_index must be an int")
+    action_key = str(body.get("action_key") or "").strip()
+    slot_level_raw = body.get("slot_level")
+    class_slug = str(body.get("class_slug") or "").strip().lower()
+
+    campaign = (
+        db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    )
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (
+        _user_is_gm(user, campaign, db) or char.owner_user_id == user.id
+    ):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    inventory = list(sheet.get("inventory") or [])
+    if inv_idx < 0 or inv_idx >= len(inventory):
+        raise HTTPException(400, "inventory_index out of range")
+    item = inventory[inv_idx]
+    if not isinstance(item, dict):
+        raise HTTPException(400, "inventory_index does not name an item")
+
+    slug = str(item.get("_slug") or "").strip().lower()
+    if not slug:
+        raise HTTPException(409, "item has no _slug; no action available")
+    catalog = _MAGIC_ITEM_ACTIONS.get(slug)
+    if not catalog or catalog.get("key") != action_key:
+        raise HTTPException(
+            404, f"no action {action_key!r} for item {slug!r}",
+        )
+    if catalog.get("requires_attunement") and not item.get("attuned"):
+        raise HTTPException(
+            409, f"{item.get('name') or slug} requires attunement",
+        )
+    if not item.get("equipped"):
+        raise HTTPException(
+            409, f"{item.get('name') or slug} must be equipped",
+        )
+
+    # Dispatch by slug (Phase 3 only has Pearl of Power).
+    if slug != "pearl-of-power":
+        raise HTTPException(409, "unknown item action handler")
+
+    # Pearl of Power — restore one expended spell slot of level
+    # 1..max_slot_level.
+    try:
+        slot_level = int(slot_level_raw or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "slot_level must be an int")
+    max_lvl = int(catalog.get("max_slot_level") or 3)
+    if slot_level < 1 or slot_level > max_lvl:
+        raise HTTPException(
+            400,
+            f"slot_level must be 1..{max_lvl} for {item.get('name')}",
+        )
+
+    # Find the resource row that gates the per-day use. Seeded onto
+    # the PC sheet alongside the inventory item.
+    resources = list(sheet.get("resources") or [])
+    res_key = str(catalog.get("resource_key") or "")
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    if cur <= 0:
+        return JSONResponse(
+            status_code=409,
+            content={"error": "out_of_uses", "label": item.get("name") or slug},
+        )
+
+    # Find the spellcasting class slug. Take the request's class_slug
+    # if provided; otherwise pick the first class on the sheet that has
+    # an expended slot at the requested level. (Most demo PCs have
+    # exactly one spellcasting class so the picker is unambiguous.)
+    all_slots = dict(sheet.get("spell_slots") or {})
+    if not class_slug:
+        for cs, slots in all_slots.items():
+            slot = (slots or {}).get(str(slot_level)) or {}
+            if int(slot.get("used") or 0) > 0:
+                class_slug = cs
+                break
+    if not class_slug:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "no_expended_slot",
+                "slot_level": slot_level,
+            },
+        )
+
+    class_slots = dict(all_slots.get(class_slug) or {})
+    slot = dict(class_slots.get(str(slot_level)) or {})
+    used = int(slot.get("used") or 0)
+    total = int(slot.get("total") or 0)
+    if used <= 0:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "no_expended_slot",
+                "slot_level": slot_level,
+                "class_slug": class_slug,
+            },
+        )
+
+    # Apply: decrement resource + slot.
+    res_row["current"] = cur - 1
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+    slot["used"] = used - 1
+    class_slots[str(slot_level)] = slot
+    all_slots[class_slug] = class_slots
+    sheet["spell_slots"] = all_slots
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Broadcasts: slot pip + resource pip + feature_used chat card.
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "spell_slot_update",
+            "data": {
+                "character_id": char.id,
+                "class_slug": class_slug,
+                "level": slot_level,
+                "total": total,
+                "used": slot["used"],
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": catalog.get("name") or "Use item",
+                "summary": (
+                    f"{char.name} used {item.get('name')} to restore a "
+                    f"L{slot_level} {class_slug} slot."
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "slot_restored": {
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": slot["used"],
+        },
+        "resource": {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
     }
 
 

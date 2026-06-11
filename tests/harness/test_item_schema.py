@@ -102,24 +102,25 @@ async def test_item_schema_bracers_of_defense_has_phase1c_passives():
     assert p.get("requires_no_shield") is True
 
 
-async def test_item_schema_pearl_of_power_has_empty_passives():
-    """v2.158.77: empty-passives canary moves from Bracers (now
-    Phase 1c wired) to Pearl of Power (Phase 3 target — 1/day spell-
-    slot recovery via the planned ``/use_item_action`` endpoint M2).
-    Pearl's wiring goes into ``actions[]`` + ``charges`` + the
-    catalog's per-item action handler — not ``passives`` — so when
-    Phase 3 ships, the assertion that flips is the ``actions`` /
-    ``charges`` check, not this one. This test will need its own
-    rotation at that point."""
+async def test_item_schema_pearl_of_power_has_phase3_action():
+    """v2.158.82: Phase 3 wired Pearl with `charges: 1`,
+    `charge_recovery: "long-rest"`, and one entry in `actions[]`
+    (the `restore-slot` action that /use_item_action dispatches).
+    Passives stays `[]` (Pearl is active-only, no passive payload).
+    Empty-passives + empty-actions canary rolls forward to Wand of
+    Magic Missiles (Phase 4 target — multi-charge spell-cast)."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
         resp = await client.get("/api/content/items/pearl-of-power")
     assert resp.status_code == 200
     record = resp.json()["record"]
     assert record["slug"] == "pearl-of-power"
-    assert record["charges"] is None
-    assert record["charge_recovery"] is None
+    assert record["charges"] == 1
+    assert record["charge_recovery"] == "long-rest"
     assert record["passives"] == []
-    assert record["actions"] == []
+    actions = record["actions"]
+    assert isinstance(actions, list) and len(actions) == 1
+    assert actions[0].get("key") == "restore-slot"
+
 
 
 async def test_item_schema_wand_of_magic_missiles_has_phase0_keys():

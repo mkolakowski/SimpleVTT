@@ -15,8 +15,14 @@
   "properties": {
     "category": "Wondrous item"
   },
-  "charges": null,
-  "charge_recovery": null,
+  "charges": 1,
+  "charge_recovery": "long-rest",
   "passives": [],
-  "actions": []
+  "actions": [
+    {
+      "key": "restore-slot",
+      "name": "Use Pearl of Power",
+      "desc": "Speak the command word. Regain one expended spell slot of 3rd level or lower (RAW: a slot of 4th level or higher returns as 3rd). Once per dawn (simplified to long rest)."
+    }
+  ]
 }

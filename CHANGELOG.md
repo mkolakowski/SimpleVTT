@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.82] - 2026-06-10 — "The Speaking Pearl" — Magic-items-automation Phase 3: ship the `/use_item_action` endpoint (M2 primitive from the plan) + the first dispatched item — Pearl of Power (1/day at dawn, restore one expended spell slot of 3rd level or lower; simplified to long rest per the plan's no-clock assumption). New `_MAGIC_ITEM_ACTIONS` catalog dict mirrors the Phase 1 `_MAGIC_ITEM_PASSIVES` pattern. Thalindra Moonwhisper (Wizard Lv 7) gets a permanent Pearl in her seed inventory + a `pearl-of-power` resource row (max 1, reset long)
+
+**Schema version:** 69
+**Commit summary:** **(A) `app/data/local/dnd5e/items/pearl-of-power.json` populated with `charges: 1`, `charge_recovery: "long-rest"`, and one `actions[]` entry (`key: "restore-slot"`, name, RAW desc). First item to populate the `actions[]` shape introduced by Phase 0. (B) `_MAGIC_ITEM_ACTIONS` catalog dict in `app/routes/tabletop_routes.py` (right below the Phase 1 `_MAGIC_ITEM_PASSIVES`) with Thalindra's `pearl-of-power` row: action key, resource key, `max_slot_level: 3`, `requires_attunement: True`. (C) New endpoint `POST /api/campaign/{cid}/character/{char_id}/use_item_action` (inserted right after the v2.158.79 `/attune` endpoint). Body `{inventory_index, action_key, slot_level, class_slug?}`. Validates: body shape (400), campaign membership (403), char (404), inventory bounds (400), `_slug` set + catalog has the action_key for this slug (404), attunement (409), equipped (409). Pearl handler then: validates `slot_level 1..3`, looks up the `pearl-of-power` resource row (409 if missing), checks `current > 0` (409 `out_of_uses`), finds the class_slug with an expended slot at that level (autopick if not provided, 409 `no_expended_slot` if none), decrements both, broadcasts `spell_slot_update` + `resource_update` + `feature_used`. Returns `{ok, item_name, slot_restored: {class_slug, level, total, used}, resource: {key, current, max}}`. (D) `_wizard_sheet` in `app/demo_seed.py` appends a Pearl of Power inventory entry to Thalindra (equipped + attuned) + a `pearl-of-power` resource row (current: 1, max: 1, reset: long). (E) New harness file `tests/harness/test_use_item_action_pearl.py` with 6 tests: happy (restore expended slot), out-of-uses (409 on 2nd use), slot-level cap (Lv 4 → 400), no-expended-slot (409 after long rest), unknown-action (404), missing-fields (400). Uses a pytest-asyncio fixture to long-rest Thalindra between tests so each starts from a clean state. (F) `test_item_schema.py` rotates the empty-actions canary: Pearl assertion flipped to the wired shape (`charges: 1`, `charge_recovery: "long-rest"`, `actions[0].key == "restore-slot"`); the Phase 4 canary stays the existing wand assertion. (G) `docs/test-harness-coverage.md` adds the new section + canary rotation + total bumped 2186 → 2192.**
+**Description:** First magic-items commit where an active item (not a passive) actually fires through an endpoint and mutates spell-slot state. The `/use_item_action` endpoint is the M2 primitive from the plan — it's the equivalent of `/use_feature` for items, dispatching by slug + action_key against the new catalog. The handler is currently hard-coded for Pearl; Phase 4 will introduce a per-slug handler-function map so wands (multi-charge spell casts) can share the endpoint without growing it into a 500-line if/else. The `pearl-of-power` resource row is seeded directly rather than auto-bootstrapped because the cleaner abstraction (auto-create on first use) requires a Phase 4 polish — for now, every Phase 3+ active item that lands also lands its resource row in the demo seed.
+
+### Added
+- `app/data/local/dnd5e/items/pearl-of-power.json` — `charges: 1`, `charge_recovery: "long-rest"`, `actions: [{key: "restore-slot", name, desc}]`.
+- `app/routes/tabletop_routes.py` — `_MAGIC_ITEM_ACTIONS` catalog dict + `use_item_action` endpoint.
+- `app/demo_seed.py` — `_wizard_sheet` inventory gains a Pearl of Power entry (equipped + attuned) + a `pearl-of-power` resource row.
+- `tests/harness/test_use_item_action_pearl.py` — 6 tests covering happy + 4 error paths + the no-expended-slot guard.
+
+### Changed
+- `tests/harness/test_item_schema.py` — `test_item_schema_pearl_of_power_has_empty_passives` renamed to `..._has_phase3_action` + assertions flipped to the wired shape.
+- `docs/test-harness-coverage.md` — new `### test_use_item_action_pearl.py` block + canary rotation; total 2186 → 2192.
+- `app/version.py` — `APP_VERSION` 2.158.81 → 2.158.82. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.82.
+
+### Notes
+- The `/use_item_action` endpoint will scale to Phase 4's wands (Wand of Magic Missiles, Wand of Fireballs, Staff of Healing) by extending `_MAGIC_ITEM_ACTIONS` with multi-charge action shapes (`charges: N` in the body, decrement N from the resource row, dispatch the spell payload via the existing `/cast_spell` machinery).
+- The resource row for Pearl is seeded directly today. Phase 4's "auto-bootstrap on first use" pattern (filed in the plan) will lift this so any Phase 3+ active item can ship without a corresponding seed-side resource row.
+- Pearl is now Thalindra's 8th inventory entry (index 7 is Cloak, 8 is Pearl). The harness test hardcodes index 8 for Pearl access; this matches the v2.158.78 + v2.158.74 pattern of appending magic items at the END of the inventory.
+
+---
+
 ## [2.158.81] - 2026-06-10 — "The Stale Loader" — Bug-fix follow-up to v2.158.80: the inventory loader at `app/templates/sheet_dnd5e.html` ~line 6552 was stripping unknown JSON fields when constructing the in-memory `inventory[]` array, so the seed's `attuned: True/False` flag never reached the row builder — the 🔮 attune chip never rendered on the sheet even though the v2.158.80 code path was correct end-to-end. Caught when the Playwright UI test red-lit on a "locator not found" error finding `.inv-attune`. The fix passes through `attuned` (and only `attuned`) iff the source carries it
 
 **Schema version:** 69
