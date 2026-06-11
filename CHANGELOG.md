@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.81] - 2026-06-10 — "The Stale Loader" — Bug-fix follow-up to v2.158.80: the inventory loader at `app/templates/sheet_dnd5e.html` ~line 6552 was stripping unknown JSON fields when constructing the in-memory `inventory[]` array, so the seed's `attuned: True/False` flag never reached the row builder — the 🔮 attune chip never rendered on the sheet even though the v2.158.80 code path was correct end-to-end. Caught when the Playwright UI test red-lit on a "locator not found" error finding `.inv-attune`. The fix passes through `attuned` (and only `attuned`) iff the source carries it
+
+**Schema version:** 69
+**Commit summary:** **One-line fix in `app/templates/sheet_dnd5e.html` ~line 6571: spread `...(s.attuned !== undefined ? {attuned: !!s.attuned} : {})` into the inventory item constructor. Items without an `attuned` key in their seed JSON (mundane gear) keep their previous behavior (no field). Items with an `attuned` key (the four demo PCs' magic items + any user-added attuneable item) get the boolean-coerced flag passed through to the runtime `inventory[]` array, which the v2.158.80 row builder reads via `typeof item.attuned !== 'undefined'` to decide whether to render the 🔮 chip. The Playwright test `test_attune_checkbox_renders_and_toggles` (added in v2.158.80) now passes against this fix; it ran red-then-green which is the canary the v2.7.3 pattern was supposed to catch.**
+**Description:** v2.158.80 added the row builder's `attuneCtrl` snippet + the JS handler but didn't notice the loader (much earlier in the file) was already filtering fields. The HTTP harness tests all green-lit because they exercise the `/attune` endpoint directly — the UI rendering issue was invisible to them. The Playwright test caught it on the first run. Lesson: when adding a new sheet-state field, audit the loader as well as the renderer in the same commit — the loader's field allowlist is the silent enemy of additivity. Filing a TODO to migrate the loader from explicit allowlist to a smarter pass-through pattern as a future cleanup.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — inventory loader (~line 6571) now passes through `attuned` when the source has the key, preserving boolean values (true/false) and dropping the key when absent.
+- `app/version.py` — `APP_VERSION` 2.158.80 → 2.158.81. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.81.
+
+### Notes
+- The Playwright UI test that caught this (`tests/harness_ui/test_attune_checkbox.py`) is the v2.7.3 pattern paying off — "backend contract green doesn't imply UI surface green" — exactly the gap this directory was created to close.
+- No other field needs the same treatment today; future fields added to the row builder should always check the loader's allowlist at line 6552 before assuming the field reaches the renderer.
+
+---
+
 ## [2.158.80] - 2026-06-10 — "The Glowing Glyph" — Magic-items-automation Phase 2b: surface the v2.158.79 `/attune` endpoint as a sheet UI checkbox next to the existing "equipped" toggle. Any inventory item that carries an explicit `attuned` field gets an inline 🔮 chip the player can click to attune / unattune; the JS handler POSTs to `/attune`, shows a browser-alert on the 409 cap-block, and reverts the checkbox on failure. Closes Phase 2 of the magic-items-automation plan
 
 **Schema version:** 69

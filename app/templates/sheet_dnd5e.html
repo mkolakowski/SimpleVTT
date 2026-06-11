@@ -6567,7 +6567,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     range: s.range || '',
                     properties: s.properties || '',
                     desc: s.desc || '',
-                    _slug: s._slug || ''
+                    _slug: s._slug || '',
+                    // v2.158.80 — Magic-items Phase 2b: pass through
+                    // the attuned flag iff the source carries it. Items
+                    // without an attuned key (mundane gear) stay
+                    // undefined here so the row builder skips the 🔮
+                    // chip; items with the key (true OR false) get the
+                    // chip rendered.
+                    ...(s.attuned !== undefined ? {attuned: !!s.attuned} : {}),
                 };
             });
         }
