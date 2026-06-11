@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.4] - 2026-06-11 — "The Bolt's Path" — Magic-items-automation Phase 8d: server-side line-AoE geometry. New `POST /api/campaign/{cid}/battle/line-targets` endpoint takes a caster + target combatant + width_ft + max_length_ft and returns the combatants whose tokens fall within a width-ft band of the segment between them. Used by the v2.159.3 Javelin of Lightning client (and future Lightning Bolt / Burning Hands UIs) to pre-fill `target_combatant_ids` automatically instead of asking the GM to enumerate "who's in the line" by hand.
+
+**Schema version:** 69
+**Commit summary:** **(A) New endpoint `POST /api/campaign/{campaign_id}/battle/line-targets`. Body: `{caster_combatant_id, target_combatant_id, width_ft=5, max_length_ft=120}`. Returns `{caster_id, target_id, width_ft, max_length_ft, results: [{combatant_id, name, distance_ft, distance_from_caster_ft}]}`. Gates: any campaign viewer can read (it's a query, not a mutation); the campaign's active map must have grid_size_px > 0 (400 on no-grid maps). (B) Algorithm: lookup caster + target combatants in the hub battle state by id → read their `source_token_id` → query Token rows for x/y. Center each token by adding (size × grid_px / 2) to its top-left x/y so a Large token's "midpoint" is the actual midpoint, not the corner. For every OTHER combatant, compute `_segment_to_point_min_ft(grid_px, ax, ay, bx, by, px, py)` (the v2.99.60 OA path-cross primitive) — if ≤ width_ft/2, include in results. Also enforces max_length_ft via `_distance_ft_between_points(caster, point)` so combatants beyond the line's end aren't picked up. (C) Combatants without a `source_token_id` are silently skipped — they have no on-map position to test. Caster + target are explicitly excluded from results (RAW: "creatures in the line excluding you and the target"). (D) New harness file `tests/harness/test_battle_line_targets.py` with 3 tests. Uses the existing v2.4.x `/token/{id}/move` endpoint to reposition 4 seeded combatants into a controlled layout: A (caster) at (140, 280), B (target) at (980, 280), C on the line at (560, 280), D off the line at (560, 560) — 20 ft perpendicular. Asserts: C is in results (on-line case); D is NOT in results (off-line case); A + B are intrinsically excluded. Teardown moves all 4 tokens to (200, 200) so the demo layout doesn't poison subsequent tests. The DEMO_RESET_ON_BOOT=true env flag re-seeds the original layout on the next container restart. (E) `docs/test-harness-coverage.md` adds the new section + total bumped 2247 → 2250.**
+**Description:** Closes Phase 8d. The Javelin client (and the existing UIs for Lightning Bolt / Lightning Arrow / etc.) can now offer a "pick line" workflow: GM clicks the caster's token, drags to the target's token, the server returns the on-line combatants, the client pre-checks them in the target picker. Before this commit, the GM enumerated by hand or eyeballed the map. The endpoint is also useful for future cone / sphere AoE items (Decanter of Endless Water, Bag of Tricks) — Phase 8e could add `/battle/sphere-targets` and `/battle/cone-targets` companion endpoints using the same Token-position read pattern.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /api/campaign/{campaign_id}/battle/line-targets` endpoint.
+- `tests/harness/test_battle_line_targets.py` — 3 tests (on-line included, off-line excluded, caster + target excluded).
+
+### Changed
+- `docs/test-harness-coverage.md` — new test block + total 2247 → 2250.
+- `app/version.py` — `APP_VERSION` 2.159.3 → 2.159.4. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.4.
+
+### Notes
+- The endpoint isn't wired to the Javelin client yet — that's a separate UI commit (Phase 8d client). Today the harness exercises it directly via curl-equivalent. The Javelin of Lightning handler (v2.159.3) still accepts the GM-supplied target_combatant_ids list.
+- The line is a 1D segment with width — RAW correct for Lightning Bolt + Javelin of Lightning. RAW Lightning Arrow's "30-ft line, 5 ft wide" reuses the same primitive with width_ft=5, max_length_ft=30. Cone (Burning Hands) needs a separate primitive: angle + length, not segment + width.
+- The token centering math (size × grid_px / 2) assumes Token.x/y is the top-left corner of the cell. This matches the v2.4.x convention and the existing distance primitives — but a Large (size=2) token's midpoint is now correctly at the center of its 2×2 cell box, not the corner.
+
+---
+
 ## [2.159.3] - 2026-06-11 — "The Storm's Throw" — Magic-items-automation Phase 8c: Javelin of Lightning (RAW DMG p.178). First line-AoE item — fires via the existing v2.158.82 `/use_item_action` endpoint with a new "hurl-lightning" action_key that takes a `target_combatant_ids` list (the line creatures, GM-picked) and rolls a DC 13 DEX save for each → 4d6 lightning (half on pass). The javelin then becomes nonmagical until the next dawn via a new `_used_today` state field on the inventory item; v2.159.3's long-rest path clears the flag alongside the existing v2.158.86 resource recharge. Krieger Stonefist gets the javelin — first thrown-weapon magic item in the demo party.
 
 **Schema version:** 69

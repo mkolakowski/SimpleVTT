@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2247 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.159.3, 2026-06-11).
+**Total tests:** 2250 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.159.4, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2076,6 +2076,15 @@ v2.158.97 magic-items-automation Phase 6a — Demon Slayer Rapier (RAW DMG p.166
 | `test_demon_slayer_fires_on_fiend_target` | Attack a `creature_type: "fiend"` combatant → `auto_uplifts` carries `source: "item-demon-slayer"`, `damage_type: "piercing"` (RAW fallback to weapon type), `expression: "2d6"`, total in [2, 24] (crit-doubled cap). |
 | `test_demon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-demon-slayer` uplift. |
 | `test_demon_slayer_suppressed_when_detuned` | /attune detune → no rider even vs. fiends. Restores attunement in teardown. |
+
+### `test_battle_line_targets.py`
+v2.159.4 magic-items-automation Phase 8d — server-side line-AoE geometry. POST /api/campaign/{cid}/battle/line-targets takes caster + target combatant ids + width_ft + max_length_ft, returns combatants within the band. Used by Javelin of Lightning client + future Lightning Bolt UIs. Uses /token/{id}/move to position 4 combatants in a controlled layout; teardown moves them to (200, 200).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_line_targets_includes_on_line_combatant` | C placed at the midpoint of A→B segment → appears in results. |
+| `test_line_targets_excludes_off_line_combatant` | D placed 20 ft perpendicular from the line → NOT in results (width_ft=5 means 2.5-ft half-band). |
+| `test_line_targets_excludes_caster_and_target` | A + B are endpoints of the segment but still excluded from results (RAW "excluding you and the target"). |
 
 ### `test_javelin_of_lightning.py`
 v2.159.3 magic-items-automation Phase 8c — Javelin of Lightning (RAW DMG p.178). First line-AoE item: fires via `/use_item_action` with `action_key="hurl-lightning"` + a `target_combatant_ids` list. Each target rolls DC 13 DEX save → 4d6 lightning (half on pass) via `_resolve_feature_save`. Item flips to `_used_today: True` after firing; long-rest path clears the flag. Krieger Stonefist gets the javelin (inventory_index 5).

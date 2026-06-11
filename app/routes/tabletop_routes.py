@@ -82726,6 +82726,133 @@ async def get_battle(
     return {"battle": state}
 
 
+@router.post("/api/campaign/{campaign_id}/battle/line-targets")
+async def battle_line_targets(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.159.4 — Phase 8d: server-side line-AoE geometry. Takes a
+    caster combatant + a target combatant + an optional width_ft
+    (default 5, RAW Lightning Bolt / Javelin of Lightning) and an
+    optional max_length_ft (default 120). Walks the segment from the
+    caster's token center to the target's token center and returns
+    the combatants whose tokens lie within ``width_ft/2`` of the
+    segment, excluding the caster + target. Useful for the Javelin
+    of Lightning client to pre-fill ``target_combatant_ids`` for
+    /use_item_action instead of asking the GM to enumerate by hand.
+
+    Body: ``{caster_combatant_id, target_combatant_id, width_ft=5,
+    max_length_ft=120}``. Returns ``{caster_id, target_id, results:
+    [{combatant_id, name, distance_ft}]}``.
+
+    Requires the campaign's active map to have grid_size_px > 0
+    (no-grid maps return 400). Combatants without a ``source_token_id``
+    are silently skipped — they have no on-map position to test.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    body = await request.json()
+    caster_id = str(body.get("caster_combatant_id") or "").strip()
+    target_id = str(body.get("target_combatant_id") or "").strip()
+    if not caster_id or not target_id:
+        raise HTTPException(400, "caster_combatant_id + target_combatant_id required")
+    try:
+        width_ft = float(body.get("width_ft") or 5)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "width_ft must be a number")
+    try:
+        max_length_ft = float(body.get("max_length_ft") or 120)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "max_length_ft must be a number")
+    if width_ft <= 0 or max_length_ft <= 0:
+        raise HTTPException(400, "width_ft + max_length_ft must be positive")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    combatants = state.get("combatants") or []
+    by_id = {str(c.get("id")): c for c in combatants if isinstance(c, dict)}
+    caster = by_id.get(caster_id)
+    target = by_id.get(target_id)
+    if not caster or not target:
+        raise HTTPException(404, "Caster or target combatant not in battle")
+
+    if not campaign.active_map_id:
+        raise HTTPException(400, "Campaign has no active map")
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        raise HTTPException(400, "Active map has no grid_size_px")
+    grid_px = int(map_row.grid_size_px)
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+
+    def _xy_for(combatant: dict) -> "tuple[float, float] | None":
+        tok_id = combatant.get("source_token_id")
+        if not tok_id:
+            return None
+        tok = db.query(Token).filter(
+            Token.id == int(tok_id), Token.map_id == map_row.id,
+        ).first()
+        if not tok:
+            return None
+        # Center the token in its tile by adding half a grid cell —
+        # consistent with the v2.61.0 distance primitive's read of
+        # token.x / token.y as the top-left corner of the cell.
+        size = int(tok.size or 1)
+        cx = float(tok.x or 0) + (size * grid_px) / 2.0
+        cy = float(tok.y or 0) + (size * grid_px) / 2.0
+        return (cx, cy)
+
+    caster_xy = _xy_for(caster)
+    target_xy = _xy_for(target)
+    if caster_xy is None or target_xy is None:
+        raise HTTPException(400, "Caster or target has no on-map token position")
+    ax, ay = caster_xy
+    bx, by = target_xy
+
+    half_width = width_ft / 2.0
+    results: list[dict] = []
+    for c in combatants:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "")
+        if not cid or cid == caster_id or cid == target_id:
+            continue
+        xy = _xy_for(c)
+        if xy is None:
+            continue
+        px, py = xy
+        dist_seg = _segment_to_point_min_ft(grid_px, ax, ay, bx, by, px, py)
+        if dist_seg > half_width:
+            continue
+        # Also enforce the max line length — combatants beyond the
+        # caster → target segment shouldn't be hit just because they
+        # happen to be co-linear past the target.
+        dist_from_caster = _distance_ft_between_points(
+            grid_px, grid_type, ax, ay, px, py,
+        )
+        if dist_from_caster > max_length_ft:
+            continue
+        results.append({
+            "combatant_id": cid,
+            "name": c.get("name") or "",
+            "distance_ft": dist_seg,
+            "distance_from_caster_ft": dist_from_caster,
+        })
+
+    return {
+        "caster_id": caster_id,
+        "target_id": target_id,
+        "width_ft": width_ft,
+        "max_length_ft": max_length_ft,
+        "results": results,
+    }
+
+
 @router.put("/api/campaign/{campaign_id}/battle")
 async def update_battle(
     campaign_id: int,
