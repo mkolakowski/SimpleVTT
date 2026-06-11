@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2290 in `tests/harness/` + 45 in `tests/harness_ui/` (as of v2.159.19, 2026-06-11).
+**Total tests:** 2294 in `tests/harness/` + 45 in `tests/harness_ui/` (as of v2.159.20, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -37,6 +37,16 @@ Sanity checks that the harness can even talk to the demo app.
 | `test_version` | `GET /version` → 200, matches `app/version.py`. |
 | `test_roster_fixture` | The `roster` fixture loads and contains all 12 demo PCs by name. |
 | `test_gm_can_open_ws` | `WS /ws/campaign/1` as GM accepts connection + emits an opening `state` message. |
+
+### `test_exhaustion_hp_max.py`
+v2.159.20 exhaustion-levels Phase 3b — HP-max halving at Lv 4. Mirrors v2.97.42 Aid max-HP plumbing in reverse: `_apply_heal_to_combatant` halves `effective_max` when `exhaustion_level >= 4`, and `/set_exhaustion` clamps current HP down to `floor(max/2)` on the transition from `< 4` to `>= 4`. Going BACK below 4 does NOT auto-restore HP (RAW). The base `hp.max` field is NEVER mutated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_pc_set_lv4_clamps_current_hp_when_above_ceiling` | Pip at full HP → /set_exhaustion level=4 → current drops to floor(max/2). `hp.max` is unchanged. |
+| `test_pc_set_lv4_at_low_hp_unchanged` | Pip at HP=1 → /set_exhaustion level=4 → current stays at 1 (already below the new ceiling). |
+| `test_pc_lv4_to_lv3_does_not_restore_hp` | Pip at Lv 4 (HP clamped) → /set_exhaustion level=3 → current HP stays at the clamped value. RAW: player has to heal up. |
+| `test_pc_set_lv3_does_not_clamp_hp` | Lv 3 → no HP touch (regression that the Lv 4 clamp doesn't fire prematurely). |
 
 ### `test_exhaustion_speed.py`
 v2.159.19 exhaustion-levels Phase 3a — pure-Python unit tests against the leaf `effective_speed_walk` helper. RAW PHB Appendix A: Lv 2 halves speed; Lv 5 floors to 0. Applied AFTER the existing buff `(base + bonus) × mult − reduction` math so Lv 2 composes cleanly with Slow / Lance of Lethargy / Longstrider / Haste. The route layer mirrors `sheet.exhaustion_level` → `combatant.exhaustion_level` so the leaf helper has no DB dependency.

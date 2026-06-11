@@ -8243,6 +8243,13 @@ async def _apply_heal_to_combatant(
             )
         except Exception:  # noqa: BLE001
             effective_max = hp_max
+        # v2.159.20 — exhaustion Phase 3b: Lv 4 halves the effective
+        # HP max (heal can never push current above floor(max/2)).
+        # Applied AFTER the buff bonus so a Lv 4 PC with Aid still
+        # gets (Aid-boosted max) // 2 — RAW order: max is augmented
+        # by Aid, THEN exhaustion halves the augmented value.
+        if _exhaustion_level(sheet) >= 4:
+            effective_max = effective_max // 2
         ds_before = (sheet.get("death_saves") or {}).get("status", "alive")
         new_hp = (
             min(effective_max, hp_cur + heal_amount) if effective_max > 0
@@ -8297,6 +8304,10 @@ async def _apply_heal_to_combatant(
         )
     except Exception:  # noqa: BLE001
         effective_max = hp_max
+    # v2.159.20 — exhaustion Phase 3b: Lv 4 halves the NPC effective
+    # HP max too — same RAW rule as the PC branch above.
+    if _exhaustion_level(target) >= 4:
+        effective_max = effective_max // 2
     new_hp = min(effective_max, hp_cur + heal_amount) if effective_max > 0 else (hp_cur + heal_amount)
     actual = new_hp - hp_cur
     target["hp_current"] = new_hp
@@ -77322,6 +77333,24 @@ async def set_exhaustion(
         from sqlalchemy.orm.attributes import flag_modified
         char.sheet = sheet
         flag_modified(char, "sheet")
+        # v2.159.20 — exhaustion Phase 3b: when transitioning from
+        # < 4 to >= 4, clamp current HP down to floor(max/2) if it's
+        # above the new ceiling. The PC's HP ceiling is suddenly halved
+        # by the level change itself, not by a heal; so we drop the
+        # excess in-place. Going BACK below 4 (long rest / Greater
+        # Restoration) does NOT restore HP — the player still has to
+        # heal up to the new ceiling.
+        if new_level >= 4 and cur < 4:
+            hp_field = dict(sheet.get("hp") or {})
+            hp_max_field = int(hp_field.get("max") or 0)
+            hp_cur_field = int(hp_field.get("current") or 0)
+            if hp_max_field > 0:
+                new_ceiling = hp_max_field // 2
+                if hp_cur_field > new_ceiling:
+                    hp_field["current"] = new_ceiling
+                    sheet["hp"] = hp_field
+                    char.sheet = sheet
+                    flag_modified(char, "sheet")
         # Level 6 → instant death via the death-save state machine.
         died = False
         if new_level >= 6:
@@ -77401,6 +77430,16 @@ async def set_exhaustion(
         new_level = cur + int(body.get("delta") or 0)
     new_level = max(0, min(6, new_level))
     target["exhaustion_level"] = new_level
+    # v2.159.20 — exhaustion Phase 3b: NPC mirror of the PC HP clamp.
+    # Transitioning to >= 4 caps current HP at floor(hp_max/2) if it's
+    # above the new ceiling.
+    if new_level >= 4 and cur < 4:
+        npc_hp_max = int(target.get("hp_max") or 0)
+        npc_hp_cur = int(target.get("hp_current") or 0)
+        if npc_hp_max > 0:
+            new_npc_ceiling = npc_hp_max // 2
+            if npc_hp_cur > new_npc_ceiling:
+                target["hp_current"] = new_npc_ceiling
     npc_killed = False
     if new_level >= 6:
         target["hp_current"] = 0

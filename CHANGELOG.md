@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.20] - 2026-06-11 — "The Smaller Vessel" — Exhaustion-levels Phase 3b: HP-max halving at Lv 4. Mirrors the v2.97.42 Aid max-HP plumbing in reverse — instead of extending the effective max with `+ buff_bonus`, the helper halves the (already buff-augmented) max when `exhaustion_level >= 4`. Two behaviors land: (1) heal-clamp at the `_apply_heal_to_combatant` PC + NPC paths; (2) on-level-change current-HP clamp at the `/set_exhaustion` endpoint that drops in-place to `floor(max/2)` when transitioning across the Lv 4 threshold from below. Going BACK below 4 does NOT auto-restore HP (RAW: the player has to heal up to the new ceiling). Closes Phase 3 of `docs/plans/exhaustion-levels.md`.
+
+**Schema version:** 69
+**Commit summary:** **(A) `_apply_heal_to_combatant` PC branch: after computing `effective_max = hp_max + _buff_hp_max_bonus(...)` (Aid), apply `if _exhaustion_level(sheet) >= 4: effective_max //= 2`. The order matches RAW — max is augmented by Aid FIRST, THEN exhaustion halves the augmented value. (B) NPC mirror — same `effective_max //= 2` after the existing Aid extension, reading `_exhaustion_level(target)` off the hub combatant. (C) `/set_exhaustion` PC path: when transitioning from `cur < 4` to `new_level >= 4`, read `sheet.hp.{max, current}`, compute `new_ceiling = max // 2`, and clamp `current = min(current, new_ceiling)`. Writes the sheet via `flag_modified` so the JSONB column persists. (D) NPC mirror — same clamp on `combatant.hp_current` against `floor(combatant.hp_max / 2)`. (E) Going from `cur >= 4` to `new_level < 4` (long rest decrement / Greater Restoration) does NOT auto-restore HP — RAW says the player has to heal up to the new ceiling. (F) The base `hp.max` field is NOT mutated by exhaustion. The effective max (for heal clamping) is derived; the on-level-change snapshot just clamps current at that moment. Future UI surfacing of "your current ceiling" should derive `floor(max/2)` when level >= 4 (filed). (G) New HTTP harness `tests/harness/test_exhaustion_hp_max.py` with 4 PC tests: full-HP → Lv 4 clamps to floor(max/2); low-HP at Lv 4 transition unchanged; Lv 4 → Lv 3 does NOT auto-restore HP; Lv 3 alone does NOT touch HP (regression). (H) HTTP test total bumped 2290 → 2294.**
+**Description:** Closes Phase 3 of `docs/plans/exhaustion-levels.md`. The remaining work for the plan is Phase 4 — Berserker Frenzy retrofit that adds `set_exhaustion(delta=+1)` to the rage-end hook (one commit, closes the Phase E.8 blocker noted in `class-content-status.md`). The exhaustion framework is now feature-complete RAW-wise: every level 1-6 has the correct mechanical effect wired through to the existing engines (disadvantage helpers + speed math + heal clamp + death-save state).
+
+### Added
+- `tests/harness/test_exhaustion_hp_max.py` — 4 HTTP tests.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `_apply_heal_to_combatant` PC + NPC branches halve `effective_max` at Lv 4; `set_exhaustion` PC + NPC paths clamp current HP on transition to Lv 4+.
+- `app/version.py` — `APP_VERSION` 2.159.19 → 2.159.20. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.20.
+- `docs/test-harness-coverage.md` — HTTP total 2290 → 2294; new `test_exhaustion_hp_max.py` entry.
+
+### Notes
+- The base `hp.max` value never changes — exhaustion is a derivation overlay, not a sheet mutation. This matches Aid (which extends max via `_buff_hp_max_bonus` rather than mutating the field). A future Greater Restoration cast that drops exhaustion by 1 from Lv 4 → 3 doesn't need to repair `hp.max`.
+- The death-save state machine's massive-damage check at `_apply_hp_change` uses `hp.max` directly. A future commit can extend it to honor `floor(max/2)` at Lv 4 (so the massive-damage threshold halves), but the heal-clamp + on-transition clamp are the load-bearing rules per RAW interpretation. Filed as Phase 3c if/when a player flag it.
+- The on-transition clamp is a one-shot at-the-moment-of-mutation operation. A Lv 4 PC who's healed up to their full base max (e.g., the heal happened before the level rose) and THEN sets to Lv 4 will get clamped down. A Lv 4 PC who's already clamped and heals via `_apply_heal_to_combatant` will hit the new (halved) effective_max in the clamp.
+
+---
+
 ## [2.159.19] - 2026-06-11 — "The Halting Stride" — Exhaustion-levels Phase 3a (see `docs/plans/exhaustion-levels.md`): speed wiring at Lv 2 (halved) + Lv 5 (zero). Extends the leaf `effective_speed_walk` helper to apply the cumulative exhaustion penalty AFTER existing buff bonus/multiplier/reduction math. The route layer now mirrors `sheet.exhaustion_level` → `combatant.exhaustion_level` on every mutation (set_exhaustion endpoint + long-rest decrement) so the leaf helper can read the level without DB access. The existing `/token/move` speed-cap enforcement at line 12472 picks up the new penalty for free — no route-layer change needed.
 
 **Schema version:** 69
