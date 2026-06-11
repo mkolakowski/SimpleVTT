@@ -2385,6 +2385,20 @@ def _ranger_sheet(name: str) -> dict:
             {"name": "Shortsword", "attack_bonus": "+7", "damage": "1d6",
              "damage_type": "piercing", "range": "5 ft", "off_hand": True,
              "desc": "Finesse, light, off-hand. RAW: no ability mod on damage; Two-Weapon Fighting style adds it. Rowan keeps it for when enemies close — but his style is Archery, so the off-hand bite stays modest."},
+            # v2.159.1 — Magic-items Phase 8a demo fixture. Longbow
+            # firing an Arrow of Slaying (Giants). RAW DMG p.151: the
+            # arrow is keyed to a creature kind — on hit vs. a giant,
+            # the target makes a DC 17 CON save or takes +6d10
+            # piercing (half on pass). The base attack stats are
+            # Rowan's normal Longbow line; the `_slug` field is the
+            # rider gate and the save fires via the v2.158.102 +
+            # v2.159.1 on_hit_save substrate. Once used the arrow
+            # becomes nonmagical RAW — qty decrement is Phase 8b.
+            {"name": "Longbow (Arrow of Slaying — Giants)",
+             "attack_bonus": "+7", "damage": "1d8+4",
+             "damage_type": "piercing", "range": "150/600 ft",
+             "_slug": "arrow-of-slaying-giants",
+             "desc": "Magic arrow fired through the longbow. RAW DMG p.151: on hit vs. a giant, the target makes a DC 17 CON save or takes +6d10 piercing (half on a pass). The arrow becomes nonmagical after dealing the extra damage. Each shot uses one of Rowan's Arrows of Slaying stash."},
         ],
         # Hunter Ranger Lv 5: Lv 1-2 spells, 4/2 slots. Spells known is
         # the Ranger's known-not-prepared list (Lv 5 = 4 known).
@@ -2423,6 +2437,19 @@ def _ranger_sheet(name: str) -> dict:
             {"name": "Arrows", "type": "ammunition", "qty": 40,
              "_slug": "arrow",
              "desc": "Standard quiver — Rowan tracks consumption manually in v1."},
+            # v2.159.1 — Magic-items Phase 8a demo fixture. Arrow
+            # of Slaying (Giants) — RAW DMG p.151 magic arrow. Qty 6
+            # = a flavor-sized stash; qty decrement on use is filed
+            # as Phase 8b polish (today RAW says "becomes nonmagical
+            # after dealing the extra damage" but the demo doesn't
+            # model the conversion). Paired with the attack entry
+            # above via `_slug="arrow-of-slaying-giants"`. The
+            # ammunition itself isn't attuneable (RAW ammunition
+            # doesn't require attunement), so attuned/equipped fields
+            # are omitted.
+            {"name": "Arrows of Slaying (Giants)", "type": "ammunition",
+             "qty": 6, "_slug": "arrow-of-slaying-giants",
+             "desc": "Magic arrow, very rare. Keyed to giants — on hit vs. a giant, DC 17 CON save or take +6d10 piercing (half on pass). Becomes nonmagical after the special damage fires."},
             {"name": "Shortsword", "type": "weapon", "qty": 1,
              "equippable": True, "equipped": False, "hands": 1,
              "damage": "1d6", "damage_type": "piercing",
@@ -3969,6 +3996,13 @@ def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate
         # placed on the demo map by default — drag-spawn from
         # Templates when showcasing the rider.
         ("quasit", "Quasit", "fiend"),
+        # v2.159.1 — Magic-items Phase 8a demo fixture. Hill Giant
+        # (CR 5, giant). Gives Rowan's Arrow of Slaying (Giants) a
+        # real RAW-giant target — the Phase 5f helper resolves
+        # sheet.type="giant" on drag-spawn so the +6d10 piercing
+        # save-for-half rider auto-fires. Not placed on the demo
+        # map — drag-spawn from Templates when showcasing.
+        ("hill-giant", "Hill Giant", "giant"),
     ]
     # v2.158.98 — specs now mixes 2-tuples and 3-tuples; the third
     # element is the optional creature_type. Unpack with a default so

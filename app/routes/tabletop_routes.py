@@ -28878,11 +28878,18 @@ async def _apply_magic_item_on_hit_save_effect(
         except Exception:
             return None
 
-    # Build the condition buff template per RAW. Today the only
-    # effect is ``frighten`` → install frightened. Future effects
-    # (``poison``, ``stun``, etc.) extend the if-chain below.
+    # v2.158.102 → v2.159.1: dispatch on effect. Two variants today:
+    #   - "frighten" (Demon Slayer DC 15 WIS): build the frightened
+    #     condition buff template, let `_resolve_feature_save` roll
+    #     the save + install on fail.
+    #   - "damage" (Arrow of Slaying DC 17 CON, RAW DMG p.151): roll
+    #     the dice, call `_resolve_feature_save` with `condition_buff
+    #     =None` to just roll the save (no install), then apply full
+    #     damage on fail or half on pass via `_apply_damage_to_combatant`.
+    #     RAW save-for-half pattern matches Fireball, etc.
     effect = (save_spec.get("effect") or "").strip().lower()
     duration_rounds = int(save_spec.get("duration_rounds") or 1)
+    condition_buff = None
     if effect == "frighten":
         condition_buff = {
             "key": "frightened",
@@ -28897,8 +28904,11 @@ async def _apply_magic_item_on_hit_save_effect(
             ],
             "source": f"item-{attack_slug}",
         }
+    elif effect == "damage":
+        # No condition buff — the damage is applied below based on
+        # the save result.
+        condition_buff = None
     else:
-        # Unknown effect — log and bail rather than half-installing.
         logging.warning(
             "Unknown on_hit_save effect %r for slug %r",
             effect, attack_slug,
@@ -28932,6 +28942,45 @@ async def _apply_magic_item_on_hit_save_effect(
         )
         return None
 
+    # v2.159.1: for effect="damage", apply save-for-half damage now
+    # that the save has resolved. PC targets that prompt return
+    # `passed=None` (deferred) — we skip the immediate damage and
+    # rely on the prompt-respond handler (filed for Phase 8 polish).
+    damage_dealt = 0
+    if effect == "damage" and sr.get("passed") is not None:
+        dice = save_spec.get("dice") or ""
+        save_for_half = bool(save_spec.get("save_for_half"))
+        damage_type = (
+            save_spec.get("damage_type")
+            or attack.get("damage_type")
+            or "piercing"
+        )
+        try:
+            r = dice_mod.roll(dice)
+            base_damage = int(r.total)
+        except dice_mod.DiceParseError:
+            base_damage = 0
+        if base_damage > 0:
+            if sr.get("passed"):
+                if save_for_half:
+                    damage_dealt = base_damage // 2
+            else:
+                damage_dealt = base_damage
+        if damage_dealt > 0:
+            try:
+                await _apply_damage_to_combatant(
+                    db, campaign_id, target_combatant,
+                    damage_amount=damage_dealt,
+                    damage_type=damage_type,
+                    is_attack=False, is_magical=True,
+                    attacker_char_id=char.id,
+                )
+            except Exception:
+                logging.exception(
+                    "on_hit_save damage apply failed for slug=%s",
+                    attack_slug,
+                )
+
     return {
         "target_combatant_id": target_combatant.get("id"),
         "target_name": target_combatant.get("name") or "Target",
@@ -28939,6 +28988,8 @@ async def _apply_magic_item_on_hit_save_effect(
         "label": label,
         "dc": dc,
         "ability": ability,
+        "effect": effect,
+        "damage_dealt": damage_dealt,
         "save_resolved": sr,
     }
 
@@ -30592,6 +30643,33 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
         "condition": lambda tgt: bool(tgt) and (
             (tgt.get("creature_type") or "").strip().lower() == "undead"
         ),
+    },
+    # v2.159.1 — Phase 8a: first ammunition-shape catalog row. Arrow of
+    # Slaying (RAW DMG p.151) is a magic arrow keyed to a specific
+    # creature kind ("giants" variant here). On hit vs. the keyed
+    # creature type, the target makes a DC 17 CON save; on a fail,
+    # extra 6d10 piercing; on a pass, half that. RAW: the arrow then
+    # "becomes a nonmagical arrow" — qty decrement deferred (Phase 8b
+    # polish). The substrate reuse: same `on_hit_save` field as Demon
+    # Slayer's Phase 7b frighten save, but the new `effect: "damage"`
+    # variant (vs. "frighten") flips the save outcome from
+    # condition-install to save-for-half damage. Doesn't require
+    # attunement (ammunition isn't attuneable RAW).
+    "arrow-of-slaying-giants": {
+        "label": "Arrow of Slaying (Giants)",
+        "requires_attunement": False,
+        "condition": lambda tgt: bool(tgt) and (
+            (tgt.get("creature_type") or "").strip().lower() == "giant"
+        ),
+        "on_hit_save": {
+            "dc": 17,
+            "ability": "CON",
+            "effect": "damage",
+            "dice": "6d10",
+            "damage_type": "piercing",
+            "save_for_half": True,
+            "label": "🏹 Arrow of Slaying (Giants)",
+        },
     },
 }
 

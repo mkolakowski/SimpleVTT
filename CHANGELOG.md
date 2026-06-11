@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.1] - 2026-06-11 — "The Giantbane" — Magic-items-automation Phase 8a: first ammunition-shape catalog row — Arrow of Slaying (Giants) (RAW DMG p.151). Extends the v2.158.102 Phase 7b `on_hit_save` substrate with a new `effect: "damage"` variant alongside the existing `effect: "frighten"`. RAW save-for-half pattern: on hit vs. the keyed creature kind, target makes a DC 17 CON save; failure deals +6d10 piercing, success deals half (3d10 floor). The arrow's "becomes nonmagical after dealing the extra damage" qty-decrement RAW is filed as Phase 8b polish.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `arrow-of-slaying-giants` row in `_MAGIC_ITEM_ATTACK_RIDERS`: `requires_attunement=False` (RAW: ammunition isn't attuneable), condition predicate keyed on `creature_type == "giant"`, `on_hit_save: {dc: 17, ability: "CON", effect: "damage", dice: "6d10", damage_type: "piercing", save_for_half: True, label}`. No outer `dice` field (rider damage comes from the save resolution, not section 6c) so the v2.158.101 section-6c guard skips the damage-uplift push for this row. (B) `_apply_magic_item_on_hit_save_effect` rewritten as an effect-dispatch helper: shared gates (slug, attunement, condition predicate) followed by per-effect logic. "frighten" still builds the frightened condition_buff template (Demon Slayer). "damage" calls `_resolve_feature_save` with `condition_buff=None` (just roll the save), reads `passed` from the result, rolls dice, applies full damage on fail or half on pass via `_apply_damage_to_combatant`. PC-target prompt path (deferred resolution) is gracefully skipped — Phase 8b polish to wire the v2.99.407 respond-handler damage application. (C) Result dict now carries `effect` and `damage_dealt` so the post-hit handler's broadcast can vary per-item. (D) `_ranger_sheet` (Rowan Quickbow) gets a "Longbow (Arrow of Slaying — Giants)" attack at attack_index 2 with `_slug="arrow-of-slaying-giants"` + an inventory entry "Arrows of Slaying (Giants)" (type=ammunition, qty=6 — flavor stash, qty decrement deferred). (E) Existing Hill Giant SRD JSON has a new demo token template spec `("hill-giant", "Hill Giant", "giant")` so the v2.158.96 Phase 5f helper resolves `creature_type="giant"` from `sheet.type` on drag-spawn. Not placed on the demo map by default. (F) New harness file `tests/harness/test_arrow_of_slaying.py` with 3 tests: hit Hill Giant template (helper-resolved giant) → HP drop > 12 (base attack max + rider min, proving rider fired); hit humanoid → HP drop ≤ 12 (rider gated off); fire plain Longbow (attack_index 0, no slug match) at giant → HP drop ≤ 12 (slug gate blocks rider leak across weapons). (G) `docs/test-harness-coverage.md` adds the new section + total bumped 2240 → 2243.**
+**Description:** Opens Phase 8 with the simplest ammunition-shape item: Arrow of Slaying reuses the existing `on_hit_save` substrate for the save-or-half-damage pattern. Rather than adding a parallel `_MAGIC_ITEM_AMMUNITION` catalog, the substrate evolves to support both effect types (frighten/damage) with a clean dispatch. This proves the v2.158.102 substrate scales to RAW save-for-half ammunition without duplication.
+
+### Added
+- `app/routes/tabletop_routes.py` — `arrow-of-slaying-giants` catalog row; effect-dispatch in `_apply_magic_item_on_hit_save_effect`.
+- `app/demo_seed.py` — Rowan's Longbow-with-Slaying-Arrow attack entry + Arrows of Slaying (Giants) inventory item; Hill Giant token template spec.
+- `tests/harness/test_arrow_of_slaying.py` — 3 tests (giant target → rider fires, humanoid → no rider, plain Longbow → no rider leak).
+
+### Changed
+- `docs/test-harness-coverage.md` — new test block + total 2240 → 2243.
+- `app/version.py` — `APP_VERSION` 2.159.0 → 2.159.1. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.1.
+
+### Notes
+- The arrow's "becomes nonmagical after dealing the extra damage" RAW (qty decrement + slug clear) is filed as Phase 8b. Today Rowan can fire the special Longbow attack repeatedly — the demo doesn't model the consumable-slug lifecycle. The substrate is ready (catalog row carries `requires_attunement: False` and the rider would still fire on every hit) — Phase 8b just wires the post-hit decrement.
+- The v2.158.97 Demon Slayer has both a `dice` field (Phase 6a rider damage from section 6c) AND an `on_hit_save: {effect: "frighten"}` field (Phase 7b save). The new Phase 8a Arrow of Slaying intentionally has NO `dice` field (no section-6c uplift) and the damage flows entirely from `on_hit_save: {effect: "damage"}`. The two patterns can co-exist on the same item if a future Arrow of Slaying variant wanted both auto-damage AND save-or-half.
+- Future Phase 8b candidates: Arrow of Slaying nonmagical-after-use (qty decrement + slug clear); Phase 8c: Javelin of Lightning (line AoE — new substrate); Phase 8d: ammunition tracking on regular bows.
+
+---
+
 ## [2.159.0] - 2026-06-11 — "The Reliquary" — MINOR milestone closing the magic-items-automation arc spanning v2.158.74 through v2.158.104 (32 PATCH commits across Phases 1-7). Doc-only commit — no code or behavior change beyond the version bump. Catalogs the full substrate + the shipped catalog + the demo coverage so future contributors can find where the system lives.
 
 **Schema version:** 69
