@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2236 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.103, 2026-06-11).
+**Total tests:** 2240 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.158.104, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2076,6 +2076,16 @@ v2.158.97 magic-items-automation Phase 6a — Demon Slayer Rapier (RAW DMG p.166
 | `test_demon_slayer_fires_on_fiend_target` | Attack a `creature_type: "fiend"` combatant → `auto_uplifts` carries `source: "item-demon-slayer"`, `damage_type: "piercing"` (RAW fallback to weapon type), `expression: "2d6"`, total in [2, 24] (crit-doubled cap). |
 | `test_demon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-demon-slayer` uplift. |
 | `test_demon_slayer_suppressed_when_detuned` | /attune detune → no rider even vs. fiends. Restores attunement in teardown. |
+
+### `test_sun_blade_rider.py`
+v2.158.104 magic-items-automation Phase 7d — Sun Blade +1d8 radiant vs. undead (RAW DMG p.205). Pure substrate composition using the v2.158.93 Phase 5c shape (dice + condition predicate). Damage type explicit "radiant" (not the weapon-type fallback). Skeleton NPC template extended with `sheet.type="undead"` so v2.158.96 Phase 5f helper auto-resolves on drag-spawn. Dame Seraphine Vael gets the Sun Blade Longsword (attack_index 2, inventory_index 5, +7/1d8+7 — RAW +2 baked in).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_sun_blade_fires_on_undead_target` | Attack `creature_type: "undead"` → `auto_uplifts` carries `source: "item-sun-blade"`, `damage_type: "radiant"`, `expression: "1d8"`, total in [1, 16] (crit-doubled cap). |
+| `test_sun_blade_silent_on_humanoid` | Attack humanoid → no rider. Condition predicate gates correctly. |
+| `test_sun_blade_suppressed_when_detuned` | Detune → no rider even vs. undead. Re-attunes in teardown. |
+| `test_sun_blade_fires_via_skeleton_template` | Skeleton token template's `sheet.type="undead"` auto-resolves via Phase 5f helper → rider fires on a combatant referencing the template without `creature_type` on the combatant. Validates the demo path. |
 
 ### `test_sword_of_sharpness.py`
 v2.158.103 magic-items-automation Phase 7c — Sword of Sharpness +4d6 slashing on natural 20 (RAW DMG p.206). Second `on_nat_20` item using a new `effect: "damage"` variant alongside Vorpal's `effect: "decap"`. Same `_apply_magic_item_nat_20_effect` helper dispatches both. Pip's seed at attunement cap (3/3).

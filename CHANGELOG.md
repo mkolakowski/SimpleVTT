@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.104] - 2026-06-11 — "The Dawning Hilt" — Magic-items-automation Phase 7d: Sun Blade +1d8 radiant vs. undead (RAW DMG p.205). Pure substrate composition — no new mechanism. Reuses the v2.158.93 Phase 5c conditional-rider shape (`dice` + `condition` predicate keyed on `creature_type=="undead"`) and the v2.158.98 Phase 6b template `sheet.type` field (extended Skeleton template to carry `creature_type="undead"`). Dame Seraphine Vael (Vengeance Paladin Lv 3) gets her first magic item — Sun Blade Longsword.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `sun-blade` row in `_MAGIC_ITEM_ATTACK_RIDERS`: dice="1d8", damage_type="radiant" (explicit — Sun Blade RAW is radiant, NOT slashing), requires_attunement=True, condition=lambda tgt: target.creature_type == "undead". (B) `_paladin_vengeance_sheet` (Dame Seraphine) gets a "Sun Blade" attack entry at attack_index 2 (+7/1d8+7 — RAW +2 baked in; damage_type="radiant" per RAW Sun Blade flavor) + a matching inventory entry at inventory_index 5 (equipped + attuned). Seraphine goes from 0 to 1 attuned items. (C) Existing Skeleton token template spec extended from 2-tuple to 3-tuple `("skeleton", "Skeleton", "undead")` so `_npc_sheet` writes `sheet["type"] = "undead"`. The Phase 5f helper auto-resolves this on /attack so a drag-spawned Skeleton triggers the Sun Blade rider with no battle PUT plumbing. (D) New harness file `tests/harness/test_sun_blade_rider.py` with 4 tests: undead combatant (synthetic creature_type set) → +1d8 radiant rider; humanoid → no rider; detune → no rider on undead; Skeleton template's helper-resolved sheet.type="undead" triggers the rider via the same path Phase 5f's Dragon Slayer template test exercises. All teardowns restore attunement. (E) `docs/test-harness-coverage.md` adds the new section + total bumped 2236 → 2240.**
+**Description:** Closes Phase 7d as the first item that's pure substrate composition — zero new code paths beyond the catalog row, the demo seed entry, and the template type extension. Validates the Phase 5+6 substrate doesn't need further extension to handle simple "deals +dice damage vs. creature_type X" items. Future items in this shape (Mace of Smiting +2d6 vs. constructs, Mace of Disruption +1d6 vs. fiends-and-undead, etc.) drop into the same shape with a catalog row + demo seed line. Phase 7e (Sun Blade light toggle as state-only — no damage gate) is filed for narrative-only follow-up; the active Phase 7 substrate work closes here.
+
+### Added
+- `app/routes/tabletop_routes.py` — `sun-blade` catalog row.
+- `app/demo_seed.py` — Dame Seraphine's Sun Blade attack entry + matching inventory item; Skeleton template extended with `creature_type="undead"`.
+- `tests/harness/test_sun_blade_rider.py` — 4 tests (undead → rider, humanoid → no rider, detune → no rider, helper-resolved Skeleton template).
+
+### Changed
+- `app/demo_seed.py` (Skeleton template spec) — 2-tuple → 3-tuple, adds creature_type "undead". Backward-compat: the seed_token_templates unpacking pattern `(*spec, "")[:3]` accepts both shapes.
+- `docs/test-harness-coverage.md` — new test block + total 2236 → 2240.
+- `app/version.py` — `APP_VERSION` 2.158.103 → 2.158.104. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.104.
+
+### Notes
+- Sun Blade's "lit state" bonus action (bright light in a 15-ft radius / dim light beyond) isn't modeled v1. RAW: the lit state doesn't gate the +1d8 vs. undead damage — the rider always fires while attuned, lit or not. Phase 7e would add a `_lit` field for the light flavor (state-toggle UI like Flame Tongue), but the gameplay impact is purely environmental lighting / GM scene-management. Filed as low priority.
+- Sun Blade's damage type is "radiant" per RAW — the entire damage roll on a Sun Blade swing is radiant, not just the +1d8 rider. The demo attack entry's `damage_type: "radiant"` reflects this. Undead resistances/immunities to slashing don't apply to Sun Blade hits.
+- Demo magic-item story now spans 9 PCs: Pip (Cloak + Ring + Sharpness — at cap), Thalindra (Cloak + Pearl + 2 Wands), Tavik (Ring + Staff), Caelan (Dragon Slayer), Lyra (Cloak of Displacement + Demon Slayer), Garrik (Flame Tongue), Mira (Vorpal), Seraphine (Sun Blade), Kael (Bracers). The 9 PCs cover every shipped Phase 1-7 archetype: passive, gated passive, single-charge active, multi-charge active with dice recharge, multi-action active, state-toggle, always-on rider, lit-state rider, conditional rider, helper-resolved conditional rider, post-hit decap, post-hit damage, save-or-effect.
+
+---
+
 ## [2.158.103] - 2026-06-11 — "The Glittering Edge" — Magic-items-automation Phase 7c: Sword of Sharpness +4d6 on nat 20 (RAW DMG p.206) — second item to use the v2.158.101 `on_nat_20` post-hit hook substrate, exercising a new `effect: "damage"` variant alongside Vorpal's `effect: "decap"`. The same `_apply_magic_item_nat_20_effect` helper now dispatches both. Pip Quickfingers caps her attunement at 3/3 (Cloak + Ring + Sharpness — the RAW DMG p.138 cap exactly) — first demo PC at the attunement ceiling, useful showcase of the attunement-pressure mechanic.
 
 **Schema version:** 69

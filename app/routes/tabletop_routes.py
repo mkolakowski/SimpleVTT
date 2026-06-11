@@ -30576,6 +30576,23 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             "damage_type": "slashing",
         },
     },
+    # v2.158.104 — Phase 7d: Sun Blade (RAW DMG p.205). Pure substrate
+    # composition — reuses the v2.158.93 Phase 5c conditional-rider
+    # shape (dice + condition predicate). +1d8 radiant on hit vs.
+    # undead. The "lit" state and the bright-light bonus action are
+    # flavor / GM-light-management mechanics, not modeled in v1 since
+    # they don't gate the damage rider (RAW: the +1d8 vs. undead
+    # always fires while attuned). The +2 attack/damage magic bonus
+    # is baked into the demo seed's attack entry.
+    "sun-blade": {
+        "label": "Sun Blade",
+        "dice": "1d8",
+        "damage_type": "radiant",
+        "requires_attunement": True,
+        "condition": lambda tgt: bool(tgt) and (
+            (tgt.get("creature_type") or "").strip().lower() == "undead"
+        ),
+    },
 }
 
 

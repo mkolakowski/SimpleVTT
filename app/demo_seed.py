@@ -1304,6 +1304,18 @@ def _paladin_vengeance_sheet(name: str) -> dict:
              "damage_type": "slashing", "range": "5 ft", "desc": "Versatile (1d10). +2 damage from Dueling."},
             {"name": "Javelin", "attack_bonus": "+5", "damage": "1d6+3",
              "damage_type": "piercing", "range": "30/120 ft", "desc": "Thrown."},
+            # v2.158.104 — Magic-items Phase 7d demo fixture. Sun
+            # Blade Longsword (RAW DMG p.205). +2 attack/damage RAW
+            # baked in (Longsword +5/1d8+5 → +7/1d8+7), damage type
+            # radiant (RAW). The +1d8 vs. undead rider fires from
+            # section 6c via the v2.158.93 conditional-rider shape
+            # (condition: target.creature_type == "undead"). The
+            # bright-light bonus action / lit-state mechanics aren't
+            # modeled v1 since they don't gate the damage rider.
+            {"name": "Sun Blade", "attack_bonus": "+7",
+             "damage": "1d8+7", "damage_type": "radiant",
+             "range": "5 ft", "_slug": "sun-blade",
+             "desc": "Rare longsword (versatile 1d8/1d10), attunement. +2 attack/damage, radiant damage type, +1d8 radiant vs. undead (RAW DMG p.205). Sheds bright light in a 15-ft radius when held."},
         ],
         # Oath of Vengeance Lv 3 always-prepared spells: Bane + Hunter's
         # Mark (PHB p.88), plus a couple of core paladin picks.
@@ -1339,6 +1351,20 @@ def _paladin_vengeance_sheet(name: str) -> dict:
              "_slug": "chain-mail"},
             {"name": "Holy symbol (amulet)", "type": "gear", "qty": 1,
              "desc": "Divine focus — replaces material components for paladin spells."},
+            # v2.158.104 — Magic-items Phase 7d demo fixture. Sun
+            # Blade Longsword (rare, attunement). Dame Seraphine's
+            # first magic item (1/3 attunement). RAW: deals radiant
+            # damage instead of slashing (note damage_type="radiant"
+            # on the attack entry). Always-on while attuned for the
+            # +1d8 vs. undead rider (lit-state bright-light flavor
+            # not gated by a `_lit` field — RAW: damage rider always
+            # fires while attuned, lit or not).
+            {"name": "Sun Blade", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d8", "damage_type": "radiant",
+             "properties": "versatile (1d10), magic",
+             "_slug": "sun-blade",
+             "desc": "Rare longsword, attunement. +2 attack/damage; radiant damage type; +1d8 radiant vs. undead (RAW DMG p.205). Bonus action: bright light in a 15-ft radius."},
         ],
         "resources": [
             {
@@ -3903,7 +3929,10 @@ def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate
         # skips it entirely); Doppelganger is Monstrosity + charm-
         # immune (Sleep skips on the second exclusion branch). Both
         # resolve via the shipped SRD JSONs.
-        ("skeleton", "Skeleton"),
+        # v2.158.104 — extend with creature_type="undead" so Sun
+        # Blade's vs-undead rider auto-fires via the v2.158.96 helper
+        # resolution (same pattern as the Young Red Dragon template).
+        ("skeleton", "Skeleton", "undead"),
         ("doppelganger", "Doppelganger"),
         # v2.49.171 — spellcasting NPC homebrew (Cult Acolyte). Two
         # spell actions (Inflict Wounds + Sacred Flame) exercise both
