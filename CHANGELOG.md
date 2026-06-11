@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.77] - 2026-06-10 — "The Empty-Handed Defense" — Magic-items-automation Phase 1c: wire Bracers of Defense (+2 AC ONLY while wearing no armor and using no shield, RAW DMG p.155) — third catalog entry + closes the plan's Phase 1. Different shape from Cloak/Ring: no `save_bonus` key + two new gate primitives (`requires_no_armor`, `requires_no_shield`) checked per-payload by `_equipped_item_effects`. New helper `_pc_is_wearing_shield` mirrors the v2.99.95 `_pc_is_wearing_armor` pattern. Kael Brightleaf (Monk Way of the Open Hand, Lv 7, Unarmored Defense base AC 16, no armor/shield) is the demo fixture
+
+**Schema version:** 69
+**Commit summary:** **(A) New helper `_pc_is_wearing_shield(sheet) -> bool` in `app/routes/tabletop_routes.py` (right above `_pc_is_wearing_armor`) — scans `sheet.inventory[]` for `type == "shield"` AND `equipped: True`. Mirror of the v2.99.95 armor helper for the Bracers' no-shield gate. (B) `_equipped_item_effects` walker (v2.158.74) extended with two per-payload gates: `if p.get("requires_no_armor") and _pc_is_wearing_armor(sheet): continue` + same shape for `requires_no_shield`. Gates check per-payload (not per-item) so a future hybrid item like Robe of the Archmagi can mix gated + ungated passives. (C) `_MAGIC_ITEM_PASSIVES` gains `bracers-of-defense` row with `[{ac_bonus: 2, requires_attunement: True, requires_no_armor: True, requires_no_shield: True}]` — first entry without a `save_bonus` key (proves the walker handles per-payload key shape variance). (D) `app/data/local/dnd5e/items/bracers-of-defense.json` populated with the matching shape. (E) `_monk_sheet` in `app/demo_seed.py` appends a Bracers of Defense inventory entry on Kael — equipped + attuned — at the END so existing inventory-index assertions stay valid. (F) New harness file `tests/harness/test_item_bracers_of_defense.py` with 2 tests: AC (Krieger swings at Kael → `target_ac == 18` = base 16 + Bracers +2) + symmetric save guard (DEX save → breakdown does NOT contain "Bracers of Defense" since the payload has no `save_bonus` key). (G) `test_item_schema.py` rotates the empty-passives canary forward to Pearl of Power (Phase 3 target — totally different shape, `actions[]` + `charges` not `passives`); the Bracers test flips to assert the wired shape. (H) `docs/test-harness-coverage.md` adds the Bracers block + updates the Bracers / Pearl canary rows + total bumped 2175 → 2178.**
+**Description:** Phase 1 of the magic-items-automation plan is fully shipped now: the three passive-wearable archetypes (Cloak + Ring share +1/+1; Bracers has +2 AC with the no-armor gate) cover the SRD's most common "magic item that just makes numbers bigger" shape. The walker's per-payload gate model (vs per-item) is the key abstraction — it scales to multi-passive items like the Robe of the Archmagi (advantage on save vs spells + Mage Armor's 13+DEX AC + spell save DC bonus + spell attack bonus, three distinct payloads under one item) when those land later. The negative-gate path (Bracers suppressed when armor or shield is equipped) is exercised in the walker code; a sheet-PATCH-based negative test waits for Phase 2's attunement UI to land the proper inventory-mutation endpoint.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_pc_is_wearing_shield(sheet)` helper; `bracers-of-defense` row in `_MAGIC_ITEM_PASSIVES`; `requires_no_armor` + `requires_no_shield` gate checks in `_equipped_item_effects`.
+- `app/data/local/dnd5e/items/bracers-of-defense.json` — `passives` populated with `[{ac_bonus: 2, requires_attunement: true, requires_no_armor: true, requires_no_shield: true}]`.
+- `app/demo_seed.py` — `_monk_sheet` inventory gains a Bracers of Defense entry on Kael (equipped + attuned).
+- `tests/harness/test_item_bracers_of_defense.py` — two tests: AC bonus + symmetric save guard.
+- `tests/harness/test_item_schema.py` — new `test_item_schema_pearl_of_power_has_empty_passives` as the rotated canary.
+
+### Changed
+- `tests/harness/test_item_schema.py` — Bracers canary flipped to `test_item_schema_bracers_of_defense_has_phase1c_passives`, asserting the wired shape (incl. the absence of a `save_bonus` key + presence of both no-armor/no-shield gates).
+- `docs/test-harness-coverage.md` — new Bracers section + canary rotation + total 2175 → 2178.
+- `app/version.py` — `APP_VERSION` 2.158.76 → 2.158.77. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.77.
+
+### Notes
+- Plan's Phase 1 is now fully shipped: Cloak + Ring + Bracers all wired with mechanical effect at attack-time AC and (where applicable) save-time bonus.
+- The empty-passives canary now points at Pearl of Power. Pearl's wiring (Phase 3) lives in `actions[]` + `charges`, not `passives`, so the canary's flip pattern shifts to those fields when that ships.
+- Next natural step on the magic-items track is Phase 2 (attunement UI + 3-item cap) — needed before Phase 3's Pearl + Phase 4's wand work can meaningfully test the gate.
+
+---
+
 ## [2.158.76] - 2026-06-10 — "The Second Band" — Magic-items-automation Phase 1b: wire Ring of Protection (+1 AC, +1 saves) — second catalog entry in `_MAGIC_ITEM_PASSIVES`, same shape as Cloak of Protection (v2.158.74), different slot. Tavik Stonebrow (Cleric Lv 8, AC 18, WIS save +6) gets a permanent equipped+attuned Ring in the demo seed, on a different PC from Thalindra's Cloak so the two fixtures' AC + save assertions don't interact. Validates the catalog scales additively before Phase 1c introduces Bracers' no-armor gate complexity
 
 **Schema version:** 69

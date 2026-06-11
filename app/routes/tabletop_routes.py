@@ -29888,6 +29888,28 @@ def _two_weapon_fighting_ability_mod(sheet: dict, attack: dict) -> int:
         return 0
 
 
+def _pc_is_wearing_shield(sheet: dict) -> bool:
+    """v2.158.77 — does the sheet show an equipped shield? Mirror of
+    `_pc_is_wearing_armor` for the Bracers of Defense gate (RAW DMG
+    p.155: +2 AC "while wearing no armor and using no shield").
+    Sheets use `type: "shield"` for the off-hand defensive slot;
+    Tavik's chain mail + shield seed is the canonical positive case.
+    """
+    if not sheet:
+        return False
+    inv = sheet.get("inventory") or []
+    if not isinstance(inv, list):
+        return False
+    for it in inv:
+        if not isinstance(it, dict):
+            continue
+        if (it.get("type") or "").strip().lower() != "shield":
+            continue
+        if it.get("equipped") is True:
+            return True
+    return False
+
+
 def _pc_is_wearing_armor(sheet: dict) -> bool:
     """v2.99.95 — does the sheet show any equipped armor? Scans
     ``sheet.inventory[]`` for ``type == "armor"`` AND
@@ -29940,6 +29962,19 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # which RAW lets a PC wear alongside the Cloak for cumulative +2/+2.
     "ring-of-protection": [
         {"ac_bonus": 1, "save_bonus": 1, "requires_attunement": True},
+    ],
+    # v2.158.77 — Phase 1c: third catalog entry. Different shape:
+    # +2 AC ONLY when no armor AND no shield (RAW DMG p.155). The
+    # ``requires_no_armor`` + ``requires_no_shield`` gates fire in
+    # _equipped_item_effects via _pc_is_wearing_armor / _pc_is_wearing_shield.
+    # Unarmored Defense builds (Monk, Barbarian) are the natural users.
+    "bracers-of-defense": [
+        {
+            "ac_bonus": 2,
+            "requires_attunement": True,
+            "requires_no_armor": True,
+            "requires_no_shield": True,
+        },
     ],
 }
 
@@ -29994,6 +30029,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if not isinstance(p, dict):
                 continue
             if p.get("requires_attunement") and not item.get("attuned"):
+                continue
+            # v2.158.77 — Bracers of Defense shape gates. The walker
+            # checks them per-payload (not per-item) so a future item
+            # like Robe of the Archmagi can mix gated and ungated
+            # passives in the same entry.
+            if p.get("requires_no_armor") and _pc_is_wearing_armor(sheet):
+                continue
+            if p.get("requires_no_shield") and _pc_is_wearing_shield(sheet):
                 continue
             try:
                 ac = int(p.get("ac_bonus") or 0)

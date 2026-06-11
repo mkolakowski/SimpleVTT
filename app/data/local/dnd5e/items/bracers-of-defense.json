@@ -17,6 +17,13 @@
   },
   "charges": null,
   "charge_recovery": null,
-  "passives": [],
+  "passives": [
+    {
+      "ac_bonus": 2,
+      "requires_attunement": true,
+      "requires_no_armor": true,
+      "requires_no_shield": true
+    }
+  ],
   "actions": []
 }

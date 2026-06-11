@@ -2778,6 +2778,18 @@ def _monk_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+            # v2.158.77 — Magic-items Phase 1c demo fixture. Bracers
+            # of Defense (+2 AC, no-armor + no-shield gate) on Kael,
+            # equipped + attuned. Kael's Monk build (Unarmored Defense
+            # base AC 16, no equipped armor or shield) is the natural
+            # canary for the new gate primitives — a Fighter PC with
+            # equipped chain mail would have the Bracers bonus
+            # correctly suppressed by the walker. Appended at END so
+            # existing inventory-index assertions stay valid.
+            {"name": "Bracers of Defense", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "bracers-of-defense",
+             "desc": "Rare wondrous item, attunement. +2 AC while wearing no armor and using no shield."},
         ],
         "feats": [],
         # v2.18.0: Ki counter (max = monk level). Refreshes on short rest.

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2175 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.76, 2026-06-10).
+**Total tests:** 2178 in `tests/harness/` + 23 in `tests/harness_ui/` (as of v2.158.77, 2026-06-10).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -1969,7 +1969,8 @@ v2.158.73 magic-items-automation Phase 0 — the SRD item content layer now ship
 |------|-----------------|
 | `test_item_schema_cloak_of_protection_has_phase1a_passives` | v2.158.75 update of the original Phase 0 assertion: Phase 1a (v2.158.74) populated the Cloak's `passives` with `[{ac_bonus:1, save_bonus:1, requires_attunement:true}]`. Test now asserts the wired shape. Charges still null. |
 | `test_item_schema_ring_of_protection_has_phase1b_passives` | v2.158.76: Phase 1b populated Ring with the same +1/+1 payload as Cloak. Test asserts the wired shape. |
-| `test_item_schema_bracers_of_defense_has_empty_passives` | v2.158.76: empty-passives canary moved from Ring (now wired) to Bracers of Defense (Phase 1c target — +2 AC with RAW no-armor + no-shield gate). Asserts `passives == []`. Flips when Phase 1c ships. |
+| `test_item_schema_bracers_of_defense_has_phase1c_passives` | v2.158.77: Phase 1c populated Bracers with `[{ac_bonus:2, requires_attunement:true, requires_no_armor:true, requires_no_shield:true}]`. Different shape from Cloak/Ring (no save_bonus key, +2 AC, two new gate flags). Plan's Phase 1 fully shipped after this entry. |
+| `test_item_schema_pearl_of_power_has_empty_passives` | v2.158.77: empty-passives canary rolls forward to Pearl of Power (Phase 3 target — 1/day spell-slot recovery via the planned `/use_item_action` M2 endpoint). Pearl's wiring goes into `actions[]` + `charges`, not `passives`, so the next flip is on those fields instead. |
 | `test_item_schema_wand_of_magic_missiles_has_phase0_keys` | `GET /api/content/items/wand-of-magic-missiles` → 200 + same shape on a charge-tracked archetype (Phase 4's charge-caster canary). |
 | `test_item_schema_unknown_slug_404` | `GET /api/content/items/no-such-srd-item` → 404 — error contract unchanged by the Phase 0 additions. |
 
@@ -1989,6 +1990,14 @@ v2.158.76 magic-items-automation Phase 1b — second catalog entry. Same +1 AC /
 |------|-----------------|
 | `test_ring_of_protection_grants_ac_bonus` | Krieger swings at Tavik → `target_ac == 19` (18 base + Ring +1). |
 | `test_ring_of_protection_grants_save_bonus` | `/roll` `wis_save` for Tavik (`1d20+6`) → breakdown contains "Ring of Protection" + "+1"; expression rewritten to `1d20+6+1` server-side. |
+
+### `test_item_bracers_of_defense.py`
+v2.158.77 magic-items-automation Phase 1c — third catalog entry + closes the plan's Phase 1. Different shape: +2 AC, no save_bonus, RAW no-armor + no-shield gate. New `_pc_is_wearing_shield` helper (mirror of v2.99.95 `_pc_is_wearing_armor`) + per-payload `requires_no_armor` + `requires_no_shield` gate checks in `_equipped_item_effects`. Kael Brightleaf (Monk Way of the Open Hand Lv 7, Unarmored Defense base AC 16, no equipped armor/shield) is the canary because both gates pass for his build.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_bracers_of_defense_grants_ac_bonus` | Krieger swings at Kael → `target_ac == 18` (16 base + Bracers +2). |
+| `test_bracers_grant_no_save_bonus` | `/roll` `dex_save` for Kael (`1d20+7`) → breakdown does NOT contain "Bracers of Defense". Shape guard: Bracers grant ONLY AC; the per-payload key shape (no `save_bonus`) must not leak into the save hook. |
 
 ---
 

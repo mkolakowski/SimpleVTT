@@ -76,12 +76,15 @@ async def test_item_schema_ring_of_protection_has_phase1b_passives():
     assert p.get("requires_attunement") is True
 
 
-async def test_item_schema_bracers_of_defense_has_empty_passives():
-    """v2.158.76: empty-passives canary moves from Ring of Protection
-    (now Phase 1b wired) to Bracers of Defense (Phase 1c target —
-    +2 AC with the RAW no-armor + no-shield gate, which needs a
-    new ``requires_no_armor`` walker primitive). When Phase 1c ships,
-    this assertion flips and the canary rolls forward again."""
+async def test_item_schema_bracers_of_defense_has_phase1c_passives():
+    """v2.158.77: Phase 1c wired Bracers with the gated +2 AC payload.
+    Different shape from Cloak/Ring: ``ac_bonus: 2`` (not 1), no
+    ``save_bonus`` key, and the new ``requires_no_armor`` +
+    ``requires_no_shield`` gates. With this entry Phase 1 of the
+    plan is done (Cloak + Ring + Bracers all wired). The empty-
+    passives canary rolls forward to Pearl of Power (Phase 3 target
+    — 1/day spell-slot recovery, a totally different mechanical
+    shape: charges + actions[] not passives)."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
         resp = await client.get("/api/content/items/bracers-of-defense")
     assert resp.status_code == 200
@@ -89,7 +92,34 @@ async def test_item_schema_bracers_of_defense_has_empty_passives():
     assert record["slug"] == "bracers-of-defense"
     assert record["charges"] is None
     assert record["charge_recovery"] is None
+    passives = record["passives"]
+    assert isinstance(passives, list) and len(passives) == 1
+    p = passives[0]
+    assert p.get("ac_bonus") == 2
+    assert "save_bonus" not in p  # Bracers grant ONLY AC, never saves.
+    assert p.get("requires_attunement") is True
+    assert p.get("requires_no_armor") is True
+    assert p.get("requires_no_shield") is True
+
+
+async def test_item_schema_pearl_of_power_has_empty_passives():
+    """v2.158.77: empty-passives canary moves from Bracers (now
+    Phase 1c wired) to Pearl of Power (Phase 3 target — 1/day spell-
+    slot recovery via the planned ``/use_item_action`` endpoint M2).
+    Pearl's wiring goes into ``actions[]`` + ``charges`` + the
+    catalog's per-item action handler — not ``passives`` — so when
+    Phase 3 ships, the assertion that flips is the ``actions`` /
+    ``charges`` check, not this one. This test will need its own
+    rotation at that point."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/api/content/items/pearl-of-power")
+    assert resp.status_code == 200
+    record = resp.json()["record"]
+    assert record["slug"] == "pearl-of-power"
+    assert record["charges"] is None
+    assert record["charge_recovery"] is None
     assert record["passives"] == []
+    assert record["actions"] == []
 
 
 async def test_item_schema_wand_of_magic_missiles_has_phase0_keys():
