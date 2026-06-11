@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2243 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.159.1, 2026-06-11).
+**Total tests:** 2244 in `tests/harness/` + 35 in `tests/harness_ui/` (as of v2.159.2, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2085,6 +2085,7 @@ v2.159.1 magic-items-automation Phase 8a — Arrow of Slaying (Giants) (RAW DMG 
 | `test_slaying_arrow_fires_save_on_giant` | Hit Hill Giant (template-resolved giant) → HP drop > 12 (base attack max + rider min, proving rider damage layered on top regardless of save pass/fail). |
 | `test_slaying_arrow_silent_on_non_giant` | Hit humanoid → HP drop ≤ 12 (rider gated off by condition predicate). |
 | `test_regular_longbow_no_slaying_rider` | Fire plain Longbow (attack_index 0, no slug match) at giant → HP drop ≤ 12 (slug-on-attack gate blocks rider leak across weapons, same shape as v2.158.91 Flame Tongue test). |
+| `test_slaying_arrow_consumes_on_use` | v2.159.2 Phase 8b: read Rowan's initial Slaying qty (6 from seed); fire one Slaying arrow at giant; assert qty=5. Teardown PATCHes the inventory back via /sheet-fields. |
 
 ### `test_sun_blade_rider.py`
 v2.158.104 magic-items-automation Phase 7d — Sun Blade +1d8 radiant vs. undead (RAW DMG p.205). Pure substrate composition using the v2.158.93 Phase 5c shape (dice + condition predicate). Damage type explicit "radiant" (not the weapon-type fallback). Skeleton NPC template extended with `sheet.type="undead"` so v2.158.96 Phase 5f helper auto-resolves on drag-spawn. Dame Seraphine Vael gets the Sun Blade Longsword (attack_index 2, inventory_index 5, +7/1d8+7 — RAW +2 baked in).

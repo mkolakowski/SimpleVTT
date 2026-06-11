@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.2] - 2026-06-11 — "The Spent Quiver" — Magic-items-automation Phase 8b: consume-on-use mechanic for ammunition (RAW DMG p.151 "the arrow becomes a nonmagical arrow after dealing the extra damage"). Catalog row gains a `consume_on_use: True` flag; the on-hit-save helper decrements the wielder's matching inventory item qty by 1 after the rider fires successfully. Rowan's seed Arrow of Slaying qty=6 drops by 1 per shot — when it reaches 0, the magic arrow is exhausted (the attack entry stays on the sheet so the player remembers it was there, but firing it does nothing extra).
+
+**Schema version:** 69
+**Commit summary:** **(A) `_MAGIC_ITEM_ATTACK_RIDERS["arrow-of-slaying-giants"]` gains `consume_on_use: True`. Future ammunition / single-use items reuse the same flag. (B) `_apply_magic_item_on_hit_save_effect` extended: after the damage applies (or for non-damage effects, after the save resolves), if the catalog row carries `consume_on_use`, find the wielder's matching inventory item by `_slug` and decrement `qty` by 1. Persist via `sqlalchemy.orm.attributes.flag_modified` on `char.sheet`. Wrapped in exception handling so a stuck commit can't crash the attack response. (C) Result dict now carries `consumed: bool` so the broadcast / chat card can surface "1 arrow used; 5 remaining" copy in a future polish. (D) New harness test `test_slaying_arrow_consumes_on_use` in `test_arrow_of_slaying.py`: GETs Rowan's sheet via `/sheet-json` to read the initial Slaying qty; fires one Arrow of Slaying at a Hill Giant; re-reads the sheet and asserts qty decremented by 1. Teardown PATCHes the inventory back via `/sheet-fields` to restore the original qty for subsequent tests. (E) `docs/test-harness-coverage.md` updates the existing `test_arrow_of_slaying.py` block + total bumped 2243 → 2244.**
+**Description:** Closes Phase 8b. The consume-on-use flag generalizes — it's the same mechanism a future Potion of Healing's `/use_item_action` path could share (qty decrement on use). RAW's "becomes a nonmagical arrow" v1 reading: qty drops by 1, that's the modeled consumption. v2 polish could auto-bump a sibling "Arrows" inventory entry by 1 to reflect the magic→mundane conversion, but the demo doesn't need that fidelity today.
+
+### Added
+- `app/routes/tabletop_routes.py` — `consume_on_use: True` on Arrow of Slaying catalog row; qty-decrement block in `_apply_magic_item_on_hit_save_effect`.
+- `tests/harness/test_arrow_of_slaying.py` — `test_slaying_arrow_consumes_on_use` (4th test in the file).
+
+### Changed
+- `docs/test-harness-coverage.md` — Arrow of Slaying test block + total 2243 → 2244.
+- `app/version.py` — `APP_VERSION` 2.159.1 → 2.159.2. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.2.
+
+### Notes
+- The qty decrement currently only fires when the rider's damage actually lands (effect="damage" + damage_dealt > 0). For non-damage effects (none using `consume_on_use` yet, but a future Potion of Web-of-Frost using `effect="restrained"` with consume_on_use might want it), the flag also fires on a successful save resolution.
+- A future Phase 8c could auto-add a regular Arrow inventory bump (qty += 1 on the slug-less "Arrows" entry) to reflect the RAW "becomes nonmagical" conversion. Today the magic arrow simply disappears from the count without a sibling bump.
+- The PATCH-based teardown depends on the v2.158.96 Phase 5f addition of `inventory` to `_SHEET_PATCH_KEYS` (already there from earlier Phase 5+ work — confirmed in the allowlist).
+
+---
+
 ## [2.159.1] - 2026-06-11 — "The Giantbane" — Magic-items-automation Phase 8a: first ammunition-shape catalog row — Arrow of Slaying (Giants) (RAW DMG p.151). Extends the v2.158.102 Phase 7b `on_hit_save` substrate with a new `effect: "damage"` variant alongside the existing `effect: "frighten"`. RAW save-for-half pattern: on hit vs. the keyed creature kind, target makes a DC 17 CON save; failure deals +6d10 piercing, success deals half (3d10 floor). The arrow's "becomes nonmagical after dealing the extra damage" qty-decrement RAW is filed as Phase 8b polish.
 
 **Schema version:** 69

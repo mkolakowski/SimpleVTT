@@ -26147,16 +26147,20 @@ def _compute_attack_auto_uplifts(
         attack_slug = (attack.get("_slug") or "").strip()
         rider_spec = _MAGIC_ITEM_ATTACK_RIDERS.get(attack_slug)
         if rider_spec:
+            # v2.159.2 — Phase 8b: ammunition items (RAW: not equipped)
+            # use slug-only matching when the catalog row doesn't
+            # require attunement. Attuneable items keep the strict
+            # equipped + attuned gate.
+            requires_attune = bool(rider_spec.get("requires_attunement"))
             has_item_attuned = False
             for inv_item in (attacker_sheet.get("inventory") or []):
                 if not isinstance(inv_item, dict):
                     continue
                 if (inv_item.get("_slug") or "") != attack_slug:
                     continue
-                if not inv_item.get("equipped"):
+                if requires_attune and not inv_item.get("equipped"):
                     continue
-                if (rider_spec.get("requires_attunement")
-                        and not inv_item.get("attuned")):
+                if requires_attune and not inv_item.get("attuned"):
                     continue
                 # v2.158.92 — Phase 5b: lit-state gate. Flame Tongue
                 # (and future state-toggle items) only fire while lit.
@@ -28709,16 +28713,20 @@ async def _apply_magic_item_nat_20_effect(
         return None
 
     # Verify the wielder has the matching item attuned + equipped.
+    # v2.159.2 — Phase 8b: for non-attuneable items (ammunition like
+    # Arrow of Slaying), skip the `equipped` check — ammo lives in a
+    # quiver, not "equipped" RAW. The slug match alone is sufficient
+    # since the wielder explicitly chose this attack entry.
+    requires_attune = bool(rider_spec.get("requires_attunement"))
     has_attuned = False
     for inv in (attacker_sheet or {}).get("inventory") or []:
         if not isinstance(inv, dict):
             continue
         if (inv.get("_slug") or "") != attack_slug:
             continue
-        if not inv.get("equipped"):
+        if requires_attune and not inv.get("equipped"):
             continue
-        if (rider_spec.get("requires_attunement")
-                and not inv.get("attuned")):
+        if requires_attune and not inv.get("attuned"):
             continue
         has_attuned = True
         break
@@ -28839,16 +28847,18 @@ async def _apply_magic_item_on_hit_save_effect(
         return None
 
     # Attunement gate (same as the rider's damage uplift).
+    # v2.159.2 — Phase 8b: ammunition items skip the equipped check
+    # (mirror of section 6c + Vorpal handler ammunition fixes).
+    requires_attune = bool(rider_spec.get("requires_attunement"))
     has_attuned = False
     for inv in (attacker_sheet or {}).get("inventory") or []:
         if not isinstance(inv, dict):
             continue
         if (inv.get("_slug") or "") != attack_slug:
             continue
-        if not inv.get("equipped"):
+        if requires_attune and not inv.get("equipped"):
             continue
-        if (rider_spec.get("requires_attunement")
-                and not inv.get("attuned")):
+        if requires_attune and not inv.get("attuned"):
             continue
         has_attuned = True
         break
@@ -28947,6 +28957,7 @@ async def _apply_magic_item_on_hit_save_effect(
     # `passed=None` (deferred) — we skip the immediate damage and
     # rely on the prompt-respond handler (filed for Phase 8 polish).
     damage_dealt = 0
+    consumed = False
     if effect == "damage" and sr.get("passed") is not None:
         dice = save_spec.get("dice") or ""
         save_for_half = bool(save_spec.get("save_for_half"))
@@ -28981,6 +28992,44 @@ async def _apply_magic_item_on_hit_save_effect(
                     attack_slug,
                 )
 
+    # v2.159.2 — Phase 8b: consume-on-use. After the rider fires
+    # (damage dealt OR a non-damage effect resolved), decrement the
+    # wielder's matching inventory item qty by 1 if the catalog
+    # declares `consume_on_use: True`. RAW: Arrow of Slaying becomes
+    # nonmagical after the special damage fires. v1: qty -= 1; v2
+    # could auto-add a nonmagical-arrow qty bump but that's flavor.
+    if rider_spec.get("consume_on_use") and (
+        damage_dealt > 0 or (effect != "damage")
+    ):
+        # Find the matching inventory item by `_slug` and decrement
+        # qty. Persist via flag_modified on char.sheet.
+        try:
+            sheet_copy = dict(attacker_sheet or {})
+            inventory = list(sheet_copy.get("inventory") or [])
+            for i, inv in enumerate(inventory):
+                if not isinstance(inv, dict):
+                    continue
+                if (inv.get("_slug") or "") != attack_slug:
+                    continue
+                qty = int(inv.get("qty") or 0)
+                if qty <= 0:
+                    break
+                new_inv = dict(inv)
+                new_inv["qty"] = qty - 1
+                inventory[i] = new_inv
+                sheet_copy["inventory"] = inventory
+                char.sheet = sheet_copy
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(char, "sheet")
+                db.commit()
+                consumed = True
+                break
+        except Exception:
+            logging.exception(
+                "consume_on_use decrement failed for slug=%s",
+                attack_slug,
+            )
+
     return {
         "target_combatant_id": target_combatant.get("id"),
         "target_name": target_combatant.get("name") or "Target",
@@ -28990,6 +29039,7 @@ async def _apply_magic_item_on_hit_save_effect(
         "ability": ability,
         "effect": effect,
         "damage_dealt": damage_dealt,
+        "consumed": consumed,
         "save_resolved": sr,
     }
 
@@ -30658,6 +30708,14 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
     "arrow-of-slaying-giants": {
         "label": "Arrow of Slaying (Giants)",
         "requires_attunement": False,
+        # v2.159.2 — Phase 8b: RAW DMG p.151: "the arrow becomes a
+        # nonmagical arrow after dealing the extra damage." Modeled
+        # as a qty decrement on the wielder's matching inventory
+        # item — when qty reaches 0, the player can't fire the magic
+        # arrow anymore but the attack entry stays on the sheet so
+        # they remember it was there. (v1 doesn't auto-convert to
+        # +1 nonmagical arrow qty; that's flavor polish.)
+        "consume_on_use": True,
         "condition": lambda tgt: bool(tgt) and (
             (tgt.get("creature_type") or "").strip().lower() == "giant"
         ),

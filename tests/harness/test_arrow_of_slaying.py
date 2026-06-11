@@ -204,6 +204,82 @@ async def test_slaying_arrow_silent_on_non_giant(gm_client, rowan):
     )
 
 
+async def test_slaying_arrow_consumes_on_use(
+    gm_client, rowan, hill_giant_template_id,
+):
+    """v2.159.2 Phase 8b: RAW DMG p.151: "the arrow becomes a
+    nonmagical arrow after dealing the extra damage." Modeled as a
+    qty decrement on Rowan's matching inventory item (slug=
+    arrow-of-slaying-giants). Seed ships qty=6; one rider firing
+    drops it to 5. Restores qty in teardown."""
+    # Snapshot Rowan's full sheet so the teardown can restore the
+    # exact inventory (other tests in the suite may have modified
+    # other fields — we only touch the qty here).
+    initial = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-json",
+    )
+    assert initial.status_code == 200, initial.text
+    initial_sheet = initial.json().get("sheet") or {}
+    initial_inventory = list(initial_sheet.get("inventory") or [])
+
+    # Find the Arrow of Slaying inventory slot.
+    slay_idx = None
+    initial_qty = None
+    for i, inv in enumerate(initial_inventory):
+        if (inv.get("_slug") or "") == "arrow-of-slaying-giants":
+            slay_idx = i
+            initial_qty = int(inv.get("qty") or 0)
+            break
+    assert slay_idx is not None, (
+        "Arrow of Slaying inventory entry missing; check demo seed."
+    )
+    assert initial_qty >= 1, (
+        f"Initial Slaying qty should be ≥ 1 to exercise decrement; "
+        f"got {initial_qty}. (Restart container for fresh demo seed.)"
+    )
+
+    try:
+        rowan_cid = f"tok_slay4_rowan_{rowan['id']}"
+        giant_cid = "tok_slay4_giant"
+        await _seed_battle(gm_client, [
+            _rowan_combatant(rowan_cid, rowan["id"], rowan["name"]),
+            _giant_combatant(giant_cid, hill_giant_template_id, hp=300),
+        ])
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": rowan["id"],
+                "attack_index": ROWAN_SLAYING_ATTACK_IDX,
+                "target_combatant_id": giant_cid,
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        # Re-read the sheet and check qty decremented by 1.
+        after = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-json",
+        )
+        assert after.status_code == 200
+        after_inventory = (after.json().get("sheet") or {}).get("inventory") or []
+        assert len(after_inventory) > slay_idx, (
+            "Inventory shrunk unexpectedly; check seed."
+        )
+        new_qty = int((after_inventory[slay_idx] or {}).get("qty") or 0)
+        assert new_qty == initial_qty - 1, (
+            f"Slaying qty should drop by 1 (consume_on_use); "
+            f"was {initial_qty}, now {new_qty}"
+        )
+    finally:
+        # Restore the original inventory via /sheet-fields. Only the
+        # inventory key is in _SHEET_PATCH_KEYS — restoring just that
+        # field is sufficient since we only touched qty.
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-fields",
+            json={"inventory": initial_inventory},
+        )
+
+
 async def test_regular_longbow_no_slaying_rider(
     gm_client, rowan, hill_giant_template_id,
 ):
