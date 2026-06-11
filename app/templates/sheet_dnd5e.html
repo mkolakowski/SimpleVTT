@@ -6548,7 +6548,18 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const equippable = s.equippable !== undefined
                     ? !!s.equippable
                     : ['armor', 'shield', 'weapon'].includes(type);
+                // v2.158.95 — Phase 5e: spread-pass-through. Earlier
+                // versions enumerated every known field explicitly so
+                // future fields (v2.158.94's `_lit`, future
+                // `_charges`, `_polymorphed_into`, etc.) had to be
+                // back-patched here one at a time — Phase 5d caught a
+                // latent drop of `_lit`. The spread-then-override
+                // pattern keeps the normalized known fields (so
+                // ``qty=1`` and ``ac_value=0`` defaults still fire on
+                // malformed input) while passing through any extras
+                // the server stored.
                 return {
+                    ...s,
                     _uid: s._uid || _newUid(),
                     name: s.name || '',
                     type,
@@ -6569,17 +6580,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     desc: s.desc || '',
                     _slug: s._slug || '',
                     // v2.158.80 — Magic-items Phase 2b: pass through
-                    // the attuned flag iff the source carries it. Items
-                    // without an attuned key (mundane gear) stay
-                    // undefined here so the row builder skips the 🔮
-                    // chip; items with the key (true OR false) get the
-                    // chip rendered.
+                    // the attuned flag iff the source carries it. The
+                    // spread above already brings it in; this line
+                    // normalizes to a real bool only when present so
+                    // truthy non-bools don't leak into the row
+                    // builder (which uses ``typeof attuned !==
+                    // 'undefined'`` to decide whether to render the
+                    // chip — undefined stays undefined here).
                     ...(s.attuned !== undefined ? {attuned: !!s.attuned} : {}),
-                    // v2.158.94 — Magic-items Phase 5d: pass through
-                    // the `_lit` state for Flame-Tongue-style state
-                    // toggles. Same lazy-pass-through pattern as
-                    // attuned: only present when the source set it.
-                    ...(s._lit !== undefined ? {_lit: !!s._lit} : {}),
                 };
             });
         }

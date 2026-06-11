@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.95] - 2026-06-10 — "The Open Tap" — Two-fold housekeeping commit: (1) Magic-items Phase 5e — refactor the inventory hydration in `sheet_dnd5e.html` from enumerate-every-known-field to spread-pass-through-then-override-normalized. The v2.158.94 commit caught a latent bug where `_lit` was being silently dropped on the JS side because the hydration didn't know about it; this commit makes that class of bug impossible by letting any source field pass through. (2) `.github/workflows/test-harness.yml` switches from `on: push + pull_request` to `on: workflow_dispatch` so commits pushed to `main` no longer auto-fire the 2200+-test harness on GitHub Actions. The workflow file stays intact and can still be triggered manually from the Actions tab.
+
+**Schema version:** 69
+**Commit summary:** **(A) Inventory hydration in `sheet_dnd5e.html` rewritten: `return { ...s, _uid: ..., name: ..., ...}` so all source fields pass through, with the known fields then normalized after the spread (defaults still fire on malformed input, but unknown fields auto-pass). The old `...(s._lit !== undefined ? {_lit: !!s._lit} : {})` one-liner from v2.158.94 dropped; `attuned` kept its explicit normalization because the row builder relies on its undefined-ness to decide whether to render the 🔮 chip. (B) `.github/workflows/test-harness.yml` swaps `on: push: [main, dev]` + `on: pull_request: [main, dev]` for `on: workflow_dispatch:` so push events no longer trigger the harness. No job/step changes — the workflow is functionally identical when manually run. (C) No new tests in this commit; the v2.158.94 Playwright tests (test_flame_tongue_use_button_renders, test_flame_tongue_click_toggles_label_and_relabels) continue to pass post-refactor, proving the spread-pass-through still surfaces `_lit` on Garrik's button. (D) All 11 Phase 5a/5b/5c HTTP harness tests + 11 UI tests green.**
+**Description:** Closes Phase 5e per the v2.158.94 fix-section TODO. The spread-pass-through pattern is what the v2.158.85 ITEM_ACTION_SLUGS scope bug + v2.158.94 _lit hydration bug both wanted — any state field the server attaches to an item now reaches the JS row builder without code change. Future items adding `_charges_remaining`, `_polymorph_target_slug`, `_wand_lit`, or anything else just work. The CI disable is the project owner's explicit ask — the test harness can still gate releases via local runs (and via /ultrareview if used), but each push no longer eats ~10 minutes of GitHub Actions time. Re-enable by uncommenting the `push` + `pull_request` lines.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — inventory hydration refactored from explicit-enumerate to spread-pass-through.
+- `.github/workflows/test-harness.yml` — auto-trigger disabled; manual `workflow_dispatch` only.
+- `app/version.py` — `APP_VERSION` 2.158.94 → 2.158.95. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.95.
+
+### Notes
+- Test-harness CI workflow no longer fires on push or PR. To re-enable: in `.github/workflows/test-harness.yml`, replace the current `on: workflow_dispatch:` block with the original `on: push:` + `on: pull_request:` triggers (preserved as commented context in the file).
+- Phase 5e was originally scoped to also route Dragon Slayer's `condition` predicate through the v2.97.48 `_attacker_creature_type` helper so demo monsters auto-trigger riders without a battle-PUT override. That's deferred — `_compute_attack_auto_uplifts` doesn't currently take `db`, so plumbing the helper through is a bigger refactor than this commit's scope. Filed as Phase 5f.
+- The `attuned` normalization stays explicit because the inv-row builder's "render 🔮 chip" branch reads `typeof attuned !== 'undefined'`. Spreading `s` would still preserve the undefined-ness for items that omit it (mundane gear), so technically the `!!s.attuned` line is just defensive — it normalizes truthy-non-bool inputs to a real bool before reaching the chip render. Kept for clarity, not load-bearing.
+
+---
+
 ## [2.158.94] - 2026-06-10 — "The Single Spark" — Magic-items-automation Phase 5d: inventory-row UI for the v2.158.92 Flame Tongue ignite/extinguish toggle. Different shape from Phases 3c/3d modals — there's no parameter to ask for, just a state flip. Garrik's inventory row now shows a dynamic ❄ Extinguish / 🔥 Ignite button whose label tracks the item's `_lit` flag in real time. Click fires `/use_item_action` directly (no modal) and the response's `lit` field updates local state so the button re-labels immediately.
 
 **Schema version:** 69

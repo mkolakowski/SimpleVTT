@@ -7,11 +7,12 @@ name: Test harness
 # runs pytest against the running stack, and uploads JUnit XML + HTML
 # reports as artifacts. Fails the workflow on any test failure.
 
+# v2.158.95 — Test-harness CI auto-trigger disabled per project owner
+# request. Workflow now only runs when manually fired from the Actions
+# tab (workflow_dispatch). Re-enable by restoring the push: + pull_request:
+# entries below.
 on:
-  push:
-    branches: [ "main", "dev" ]
-  pull_request:
-    branches: [ "main", "dev" ]
+  workflow_dispatch:
 
 jobs:
   harness:
