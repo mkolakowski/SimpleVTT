@@ -611,3 +611,148 @@ def test_flame_tongue_click_toggles_label_and_relabels(gm_page: Page, roster: di
         # Hard-force lit so downstream tests see Garrik with the
         # seed-default state regardless of which click path failed.
         _force_garrik_flame_tongue_lit(garrik["id"], True)
+
+
+def test_wand_of_fear_click_fires_use_item_action(
+    gm_page: Page, roster: dict,
+):
+    """v2.159.12 Phase 8l: end-to-end Wand of Fear click chain.
+    Click 😱 Cast Fear → stubbed vttOpenMultiTargetPicker returns a
+    single target id → /battle GET returns synthetic combatants →
+    /battle/cone-targets returns auto-picked combatants → AoE confirm
+    modal opens → click Fire → POST /use_item_action with the right
+    body shape (cast-fear + target_combatant_ids) → resource counter
+    drops 7 → 6.
+
+    Mirrors the v2.159.8 javelin E2E. This test exists because the
+    cone branch is new code; without it, JS-scope / await-deadlock
+    regressions (like the v2.159.6 `picked` shadowing or the v2.159.7
+    setTimeout-await deadlock) would only surface when the Wand was
+    clicked in production.
+
+    Stubs:
+      - vttOpenMultiTargetPicker: returns [directionCid] immediately
+      - /api/campaign/1/battle (GET): synthetic combatant list so the
+        click handler finds Magnus's combatant id
+      - /api/campaign/1/battle/cone-targets (POST): 1-combatant result
+        so the confirm modal renders something
+    """
+    import httpx, json
+    magnus = roster["Magnus Hexbinder"]
+
+    # Force-reseed the wand to 7 charges so the test is hermetic.
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        sr = c.get(f"/api/campaign/1/character/{magnus['id']}/sheet-json")
+        sheet = sr.json().get("sheet") or {}
+        resources = list(sheet.get("resources") or [])
+        for i, r in enumerate(resources):
+            if isinstance(r, dict) and r.get("key") == "wand-of-fear":
+                resources[i] = {**r, "current": 7, "max": 7}
+                break
+        c.patch(
+            f"/api/campaign/1/character/{magnus['id']}/sheet-fields",
+            json={"resources": resources},
+        )
+
+    page = gm_page
+
+    def _handle_battle(route):
+        if route.request.method == "GET":
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "battle": {
+                        "combatants": [
+                            {"id": "tok_test_magnus", "char_id": magnus["id"], "name": magnus["name"], "source_token_id": 1},
+                            {"id": "tok_test_dir", "name": "Bandit", "source_token_id": 2},
+                            {"id": "tok_test_in_cone", "name": "Goblin", "source_token_id": 3},
+                        ],
+                    },
+                }),
+            )
+        else:
+            route.continue_()
+    page.route("**/api/campaign/1/battle", _handle_battle)
+
+    def _handle_cone(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "apex_id": "tok_test_magnus",
+                "direction_id": "tok_test_dir",
+                "length_ft": 30,
+                "apex_half_angle_deg": 26.57,
+                "results": [
+                    {"combatant_id": "tok_test_in_cone", "name": "Goblin", "distance_ft": 12.0},
+                ],
+            }),
+        )
+    page.route("**/api/campaign/1/battle/cone-targets", _handle_cone)
+
+    page.goto(sheet_url(magnus["id"]))
+
+    page.evaluate("""
+        window.vttOpenMultiTargetPicker = async () => ['tok_test_dir'];
+    """)
+
+    wand_row = page.locator(".inv-row", has_text="Wand of Fear")
+    expect(wand_row).to_be_visible(timeout=5000)
+    wand_btn = wand_row.locator(".inv-item-action")
+    expect(wand_btn).to_contain_text("Cast Fear")
+
+    with page.expect_request(
+        lambda req: (
+            req.url.endswith(f"/use_item_action")
+            and req.method == "POST"
+        ),
+        timeout=10000,
+    ) as req_info:
+        wand_btn.click()
+        modal = page.locator("#aoe-line-confirm-modal")
+        expect(modal).to_be_visible(timeout=5000)
+        expect(modal).to_contain_text("Goblin")
+        modal.locator("#aoe-confirm").click()
+
+    posted = req_info.value
+    payload = posted.post_data_json
+    assert payload["action_key"] == "cast-fear", payload
+    assert payload["target_combatant_ids"] == ["tok_test_in_cone"], payload
+    assert payload.get("inventory_index") == 7  # Magnus's wand idx
+
+    # Confirm the server actually decremented the resource (7 → 6).
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        sr = c.get(f"/api/campaign/1/character/{magnus['id']}/sheet-json")
+        sheet = sr.json().get("sheet") or {}
+        for r in sheet.get("resources") or []:
+            if isinstance(r, dict) and r.get("key") == "wand-of-fear":
+                assert int(r.get("current") or 0) == 6, r
+                break
+
+
+def test_wand_of_fear_use_button_renders(gm_page: Page, roster: dict):
+    """v2.159.12: Magnus's Wand of Fear inventory row shows a
+    😱 Cast Fear button (equipped, attuned, charge counter > 0)."""
+    magnus = roster["Magnus Hexbinder"]
+    page = gm_page
+    page.goto(sheet_url(magnus["id"]))
+
+    wand_row = page.locator(".inv-row", has_text="Wand of Fear")
+    expect(wand_row).to_be_visible(timeout=5000)
+
+    btn = wand_row.locator(".inv-item-action")
+    expect(btn).to_be_visible()
+    expect(btn).to_contain_text("Cast Fear")

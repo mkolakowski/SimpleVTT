@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.12] - 2026-06-11 — "The Cone of Dread" — Magic-items-automation Phase 8l: end-to-end Playwright integration test for the full Wand of Fear click-to-fire chain. Drives the actual 😱 Cast Fear button (no `page.evaluate` shortcut), watches the chain 😱 button → vttOpenMultiTargetPicker (stubbed) → /battle GET (intercepted) → /battle/cone-targets POST (intercepted) → AoE confirm modal → Fire button → /use_item_action POST (real endpoint) → resource counter 7 → 6 verified via /sheet-json.
+
+**Schema version:** 69
+**Commit summary:** **(A) New `test_wand_of_fear_click_fires_use_item_action` Playwright test in `tests/harness_ui/test_use_item_action_buttons.py`. Force-reseeds Magnus's `wand-of-fear` resource row to current=7 via httpx + /sheet-fields so the test is hermetic. Intercepts GET `/api/campaign/1/battle` to return a synthetic 3-combatant state (caster + direction + in-cone Goblin), and POST `/api/campaign/1/battle/cone-targets` to return a 1-combatant result (the Goblin). Stubs `vttOpenMultiTargetPicker` via `page.evaluate` to immediately resolve with `['tok_test_dir']`. (B) Test flow: navigate to Magnus's sheet → find Wand of Fear row → click 😱 Cast Fear → wait for the AoE confirm modal with "Goblin" inside → click Fire → assert the real `/use_item_action` POST fires with `action_key: "cast-fear"`, `target_combatant_ids: ["tok_test_in_cone"]`, `inventory_index: 7`. (C) Post-fire assertion: re-fetch the sheet and verify the `wand-of-fear` resource row's `current` dropped from 7 → 6 — proving the real server processed the request, not the stub. (D) New `test_wand_of_fear_use_button_renders` Playwright test asserts the button label is "Cast Fear" + visible on Magnus's sheet. (E) UI test total bumped 40 → 42.**
+**Description:** Closes Phase 8l. Mirror of v2.159.8's `test_javelin_lightning_click_fires_use_item_action` — the v2.159.6 / v2.159.7 saga of latent JS-scope + await-deadlock bugs in the line branch motivated adding an end-to-end test alongside every new AoE shape. The cone branch's flow is identical to the line branch (caster id from /battle + single-target picker → AoE endpoint → confirm modal); this test pins it before any future refactor can regress the chain silently.
+
+### Added
+- `tests/harness_ui/test_use_item_action_buttons.py` — `test_wand_of_fear_click_fires_use_item_action` + `test_wand_of_fear_use_button_renders`.
+
+### Changed
+- `app/version.py` — `APP_VERSION` 2.159.11 → 2.159.12. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.12.
+- `docs/test-harness-coverage.md` — UI total 40 → 42.
+
+### Notes
+- The 2 new tests both touch Magnus's wand state. The render test reads the seed default (current=7 from the v2.159.11 seed); the E2E test re-seeds via /sheet-fields to be hermetic regardless of prior test runs.
+- The `/use_item_action` POST is NOT intercepted in the E2E test — that's intentional. The point of the test is to verify the REAL endpoint flips state. The resource-counter assertion (7 → 6 via re-fetch) is the observable signal that confirms.
+- All three AoE shapes (line / sphere / cone) now have an E2E click-to-fire test: Javelin (line, v2.159.8), Necklace (sphere — via the v2.159.9 render test + v2.159.10 modal coverage; no full click-to-fire E2E yet — Phase 8m candidate), Wand of Fear (cone, this commit).
+
+---
+
 ## [2.159.11] - 2026-06-11 — "The Whispering Wand" — Magic-items-automation Phase 8k: first cone-AoE magic item — Wand of Fear (RAW DMG p.213, rare + attunement). 7 charges (regain 1d6+1 at dawn via Phase 4b dice-expression recharge), spend 1 to project a 30-ft cone — DC 15 WIS save or Frightened for 1 minute (repeated save end-of-turn). No damage — the rider is the condition install via the v2.99.409 `condition_buff` pattern. New `aoe-cone` `ITEM_ACTION_SLUGS` kind wires the v2.159.5 `/battle/cone-targets` endpoint into the click chain. Magnus Hexbinder (Warlock Lv 5) gets the wand at inventory_index 7.
 
 **Schema version:** 69
