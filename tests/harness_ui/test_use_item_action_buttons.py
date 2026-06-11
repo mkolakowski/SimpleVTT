@@ -894,6 +894,121 @@ def test_lightning_bolt_confirm_modal_renders_target_names(
     assert payload.get("target_combatant_ids") == ["tok_test_b1", "tok_test_b2"], payload
 
 
+def test_fireball_sphere_confirm_modal_renders_target_names(
+    gm_page: Page, roster: dict,
+):
+    """v2.159.15 Phase 8o: extends the v2.159.14 spell-side AoE
+    confirm modal from line-only to ALL AoE shapes. Fireball (sphere)
+    is the canonical sphere test — proves the gate flip from
+    `_spArea.shape === 'line'` to `_AOE_SHAPES.has(_spArea.shape)`
+    works for spheres.
+
+    Same shape as test_lightning_bolt_confirm_modal_renders_target_names
+    but with shape='sphere' in the stubbed open5e response. The modal
+    body now reflects the shape name dynamically ("Each creature in
+    the sphere must make a save").
+    """
+    import httpx, json
+    thalindra = roster["Thalindra Moonwhisper"]
+    FIREBALL_IDX = 10
+
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        c.post(
+            f"/api/campaign/1/character/{thalindra['id']}/rest",
+            json={"type": "long"},
+        )
+
+    page = gm_page
+
+    def _handle_battle(route):
+        if route.request.method == "GET":
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "battle": {
+                        "combatants": [
+                            {"id": "tok_test_thal", "char_id": thalindra["id"], "name": thalindra["name"], "source_token_id": 1},
+                            {"id": "tok_test_b1", "name": "Bandit Alpha", "source_token_id": 2},
+                            {"id": "tok_test_b2", "name": "Bandit Beta", "source_token_id": 3},
+                        ],
+                    },
+                }),
+            )
+        else:
+            route.continue_()
+    page.route("**/api/campaign/1/battle", _handle_battle)
+
+    def _handle_cast(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"ok": True, "auto_save_targets": []}),
+        )
+    page.route("**/api/campaign/1/cast_spell", _handle_cast)
+
+    def _handle_open5e(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "results": [{
+                    "name": "Fireball",
+                    "range": "150 feet",
+                    "actions": [{
+                        "area": {"shape": "sphere", "size_ft": 20},
+                        "damage": "8d6",
+                    }],
+                }],
+            }),
+        )
+    page.route("**/api/open5e/spells**", _handle_open5e)
+
+    page.goto(sheet_url(thalindra["id"]))
+
+    page.evaluate("""
+        window._openAoePicker = async () => ({
+            target_combatant_ids: ['tok_test_b1', 'tok_test_b2'],
+            center: {x: 100, y: 100},
+        });
+    """)
+
+    fb_btn = page.locator(f'.sp-cast[data-idx="{FIREBALL_IDX}"]')
+    expect(fb_btn).to_be_visible(timeout=5000)
+
+    with page.expect_request(
+        lambda req: (
+            req.url.endswith(f"/cast_spell")
+            and req.method == "POST"
+        ),
+        timeout=10000,
+    ) as req_info:
+        fb_btn.click()
+        # Thalindra has L3+L4 slots — upcast picker opens. Pick base L3.
+        upcast_modal = page.locator('[role="dialog"][aria-label="Choose spell slot level"]')
+        expect(upcast_modal).to_be_visible(timeout=5000)
+        upcast_modal.locator('button', has_text="Lvl 3").click()
+        # v2.159.15: sphere now opens the same confirm modal as line.
+        modal = page.locator("#aoe-line-confirm-modal")
+        expect(modal).to_be_visible(timeout=5000)
+        expect(modal).to_contain_text("Bandit Alpha")
+        expect(modal).to_contain_text("Bandit Beta")
+        expect(modal).to_contain_text("sphere")  # body text reflects shape
+        modal.locator("#aoe-confirm").click()
+
+    posted = req_info.value
+    payload = posted.post_data_json
+    assert payload.get("character_id") == thalindra["id"], payload
+    assert payload.get("spell_index") == FIREBALL_IDX, payload
+    assert payload.get("target_combatant_ids") == ["tok_test_b1", "tok_test_b2"], payload
+
+
 def test_necklace_fireballs_click_fires_use_item_action(
     gm_page: Page, roster: dict,
 ):

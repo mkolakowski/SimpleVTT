@@ -3087,18 +3087,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             ? _placed.target_combatant_ids : [];
                         // v2.159.14 — first spell wired into the
                         // magic-items AoE confirm-modal substrate.
-                        // For line-shape spells (Lightning Bolt
-                        // initially), show the same per-target
-                        // deselect modal the Javelin uses. The picker
-                        // tells us WHO is in the area; the GM picks
-                        // which of those actually take the save chain
-                        // (line-edge cases: half-cover, prone behind
-                        // cover, etc.). Sphere/cone spells skip the
-                        // modal for now — they have richer center-
-                        // placement cues on the canvas, and adding a
-                        // confirm step there would force an extra
-                        // click on every Fireball.
-                        if (_spArea.shape === 'line'
+                        // v2.159.15 — flipped from line-only to ALL
+                        // AoE shapes. Sphere (Fireball), cone (Cone of
+                        // Cold, Burning Hands), cube, self_sphere etc.
+                        // all now surface the per-target deselect
+                        // modal. The canvas picker already shows the
+                        // shape placement; the confirm step lets the
+                        // GM opt out edge-of-area combatants (half-
+                        // cover, prone behind cover, etc.) without
+                        // re-dragging the picker.
+                        if (_AOE_SHAPES.has(_spArea.shape)
                                 && _ids.length
                                 && typeof window._showAoEConfirmModal === 'function') {
                             // Fetch the battle for name lookup; the
@@ -3114,12 +3112,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             } catch (_) {}
                             const _picked = await window._showAoEConfirmModal({
                                 title: `${s.name || 'Spell'}`,
-                                body: `Each creature in the line must make a save. Uncheck to remove from the save chain.`,
+                                body: `Each creature in the ${_spArea.shape} must make a save. Uncheck to remove from the save chain.`,
                                 combatants: _ids.map(id => ({
                                     combatant_id: id,
                                     name: _nameById[id] || id,
                                 })),
-                                submit_label: '⚡ Cast',
+                                submit_label: '✨ Cast',
                             });
                             if (_picked === null) {
                                 // Cancelled — revert optimistic slot decrement.

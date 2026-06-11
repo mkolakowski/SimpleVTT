@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.15] - 2026-06-11 — "The Round Burst" — Magic-items-automation Phase 8o: extends the v2.159.14 spell-side AoE confirm modal from line-only to ALL AoE shapes. Fireball (sphere), Burning Hands (cone), Cone of Cold (cone), Shatter (sphere), Web (cube — Thalindra routes through /cast_web so this won't fire there, but the substrate now supports it), etc. all surface the per-target deselect modal after the canvas `_openAoePicker` resolves. Gate flipped from `_spArea.shape === 'line'` to `_AOE_SHAPES.has(_spArea.shape)`. Modal body text now reflects the shape dynamically ("Each creature in the sphere must make a save") instead of hardcoding "line".
+
+**Schema version:** 69
+**Commit summary:** **(A) `sheet_dnd5e.html` `.sp-cast` post-`_openAoePicker` branch swaps `_spArea.shape === 'line'` for `_AOE_SHAPES.has(_spArea.shape)`. The existing `_AOE_SHAPES` set (defined inline at the top of the branch) covers `['sphere', 'cone', 'line', 'cube', 'self_sphere', 'self_cube']` — all six AoE shape kinds get the same per-target deselect modal. (B) Modal body text interpolates `${_spArea.shape}` so each shape's modal reads naturally ("Each creature in the sphere/cone/cube/line must make a save"). Submit label also swapped from ⚡ (line/Lightning Bolt-themed) to ✨ (the generic Cast emoji used on every .sp-cast button) since it now serves all spell shapes. (C) New UI test `test_fireball_sphere_confirm_modal_renders_target_names` — drives Thalindra's Fireball (spell_index 10) click chain end-to-end with `shape='sphere'` in the stubbed open5e response. Asserts the modal renders both bandit names AND the body text contains the word "sphere" (regression guard for the v2.159.15 dynamic-shape body interpolation). (D) UI test total bumped 44 → 45.**
+**Description:** Closes Phase 8o. The spell-side AoE confirm modal now matches the item-side coverage matrix: line + sphere + cone all show the deselect modal. The v2.159.14 line-only gate was a deliberate conservative landing — sphere/cone spells had been working on the legacy flow since v2.46.0 and the rationale for the conservative gate was that the in-canvas placement gives strong visual feedback for circles. After Phase 8m completion the substrate's reliability is proven, and the additional click step for sphere/cone is a net win for GMs who want to opt out edge-case targets without re-dragging the picker. Future work: a GM-level toggle to opt out of the confirm modal entirely if a player prefers the legacy single-click flow.
+
+### Added
+- `tests/harness_ui/test_use_item_action_buttons.py` — `test_fireball_sphere_confirm_modal_renders_target_names`.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — `.sp-cast` AoE-confirm gate flipped to `_AOE_SHAPES.has(...)`; modal body text now shape-aware; submit label `⚡ Cast` → `✨ Cast`.
+- `app/version.py` — `APP_VERSION` 2.159.14 → 2.159.15. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.15.
+- `docs/test-harness-coverage.md` — UI total 44 → 45.
+
+### Notes
+- Web (cube), Slow (no AoE — single-target buff), Hold Monster (no AoE) etc. route through their own dedicated endpoints (`/cast_web`, `/cast_slow`, `/cast_hold_monster`) rather than `/cast_spell`, so they don't touch this branch. The substrate would need per-route wiring to extend coverage there.
+- Cube spells get the modal too (`_AOE_SHAPES` includes `'cube'` + `'self_cube'`) — Sleep is a cube via `/cast_spell` (no dedicated endpoint), so it should now surface the modal too. Filed as a follow-up sanity check.
+- The submit label change (`⚡` → `✨`) is purely cosmetic — the button does the same thing, fires `/cast_spell` with the deselected target list.
+
+---
+
 ## [2.159.14] - 2026-06-11 — "The First Spell Through" — Magic-items-automation Phase 8n: first SPELL wired into the AoE-line confirm-modal substrate that v2.159.7-v2.159.13 built for items. After the v2.46.0 canvas `_openAoePicker` drags a line shape and resolves the in-area combatants, the sheet's `.sp-cast` click handler now opens `_showAoEConfirmModal` between the picker and the `/cast_spell` POST — giving GMs the same per-target deselect power the Javelin already has (line-edge cases: half-cover, prone behind cover, etc.). Lightning Bolt is the first spell to exercise this. Sphere/cone spells (Fireball, Burning Hands, Cone of Cold) stay on the legacy flow for now — the v2.49.146 in-canvas placement already gives enough visual feedback that an additional confirm step would be friction.
 
 **Schema version:** 69
