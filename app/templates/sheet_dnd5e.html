@@ -6734,6 +6734,25 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 : `<input type="checkbox" class="inv-equip" data-idx="${idx}" ${item.equipped ? 'checked' : ''}
                           title="Equip / unequip" style="flex-shrink:0;cursor:pointer;">`;
 
+        // v2.158.80 — Magic-items Phase 2b: attune checkbox. Surfaces
+        // the v2.158.79 /attune endpoint as a chip next to "equipped"
+        // for any item that carries an explicit ``attuned`` field
+        // (truthy or false). Mundane gear (no attuned field) doesn't
+        // show the chip. Server enforces RAW DMG p.138 3-item cap and
+        // returns 409 on the 4th attune; the JS handler shows a
+        // browser alert and reverts the checkbox on cap-block.
+        const attuneable = (typeof item.attuned !== 'undefined');
+        const attuneCtrl = !attuneable
+            ? ''
+            : isReadonly
+                ? `<span class="inv-attuned-readonly" style="flex-shrink:0;font-size:10px;font-weight:700;color:${item.attuned ? 'var(--s-accent)' : 'var(--s-mute)'};"
+                          title="${item.attuned ? 'Attuned' : 'Not attuned'}">${item.attuned ? '🔮' : '⚪'}</span>`
+                : `<label class="inv-attune-label" style="flex-shrink:0;display:inline-flex;align-items:center;gap:2px;font-size:10px;font-weight:700;color:${item.attuned ? 'var(--s-accent)' : 'var(--s-mute)'};cursor:pointer;"
+                          title="Attune / unattune (RAW max 3 items per PC)">
+                       <input type="checkbox" class="inv-attune" data-idx="${idx}" ${item.attuned ? 'checked' : ''}
+                              style="margin:0;cursor:pointer;">🔮
+                   </label>`;
+
         const rmBtn = isReadonly ? '' :
             `<button type="button" class="inv-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:var(--s-danger);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
 
@@ -6774,6 +6793,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                  style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none;"
                  title="Click to expand">
                 ${equipCtrl}
+                ${attuneCtrl}
                 <button type="button" class="inv-expand" data-idx="${idx}"
                     style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
                 <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
@@ -6931,6 +6951,52 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 _syncEquippedWeaponAttacks();
                 renderInventory(); // re-render so modifier badge & background update
             }));
+        // v2.158.80 — Magic-items Phase 2b: attune toggle handler.
+        // POSTs to the v2.158.79 /attune endpoint which enforces the
+        // RAW DMG p.138 3-item cap server-side. On 409, the JS reverts
+        // the checkbox + alerts the player.
+        container.querySelectorAll('.inv-attune').forEach(inp =>
+            inp.addEventListener('change', async () => {
+                if (typeof CAMPAIGN_ID === 'undefined' || typeof MY_CHAR_ID === 'undefined') {
+                    return;
+                }
+                const idx = +inp.dataset.idx;
+                const want = inp.checked;
+                inp.disabled = true;
+                try {
+                    const resp = await fetch(
+                        `/api/campaign/${CAMPAIGN_ID}/character/${MY_CHAR_ID}/attune`,
+                        {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                inventory_index: idx, attuned: want,
+                            }),
+                        },
+                    );
+                    if (resp.status === 409) {
+                        const body = await resp.json().catch(() => ({}));
+                        alert(
+                            `Attunement cap reached: ${body.current_attuned || 3} / ${body.max_attuned || 3}.\n`
+                            + `Un-attune another item first (RAW DMG p.138).`,
+                        );
+                        inp.checked = !want;  // revert
+                        return;
+                    }
+                    if (!resp.ok) {
+                        alert('Failed to update attunement — please refresh.');
+                        inp.checked = !want;
+                        return;
+                    }
+                    inventory[idx].attuned = want;
+                    renderInventory();
+                } catch (e) {
+                    alert('Network error toggling attunement.');
+                    inp.checked = !want;
+                } finally {
+                    inp.disabled = false;
+                }
+            }));
         container.querySelectorAll('.inv-rm').forEach(btn =>
             btn.addEventListener('click', () => {
                 inventory.splice(+btn.dataset.idx, 1);
@@ -7024,7 +7090,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             // ``_dbnc`` so iPad Magic Keyboard trackpad double-fire is
             // caught regardless of which event arrives first.
             const _activate = (ev) => {
-                if (ev.target.closest('.inv-equip, .inv-qty, .inv-rm, .inv-use')) return;
+                if (ev.target.closest('.inv-equip, .inv-qty, .inv-rm, .inv-use, .inv-attune, .inv-attune-label')) return;
                 const _now = Date.now();
                 if (header._dbnc && _now - header._dbnc < 700) return;
                 header._dbnc = _now;

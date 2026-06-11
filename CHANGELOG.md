@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.158.80] - 2026-06-10 — "The Glowing Glyph" — Magic-items-automation Phase 2b: surface the v2.158.79 `/attune` endpoint as a sheet UI checkbox next to the existing "equipped" toggle. Any inventory item that carries an explicit `attuned` field gets an inline 🔮 chip the player can click to attune / unattune; the JS handler POSTs to `/attune`, shows a browser-alert on the 409 cap-block, and reverts the checkbox on failure. Closes Phase 2 of the magic-items-automation plan
+
+**Schema version:** 69
+**Commit summary:** **(A) `app/templates/sheet_dnd5e.html` — new `attuneCtrl` snippet in the `rowHtml` builder for inventory rows. Renders an `.inv-attune` checkbox + 🔮 label when `typeof item.attuned !== 'undefined'` (mundane gear has no `attuned` field, so the chip stays off for non-magical items). Renders a read-only 🔮 / ⚪ glyph when the sheet is in read-only mode. Inserted right after `equipCtrl` in the header row HTML so the equipped + attuned chips sit together visually. (B) JS change handler attached to `.inv-attune` POSTs to `/api/campaign/{cid}/character/{MY_CHAR_ID}/attune` with `{inventory_index, attuned: !checked}`. On 200, updates `inventory[idx].attuned` locally + re-renders. On 409, alerts the player with the cap details (`current_attuned / max_attuned`) and reverts the checkbox state. On other failures, alerts a generic "please refresh" and reverts. (C) `.inv-attune` + `.inv-attune-label` added to the click-to-expand exclusion list so the checkbox click doesn't also expand the row's detail panel (mirrors the v2.7.0 `.inv-equip` / `.inv-qty` exclusions). (D) New Playwright UI test `tests/harness_ui/test_attune_checkbox.py` — `test_attune_checkbox_renders_and_toggles`: log into the GM page, open Pip's sheet, locate the Cloak's row by name, assert the `.inv-attune` checkbox renders + is initially checked (seed: attuned=True), click it, poll for the unchecked state, restore via the HTTP `/attune` endpoint in teardown. Mirrors the v2.7.3 pattern — backend contract green doesn't imply UI surface green. (E) `docs/test-harness-coverage.md` UI total bumped 23 → 24.**
+**Description:** Closes Phase 2 of the magic-items-automation plan. Players + GMs can now toggle attunement directly from the sheet UI; the v2.158.79 endpoint enforces the RAW DMG p.138 three-item cap server-side and the client surfaces the cap-block as a useful browser alert. The chip uses 🔮 instead of a generic checkbox label because it has to coexist visually with the existing 🛡 equipped chip in a tight horizontal row; the emoji + color shift carries the state without needing extra width. Read-only sheets (other players viewing your character) see a read-only glyph instead of an interactive checkbox — same pattern as the existing equip indicator.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `attuneCtrl` builder snippet + `.inv-attune` click handler + click-to-expand exclusion entry.
+- `tests/harness_ui/test_attune_checkbox.py` — Playwright UI smoke test that verifies the checkbox renders + click flips the flag.
+
+### Changed
+- `docs/test-harness-coverage.md` — UI total bumped 23 → 24.
+- `app/version.py` — `APP_VERSION` 2.158.79 → 2.158.80. `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.158.80.
+
+### Notes
+- Magic-items plan now has Phase 0 + Phase 1 (a-d) + Phase 2 (a-b) all shipped. Engine, catalog walker, attunement gate, and player-facing UI all wired.
+- Phase 3 (Pearl of Power — 1/day spell-slot recovery) is the natural next step. It introduces the `/use_item_action` endpoint (M2 primitive) + the auto-bootstrapped resource row pattern (from the v2.158.13 Star Map fixture). Different mechanical shape from Phase 1's passives — the catalog will carry an `actions[]` payload for the first time.
+- Read-only sheets (player viewing GM's character) get a non-interactive 🔮 / ⚪ glyph in the same horizontal slot. Same pattern as the existing equipped check vs equipped indicator.
+
+---
+
 ## [2.158.79] - 2026-06-10 — "The Bound Three" — Magic-items-automation Phase 2a: ship the `POST /api/campaign/{cid}/character/{char_id}/attune` endpoint that toggles the `attuned` flag on a PC inventory item, with server-side enforcement of the RAW DMG p.138 three-item attunement cap. The Phase 1 catalog walker (`_equipped_item_effects`) already gated payloads on the `attuned` flag; this commit ships the player/GM-facing surface that flips it. Sheet UI checkbox waits for Phase 2b
 
 **Schema version:** 69
