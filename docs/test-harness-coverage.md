@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2303 in `tests/harness/` + 50 in `tests/harness_ui/` (as of v2.159.26, 2026-06-11).
+**Total tests:** 2340 in `tests/harness/` + 50 in `tests/harness_ui/` (as of v2.159.27, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -57,6 +57,19 @@ v2.159.20 exhaustion-levels Phase 3b — HP-max halving at Lv 4. Mirrors v2.97.4
 | `test_pc_set_lv4_at_low_hp_unchanged` | Pip at HP=1 → /set_exhaustion level=4 → current stays at 1 (already below the new ceiling). |
 | `test_pc_lv4_to_lv3_does_not_restore_hp` | Pip at Lv 4 (HP clamped) → /set_exhaustion level=3 → current HP stays at the clamped value. RAW: player has to heal up. |
 | `test_pc_set_lv3_does_not_clamp_hp` | Lv 3 → no HP touch (regression that the Lv 4 clamp doesn't fire prematurely). |
+
+### `test_carry_weight.py`
+v2.159.27 carrying-capacity Phase 1 (see [carrying-capacity.md](../plans/carrying-capacity.md)) — pure-Python unit tests against the leaf `app.content.carry_weight` module, plus 1 integration test against `/sheet-json`. RAW PHB p.176: carry capacity = `STR × 15 lb`. The leaf module exposes a defensive weight-string parser, a 3-tier item-weight resolver, STR-aware capacity, an over-capacity boolean, and a bundled summary helper that `/sheet-json` calls into.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_parse_weight_*` (11 tests) | Parser handles `""`/`"3 lb."`/`"3 lb. lb"` SRD typo/`"1/2 lb."` fraction/`"2.5 lb."` decimal/`"-5 lb."` clamped/junk/non-string defensive — all map to a non-negative float. |
+| `test_item_weight_lb_tier*` (5 tests) | 3-tier priority: direct override `weight_lb` wins, then item's `weight` string, then catalog fallback string, then 0.0. Non-dict input defensive. |
+| `test_carry_capacity_*` (7 tests) | STR 10 → 150; STR 16 → 240; STR 20 → 300; STR 0 clamps to 1 (→ 15); missing abilities defaults to 10; nested `{"score": 14}` → 210; flat `sheet.str` → 270; uppercase `abilities.STR` key (the dnd5e demo seed's shape) → correct. |
+| `test_inventory_weight_*` (7 tests) | Empty inventory → 0; single item; qty multiplies; qty default 1; sum across items; catalog fallback used when no inline weight; `_in_bag_of_holding: True` items skipped. |
+| `test_is_over_capacity_*` (3 tests) | Under cap → False; over cap → True; exactly at cap → False (RAW inclusive). |
+| `test_carry_summary_*` (2 tests) | Bundled summary returns the 3 fields in the right shape; over-capacity flag propagates. |
+| `test_sheet_json_exposes_derived_carry` | Integration: `GET /sheet-json` for Krieger returns `derived.carry.{carry_capacity_lb, inventory_weight_lb, is_over_capacity}`; cap ≥ 240 (STR 18 Barbarian). |
 
 ### `test_exhaustion_speed.py`
 v2.159.19 exhaustion-levels Phase 3a — pure-Python unit tests against the leaf `effective_speed_walk` helper. RAW PHB Appendix A: Lv 2 halves speed; Lv 5 floors to 0. Applied AFTER the existing buff `(base + bonus) × mult − reduction` math so Lv 2 composes cleanly with Slow / Lance of Lethargy / Longstrider / Haste. The route layer mirrors `sheet.exhaustion_level` → `combatant.exhaustion_level` so the leaf helper has no DB dependency.

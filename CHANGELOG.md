@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.159.27] - 2026-06-11 — "The Sturdy Stride" — Carrying-capacity Phase 1 (see `docs/plans/carrying-capacity.md`): leaf module + helpers + `/sheet-json` exposure. RAW PHB p.176: carrying capacity = `STR × 15 lb`. New leaf `app/content/carry_weight.py` (mirrors v2.99.98 `effective_speed.py`) with a defensive weight-string parser, a 3-tier item-weight resolver (sheet override → item's `weight` string → catalog fallback), STR-aware capacity helper, and an over-capacity boolean. `/sheet-json` returns a new top-level `derived: {carry: {carry_capacity_lb, inventory_weight_lb, is_over_capacity}}` key parallel to `sheet`. Closes Phase 1; Phase 2 (demo seed weight backfill + sheet UI meter) and Phase 3 (Bag of Holding catalog) build on this surface.
+
+**Schema version:** 69
+**Commit summary:** **(A) New leaf module `app/content/carry_weight.py` with 4 pure helpers + 2 bundled helpers: `parse_weight_lb(weight_str)` handles SRD inconsistencies (`""`/`"3 lb."`/`"3 lb. lb"` typo/`"1/2 lb."` fraction/decimal/junk); `item_weight_lb(item, fallback_catalog_weight)` resolves via 3-tier priority; `sheet_carry_capacity_lb(sheet)` reads STR via multiple key shapes (`abilities.STR` for the dnd5e demo-seed shape, `abilities.strength`/`str`, nested `{"score": 14}`, flat `sheet.str`) and returns `STR × 15`; `sheet_inventory_weight_lb(sheet, catalog_weight_by_slug)` sums `weight × qty` across inventory and SKIPS items flagged `_in_bag_of_holding: True` (Phase 3 hook lands now); `sheet_is_over_capacity(sheet, catalog)` returns the bool; `sheet_carry_summary(sheet, catalog)` bundles the three derivations. (B) `/sheet-json` endpoint extended to populate `derived: {carry: <summary>}` for dnd5e PCs. Defensive try/except — a malformed sheet should never block the endpoint, since many call sites depend on it (tests, the sheet UI, the sheet-fields PATCH). (C) New pure-Python unit suite `tests/harness/test_carry_weight.py` with 36 tests: 11 parser tests (every input shape), 5 item_weight_lb tests (3-tier priority), 8 carry-capacity tests (STR shapes + clamps), 7 inventory-weight tests (qty, catalog fallback, Bag of Holding skip), 3 over-capacity tests (under/over/exact), 2 summary-bundle tests, plus 1 integration test (`test_sheet_json_exposes_derived_carry`) against Krieger that asserts `cap >= 240` (his STR 18). (D) HTTP test total bumped 2303 → 2340.**
+**Description:** Closes Phase 1 of `docs/plans/carrying-capacity.md`. The leaf module is a leaf in the import sense (no FastAPI / SQLAlchemy deps) so tests run host-side without the Docker container. The "uppercase STR key" issue surfaced during integration — Krieger's `abilities` are `{"STR": 18, ...}` (the dnd5e demo seed's 3-letter uppercase shape), not the lowercased `"strength"` I initially assumed. The fix iterates 4 key shapes per sheet so the helper is robust to schema drift across PC sources (demo seed, homebrew, future imports). Phase 2 (demo seed weight backfill + sheet UI meter) is the natural next step; Phase 3 (Bag of Holding catalog + demo) drops in trivially because the `_in_bag_of_holding` hook is already in the helper.
+
+### Added
+- `app/content/carry_weight.py` — Phase 1 leaf module.
+- `tests/harness/test_carry_weight.py` — 37 tests (36 unit + 1 integration).
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/sheet-json` returns `derived.carry` for dnd5e PCs.
+- `app/version.py` — `APP_VERSION` 2.159.26 → 2.159.27. `SCHEMA_VERSION` unchanged.
+- `README.md` — version badge bumped to 2.159.27.
+- `docs/test-harness-coverage.md` — HTTP total 2303 → 2340.
+
+### Notes
+- The 3-tier priority for item weight (sheet override → item.weight string → catalog fallback) is what lets the demo seed Phase 2 work without re-fetching the catalog on every weight sum. The catalog-lookup parameter is OPTIONAL — when None, the helper just reads from the inventory item.
+- The `_in_bag_of_holding` skip is shipped now (Phase 1) even though the Bag catalog row lands Phase 3. Rationale: the read site is tiny (one boolean check inside the existing loop), and landing it now means Phase 3 only touches `_MAGIC_ITEM_PASSIVES` + the demo seed.
+- The carry meter UI on the sheet (PHB-style "62/240 lb") is Phase 2, not this commit. v2.159.27 ships the server-side surface only.
+
+---
+
 ## [2.159.26] - 2026-06-11 — "The Weight on the Shoulders" — Carrying-capacity design plan (Phase 0). Files `docs/plans/carrying-capacity.md` outlining the phased work to add a RAW STR × 15 carry-weight engine so Bag of Holding (RAW DMG p.153) and future weight-related items (Heward's Handy Haversack, Belt of Giant Strength) have a load-bearing surface to compose with. The plan documents weight parser + helpers + sheet exposure + Bag integration across 3 commit phases, plus an optional Phase 4 for the Encumbered variant rule. Surfaces the doc via the wiki per CLAUDE.md's surface-every-doc rule.
 
 **Schema version:** 69

@@ -86710,12 +86710,26 @@ async def get_character_sheet_json(
     sheet = dict(char.sheet or {})
     if char.template == "dnd5e":
         normalize_dnd5e_sheet(sheet)
+    # v2.159.27 — carrying-capacity Phase 1: bundle the leaf derivations
+    # into a top-level `derived` key parallel to `sheet`. RAW PHB p.176:
+    # carry capacity = STR × 15 lb. Defensive try/except — a malformed
+    # sheet should never block /sheet-json from returning, since many
+    # call sites (tests, the sheet UI, the sheet-fields PATCH) depend on
+    # this endpoint.
+    derived: dict = {}
+    if char.template == "dnd5e":
+        try:
+            from ..content.carry_weight import sheet_carry_summary
+            derived["carry"] = sheet_carry_summary(sheet)
+        except Exception:
+            pass
     return {
         "ok": True,
         "character_id": char.id,
         "name": char.name,
         "template": char.template,
         "sheet": sheet,
+        "derived": derived,
     }
 
 
