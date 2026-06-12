@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.180.0] - 2026-06-12 — "The Felt Presence" — Player-facing regional flavor. v2.179.0 surfaced the lair's passive regional effects (RAW MM p.11) in the GM's lair-action panel, but players saw nothing — the table couldn't feel the lair's environment. This commit gives **players** their own read-only regional-effects card (`#_regional_effects_panel`): when a lair owner is on the field, a non-GM client renders the same passive regional effects (name + description) under a calm "🌐 Regional Effects" heading, in a cooler blue palette distinct from the GM's volcanic-orange panel. The player card deliberately omits the GM-only lair-action controls (Enter/Exit, Trigger buttons, initiative-20 mechanics) **and the creature's name** — RAW regional effects are observable environmental changes (earthquakes, fog, fouled water), so they're atmosphere for the whole table, not a monster reveal.
+
+**Schema version:** 69
+**Commit summary:** **Front-end-only commit. (A) `app/templates/tabletop.html` — new `_renderPlayerRegionalPanel(owner)` renders a read-only `#_regional_effects_panel` for non-GM clients (name + desc per effect, no controls, no creature name); `_renderLairActionPanel`'s early-return is split so a non-GM with a lair owner routes to the player panel instead of removing the GM panel. (B) `tests/harness_ui/test_lair_action_ui.py` — 1 new Playwright test (`test_regional_effects_render_for_player`) asserting the player card renders the effects but not the GM panel / creature name / trigger controls.**
+**Description:** A client is exactly one of GM or player, so the two panels never coexist: the player card uses its own host id (`#_regional_effects_panel`) and a blue border to read as ambient environment rather than a GM control. The data already rode `sheet.regional_effects` (v2.178.0) and is seeded onto the combatant by `_ensureLairActions` (v2.179.0); this commit only adds the player read site. No endpoint, broadcast, or schema change.
+
+### Added
+- `app/templates/tabletop.html` — `_renderPlayerRegionalPanel(owner)` read-only regional-effects card for players (`#_regional_effects_panel`).
+- `tests/harness_ui/test_lair_action_ui.py` — `test_regional_effects_render_for_player` (player sees the effects, not the GM panel / owner name / triggers).
+
+### Changed
+- `app/templates/tabletop.html` — `_renderLairActionPanel` routes non-GM clients to the player regional panel (was: GM-only, panel removed for players).
+- `docs/plans/legendary-actions.md` — player-facing regional flavor noted shipped (v2.180.0).
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the player regional-effects card.
+- `docs/test-harness-coverage.md` — `test_lair_action_ui.py` +1 (player regional panel); UI total 69 → 70.
+- `app/version.py` — `APP_VERSION` 2.179.0 → 2.180.0 (MINOR: new user-facing UI surface). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.180.0.
+
+### Notes
+- No schema / endpoint / broadcast change — the regional-effects data already rode `sheet.regional_effects` from v2.178.0 and is seeded onto the combatant since v2.179.0; this commit only adds the player read site.
+- The player card omits the creature's name by design — regional effects are observable environment, not a monster reveal.
+
 ## [2.179.0] - 2026-06-12 — "The Living Land" — Regional effects surfaced in the GM lair panel. v2.178.0 shipped the regional-effects data + projection (`sheet.regional_effects`) but nothing read it on the client — the effect text reached the browser and went nowhere. This commit closes that loop: the GM's floating 🌋 lair-action panel (`#_lair_action_panel`) now lists the lair's passive **regional effects** under a "🌐 Regional Effects" heading — name + rephrased RAW description per effect. They render as a static descriptive list whenever the lair owner is on the field, **independent of the Enter/Exit-lair toggle**, because RAW MM p.11 regional effects radiate while the creature merely *dwells* in its lair (unlike the initiative-20 lair *actions*, which are the in-combat triggers). The GM can now read and narrate the environment without leaving the table view.
 
 **Schema version:** 69

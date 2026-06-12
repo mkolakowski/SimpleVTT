@@ -9566,6 +9566,53 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     // action's Trigger button opens the multi-target picker then POSTs
     // /trigger_lair_action. Both answer with WS broadcasts (in_lair_changed
     // / lair_action_resolved) whose handlers re-run this renderer.
+    // v2.180.0 — read-only regional-effects card for players (non-GM).
+    // Renders the lair owner's passive regional effects (RAW MM p.11) as
+    // atmospheric text — no lair-action controls, no creature name, no
+    // initiative-20 mechanics. Removes itself when the owner has no
+    // regional effects (or has left the field). See _renderLairActionPanel.
+    function _renderPlayerRegionalPanel(owner) {
+        const HOST_ID = '_regional_effects_panel';
+        let host = document.getElementById(HOST_ID);
+        const regional = (owner && Array.isArray(owner.regional_effects))
+            ? owner.regional_effects : [];
+        if (!regional.length) {
+            if (host) host.remove();
+            return;
+        }
+        if (!host) {
+            host = document.createElement('div');
+            host.id = HOST_ID;
+            host.style.cssText = (
+                'position:fixed;bottom:200px;left:18px;z-index:9080;'
+                + 'background:rgba(18,22,28,0.93);color:#dce7f2;'
+                + 'border:2px solid #3f6f8c;border-radius:10px;'
+                + 'padding:10px 14px;min-width:260px;max-width:340px;'
+                + 'font-size:14px;box-shadow:0 6px 18px rgba(0,0,0,0.5);'
+                + 'backdrop-filter:blur(6px);'
+            );
+            document.body.appendChild(host);
+        }
+        const header = (
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">'
+            + '<span style="font-size:18px;">🌐</span>'
+            + '<strong>Regional Effects</strong>'
+            + '</div>'
+        );
+        const body = regional.map(e => {
+            const enm = _escH(e.name || 'Effect');
+            const edesc = _escH(e.desc || '');
+            return (
+                '<div style="font-size:11px;line-height:1.35;'
+                + 'margin-bottom:5px;opacity:0.92;">'
+                + '<strong>' + enm + '.</strong> ' + edesc
+                + '</div>'
+            );
+        }).join('');
+        host.innerHTML = header + body;
+    }
+    window._renderPlayerRegionalPanel = _renderPlayerRegionalPanel;
+
     window._renderLairActionPanel = function () {
         const HOST_ID = '_lair_action_panel';
         let host = document.getElementById(HOST_ID);
@@ -9583,8 +9630,22 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }
         }
 
-        if (!isGm || !owner) {
+        if (!owner) {
             if (host) host.remove();
+            const _pp = document.getElementById('_regional_effects_panel');
+            if (_pp) _pp.remove();
+            return;
+        }
+
+        // v2.180.0 — players (non-GM) get a read-only regional-effects card.
+        // RAW MM p.11 regional effects are observable environmental changes
+        // (earthquakes, fog, fouled water), so the whole table can feel the
+        // lair's presence — but we deliberately omit the GM-only lair-action
+        // controls AND the creature's name (so the panel is atmosphere, not a
+        // monster reveal). Players never see the 🌋 lair-action host.
+        if (!isGm) {
+            if (host) host.remove();
+            _renderPlayerRegionalPanel(owner);
             return;
         }
 

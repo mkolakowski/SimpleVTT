@@ -506,6 +506,12 @@ combatant.legendary_resistance = {
   while the creature dwells in its lair, distinct from the initiative-20
   actions). `_ensureLairActions` seeds `c.regional_effects` from the
   projected sheet. Front-end only; 1 new Playwright test.
+- Player-facing regional flavor (✅ **shipped v2.180.0** "The Felt
+  Presence"): players (non-GM) get their own read-only regional-effects
+  card (`#_regional_effects_panel`, `_renderPlayerRegionalPanel`) — the
+  same passive effects in a cooler blue palette, with the GM-only
+  lair-action controls and the creature's name omitted (atmosphere, not a
+  monster reveal). Front-end only; 1 new Playwright test.
 
 ### Non-goals (v1)
 

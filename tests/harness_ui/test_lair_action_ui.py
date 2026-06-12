@@ -450,3 +450,35 @@ def test_regional_effects_render_in_panel(gm_page: Page):
     expect(panel).to_contain_text("supernaturally warm")
     # No Enter-lair toggle needed — regional effects render out of lair too.
     expect(panel.locator("#_lair_toggle_btn")).to_contain_text("Enter lair")
+
+
+def test_regional_effects_render_for_player(alice_page: Page):
+    """v2.180.0 — a player (non-GM) sees a read-only regional-effects card
+    (#_regional_effects_panel) with the lair's passive effects, but NOT the
+    GM lair-action panel (#_lair_action_panel) and NOT the creature's name
+    (the panel is atmosphere, not a monster reveal). The player receives the
+    lair owner via the GM's `battle_update` broadcast (the real sync path —
+    a player's localStorage seed is overwritten by that broadcast)."""
+    alice_page.goto(tabletop_url())
+
+    # Mirror real play: the GM's battle (carrying the dragon's regional
+    # effects) reaches the player as a `battle_update` WS broadcast.
+    alice_page.evaluate(
+        """(battleJson) => {
+            document.dispatchEvent(new CustomEvent('vtt:ws-message', {detail: {
+                type: 'battle_update', data: JSON.parse(battleJson),
+            }}));
+        }""",
+        _battle_json(in_lair=True, turn_index=1),
+    )
+
+    player_panel = alice_page.locator("#_regional_effects_panel")
+    expect(player_panel).to_be_visible(timeout=5000)
+    expect(player_panel).to_contain_text("Regional Effects")
+    expect(player_panel).to_contain_text("Minor Earthquakes")
+    expect(player_panel).to_contain_text("supernaturally warm")
+    # Players never see the GM lair-action panel or the creature's name.
+    expect(alice_page.locator("#_lair_action_panel")).to_have_count(0)
+    expect(player_panel).not_to_contain_text("Ancient Red Dragon")
+    # No GM-only trigger controls leak into the player card.
+    expect(player_panel.locator("._lair_trigger_btn")).to_have_count(0)
