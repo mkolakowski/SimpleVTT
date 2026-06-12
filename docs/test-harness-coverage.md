@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2506 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.17, 2026-06-12).
+**Total tests:** 2510 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.18, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -552,6 +552,16 @@ v2.183.15 — spell-validation suite Phase 4 (fifth complex-spell deep-dive). Sp
 | `test_polymorph_present_in_catalog` | Phase 4 — catalog anchor: 4th-level Transmutation, "Up to 1 hour" duration, WIS save, and `concentration: false` (the flag the divergence test pins against the runtime cast). |
 | `test_cast_binds_concentration_despite_catalog_flag` | Phase 4 — house-rule divergence (mirror of Spiritual Weapon's): catalog flags `concentration: false`, but `/cast_polymorph` returns `concentration: true` + installs the `concentration-polymorph` caster anchor. |
 | `test_polymorph_full_ability_replace_and_revert_restores` | Phase 4 (Open5e-gated) — `/transform source=polymorph` replaces ALL six abilities with the beast's (asserted structurally against the response's `active_form.form_sheet`, no hardcoded numbers) + swaps in the beast HP pool + the mental stats actually change (Wild Shape keeps them); `/revert` restores the prior form's abilities + HP exactly. |
+
+### `test_cast_mirror_image.py`
+Mirror Image (L2 Illusion) — the spell-validation suite's reference case for a *deliberately narration-only* spell: no dedicated cast endpoint, no `_SPELL_BUFF_MAP` entry, a single catalog "cast" action with no save/attack/damage. It rides the generic `/cast_spell` path (spends a slot + broadcasts `spell_cast`) but installs no engine buff — the RAW 3-duplicate misdirection is GM-narrated, not modeled. Caster: Zara Emberfire (Sorcerer, owns it natively at spell_index 9). v2.183.18 — Phase 4 deep-dive (eighth).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mirror_image_present_in_catalog` | Catalog shape: `level_int == 2`, school Illusion, "self" range, "minute" duration, `concentration: false`, and every action carries no `save_ability` / `attack_roll` / `damage`. |
+| `test_cast_consumes_l2_slot_and_broadcasts` | Zara casts at L2 → `ok: true`, `slot.level == 2`, `slot.used >= 1`; `spell_cast` broadcast carries `spell_name == "Mirror Image"`, `spell_level == 2`, `spell_casting_time == "1 action"`, and no damage action. |
+| `test_cast_is_non_concentration` | RAW non-concentration (inverse of the Polymorph deep-dive): the cast response does NOT flag concentration and installs no `concentration-mirror-image` anchor on the caster — what lets a sorcerer hold Mirror Image alongside a concentration spell. |
+| `test_cast_installs_no_duplicate_or_ac_buff` | Narration-only contract pin: no `mirror-image` (or any duplicate-count / AC-by-count) buff is installed on the caster today, so a future commit that models duplicates updates this test on purpose. |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
