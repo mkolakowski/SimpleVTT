@@ -2,7 +2,7 @@
 
 **Status:** 🟠 in progress (v2.182.4, 2026-06-12) — Phase 2D heal assertions landed: `test_spell_catalog_heal.py` casts every healing spell (7) at the caster and range-checks the `spell_cast` broadcast's `auto_heal_rolled` against the declared healing dice shifted by the caster's spellcasting mod; zero skips. Phase 2C attack assertions landed (v2.182.3): `test_spell_catalog_attack.py` casts every spell-attack-roll spell (15) at an NPC and asserts the derived attack bonus = `prof + spellcasting mod` (uniform across one caster) + the hit/miss verdict follows the d20 rules vs target AC; a seeded test proves crit-doubling (Fire Bolt 2d10 → 4d10); zero skips. Phase 2B save assertions landed (v2.182.2): `test_spell_catalog_save.py` casts every save-bearing spell (~116) at an NPC and asserts the response's save ability matches the JSON + the DC matches the caster's spell-save-DC formula (uniform across one caster's spells); zero skips. Phase 1 smoke catalog landed (v2.182.1): `test_spell_catalog_smoke.py` patches one scratch caster with the whole 319-spell catalog + abundant slots and casts every spell by index, asserting the floor contract (no 500, `spell_cast` broadcast emitted); all 319 pass with zero skips. Earlier (v2.49.108): Phase 2A v1 — `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized over `(caster, spell, slot)` rows, covering single-target attack-roll spells (Fire Bolt). Filed: 2A save spells, multi-beam (Scorching Ray / Eldritch Blast), auto-hit (Magic Missile) — each needs a different response-shape adapter.
 **Authors:** rolling
-**Last updated:** 2026-06-12 (Phase 4 in progress — three complex-spell deep-dives shipped: Counterspell `test_cast_counterspell.py`, Spirit Guardians `test_cast_spirit_guardians.py`, Eldritch Blast `test_cast_eldritch_blast.py`)
+**Last updated:** 2026-06-12 (Phase 4 in progress — four complex-spell deep-dives shipped: Counterspell `test_cast_counterspell.py`, Spirit Guardians `test_cast_spirit_guardians.py`, Eldritch Blast `test_cast_eldritch_blast.py`, Magic Missile `test_cast_magic_missile.py`)
 
 A plan to expand `tests/harness/` so every spell in
 `app/data/local/dnd5e/spells/` (319 SRD entries as of v2.49.102, plus
@@ -427,7 +427,7 @@ assert the auto-effect lands.
 **Goal:** the dozen-ish spells that don't fit the catalog matrix get
 their own deep-dive tests, modelled on `tests/harness/test_cast_sleep*.py`.
 
-**Status:** in progress — deep-dives shipped: Counterspell (v2.183.11, `tests/harness/test_cast_counterspell.py`), Spirit Guardians (v2.183.12, `tests/harness/test_cast_spirit_guardians.py`), Eldritch Blast (v2.183.13, `tests/harness/test_cast_eldritch_blast.py`).
+**Status:** in progress — deep-dives shipped: Counterspell (v2.183.11, `tests/harness/test_cast_counterspell.py`), Spirit Guardians (v2.183.12, `tests/harness/test_cast_spirit_guardians.py`), Eldritch Blast (v2.183.13, `tests/harness/test_cast_eldritch_blast.py`), Magic Missile (v2.183.14, `tests/harness/test_cast_magic_missile.py`).
 
 **Candidates** (from Phase 0 inventory):
 - Counterspell — ✅ shipped v2.183.11 (`test_cast_counterspell.py`): prompt-emission contract — positive `spell_cast_near` emission on a visible leveled cast within 60 ft of a Counterspell-ready watcher + three exclusion gates (cantrip, out-of-range, watcher lacks Counterspell). Companion to `test_counterspell_subtle_immune.py` (the Subtle-Spell suppression half).
@@ -437,7 +437,7 @@ their own deep-dive tests, modelled on `tests/harness/test_cast_sleep*.py`.
 - Mirror Image — duplicate tokens, attack redirection
 - Bless of Bahamut (homebrew) — homebrew handling
 - Eldritch Blast — ✅ shipped v2.183.13 (`test_cast_eldritch_blast.py`): multi-beam scaling — Magnus (Lv 5) fires exactly 2 separate-attack-roll beams in `auto_attack_beams`, the beam count tracks character level through the `extra_beams` tiers (1/3/4 beams at L1/L11/L17), and the aggregate `auto_attack_damage_rolled` is exactly the sum of the per-beam 1d10 force rolls (no `/cast_spell`-path rider).
-- Magic Missile — multi-dart scaling (already partial coverage)
+- Magic Missile — ✅ shipped v2.183.14 (`test_cast_magic_missile.py`): auto-hit multi-dart contract — three darts split across distinct targets (each its own `auto_hit_targets` entry + 1d4+1 force roll + applied damage), the auto-hit/no-attack-roll/no-miss invariant across dice seeds (response carries `auto_hit_targets` not `auto_attack_beams`), and the aggregate == exact sum of per-dart rolls. The auto-hit counterpoint to the Eldritch Blast attack-roll deep-dive; builds on Phase 2A's `test_spell_catalog_autohit.py` same-target range check.
 - Spiritual Weapon — persistent attacker
 - Spirit Guardians — ✅ shipped v2.183.12 (`test_cast_spirit_guardians.py`): self-anchored concentration-aura lifecycle — pending self-sphere placement + `spell_concentration: true`, `/place_aoe` 3d8 radiant Wisdom-save dispatch, self-anchored marker persistence, and the marker rejecting `/move_aoe` (409 `not_movable`). Bundled the catalog `concentration` flag fix (`false` → `true`) the assertion depends on.
 - Conjure X / Summon X — token creation

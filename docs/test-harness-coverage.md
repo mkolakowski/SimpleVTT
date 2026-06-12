@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2493 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.13, 2026-06-12).
+**Total tests:** 2497 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.14, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -503,6 +503,16 @@ v2.183.13 — spell-validation suite Phase 4 (third complex-spell deep-dive). El
 | `test_cast_fires_two_beams_at_level_five` | Magnus (Lv 5) casts → exactly 2 beams in `auto_attack_beams`, numbered `[1, 2]`, each carrying an int `total` + bool `hit`; aggregate `auto_attack_damage_type == "force"`. |
 | `test_beam_count_tracks_character_level` | PATCH the caster's `level` to 1 / 11 / 17 → 1 / 3 / 4 beams respectively (the `extra_beams` tiers exercised end-to-end). |
 | `test_aggregate_damage_is_sum_of_hit_beams` | Seed dice until a beam hits; `auto_attack_damage_rolled` is exactly the sum of the per-beam `damage_rolled`, every hit beam rolls a single 1d10 (1-10) force die and missed beams roll 0 (no `/cast_spell`-path rider — Agonizing Blast's +CHA lives on the `/attack` weapon entry). |
+
+### `test_cast_magic_missile.py`
+v2.183.14 — spell-validation suite Phase 4 (fourth complex-spell deep-dive). Magic Missile is the catalog's one true auto-hit attack: three 1d4+1 force darts with no save and no attack roll, directable at one creature or several. The engine rolls one die per target combatant id in the cast body and surfaces them in `auto_hit_targets` (when `campaign.auto_apply_damage` is on). Where Phase 2A's `test_spell_catalog_autohit.py` checks the matrix shape (3 darts at one target, in band), this file owns the bespoke story that distinguishes it from Eldritch Blast's per-beam attack rolls. Caster: Thalindra Moonwhisper (demo Wizard L7, native Magic Missile + L1 slots; spell index resolved from the live sheet).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_magic_missile_present_in_catalog` | Catalog anchor — Magic Missile present as a no-save / no-attack force-damage spell whose action documents the dart-count scaling (`aoe_targets == 3` base + `extra_targets_per_slot_above_base == 1`). |
+| `test_three_darts_split_across_distinct_targets` | Cast at three distinct targets → three `auto_hit_targets` entries with three distinct combatant ids, each a 1d4+1 (2-5) force roll that applied non-zero damage ("one creature or several"). |
+| `test_darts_auto_hit_with_no_attack_roll` | The response carries `auto_hit_targets` and **not** `auto_attack_beams` (no spell-attack path), and every dart applies > 0 across dice seeds 1-6 (no dart ever misses) — the contrast with Eldritch Blast's missable beams. Long-rests between casts so the L1 slots don't deplete. |
+| `test_aggregate_is_exact_sum_of_darts` | Seeded for determinism: each dart's `damage_applied == rolled` (full-HP force targets), and the total applied equals the sum of the per-dart rolls — no rider on the auto-hit path (Empowered Evocation +INT doesn't touch it). |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
