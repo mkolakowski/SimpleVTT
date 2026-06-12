@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2465 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.2, 2026-06-12).
+**Total tests:** 2467 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.3, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3336,6 +3336,14 @@ Phase 2G area-of-effect shape drift gate — a pure-Python content gate (no HTTP
 |------|-----------------|
 | `test_every_aoe_spell_has_a_valid_raw_shape_and_size` | Every spell with a non-empty `area.shape` uses a RAW shape with positive `size_ft`; the line spell has positive width; exactly 27 AoE spells; drift collected by slug. |
 | `test_aoe_shape_set_covers_every_shape_in_use` | Two-way lock step: no catalog shape outside `_RAW_SHAPES`, and every `_RAW_SHAPES` entry is used by some spell. |
+
+### `test_spell_catalog_aoe_placement.py`
+Phase 2G HTTP placement + resolution gate — the companion to the offline `test_spell_catalog_aoe.py` shape gate. Drives the live server end to end across three distinct RAW non-concentration damage AoE shapes (sphere = Fireball, cone = Burning Hands, line = Lightning Bolt): casts each *without* targets so it lands in pending-placement state, then resolves it through `/place_aoe`. Uses the scratch-caster bulk-inject scaffolding (so cone/line spells outside Thalindra's demo list are castable) and the v2.183.0 TEST_MODE `/api/test/campaign/{id}/flags` toggle to enable the server-side damage roll. Adds the cone + line shapes that no prior placement test exercised (`test_cast_spell_aoe.py` covered sphere + the cube concentration path) plus the inside-vs-outside resolution contract — a second battle bandit left outside the placement is asserted untouched.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_every_aoe_shape_places_resolves_inside_and_skips_outside` | For sphere/cone/line: cast→pending carries catalog `area_shape`+`area_size_ft`; `/place_aoe` resolves the inside bandit's save + in-band damage + type; the `aoe_pulse` + `spell_cast_aoe_resolved` broadcasts carry the catalog shape/size + cast_id; the outside bandit is absent from `auto_save_targets` and its HP is unchanged. |
+| `test_aoe_placement_cases_present_in_catalog` | Guard: every case slug resolves to a catalog spell whose first AoE-shaped action matches the expected shape + size, so the HTTP test can't drift from the catalog. |
 
 ### `test_spell_catalog_autohit.py`
 Phase 2A backfill — auto-hit damage (Magic Missile), the last of the four damage shapes. Flips `auto_apply_damage` on via the TEST_MODE `/api/test/campaign/{id}/flags` endpoint, then fires Magic Missile's 3 darts at an NPC (3 entries in `target_combatant_ids`) and asserts each `auto_hit_targets` entry rolled inside the `1d4+1` force band, carried force damage type, and applied non-zero damage. The server contract is "one in-band roll per target id sent" — dart count is the client's responsibility. Range-check only.
