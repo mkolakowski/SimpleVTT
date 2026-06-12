@@ -13,20 +13,29 @@ correctly, the chip shows correctly, yet the auto-uplift on the attack is
 silently wrong. An install-only test sails right past that.
 
 Phase 3a covers the two auto-applied attack-roll uplifts — Bless (+1d4)
-and Bane (-1d4) — with an *exact* check rather than a "token appears"
-check. The trick: roll the same attack twice under the same dice seed,
-once with the buff on the attacker and once without. The d20 is the first
-draw in both casts (identical seed → identical d20) and the flat attack
-bonus is constant, so the only delta between the two attack totals is the
+and Bane (-1d4) — and Phase 3b extends the same exact check to the
+**save** side (Bless/Bane also add/subtract a d4 on saving throws, RAW).
+Both use an *exact* check rather than a "token appears" check. The trick:
+roll the same d20 twice under the same dice seed, once with the buff and
+once without. The d20 is the first draw in both casts (identical seed →
+identical d20) and the flat modifier is constant, so the only delta is the
 buff die. We then assert that delta equals exactly the d4 value the engine
 prints in the buffed breakdown, with the registry-declared sign. A
 regression that changes "1d4" → "1d6", drops the uplift, or flips the
 sign moves the delta and fails here.
 
-The buff is pre-seeded directly into the attacker's combatant payload via
-PUT /battle — `_attacker_has_bless` / `_attacker_has_bane` read it straight
-off the live combatant's `buffs` list — so the check is fully deterministic
-with no save-fail loop. The catalog anchor (`test_*_present_in_catalog`)
+- 3a (attack): the buff is pre-seeded into the *attacker's* combatant;
+  `/attack` appends the suffix to the d20 to-hit expression via
+  `_attacker_has_bless` / `_attacker_has_bane`. Delta = `attack_total`
+  with minus without.
+- 3b (save): the buff is pre-seeded into the *saver's* (NPC target's)
+  combatant; a save spell cast at it rolls the NPC save server-side and
+  `_saver_bless_bane_save_suffix` appends the d4. Delta =
+  `auto_save_rolled` with minus without.
+
+Both pre-seed the buff directly via PUT /battle (off the live combatant's
+`buffs` list — no `effects` gating, no save-fail loop), so the checks are
+fully deterministic. The catalog anchor (`test_*_present_in_catalog`)
 ties the registry to the real spell JSON so a renamed/removed spell trips
 the gate too.
 """
@@ -172,4 +181,136 @@ async def test_bless_bane_attack_uplift_contribution_is_exact(gm_client, roster)
     )
     assert not failures, (
         f"{len(failures)} buff-effect failures:\n  " + "\n  ".join(failures)
+    )
+
+
+# --- Phase 3b: save-side uplift ---------------------------------------------
+
+# Same Bless (+1d4) / Bane (-1d4) dice, applied to the *saver's* d20 by
+# `_saver_bless_bane_save_suffix` when a save spell is cast at an NPC that
+# carries the buff. Reuses the attack registry's sign + die.
+_SAVE_CASTER = "Lyra Sunstrider"   # Bard; Hold Person at spell_index 11.
+_HOLD_PERSON_INDEX = 11            # Lyra's Hold Person (L2, WIS save, no damage).
+
+
+async def _seed_save_battle(gm_client, caster, bandit_tmpl_id, *, buff_key: str | None) -> tuple[str, str]:
+    """Battle with the caster + one high-HP bandit target that optionally
+    carries a save-uplift buff. Returns (caster_tok, target_tok)."""
+    caster_tok = f"tok_buffsave_caster_{caster['id']}"
+    target_tok = "tok_buffsave_target"
+    buffs = [_buff_payload(buff_key, caster["id"])] if buff_key else []
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {"id": caster_tok, "char_id": caster["id"], "name": caster["name"],
+                 "initiative": 12, "hp_current": 35, "hp_max": 35, "buffs": [],
+                 "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                {"id": target_tok, "char_id": None, "token_template_id": bandit_tmpl_id,
+                 "name": "Save Uplift Target", "initiative": 6,
+                 "hp_current": 999999, "hp_max": 999999, "buffs": buffs,
+                 "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+    return caster_tok, target_tok
+
+
+async def test_bless_bane_save_uplift_contribution_is_exact(gm_client, roster):
+    """Save-side mirror of the attack gate: a save spell (Hold Person) cast
+    at an NPC carrying Bless / Bane rolls the NPC save server-side with the
+    d4 suffix. Same-seed with/without-buff casts hold the NPC's d20 + save
+    mod constant, so the `auto_save_rolled` delta isolates the buff die,
+    which must equal exactly the printed d4 × the registry sign.
+    """
+    caster = roster[_SAVE_CASTER]
+    templates = (await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")).json()
+    bandit = next(t for t in templates if "bandit" in t["name"].lower())
+
+    failures: list[str] = []
+    checked = 0
+    try:
+        for slug, spec in _ATTACK_UPLIFT_BUFFS.items():
+            seed = 42000 + checked
+
+            async def _cast_hold_person() -> dict:
+                r = await gm_client.post(
+                    f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+                    json={
+                        "character_id": caster["id"],
+                        "spell_index": _HOLD_PERSON_INDEX,
+                        "slot_level": 2,
+                        "class_slug": "bard",
+                        "target_combatant_id": "tok_buffsave_target",
+                        "target_name": "Save Uplift Target",
+                        "override": True,
+                        "override_range": True,
+                    },
+                )
+                assert r.status_code == 200, r.text
+                return r.json()
+
+            # With the buff on the saver. Long-rest first so the L2 slot is
+            # available; the dice seed is set *after* the rest so the save
+            # roll stays deterministic across the pair.
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{caster['id']}/rest",
+                json={"type": "long"},
+            )
+            await _seed_save_battle(gm_client, caster, bandit["id"], buff_key=spec["buff_key"])
+            await _seed_dice(gm_client, seed)
+            with_data = await _cast_hold_person()
+            if with_data.get("auto_save_target_kind") != "npc":
+                failures.append(f"{slug}: expected NPC auto-save, got {with_data.get('auto_save_target_kind')!r}")
+                continue
+            with_rolled = int(with_data.get("auto_save_rolled") or 0)
+            with_bd = with_data.get("auto_save_breakdown") or ""
+            m = _D4_TOKEN.search(with_bd)
+            if not m:
+                failures.append(f"{slug}: no 1d4 token in buffed save breakdown {with_bd!r}")
+                continue
+            d4_rolled, d4_sub = int(m.group(1)), int(m.group(2))
+            if not (1 <= d4_rolled <= 4):
+                failures.append(f"{slug}: save d4 roll {d4_rolled} out of [1,4] ({with_bd!r})")
+            if d4_rolled != d4_sub:
+                failures.append(f"{slug}: save d4 token {d4_rolled} != subtotal {d4_sub} ({with_bd!r})")
+            if spec["sign"] < 0 and "-1d4[" not in with_bd:
+                failures.append(f"{slug}: expected '-1d4[' in save breakdown {with_bd!r}")
+            if spec["sign"] > 0 and "-1d4[" in with_bd:
+                failures.append(f"{slug}: unexpected '-1d4[' on a positive save uplift ({with_bd!r})")
+
+            # Without the buff — same seed → same NPC d20 + save mod.
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{caster['id']}/rest",
+                json={"type": "long"},
+            )
+            await _seed_save_battle(gm_client, caster, bandit["id"], buff_key=None)
+            await _seed_dice(gm_client, seed)
+            without_data = await _cast_hold_person()
+            without_rolled = int(without_data.get("auto_save_rolled") or 0)
+            if "1d4[" in (without_data.get("auto_save_breakdown") or ""):
+                failures.append(
+                    f"{slug}: unbuffed save unexpectedly carries a 1d4 token: "
+                    f"{without_data.get('auto_save_breakdown')!r}"
+                )
+
+            expected_delta = spec["sign"] * d4_rolled
+            actual_delta = with_rolled - without_rolled
+            if actual_delta != expected_delta:
+                failures.append(
+                    f"{slug}: save-total delta {actual_delta} != expected "
+                    f"{expected_delta} (sign {spec['sign']:+d} × d4 {d4_rolled}); "
+                    f"with={with_rolled} ({with_bd!r}), without={without_rolled} "
+                    f"({without_data.get('auto_save_breakdown')!r})"
+                )
+            checked += 1
+    finally:
+        await _seed_dice(gm_client, None)
+
+    assert checked == len(_ATTACK_UPLIFT_BUFFS), (
+        f"only exercised {checked}/{len(_ATTACK_UPLIFT_BUFFS)} save-uplift buffs"
+    )
+    assert not failures, (
+        f"{len(failures)} save buff-effect failures:\n  " + "\n  ".join(failures)
     )
