@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.163.0] - 2026-06-11 — "The Heralded Strike" — Legendary-actions Phase 1c (chat card): the save-AoE result now lands in the roll log. v2.161.0/v2.162.0 wired the server dispatch + the GM target-pick, but the only on-screen evidence a Wing Attack resolved was the silent HP ticks on each target token. This commit adds the chat-card surface: the `legendary_action_aoe_resolved` broadcast now renders a 👑 roll-log card naming the creature + action + save line (DEX · DC 22), with one result pill per target — green ✅ for a passed save, red ❌ with the damage dealt for a failed save, and a neutral ⏳ "save pending" for a PC target whose save was prompted (GM-manual). The card persists to the roll-log buffer so it survives a page refresh like every other WS-only card.
+
+**Schema version:** 69
+**Commit summary:** **Front-end commit. (A) `app/static/tabletop.js` — new `_appendLegendaryAoeResolved(d)` builds a `.feature-used-card` roll-log entry from the v2.161.0 `legendary_action_aoe_resolved` broadcast (combatant_name + action_name + save_ability/dc + per-target results). Per-target pills: `chip-hit` ✅ "<name> · saved" for `passed === true`, `chip-miss` ❌ "<name> · −<dmg> <type>" for `passed === false`, `chip-buff` ⏳ "<name> · save pending" for a prompted PC target (`passed == null`). Wired into the WS dispatch (`else if (msg.type === 'legendary_action_aoe_resolved')`) + the roll-log hydration replay switch so it rebuilds on refresh, and persisted via `_persistRollEntry`. The function is also exposed as `window._appendLegendaryAoeResolved` so the harness can drive it without a live broadcast. (B) `tests/harness_ui/test_legendary_action_buttons.py` — 1 new Playwright test (5 → 6) drives the exposed helper with a 3-target payload (saved / failed-with-damage / pending) and asserts each pill class + text. UI total 56 → 57.**
+**Description:** The chat-card slice of Phase 1c in `docs/plans/legendary-actions.md`, closing the "the table can't see what happened" gap left by the v2.161.0 server dispatch. Pure presentation — no server, schema, or endpoint change; the broadcast shape is unchanged from v2.161.0. Mirrors the existing `feature_used` / `spell_cast_aoe_resolved` card builders (same `#roll-list` target, `escapeHTML`, `_scrollRollLogToBottom`, `_persistRollEntry` + hydration registration), so refresh-persistence and the roll-log drawer behavior come for free. Browser-verified against the demo: drag-spawn the Adult Red Dragon, spend Wing Attack on another creature's turn, pick targets → the 👑 card appears in the roll log with per-target save outcomes.
+
+### Added
+- `app/static/tabletop.js::_appendLegendaryAoeResolved` — roll-log card builder for the `legendary_action_aoe_resolved` broadcast (per-target saved / failed-with-damage / pending pills); exposed on `window` for the harness.
+- `tests/harness_ui/test_legendary_action_buttons.py` — 1 Playwright test asserting the 3 pill states render with the right classes + text.
+
+### Changed
+- `app/static/tabletop.js` — WS dispatch + roll-log hydration replay now handle `legendary_action_aoe_resolved`.
+- `docs/plans/legendary-actions.md` — Phase 1c chat-card slice marked shipped; remaining follow-up narrowed to Tail-reference dispatch.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the Phase 1c chat card.
+- `docs/test-harness-coverage.md` — UI harness total 56 → 57; `test_legendary_action_buttons.py` section updated with the chat-card test.
+- `app/version.py` — `APP_VERSION` 2.162.0 → 2.163.0 (MINOR: new backward-compatible UI surface). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.163.0.
+
+### Notes
+- Total harness count: **2357** in `tests/harness/` (unchanged — no new HTTP surface); `tests/harness_ui/` **57** (was 56, +1).
+- No schema change (still v69). No new or changed endpoint — purely renders the existing v2.161.0 broadcast.
+- The card reuses the `.feature-used-card` chrome rather than a bespoke class, so it inherits the roll-log drawer focus, refresh-persistence, and styling that the feature/spell cards already have.
+
 ## [2.162.0] - 2026-06-11 — "The Targeted Gust" — Legendary-actions Phase 1c (UI): the Wing Attack button now fires the save-AoE from the GM screen. v2.161.0 landed the server-side save-AoE dispatch but the v2.160.0 init-tracker strip never sent `aoe_target_combatant_ids`, so the only way to trigger it was a hand-rolled POST. This commit closes that gap: the spend button for a save-AoE legendary action (Wing Attack — it carries a `save_ability` + `damage`) now opens the existing target picker so the GM clicks the creatures caught in the emanation, then rides the picked combatant ids along on the `/use_legendary_action` POST. The server rolls each save + applies save-or-take damage exactly as the direct-POST path already did. Non-AoE options (Detect / Tail Attack) skip the picker and spend as before. Cancelling the picker (Esc) aborts the whole spend — no point consumed, button restored.
 
 **Schema version:** 69

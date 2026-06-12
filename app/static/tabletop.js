@@ -4997,6 +4997,9 @@
             } else if (msg.type === 'feature_used') {
                 _appendFeatureUsed(msg.data);
                 _focusRollLogIfLocal(msg.data && msg.data.user_id);
+            } else if (msg.type === 'legendary_action_aoe_resolved') {
+                // v2.163.0 — save-AoE legendary action result card.
+                _appendLegendaryAoeResolved(msg.data);
             } else if (msg.type === 'reaction_prompt') {
                 // v2.99.63 — inject Take OA / Skip / per-attack buttons
                 // into the matching OA chat-log card. Pairs with the
@@ -5236,6 +5239,7 @@
                     else if (e.type === 'heal_applied')  _onHealApplied(e.data);
                     else if (e.type === 'spell_cast_target_updated') _onSpellCastTargetUpdated(e.data);
                     else if (e.type === 'spell_cast_aoe_resolved') _onSpellCastAoeResolved(e.data);
+                    else if (e.type === 'legendary_action_aoe_resolved') _appendLegendaryAoeResolved(e.data);
                 } catch (err) {
                     console.warn('[rolllog] hydrate skipped', e.type, err);
                 }
@@ -6881,6 +6885,74 @@
             });
         }
     }
+
+    // v2.163.0 — legendary-action save-AoE result card. The server
+    // broadcasts ``legendary_action_aoe_resolved`` after a save-AoE
+    // legendary action (the Adult Red Dragon's Wing Attack) rolls each
+    // picked target's saving throw + applies save-or-take damage. This
+    // renders the outcome as a roll-log card so the whole table sees who
+    // saved and who took damage, instead of only the silent HP ticks.
+    // Per-target pills: green ✅ SAVED for a passed save, red ❌ for a
+    // failed save (with the damage dealt), neutral ⏳ for a PC target
+    // whose save was prompted (GM-manual, damage deferred).
+    function _appendLegendaryAoeResolved(d) {
+        const ul = document.getElementById('roll-list');
+        if (!ul || !d || typeof d !== 'object') return;
+        const now = new Date();
+        const h = now.getHours(), m = now.getMinutes();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12  = (h % 12) || 12;
+        const hhmm = h12.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ' ' + ampm;
+        const dragon = d.combatant_name || 'Legendary creature';
+        const action = d.action_name || 'Legendary Action';
+        const saveAb = String(d.save_ability || '').toUpperCase();
+        const saveDc = d.save_dc;
+        const dmgType = d.damage_type || '';
+        const saveLine = (saveAb && saveDc != null)
+            ? `${escapeHTML(saveAb)} save · DC ${escapeHTML(String(saveDc))}`
+            : '';
+        const results = Array.isArray(d.results) ? d.results : [];
+        const pills = results.map(r => {
+            if (!r || typeof r !== 'object') return '';
+            const nm = escapeHTML(r.name || 'Target');
+            if (r.prompted && r.passed == null) {
+                return `<span class="result-pill chip-buff">⏳ ${nm} · save pending</span>`;
+            }
+            if (r.passed === true) {
+                return `<span class="result-pill chip-hit">✅ ${nm} · saved</span>`;
+            }
+            // Failed save (passed === false) → took damage.
+            const dmg = Number(r.damage_dealt || 0);
+            const tail = dmg > 0
+                ? ` · −${dmg}${dmgType ? ' ' + escapeHTML(dmgType) : ''}`
+                : '';
+            return `<span class="result-pill chip-miss">❌ ${nm}${tail}</span>`;
+        }).filter(Boolean).join('');
+        const pillRow = pills ? `<div class="result-pills">${pills}</div>` : '';
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <div class="roll-card feature-used-card">
+                <div class="roll-card-header">
+                    <div class="roll-card-avatar">👑</div>
+                    <span class="roll-card-user">${escapeHTML(dragon)}</span>
+                    <span class="spell-cast-slot">Legendary Action</span>
+                    <span class="roll-card-time">${hhmm}</span>
+                </div>
+                <div class="roll-card-body" style="padding:6px 10px 8px;">
+                    <div class="feature-used-name-row">
+                        <strong class="feature-used-name">${escapeHTML(action)}</strong>
+                        ${saveLine ? `<span class="feature-used-desc">· ${saveLine}</span>` : ''}
+                    </div>
+                    ${pillRow}
+                </div>
+            </div>`;
+        ul.appendChild(li);
+        _scrollRollLogToBottom();
+        _persistRollEntry('legendary_action_aoe_resolved', d);
+    }
+    // Exposed for the harness so a Playwright test can drive the card
+    // render without simulating a live WS broadcast.
+    window._appendLegendaryAoeResolved = _appendLegendaryAoeResolved;
 
     // v2.99.63 — inline OA action buttons in the chat-log card.
     // The reaction_prompt broadcast (popup pipeline) carries

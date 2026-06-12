@@ -38,13 +38,20 @@ v2.160.0) — the budget surface + GM control are live:
   aborts the spend. Non-AoE options spend straight through. 2 Playwright
   tests.
 
+- **Phase 1c (chat card) ✅ v2.163.0** — the `legendary_action_aoe_resolved`
+  broadcast now renders a 👑 roll-log card
+  (`_appendLegendaryAoeResolved` in `tabletop.js`) naming the creature +
+  action + save line, with one pill per target (✅ saved / ❌
+  failed-with-damage / ⏳ pending PC save). Persists + hydrates like the
+  other WS-only cards. 1 Playwright test.
+
 The data shapes turned out more varied than the original "attack_roll +
 damage" assumption: the demo dragon's legendary options are a save-AoE
 (Wing Attack), a reference-attack (Tail Attack → base "Tail" action), and
-a no-damage utility (Detect). v2.161.0 + v2.162.0 cover the save-AoE
-slice end-to-end (server dispatch + UI target-pick). The remaining
-Phase 1c work is the attack-roll/reference-attack dispatch (Tail Attack)
-and a chat-card surface for `legendary_action_aoe_resolved`.
+a no-damage utility (Detect). v2.161.0 + v2.162.0 + v2.163.0 cover the
+save-AoE slice end-to-end (server dispatch + UI target-pick + chat card).
+The remaining Phase 1c work is the attack-roll/reference-attack dispatch
+(Tail Attack).
 **Authors:** rolling
 **Last updated:** 2026-06-11
 
@@ -287,9 +294,16 @@ combatant.legendary_resistance = {
   onto each option. 2 Playwright tests
   (`test_wing_attack_save_aoe_opens_picker_and_posts_targets`,
   `test_wing_attack_save_aoe_picker_cancel_aborts_spend`).
+- Phase 1c (chat card) ✅ v2.163.0: `_appendLegendaryAoeResolved` in
+  `tabletop.js` renders the `legendary_action_aoe_resolved` broadcast as
+  a 👑 `.feature-used-card` roll-log entry with per-target pills
+  (`chip-hit` saved / `chip-miss` failed-with-damage / `chip-buff`
+  pending PC save); wired into the WS dispatch + hydration replay +
+  `_persistRollEntry`; exposed as `window._appendLegendaryAoeResolved`
+  for the harness. 1 Playwright test
+  (`test_legendary_aoe_resolved_card_renders_per_target_pills`).
 - Phase 1c (pending): attack-roll / reference-attack dispatch (Tail
-  Attack → base "Tail" action); chat-card surface for
-  `legendary_action_aoe_resolved`.
+  Attack → base "Tail" action).
 
 ### Phase 2 — Legendary resistance pool (S, ~2 commits)
 

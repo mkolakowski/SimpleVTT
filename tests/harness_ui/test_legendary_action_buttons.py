@@ -245,3 +245,46 @@ def test_wing_attack_save_aoe_picker_cancel_aborts_spend(gm_page: Page):
     assert posted["hit"] is False
     # Button restored (cancel returns before disabling stays latched).
     expect(wing_btn).to_be_enabled()
+
+
+def test_legendary_aoe_resolved_card_renders_per_target_pills(gm_page: Page):
+    """v2.163.0 — the legendary_action_aoe_resolved broadcast renders a
+    roll-log card with one pill per target: ✅ saved (passed), ❌ with
+    damage (failed), ⏳ pending (PC target prompted). Drives the exposed
+    `window._appendLegendaryAoeResolved` helper directly so the test
+    doesn't need a live WS broadcast or positioned tokens."""
+    gm_page.goto(tabletop_url())
+
+    # The helper is attached once tabletop.js finishes loading.
+    gm_page.wait_for_function("typeof window._appendLegendaryAoeResolved === 'function'")
+    gm_page.evaluate("""
+        window._appendLegendaryAoeResolved({
+            combatant_name: 'Adult Red Dragon',
+            action_name: 'Wing Attack',
+            save_ability: 'dex',
+            save_dc: 22,
+            damage_type: 'bludgeoning',
+            results: [
+                {combatant_id: 'b1', name: 'Bandit A', passed: true,  prompted: false, damage_dealt: 0},
+                {combatant_id: 'b2', name: 'Bandit B', passed: false, prompted: false, damage_dealt: 13},
+                {combatant_id: 'pc', name: 'Hero',     passed: null,  prompted: true,  damage_dealt: 0},
+            ],
+        });
+    """)
+
+    # The roll-log drawer is collapsed by default, so the card is in the
+    # DOM but not "visible" — assert on presence + text content rather
+    # than visibility.
+    card = gm_page.locator("#roll-list .feature-used-card", has_text="Wing Attack")
+    expect(card).to_have_count(1, timeout=3000)
+    expect(card).to_contain_text("Adult Red Dragon")
+    expect(card).to_contain_text("DEX save · DC 22")
+    # Passed save → green saved pill.
+    expect(card.locator(".result-pill.chip-hit")).to_contain_text("Bandit A")
+    # Failed save → red pill carrying the damage + type.
+    failed = card.locator(".result-pill.chip-miss")
+    expect(failed).to_contain_text("Bandit B")
+    expect(failed).to_contain_text("13")
+    expect(failed).to_contain_text("bludgeoning")
+    # PC target prompted → neutral pending pill.
+    expect(card.locator(".result-pill.chip-buff")).to_contain_text("save pending")
