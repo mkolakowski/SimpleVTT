@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2428 in `tests/harness/` + 70 in `tests/harness_ui/` (as of v2.180.0, 2026-06-12).
+**Total tests:** 2436 in `tests/harness/` + 70 in `tests/harness_ui/` (as of v2.181.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -178,6 +178,20 @@ v2.178.0 legendary-actions regional effects (see [legendary-actions.md](../plans
 | `test_all_ten_chromatic_slugs_are_keyed` | adult + ancient × black/blue/green/red/white = 10 slugs keyed, each 3 effects. |
 | `test_each_chromatic_color_shares_adult_and_ancient` | Per color, adult + ancient resolve to identical effect lists. |
 | `test_black_swamp_region_shape` / `test_blue_desert_region_shape` / `test_green_forest_region_shape` / `test_white_arctic_region_shape` | Each color's three effect ids match the curated RAW set. |
+
+### `test_set_regional_fade.py`
+v2.181.0 legendary-actions regional-effect fade tracker (see [legendary-actions.md](../plans/legendary-actions.md)) — RAW MM p.11: when a lair-dwelling creature dies its regional effects "fade over the course of 1d10 days." GM-only `POST /set_regional_fade` with a `start`/`advance`/`clear` action discriminator drives a `regional_fade` {days_total, days_remaining, faded, lair_slug} countdown on the battle state, broadcasting `regional_fade_changed`. HTTP + WS.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_start_rolls_1d10_and_broadcasts` | `start` rolls `days_total` in 1–10, seeds `days_remaining == days_total` + `faded=False`, broadcasts `regional_fade_changed`, persists onto the battle-state dict (verified via GET /battle). |
+| `test_start_defaults_lair_slug_from_battle` | `start` with no `lair_slug` in the body falls back to the battle's `lair_slug`. |
+| `test_advance_ticks_days_down` | `advance` decrements `days_remaining` by 1, preserves `days_total`, keeps `faded=False` while days remain. |
+| `test_advance_to_zero_marks_faded` | `advance` from `days_remaining=1` lands at 0 + flips `faded=True`; the `regional_fade_changed` broadcast carries `faded=True`. |
+| `test_advance_with_no_fade_409` | `advance` with no active tracker → `409 no_active_fade`. |
+| `test_clear_removes_tracker` | `clear` sets `regional_fade=None` + broadcasts the cleared tracker. |
+| `test_unknown_action_400` | An unrecognized `action` → 400. |
+| `test_player_403` | Non-GM caller → 403. |
 
 ### `test_trigger_lair_action.py`
 v2.169.0 legendary-actions Phase 3b (see [legendary-actions.md](../plans/legendary-actions.md)) — the lair-action engine. Two GM endpoints: `POST /set_in_lair` toggles the battle's `in_lair` flag + records `lair_slug`; `POST /trigger_lair_action` resolves a lair action against the GM-picked caught targets, reusing the legendary save-AoE dispatch (`_resolve_feature_save` → roll → `_apply_damage_to_combatant`). NPC targets resolve inline; PC targets get a roll-request prompt. HTTP + WS.

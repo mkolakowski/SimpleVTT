@@ -24363,6 +24363,101 @@ async def trigger_lair_action(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/set_regional_fade")
+async def set_regional_fade(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.181.0 — regional-effect fade tracker. RAW MM p.11: when a
+    lair-dwelling creature dies, its regional effects don't vanish — they
+    "fade over the course of 1d10 days." This endpoint models that decay as
+    a GM-driven countdown parked on the battle state, distinct from the
+    initiative-20 lair actions (combat) and the passive regional effects
+    (always-on while the creature lives).
+
+    Body:
+      ``action`` — one of:
+        ``start``   — the creature died; roll 1d10 and begin the fade.
+                      Uses ``lair_slug`` from the body, else the battle's.
+        ``advance`` — one in-world day passes; tick ``days_remaining`` down
+                      by 1. At 0 the effects are gone (``faded`` = True).
+        ``clear``   — remove the fade tracker entirely (creature returned /
+                      GM reset).
+
+    Persists ``regional_fade`` (an object or None) onto the battle-state
+    dict — carried across `/battle` PUTs by the carry-forward guard — and
+    broadcasts ``regional_fade_changed`` so every client reflects the
+    countdown.
+
+    The fade object shape:
+      ``{lair_slug, days_total, days_remaining, faded}``
+
+    Auth: GM only.
+
+    Errors:
+      400 unknown/missing ``action``.
+      403 non-member / non-GM.
+      404 no active battle.
+      409 ``no_active_fade`` — ``advance`` with no fade in progress.
+    """
+    import random as _rand
+
+    body = await request.json()
+    action = str(body.get("action") or "").strip().lower()
+    if action not in ("start", "advance", "clear"):
+        raise HTTPException(400, "action must be one of: start, advance, clear")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only — regional fade is GM-authorised")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+
+    if action == "clear":
+        fade = None
+    elif action == "start":
+        lair_slug = (
+            str(body.get("lair_slug") or "").strip().lower()
+            or str(state.get("lair_slug") or "").strip().lower()
+        )
+        days = _rand.randint(1, 10)
+        fade = {
+            "lair_slug": lair_slug,
+            "days_total": days,
+            "days_remaining": days,
+            "faded": False,
+        }
+    else:  # advance
+        existing = state.get("regional_fade")
+        if not isinstance(existing, dict):
+            return JSONResponse(status_code=409, content={
+                "error": "no_active_fade",
+            })
+        try:
+            remaining = int(existing.get("days_remaining") or 0)
+        except (TypeError, ValueError):
+            remaining = 0
+        remaining = max(0, remaining - 1)
+        fade = dict(existing)
+        fade["days_remaining"] = remaining
+        fade["faded"] = remaining <= 0
+
+    state["regional_fade"] = fade
+    hub.set_battle(campaign_id, state)
+
+    await hub.broadcast(campaign_id, {
+        "type": "regional_fade_changed",
+        "data": {"regional_fade": fade},
+    })
+    return {"ok": True, "regional_fade": fade}
+
+
 # ----------- API: Cutting Words (Lore Bard Lv 3) -----------
 
 # v2.67.0 Phase 1 — Reactions automation foundation.
@@ -85396,6 +85491,12 @@ async def update_battle(
                 and "lair_init20_broadcast_round" in _prev_battle):
             state["lair_init20_broadcast_round"] = _prev_battle.get(
                 "lair_init20_broadcast_round")
+        # v2.181.0 — carry forward the regional-effect fade tracker (RAW MM
+        # p.11: effects fade over 1d10 days after the creature dies). The
+        # client never round-trips this key, so without the carry-forward a
+        # routine init-tracker PUT would clear the countdown.
+        if "regional_fade" not in state and "regional_fade" in _prev_battle:
+            state["regional_fade"] = _prev_battle.get("regional_fade")
 
     # v2.99.185 — NPC concentration-drop auto-cascade. Closes a
     # v2.99.179 filed item. Walk the prev/new combatants for any

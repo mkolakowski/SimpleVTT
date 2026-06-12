@@ -512,6 +512,21 @@ combatant.legendary_resistance = {
   same passive effects in a cooler blue palette, with the GM-only
   lair-action controls and the creature's name omitted (atmosphere, not a
   monster reveal). Front-end only; 1 new Playwright test.
+- Regional-effect fade tracker (✅ **shipped v2.181.0** "The Slow
+  Unmaking"): RAW MM p.11 — when a lair-dwelling creature dies its
+  regional effects don't vanish, they "fade over the course of 1d10
+  days." New GM-only `POST /api/campaign/{cid}/set_regional_fade`
+  endpoint with an `action` discriminator: `start` rolls 1d10 and seeds
+  `regional_fade = {lair_slug, days_total, days_remaining, faded}` on the
+  battle state; `advance` ticks `days_remaining` down by one (and flips
+  `faded=True` at zero); `clear` removes the tracker. Broadcasts
+  `regional_fade_changed`; carried forward by the `/battle` PUT guard so
+  a client that omits the key doesn't drop the countdown. A new
+  mechanical phase (a real day-countdown on battle state) rather than
+  flavor-only. 8 new HTTP harness tests
+  (`tests/harness/test_set_regional_fade.py`). UI surfacing of the
+  countdown (a fade badge + "advance a day" control) is a filed
+  follow-up.
 
 ### Non-goals (v1)
 

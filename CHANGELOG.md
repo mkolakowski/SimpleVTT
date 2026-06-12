@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.181.0] - 2026-06-12 — "The Slow Unmaking" — Regional-effect fade tracker (RAW MM p.11). A dragon's regional effects don't snap off the instant it dies — the *Monster Manual* says they "fade over the course of 1d10 days." This commit models that decay as a GM-driven countdown on the battle state, via a new `POST /api/campaign/{cid}/set_regional_fade` endpoint. `action: "start"` rolls 1d10 and seeds a `regional_fade` object (`{lair_slug, days_total, days_remaining, faded}`); `action: "advance"` ticks one in-world day off (`days_remaining − 1`, flipping `faded` to True at 0); `action: "clear"` removes the tracker. Each call broadcasts `regional_fade_changed` so every client can reflect the countdown. The fade state is GM-only and rides the battle-state JSON (carried across `/battle` PUTs by the existing carry-forward guard) — no schema change.
+
+**Schema version:** 69
+**Commit summary:** **Back-end commit. (A) `app/routes/tabletop_routes.py` — new `POST /set_regional_fade` endpoint (GM-only): start rolls 1d10 + seeds `regional_fade`, advance decrements `days_remaining` (faded at 0), clear nulls it; broadcasts `regional_fade_changed`. (B) The `/battle` PUT carry-forward guard now preserves `regional_fade` when the client omits it (mirrors the v2.169.0–v2.175.0 lair-flag carry-forwards). (C) `tests/harness/test_set_regional_fade.py` — 8 new tests (start/advance/clear happy paths, advance-to-faded, 409 no_active_fade, 400 unknown action, 403 player).**
+**Description:** The fade is intentionally GM-driven rather than auto-triggered on the creature's death — the timescale is in-world *days*, not combat rounds, so the GM ticks it as narrative time passes (the engine has no day clock). This is the mechanical counterpart to the flavor-only regional effects shipped in v2.178.0–v2.180.0: the data describes what the region is like; this tracker describes how it unwinds once the creature is gone. UI surfacing (a fade badge on the GM/player regional panels + an "advance a day" control) is a filed follow-up.
+
+### Added
+- `app/routes/tabletop_routes.py` — `POST /api/campaign/{cid}/set_regional_fade` (start / advance / clear) with the `regional_fade_changed` broadcast.
+- `tests/harness/test_set_regional_fade.py` — 8 tests covering the fade lifecycle + error paths.
+
+### Changed
+- `app/routes/tabletop_routes.py` — `/battle` PUT carry-forward guard preserves `regional_fade` across routine init-tracker saves.
+- `docs/plans/legendary-actions.md` — regional-effect fade tracker noted shipped (v2.181.0).
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the fade tracker.
+- `docs/test-harness-coverage.md` — new `test_set_regional_fade.py` section (8 tests); harness total 2428 → 2436.
+- `app/version.py` — `APP_VERSION` 2.180.0 → 2.181.0 (MINOR: new endpoint + WS broadcast). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.181.0.
+
+### Notes
+- No schema change (still v69). `regional_fade` rides the battle-state JSON; the broadcast is a new WS type older clients ignore.
+- GM-driven by design: the 1d10-day fade is in-world time, not combat rounds, so the GM advances it as narrative days pass.
+
 ## [2.180.0] - 2026-06-12 — "The Felt Presence" — Player-facing regional flavor. v2.179.0 surfaced the lair's passive regional effects (RAW MM p.11) in the GM's lair-action panel, but players saw nothing — the table couldn't feel the lair's environment. This commit gives **players** their own read-only regional-effects card (`#_regional_effects_panel`): when a lair owner is on the field, a non-GM client renders the same passive regional effects (name + description) under a calm "🌐 Regional Effects" heading, in a cooler blue palette distinct from the GM's volcanic-orange panel. The player card deliberately omits the GM-only lair-action controls (Enter/Exit, Trigger buttons, initiative-20 mechanics) **and the creature's name** — RAW regional effects are observable environmental changes (earthquakes, fog, fouled water), so they're atmosphere for the whole table, not a monster reveal.
 
 **Schema version:** 69
