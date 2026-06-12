@@ -72,6 +72,19 @@ def save_ability_of(spell: dict) -> str:
     return (raw or "").strip().upper()[:3]
 
 
+def healing_expr_of(spell: dict) -> str:
+    """Return the spell's declared healing dice/flat expression, or ``""``
+    if it doesn't heal. Mirrors the endpoint's resolution
+    (``tabletop_routes.py`` ~line 18558): a top-level ``healing`` first,
+    else the first action that carries one. The SRD stores the catalog's
+    healing on the ``cast`` action (e.g. Cure Wounds ``"1d8"``)."""
+    expr = spell.get("healing") or next(
+        (a.get("healing") for a in (spell.get("actions") or []) if (a.get("healing") or "").strip()),
+        "",
+    )
+    return (expr or "").strip()
+
+
 def is_attack_spell(spell: dict) -> bool:
     """True when ``/cast_spell`` resolves this spell as a spell-attack
     roll (Fire Bolt, Eldritch Blast, …) rather than a save. Mirrors the

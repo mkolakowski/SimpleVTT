@@ -9,6 +9,7 @@ from __future__ import annotations
 from .spell_catalog import (
     damage_actions,
     dice_range,
+    healing_expr_of,
     is_attack_spell,
     load_all_spells,
     save_ability_of,
@@ -129,3 +130,22 @@ def test_is_attack_spell_resolution():
     # Neither → not an attack.
     assert is_attack_spell({"actions": [{"id": "cast", "damage": "8d6"}]}) is False
     assert is_attack_spell({}) is False
+
+
+def test_healing_expr_of_resolution():
+    """healing_expr_of mirrors the endpoint: top-level first, else the
+    first action with a non-empty healing; '' when absent. The SRD
+    stores the healing on the cast action."""
+    # From an action (the SRD shape).
+    assert healing_expr_of({"actions": [{"id": "cast", "healing": "1d8"}]}) == "1d8"
+    # Top-level wins over an action.
+    assert healing_expr_of(
+        {"healing": "70", "actions": [{"healing": "1d8"}]}
+    ) == "70"
+    # First action with a non-empty healing wins; empty strings skipped.
+    assert healing_expr_of(
+        {"actions": [{"id": "a", "healing": ""}, {"healing": "3d8"}]}
+    ) == "3d8"
+    # No healing anywhere → empty.
+    assert healing_expr_of({"actions": [{"id": "cast", "damage": "8d6"}]}) == ""
+    assert healing_expr_of({}) == ""
