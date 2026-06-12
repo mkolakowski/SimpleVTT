@@ -1,11 +1,18 @@
 # Legendary actions + lair actions — design plan
 
-**Status:** 🟠 Phase 1a shipped (v2.159.33, 2026-06-11) — cost-integer
-backfill landed: 39 legendary actions across 30 monsters now carry the
-RAW cost integer (1/2/3) instead of the default `cost: 1`. Filed as
-the top P1 finding of the [SRD 5e Audit (2026-06-11 refresh)](../../TODO.md#srd-5e-audit-2026-06-11-refresh).
-Phase 1b (combatant action-point budget + `/use_legendary_action`
-endpoint) is the next slice.
+**Status:** 🟠 Phases 1a + 1b shipped (re-audited 2026-06-11,
+v2.159.34) — the budget surface is live:
+- **Phase 1a ✅ v2.159.33** — cost-integer backfill across 30 monsters
+  (39 actions).
+- **Phase 1b ✅ v2.159.34** — combatant `legendary_actions = {max, current}`
+  field + turn-start refresh hook in the `/battle` PUT handler +
+  `POST /api/campaign/{cid}/use_legendary_action` endpoint (GM-only,
+  own-turn gate, pool-cost gate, decrement, broadcasts
+  `legendary_action_pool_update` + `feature_used`).
+
+Phase 1c (chat-card surface + initiative-tracker chip + damage-dispatch
+chaining to `/npc_attack` for attack-shape actions) is the natural
+next slice.
 **Authors:** rolling
 **Last updated:** 2026-06-11
 
@@ -211,14 +218,23 @@ combatant.legendary_resistance = {
   - Vampire — Bite (2). Tarrasque — Chomp (2).
   - Mummy Lord — Blasphemous Word (2) / Channel Negative Energy (2) / Whirlwind of Sand (2).
   - Unicorn — Shimmering Shield (2) / Heal Self (3).
-- Phase 1b: `combatant.legendary_actions` field + `/next_turn` refresh
-  hook + `/use_legendary_action` endpoint dispatching through the
-  existing `/npc_attack` + AoE pipelines. Harness: ancient-red-dragon
-  fixture; Tail Attack (cost 1) consumes 1 point; Wing Attack (cost 2)
-  consumes 2; gate fails on the dragon's own turn; gate fails if
-  pool empty.
-- Phase 1c: chat-card surface + economy_update broadcast extended with
-  `legendary_actions.current`; initiative-tracker chip shows the count.
+- **Phase 1b ✅ v2.159.34** — `combatant.legendary_actions = {max, current}`
+  field + turn-start refresh hook in the `/battle` PUT handler +
+  `POST /api/campaign/{cid}/use_legendary_action` endpoint (GM-only,
+  own-turn gate, pool-cost gate, decrement). 7 harness tests
+  (`test_use_legendary_action.py`) — cost-1 spend / cost-2 spend /
+  own-turn 409 / insufficient-pool 409 / turn-start refresh / 400
+  missing-id / 403 non-GM. Broadcasts `legendary_action_pool_update`
+  (data: combatant_id + max + current + reason ∈ {spent,
+  turn_start_refresh} + cost?) + `feature_used(source=legendary-action)`.
+  Damage dispatch deferred to Phase 1c — Phase 1b is a budget gate
+  only; the client (or a future commit) follows up with a regular
+  `/npc_attack` call for attack-shape actions.
+- Phase 1c: damage-dispatch chaining (the endpoint optionally calls
+  into `/npc_attack`'s damage pipeline when the action has
+  `attack_roll`+`damage`, or routes through the AoE save-resolver when
+  the action has `save_ability`); chat-card surface + initiative-
+  tracker chip showing the legendary-action point count.
 
 ### Phase 2 — Legendary resistance pool (S, ~2 commits)
 

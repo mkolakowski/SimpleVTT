@@ -510,6 +510,56 @@ async def _mark_battle_economy(
     })
 
 
+# v2.159.34 — legendary-actions Phase 1b: per-combatant action-point
+# pool helpers. RAW DMG p.11: a legendary creature has 3 legendary
+# action points per round (some monsters carry a different default),
+# spent at the END of other creatures' turns and refreshed at the
+# START of the legendary creature's own turn. Pool shape mirrors PC
+# class-resource trackers: ``{"max": int, "current": int}``.
+def _ensure_legendary_action_pool(
+    combatant: dict, *, default_max: int = 3,
+) -> dict:
+    """Initialize a combatant's legendary-action pool if missing.
+    Returns the pool dict (mutated onto ``combatant`` so the caller
+    can decrement it directly). Non-legendary combatants never get
+    the pool initialised by Phase 1b — they pick it up lazily when
+    ``/use_legendary_action`` is called against them with a valid
+    action; the gate's own-turn + cost checks already block misuse.
+    """
+    pool = combatant.get("legendary_actions")
+    if not isinstance(pool, dict):
+        pool = {"max": int(default_max), "current": int(default_max)}
+        combatant["legendary_actions"] = pool
+    return pool
+
+
+def _refresh_legendary_action_pool(combatant: dict) -> bool:
+    """Refresh a combatant's legendary-action pool to ``current = max``.
+    No-op if the combatant doesn't carry the pool (non-legendary).
+    Returns True if the pool actually changed value (otherwise the
+    caller can skip the broadcast).
+    """
+    pool = combatant.get("legendary_actions")
+    if not isinstance(pool, dict):
+        return False
+    try:
+        pool_max = int(pool.get("max") or 3)
+    except (TypeError, ValueError):
+        pool_max = 3
+    try:
+        current = int(pool.get("current") or 0)
+    except (TypeError, ValueError):
+        current = 0
+    if current >= pool_max:
+        # Already at-or-above max; clamp the rare over-shoot but
+        # don't broadcast.
+        if current > pool_max:
+            pool["current"] = pool_max
+        return False
+    pool["current"] = pool_max
+    return True
+
+
 # v2.19.0 Phase C.1: buff slot helpers. A "buff" is a structured timed
 # effect installed on a combatant in the hub battle state — Rage,
 # Hunter's Mark, Hex, Bless, Faerie Fire, etc. Unlike the action-economy
@@ -23081,6 +23131,162 @@ async def wake_sleeper(
         "target_combatant_id": target.get("id"),
         "buffs_removed": sleep_keys,
         "over_budget": was_used,
+    }
+
+
+# v2.159.34 — legendary-actions Phase 1b: spend a legendary-action
+# point from the active NPC's pool. Phase 1b is the BUDGET GATE only —
+# this endpoint validates the gate (own-turn check + pool >= cost) and
+# decrements the pool. The actual attack / AoE dispatch happens via a
+# follow-up `/npc_attack` call from the client (mirrors how reactions
+# decouple the slot mark from the underlying attack roll in some
+# patterns). RAW DMG p.11: legendary actions can be spent at the END
+# of ANOTHER creature's turn, never on the legendary creature's own
+# turn, and never if incapacitated (incapacitated check filed for a
+# later phase — needs the condition-on-combatant read site).
+@router.post("/api/campaign/{campaign_id}/use_legendary_action")
+async def use_legendary_action(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.159.34 — Phase 1b of `docs/plans/legendary-actions.md`.
+    Spend a legendary-action point from an NPC combatant's pool.
+
+    Body:
+      ``combatant_id``       — the legendary creature's combatant id.
+      ``action_id``          — the action's id (informational; for
+                                the chat-card label + log).
+      ``action_name``        — display name ("Wing Attack" /
+                                "Disrupt Life").
+      ``cost``               — 1, 2, or 3 (integer). Defaults to 1.
+                                Phase 1a backfilled the cost integer
+                                on every legendary action carrying a
+                                "(Costs N Actions)" suffix in its
+                                SRD name, so the client renders the
+                                correct cost at button-render time.
+      ``target_combatant_id`` (optional) — informational; the actual
+                                damage dispatch happens via a
+                                follow-up `/npc_attack` call.
+
+    Auth: GM only (NPC combatants are GM-controlled).
+
+    Errors:
+      400 missing ``combatant_id`` / ``action_name``.
+      400 ``cost`` outside [1, 3].
+      403 non-member / non-GM.
+      404 combatant not in active battle.
+      409 ``cannot_use_on_own_turn`` — the active combatant is the
+          legendary creature itself; legendary actions can only be
+          spent at the END of another creature's turn.
+      409 ``insufficient_legendary_action_points`` — pool current
+          < requested cost.
+    """
+    body = await request.json()
+    combatant_id = str(body.get("combatant_id") or "").strip()
+    action_id = str(body.get("action_id") or "").strip()
+    action_name = str(body.get("action_name") or "").strip()
+    target_combatant_id = (
+        str(body.get("target_combatant_id") or "").strip() or None
+    )
+    try:
+        cost = int(body.get("cost") or 1)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "cost must be an integer in [1, 3]")
+    if cost < 1 or cost > 3:
+        raise HTTPException(400, "cost must be in [1, 3]")
+    if not combatant_id:
+        raise HTTPException(400, "combatant_id is required")
+    if not action_name:
+        raise HTTPException(400, "action_name is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only — legendary actions are GM-authorised")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    combatants = state.get("combatants") or []
+    spender_idx = None
+    spender = None
+    for i, c in enumerate(combatants):
+        if c.get("id") == combatant_id:
+            spender_idx = i
+            spender = c
+            break
+    if spender is None:
+        raise HTTPException(404, "Combatant not found in active battle")
+
+    # Own-turn gate: legendary actions can only be spent at the END of
+    # ANOTHER creature's turn (RAW DMG p.11).
+    try:
+        active_idx = int(state.get("turn_index") or 0)
+    except (TypeError, ValueError):
+        active_idx = 0
+    if active_idx == spender_idx:
+        return JSONResponse(status_code=409, content={
+            "error": "cannot_use_on_own_turn",
+            "combatant_id": combatant_id,
+            "action_id": action_id,
+        })
+
+    pool = _ensure_legendary_action_pool(spender)
+    try:
+        pool_current = int(pool.get("current") or 0)
+        pool_max = int(pool.get("max") or 3)
+    except (TypeError, ValueError):
+        pool_current = 0
+        pool_max = 3
+    if pool_current < cost:
+        return JSONResponse(status_code=409, content={
+            "error": "insufficient_legendary_action_points",
+            "combatant_id": combatant_id,
+            "action_id": action_id,
+            "cost": cost,
+            "current": pool_current,
+            "max": pool_max,
+        })
+
+    # Spend.
+    pool["current"] = pool_current - cost
+    hub.set_battle(campaign_id, state)
+
+    pool_remaining = int(pool["current"])
+    payload = {
+        "combatant_id": combatant_id,
+        "combatant_name": str(spender.get("name") or "Legendary creature"),
+        "action_id": action_id,
+        "action_name": action_name,
+        "cost": cost,
+        "pool_current": pool_remaining,
+        "pool_max": pool_max,
+        "target_combatant_id": target_combatant_id,
+    }
+    await hub.broadcast(campaign_id, {
+        "type": "legendary_action_pool_update",
+        "data": {
+            "combatant_id": combatant_id,
+            "max": pool_max,
+            "current": pool_remaining,
+            "reason": "spent",
+            "cost": cost,
+            "action_id": action_id,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "source": "legendary-action",
+            **payload,
+        },
+    })
+    return {
+        "ok": True,
+        **payload,
     }
 
 
@@ -84295,6 +84501,28 @@ async def update_battle(
         # target.
         if _active is not None:
             _active["has_acted"] = True
+        # v2.159.34 — legendary-actions Phase 1b: refresh the active
+        # combatant's legendary-action pool to full on their turn start.
+        # RAW DMG p.11: legendary action points refresh at the START
+        # of the legendary creature's own turn (the points are then
+        # spent over the round at the END of each other creature's
+        # turn). No-op for non-legendary combatants (the pool field
+        # is absent on those, so ``_refresh_legendary_action_pool``
+        # returns False and skips the broadcast).
+        if _active is not None and _refresh_legendary_action_pool(_active):
+            await hub.broadcast(campaign_id, {
+                "type": "legendary_action_pool_update",
+                "data": {
+                    "combatant_id": _active.get("id"),
+                    "max": int(
+                        (_active.get("legendary_actions") or {}).get("max") or 3
+                    ),
+                    "current": int(
+                        (_active.get("legendary_actions") or {}).get("current") or 0
+                    ),
+                    "reason": "turn_start_refresh",
+                },
+            })
         # v2.150.0 — Death Saves Phase 3a: when the newly-active
         # combatant is a PC in `dying` state, broadcast a
         # `death_save_prompt` event so the owning player's client can

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2346 in `tests/harness/` + 51 in `tests/harness_ui/` (as of v2.159.33, 2026-06-11).
+**Total tests:** 2353 in `tests/harness/` + 51 in `tests/harness_ui/` (as of v2.159.34, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -98,6 +98,19 @@ v2.159.18 exhaustion-levels Phase 2 — disadvantage wiring at Lv 1 (ability che
 | `test_exhaustion_lv3_imposes_save_disadvantage` | Lv 3 imposes ALL save disadvantage (not just DEX-gated like Restrained). WIS save → 2d20kl1, `roll_state_applied == "auto_disadvantage_exhaustion-3"`. |
 | `test_exhaustion_lv0_no_disadvantage` | Regression. At level=0 the helpers must NOT fire any exhaustion label. |
 | `test_exhaustion_lv3_npc_imposes_check_disadvantage` | NPC mirror path — set exhaustion via `combatant_id` + skip_roll_state + /roll → response carries an exhaustion label. |
+
+### `test_use_legendary_action.py`
+v2.159.34 legendary-actions Phase 1b (see [legendary-actions.md](../plans/legendary-actions.md)) — budget gate + spend endpoint `POST /api/campaign/{cid}/use_legendary_action`. RAW DMG p.11: 3 legendary-action points per round, spent at the END of another creature's turn (never the legendary creature's own), refreshed at the START of the legendary creature's turn. Phase 1b is the budget gate only — damage dispatch chains via a follow-up `/npc_attack` (Phase 1c).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_legendary_action_cost_1_spends_one_point` | Tail Attack (cost 1) → 200; pool 3 → 2; `legendary_action_pool_update(reason=spent, cost=1)` + `feature_used(source=legendary-action)` broadcasts. |
+| `test_use_legendary_action_cost_2_spends_two_points` | Wing Attack (cost 2) → pool 3 → 1 (multi-cost spend path). |
+| `test_use_legendary_action_blocked_on_own_turn` | Dragon is the active combatant → 409 `cannot_use_on_own_turn`. |
+| `test_use_legendary_action_blocked_when_pool_empty` | 3 × cost-1 spends drain the pool; 4th attempt → 409 `insufficient_legendary_action_points` with `current == 0`. |
+| `test_turn_start_refreshes_legendary_action_pool` | Spend to 1, advance turn back to the dragon → pool resets to 3; broadcast carries `reason=turn_start_refresh`. |
+| `test_use_legendary_action_missing_combatant_id_400` | Missing `combatant_id` → 400. |
+| `test_use_legendary_action_player_caller_403` | Non-GM caller → 403 (NPC legendary actions are GM-authorised). |
 
 ### `test_monster_legendary_action_cost.py`
 v2.159.33 legendary-actions Phase 1a (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python data-invariant guard: every SRD legendary action whose name carries a `(Costs N Actions)` suffix has its `cost` integer set to N (not the default 1). Walks the shipped `app/data/local/dnd5e/monsters/*.json` content layer directly. Phase 1a backfilled 39 cost integers across 30 monsters from the suffix; this test guards the invariant against future SRD-rebuild drift so the Phase 1b `/use_legendary_action` budget gate doesn't silently re-break.
