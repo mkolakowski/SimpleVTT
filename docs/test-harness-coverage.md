@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2512 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.19, 2026-06-12).
+**Total tests:** 2515 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.20, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -571,6 +571,15 @@ Mirror Image (L2 Illusion) — the spell-validation suite's reference case for a
 | `test_mage_armor_installs_ac_buff_and_raises_ac` | Casting Mage Armor on self installs a `mage-armor` buff with `ac_bonus: 3`, and the target's `/attack` `target_ac` rises by exactly +3 over baseline. |
 | `test_mage_armor_present_in_catalog` | Phase 4 — catalog shape: `level_int == 1`, school Abjuration, "touch" range, "hour" duration, `concentration: false`, Sorcerer + Wizard lists, every action carries no `save_ability` / `attack_roll` / `damage`. |
 | `test_mage_armor_buff_is_flat_plus3_nonconcentration_8h` | Phase 4 — simplification pin: the installed buff carries a flat `effects.ac_bonus == 3` (with NO `ac_set` / `ac_base` / `ac_override` recompute field), is non-concentration (survives the caster casting a concentration spell, unlike Haste / Shield of Faith), and carries the 8-hour (≥100-round) duration that persists across short rests. |
+
+### `test_cast_wish.py`
+Wish (L9 Conjuration) — the spell-validation suite's L9 narration-only capstone: no dedicated endpoint, no `_SPELL_BUFF_MAP` entry, effect is pure DM adjudication. Rides the generic `/cast_spell` path (spends an L9 slot + broadcasts `spell_cast`). No demo PC owns Wish (no L17 casters), so the fixture patches Wish + a wizard L9 slot onto Thalindra Moonwhisper (Wizard), restored in finally. v2.183.20 — Phase 4 deep-dive (tenth).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_wish_present_in_catalog` | Catalog shape: `level_int == 9`, school Conjuration, "self" range, "instantaneous" duration, `concentration: false`, Sorcerer + Wizard lists. SRD-build quirk pin: the cast action carries `damage == "1d10"` necrotic but no `attack_roll` / `save_ability` (narration-grade stress backlash, not an auto-resolved hit). |
+| `test_cast_wish_spends_l9_slot_and_broadcasts` | Wish rides `/cast_spell` → 200, `ok: true`, `slot.level == 9`, `slot.used >= 1`; `spell_cast` broadcast carries `spell_name == "Wish"`, `spell_level == 9`, `spell_casting_time == "1 action"`. Contract: doesn't 500, spends the slot, names the spell. |
+| `test_cast_wish_is_non_concentration` | Instantaneous + non-concentration: the cast does NOT flag concentration on the response and installs no `concentration-wish` anchor on the caster. |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
