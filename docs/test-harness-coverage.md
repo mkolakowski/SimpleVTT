@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2503 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.16, 2026-06-12).
+**Total tests:** 2506 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.17, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -537,6 +537,21 @@ v2.183.15 — spell-validation suite Phase 4 (fifth complex-spell deep-dive). Sp
 | `test_cast_hold_person_undo_refunds_slot` | Cast carries a `cast_id`; `/undo_attack_damage` with it broadcasts a `spell_slot_update` refunding the L2 cleric slot (`used` − 1). |
 | `test_cast_hold_person_buff_carries_paralyzed_contract` | Phase 4 — the installed combatant buff carries `key == "paralyzed"`, `concentration: true`, `source: "hold-person-spell"`, the WIS re-save stamps (`repeated_save_ability == "WIS"`, `repeated_save_dc > 0`), `speed_reduction_ft == 40`, and the full RAW `raw_effects` narration (incapacitated / can't speak / auto-fail STR-DEX / melee auto-crit / "WIS save at end of each turn" / "Only affects Humanoids"). |
 | `test_cast_hold_person_end_of_turn_wis_resave` | Phase 4 — `/use_repeated_save {buff_key: "paralyzed"}` resolves a WIS save vs the stamped DC; a seed-loop (re-casting + long-resting Tavik to refill L2 slots) observes both a pass (`buff_dropped: true`, buff gone) and a fail (`buff_dropped: false`, buff persists); the save is always WIS vs a positive DC. |
+
+### `test_cast_polymorph.py`
+`/cast_polymorph` — a 4th-level concentration Transmutation that turns a creature into a beast (CR ≤ its level). The spell splits across `/cast_polymorph` (spell-side: slot + invocation gate + concentration anchor) and `/transform source=polymorph` (the actual stat-block swap, `tabletop_routes.py:80641`). The first six tests cover the spell-side contract (Sculptor of Flesh invocation gate, slot/level gates). v2.183.17 appended the Phase 4 deep-dive: the catalog-vs-runtime concentration divergence + the full six-ability stat-block replace that distinguishes Polymorph from Wild Shape. Casters: Magnus Hexbinder (Warlock, via Sculptor of Flesh) for the spell-side tests; Thalindra Moonwhisper (Wizard) on Krieger Stonefist (Barbarian) for the swap. The swap test is Open5e-gated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_sculptor_of_flesh_happy_path` | Magnus casts Polymorph via the Sculptor of Flesh invocation → 200, `concentration: true`, `ready_to_transform: true`, `concentration-polymorph` anchor installed. |
+| `test_warlock_without_via_invocation_409` | `class_slug: warlock` without `via_invocation` → 409 `missing_invocation` (Polymorph isn't a Warlock spell). |
+| `test_warlock_wrong_invocation_409` | Warlock + `via_invocation: mire-the-mind` → 409 `missing_invocation` (registry rejects: that invocation maps to "slow", not "polymorph"). |
+| `test_sculptor_of_flesh_second_cast_409` | Second Sculptor of Flesh cast in the same long rest → 409 `not_enough_uses` (1/long-rest gate). |
+| `test_cast_polymorph_l3_slot_400` | `slot_level: 3` → 400 (Polymorph is L4). |
+| `test_cast_polymorph_missing_character_id_400` | Missing `character_id` → 400. |
+| `test_polymorph_present_in_catalog` | Phase 4 — catalog anchor: 4th-level Transmutation, "Up to 1 hour" duration, WIS save, and `concentration: false` (the flag the divergence test pins against the runtime cast). |
+| `test_cast_binds_concentration_despite_catalog_flag` | Phase 4 — house-rule divergence (mirror of Spiritual Weapon's): catalog flags `concentration: false`, but `/cast_polymorph` returns `concentration: true` + installs the `concentration-polymorph` caster anchor. |
+| `test_polymorph_full_ability_replace_and_revert_restores` | Phase 4 (Open5e-gated) — `/transform source=polymorph` replaces ALL six abilities with the beast's (asserted structurally against the response's `active_form.form_sheet`, no hardcoded numbers) + swaps in the beast HP pool + the mental stats actually change (Wild Shape keeps them); `/revert` restores the prior form's abilities + HP exactly. |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
