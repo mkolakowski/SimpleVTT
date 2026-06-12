@@ -9600,12 +9600,39 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             ? battle.lair_acted_round : null;
         const actedThisRound = (actedRound != null) && (actedRound === curRound);
 
+        // v2.174.0 — RAW MM p.11: lair actions fire on initiative count 20
+        // (losing ties). Combatants above 20 have already acted; the lair
+        // acts before the first combatant whose initiative is <= 20. We
+        // derive "init 20 reached" from the live turn order: the active
+        // combatant's initiative is <= 20, OR every combatant is above 20
+        // (so count 20 falls after the last turn). This stays a *prompt*,
+        // not a gate — the timing is GM-driven by design; the panel just
+        // surfaces when RAW says the lair should act.
+        const activeComb = (combs.length)
+            ? combs[((battle && battle.turn_index) || 0) % combs.length] : null;
+        const activeInit = activeComb ? (Number(activeComb.initiative) || 0) : 0;
+        const allAbove20 = combs.length > 0
+            && combs.every(c => (Number(c && c.initiative) || 0) > 20);
+        const init20Reached = inLair && (activeInit <= 20 || allAbove20);
+
         let actionsHtml = '';
         if (inLair) {
             if (actedThisRound) {
                 actionsHtml = (
                     '<div style="font-size:12px;opacity:0.85;padding:4px 0;'
                     + 'color:#f4c89c;">Lair already acted this round (init 20).</div>'
+                );
+            } else if (init20Reached) {
+                actionsHtml = (
+                    '<div style="font-size:13px;font-weight:600;padding:5px 8px;'
+                    + 'margin-bottom:6px;border-radius:6px;color:#1c120c;'
+                    + 'background:#ff8a3d;">⚠️ Initiative count 20 — '
+                    + ownerName + ' acts now.</div>'
+                );
+            } else {
+                actionsHtml = (
+                    '<div style="font-size:12px;opacity:0.7;padding:4px 0;'
+                    + 'color:#d8c2b2;">Initiative count 20 not yet reached.</div>'
                 );
             }
             actionsHtml += (owner.lair_actions || []).map(a => {
@@ -9647,6 +9674,28 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         }
 
         host.innerHTML = header + toggleBtn + actionsHtml;
+
+        // v2.174.0 — glow the panel border when initiative count 20 is
+        // reached and the lair hasn't acted yet, and fire a one-shot toast
+        // the first time we cross into init 20 each round so the GM is
+        // prompted even if the panel is scrolled off-screen.
+        const _init20Live = inLair && init20Reached && !actedThisRound;
+        if (_init20Live) {
+            host.style.borderColor = '#ff8a3d';
+            host.style.boxShadow = '0 0 14px rgba(255,138,61,0.7), 0 6px 18px rgba(0,0,0,0.5)';
+        } else {
+            host.style.borderColor = '#c2541f';
+            host.style.boxShadow = '0 6px 18px rgba(0,0,0,0.5)';
+        }
+        if (_init20Live && curRound != null
+                && window._lairInit20PromptedRound !== curRound) {
+            window._lairInit20PromptedRound = curRound;
+            (window.showToast || function (m) { console.log(m); })(
+                '🌋 Initiative count 20 — ' + (owner.name || 'the lair')
+                + ' may take a lair action.',
+                'info',
+            );
+        }
 
         const _toggleEl = host.querySelector('#_lair_toggle_btn');
         if (_toggleEl) {

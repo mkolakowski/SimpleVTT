@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2407 in `tests/harness/` + 64 in `tests/harness_ui/` (as of v2.173.0, 2026-06-12).
+**Total tests:** 2407 in `tests/harness/` + 65 in `tests/harness_ui/` (as of v2.174.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3359,6 +3359,7 @@ v2.170.0 legendary-actions Phase 3c UI — the GM-facing lair-action panel. Seed
 | `test_trigger_posts_trigger_lair_action` | In the in-lair state, clicking Trigger opens the (stubbed) multi-target picker then POSTs `/trigger_lair_action` with `action_id:"magma-erupts"`, the lair_slug, and the picked `aoe_target_combatant_ids`. |
 | `test_resolved_action_disables_its_trigger_no_repeat` | v2.172.0 — after a `lair_action_resolved` parks `last_lair_action_id`, that action's Trigger button is disabled + reads "Used last round" while the other stays enabled (RAW MM p.11 no-repeat). |
 | `test_resolved_action_disables_all_triggers_once_per_round` | v2.173.0 — a `lair_action_resolved` carrying `lair_acted_round` matching the battle's round disables EVERY Trigger ("Acted this round") + shows the "already acted this round" banner (RAW MM p.11 one-per-round). |
+| `test_init_20_banner_surfaces_when_reached` | v2.174.0 — RAW MM p.11: when the active combatant's initiative ≤ 20 (init count 20 reached), the panel shows the "⚠️ Initiative count 20 — … acts now" banner; when the active combatant's initiative > 20 it shows the "not yet reached" hint instead. |
 
 ---
 

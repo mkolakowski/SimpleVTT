@@ -33,9 +33,11 @@ _HERO_ID = "tok_hero_lair_ui_test"
 _LAIR_SLUG = "ancient-red-dragon"
 
 
-def _battle_json(in_lair: bool = False) -> str:
-    """A Hero (active) + an Ancient Red Dragon carrying two pre-baked
-    lair actions and a lair_slug. The Hero is active (turn_index=0)."""
+def _battle_json(in_lair: bool = False, turn_index: int = 0) -> str:
+    """A Hero (init 25) + an Ancient Red Dragon (init 20) carrying two
+    pre-baked lair actions and a lair_slug. `turn_index` selects the
+    active combatant: 0 = Hero (init 25 > 20), 1 = Dragon (init 20 ≤ 20,
+    i.e. initiative count 20 reached)."""
     return json.dumps({
         "combatants": [
             {
@@ -78,7 +80,7 @@ def _battle_json(in_lair: bool = False) -> str:
                 ],
             },
         ],
-        "turn_index": 0,
+        "turn_index": turn_index,
         "round": 1,
         "active": True,
         "in_lair": in_lair,
@@ -86,10 +88,10 @@ def _battle_json(in_lair: bool = False) -> str:
     })
 
 
-def _seed_battle(page: Page, in_lair: bool = False) -> None:
+def _seed_battle(page: Page, in_lair: bool = False, turn_index: int = 0) -> None:
     page.add_init_script(
         f"window.localStorage.setItem('simplevtt_battle_{CAMPAIGN_ID}', "
-        f"{json.dumps(_battle_json(in_lair))});"
+        f"{json.dumps(_battle_json(in_lair, turn_index))});"
     )
 
 
@@ -292,3 +294,27 @@ def test_resolved_action_disables_all_triggers_once_per_round(gm_page: Page):
     expect(disabled).to_have_count(2, timeout=3000)
     expect(disabled.first).to_contain_text("Acted this round")
     expect(panel).to_contain_text("Lair already acted this round")
+
+
+def test_init_20_banner_surfaces_when_reached(gm_page: Page):
+    """v2.174.0 — RAW MM p.11: lair actions fire on initiative count 20.
+    With the Dragon (init 20) as the active combatant, the panel surfaces
+    the "Initiative count 20 — … acts now" prompt; with the Hero (init 25)
+    active it shows the "not yet reached" hint instead."""
+    # turn_index=1 → Dragon (init 20) active → init count 20 reached.
+    _seed_battle(gm_page, in_lair=True, turn_index=1)
+    gm_page.goto(tabletop_url())
+
+    panel = gm_page.locator("#_lair_action_panel")
+    expect(panel).to_be_visible(timeout=5000)
+    expect(panel).to_contain_text("Initiative count 20", timeout=3000)
+    expect(panel).to_contain_text("acts now")
+    # Triggers stay enabled (prompt, not gate).
+    expect(panel.locator("._lair_trigger_btn:not([disabled])")).to_have_count(2)
+
+    # turn_index=0 → Hero (init 25) active → count 20 not yet reached.
+    _seed_battle(gm_page, in_lair=True, turn_index=0)
+    gm_page.goto(tabletop_url())
+    panel = gm_page.locator("#_lair_action_panel")
+    expect(panel).to_be_visible(timeout=5000)
+    expect(panel).to_contain_text("not yet reached", timeout=3000)

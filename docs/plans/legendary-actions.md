@@ -444,6 +444,18 @@ combatant.legendary_resistance = {
   round") + prepends an "already acted this round" banner. The two RAW
   lair restrictions (one-per-round + no-repeat) are now both enforced.
   Restructured to 6 harness tests (net +2).
+- Initiative-20 auto-surfacing (✅ **shipped v2.174.0** "The Twentieth
+  Count"): RAW MM p.11 — lair actions fire on initiative count 20.
+  `_renderLairActionPanel` derives "init 20 reached" from the live turn
+  order (active combatant initiative ≤ 20, or all combatants above 20)
+  and, when reached + not yet acted, shows a bright "⚠️ Initiative count
+  20 — {owner} acts now" banner, glows the panel border, and fires a
+  one-shot per-round toast (deduped on `window._lairInit20PromptedRound`).
+  Before count 20 it shows a "not yet reached" hint. A prompt, not a gate
+  — the timing stays GM-driven; the once-per-round + no-repeat guards are
+  the hard rules. Front-end only (no endpoint / WS / schema change);
+  1 new Playwright test. The lair-action RAW cadence is now both enforced
+  and surfaced.
 
 ### Non-goals (v1)
 
