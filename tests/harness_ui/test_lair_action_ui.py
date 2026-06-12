@@ -105,6 +105,23 @@ def _dispatch_in_lair_changed(page: Page, in_lair: bool) -> None:
     )
 
 
+def _dispatch_lair_action_resolved(page: Page, action_id: str) -> None:
+    page.evaluate(
+        """(args) => {
+            document.dispatchEvent(new CustomEvent('vtt:ws-message', {detail: {
+                type: 'lair_action_resolved',
+                data: {
+                    action_id: args.actionId,
+                    action_name: 'Magma Erupts',
+                    last_lair_action_id: args.actionId,
+                    results: [],
+                },
+            }}));
+        }""",
+        {"actionId": action_id},
+    )
+
+
 def test_lair_panel_toggle_renders(gm_page: Page):
     """When the battle holds a lair-bearing creature, the GM sees the
     floating lair-action panel with an "Enter lair" toggle and no action
@@ -225,3 +242,28 @@ def test_trigger_posts_trigger_lair_action(gm_page: Page):
     assert captured.get("action_id") == "magma-erupts", captured
     assert captured.get("lair_slug") == _LAIR_SLUG, captured
     assert captured.get("aoe_target_combatant_ids") == [_HERO_ID], captured
+
+
+def test_resolved_action_disables_its_trigger_no_repeat(gm_page: Page):
+    """v2.172.0 — RAW MM p.11: a lair action can't be used two rounds in a
+    row. After a lair_action_resolved broadcast parks the fired action id,
+    that action's Trigger button reads "Used last round" and is disabled,
+    while the other action stays triggerable."""
+    _seed_battle(gm_page, in_lair=True)
+    gm_page.goto(tabletop_url())
+
+    panel = gm_page.locator("#_lair_action_panel")
+    expect(panel).to_be_visible(timeout=5000)
+    expect(panel.locator("._lair_trigger_btn")).to_have_count(2, timeout=3000)
+    # Both triggerable to start.
+    enabled_before = panel.locator("._lair_trigger_btn:not([disabled])")
+    expect(enabled_before).to_have_count(2)
+
+    _dispatch_lair_action_resolved(gm_page, "magma-erupts")
+
+    # Magma's button is now disabled + relabelled; Tremor stays enabled.
+    disabled = panel.locator("._lair_trigger_btn[disabled]")
+    expect(disabled).to_have_count(1, timeout=3000)
+    expect(disabled).to_contain_text("Used last round")
+    expect(disabled).to_have_attribute("data-action-id", "magma-erupts")
+    expect(panel.locator("._lair_trigger_btn:not([disabled])")).to_have_count(1)

@@ -24072,11 +24072,18 @@ async def set_in_lair(
 
     state["in_lair"] = in_lair
     state["lair_slug"] = lair_slug if in_lair else ""
+    # v2.172.0 — entering or leaving a lair resets the no-repeat memory
+    # (RAW MM p.11: the two-rounds-in-a-row restriction is per-lair).
+    state["last_lair_action_id"] = ""
     hub.set_battle(campaign_id, state)
 
     await hub.broadcast(campaign_id, {
         "type": "in_lair_changed",
-        "data": {"in_lair": in_lair, "lair_slug": state["lair_slug"]},
+        "data": {
+            "in_lair": in_lair,
+            "lair_slug": state["lair_slug"],
+            "last_lair_action_id": "",
+        },
     })
     return {"ok": True, "in_lair": in_lair, "lair_slug": state["lair_slug"]}
 
@@ -24100,6 +24107,9 @@ async def trigger_lair_action(
                                        the battle state's ``lair_slug``.
       ``aoe_target_combatant_ids``   — list of combatant ids caught in
                                        the area.
+      ``override`` (optional)        — bypass the no-repeat guard (RAW MM
+                                       p.11: no same lair action two
+                                       rounds in a row).
 
     Dispatch (mirrors the legendary save-AoE path in
     ``use_legendary_action``):
@@ -24122,6 +24132,8 @@ async def trigger_lair_action(
       404 no active battle.
       409 ``not_in_lair`` — the battle's ``in_lair`` flag is False.
       409 ``unknown_lair_action`` — slug/action_id didn't resolve.
+      409 ``lair_action_repeated`` — same action as the previous lair
+          turn and ``override`` not set (RAW MM p.11).
     """
     body = await request.json()
     action_id = str(body.get("action_id") or "").strip()
@@ -24159,6 +24171,19 @@ async def trigger_lair_action(
             "error": "unknown_lair_action",
             "lair_slug": lair_slug,
             "action_id": action_id,
+        })
+
+    # v2.172.0 — RAW MM p.11: a creature can't use the same lair action
+    # two rounds in a row. The previous lair turn's action id is parked on
+    # the battle state; reject a repeat unless the GM passes override=true.
+    override = bool(body.get("override"))
+    last_action_id = str(state.get("last_lair_action_id") or "").strip()
+    if not override and last_action_id and action_id == last_action_id:
+        return JSONResponse(status_code=409, content={
+            "error": "lair_action_repeated",
+            "lair_slug": lair_slug,
+            "action_id": action_id,
+            "last_lair_action_id": last_action_id,
         })
 
     action_name = str(action_def.get("name") or action_id)
@@ -24248,6 +24273,12 @@ async def trigger_lair_action(
             "condition_installed": bool(sr.get("condition_installed")),
         })
 
+    # v2.172.0 — park this action id as the no-repeat memory so the next
+    # lair turn can't re-use it (RAW MM p.11), and clients can disable its
+    # Trigger button until a different action is used.
+    state["last_lair_action_id"] = action_id
+    hub.set_battle(campaign_id, state)
+
     await hub.broadcast(campaign_id, {
         "type": "lair_action_resolved",
         "data": {
@@ -24261,6 +24292,7 @@ async def trigger_lair_action(
             "half_on_save": half_on_save,
             "effect": effect,
             "results": results,
+            "last_lair_action_id": action_id,
         },
     })
     return {
@@ -24269,6 +24301,7 @@ async def trigger_lair_action(
         "action_id": action_id,
         "action_name": action_name,
         "results": results,
+        "last_lair_action_id": action_id,
     }
 
 
@@ -85289,6 +85322,11 @@ async def update_battle(
             state["in_lair"] = _prev_battle.get("in_lair")
         if "lair_slug" not in state and "lair_slug" in _prev_battle:
             state["lair_slug"] = _prev_battle.get("lair_slug")
+        # v2.172.0 — carry forward the no-repeat memory (RAW MM p.11: a
+        # lair action can't be used two rounds in a row) for the same
+        # reason as the flags above.
+        if "last_lair_action_id" not in state and "last_lair_action_id" in _prev_battle:
+            state["last_lair_action_id"] = _prev_battle.get("last_lair_action_id")
 
     # v2.99.185 — NPC concentration-drop auto-cascade. Closes a
     # v2.99.179 filed item. Walk the prev/new combatants for any

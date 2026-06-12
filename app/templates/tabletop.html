@@ -8486,6 +8486,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (battle && typeof battle === 'object') {
                 battle.in_lair = !!data.in_lair;
                 battle.lair_slug = data.lair_slug || '';
+                // v2.172.0 — entering / leaving a lair resets the
+                // no-repeat memory (RAW MM p.11).
+                battle.last_lair_action_id = data.last_lair_action_id || '';
             }
             if (typeof window._renderLairActionPanel === 'function') {
                 window._renderLairActionPanel();
@@ -8509,6 +8512,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }
             const _detail = _bits.length ? ` — ${_bits.join(' · ')}` : '';
             (window.showToast || function (m) { console.log(m); })(`🌋 ${_nm}${_detail}`, 'info');
+            // v2.172.0 — park the no-repeat memory so the panel disables
+            // this action's Trigger button until a different one is used
+            // (RAW MM p.11: no same lair action two rounds in a row).
+            if (battle && typeof battle === 'object') {
+                battle.last_lair_action_id = data.last_lair_action_id || data.action_id || '';
+            }
+            if (typeof window._renderLairActionPanel === 'function') {
+                window._renderLairActionPanel();
+            }
             return;
         }
         // v2.19.0 Phase C.1: buff_update — server installed / removed a
@@ -9566,6 +9578,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             + '</button>'
         );
 
+        // v2.172.0 — RAW MM p.11: a lair action can't be used two rounds
+        // in a row. The server parks the last-fired action id on the
+        // battle state; disable its Trigger button until a different
+        // action is used.
+        const lastActionId = (battle && battle.last_lair_action_id) || '';
+
         let actionsHtml = '';
         if (inLair) {
             actionsHtml = (owner.lair_actions || []).map(a => {
@@ -9577,6 +9595,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     : '';
                 const eff = a.effect ? _escH(a.effect) : '';
                 const meta = [dmg, sv, eff].filter(Boolean).join(' · ');
+                const usedLast = (a.id || '') === lastActionId && lastActionId !== '';
+                const btn = usedLast
+                    ? ('<button class="_lair_trigger_btn" data-action-id="' + aid
+                        + '" data-action-name="' + anm + '" disabled '
+                        + 'style="width:100%;opacity:0.5;cursor:not-allowed;">'
+                        + 'Used last round</button>')
+                    : ('<button class="_lair_trigger_btn" data-action-id="' + aid
+                        + '" data-action-name="' + anm + '" style="width:100%;">Trigger</button>');
                 return (
                     '<div style="margin-bottom:6px;padding-bottom:6px;'
                     + 'border-bottom:1px solid rgba(255,255,255,0.12);">'
@@ -9584,8 +9610,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     + '<strong>' + anm + '</strong>'
                     + (meta ? '<br><span style="opacity:0.8;">' + meta + '</span>' : '')
                     + '</div>'
-                    + '<button class="_lair_trigger_btn" data-action-id="' + aid
-                    + '" data-action-name="' + anm + '" style="width:100%;">Trigger</button>'
+                    + btn
                     + '</div>'
                 );
             }).join('');
@@ -9648,6 +9673,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     if (!r.ok) {
                         const txt = await r.text();
                         console.warn('trigger_lair_action failed:', txt);
+                        // v2.172.0 — surface the no-repeat rejection (RAW
+                        // MM p.11) as a toast rather than a silent no-op.
+                        if (r.status === 409 && txt.indexOf('lair_action_repeated') !== -1) {
+                            (window.showToast || function (m) { console.log(m); })(
+                                '🌋 ' + actionName + ' was used last round — pick a different lair action.',
+                                'warn',
+                            );
+                        }
                     }
                     // Success → lair_action_resolved WS surfaces a toast.
                 } catch (err) {

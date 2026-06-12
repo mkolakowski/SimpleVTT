@@ -61,7 +61,10 @@ async def bandit_template_id(gm_client):
 
 
 async def _seed_battle(gm_client, combatants, *, turn_index=0,
-                       in_lair=False, lair_slug=""):
+                       in_lair=False, lair_slug="", last_lair_action_id=""):
+    # last_lair_action_id is sent explicitly (default "") so the v2.172.0
+    # carry-forward guard doesn't leak the no-repeat memory across tests —
+    # the guard only preserves the key when the client omits it.
     await gm_client.put(
         f"/api/campaign/{CAMPAIGN_ID}/battle",
         json={
@@ -71,6 +74,7 @@ async def _seed_battle(gm_client, combatants, *, turn_index=0,
             "active": True,
             "in_lair": in_lair,
             "lair_slug": lair_slug,
+            "last_lair_action_id": last_lair_action_id,
         },
     )
 
@@ -184,6 +188,121 @@ async def test_trigger_magma_erupts_damage_save_for_half(
     assert msg["data"]["damage_type"] == "fire"
     assert msg["data"]["half_on_save"] is True
     assert len(msg["data"]["results"]) == 2
+    assert msg["data"]["last_lair_action_id"] == "magma-erupts"
+
+
+async def test_trigger_same_action_twice_is_409_no_repeat(
+    gm_client, bandit_template_id,
+):
+    """v2.172.0 — RAW MM p.11: a lair action can't be used two rounds in a
+    row. Firing the same action twice → 409 `lair_action_repeated`; the
+    broadcast/state park the last-fired id."""
+    b1 = "npc_lair_norepeat_b1"
+    await _seed_battle(gm_client, [
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="adult-red-dragon")
+
+    first = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "magma-erupts", "aoe_target_combatant_ids": [b1]},
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["last_lair_action_id"] == "magma-erupts"
+
+    repeat = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "magma-erupts", "aoe_target_combatant_ids": [b1]},
+    )
+    assert repeat.status_code == 409
+    body = repeat.json()
+    assert body["error"] == "lair_action_repeated"
+    assert body["last_lair_action_id"] == "magma-erupts"
+
+
+async def test_trigger_repeat_with_override_succeeds(
+    gm_client, bandit_template_id,
+):
+    """The no-repeat guard is bypassable with override=true (matches the
+    action-economy override convention)."""
+    b1 = "npc_lair_override_b1"
+    await _seed_battle(gm_client, [
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="adult-red-dragon")
+
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "magma-erupts", "aoe_target_combatant_ids": [b1]},
+    )
+    again = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={
+            "action_id": "magma-erupts",
+            "aoe_target_combatant_ids": [b1],
+            "override": True,
+        },
+    )
+    assert again.status_code == 200, again.text
+
+
+async def test_trigger_different_action_clears_no_repeat(
+    gm_client, bandit_template_id,
+):
+    """After a DIFFERENT action is used, the first one is available again
+    (only the immediately-previous turn's action is blocked)."""
+    b1 = "npc_lair_clears_b1"
+    await _seed_battle(gm_client, [
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="adult-red-dragon")
+
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "magma-erupts", "aoe_target_combatant_ids": [b1]},
+    )
+    # A different action this round — moves the no-repeat memory off magma.
+    tremor = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "tremor", "aoe_target_combatant_ids": [b1]},
+    )
+    assert tremor.status_code == 200, tremor.text
+    assert tremor.json()["last_lair_action_id"] == "tremor"
+    # Magma is available again now that tremor was the last action.
+    magma_again = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "magma-erupts", "aoe_target_combatant_ids": [b1]},
+    )
+    assert magma_again.status_code == 200, magma_again.text
+
+
+async def test_set_in_lair_clears_no_repeat_memory(gm_client, gm_ws,
+                                                    bandit_template_id):
+    """Entering / leaving a lair resets the no-repeat memory and the
+    `in_lair_changed` broadcast carries the cleared id."""
+    b1 = "npc_lair_reset_b1"
+    await _seed_battle(gm_client, [
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="adult-red-dragon")
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "magma-erupts", "aoe_target_combatant_ids": [b1]},
+    )
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/set_in_lair",
+        json={"in_lair": True, "lair_slug": "adult-red-dragon"},
+    )
+    assert resp.status_code == 200, resp.text
+    msg = await gm_ws.wait_for("in_lair_changed")
+    assert msg["data"]["last_lair_action_id"] == ""
+    # Magma fires cleanly now that the memory was reset.
+    after = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "magma-erupts", "aoe_target_combatant_ids": [b1]},
+    )
+    assert after.status_code == 200, after.text
 
 
 async def test_trigger_tremor_installs_prone_on_fail(

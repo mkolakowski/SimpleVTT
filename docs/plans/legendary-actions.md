@@ -421,6 +421,16 @@ combatant.legendary_resistance = {
   descriptive entries the GM resolves manually. 6 new unit tests +
   1 new trigger harness test. **Filed follow-up:** metallic dragons +
   Lich + Kraken (same drop-in path).
+- No-repeat guard (✅ **shipped v2.172.0** "No Encore"): RAW MM p.11 —
+  a lair action can't be used two rounds in a row. `trigger_lair_action`
+  parks the fired action id as `state["last_lair_action_id"]` and
+  rejects a repeat with `409 lair_action_repeated` unless `override`
+  is set; a different action this round frees the previous one.
+  `set_in_lair` clears the memory; the carry-forward guard preserves it
+  across `/battle` PUTs. The GM panel disables the just-used action's
+  Trigger button ("Used last round"). 4 new harness tests + 1 Playwright
+  test. (Once-per-round / init-20 cadence stays GM-driven — the panel
+  surfaces "init 20".)
 
 ### Non-goals (v1)
 
