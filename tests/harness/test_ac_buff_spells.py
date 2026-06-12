@@ -19,6 +19,7 @@ Tests:
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+from .spell_catalog import load_all_spells
 
 
 # Magnus Hexbinder's demo spell list (see demo_seed `_warlock_sheet`),
@@ -138,3 +139,87 @@ async def test_mage_armor_installs_ac_buff_and_raises_ac(
     # AC rose by exactly the +3.
     new_ac = await _read_ac()
     assert new_ac == base_ac + 3
+
+
+# --- Phase 4 complex-spell deep-dive (v2.183.19) --------------------
+# Mage Armor is the spell-validation suite's reference case for a
+# *documented RAW-vs-engine simplification*. RAW (PHB p.256): "The
+# target's base AC becomes 13 + its Dexterity modifier. The spell ends
+# if the target dons armor." The engine models that as a flat +3
+# ac_bonus buff (the 13+Dex − 10+Dex delta), non-concentration, 8-hour
+# duration, applied unconditionally — the GM is responsible for only
+# casting it on unarmored targets. The existing
+# `test_mage_armor_installs_ac_buff_and_raises_ac` proves the +3 flows
+# into `/attack`'s target_ac; this deep-dive owns the catalog shape and
+# the buff-contract pin (flat +3, non-concentration, 8h, no 13+Dex
+# recompute / unarmored gate).
+
+
+def test_mage_armor_present_in_catalog():
+    """Catalog shape: L1 Abjuration, Touch range, 8-hour duration,
+    non-concentration, Sorcerer + Wizard lists, and a single
+    no-save/attack/damage action (the AC change lives in prose)."""
+    by_slug = {(s.get("slug") or ""): s for s in load_all_spells()}
+    ma = by_slug.get("mage-armor")
+    assert ma is not None, "mage-armor must be in the spell catalog"
+    assert ma.get("level_int") == 1
+    assert (ma.get("school") or "").lower() == "abjuration"
+    assert "touch" in (ma.get("range") or "").lower()
+    assert "hour" in (ma.get("duration") or "").lower()
+    assert ma.get("concentration") is False
+    assert {"sorcerer", "wizard"} <= set(ma.get("spell_lists") or [])
+    for a in ma.get("actions") or []:
+        assert not a.get("save_ability"), a
+        assert not a.get("attack_roll"), a
+        assert not a.get("damage"), a
+
+
+async def test_mage_armor_buff_is_flat_plus3_nonconcentration_8h(
+    gm_client, gm_ws, magnus_with_mage_armor,
+):
+    """Phase 4 — pins the RAW-vs-engine simplification. RAW sets base AC
+    to 13 + Dex; the engine installs a flat +3 ac_bonus buff that is
+    non-concentration and lasts 8 hours (4800 rounds). The +3 is
+    unconditional (no 13+Dex recompute, no unarmored gate) — that's the
+    documented simplification, distinct from the 1-minute concentration
+    Haste / Shield of Faith AC buffs."""
+    magnus = magnus_with_mage_armor
+    magnus_tok = f"tok_ma2_{magnus['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [
+            {"id": magnus_tok, "char_id": magnus["id"], "name": magnus["name"],
+             "initiative": 10, "hp_current": 40, "hp_max": 40, "buffs": [],
+             "economy": {"action": False, "bonus": False,
+                         "reaction": False, "movement": 0}},
+        ], "turn_index": 0, "round": 1, "active": True},
+    )
+
+    gm_ws.mark()
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={"character_id": magnus["id"], "spell_index": MAGE_ARMOR_INDEX,
+              "slot_level": 3, "class_slug": "warlock",
+              "target_combatant_id": magnus_tok,
+              "target_character_id": magnus["id"],
+              "override": True, "override_range": True},
+    )
+    assert r.status_code == 200, r.text
+
+    bu = await gm_ws.wait_for("buff_update")
+    ma = next((b for b in bu["data"]["buffs"]
+               if b.get("key") == "mage-armor"), None)
+    assert ma is not None, bu["data"]["buffs"]
+
+    eff = ma.get("effects") or {}
+    # Flat +3 (the 13+Dex − 10+Dex delta), not a 13+Dex recompute.
+    assert eff.get("ac_bonus") == 3, eff
+    assert "ac_set" not in eff and "ac_base" not in eff, eff
+    assert "ac_override" not in eff, eff
+    # RAW non-concentration — survives the caster casting a concentration
+    # spell, unlike Haste / Shield of Faith.
+    assert not ma.get("concentration"), ma
+    # 8-hour duration (4800 rounds) — well beyond a 1-minute (10-round)
+    # AC buff, so it persists across short rests.
+    dur = ma.get("duration_rounds") or ma.get("duration_max")
+    assert dur and dur >= 100, ma
