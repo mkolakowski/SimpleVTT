@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2484 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.11, 2026-06-12).
+**Total tests:** 2489 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.12, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -482,6 +482,17 @@ v2.183.11 — spell-validation suite Phase 4 (first complex-spell deep-dive). Co
 | `test_no_prompt_for_cantrip` | Fire Bolt (L0) → no prompt — the walker excludes `spell_level == 0`. |
 | `test_no_prompt_when_watcher_out_of_range` | Thalindra moved beyond `COUNTERSPELL_RANGE_FT = 60.0` → no prompt. |
 | `test_no_prompt_when_watcher_lacks_counterspell` | Thalindra's sheet patched to drop Counterspell → no prompt. |
+
+### `test_cast_spirit_guardians.py`
+v2.183.12 — spell-validation suite Phase 4 (second complex-spell deep-dive). Spirit Guardians is the catalog's canonical self-anchored concentration AoE: a 15-ft `self_sphere` centred on the caster, rolling a Wisdom save (3d8 radiant, save-for-half) against everything in the area for the duration. This file owns the full live cast → place → persist story. Bundled with a one-line catalog fix: the `concentration` flag in `spirit-guardians.json` was corrected `false` → `true` (the cast path already treated it as concentration via the "Up to ..." duration fallback, but the `spell_concentration` response field read the raw flag). Caster: Brother Tavik Stonebrow (demo Cleric, native Spirit Guardians + L3 slots; spell index resolved from the live sheet). Companion to `test_cast_spell_aoe.py` (generic AoE dispatch) and `test_use_spiritual_weapon.py` (the other Cleric concentration-summon deep-dive).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_spirit_guardians_present_in_catalog` | Catalog anchor — Spirit Guardians present **and** its `concentration` flag is now `true` (guards both the rename and the corrected flag). |
+| `test_cast_marks_concentration_and_pending_self_sphere` | Cast with no targets → HTTP `pending_aoe_placement: true`, `area_shape == "self_sphere"`, `area_size_ft == 15`; the `spell_cast` broadcast carries `spell_concentration == true` (the field the catalog flag fix corrects — the HTTP response is a curated subset that omits it). |
+| `test_place_dispatches_radiant_saves` | `/place_aoe` on 2 bandits (auto-apply on) → `auto_save_targets` has 2 entries each with an int `rolled`, bool `passed`, `damage_type == "radiant"`, and `damage_applied > 0` (3d8 save-for-half). |
+| `test_place_creates_self_anchored_concentration_marker` | Placement broadcasts `concentration_aoe_update` carrying a Spirit Guardians marker with `is_self_anchored: true`, `shape == "self_sphere"`, and `caster_char_id == Tavik` (the aura follows the caster). |
+| `test_self_anchored_marker_not_movable` | `/move_aoe` on the self-anchored marker → 409 `not_movable` (Spirit Guardians tracks the caster's token; it can't be repositioned like Web/Moonbeam). |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.

@@ -427,7 +427,7 @@ assert the auto-effect lands.
 **Goal:** the dozen-ish spells that don't fit the catalog matrix get
 their own deep-dive tests, modelled on `tests/harness/test_cast_sleep*.py`.
 
-**Status:** in progress — first deep-dive shipped (Counterspell, v2.183.11, `tests/harness/test_cast_counterspell.py`).
+**Status:** in progress — deep-dives shipped: Counterspell (v2.183.11, `tests/harness/test_cast_counterspell.py`), Spirit Guardians (v2.183.12, `tests/harness/test_cast_spirit_guardians.py`).
 
 **Candidates** (from Phase 0 inventory):
 - Counterspell — ✅ shipped v2.183.11 (`test_cast_counterspell.py`): prompt-emission contract — positive `spell_cast_near` emission on a visible leveled cast within 60 ft of a Counterspell-ready watcher + three exclusion gates (cantrip, out-of-range, watcher lacks Counterspell). Companion to `test_counterspell_subtle_immune.py` (the Subtle-Spell suppression half).
@@ -439,7 +439,7 @@ their own deep-dive tests, modelled on `tests/harness/test_cast_sleep*.py`.
 - Eldritch Blast — multi-beam scaling
 - Magic Missile — multi-dart scaling (already partial coverage)
 - Spiritual Weapon — persistent attacker
-- Spirit Guardians — concentration aura
+- Spirit Guardians — ✅ shipped v2.183.12 (`test_cast_spirit_guardians.py`): self-anchored concentration-aura lifecycle — pending self-sphere placement + `spell_concentration: true`, `/place_aoe` 3d8 radiant Wisdom-save dispatch, self-anchored marker persistence, and the marker rejecting `/move_aoe` (409 `not_movable`). Bundled the catalog `concentration` flag fix (`false` → `true`) the assertion depends on.
 - Conjure X / Summon X — token creation
 - Hold Person + Stunning Strike interaction — incapacitation stack
 - Sleep wake-on-damage — already tested; this is the model
