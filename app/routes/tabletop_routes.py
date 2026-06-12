@@ -3625,6 +3625,10 @@ from app.content.effective_speed import (
     effective_speed_reduction_ft as _effective_speed_reduction_ft,
     effective_speed_walk as _effective_speed_walk,
 )
+from app.content.lair_actions import (
+    lair_action_by_id as _lair_action_by_id,
+    lair_actions_for_slug as _lair_actions_for_slug,
+)
 
 
 def _combatant_oa_blocked_against(combatant: dict, mover_char_id: int) -> bool:
@@ -88598,6 +88602,16 @@ def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:
             break
     if lr_per_day:
         out["legendary_resistance_per_day"] = lr_per_day
+    # v2.168.0 Phase 3a — fold curated lair actions (RAW per-monster
+    # "Lair Actions" sidebar) onto the projected sheet, keyed by slug.
+    # The SRD content build doesn't carry a lair-action block, so these
+    # are hand-authored in app/content/lair_actions.py. Only a handful
+    # of legendary creatures have a lair, so this is a no-op for almost
+    # every monster. The initiative-20 lair-action scheduler (Phase 3b)
+    # reads sheet["lair_actions"] directly.
+    lair = _lair_actions_for_slug(m.get("slug"))
+    if lair:
+        out["lair_actions"] = lair
     return out
 
 

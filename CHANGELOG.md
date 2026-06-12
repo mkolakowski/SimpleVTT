@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.168.0] - 2026-06-12 — "The Volcanic Floor" — Legendary-actions Phase 3a: the lair-action data layer. Phase 3 adds lair actions (RAW: a creature in its lair acts on initiative count 20, once per round). The SRD content build doesn't carry a "Lair Actions" block, so this commit hand-authors the data and folds it onto the projected monster sheet — the engine + GM UI land in Phases 3b/3c. New leaf module `app/content/lair_actions.py` curates the Red Dragon's volcanic lair (Magma Erupts — DEX DC 15, 6d6 fire, save-for-half, 20-ft burst; Tremor — DEX DC 15, knocked prone, 60-ft radius; Volcanic Gases — CON DC 13, poisoned, 20-ft sphere), keyed by monster slug. Red dragons of every age share the lair (RAW: lair actions are tied to the lair, not the creature's age), so the Adult (demo fixture) + Ancient red dragon both resolve to the same set. `_monster_dict_to_sheet` now folds `lair_actions` onto the projected sheet (a no-op for the ~99% of monsters with no authored lair), so the Phase 3b initiative-20 scheduler can read `sheet["lair_actions"]` directly — exactly the way `legendary_resistance_per_day` already rides the same projection.
+
+**Schema version:** 69
+**Commit summary:** **Back-end (data) commit. (A) `app/content/lair_actions.py` — new leaf module: `LAIR_ACTIONS_BY_SLUG` curated map (adult/ancient red dragon → the 3 RAW volcanic lair actions), `lair_actions_for_slug(slug)` (deep-copied, case/whitespace-insensitive, empty list for unknown/blank/non-string slugs), `lair_action_by_id(slug, id)` (single-action lookup for the Phase 3b trigger endpoint). (B) `app/routes/tabletop_routes.py` — `_monster_dict_to_sheet` folds `lair_actions` onto the projected sheet keyed by `m["slug"]`, right after the `legendary_resistance_per_day` derivation; module-level import of the two leaf helpers. (C) `tests/harness/test_lair_actions.py` — 13 pure-Python unit tests (suite 2371 → 2384): 3-action shape, magma-erupts DEX-save-AoE fields, tremor prone effect, volcanic-gases CON poison, adult==ancient lair sharing, unknown/blank/non-string slug → [], case-insensitive lookup, deep-copy isolation, `lair_action_by_id` known/unknown/blank.**
+**Description:** Phase 3a of `docs/plans/legendary-actions.md`. The data shape is the top-level `lair_actions` array (Open Question 2's default) rather than `category: "lair_action"` in the unified `actions` list — the initiative-20 scheduler reads the array directly and no other read site wants lair actions surfaced. The leaf-module + slug-keyed-projection pattern mirrors `app/content/carry_weight.py` (Phase 1 carrying-capacity) and the `legendary_resistance_per_day` fold, so the data is unit-testable without HTTP fixtures and lands on `allTemplates[].sheet.lair_actions` (the same projection that feeds the Phase 1c/2 legendary strips) for free. v1 ships the demo's Adult Red Dragon (+ its ancient counterpart) fully and correctly rather than hand-authoring all 15 SRD legendary monsters at risk of RAW errors; the remaining chromatic/metallic lairs + Lich/Kraken are a filed follow-up backfill that drops into `LAIR_ACTIONS_BY_SLUG` with no code change.
+
+### Added
+- `app/content/lair_actions.py` — curated lair-action data + `lair_actions_for_slug` / `lair_action_by_id` accessors.
+- `tests/harness/test_lair_actions.py` — 13 pure-Python unit tests for the leaf module.
+
+### Changed
+- `app/routes/tabletop_routes.py::_monster_dict_to_sheet` — folds curated `lair_actions` onto the projected sheet keyed by monster slug.
+- `docs/plans/legendary-actions.md` — Phase 3a marked shipped.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note Phase 3a (lair-action data layer) shipped.
+- `docs/test-harness-coverage.md` — `tests/harness/` total 2371 → 2384; new `test_lair_actions.py` section.
+- `app/version.py` — `APP_VERSION` 2.167.0 → 2.168.0 (MINOR: additive `lair_actions` sheet field + new data module). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.168.0.
+
+### Notes
+- Total harness count: **2384** in `tests/harness/` (was 2371, +13); `tests/harness_ui/` **58** (unchanged).
+- No schema change (still v69). Lair actions are curated read-only content folded at projection time; nothing persists to the DB.
+- Phase 3b wires the initiative-20 `lair_action_prompt` broadcast + `POST /trigger_lair_action` (reusing the legendary save-AoE dispatch). Phase 3c adds the GM banner UI.
+
 ## [2.167.0] - 2026-06-12 — "The Shield Made Visible" — Legendary-actions Phase 2 UI: the GM-facing surface for the resistance pool + the failed-save prompt. v2.165.0–2.166.0 shipped the back-end (a per-day legendary-resistance pool, a spend endpoint, and a failed-save deferral that broadcasts `legendary_resistance_prompt` / `legendary_resistance_resolved`) — but every signal landed on the wire with no UI. The GM had nothing to look at: no badge for charges remaining, and no banner when a deferred save needed a Spend/Decline call. This commit wires all of it into the init-tracker. Each legendary combatant now renders a 🛡️ steel-blue charge meter (◆/◇ diamonds, current/max) beside the gold 👑 action meter, and when the server defers a failed save a floating bottom-left banner pops with a **Spend (N left)** / **Decline** button pair per pending prompt. Spend POSTs `/spend_legendary_resistance` (flips to success, pool −1); Decline POSTs `/decline_legendary_resistance` (the held condition installs). Both ride the `legendary_resistance_resolved` broadcast back to clear the banner row.
 
 **Schema version:** 69

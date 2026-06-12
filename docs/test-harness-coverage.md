@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2371 in `tests/harness/` + 58 in `tests/harness_ui/` (as of v2.167.0, 2026-06-12).
+**Total tests:** 2384 in `tests/harness/` + 58 in `tests/harness_ui/` (as of v2.168.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -139,6 +139,23 @@ v2.166.0 legendary-actions Phase 2b (see [legendary-actions.md](../plans/legenda
 | `test_decline_unknown_prompt_404` | `/decline_legendary_resistance` with an unknown `prompt_id` → 404. |
 | `test_decline_missing_prompt_id_400` | `/decline_legendary_resistance` with no `prompt_id` → 400. |
 | `test_decline_player_caller_403` | Non-GM caller → 403 (legendary resistance is GM-authorised). |
+
+### `test_lair_actions.py`
+v2.168.0 legendary-actions Phase 3a (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python unit tests against the `app.content.lair_actions` leaf module. Curated RAW lair-action data (Red Dragon volcanic lair) folded onto the projected monster sheet by `_monster_dict_to_sheet`. No HTTP fixtures.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_adult_red_dragon_has_three_lair_actions` | `lair_actions_for_slug("adult-red-dragon")` → 3 actions: magma-erupts, tremor, volcanic-gases. |
+| `test_magma_erupts_is_a_dex_save_aoe` | Magma Erupts: DEX, DC 15, 6d6 fire, half_on_save=True, sphere 20 ft. |
+| `test_tremor_is_a_non_damage_prone_effect` | Tremor: DEX DC 15, no damage, effect="prone", 60-ft radius. |
+| `test_volcanic_gases_is_a_con_save_poison` | Volcanic Gases: CON DC 13, effect="poisoned", no damage. |
+| `test_ancient_red_dragon_shares_the_volcanic_lair` | Adult + ancient red dragon resolve to the identical action set (lair tied to the lair, not the age). |
+| `test_unknown_slug_returns_empty_list` | A monster with no authored lair (bandit) + a typo'd slug → `[]`. |
+| `test_blank_or_non_string_slug_returns_empty_list` | `""`, `None`, and an int slug → `[]`. |
+| `test_slug_lookup_is_case_and_whitespace_insensitive` | `"  Adult-Red-Dragon  "` → 3 actions. |
+| `test_returned_list_is_a_deep_copy` | Mutating the returned list/dicts doesn't corrupt the module-level source. |
+| `test_lair_action_by_id_resolves_known_action` | `lair_action_by_id("adult-red-dragon", "magma-erupts")` → the Magma Erupts dict. |
+| `test_lair_action_by_id_unknown_id_returns_none` / `test_lair_action_by_id_unknown_slug_returns_none` / `test_lair_action_by_id_blank_id_returns_none` | Unknown id, unknown slug, and blank/None id → `None`. |
 
 ### `test_monster_legendary_action_cost.py`
 v2.159.33 legendary-actions Phase 1a (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python data-invariant guard: every SRD legendary action whose name carries a `(Costs N Actions)` suffix has its `cost` integer set to N (not the default 1). Walks the shipped `app/data/local/dnd5e/monsters/*.json` content layer directly. Phase 1a backfilled 39 cost integers across 30 monsters from the suffix; this test guards the invariant against future SRD-rebuild drift so the Phase 1b `/use_legendary_action` budget gate doesn't silently re-break.

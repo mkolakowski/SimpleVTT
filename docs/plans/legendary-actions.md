@@ -364,11 +364,20 @@ combatant.legendary_resistance = {
 
 ### Phase 3 — Lair actions (M, ~3 commits)
 
-- Phase 3a: data shape decision (Open question 2) + backfill
-  `lair_actions` for the 15-monster legendary roster from SRD 5.1.
-  Ancient Red Dragon (volcanic): "magma erupts" / "tremor"
-  / "volcanic gas." Lich: "necrotic surge" / "shadowy tendrils"
-  / "memory-shred."
+- Phase 3a (✅ **shipped v2.168.0** "The Volcanic Floor"): data-shape
+  decision (Open question 2 → top-level `lair_actions` array on the
+  sheet) + new leaf module `app/content/lair_actions.py`
+  (`lair_actions_for_slug` / `lair_action_by_id`, deep-copy reads,
+  slug-normalized). v1 ships the Red Dragon volcanic lair (adult +
+  ancient share one lair RAW): "magma erupts" (DEX DC15, 6d6 fire,
+  half) / "tremor" (DEX DC15, prone, 60 ft) / "volcanic gases"
+  (CON DC13, poisoned). Folded into `_monster_dict_to_sheet` so the
+  projection carries `lair_actions` to `allTemplates[].sheet`. 13
+  pure-Python unit tests in `tests/harness/test_lair_actions.py`.
+  The remaining SRD legendary lairs (Lich "necrotic surge" /
+  "shadowy tendrils" / "memory-shred", Kraken, other chromatic
+  dragons) drop into `LAIR_ACTIONS_BY_SLUG` with no code change — a
+  data-only follow-up.
 - Phase 3b: `in_lair` toggle on the encounter; initiative-20
   scheduler entry; `lair_action_prompt` + `trigger_lair_action`
   endpoint; AoE dispatch via existing geometry templates.
