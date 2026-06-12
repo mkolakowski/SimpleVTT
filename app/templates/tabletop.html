@@ -8569,6 +8569,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }
             return;
         }
+        // v2.182.0 — regional_fade_changed — the GM started / advanced /
+        // cleared the regional-effect fade countdown (RAW MM p.11: effects
+        // fade over 1d10 days once the lair-dweller dies). Patch the local
+        // battle state and re-render the lair panel so the GM's fade readout
+        // (and the player's atmospheric fade cue) reflect the new state.
+        if (msg.type === 'regional_fade_changed') {
+            const data = msg.data || {};
+            if (battle && typeof battle === 'object') {
+                battle.regional_fade = data.regional_fade || null;
+            }
+            if (typeof window._renderLairActionPanel === 'function') {
+                window._renderLairActionPanel();
+            }
+            return;
+        }
         // v2.19.0 Phase C.1: buff_update — server installed / removed a
         // buff on a combatant. Replace the combatant's buffs list and
         // re-render badges. The whole list is broadcast (not just a
@@ -9609,7 +9624,23 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 + '</div>'
             );
         }).join('');
-        host.innerHTML = header + body;
+        // v2.182.0 — read-only fade cue. When the GM has started the
+        // regional-fade countdown (RAW MM p.11: effects fade over 1d10 days
+        // once the lair-dweller dies), players see an atmospheric line — no
+        // day numbers, no controls. Just "the land is letting go."
+        let fadeLine = '';
+        const pfade = (typeof battle !== 'undefined' && battle) ? battle.regional_fade : null;
+        if (pfade && typeof pfade === 'object') {
+            const txt = pfade.faded
+                ? "The lair's presence has faded from the land."
+                : "The lair's power is waning — the land begins to forget.";
+            fadeLine = (
+                '<div style="font-size:11px;line-height:1.35;margin-top:6px;'
+                + 'padding-top:6px;border-top:1px solid rgba(255,255,255,0.18);'
+                + 'font-style:italic;opacity:0.85;">🕯️ ' + _escH(txt) + '</div>'
+            );
+        }
+        host.innerHTML = header + body + fadeLine;
     }
     window._renderPlayerRegionalPanel = _renderPlayerRegionalPanel;
 
@@ -9799,7 +9830,54 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             );
         }
 
-        host.innerHTML = header + toggleBtn + actionsHtml + regionalHtml;
+        // v2.182.0 — regional-fade tracker (RAW MM p.11): once the lair
+        // owner dies its regional effects fade over 1d10 days. GM-driven via
+        // /set_regional_fade (the engine has no day clock — the GM ticks
+        // narrative days). Render under the regional effects: a Start button
+        // when no countdown is running, else the days-remaining readout plus
+        // Advance / Clear controls. Only shown when the lair has regional
+        // effects to fade in the first place.
+        let fadeHtml = '';
+        if (regional.length) {
+            const fade = (battle && battle.regional_fade) || null;
+            if (fade && typeof fade === 'object') {
+                const rem = (fade.days_remaining != null) ? fade.days_remaining : 0;
+                const tot = (fade.days_total != null) ? fade.days_total : 0;
+                const faded = !!fade.faded;
+                const statusLine = faded
+                    ? '<span style="color:#9fb4c6;">Regional effects have faded.</span>'
+                    : ('Fading — <strong>' + rem + '</strong> / ' + tot
+                        + ' day' + (tot === 1 ? '' : 's') + ' remaining.');
+                fadeHtml = (
+                    '<div style="margin-top:8px;padding-top:8px;'
+                    + 'border-top:1px solid rgba(255,255,255,0.18);">'
+                    + '<div style="font-size:12px;font-weight:600;opacity:0.85;'
+                    + 'margin-bottom:5px;">🕯️ Regional Fade</div>'
+                    + '<div style="font-size:11px;line-height:1.35;'
+                    + 'margin-bottom:6px;opacity:0.9;">' + statusLine + '</div>'
+                    + (faded ? ''
+                        : '<button id="_fade_advance_btn" style="width:100%;'
+                          + 'margin-bottom:6px;">Advance a day</button>')
+                    + '<button id="_fade_clear_btn" style="width:100%;">Clear fade</button>'
+                    + '</div>'
+                );
+            } else {
+                fadeHtml = (
+                    '<div style="margin-top:8px;padding-top:8px;'
+                    + 'border-top:1px solid rgba(255,255,255,0.18);">'
+                    + '<div style="font-size:12px;font-weight:600;opacity:0.85;'
+                    + 'margin-bottom:5px;">🕯️ Regional Fade</div>'
+                    + '<div style="font-size:11px;line-height:1.35;'
+                    + 'margin-bottom:6px;opacity:0.7;">On the lair-dweller\'s '
+                    + 'death these effects fade over 1d10 days.</div>'
+                    + '<button id="_fade_start_btn" style="width:100%;">'
+                    + 'Start fade (1d10 days)</button>'
+                    + '</div>'
+                );
+            }
+        }
+
+        host.innerHTML = header + toggleBtn + actionsHtml + regionalHtml + fadeHtml;
 
         // v2.174.0 — glow the panel border when initiative count 20 is
         // reached and the lair hasn't acted yet. The one-shot toast is
@@ -9893,6 +9971,35 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 }
             });
         });
+
+        // v2.182.0 — regional-fade controls. start / advance / clear all
+        // POST /set_regional_fade; the server's regional_fade_changed
+        // broadcast re-renders this panel with the new countdown state.
+        const _fadePost = async (action, srcBtn) => {
+            if (srcBtn) { srcBtn.disabled = true; srcBtn.style.opacity = '0.6'; }
+            try {
+                const r = await fetch('/api/campaign/' + CAMPAIGN_ID + '/set_regional_fade', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: action, lair_slug: lairSlug }),
+                });
+                if (!r.ok) {
+                    const txt = await r.text();
+                    console.warn('set_regional_fade failed:', txt);
+                    if (srcBtn) { srcBtn.disabled = false; srcBtn.style.opacity = '1'; }
+                }
+                // Success → regional_fade_changed WS re-renders the panel.
+            } catch (err) {
+                console.warn('set_regional_fade error:', err);
+                if (srcBtn) { srcBtn.disabled = false; srcBtn.style.opacity = '1'; }
+            }
+        };
+        const _fadeStart = host.querySelector('#_fade_start_btn');
+        if (_fadeStart) _fadeStart.addEventListener('click', () => _fadePost('start', _fadeStart));
+        const _fadeAdvance = host.querySelector('#_fade_advance_btn');
+        if (_fadeAdvance) _fadeAdvance.addEventListener('click', () => _fadePost('advance', _fadeAdvance));
+        const _fadeClear = host.querySelector('#_fade_clear_btn');
+        if (_fadeClear) _fadeClear.addEventListener('click', () => _fadePost('clear', _fadeClear));
     };
 
     // v2.170.0 — render the lair-action panel once now that the function

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2437 in `tests/harness/` + 70 in `tests/harness_ui/` (as of v2.181.1, 2026-06-12).
+**Total tests:** 2437 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3410,6 +3410,10 @@ v2.170.0 legendary-actions Phase 3c UI — the GM-facing lair-action panel. Seed
 | `test_lair_action_resolved_renders_roll_log_card` | v2.177.0 — a `lair_action_resolved` broadcast renders a persistent `#roll-list .feature-used-card` headed by the owner ("Ancient Red Dragon") + "Lair Action" with the action name, "DEX save · DC 15" line, a ❌ chip-miss pill carrying the damage ("17 fire") for a failed save, and a ✅ chip-hit pill for a passed one. |
 | `test_regional_effects_render_in_panel` | v2.179.0 — the lair-action panel lists the lair owner's passive regional effects under a "🌐 Regional Effects" heading (name + desc per effect), rendered out of lair (no Enter-lair toggle needed) since they radiate while the creature dwells in its lair. |
 | `test_regional_effects_render_for_player` | v2.180.0 — a player (non-GM) sees a read-only `#_regional_effects_panel` with the lair's passive effects, but NOT the GM `#_lair_action_panel`, the creature's name, or the trigger controls. |
+| `test_fade_start_button_renders_and_posts` | v2.182.0 — with regional effects + no fade running, the GM panel shows a "🕯️ Regional Fade" block with a `#_fade_start_btn`; clicking it POSTs `/set_regional_fade` with `{action:"start", lair_slug}`. |
+| `test_fade_changed_shows_countdown_and_controls` | v2.182.0 — a `regional_fade_changed` WS message carrying an active fade flips the panel to a "4 / 6 days remaining" readout with `#_fade_advance_btn` + `#_fade_clear_btn` and no `#_fade_start_btn`. |
+| `test_fade_faded_state_hides_advance` | v2.182.0 — a `regional_fade_changed` with `faded:true` reads "have faded", hides `#_fade_advance_btn`, and keeps only `#_fade_clear_btn`. |
+| `test_fade_player_gets_atmospheric_cue` | v2.182.0 — a player whose `battle_update` carries an active `regional_fade` sees an italic 🕯️ "waning" cue on `#_regional_effects_panel` — no day numbers ("days remaining") and no `#_fade_advance_btn` controls. |
 
 ---
 

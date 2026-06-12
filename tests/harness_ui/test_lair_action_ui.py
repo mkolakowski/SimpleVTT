@@ -33,11 +33,13 @@ _HERO_ID = "tok_hero_lair_ui_test"
 _LAIR_SLUG = "ancient-red-dragon"
 
 
-def _battle_json(in_lair: bool = False, turn_index: int = 0) -> str:
+def _battle_json(in_lair: bool = False, turn_index: int = 0,
+                 regional_fade=None) -> str:
     """A Hero (init 25) + an Ancient Red Dragon (init 20) carrying two
     pre-baked lair actions and a lair_slug. `turn_index` selects the
     active combatant: 0 = Hero (init 25 > 20), 1 = Dragon (init 20 ≤ 20,
-    i.e. initiative count 20 reached)."""
+    i.e. initiative count 20 reached). `regional_fade` (v2.182.0) seeds
+    the fade-tracker state on the battle dict."""
     return json.dumps({
         "combatants": [
             {
@@ -97,13 +99,15 @@ def _battle_json(in_lair: bool = False, turn_index: int = 0) -> str:
         "active": True,
         "in_lair": in_lair,
         "lair_slug": _LAIR_SLUG if in_lair else "",
+        "regional_fade": regional_fade,
     })
 
 
-def _seed_battle(page: Page, in_lair: bool = False, turn_index: int = 0) -> None:
+def _seed_battle(page: Page, in_lair: bool = False, turn_index: int = 0,
+                 regional_fade=None) -> None:
     page.add_init_script(
         f"window.localStorage.setItem('simplevtt_battle_{CAMPAIGN_ID}', "
-        f"{json.dumps(_battle_json(in_lair, turn_index))});"
+        f"{json.dumps(_battle_json(in_lair, turn_index, regional_fade))});"
     )
 
 
@@ -482,3 +486,119 @@ def test_regional_effects_render_for_player(alice_page: Page):
     expect(player_panel).not_to_contain_text("Ancient Red Dragon")
     # No GM-only trigger controls leak into the player card.
     expect(player_panel.locator("._lair_trigger_btn")).to_have_count(0)
+
+
+def _dispatch_regional_fade_changed(page: Page, regional_fade) -> None:
+    page.evaluate(
+        """(fade) => {
+            document.dispatchEvent(new CustomEvent('vtt:ws-message', {detail: {
+                type: 'regional_fade_changed',
+                data: {regional_fade: fade},
+            }}));
+        }""",
+        regional_fade,
+    )
+
+
+def test_fade_start_button_renders_and_posts(gm_page: Page):
+    """v2.182.0 — with a lair owner carrying regional effects and no fade
+    in progress, the GM panel shows a "🕯️ Regional Fade" block with a
+    "Start fade" button. Clicking it POSTs /set_regional_fade {action:
+    start, lair_slug}."""
+    _seed_battle(gm_page, in_lair=False)
+
+    captured = {}
+
+    def _handle(route):
+        try:
+            captured.update(route.request.post_data_json or {})
+        except Exception:
+            pass
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"ok": True, "regional_fade": {
+                "lair_slug": _LAIR_SLUG, "days_total": 6,
+                "days_remaining": 6, "faded": False}}),
+        )
+
+    gm_page.route("**/set_regional_fade", _handle)
+    gm_page.goto(tabletop_url())
+
+    panel = gm_page.locator("#_lair_action_panel")
+    expect(panel).to_be_visible(timeout=5000)
+    expect(panel).to_contain_text("Regional Fade", timeout=3000)
+    start_btn = panel.locator("#_fade_start_btn")
+    expect(start_btn).to_be_visible()
+
+    with gm_page.expect_request("**/set_regional_fade"):
+        start_btn.click()
+    assert captured.get("action") == "start", captured
+    assert captured.get("lair_slug") == _LAIR_SLUG, captured
+
+
+def test_fade_changed_shows_countdown_and_controls(gm_page: Page):
+    """v2.182.0 — a regional_fade_changed WS message carrying an active
+    fade flips the panel to the days-remaining readout with Advance + Clear
+    controls (and no Start button)."""
+    _seed_battle(gm_page, in_lair=False)
+    gm_page.goto(tabletop_url())
+
+    panel = gm_page.locator("#_lair_action_panel")
+    expect(panel).to_be_visible(timeout=5000)
+    expect(panel.locator("#_fade_start_btn")).to_be_visible(timeout=3000)
+
+    _dispatch_regional_fade_changed(gm_page, {
+        "lair_slug": _LAIR_SLUG, "days_total": 6,
+        "days_remaining": 4, "faded": False,
+    })
+
+    expect(panel).to_contain_text("4 / 6 days remaining", timeout=3000)
+    expect(panel.locator("#_fade_advance_btn")).to_be_visible()
+    expect(panel.locator("#_fade_clear_btn")).to_be_visible()
+    expect(panel.locator("#_fade_start_btn")).to_have_count(0)
+
+
+def test_fade_faded_state_hides_advance(gm_page: Page):
+    """v2.182.0 — when the countdown reaches faded=True the readout reads
+    "have faded" and the Advance button is gone (only Clear remains)."""
+    _seed_battle(gm_page, in_lair=False)
+    gm_page.goto(tabletop_url())
+
+    panel = gm_page.locator("#_lair_action_panel")
+    expect(panel).to_be_visible(timeout=5000)
+
+    _dispatch_regional_fade_changed(gm_page, {
+        "lair_slug": _LAIR_SLUG, "days_total": 6,
+        "days_remaining": 0, "faded": True,
+    })
+
+    expect(panel).to_contain_text("have faded", timeout=3000)
+    expect(panel.locator("#_fade_advance_btn")).to_have_count(0)
+    expect(panel.locator("#_fade_clear_btn")).to_be_visible()
+
+
+def test_fade_player_gets_atmospheric_cue(alice_page: Page):
+    """v2.182.0 — a player whose battle carries an active regional_fade
+    sees an italic 🕯️ cue on their regional-effects card (no day numbers,
+    no controls)."""
+    alice_page.goto(tabletop_url())
+
+    alice_page.evaluate(
+        """(battleJson) => {
+            document.dispatchEvent(new CustomEvent('vtt:ws-message', {detail: {
+                type: 'battle_update', data: JSON.parse(battleJson),
+            }}));
+        }""",
+        _battle_json(in_lair=True, turn_index=1, regional_fade={
+            "lair_slug": _LAIR_SLUG, "days_total": 6,
+            "days_remaining": 3, "faded": False,
+        }),
+    )
+
+    player_panel = alice_page.locator("#_regional_effects_panel")
+    expect(player_panel).to_be_visible(timeout=5000)
+    expect(player_panel).to_contain_text("waning", timeout=3000)
+    # No GM day-count numbers or controls leak to the player.
+    expect(player_panel).not_to_contain_text("days remaining")
+    expect(player_panel.locator("#_fade_advance_btn")).to_have_count(0)

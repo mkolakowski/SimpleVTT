@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.182.0] - 2026-06-12 — "The Waning Light" — Fade-tracker UI surfacing. The v2.181.0 `POST /set_regional_fade` endpoint modeled the RAW MM-p.11 "regional effects fade over 1d10 days" countdown on the battle state, but nothing in the browser drove it — a GM had to hit the endpoint by hand. This commit wires the tracker into the floating lair panel. The GM's `#_lair_action_panel` gains a "🕯️ Regional Fade" block beneath the regional effects: a **Start fade (1d10 days)** button when no countdown is running, or a **N / M days remaining** readout with **Advance a day** + **Clear fade** controls once it is (the Advance button disappears at `faded`). Each button POSTs `/set_regional_fade`; the server's `regional_fade_changed` broadcast re-renders the panel live. Players get a read-only atmospheric cue on their `#_regional_effects_panel` ("The lair's power is waning…" / "…has faded from the land") — no day numbers, no controls, matching the v2.180.0 atmosphere-not-mechanics split.
+
+**Schema version:** 69
+**Commit summary:** **Front-end commit. (A) `app/templates/tabletop.html` — `_renderLairActionPanel` GM branch renders the fade block + wires Start/Advance/Clear to `/set_regional_fade`; `_renderPlayerRegionalPanel` renders the read-only player cue; a new `regional_fade_changed` WS handler patches `battle.regional_fade` + re-renders. (B) `tests/harness_ui/test_lair_action_ui.py` — 4 new Playwright tests (start button posts, countdown + controls render on the WS message, faded hides Advance, player gets the cue).**
+**Description:** Pure UI surfacing of an existing endpoint + broadcast — no server change, no schema change. Closes the one gap the v2.181.0 fade tracker left open (it shipped engine + tests but no in-browser driver). MINOR because it adds a new user-facing control surface. Browser-verified via the 4 Playwright tests.
+
+### Added
+- `app/templates/tabletop.html` — GM "🕯️ Regional Fade" panel block (Start / Advance / Clear), player atmospheric fade cue, and the `regional_fade_changed` WS handler.
+- `tests/harness_ui/test_lair_action_ui.py` — 4 Playwright tests covering the fade UI (GM controls + player cue).
+
+### Changed
+- `docs/test-harness-coverage.md` — UI-test total 70 → 74; `test_lair_action_ui.py` section updated.
+- `app/version.py` — `APP_VERSION` 2.181.1 → 2.182.0 (MINOR: new user-facing UI surface). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.182.0.
+
 ## [2.181.1] - 2026-06-12 — "The Bestiary Index" — A reader-facing wiki catalog of every authored lair. The lair-action + regional-effect arc (v2.168.0–v2.181.0) shipped its data in two `app/content/` leaf modules and surfaced it in-play through the GM/player floating panels — but there was no single human-readable page a GM could open to see *what's actually in the game*. This commit adds `docs/wiki/lair-regional-catalog.md`: a per-color catalog of all five chromatic dragons' lair actions (save / DC / effect table) and regional effects (bulleted flavor), plus a side-by-side "how the two differ" primer and the RAW MM page citations. It mirrors `lair_actions.py` + `regional_effects.py` — the leaf modules stay the source of truth; this page is the navigable index. Surfaced through the wiki per the surface-every-doc rule (Available guides table + on-disk README), with a per-slug render smoke test.
 
 **Schema version:** 69
