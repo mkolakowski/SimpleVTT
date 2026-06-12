@@ -651,3 +651,198 @@ async def test_weapon_hit_riders_apply_exact_bonus_damage(gm_client, roster):
     assert not failures, (
         f"{len(failures)} weapon-hit-rider failures:\n  " + "\n  ".join(failures)
     )
+
+
+# --- Phase 3e: movement-speed riders ----------------------------------------
+
+# Haste (×2 speed) and Slow (½ speed) are the two buffs whose mechanical
+# effect lands on the *movement* engine rather than the attack/save/AC paths.
+# Both install an `effects` key the v2.99.98 `_effective_speed_walk` engine
+# reads at /token/move time: Haste → `speed_multiplier: 2`, Slow →
+# `speed_reduction_ft: base // 2` (rounded down to the nearest 5 ft). The gate
+# real-casts each onto an *active mover* that owns a real map token, then drives
+# a move that overshoots the post-buff cap and asserts the 409 `over_speed_cap`
+# response's `cap_ft` equals the registry-derived effective speed exactly.
+#
+# Why this is the right surface: the move-cap reads the combatant's seeded
+# `speed_walk`, so the test pins a known base (Haste 15 → cap 30, Slow 30 →
+# cap 15) and the 409's `cap_ft` is the *only* free variable. A registry edit
+# that retunes Haste's multiplier or Slow's halving — or drops either hook —
+# moves `cap_ft` (or flips the 409 to a 200) and fails here. Mirrors the
+# `test_token_move_speed_cap.py` parking + seed pattern, but the buff arrives
+# via a real cast (Haste through /cast_spell + the scratch-inject, Slow through
+# the dedicated /cast_slow) instead of a synthetic PUT-/battle buff.
+_SPEED_RIDER_BUFFS = {
+    "haste": {
+        "mechanism": "cast_spell", "base_speed": 15, "expected_cap": 30,
+        "move_x": 840.0, "move_ft": 35,
+    },
+    "slow": {
+        "mechanism": "cast_slow", "base_speed": 30, "expected_cap": 15,
+        "move_x": 630.0, "move_ft": 20,
+    },
+}
+
+_SPEED_CASTER = "Thalindra Moonwhisper"
+_SPEED_CASTER_CLASS = "wizard"
+_SPEED_MOVER = "Pip Quickfingers"
+
+
+async def _speed_tokens_by_char(gm_client) -> dict[int, dict]:
+    resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
+    assert resp.status_code == 200, resp.text
+    return {t["character_id"]: t for t in resp.json()["tokens"] if t.get("character_id")}
+
+
+async def _speed_park(gm_client, token_id, x=350.0, y=350.0) -> None:
+    """Park the mover's real token at a known origin, bypassing any stale
+    over-speed / OA gate so the subsequent seeded move starts clean."""
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{token_id}/move",
+        json={"x": x, "y": y, "over_speed_confirmed": True, "oa_confirmed": True},
+    )
+
+
+async def _speed_seed_battle(gm_client, mover, mover_token_id, caster, base_speed) -> str:
+    """Active battle: the mover (active combatant, real map token, given base
+    speed) + the caster. Returns the mover's combatant id (the cast target)."""
+    mover_tok = f"tok_speedrider_mover_{mover['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {"id": mover_tok, "char_id": mover["id"], "name": mover["name"],
+                 "source_token_id": mover_token_id, "initiative": 20,
+                 "hp_current": 40, "hp_max": 40, "speed_walk": base_speed, "buffs": [],
+                 "economy": {"action": False, "bonus": False, "reaction": False,
+                             "movement": 0, "dash_bonus_ft": 0}},
+                {"id": f"tok_speedrider_caster_{caster['id']}", "char_id": caster["id"],
+                 "name": caster["name"], "initiative": 5, "hp_current": 30, "hp_max": 30,
+                 "buffs": [], "economy": {"action": False, "bonus": False,
+                                          "reaction": False, "movement": 0}},
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+    return mover_tok
+
+
+async def test_speed_rider_buffs_present_in_catalog():
+    """Catalog anchor for the movement-speed riders (Haste + Slow). Both are
+    open-SRD spells, so a rename/removal of either trips this gate."""
+    by_slug = {(s.get("slug") or ""): s for s in load_all_spells()}
+    missing = [slug for slug in _SPEED_RIDER_BUFFS if slug not in by_slug]
+    assert not missing, f"speed-rider spells absent from catalog: {missing}"
+
+
+async def test_speed_rider_spells_apply_exact_move_cap(gm_client, roster):
+    """For Haste (×2) and Slow (½): real-cast the rider onto an active mover,
+    then drive a move that overshoots the post-buff cap and assert the 409
+    `over_speed_cap` response's `cap_ft` equals the registry-derived effective
+    speed exactly (Haste base 15 → 30; Slow base 30 → 15).
+
+    The mover's seeded `speed_walk` is the only baseline input, so `cap_ft` is
+    a pure function of the spell's registry effect. A multiplier/halving retune
+    or a dropped hook moves `cap_ft` (or flips the 409 to a 200) and fails.
+    """
+    caster = roster[_SPEED_CASTER]
+    mover = roster[_SPEED_MOVER]
+    cid = caster["id"]
+
+    tokens = await _speed_tokens_by_char(gm_client)
+    assert mover["id"] in tokens, f"{_SPEED_MOVER} has no real map token"
+    mover_token_id = tokens[mover["id"]]["id"]
+
+    snap = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/character/{cid}/sheet-json")
+    sheet = (snap.json() or {}).get("sheet") or {}
+    orig_spells = sheet.get("spells") or []
+    orig_slots = sheet.get("spell_slots") or {}
+
+    spells = load_all_spells()
+    entries = _all_entries(spells)
+    idx_by_slug = {e["_slug"]: i for i, e in enumerate(entries)}
+    by_slug = {(s.get("slug") or ""): s for s in spells}
+
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{cid}/sheet-fields",
+        json={"spells": entries, "spell_slots": _abundant_slots()},
+    )
+    assert patch.status_code == 200, patch.text
+
+    failures: list[str] = []
+    checked = 0
+    try:
+        for slug, spec in _SPEED_RIDER_BUFFS.items():
+            await _speed_park(gm_client, mover_token_id)
+            mover_tok = await _speed_seed_battle(
+                gm_client, mover, mover_token_id, caster, spec["base_speed"],
+            )
+
+            if spec["mechanism"] == "cast_spell":
+                idx = idx_by_slug.get(slug)
+                spell = by_slug.get(slug)
+                if idx is None or spell is None:
+                    failures.append(f"{slug}: not in catalog")
+                    continue
+                cast = await gm_client.post(
+                    f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+                    json={
+                        "character_id": cid, "spell_index": idx,
+                        "slot_level": int(spell.get("level_int") or 1) or 1,
+                        "class_slug": _SPEED_CASTER_CLASS,
+                        "target_character_id": mover["id"],
+                        "target_combatant_id": mover_tok,
+                        "target_name": mover["name"],
+                        "override": True, "override_range": True,
+                    },
+                )
+            else:  # cast_slow
+                cast = await gm_client.post(
+                    f"/api/campaign/{CAMPAIGN_ID}/cast_slow",
+                    json={
+                        "character_id": cid, "class_slug": _SPEED_CASTER_CLASS,
+                        "slot_level": 3, "target_combatant_ids": [mover_tok],
+                        "override": True,
+                    },
+                )
+            if cast.status_code != 200:
+                failures.append(f"{slug}: cast HTTP {cast.status_code} {cast.text[:120]}")
+                continue
+
+            move = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/token/{mover_token_id}/move",
+                json={"x": spec["move_x"], "y": 350.0},
+            )
+            if move.status_code != 409:
+                failures.append(
+                    f"{slug}: expected 409 over_speed_cap on a {spec['move_ft']} ft "
+                    f"move vs the post-buff cap, got HTTP {move.status_code} "
+                    f"{move.text[:160]}"
+                )
+                continue
+            data = move.json()
+            if data.get("error") != "over_speed_cap":
+                failures.append(f"{slug}: 409 error {data.get('error')!r} != 'over_speed_cap'")
+                continue
+            if data.get("cap_ft") != spec["expected_cap"]:
+                failures.append(
+                    f"{slug}: cap_ft {data.get('cap_ft')} != expected "
+                    f"{spec['expected_cap']} (base {spec['base_speed']}); full {data}"
+                )
+            checked += 1
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{cid}/sheet-fields",
+            json={"spells": orig_spells, "spell_slots": orig_slots},
+        )
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": [], "turn_index": 0, "round": 1, "active": False},
+        )
+
+    assert checked == len(_SPEED_RIDER_BUFFS), (
+        f"only exercised {checked}/{len(_SPEED_RIDER_BUFFS)} speed-rider buffs"
+    )
+    assert not failures, (
+        f"{len(failures)} speed-rider failures:\n  " + "\n  ".join(failures)
+    )
