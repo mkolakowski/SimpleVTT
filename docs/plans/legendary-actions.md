@@ -45,13 +45,20 @@ v2.160.0) — the budget surface + GM control are live:
   failed-with-damage / ⏳ pending PC save). Persists + hydrates like the
   other WS-only cards. 1 Playwright test.
 
+- **Phase 1c (server reference-attack) ✅ v2.164.0** — `/use_legendary_action`
+  now resolves a reference-attack legendary action (Tail Attack → base
+  "Tail" action, +14 / 2d8+8) via `_resolve_reference_attack_base_action`,
+  rolls 2d20kh1+attack_bonus vs the target's AC, applies (crit-doubled)
+  damage on a hit, and broadcasts `feature_used(source=legendary-action-attack)`.
+  The response gains an `attack_result` field. 2 harness tests. **Phase 1c
+  is now complete.**
+
 The data shapes turned out more varied than the original "attack_roll +
 damage" assumption: the demo dragon's legendary options are a save-AoE
 (Wing Attack), a reference-attack (Tail Attack → base "Tail" action), and
-a no-damage utility (Detect). v2.161.0 + v2.162.0 + v2.163.0 cover the
-save-AoE slice end-to-end (server dispatch + UI target-pick + chat card).
-The remaining Phase 1c work is the attack-roll/reference-attack dispatch
-(Tail Attack).
+a no-damage utility (Detect). v2.161.0–v2.164.0 cover all of them: the
+save-AoE slice end-to-end (server dispatch + UI target-pick + chat card)
+and the reference-attack dispatch. Phase 1c is closed.
 **Authors:** rolling
 **Last updated:** 2026-06-11
 
@@ -302,8 +309,16 @@ combatant.legendary_resistance = {
   `_persistRollEntry`; exposed as `window._appendLegendaryAoeResolved`
   for the harness. 1 Playwright test
   (`test_legendary_aoe_resolved_card_renders_per_target_pills`).
-- Phase 1c (pending): attack-roll / reference-attack dispatch (Tail
-  Attack → base "Tail" action).
+- Phase 1c (server reference-attack) ✅ v2.164.0: `use_legendary_action`
+  resolves a reference-attack legendary action via
+  `_resolve_reference_attack_base_action` (Tail Attack → base "Tail",
+  +14 / 2d8+8 bludgeoning), rolls 2d20kh1+attack_bonus vs the target's
+  AC, applies crit-doubled damage on a hit, broadcasts
+  `feature_used(source=legendary-action-attack)`, and returns an
+  `attack_result` field. 2 harness tests
+  (`test_tail_attack_reference_resolves_attack_and_damage`,
+  `test_tail_attack_without_target_skips_attack_dispatch`). **Phase 1c
+  complete.**
 
 ### Phase 2 — Legendary resistance pool (S, ~2 commits)
 

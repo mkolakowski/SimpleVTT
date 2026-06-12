@@ -29,6 +29,13 @@ v2.161.0 — Phase 1c (server) save-AoE damage dispatch:
     applies save-or-take damage (full on fail, none on pass) +
     broadcasts `legendary_action_aoe_resolved`.
   - the spender is excluded from its own AoE.
+
+v2.164.0 — Phase 1c (server) reference-attack dispatch:
+  - Tail Attack (cost 1) resolves the base "Tail" action (+14 / 2d8+8
+    bludgeoning) from the stat block, rolls 2d20kh1+14 vs the target's
+    AC, applies (crit-doubled) damage on a hit + broadcasts
+    `feature_used(source=legendary-action-attack)`.
+  - no target_combatant_id → attack_result is None (budget-only flow).
 """
 import pytest_asyncio
 
@@ -354,6 +361,103 @@ async def test_wing_attack_without_targets_skips_dispatch(
     data = resp.json()
     assert data["pool_current"] == 1
     assert data["aoe_results"] == []
+
+
+async def test_tail_attack_reference_resolves_attack_and_damage(
+    gm_client, gm_ws, adult_red_dragon_template_id, bandit_template_id,
+):
+    """v2.164.0 — Tail Attack (cost 1) is a reference-attack: the
+    legendary action carries no inline attack data, so the server
+    resolves the base "Tail" action (+14 / 2d8+8 bludgeoning) from the
+    dragon's stat block, rolls 2d20kh1+14 vs the target's AC and, on a
+    hit, rolls + applies damage. Broadcasts `feature_used` with
+    source=legendary-action-attack. The low-AC bandit target (+14 to
+    hit) is hit on all but a natural 1, so we assert hit-consistency:
+    damage>0 iff hit."""
+    dragon_cid = "npc_ard_tail_spender"
+    bandit = "npc_ard_tail_bandit"
+    await _seed_battle(gm_client, [
+        _mkc(dragon_cid, hp_cur=256, hp_max=256, name="Adult Red Dragon",
+             initiative=20, token_template_id=adult_red_dragon_template_id),
+        _mkc(bandit, hp_cur=40, hp_max=40, name="Bandit Target", initiative=15,
+             token_template_id=bandit_template_id),
+    ], turn_index=1)
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_legendary_action",
+        json={
+            "combatant_id": dragon_cid,
+            "action_id": "tail-attack",
+            "action_name": "Tail Attack",
+            "cost": 1,
+            "target_combatant_id": bandit,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["pool_current"] == 2  # 3 → 2 (cost 1)
+    ar = data["attack_result"]
+    assert ar is not None, data
+    assert ar["base_action_name"] == "Tail"
+    assert ar["target_combatant_id"] == bandit
+    assert ar["damage_type"] == "bludgeoning"
+    assert isinstance(ar["attack_total"], int)
+    # Hit-consistency: damage rolled iff the swing hit.
+    if ar["hit"]:
+        assert ar["damage_total"] and ar["damage_total"] > 0, ar
+    else:
+        assert not ar["damage_total"], ar
+
+    # Two feature_used broadcasts fire: the generic legendary-action
+    # spend and the reference-attack card. wait_for returns the first
+    # match only, so scan the buffer for the attack-source card (poll
+    # briefly so the second broadcast has time to arrive over the WS).
+    import asyncio
+    attack_cards: list[dict] = []
+    for _ in range(100):
+        attack_cards = [
+            m for m in gm_ws.buffered("feature_used")
+            if m["data"].get("source") == "legendary-action-attack"
+        ]
+        if attack_cards:
+            break
+        await asyncio.sleep(0.02)
+    assert len(attack_cards) == 1, gm_ws.buffered("feature_used")
+    feat_msg = attack_cards[0]
+    assert feat_msg["data"]["attack_name"] == "Tail"
+    assert feat_msg["data"]["action_name"] == "Tail Attack"
+    assert feat_msg["data"]["target_combatant_id"] == bandit
+
+
+async def test_tail_attack_without_target_skips_attack_dispatch(
+    gm_client, adult_red_dragon_template_id,
+):
+    """v2.164.0 — no target_combatant_id → the pool still spends but no
+    reference-attack is resolved (attack_result is None). Backward-
+    compatible with the Phase 1b budget-gate-only flow."""
+    dragon_cid = "npc_ard_tail_notarget"
+    filler = "npc_ard_tail_notarget_filler"
+    await _seed_battle(gm_client, [
+        _mkc(dragon_cid, hp_cur=256, hp_max=256, name="Adult Red Dragon",
+             initiative=20, token_template_id=adult_red_dragon_template_id),
+        _mkc(filler, hp_cur=40, hp_max=40, name="Filler", initiative=15),
+    ], turn_index=1)
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_legendary_action",
+        json={
+            "combatant_id": dragon_cid,
+            "action_id": "tail-attack",
+            "action_name": "Tail Attack",
+            "cost": 1,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["pool_current"] == 2
+    assert data["attack_result"] is None
 
 
 async def test_use_legendary_action_player_caller_403(alice_client, roster):

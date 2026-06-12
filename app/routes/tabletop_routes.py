@@ -602,6 +602,66 @@ def _resolve_legendary_action_def(
     return fallback
 
 
+def _resolve_reference_attack_base_action(
+    db: Session, campaign_id: int, spender: dict,
+    action_def: "dict | None", action_name: str,
+) -> "dict | None":
+    """v2.164.0 — resolve a *reference-attack* legendary action to the
+    base attack it points at. The Adult Red Dragon's "Tail Attack"
+    legendary action carries no inline attack data (``attack_roll`` is
+    false, ``damage`` empty) — RAW it just says "the dragon makes a tail
+    attack", referencing the base **Tail** action (+14 / 2d8+8
+    bludgeoning). This walks the spender's stat block and returns that
+    base action dict so the endpoint can roll a real to-hit + damage.
+
+    Returns ``None`` when the legendary action carries its own attack /
+    save / damage data (i.e. it's NOT a reference-attack — the AoE or
+    direct-damage paths own those), or no matching base action exists.
+    """
+    if action_def:
+        if str(action_def.get("damage") or "").strip():
+            return None
+        if action_def.get("attack_roll"):
+            return None
+        if str(action_def.get("save_ability") or "").strip():
+            return None
+    tmpl_id = spender.get("token_template_id")
+    if not tmpl_id:
+        return None
+    try:
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(tmpl_id),
+        ).first()
+    except (TypeError, ValueError):
+        tmpl = None
+    if not tmpl:
+        return None
+    sheet = _monster_template_to_sheet(tmpl, campaign_id)
+    actions = sheet.get("actions") or []
+    # Candidate base name: strip a trailing " Attack" ("Tail Attack" →
+    # "Tail"); fall back to the full name for stat blocks that name the
+    # base action identically to the legendary reference.
+    nm = (action_name or "").strip()
+    low = nm.lower()
+    candidates: list[str] = []
+    if low.endswith(" attack"):
+        candidates.append(nm[: -len(" attack")].strip().lower())
+    candidates.append(low)
+    for cand in candidates:
+        if not cand:
+            continue
+        for a in actions:
+            if not isinstance(a, dict):
+                continue
+            if a.get("category") == "legendary_action":
+                continue
+            if not a.get("attack_roll"):
+                continue
+            if str(a.get("name") or "").strip().lower() == cand:
+                return a
+    return None
+
+
 # v2.19.0 Phase C.1: buff slot helpers. A "buff" is a structured timed
 # effect installed on a combatant in the hub battle state — Rage,
 # Hunter's Mark, Hex, Bless, Faerie Fire, etc. Unlike the action-economy
@@ -23208,9 +23268,20 @@ async def use_legendary_action(
                                 "(Costs N Actions)" suffix in its
                                 SRD name, so the client renders the
                                 correct cost at button-render time.
-      ``target_combatant_id`` (optional) — informational; the actual
-                                damage dispatch happens via a
-                                follow-up `/npc_attack` call.
+      ``target_combatant_id`` (optional) — the single target of a
+                                reference-attack legendary action (e.g.
+                                the Adult Red Dragon's "Tail Attack",
+                                which RAW references the base "Tail"
+                                action: +14 / 2d8+8 bludgeoning). When
+                                the spent action resolves (server-side,
+                                from the spender's stat block) to a
+                                reference-attack — no save, no inline
+                                damage, name "<X> Attack" matching a base
+                                attack — the endpoint rolls 2d20kh1 +
+                                attack_bonus vs the target's AC and, on a
+                                hit, rolls (crit-doubled) damage and
+                                applies it via `_apply_damage_to_combatant`
+                                (v2.164.0). Otherwise it's informational.
       ``aoe_target_combatant_ids`` (optional, v2.161.0) — list of
                                 combatant ids the GM picked as caught in
                                 a save-AoE legendary action (e.g. the
@@ -23356,11 +23427,11 @@ async def use_legendary_action(
     # legendary actions are save-or-take, not save-for-half). PC targets
     # get a roll-request prompt; their damage stays GM-manual for v1
     # (matches the /npc_cast_spell AoE convention).
+    action_def = _resolve_legendary_action_def(
+        db, campaign_id, spender, action_id, action_name,
+    )
     aoe_results: list[dict] = []
     if aoe_target_ids:
-        action_def = _resolve_legendary_action_def(
-            db, campaign_id, spender, action_id, action_name,
-        )
         save_ability = str(
             (action_def or {}).get("save_ability") or "",
         ).strip().upper()
@@ -23454,9 +23525,109 @@ async def use_legendary_action(
                     },
                 })
 
+    # v2.164.0 Phase 1c (server) — reference-attack dispatch. When the
+    # spent legendary action is a "<X> Attack" that references a base
+    # attack (e.g. the Adult Red Dragon's "Tail Attack" → base "Tail",
+    # +14 / 2d8+8 bludgeoning) and the GM supplied a single
+    # `target_combatant_id`, roll the to-hit (2d20kh1 + attack_bonus) vs
+    # the target's AC, then on a hit roll damage (crit-doubled dice) and
+    # apply it via the shared damage helper. Broadcasts `feature_used`
+    # with the attack fields so the existing chat card renders the swing.
+    attack_result: dict | None = None
+    if target_combatant_id and not aoe_results:
+        base_action = _resolve_reference_attack_base_action(
+            db, campaign_id, spender, action_def, action_name,
+        )
+        if base_action:
+            target_c = _lookup_combatant(campaign_id, target_combatant_id)
+            if target_c:
+                bonus_str = str(base_action.get("attack_bonus") or "").strip()
+                if bonus_str and not bonus_str.startswith(("+", "-")):
+                    bonus_str = "+" + bonus_str
+                atk_expr = f"2d20kh1{bonus_str}"
+                try:
+                    atk_r = dice_mod.roll(atk_expr)
+                    attack_total = int(atk_r.total)
+                    attack_breakdown = atk_r.breakdown
+                except dice_mod.DiceParseError:
+                    attack_total = None
+                    attack_breakdown = ""
+                target_ac = _read_target_ac(db, campaign_id, target_c)
+                is_crit = False
+                if attack_breakdown:
+                    import re as _re_crit
+                    _m = _re_crit.search(
+                        r"\d*d20[^d=+ ]*=(\d+)", attack_breakdown,
+                    )
+                    if _m and int(_m.group(1)) >= 20:
+                        is_crit = True
+                hit = (
+                    is_crit
+                    or (attack_total is not None
+                        and attack_total >= int(target_ac))
+                )
+                dmg_type = str(
+                    base_action.get("damage_type") or "",
+                ).strip().lower()
+                damage_total = None
+                damage_breakdown = ""
+                if hit:
+                    dmg_expr = str(base_action.get("damage") or "").strip()
+                    if is_crit:
+                        dmg_expr = _double_dice_for_crit(dmg_expr)
+                    if dmg_expr:
+                        try:
+                            d_r = dice_mod.roll(dmg_expr)
+                            damage_total = int(d_r.total)
+                            damage_breakdown = d_r.breakdown
+                        except dice_mod.DiceParseError:
+                            damage_total = None
+                    if damage_total and damage_total > 0:
+                        try:
+                            await _apply_damage_to_combatant(
+                                db, campaign_id, target_c,
+                                damage_amount=damage_total,
+                                damage_type=dmg_type,
+                                is_crit=is_crit, is_attack=True,
+                            )
+                        except Exception:
+                            logging.exception(
+                                "Legendary reference-attack damage apply "
+                                "failed for tid=%s", target_combatant_id,
+                            )
+                target_name = str(target_c.get("name") or "Target")
+                attack_result = {
+                    "base_action_name": base_action.get("name") or "Attack",
+                    "attack_total": attack_total,
+                    "attack_breakdown": attack_breakdown,
+                    "target_ac": target_ac,
+                    "hit": hit,
+                    "is_crit": is_crit,
+                    "damage_total": damage_total,
+                    "damage_breakdown": damage_breakdown,
+                    "damage_type": dmg_type,
+                    "target_combatant_id": target_combatant_id,
+                    "target_name": target_name,
+                }
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "source": "legendary-action-attack",
+                        "combatant_id": combatant_id,
+                        "combatant_name": payload["combatant_name"],
+                        "caster_char_name": payload["combatant_name"],
+                        "action_id": action_id,
+                        "action_name": action_name,
+                        "feature_name": f"👑 {action_name}",
+                        "attack_name": base_action.get("name") or "Attack",
+                        **attack_result,
+                    },
+                })
+
     return {
         "ok": True,
         "aoe_results": aoe_results,
+        "attack_result": attack_result,
         **payload,
     }
 

@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.164.0] - 2026-06-11 — "The Lashing Tail" — Legendary-actions Phase 1c (server): the reference-attack dispatch, closing Phase 1c. The Adult Red Dragon's "Tail Attack" legendary action carries no inline attack data — RAW it just reads "the dragon makes a tail attack", pointing at the base **Tail** action (+14 / 2d8+8 bludgeoning). Until now spending it only decremented the pool; the GM rolled the swing by hand. This commit teaches `/use_legendary_action` to recognise a reference-attack (no save, no inline damage, name "<X> Attack" matching a base attack on the spender's stat block), resolve that base action, roll `2d20kh1 + attack_bonus` vs the target's AC, and on a hit roll (crit-doubled) damage and apply it via the shared `_apply_damage_to_combatant` helper — the same to-hit pattern the Unwavering Punish endpoint uses. A `feature_used(source=legendary-action-attack)` broadcast renders the swing as a chat card. With save-AoE (v2.161.0) and now reference-attack dispatch both landed, every Phase 1c slice ships.
+
+**Schema version:** 69
+**Commit summary:** **Back-end commit. (A) `app/routes/tabletop_routes.py` — new `_resolve_reference_attack_base_action(db, campaign_id, spender, action_def, action_name)` helper: returns the base attack dict a reference-attack legendary action points at (strips a trailing " Attack" from the name — "Tail Attack" → "Tail" — and matches a non-legendary `attack_roll` action on the spender's projected stat block), or `None` when the legendary action carries its own save/damage/attack data. `use_legendary_action` now resolves `action_def` once up front (shared by the AoE + attack paths) and, when a single `target_combatant_id` is supplied and no save-AoE fired, rolls the reference-attack to-hit + (crit-doubled) damage, applies it, and broadcasts `feature_used(source=legendary-action-attack)`. The endpoint response gains an `attack_result` field (None when no reference-attack resolved). (B) `tests/harness/test_use_legendary_action.py` — 2 new tests (9 → 11): Tail Attack vs a low-AC bandit asserts the base "Tail" resolves, hit-consistency (damage>0 iff hit), and the `legendary-action-attack` broadcast; no-target spend leaves `attack_result` None.**
+**Description:** The reference-attack slice of Phase 1c in `docs/plans/legendary-actions.md`, the last open item, completing the phase. The resolver is deliberately narrow — it only fires when the legendary action has no save ability, no inline damage, and `attack_roll` falsy, so the v2.161.0 save-AoE path (Wing Attack) and any future direct-damage legendary action keep their own dispatch. Damage applies through `_apply_damage_to_combatant(is_attack=True)`, so PC targets route through the death-save / resistance / Uncanny Dodge machinery and NPC targets get a direct HP tick + `battle_update`. Mirrors the Unwavering Punish to-hit resolution (2d20kh1+bonus, crit via the `\d*d20...=(\d+)` ≥20 regex, `_double_dice_for_crit`). Harness-verified against the demo's Adult Red Dragon template.
+
+### Added
+- `app/routes/tabletop_routes.py::_resolve_reference_attack_base_action` — resolves a reference-attack legendary action ("Tail Attack") to its base attack ("Tail", +14 / 2d8+8) from the spender's stat block.
+- `tests/harness/test_use_legendary_action.py` — 2 tests: Tail Attack reference-attack resolves + applies damage with hit-consistency + broadcasts `legendary-action-attack`; no-target spend skips the attack dispatch.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_legendary_action` — resolves `action_def` once; on a single-target reference-attack rolls the to-hit + (crit-doubled) damage, applies it, broadcasts `feature_used(source=legendary-action-attack)`, and returns an `attack_result` field.
+- `docs/plans/legendary-actions.md` — Phase 1c reference-attack slice marked shipped; Phase 1c now complete.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note Phase 1c is complete (reference-attack landed).
+- `docs/test-harness-coverage.md` — `tests/harness/` total 2357 → 2359; `test_use_legendary_action.py` section updated with the 2 reference-attack tests.
+- `app/version.py` — `APP_VERSION` 2.163.0 → 2.164.0 (MINOR: new backward-compatible server behavior on an existing endpoint). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.164.0.
+
+### Notes
+- Total harness count: **2359** in `tests/harness/` (was 2357, +2); `tests/harness_ui/` **57** (unchanged).
+- No schema change (still v69). No new endpoint — additive behavior + an additive `attack_result` response field on the existing `/use_legendary_action`.
+- The reference-attack guard returns `None` for "Detect" (no matching base attack) and "Wing Attack" (carries a `save_ability`), so neither regresses into the attack path.
+
 ## [2.163.0] - 2026-06-11 — "The Heralded Strike" — Legendary-actions Phase 1c (chat card): the save-AoE result now lands in the roll log. v2.161.0/v2.162.0 wired the server dispatch + the GM target-pick, but the only on-screen evidence a Wing Attack resolved was the silent HP ticks on each target token. This commit adds the chat-card surface: the `legendary_action_aoe_resolved` broadcast now renders a 👑 roll-log card naming the creature + action + save line (DEX · DC 22), with one result pill per target — green ✅ for a passed save, red ❌ with the damage dealt for a failed save, and a neutral ⏳ "save pending" for a PC target whose save was prompted (GM-manual). The card persists to the roll-log buffer so it survives a page refresh like every other WS-only card.
 
 **Schema version:** 69
