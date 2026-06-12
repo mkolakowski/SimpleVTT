@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2518 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.21, 2026-06-12).
+**Total tests:** 2521 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.22, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -589,6 +589,15 @@ The Conjure X family (narration-only summons) — the spell-validation suite's r
 | `test_conjure_family_present_in_catalog` | Catalog shape across all five siblings: each is Conjuration at the right `level_int` (7/5/6/4/4), carries the right spell-list membership, and has a single cast action with no `save_ability` / `attack_roll` / `damage` (auto-resolves nothing). Catalog-vs-runtime concentration divergence pin: each `concentration` flag is `false` yet the duration starts with "Up to" (the Open5e concentration convention). |
 | `test_cast_conjure_minor_elementals_narration_only` | Conjure Minor Elementals rides `/cast_spell` → 200, `ok: true`, `slot.level == 4`, `slot.used >= 1`; `spell_cast` broadcast carries `spell_name == "Conjure Minor Elementals"`, `spell_level == 4`, `spell_casting_time == "1 minute"`. Narration contract: the response carries NO `combatants` / `token_ids` summon payload (contrast `/cast_conjure_animals`). |
 | `test_cast_conjure_installs_no_buff_or_anchor` | No `_SPELL_BUFF_MAP` entry and no AoE template: the generic cast installs neither a spell buff nor a `concentration-conjure-*` anchor on the caster (diff of buff keys before/after has no `conjure`/`concentration` keys), and the response is not flagged concentration. |
+
+### `test_cast_homebrew_spell.py`
+Homebrew handling — the spell-validation suite's proof that the cast path works for a spell the GM *invents* (no JSON file, no catalog entry). Contract at tabletop_routes.py:18164-18177: `/cast_spell` reads the inline sheet spell dict and only enriches from the catalog when `_slug` resolves, via `setdefault` (sheet fields win). Fixtures patch a fictional "Bless of Bahamut" (+ a `bless`-slugged renamed variant) + a cleric slot onto Brother Tavik Stonebrow (Cleric), restored in finally. v2.183.22 — Phase 4 deep-dive (twelfth/final, closes Phase 4).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_bless_of_bahamut_absent_from_catalog` | The homebrew slug `bless-of-bahamut` is NOT in `load_all_spells()` — genuinely non-SRD, so the cast path can't be leaning on a hidden JSON file. |
+| `test_cast_homebrew_spell_rides_inline_definition` | A fully-homebrew spell (slug absent from the catalog) casts from its inline sheet definition: `/cast_spell` → 200, L2 slot decrement; `spell_cast` broadcast echoes `spell_name == "Bless of Bahamut"`, `spell_level == 2`, `spell_school == "Evocation"`, `spell_casting_time == "1 action"`, `spell_save_ability == "DEX"`, `spell_damage == "2d8"`, and the inline Radiant Smite action (name/save/damage/`radiant` type) verbatim — no catalog enrichment. |
+| `test_homebrew_sheet_override_beats_catalog` | Sheet-side override precedence: a homebrew entry borrowing the real `bless` slug but renaming it broadcasts the SHEET name (`spell_name == "Bahamut's Greater Blessing"`, sheet wins via `setdefault`) while the un-overridden catalog field bleeds through (`spell_school == "Enchantment"` from the SRD `bless` record). |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
