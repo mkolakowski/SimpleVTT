@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.182.7] - 2026-06-12 — "The Honest Yardstick" — Spell-validation suite Phase 2H: range assertions. The seventh per-mechanic content-drift gate. `test_spell_catalog_range.py` is a pure-Python gate (no HTTP/WS — like `test_range_parser.py`) that parses every one of the 319 catalog spells' declared `range` string through `app/content/range_parser.py` and asserts the projection matches the string's RAW category: "Special"/"Unlimited"/"Sight" → `None` (deliberately skipped), "Self"/"Self (N-foot radius)" → `0`, "Touch" → `5`, "N feet" → `N`, "N mile(s)" → `N × 5280`. Anything that parses to `None` while *not* being a recognized skip token fails — so a content edit that corrupts a range ("60 feet" → "60 fee", "Touch" → "Touchh") is caught the moment this runs. For numeric bands it also asserts the parsed reach equals the number embedded in the string, so a digit typo (90 → 99) doesn't slip through. All 319 ranges parse to their category, zero drift.
+
+**Schema version:** 69
+**Commit summary:** **Test + docs commit. (A) New `tests/harness/test_spell_catalog_range.py` — `test_every_spell_range_parses_to_its_category` (parse every catalog range, assert it matches the category + numeric value, collect drift by slug) + `test_range_catalog_every_spell_has_a_range` guard. (B) `docs/plans/spell-validation-suite.md` — Phase 2H checkbox + status line. (C) `docs/test-harness-coverage.md` — new section + harness total 2453 → 2455.**
+**Description:** A CI-gated drift gate over every spell's range field — keeps a content edit from corrupting a range string into something the parser silently drops to "skip the check". PATCH because it adds no endpoint, schema, or user-facing surface — test + doc only. Pure-Python: imports `range_parser` + the catalog loader directly, no fixtures. The HTTP cast-from-position range gate (in-range cast succeeds, out-of-range → 409 with a `range` body field) is a filed follow-up — it needs the generic `/cast_spell` to enforce a position-based check, which isn't wired today.
+
+### Added
+- `tests/harness/test_spell_catalog_range.py` — Phase 2H range catalog: every spell's range string parsed + asserted against its RAW category and numeric value (2 tests).
+
+### Changed
+- `docs/plans/spell-validation-suite.md` — Phase 2H marked ✅ landed (status line + checkbox).
+- `docs/test-harness-coverage.md` — new `test_spell_catalog_range.py` section; harness total 2453 → 2455.
+- `app/version.py` — `APP_VERSION` 2.182.6 → 2.182.7 (PATCH: test + doc, no code change). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.182.7.
+
 ## [2.182.6] - 2026-06-12 — "The Borrowed Ward" — Spell-validation suite Phase 2F: buff-install payload assertions. The sixth per-mechanic content-drift gate. `test_spell_catalog_buff_install.py` patches one scratch caster (Thalindra) with the whole catalog + 999 slots/level, seeds a battle, then casts every `_SPELL_BUFF_MAP` spell at a **separate** PC target (Krieger) and asserts the installed buff's full payload — `key`, `name`, `duration_rounds`, and `concentration` flag — matches the expected RAW values. A registry edit that renames a buff key (silently breaking the auto-uplift / intercept paths that look it up by key), shortens a duration, or flips a concentration flag is caught the moment this runs. This complements Phase 2E (which *self-casts* the 5 concentration buffs to exercise the one-at-a-time swap): 2F casts on a *different* combatant — the cross-combatant `_install_buff` path a caster takes when warding an ally — and covers all 9 buff-map entries (Bless, Heroism, Shield of Faith, Aid, Sanctuary, Protection from Evil and Good, Mage Armor, Haste, Longstrider), including the 4 non-concentration buffs (Aid, Sanctuary, Mage Armor, Longstrider) that 2E never touched. These install unconditionally (no save gate), so the test is fully deterministic. All 9 assert cleanly, zero skips.
 
 **Schema version:** 69

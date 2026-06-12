@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2453 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.6, 2026-06-12).
+**Total tests:** 2455 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.7, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3328,6 +3328,14 @@ Phase 2F buff-install payload assertions. Patches the scratch caster (Thalindra)
 |------|-----------------|
 | `test_every_buff_spell_installs_expected_payload` | Every buff-map spell installs on the target with the expected key/name/duration_rounds/concentration + non-empty effects; all 9 asserted; drift collected by slug. |
 | `test_buff_install_catalog_subset_nonempty` | Guard: ≥ 9 buff-install spells listed and every slug resolves to a real catalog spell. |
+
+### `test_spell_catalog_range.py`
+Phase 2H range assertions — a pure-Python content-drift gate (no HTTP/WS fixtures; imports `app.content.range_parser` + the catalog loader directly, same shape as `test_range_parser.py`). For every spell in the catalog it parses the declared `range` string and asserts the projection matches the string's category: skip tokens (Special / Unlimited / Sight) → `None`, Self / Self (N-foot …) → `0`, Touch → `5`, `N feet/foot/ft` → `N`, `N mile(s)` → `N × 5280`; anything else fails as drift. Catches a corrupted range field ("60 feet" → "60 fee", "Touch" → "Touchh") that would make the parser return `None` for a non-skip string. The HTTP cast-from-position range gate (cast inside range → success, outside → 409 with a `range` body field) is a filed follow-up — it needs a position-based range check that `/cast_spell` doesn't enforce today.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_every_spell_range_parses_to_its_category` | Every catalog spell's range parses to the projection its string category implies; unrecognized strings (typos / drift) fail; ≥ 300 asserted. |
+| `test_range_catalog_every_spell_has_a_range` | Guard: ≥ 300 spells and every one carries a non-empty `range` field so the parse gate can't pass vacuously. |
 
 ### `test_spell_catalog_damage.py`
 Parameterized over `(caster_name, spell_slug, spell_index, slot_level, base_dmg_expr, upcast_dice)` rows in the `DAMAGE_SPELL_CASES` table. v1 has one row (Fire Bolt at Wizard L5 → 2d10). Each case long-rests the caster, seeds a target combatant, casts the spell, and asserts `response.auto_attack_damage_rolled` is inside the dice expression's [min, max]. Damage type is verified against the catalog JSON.
