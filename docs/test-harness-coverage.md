@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2489 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.12, 2026-06-12).
+**Total tests:** 2493 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.13, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -493,6 +493,16 @@ v2.183.12 — spell-validation suite Phase 4 (second complex-spell deep-dive). S
 | `test_place_dispatches_radiant_saves` | `/place_aoe` on 2 bandits (auto-apply on) → `auto_save_targets` has 2 entries each with an int `rolled`, bool `passed`, `damage_type == "radiant"`, and `damage_applied > 0` (3d8 save-for-half). |
 | `test_place_creates_self_anchored_concentration_marker` | Placement broadcasts `concentration_aoe_update` carrying a Spirit Guardians marker with `is_self_anchored: true`, `shape == "self_sphere"`, and `caster_char_id == Tavik` (the aura follows the caster). |
 | `test_self_anchored_marker_not_movable` | `/move_aoe` on the self-anchored marker → 409 `not_movable` (Spirit Guardians tracks the caster's token; it can't be repositioned like Web/Moonbeam). |
+
+### `test_cast_eldritch_blast.py`
+v2.183.13 — spell-validation suite Phase 4 (third complex-spell deep-dive). Eldritch Blast is the Warlock's signature cantrip: a 1d10 force ranged spell attack that fires additional beams as the caster levels (1 / 2 / 3 / 4 beams at L1 / L5 / L11 / L17). Where the catalog matrix treats it as a generic attack cantrip, this file owns its multi-beam scaling — driven by the cantrip `damage_scaling` tier's `extra_beams` count (`tabletop_routes.py:19252-19445`). Caster: Magnus Hexbinder (demo Warlock Lv 5 → 2 beams natively; spell index resolved from the live sheet). The level-scaling test PATCHes Magnus's sheet `level` to 1 / 11 / 17 and the fixture restores it.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_eldritch_blast_present_in_catalog` | Catalog anchor — Eldritch Blast present with the `extra_beams` scaling tiers (L5 +1, L11 +2, L17 +3) that drive the beam count; a dropped/edited tier collapses the spell to a single beam. |
+| `test_cast_fires_two_beams_at_level_five` | Magnus (Lv 5) casts → exactly 2 beams in `auto_attack_beams`, numbered `[1, 2]`, each carrying an int `total` + bool `hit`; aggregate `auto_attack_damage_type == "force"`. |
+| `test_beam_count_tracks_character_level` | PATCH the caster's `level` to 1 / 11 / 17 → 1 / 3 / 4 beams respectively (the `extra_beams` tiers exercised end-to-end). |
+| `test_aggregate_damage_is_sum_of_hit_beams` | Seed dice until a beam hits; `auto_attack_damage_rolled` is exactly the sum of the per-beam `damage_rolled`, every hit beam rolls a single 1d10 (1-10) force die and missed beams roll 0 (no `/cast_spell`-path rider — Agonizing Blast's +CHA lives on the `/attack` weapon entry). |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
