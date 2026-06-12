@@ -295,7 +295,7 @@
       "min_level": 1,
       "category": "legendary_action",
       "resource_key": "",
-      "cost": 1,
+      "cost": 2,
       "active_toggle": false,
       "damage": "2d6+6",
       "damage_type": "bludgeoning",

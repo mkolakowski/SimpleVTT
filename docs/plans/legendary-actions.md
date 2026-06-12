@@ -1,12 +1,21 @@
 # Legendary actions + lair actions — design plan
 
-**Status:** ⚪ proposed (v2.159.32, 2026-06-11) — no code yet. Filed
-as the top P1 finding of the [SRD 5e Audit (2026-06-11 refresh)](../../TODO.md#srd-5e-audit-2026-06-11-refresh).
+**Status:** 🟠 Phase 1a shipped (v2.159.33, 2026-06-11) — cost-integer
+backfill landed: 39 legendary actions across 30 monsters now carry the
+RAW cost integer (1/2/3) instead of the default `cost: 1`. Filed as
+the top P1 finding of the [SRD 5e Audit (2026-06-11 refresh)](../../TODO.md#srd-5e-audit-2026-06-11-refresh).
+Phase 1b (combatant action-point budget + `/use_legendary_action`
+endpoint) is the next slice.
 **Authors:** rolling
 **Last updated:** 2026-06-11
 
 A plan to wire the legendary-action + legendary-resistance + lair-action
-mechanics for the 15 SRD monsters that ship with the relevant data.
+mechanics for the **30** SRD monsters that ship with the relevant data.
+(The original Phase 0 filing cited "15 monsters" — that count was for
+the un-suffixed legendary creature roster; including the 10 Adult
+dragons, Aboleth, Gynosphinx, and the original 17 unique creatures
+the real count is 30 monsters and 39 multi-cost actions. The Phase 1a
+data backfill in v2.159.33 surfaced the larger roster.)
 Today a GM running an ancient dragon, lich, vampire, tarrasque, kraken,
 mummy lord, solar, sphinx, or unicorn has to track all three of those
 mechanics by hand — the engine surfaces the data via `/templates` but
@@ -179,7 +188,7 @@ combatant.legendary_resistance = {
 
 ## Phasing
 
-### Phase 0 — Plan (this doc) ⚪ v2.159.32
+### Phase 0 — Plan (this doc) ✅ v2.159.32
 
 - This commit. Files the plan, wires it through the wiki (allowlist
   + landing-page row + per-slug harness test + `test_wiki_home_renders`
@@ -188,9 +197,20 @@ combatant.legendary_resistance = {
 
 ### Phase 1 — Legendary action point budget + dispatch (M, ~3 commits)
 
-- Phase 1a: data backfill — parse "(Costs N Actions)" suffix from the
-  ~7 multi-cost actions and update the `cost` integer in each monster
-  JSON. Boot-time validator (v2.159.23) confirms the integer is set.
+- **Phase 1a ✅ v2.159.33** — data backfill. Parsed "(Costs N Actions)"
+  suffix from 39 multi-cost legendary actions across 30 monsters and
+  updated the `cost` integer (1/2/3) in each monster JSON. New harness
+  `test_monster_legendary_action_cost.py` (4 tests) guards the
+  invariant against future SRD-rebuild drift. Breakdown:
+  - 20 dragons (Adult + Ancient × 10 colors) — Wing Attack cost 2.
+  - Aboleth — Psychic Drain (2).
+  - Solar — Searing Burst (2) / Blinding Gaze (3).
+  - Kraken — Lightning Storm (2) / Ink Cloud (3).
+  - Lich — Paralyzing Touch (2) / Frightening Gaze (2) / Disrupt Life (3).
+  - Sphinx (Andro + Gyno) — Teleport (2) / Cast a Spell (3).
+  - Vampire — Bite (2). Tarrasque — Chomp (2).
+  - Mummy Lord — Blasphemous Word (2) / Channel Negative Energy (2) / Whirlwind of Sand (2).
+  - Unicorn — Shimmering Shield (2) / Heal Self (3).
 - Phase 1b: `combatant.legendary_actions` field + `/next_turn` refresh
   hook + `/use_legendary_action` endpoint dispatching through the
   existing `/npc_attack` + AoE pipelines. Harness: ancient-red-dragon

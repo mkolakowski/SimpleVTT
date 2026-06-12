@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2342 in `tests/harness/` + 51 in `tests/harness_ui/` (as of v2.159.32, 2026-06-11).
+**Total tests:** 2346 in `tests/harness/` + 51 in `tests/harness_ui/` (as of v2.159.33, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -98,6 +98,16 @@ v2.159.18 exhaustion-levels Phase 2 — disadvantage wiring at Lv 1 (ability che
 | `test_exhaustion_lv3_imposes_save_disadvantage` | Lv 3 imposes ALL save disadvantage (not just DEX-gated like Restrained). WIS save → 2d20kl1, `roll_state_applied == "auto_disadvantage_exhaustion-3"`. |
 | `test_exhaustion_lv0_no_disadvantage` | Regression. At level=0 the helpers must NOT fire any exhaustion label. |
 | `test_exhaustion_lv3_npc_imposes_check_disadvantage` | NPC mirror path — set exhaustion via `combatant_id` + skip_roll_state + /roll → response carries an exhaustion label. |
+
+### `test_monster_legendary_action_cost.py`
+v2.159.33 legendary-actions Phase 1a (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python data-invariant guard: every SRD legendary action whose name carries a `(Costs N Actions)` suffix has its `cost` integer set to N (not the default 1). Walks the shipped `app/data/local/dnd5e/monsters/*.json` content layer directly. Phase 1a backfilled 39 cost integers across 30 monsters from the suffix; this test guards the invariant against future SRD-rebuild drift so the Phase 1b `/use_legendary_action` budget gate doesn't silently re-break.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_every_costs_n_legendary_action_has_matching_cost_integer` | Sweep all monster JSONs; no legendary action with a "(Costs N Actions)" suffix may carry `cost != N`. |
+| `test_ancient_red_dragon_wing_attack_costs_2` | Spot-check canonical Ancient Red Dragon Wing Attack `cost == 2`. |
+| `test_lich_disrupt_life_costs_3` | Spot-check Lich Disrupt Life `cost == 3` (the highest cost in SRD). |
+| `test_legendary_action_costs_in_valid_range` | Every legendary action's `cost` ∈ {1, 2, 3}. RAW SRD 5.1 only uses 1/2/3. |
 
 ### `test_bag_of_holding.py`
 v2.159.30 carrying-capacity Phase 3 (CLOSES the plan) — Bag of Holding (RAW DMG p.153, uncommon, no attunement). The bag weighs 15 lb regardless of contents; items "inside" don't count against the wielder's carry capacity. The v2.159.27 leaf module's `sheet_inventory_weight_lb` already skips items flagged `_in_bag_of_holding: True`; this commit lands the catalog row + demo seed + assertive test. Brakka Wildmane's Explorer's pack (59 lb) is tagged `_in_bag_of_holding: True` so it contributes 0 lb.
