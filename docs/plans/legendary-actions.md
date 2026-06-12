@@ -1,7 +1,8 @@
 # Legendary actions + lair actions — design plan
 
-**Status:** 🟠 Phases 1a + 1b + 1c (UI) shipped (re-audited 2026-06-11,
-v2.160.0) — the budget surface + GM control are live:
+**Status:** ✅ Phases 1 + 2 + 3 shipped (closed 2026-06-12, v2.170.0) —
+legendary-action budget + GM control, legendary-resistance pool + UI,
+and the full lair-action arc (data + engine + GM UI) are all live:
 - **Phase 1a ✅ v2.159.33** — cost-integer backfill across 30 monsters
   (39 actions).
 - **Phase 1b ✅ v2.159.34** — combatant `legendary_actions = {max, current}`
@@ -396,10 +397,18 @@ combatant.legendary_resistance = {
   trigger on count 20 and the once-per-round discipline is surfaced in
   the Phase 3c UI. 10 harness tests in
   `tests/harness/test_trigger_lair_action.py`.
-- Phase 3c: the GM lair-action UI — an `in_lair` toggle control + a
-  floating lair-action banner (mirroring `_renderLegendaryResistancePrompts`)
-  with an action picker POSTing `/trigger_lair_action`, plus a
-  Playwright test driving the WS flow.
+- Phase 3c (✅ **shipped v2.170.0** "The Trembling Cavern"): the GM
+  lair-action UI — an `in_lair` toggle control + a floating
+  lair-action panel (`#_lair_action_panel`, mirroring
+  `_renderLegendaryResistancePrompts`' floating-card pattern but
+  derived from battle state) with a Trigger button per action that
+  opens the multi-target picker then POSTs `/trigger_lair_action`. The
+  `_ensureLairActions` seed helper folds `tmpl.sheet.lair_actions` +
+  `monster_slug` onto the combatant (mirroring `_ensureLegendaryActions`);
+  the `in_lair_changed` / `lair_action_resolved` WS handlers re-render
+  the panel + toast the outcome. 4 Playwright tests in
+  `tests/harness_ui/test_lair_action_ui.py`. **Closes Phase 3 (and the
+  lair-action arc).**
 
 ### Non-goals (v1)
 

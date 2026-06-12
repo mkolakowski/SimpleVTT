@@ -6510,6 +6510,27 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         c.legendary_resistance = { max: perDay, current: perDay };
     }
 
+    /* v2.170.0 — seed a lair owner's lair-action list from the source
+     * token template's projected stat block (sheet.lair_actions, curated
+     * in app/content/lair_actions.py and folded onto the sheet by
+     * _monster_dict_to_sheet — Phase 3a). Copies the actions + the lair
+     * slug onto the combatant so the GM lair-action panel can render the
+     * Trigger buttons without re-walking the template every frame.
+     * Idempotent: once c.lair_actions is an array we never re-derive it.
+     * Mirrors _ensureLegendaryActions. PCs + monsters with no authored
+     * lair are no-ops. The actual save-AoE dispatch is server-side
+     * (/trigger_lair_action); this just surfaces the menu. */
+    function _ensureLairActions(c) {
+        if (!c || c.char_id || !c.token_template_id) return;
+        if (Array.isArray(c.lair_actions)) return;
+        const tmpl = allTemplates.find(t => t.id === c.token_template_id);
+        const acts = (tmpl && tmpl.sheet && Array.isArray(tmpl.sheet.lair_actions))
+            ? tmpl.sheet.lair_actions : [];
+        if (!acts.length) return;
+        c.lair_actions = acts;
+        c.lair_slug = (tmpl.sheet.monster_slug || '');
+    }
+
     /* v2.4.31: heal stale combatants in localStorage that pre-date the
      * action-economy ``economy`` object. Called from ``renderBattle`` before
      * the per-row HTML loop so every combatant has the field; defensive
@@ -7387,6 +7408,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             _ensureEconomy(c);
             _ensureLegendaryActions(c);
             _ensureLegendaryResistance(c);
+            _ensureLairActions(c);
             // v2.99.67 — re-project speed_walk from the linked sheet
             // on every render so stale localStorage / older battle_update
             // payloads don't pin the Mov cap at 30 when the sheet says 40
@@ -8030,6 +8052,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
          * just a few line strokes per active waypoint, so calling it on
          * every renderBattle is well under a frame budget. */
         _updateMovementBreadcrumb();
+
+        // v2.170.0 — refresh the GM lair-action panel on every render so
+        // it tracks the in-lair flag + the lair owner's presence in init.
+        if (typeof window._renderLairActionPanel === 'function') {
+            window._renderLairActionPanel();
+        }
     }
 
     /* v2.49.45 — expose renderBattle so tabletop.js (which lives in a
@@ -8446,6 +8474,41 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (typeof window._renderLegendaryResistancePrompts === 'function') {
                 window._renderLegendaryResistancePrompts();
             }
+            return;
+        }
+        // v2.170.0 — in_lair_changed — the GM toggled the active battle's
+        // lair status (MM p.11: a creature in its lair acts on initiative
+        // count 20). Patch the local battle-state flags and re-render the
+        // floating lair-action panel so the toggle label + action list
+        // reflect the new state.
+        if (msg.type === 'in_lair_changed') {
+            const data = msg.data || {};
+            if (battle && typeof battle === 'object') {
+                battle.in_lair = !!data.in_lair;
+                battle.lair_slug = data.lair_slug || '';
+            }
+            if (typeof window._renderLairActionPanel === 'function') {
+                window._renderLairActionPanel();
+            }
+            return;
+        }
+        // v2.170.0 — lair_action_resolved — the GM fired a lair action and
+        // the server applied its AoE damage / condition. Surface a short
+        // toast summarizing the action + outcome; damage and condition
+        // installs ride their own battle_update / buff_update broadcasts.
+        if (msg.type === 'lair_action_resolved') {
+            const data = msg.data || {};
+            const _nm = data.action_name || 'Lair action';
+            let _bits = [];
+            if (Number.isFinite(parseInt(data.damage, 10)) && parseInt(data.damage, 10) > 0) {
+                _bits.push(`${parseInt(data.damage, 10)} ${data.damage_type || ''}`.trim());
+            }
+            if (data.effect) { _bits.push(String(data.effect)); }
+            if (data.save_ability && data.save_dc) {
+                _bits.push(`${String(data.save_ability).toUpperCase()} DC ${data.save_dc}`);
+            }
+            const _detail = _bits.length ? ` — ${_bits.join(' · ')}` : '';
+            (window.showToast || function (m) { console.log(m); })(`🌋 ${_nm}${_detail}`, 'info');
             return;
         }
         // v2.19.0 Phase C.1: buff_update — server installed / removed a
@@ -9432,6 +9495,177 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             btn.addEventListener('click', () => _post(btn, 'decline_legendary_resistance'));
         });
     };
+
+    // v2.170.0 — GM lair-action panel. MM p.11: a creature in its lair
+    // takes a lair action on initiative count 20 (losing ties), once per
+    // round. We surface this as a GM-driven floating control rather than
+    // rewriting the initiative scheduler: the GM toggles "in lair" and
+    // fires the round's lair action manually (the init-20 / once-per-round
+    // discipline is the GM's call). The panel only appears when the active
+    // battle contains a combatant whose projected sheet carried a non-empty
+    // ``lair_actions`` list (seeded onto the combatant by _ensureLairActions
+    // from tmpl.sheet.lair_actions). Enter/Exit POSTs /set_in_lair; each
+    // action's Trigger button opens the multi-target picker then POSTs
+    // /trigger_lair_action. Both answer with WS broadcasts (in_lair_changed
+    // / lair_action_resolved) whose handlers re-run this renderer.
+    window._renderLairActionPanel = function () {
+        const HOST_ID = '_lair_action_panel';
+        let host = document.getElementById(HOST_ID);
+
+        const isGm = (typeof ME !== 'undefined') && ME.isGm;
+        const combs = (typeof battle !== 'undefined' && battle && battle.combatants)
+            ? battle.combatants : [];
+
+        // Find the first combatant carrying lair actions (the lair owner).
+        let owner = null;
+        for (const c of combs) {
+            if (c && Array.isArray(c.lair_actions) && c.lair_actions.length) {
+                owner = c;
+                break;
+            }
+        }
+
+        if (!isGm || !owner) {
+            if (host) host.remove();
+            return;
+        }
+
+        const inLair = !!(battle && battle.in_lair);
+        const lairSlug = (battle && battle.lair_slug) || owner.lair_slug || '';
+
+        if (!host) {
+            host = document.createElement('div');
+            host.id = HOST_ID;
+            // bottom:200px keeps clear of the LR prompt banner (bottom:18px)
+            // and repeated-save panel. Volcanic-orange border to match the
+            // lair-action flavor (red-dragon volcanic actions in the seed).
+            host.style.cssText = (
+                'position:fixed;bottom:200px;left:18px;z-index:9080;'
+                + 'background:rgba(28,18,12,0.93);color:#fbe9dc;'
+                + 'border:2px solid #c2541f;border-radius:10px;'
+                + 'padding:10px 14px;min-width:280px;max-width:360px;'
+                + 'font-size:14px;box-shadow:0 6px 18px rgba(0,0,0,0.5);'
+                + 'backdrop-filter:blur(6px);'
+            );
+            document.body.appendChild(host);
+        }
+
+        const ownerName = _escH(owner.name || 'Creature');
+        const header = (
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+            + '<span style="font-size:18px;">🌋</span>'
+            + '<strong>Lair Actions</strong>'
+            + '<span style="font-size:11px;opacity:0.75;">init 20 · ' + ownerName + '</span>'
+            + '</div>'
+        );
+
+        const toggleBtn = (
+            '<button id="_lair_toggle_btn" style="width:100%;margin-bottom:'
+            + (inLair ? '8px' : '0') + ';">'
+            + (inLair ? 'Exit lair' : 'Enter lair')
+            + '</button>'
+        );
+
+        let actionsHtml = '';
+        if (inLair) {
+            actionsHtml = (owner.lair_actions || []).map(a => {
+                const aid = _escH(a.id || '');
+                const anm = _escH(a.name || 'Lair action');
+                const dmg = a.damage ? (_escH(a.damage) + ' ' + _escH(a.damage_type || '')) : '';
+                const sv = (a.save_ability && a.save_dc)
+                    ? (_escH(String(a.save_ability).toUpperCase()) + ' DC ' + (parseInt(a.save_dc, 10) || 0))
+                    : '';
+                const eff = a.effect ? _escH(a.effect) : '';
+                const meta = [dmg, sv, eff].filter(Boolean).join(' · ');
+                return (
+                    '<div style="margin-bottom:6px;padding-bottom:6px;'
+                    + 'border-bottom:1px solid rgba(255,255,255,0.12);">'
+                    + '<div style="font-size:12px;opacity:0.9;margin-bottom:4px;line-height:1.3;">'
+                    + '<strong>' + anm + '</strong>'
+                    + (meta ? '<br><span style="opacity:0.8;">' + meta + '</span>' : '')
+                    + '</div>'
+                    + '<button class="_lair_trigger_btn" data-action-id="' + aid
+                    + '" data-action-name="' + anm + '" style="width:100%;">Trigger</button>'
+                    + '</div>'
+                );
+            }).join('');
+        }
+
+        host.innerHTML = header + toggleBtn + actionsHtml;
+
+        const _toggleEl = host.querySelector('#_lair_toggle_btn');
+        if (_toggleEl) {
+            _toggleEl.addEventListener('click', async () => {
+                _toggleEl.disabled = true;
+                _toggleEl.style.opacity = '0.6';
+                try {
+                    const r = await fetch('/api/campaign/' + CAMPAIGN_ID + '/set_in_lair', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ in_lair: !inLair, lair_slug: lairSlug }),
+                    });
+                    if (!r.ok) {
+                        const txt = await r.text();
+                        console.warn('set_in_lair failed:', txt);
+                        _toggleEl.disabled = false;
+                        _toggleEl.style.opacity = '1';
+                    }
+                    // Success → in_lair_changed WS re-runs this renderer.
+                } catch (err) {
+                    console.warn('set_in_lair error:', err);
+                    _toggleEl.disabled = false;
+                    _toggleEl.style.opacity = '1';
+                }
+            });
+        }
+
+        host.querySelectorAll('._lair_trigger_btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const actionId = btn.getAttribute('data-action-id') || '';
+                const actionName = btn.getAttribute('data-action-name') || 'Lair action';
+                let targetIds = [];
+                if (typeof window.vttOpenMultiTargetPicker === 'function') {
+                    const picked = await window.vttOpenMultiTargetPicker({
+                        required: 12,
+                        spellName: actionName,
+                        casterCombatantId: owner.id,
+                    });
+                    if (picked === null) { return; }  // cancelled
+                    targetIds = Array.isArray(picked) ? picked : [];
+                }
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+                try {
+                    const r = await fetch('/api/campaign/' + CAMPAIGN_ID + '/trigger_lair_action', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action_id: actionId,
+                            lair_slug: lairSlug,
+                            aoe_target_combatant_ids: targetIds,
+                        }),
+                    });
+                    if (!r.ok) {
+                        const txt = await r.text();
+                        console.warn('trigger_lair_action failed:', txt);
+                    }
+                    // Success → lair_action_resolved WS surfaces a toast.
+                } catch (err) {
+                    console.warn('trigger_lair_action error:', err);
+                } finally {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }
+            });
+        });
+    };
+
+    // v2.170.0 — render the lair-action panel once now that the function
+    // is defined. The renderBattle() at IIFE init (above) runs BEFORE this
+    // assignment, so its `typeof window._renderLairActionPanel` guard is
+    // false on first load and the panel would otherwise only appear after
+    // the next re-render. This catch-up call paints it on initial load.
+    try { window._renderLairActionPanel(); } catch (_) {}
 
     // v2.97.64 — Sleeper wake panel. Lists every combatant currently
     // carrying a Sleep-sourced ``unconscious`` / ``asleep`` buff, with

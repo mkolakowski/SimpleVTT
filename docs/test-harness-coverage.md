@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2394 in `tests/harness/` + 58 in `tests/harness_ui/` (as of v2.169.0, 2026-06-12).
+**Total tests:** 2394 in `tests/harness/` + 62 in `tests/harness_ui/` (as of v2.170.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3334,6 +3334,16 @@ v2.167.0 legendary-actions Phase 2 UI — the GM-facing surface for the per-day 
 | `test_lr_badge_renders` | The dragon's card shows the `.legendary-lr-meter` badge containing "3/3" even with no legendary-action options; no 👑 `.legendary-meter` is present. |
 | `test_lr_prompt_banner_appears_and_spend_clears_it` | No banner before any prompt; dispatching `legendary_resistance_prompt` surfaces `#_legendary_resistance_prompt` with "Ancient Red Dragon", "WIS DC 16", a "Spend (3 left)" + "Decline" pair; clicking Spend POSTs `/spend_legendary_resistance` with the `prompt_id`; a following `legendary_resistance_resolved` event clears the banner. |
 | `test_lr_decline_button_posts_decline` | Dispatching the prompt then clicking Decline POSTs `/decline_legendary_resistance` carrying the `prompt_id`. |
+
+### `test_lair_action_ui.py`
+v2.170.0 legendary-actions Phase 3c UI — the GM-facing lair-action panel. Seeds a two-combatant battle into `localStorage` (Hero + Ancient Red Dragon carrying `lair_slug` + a two-entry `lair_actions` list directly on the combatant, plus the battle-level `in_lair` / `lair_slug` flags) so it exercises the client render + WS-handler path without the server hub. Asserts the floating `#_lair_action_panel` renders for the GM with an Enter/Exit toggle, that an `in_lair_changed` WS message flips the panel into the in-lair state listing each action with a Trigger button, and that the toggle + Trigger buttons POST `/set_in_lair` / `/trigger_lair_action` with the expected bodies (the multi-target picker stubbed to resolve the hero's id).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_lair_panel_toggle_renders` | With a lair-bearing combatant in the battle, the GM sees `#_lair_action_panel` containing "Lair Actions" + "Ancient Red Dragon" and an "Enter lair" toggle; out of lair → no `._lair_trigger_btn` buttons. |
+| `test_in_lair_changed_shows_action_list` | Dispatching `in_lair_changed` `{in_lair:true}` flips the toggle to "Exit lair" and lists two `._lair_trigger_btn` actions ("Magma Erupts", "Tremor", "DEX DC 15"). |
+| `test_toggle_posts_set_in_lair` | Clicking the toggle POSTs `/set_in_lair` with `{in_lair:true, lair_slug:"ancient-red-dragon"}`. |
+| `test_trigger_posts_trigger_lair_action` | In the in-lair state, clicking Trigger opens the (stubbed) multi-target picker then POSTs `/trigger_lair_action` with `action_id:"magma-erupts"`, the lair_slug, and the picked `aoe_target_combatant_ids`. |
 
 ---
 

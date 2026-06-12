@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.170.0] - 2026-06-12 — "The Trembling Cavern" — Legendary-actions Phase 3c: the GM lair-action UI. v2.168.0 folded the curated lair-action data onto the projected monster sheet and v2.169.0 landed the engine (`/set_in_lair` + `/trigger_lair_action`); both shipped with no UI. This commit wires the GM-facing surface into `tabletop.html`. When the active battle holds a combatant carrying a non-empty `lair_actions` list, the GM sees a floating volcanic-orange 🌋 panel (`#_lair_action_panel`, bottom-left, clear of the legendary-resistance banner) with an **Enter lair** / **Exit lair** toggle. Toggling POSTs `/set_in_lair`; the `in_lair_changed` broadcast flips the panel into the in-lair state, listing each lair action (name + save/damage/effect meta) with a **Trigger** button. Trigger opens the existing multi-target picker, then POSTs `/trigger_lair_action` with the caught targets; the `lair_action_resolved` broadcast surfaces a toast summary. Lair actions stay fully GM-driven (the GM fires the round's action on initiative count 20) — the once-per-round / init-20 discipline is the GM's call, surfaced in the panel rather than enforced server-side. Closes Phase 3 (and the lair-action arc) of `docs/plans/legendary-actions.md`.
+
+**Schema version:** 69
+**Commit summary:** **Front-end commit. `app/templates/tabletop.html` — (A) `_ensureLairActions(c)` seed helper (mirrors `_ensureLegendaryActions`): folds `tmpl.sheet.lair_actions` + `tmpl.sheet.monster_slug` onto the combatant when the projected template carried a lair, called in the `renderBattle` heal loop. (B) `window._renderLairActionPanel` — GM-only floating panel: scans `battle.combatants` for the first lair-bearing combatant, renders the Enter/Exit toggle (POSTs `/set_in_lair`) and, when in lair, a Trigger button per action (opens `vttOpenMultiTargetPicker` → POSTs `/trigger_lair_action`); re-run from `renderBattle` + the `in_lair_changed` WS handler. (C) Two WS handlers: `in_lair_changed` patches `battle.in_lair` / `battle.lair_slug` + re-renders the panel; `lair_action_resolved` surfaces a toast summary. `tests/harness_ui/test_lair_action_ui.py` — 4 Playwright tests for the panel render + toggle POST + in-lair flip + Trigger POST.**
+**Description:** Phase 3c of `docs/plans/legendary-actions.md` — the final phase. The panel mirrors `_renderLegendaryResistancePrompts`' floating-card pattern but is derived from battle state (`battle.in_lair` + the lair-bearing combatant's `lair_actions`) rather than event-sourced from a prompt dict. The seed helper `_ensureLairActions` reuses the `_ensureLegendaryActions` shape exactly — read the combatant's template from `allTemplates`, fold the projected `lair_actions` + `monster_slug` onto the combatant — so the Phase 3a projection feeds the UI with no new backend read. No schema change and no new endpoint, so the UI test seeds the lair-bearing dragon inline (no real template projection needed) the same way the legendary-resistance UI test seeds its pool. This closes the whole lair-action arc: data (3a) → engine (3b) → UI (3c).
+
+### Added
+- `app/templates/tabletop.html` — `_ensureLairActions` seed helper, `window._renderLairActionPanel` GM panel, `in_lair_changed` + `lair_action_resolved` WS handlers.
+- `tests/harness_ui/test_lair_action_ui.py` — 4 Playwright tests (panel render, in-lair flip, toggle POST, Trigger POST).
+
+### Changed
+- `app/templates/tabletop.html::renderBattle` — calls `_ensureLairActions(c)` in the heal loop + `window._renderLairActionPanel()` after the movement breadcrumb refresh.
+- `docs/plans/legendary-actions.md` — Phase 3c marked shipped; Phase 3 (and the lair-action arc) closed.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note Phase 3c (GM lair-action UI) shipped.
+- `docs/test-harness-coverage.md` — new `test_lair_action_ui.py` section; `tests/harness_ui/` total 58 → 62.
+- `app/version.py` — `APP_VERSION` 2.169.0 → 2.170.0 (MINOR: new GM-facing UI surface + WS-handler wiring). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.170.0.
+
+### Notes
+- Total harness count: **2394** in `tests/harness/` (unchanged); `tests/harness_ui/` **62** (was 58, +4).
+- No schema change (still v69) and no new endpoint — this is the UI layer over the v2.169.0 engine.
+- Closes Phase 3 of the legendary-actions plan. Lair actions stay GM-driven (no initiative-20 scheduler rewrite).
+
 ## [2.169.0] - 2026-06-12 — "The Floor Strikes Back" — Legendary-actions Phase 3b: the lair-action engine. Phase 3a (v2.168.0) folded the curated lair-action data onto the projected monster sheet; this commit lands the back-end that actually resolves a lair action against the table. Two new GM endpoints: `POST /set_in_lair` toggles the active battle's `in_lair` flag + records which lair the encounter is in (the init-tracker reads it to surface / hide the lair-action control); `POST /trigger_lair_action` resolves a chosen lair action against the GM-picked caught targets. The trigger reuses the same save-AoE dispatch the legendary Wing Attack already uses — area damage rolls once, each target rolls its own save, NPC targets resolve inline (full damage on a fail, half on a pass when the action is save-for-half, e.g. Magma Erupts; none otherwise), PC targets get a roll-request prompt with damage staying GM-manual. Condition lair actions (Tremor → prone, Volcanic Gases → poisoned) install the condition on a failed save through the shared `_resolve_feature_save` buff path. Resolution fans out over `lair_action_resolved`. The `in_lair` / `lair_slug` flags persist on the battle-state dict and are carried across `/battle` PUTs by a new server-side guard (the pre-3c client doesn't round-trip them). Phase 3c adds the GM banner UI + the Playwright test.
 
 **Schema version:** 69
