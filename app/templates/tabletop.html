@@ -6464,6 +6464,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             id: a.id || String(a.name || 'legendary-action').toLowerCase().replace(/\s+/g, '-'),
             name: a.name || 'Legendary Action',
             cost: Math.max(1, Math.min(3, parseInt(a.cost, 10) || 1)),
+            // v2.162.0 — carry the save/damage shape so the spend button
+            // knows to open the target picker for save-AoE options (Wing
+            // Attack). The server (/use_legendary_action) re-resolves these
+            // from the template authoritatively; these are a UX hint only.
+            save_ability: String(a.save_ability || '').trim(),
+            damage: String(a.damage || '').trim(),
         }));
         if (!c.legendary_actions || typeof c.legendary_actions !== 'object') {
             c.legendary_actions = { max: 3, current: 3 };
@@ -7608,9 +7614,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         const _ttl = _ownTurn
                             ? 'Cannot spend on the creature&#39;s own turn'
                             : `Spend ${opt.cost} legendary action point${opt.cost === 1 ? '' : 's'}`;
+                        const _saveAb = String(opt.save_ability || '').trim();
+                        const _hasDmg = !!String(opt.damage || '').trim();
+                        const _isSaveAoe = !!_saveAb && _hasDmg;
                         return `<button type="button" class="legendary-act-btn"
                             data-idx="${i}" data-action-id="${opt.id}"
                             data-action-name="${_nm}" data-cost="${opt.cost}"
+                            data-save-ability="${_saveAb}" data-is-save-aoe="${_isSaveAoe ? '1' : ''}"
                             ${_disabled ? 'disabled' : ''} title="${_ttl}">
                             ${_nm} <span class="la-cost">${opt.cost}</span>
                         </button>`;
@@ -7792,6 +7802,32 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const c = battle.combatants[idx];
             if (!c || !c.id) return;
             const cost = Math.max(1, Math.min(3, parseInt(btn.dataset.cost, 10) || 1));
+
+            // v2.162.0 — save-AoE options (Wing Attack) open the target
+            // picker first so the GM clicks the creatures caught in the
+            // emanation. The picked combatant ids ride along as
+            // aoe_target_combatant_ids; the server rolls each save +
+            // applies save-or-take damage and broadcasts
+            // legendary_action_aoe_resolved. Cancelling (Esc) aborts the
+            // spend entirely — no point spent, button restored. Non-AoE
+            // options (Detect / Tail Attack) skip the picker. The dragon's
+            // own emanation has no fixed target count, so we set a generous
+            // `required` cap and let the GM press Enter to commit early.
+            let _aoeTargetIds = [];
+            if (btn.dataset.isSaveAoe === '1'
+                    && typeof window.vttOpenMultiTargetPicker === 'function') {
+                const _picked = await window.vttOpenMultiTargetPicker({
+                    required: 12,
+                    spellName: btn.dataset.actionName || 'Legendary Action',
+                    casterCombatantId: c.id,
+                });
+                if (_picked === null) {
+                    // Cancelled — don't spend.
+                    return;
+                }
+                _aoeTargetIds = Array.isArray(_picked) ? _picked : [];
+            }
+
             btn.disabled = true;
             try {
                 const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/use_legendary_action`, {
@@ -7802,6 +7838,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         action_id: btn.dataset.actionId || '',
                         action_name: btn.dataset.actionName || 'Legendary Action',
                         cost,
+                        ...(_aoeTargetIds.length ? { aoe_target_combatant_ids: _aoeTargetIds } : {}),
                     }),
                 });
                 if (!r.ok) {

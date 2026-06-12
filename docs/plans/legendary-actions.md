@@ -30,14 +30,21 @@ v2.160.0) — the budget surface + GM control are live:
   Dragon's Wing Attack (cost 2, DEX DC 22, 2d6+8 bludgeoning). 2 HTTP
   harness tests.
 
+- **Phase 1c (UI target-pick) ✅ v2.162.0** — the strip's spend button
+  for a save-AoE legendary action (Wing Attack — carries `save_ability`
+  + `damage`) now opens `vttOpenMultiTargetPicker` so the GM clicks the
+  caught creatures, then folds the picked ids into the
+  `/use_legendary_action` POST as `aoe_target_combatant_ids`. Cancel
+  aborts the spend. Non-AoE options spend straight through. 2 Playwright
+  tests.
+
 The data shapes turned out more varied than the original "attack_roll +
 damage" assumption: the demo dragon's legendary options are a save-AoE
 (Wing Attack), a reference-attack (Tail Attack → base "Tail" action), and
-a no-damage utility (Detect). v2.161.0 covers the save-AoE slice. The
-remaining Phase 1c work is the attack-roll/reference-attack dispatch
-(Tail Attack), the UI target-pick wiring (the v2.160.0 strip doesn't yet
-send `aoe_target_combatant_ids`), and a chat-card surface for
-`legendary_action_aoe_resolved`.
+a no-damage utility (Detect). v2.161.0 + v2.162.0 cover the save-AoE
+slice end-to-end (server dispatch + UI target-pick). The remaining
+Phase 1c work is the attack-roll/reference-attack dispatch (Tail Attack)
+and a chat-card surface for `legendary_action_aoe_resolved`.
 **Authors:** rolling
 **Last updated:** 2026-06-11
 
@@ -272,10 +279,17 @@ combatant.legendary_resistance = {
   damage_type + results[]). 2 HTTP tests
   (`test_wing_attack_aoe_resolves_saves_and_damage`,
   `test_wing_attack_without_targets_skips_dispatch`).
-- Phase 1c (server, pending): attack-roll / reference-attack dispatch
-  (Tail Attack → base "Tail" action); UI target-pick wiring (the
-  v2.160.0 strip doesn't yet send `aoe_target_combatant_ids`); chat-card
-  surface for `legendary_action_aoe_resolved`.
+- Phase 1c (UI target-pick) ✅ v2.162.0: the strip's save-AoE spend
+  button (`data-is-save-aoe`, set when the option has `save_ability` +
+  `damage`) opens `vttOpenMultiTargetPicker` before POSTing, folding the
+  picked combatant ids into `aoe_target_combatant_ids`; cancel aborts the
+  spend. `_ensureLegendaryActions` now carries `save_ability` + `damage`
+  onto each option. 2 Playwright tests
+  (`test_wing_attack_save_aoe_opens_picker_and_posts_targets`,
+  `test_wing_attack_save_aoe_picker_cancel_aborts_spend`).
+- Phase 1c (pending): attack-roll / reference-attack dispatch (Tail
+  Attack → base "Tail" action); chat-card surface for
+  `legendary_action_aoe_resolved`.
 
 ### Phase 2 — Legendary resistance pool (S, ~2 commits)
 

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2357 in `tests/harness/` + 54 in `tests/harness_ui/` (as of v2.161.0, 2026-06-11).
+**Total tests:** 2357 in `tests/harness/` + 56 in `tests/harness_ui/` (as of v2.162.0, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3256,13 +3256,15 @@ v2.158.85 magic-items-automation Phase 3b — Use buttons render on the inventor
 | `test_javelin_lightning_click_fires_use_item_action` | v2.159.8 Phase 8h: end-to-end click chain — click button → stubbed picker → intercepted /battle + /battle/line-targets → AoE confirm modal renders → Fire → REAL /use_item_action POST asserted with right body → button relabels to "spent until dawn" after sheet flag flips. First full click-to-fire E2E in the Phase 8 work. |
 
 ### `test_legendary_action_buttons.py`
-v2.160.0 legendary-actions Phase 1c (UI) — GM init-tracker legendary-action spend strip. Seeds a two-combatant battle into `localStorage` (Hero + Ancient Red Dragon carrying `legendary_actions: {max:3,current:3}` + `legendary_action_options`), so it exercises the client render path without depending on the server hub. The strip is GM-only and renders one `.legendary-act-btn` per option plus a 👑 dot meter.
+v2.160.0 legendary-actions Phase 1c (UI) + v2.162.0 (target-pick) — GM init-tracker legendary-action spend strip. Seeds a two-combatant battle into `localStorage` (Hero + Ancient Red Dragon carrying `legendary_actions: {max:3,current:3}` + `legendary_action_options`), so it exercises the client render path without depending on the server hub. The strip is GM-only and renders one `.legendary-act-btn` per option plus a 👑 dot meter. v2.162.0 adds the save-AoE target-pick path: options carrying `save_ability`+`damage` flag the button `data-is-save-aoe` and route the click through `vttOpenMultiTargetPicker` before POSTing `aoe_target_combatant_ids`.
 
 | Test | What it asserts |
 |------|-----------------|
 | `test_legendary_strip_renders_meter_and_buttons` | With the dragon NOT on its own turn (turn_index=0), the strip shows a "3/3" meter and 2 enabled buttons with cost pills "1" / "2". |
 | `test_legendary_buttons_disabled_on_own_turn` | With the dragon active (turn_index=1), both `.legendary-act-btn` are disabled — RAW: legendary actions are spent at the END of OTHER creatures' turns, never on your own. |
-| `test_legendary_button_click_posts_use_legendary_action` | `page.route` intercepts the POST to `/use_legendary_action`; clicking the Wing Attack button fires a body with `combatant_id`, `action_id='wing-attack-costs-2-actions'`, `action_name='Wing Attack'`, `cost=2`. |
+| `test_legendary_button_click_posts_use_legendary_action` | `page.route` intercepts the POST to `/use_legendary_action`; clicking the Wing Attack button fires a body with `combatant_id`, `action_id='wing-attack-costs-2-actions'`, `action_name='Wing Attack'`, `cost=2`. Non-AoE seed → asserts `aoe_target_combatant_ids` absent. |
+| `test_wing_attack_save_aoe_opens_picker_and_posts_targets` | v2.162.0 — Wing Attack seeded with `save_ability`+`damage` → button flagged `data-is-save-aoe="1"`; clicking opens the (stubbed) `vttOpenMultiTargetPicker`; the picked ids ride along as `aoe_target_combatant_ids` on the POST. |
+| `test_wing_attack_save_aoe_picker_cancel_aborts_spend` | v2.162.0 — stubbed picker resolves `null` (cancel) → no `/use_legendary_action` POST fires + the button stays enabled. |
 
 ---
 

@@ -31,10 +31,18 @@ _DRAGON_ID = "npc_dragon_ui_test"
 _HERO_ID = "tok_hero_ui_test"
 
 
-def _battle_json(turn_index: int) -> str:
+def _battle_json(turn_index: int, wing_save_aoe: bool = False) -> str:
     """Two manual combatants: a Hero (active when turn_index=0) and an
     Ancient Red Dragon carrying a pre-baked legendary-action pool +
-    options. turn_index selects who is active."""
+    options. turn_index selects who is active.
+
+    When ``wing_save_aoe`` is True the Wing Attack option carries the
+    ``save_ability`` + ``damage`` fields the v2.162.0 render reads to
+    flag the button as a save-AoE (``data-is-save-aoe="1"``), which
+    routes the click through the target picker before the POST."""
+    wing = {"id": "wing-attack-costs-2-actions", "name": "Wing Attack", "cost": 2}
+    if wing_save_aoe:
+        wing = {**wing, "save_ability": "dex", "damage": "2d6+8"}
     return json.dumps({
         "combatants": [
             {
@@ -59,7 +67,7 @@ def _battle_json(turn_index: int) -> str:
                 "legendary_actions": {"max": 3, "current": 3},
                 "legendary_action_options": [
                     {"id": "tail-attack", "name": "Tail Attack", "cost": 1},
-                    {"id": "wing-attack-costs-2-actions", "name": "Wing Attack", "cost": 2},
+                    wing,
                 ],
             },
         ],
@@ -69,10 +77,10 @@ def _battle_json(turn_index: int) -> str:
     })
 
 
-def _seed_battle(page: Page, turn_index: int) -> None:
+def _seed_battle(page: Page, turn_index: int, wing_save_aoe: bool = False) -> None:
     page.add_init_script(
         f"window.localStorage.setItem('simplevtt_battle_{CAMPAIGN_ID}', "
-        f"{json.dumps(_battle_json(turn_index))});"
+        f"{json.dumps(_battle_json(turn_index, wing_save_aoe))});"
     )
 
 
@@ -154,3 +162,86 @@ def test_legendary_button_click_posts_use_legendary_action(gm_page: Page):
     assert captured.get("action_id") == "wing-attack-costs-2-actions", captured
     assert captured.get("action_name") == "Wing Attack", captured
     assert captured.get("cost") == 2, captured
+    # Non-AoE seed (no save_ability/damage) → button is NOT a save-AoE,
+    # so the picker is skipped and no aoe_target_combatant_ids ride along.
+    assert "aoe_target_combatant_ids" not in captured, captured
+
+
+def test_wing_attack_save_aoe_opens_picker_and_posts_targets(gm_page: Page):
+    """v2.162.0 — when the Wing Attack option carries save_ability +
+    damage, the button is flagged data-is-save-aoe. Clicking it opens
+    the target picker; the picked combatant ids ride along as
+    aoe_target_combatant_ids on the /use_legendary_action POST."""
+    _seed_battle(gm_page, turn_index=0, wing_save_aoe=True)
+
+    captured = {}
+
+    def _handle(route):
+        req = route.request
+        try:
+            captured.update(req.post_data_json or {})
+        except Exception:
+            pass
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"ok": True, "pool_current": 1, "pool_max": 3, "aoe_results": []}),
+        )
+
+    gm_page.route("**/use_legendary_action", _handle)
+    gm_page.goto(tabletop_url())
+
+    # Stub the global target picker to resolve with a known id list
+    # BEFORE the click (the page's own assignment ran on load; this
+    # overrides it for the test).
+    gm_page.evaluate(
+        "window.vttOpenMultiTargetPicker = async () => ['%s'];" % _HERO_ID
+    )
+
+    dragon_entry = gm_page.locator(f'.init-entry[data-char-id="{_DRAGON_ID}"]')
+    expect(dragon_entry).to_be_visible(timeout=5000)
+    wing_btn = dragon_entry.locator(".legendary-act-btn", has_text="Wing Attack")
+    expect(wing_btn).to_have_attribute("data-is-save-aoe", "1")
+    expect(wing_btn).to_be_enabled()
+
+    with gm_page.expect_request("**/use_legendary_action") as req_info:
+        wing_btn.click()
+    req_info.value
+
+    assert captured.get("combatant_id") == _DRAGON_ID, captured
+    assert captured.get("cost") == 2, captured
+    assert captured.get("aoe_target_combatant_ids") == [_HERO_ID], captured
+
+
+def test_wing_attack_save_aoe_picker_cancel_aborts_spend(gm_page: Page):
+    """v2.162.0 — cancelling the target picker (resolves null) aborts
+    the spend entirely: no /use_legendary_action POST is issued."""
+    _seed_battle(gm_page, turn_index=0, wing_save_aoe=True)
+
+    posted = {"hit": False}
+
+    def _handle(route):
+        posted["hit"] = True
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"ok": True, "pool_current": 1, "pool_max": 3}),
+        )
+
+    gm_page.route("**/use_legendary_action", _handle)
+    gm_page.goto(tabletop_url())
+
+    # Picker resolves null → user cancelled → spend must NOT fire.
+    gm_page.evaluate("window.vttOpenMultiTargetPicker = async () => null;")
+
+    dragon_entry = gm_page.locator(f'.init-entry[data-char-id="{_DRAGON_ID}"]')
+    expect(dragon_entry).to_be_visible(timeout=5000)
+    wing_btn = dragon_entry.locator(".legendary-act-btn", has_text="Wing Attack")
+    expect(wing_btn).to_be_enabled()
+
+    wing_btn.click()
+    # Give any (erroneous) request a moment to fire.
+    gm_page.wait_for_timeout(500)
+    assert posted["hit"] is False
+    # Button restored (cancel returns before disabling stays latched).
+    expect(wing_btn).to_be_enabled()
