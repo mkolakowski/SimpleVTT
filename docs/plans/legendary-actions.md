@@ -14,6 +14,11 @@ v2.160.0) — the budget surface + GM control are live:
   pill, own-turn + insufficient-points disable), wired to the
   /use_legendary_action endpoint, with a `legendary_action_pool_update`
   WS handler driving the meter live. 3 Playwright UI tests.
+- **Phase 1c demo fixture ✅ v2.160.1** — the Adult Red Dragon (CR 17,
+  legendary) is now a drag-spawnable demo template, so the v2.160.0
+  strip has a real legendary creature to render on (the demo's existing
+  Young Red Dragon is non-legendary RAW). 2 HTTP harness tests guard
+  the seed wiring.
 
 The remaining Phase 1c work is server-side damage-dispatch chaining
 (roll the attack/AoE through `/npc_attack` in the same request for

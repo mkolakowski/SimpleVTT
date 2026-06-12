@@ -4136,6 +4136,17 @@ def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate
         # PCs would steamroll the Tavern Brawl); GM drags from the
         # Templates tab when they want to showcase the rider.
         ("young-red-dragon", "Young Red Dragon", "dragon"),
+        # v2.160.1 — legendary-actions Phase 1c demo fixture. The Young
+        # Red Dragon above is NOT legendary (young dragons lack legendary
+        # actions RAW), so the v2.160.0 GM init-tracker legendary strip
+        # had no demo creature to render on. The Adult Red Dragon (CR 17)
+        # carries 3 legendary actions (Detect / Tail Attack cost 1, Wing
+        # Attack cost 2) with the category+cost fields the v2.159.33
+        # backfill set, so its projected sheet.actions drives the strip's
+        # buttons + 👑 pool meter. Not placed on the demo map by default
+        # (CR 17 would obliterate the Lv 5-9 Tavern Brawl); GM drag-spawns
+        # from the Templates tab → adds to init → the strip renders.
+        ("adult-red-dragon", "Adult Red Dragon", "dragon"),
         # v2.158.102 — Magic-items Phase 7b demo fixture. Quasit
         # (CR 1, fiend). Lyra's Demon Slayer Rapier's +2d6 fiend
         # rider (v2.158.97 Phase 6a) + the Phase 7b DC 15 WIS save-

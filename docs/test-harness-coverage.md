@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2353 in `tests/harness/` + 54 in `tests/harness_ui/` (as of v2.160.0, 2026-06-11).
+**Total tests:** 2355 in `tests/harness/` + 54 in `tests/harness_ui/` (as of v2.160.1, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -2309,6 +2309,14 @@ v2.158.99 magic-items-automation Phase 6c — Drakkasha (Young Red Dragon) is sp
 |------|-----------------|
 | `test_yrd_token_present_in_tavern_brawl` | GETs `/encounters`, finds Tavern Brawl, asserts payload.tokens contains a Drakkasha entry with `size=2` (Large) and `team=villain`. |
 | `test_yrd_combatant_in_battle_state` | Asserts payload.battle_state.combatants contains Drakkasha at `hp_max=178` with `token_template_id` set so the Phase 5f resolver can fire the rider. |
+
+### `test_demo_adult_red_dragon_template.py`
+v2.160.1 legendary-actions Phase 1c demo fixture — the Adult Red Dragon (CR 17, legendary) is a drag-spawnable template so the v2.160.0 init-tracker legendary strip has a real legendary creature to render on (the demo's Young Red Dragon is non-legendary RAW). Not placed on the map by default; the GM drag-spawns it from the Templates tab.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_adult_red_dragon_template_seeded` | GETs `/templates`, finds "Adult Red Dragon", asserts `sheet.monster_slug == "adult-red-dragon"` (so its 3 legendary actions project) and `sheet.type == "dragon"`. |
+| `test_adult_red_dragon_sheet_page_renders` | Looks up the template id, GETs `/monster-template/{id}/sheet`, asserts 200 + "Adult Red Dragon" in the body — smoke that the slug resolves end-to-end via `_monster_template_to_sheet`. |
 
 ### `test_dragon_slayer_template.py`
 v2.158.98 magic-items-automation Phase 6b — Young Red Dragon NPC token template carries `sheet.type: "dragon"`, exercising the third branch of the v2.97.48 `_attacker_creature_type` helper (`token_template.sheet["type"]`). Validates the path a demo GM hits when they drag-spawn the dragon from the Templates drawer and Caelan attacks the resulting token. The dragon isn't on the demo map by default (CR 10 vs. Lv 5-9 PCs would steamroll the Tavern Brawl); harness GETs `/templates` to look up the id.

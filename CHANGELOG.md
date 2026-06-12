@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.160.1] - 2026-06-11 — "The Adult in the Room" — Legendary-actions Phase 1c demo fixture: the Adult Red Dragon (CR 17, legendary) is now a drag-spawnable demo template so the v2.160.0 init-tracker legendary strip has a real creature to render on. The existing demo dragon (Drakkasha, a Young Red Dragon) is NOT legendary — young dragons lack legendary actions RAW — so a GM exploring the v2.160.0 feature in the demo had nothing that showed the 👑 strip. The Adult Red Dragon carries the 3 legendary actions (Detect + Tail Attack cost 1, Wing Attack cost 2) the v2.159.33 backfill tagged with `category` + `cost`, so once the GM drag-spawns it from the Templates tab and adds it to initiative, the strip's buttons + pool meter render against live data.
+
+**Schema version:** 69
+**Commit summary:** **Demo-data + harness commit. (A) `app/demo_seed.py` — new template spec `("adult-red-dragon", "Adult Red Dragon", "dragon")` appended to the monster-template seed list right after the Young Red Dragon. Like the Young Red Dragon / Quasit / Hill Giant fixtures it is NOT placed on the Tavern Brawl map by default (CR 17 would obliterate the Lv 5-9 demo party); the GM drag-spawns it from the Templates tab when showcasing legendary actions. The `"dragon"` creature_type also lets Caelan's Dragon Slayer rider (v2.158.93) fire against it, same as the young dragon. (B) New harness `tests/harness/test_demo_adult_red_dragon_template.py` (2 tests): the template is seeded via `GET /templates` pointing at the `adult-red-dragon` SRD slug with `sheet.type='dragon'`; the monster-template sheet page renders end-to-end (smoke that the slug resolves so the legendary actions project). HTTP total 2353 → 2355.**
+**Description:** Closes the "bring a legendary template into the demo" follow-up the v2.160.0 notes deferred. No code change to the engine or the UI — the v2.160.0 client already renders the strip for any combatant whose projected `sheet.actions` carry `category: legendary_action`; this commit just gives the demo a creature that qualifies. The legendary-action cost integers the strip reads are guarded by `tests/harness/test_monster_legendary_action_cost.py`; the strip render itself by `tests/harness_ui/test_legendary_action_buttons.py`; this commit guards the seed wiring that connects them.
+
+### Added
+- `app/demo_seed.py` — Adult Red Dragon (`adult-red-dragon`, CR 17, legendary) monster-template seed entry, drag-spawn-only.
+- `tests/harness/test_demo_adult_red_dragon_template.py` — 2 HTTP tests: template seeded + slug/type correct; sheet page renders.
+
+### Changed
+- `docs/plans/legendary-actions.md` — Phase 1c demo-fixture note added; the "legendary demo template deferred" caveat resolved.
+- `app/version.py` — `APP_VERSION` 2.160.0 → 2.160.1 (PATCH: additive demo fixture). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.160.1.
+- `docs/test-harness-coverage.md` — HTTP harness total 2353 → 2355; new `test_demo_adult_red_dragon_template.py` section.
+
+### Notes
+- Total harness count: **2355** in `tests/harness/` (was 2353, +2); `tests/harness_ui/` **54** (unchanged).
+- No schema change (still v69). No new endpoint — the test exercises the existing `/templates` list + the `/monster-template/{id}/sheet` page.
+- The Young Red Dragon (Drakkasha) stays the on-map demo boss; the Adult Red Dragon is drag-spawn-only so it doesn't unbalance the seeded Tavern Brawl.
+
 ## [2.160.0] - 2026-06-11 — "The Crowned Initiative" — Legendary-actions Phase 1c (UI): the GM initiative tracker now renders a per-creature legendary-action strip — a pool meter (👑 ●●● 3/3) plus a click-to-spend button for each option, wired to the v2.159.34 `/use_legendary_action` endpoint. Until now the budget gate was endpoint-only; a GM had no on-screen control and still tracked the 3-point pool by hand. This commit lands the client surface: a legendary creature's init card grows a 👑 strip showing remaining points and one amber button per legendary option (each carrying its 1–3 cost in a pill), the buttons auto-disable on the creature's OWN turn (RAW DMG p.11) and whenever an option costs more than the points left, and clicking one POSTs the spend + lets the server's `legendary_action_pool_update` broadcast drive the meter back down in real time.
 
 **Schema version:** 69
