@@ -330,10 +330,25 @@ combatant.legendary_resistance = {
   broadcasts `legendary_resistance_spent`. 6 harness tests in
   `test_spend_legendary_resistance.py` (happy + drain-to-409 + non-legendary
   409 + 404 + 400 + 403).
-- Phase 2b (pending): GM auto-prompt on failed-save broadcasts when the
-  target's pool > 0 (intercept in the save-resolver hot path) + long-rest
-  pool refill. Harness: creature fails a save → prompt fires; spend → save
-  flips to success; long rest refills the pool.
+- Phase 2b ✅ v2.166.0: the failed-save auto-prompt. `_resolve_feature_save`
+  now intercepts a failed NPC save that would impose a condition: when the
+  creature has a `legendary_resistance` charge left (effective `current`,
+  defaulting to the stat-block max before the pool seeds) it defers the
+  install, stashes the held condition in `_legendary_resistance_context`
+  (prompt-keyed, 8h TTL), and broadcasts `legendary_resistance_prompt`.
+  `spend_legendary_resistance` accepts an optional `prompt_id` → flips the
+  save to a success (no install, pool decrements, `legendary_resistance_resolved(passed=True)`);
+  new `POST /decline_legendary_resistance` installs the held condition
+  (`legendary_resistance_resolved(passed=False, condition_installed=True)`).
+  The interception lives in the one shared NPC save path, so it fires for
+  every feature-save call site against any legendary monster. 6 harness
+  tests in `test_legendary_resistance_prompt.py` (Menacing Attack vs Adult
+  Red Dragon, defer-then-spend + defer-then-decline + 404/404/400/403).
+  Per-day refill is by-design: legendary resistance is battle-scoped NPC
+  state seeded lazily per combatant, so each new encounter starts with a
+  full pool (effective `current` defaults to max) — the correct "per day"
+  cadence without a wrong-cadence refill on the per-turn legendary-action
+  refresh or the PC long-rest hook. **Phase 2 complete.**
 
 ### Phase 3 — Lair actions (M, ~3 commits)
 

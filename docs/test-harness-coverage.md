@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2365 in `tests/harness/` + 57 in `tests/harness_ui/` (as of v2.165.0, 2026-06-11).
+**Total tests:** 2371 in `tests/harness/` + 57 in `tests/harness_ui/` (as of v2.166.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -127,6 +127,18 @@ v2.165.0 legendary-actions Phase 2a (see [legendary-actions.md](../plans/legenda
 | `test_spend_legendary_resistance_unknown_combatant_404` | combatant id not in the active battle → 404. |
 | `test_spend_legendary_resistance_missing_combatant_id_400` | Missing `combatant_id` → 400. |
 | `test_spend_legendary_resistance_player_caller_403` | Non-GM caller → 403 (legendary resistance is GM-authorised). |
+
+### `test_legendary_resistance_prompt.py`
+v2.166.0 legendary-actions Phase 2b (see [legendary-actions.md](../plans/legendary-actions.md)) — the failed-save auto-prompt. When an NPC with a resistance charge left fails a feature save that would impose a condition, `_resolve_feature_save` defers the install and broadcasts `legendary_resistance_prompt`. Spending (`/spend_legendary_resistance` with a `prompt_id`) flips the save to a success; declining (`/decline_legendary_resistance`) installs the held condition. Trigger: Battle Master Menacing Attack (DC 16 WIS → Frightened) at an Adult Red Dragon, fail-until-prompt loop.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_failed_save_defers_then_spend_flips_to_success` | A failed dragon WIS save defers: `legendary_resistance_prompt` fires (combatant, WIS, DC 16, frightened, current=3, max=3), nothing installs while pending; spend with `prompt_id` → 200 (resolution=spent, pool 3 → 2), `legendary_resistance_resolved(passed=True, condition_installed=False)`, still no Frightened, replay 404. |
+| `test_failed_save_decline_installs_held_condition` | Declining the prompt → 200 (resolution=declined, condition_installed=True, frightened); `legendary_resistance_resolved(passed=False, condition_installed=True)`; the dragon now carries Frightened (source_char_id = Garrik); replay 404. |
+| `test_spend_unknown_prompt_404` | `/spend_legendary_resistance` with an unknown `prompt_id` → 404. |
+| `test_decline_unknown_prompt_404` | `/decline_legendary_resistance` with an unknown `prompt_id` → 404. |
+| `test_decline_missing_prompt_id_400` | `/decline_legendary_resistance` with no `prompt_id` → 400. |
+| `test_decline_player_caller_403` | Non-GM caller → 403 (legendary resistance is GM-authorised). |
 
 ### `test_monster_legendary_action_cost.py`
 v2.159.33 legendary-actions Phase 1a (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python data-invariant guard: every SRD legendary action whose name carries a `(Costs N Actions)` suffix has its `cost` integer set to N (not the default 1). Walks the shipped `app/data/local/dnd5e/monsters/*.json` content layer directly. Phase 1a backfilled 39 cost integers across 30 monsters from the suffix; this test guards the invariant against future SRD-rebuild drift so the Phase 1b `/use_legendary_action` budget gate doesn't silently re-break.

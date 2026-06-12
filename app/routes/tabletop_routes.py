@@ -7220,6 +7220,28 @@ def _purge_save_request_context() -> None:
         _save_request_context.pop(k, None)
 
 
+# v2.166.0 — Phase 2b (docs/plans/legendary-actions.md): deferred
+# legendary-resistance prompts. When an NPC with legendary resistance
+# left FAILS a feature/spell save that would impose a condition, the
+# save-resolver defers the install and broadcasts a GM prompt instead
+# (RAW MM p.11: "If the creature fails a saving throw, it can choose to
+# succeed instead"). The held condition template + everything needed to
+# either flip the save to a success (spend a charge → no effect) or
+# apply the held effect (decline → install) is stashed here, keyed by a
+# generated prompt_id (hex). 8-hour TTL, same as the save-request stash.
+_legendary_resistance_context: dict[str, dict] = {}
+
+
+def _purge_legendary_resistance_context() -> None:
+    cutoff = _time.time() - 8 * 3600
+    stale = [
+        k for k, v in _legendary_resistance_context.items()
+        if v.get("ts", 0) < cutoff
+    ]
+    for k in stale:
+        _legendary_resistance_context.pop(k, None)
+
+
 # v2.48.0 Phase T.5e: caster-gated AoE placement. When an AoE spell
 # (Fireball / Burning Hands / etc.) is cast WITHOUT a target list,
 # the cast card lands in "pending placement" state — the caster (or
@@ -23687,6 +23709,12 @@ async def spend_legendary_resistance(
 
     Body:
       ``combatant_id`` — the legendary creature's combatant id.
+      ``prompt_id`` (optional, v2.166.0) — a pending deferred-save prompt
+          id from a ``legendary_resistance_prompt`` broadcast. When
+          present, the combatant is resolved from the prompt context, the
+          held condition is dropped (the save flips to a success), and a
+          ``legendary_resistance_resolved`` event fires alongside the
+          pool-decrement broadcast.
 
     The pool's ``max`` seeds from the creature's stat block
     (``legendary_resistance_per_day``, derived in
@@ -23698,17 +23726,16 @@ async def spend_legendary_resistance(
     Auth: GM only (legendary creatures are GM-controlled).
 
     Errors:
-      400 missing ``combatant_id``.
+      400 missing ``combatant_id`` (and no ``prompt_id``).
       403 non-member / non-GM.
-      404 combatant not in active battle.
+      404 combatant not in active battle, or unknown ``prompt_id``.
       409 ``no_legendary_resistance`` — the creature's stat block has
           no Legendary Resistance special ability (max 0).
       409 ``insufficient_legendary_resistance`` — pool already at 0.
     """
     body = await request.json()
+    prompt_id = str(body.get("prompt_id") or "").strip()
     combatant_id = str(body.get("combatant_id") or "").strip()
-    if not combatant_id:
-        raise HTTPException(400, "combatant_id is required")
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -23717,6 +23744,19 @@ async def spend_legendary_resistance(
         raise HTTPException(
             403, "GM only — legendary resistance is GM-authorised",
         )
+
+    # v2.166.0 — Phase 2b: a prompt_id resolves the combatant from the
+    # deferred-save context (the held condition is simply dropped — the
+    # creature chose to succeed, so nothing installs).
+    ctx = None
+    if prompt_id:
+        _purge_legendary_resistance_context()
+        ctx = _legendary_resistance_context.get(prompt_id)
+        if ctx is None or ctx.get("campaign_id") != campaign_id:
+            raise HTTPException(404, "Unknown or expired legendary-resistance prompt")
+        combatant_id = str(ctx.get("combatant_id") or "").strip()
+    if not combatant_id:
+        raise HTTPException(400, "combatant_id is required")
 
     state = hub.get_battle(campaign_id)
     if not state:
@@ -23774,12 +23814,127 @@ async def spend_legendary_resistance(
         },
     })
 
+    # v2.166.0 — Phase 2b: a prompt-driven spend flips the deferred save to
+    # a success. No condition installs; broadcast the resolution so the GM
+    # prompt clears, then drop the held context.
+    if ctx is not None:
+        await hub.broadcast(campaign_id, {
+            "type": "legendary_resistance_resolved",
+            "data": {
+                "prompt_id": prompt_id,
+                "combatant_id": combatant_id,
+                "combatant_name": combatant_name,
+                "passed": True,
+                "condition_installed": False,
+                "condition_key": "",
+                "reason": "spent",
+                "max": pool_max,
+                "current": remaining,
+            },
+        })
+        _legendary_resistance_context.pop(prompt_id, None)
+
     return {
         "ok": True,
         "combatant_id": combatant_id,
         "combatant_name": combatant_name,
         "max": pool_max,
         "current": remaining,
+        "prompt_id": prompt_id or None,
+        "resolution": "spent" if ctx is not None else None,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/decline_legendary_resistance")
+async def decline_legendary_resistance(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.166.0 — Phase 2b of `docs/plans/legendary-actions.md`. Decline a
+    pending deferred-save legendary-resistance prompt: the creature lets
+    the failed save stand, so the held condition is installed now (no
+    charge spent). The counterpart to spending a charge to flip the save
+    to a success.
+
+    Body:
+      ``prompt_id`` — a pending prompt id from a
+          ``legendary_resistance_prompt`` broadcast.
+
+    Looks up the held condition template from the prompt context, installs
+    it on the combatant (mirroring the immediate-install path in
+    ``_resolve_feature_save``), and broadcasts
+    ``legendary_resistance_resolved`` so the GM prompt clears.
+
+    Auth: GM only (legendary creatures are GM-controlled).
+
+    Errors:
+      400 missing ``prompt_id``.
+      403 non-member / non-GM.
+      404 unknown / expired ``prompt_id``.
+    """
+    body = await request.json()
+    prompt_id = str(body.get("prompt_id") or "").strip()
+    if not prompt_id:
+        raise HTTPException(400, "prompt_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(
+            403, "GM only — legendary resistance is GM-authorised",
+        )
+
+    _purge_legendary_resistance_context()
+    ctx = _legendary_resistance_context.get(prompt_id)
+    if ctx is None or ctx.get("campaign_id") != campaign_id:
+        raise HTTPException(404, "Unknown or expired legendary-resistance prompt")
+
+    combatant_id = str(ctx.get("combatant_id") or "").strip()
+    combatant_name = str(ctx.get("combatant_name") or "Legendary creature")
+    condition_buff = ctx.get("condition_buff")
+
+    condition_installed = False
+    condition_key = ""
+    if isinstance(condition_buff, dict) and combatant_id:
+        buff = dict(condition_buff)
+        buff.setdefault("source_char_id", ctx.get("caster_char_id"))
+        buff.setdefault("source_char_name", ctx.get("caster_char_name"))
+        if ctx.get("repeated_save"):
+            buff["repeated_save_ability"] = ctx.get("save_ability")
+            buff["repeated_save_dc"] = int(ctx.get("save_dc") or 0)
+        installed = await _install_buff_on_combatant_id(
+            campaign_id, combatant_id, buff,
+        )
+        condition_installed = bool(installed)
+        if installed:
+            condition_key = str(buff.get("key") or "")
+
+    _legendary_resistance_context.pop(prompt_id, None)
+
+    await hub.broadcast(campaign_id, {
+        "type": "legendary_resistance_resolved",
+        "data": {
+            "prompt_id": prompt_id,
+            "combatant_id": combatant_id,
+            "combatant_name": combatant_name,
+            "passed": False,
+            "condition_installed": condition_installed,
+            "condition_key": condition_key,
+            "reason": "declined",
+        },
+    })
+
+    return {
+        "ok": True,
+        "prompt_id": prompt_id,
+        "combatant_id": combatant_id,
+        "combatant_name": combatant_name,
+        "condition_installed": condition_installed,
+        "condition_key": condition_key,
+        "resolution": "declined",
     }
 
 
@@ -30055,6 +30210,8 @@ async def _resolve_feature_save(
         "condition_key": "",
         "prompted": False,
         "prompt_id": 0,
+        "legendary_resistance_pending": False,
+        "legendary_resistance_prompt_id": "",
     }
     if not target_combatant:
         return result
@@ -30167,6 +30324,67 @@ async def _resolve_feature_save(
             "dc": int(dc),
         },
     })
+
+    # v2.166.0 — Phase 2b: deferred legendary resistance. If the NPC just
+    # FAILED a save that would impose a condition AND it still has a
+    # legendary-resistance charge, RAW lets it choose to succeed instead
+    # (MM p.11). Rather than auto-spend, defer the install and broadcast a
+    # GM prompt — spending a charge flips the save to a success (no
+    # effect), declining applies the held condition. The held template +
+    # everything the spend/decline endpoints need lives in the context
+    # stash, keyed by the generated prompt_id.
+    if result["passed"] is False and condition_buff:
+        lr_max = _resolve_legendary_resistance_max(
+            db, campaign_id, target_combatant,
+        )
+        if lr_max > 0:
+            existing_pool = target_combatant.get("legendary_resistance")
+            if isinstance(existing_pool, dict):
+                try:
+                    lr_current = int(existing_pool.get("current") or 0)
+                except (TypeError, ValueError):
+                    lr_current = 0
+            else:
+                lr_current = lr_max
+            if lr_current > 0:
+                prompt_id = uuid.uuid4().hex[:12]
+                _purge_legendary_resistance_context()
+                _legendary_resistance_context[prompt_id] = {
+                    "ts": _time.time(),
+                    "campaign_id": campaign_id,
+                    "combatant_id": target_combatant.get("id") or "",
+                    "combatant_name": (
+                        target_combatant.get("name") or "Legendary creature"
+                    ),
+                    "condition_buff": dict(condition_buff),
+                    "caster_char_id": caster_char_id,
+                    "caster_char_name": caster_char_name,
+                    "repeated_save": bool(repeated_save),
+                    "save_ability": result["save_ability"],
+                    "save_dc": int(dc),
+                    "feature_name": feature_name or note_label,
+                    "source": source,
+                }
+                await hub.broadcast(campaign_id, {
+                    "type": "legendary_resistance_prompt",
+                    "data": {
+                        "prompt_id": prompt_id,
+                        "combatant_id": target_combatant.get("id") or "",
+                        "combatant_name": (
+                            target_combatant.get("name")
+                            or "Legendary creature"
+                        ),
+                        "save_ability": result["save_ability"],
+                        "save_dc": int(dc),
+                        "feature_name": feature_name or note_label,
+                        "condition_key": str(condition_buff.get("key") or ""),
+                        "current": lr_current,
+                        "max": lr_max,
+                    },
+                })
+                result["legendary_resistance_pending"] = True
+                result["legendary_resistance_prompt_id"] = prompt_id
+                return result
 
     if result["passed"] is False and condition_buff:
         buff = dict(condition_buff)
