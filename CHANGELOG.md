@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.167.0] - 2026-06-12 — "The Shield Made Visible" — Legendary-actions Phase 2 UI: the GM-facing surface for the resistance pool + the failed-save prompt. v2.165.0–2.166.0 shipped the back-end (a per-day legendary-resistance pool, a spend endpoint, and a failed-save deferral that broadcasts `legendary_resistance_prompt` / `legendary_resistance_resolved`) — but every signal landed on the wire with no UI. The GM had nothing to look at: no badge for charges remaining, and no banner when a deferred save needed a Spend/Decline call. This commit wires all of it into the init-tracker. Each legendary combatant now renders a 🛡️ steel-blue charge meter (◆/◇ diamonds, current/max) beside the gold 👑 action meter, and when the server defers a failed save a floating bottom-left banner pops with a **Spend (N left)** / **Decline** button pair per pending prompt. Spend POSTs `/spend_legendary_resistance` (flips to success, pool −1); Decline POSTs `/decline_legendary_resistance` (the held condition installs). Both ride the `legendary_resistance_resolved` broadcast back to clear the banner row.
+
+**Schema version:** 69
+**Commit summary:** **Front-end commit. `app/templates/tabletop.html` — (A) new `_ensureLegendaryResistance(c)` seed helper (mirrors `_ensureLegendaryActions`): seeds `c.legendary_resistance = {max, current}` from the source template's `sheet.legendary_resistance_per_day` when ≥1, idempotent so a server spend is preserved across renders; called in the per-render heal loop. (B) The legendary-strip render now fires when EITHER `legendary_action_options` OR `legendary_resistance` is present (was action-options-only) and adds a `🛡️ ◆◇ cur/max` badge (`.legendary-lr-meter`, steel-blue #8fc7e6). (C) New `window._renderLegendaryResistancePrompts()` floating GM banner (event-sourced from `_legendaryResistancePrompts`, keyed by prompt_id) at bottom-left with a Spend/Decline button pair per pending prompt. (D) Three new `vtt:ws-message` handlers: `legendary_resistance_prompt` (stash prompt + patch pool badge + show banner), `legendary_resistance_spent` (patch the 🛡️ badge), `legendary_resistance_resolved` (drop the prompt + clear the banner row). New `tests/harness_ui/test_legendary_resistance_ui.py` Playwright test (suite 57 → 58) drives the WS handlers in-page and asserts the badge + banner render and Spend clears the row.**
+**Description:** Phase 2 UI of `docs/plans/legendary-actions.md`, closing the gap between the Phase 2a/2b back-end and the GM's screen. The badge is read-only pool state (the spend happens via the prompt banner or the back-end's auto-deferral, never a click on the badge). The prompt banner is event-sourced from the WS stream rather than derived from battle state — the deferred-save context lives server-side and there's no GET to re-hydrate it, so the banner only surfaces for prompts that arrive while the GM's page is open (an acceptable Phase 2 limitation; a re-hydrate endpoint can land later if needed). Both new floating surfaces are GM-gated (`ME.isGm`) and positioned to not collide with the existing BI-die (bottom-right) / repeated-save (bottom-right, higher) banners — the LR banner sits bottom-left with a steel-blue border matching the badge palette.
+
+### Added
+- `app/templates/tabletop.html::_ensureLegendaryResistance` — per-render seed of the client-side `legendary_resistance` pool from the template stat block.
+- `app/templates/tabletop.html::_renderLegendaryResistancePrompts` — floating GM Spend/Decline banner for pending deferred-save prompts.
+- `app/templates/tabletop.html` — `.legendary-lr-meter` CSS (steel-blue per-day charge badge) + three `vtt:ws-message` handlers (`legendary_resistance_prompt` / `_spent` / `_resolved`).
+- `tests/harness_ui/test_legendary_resistance_ui.py` — Playwright UI test for the badge render + prompt banner + Spend-clears-row flow.
+
+### Changed
+- `app/templates/tabletop.html` — the legendary-strip now renders when either legendary actions or legendary resistance is present (was action-options-only), adding the 🛡️ charge badge beside the 👑 action meter.
+- `docs/plans/legendary-actions.md` — Phase 2 UI marked shipped.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the Phase 2 GM UI shipped.
+- `docs/test-harness-coverage.md` — `tests/harness_ui/` total 57 → 58; new `test_legendary_resistance_ui.py` section.
+- `app/version.py` — `APP_VERSION` 2.166.0 → 2.167.0 (MINOR: new backward-compatible GM UI surface). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.167.0.
+
+### Notes
+- Total harness count: **2371** in `tests/harness/` (unchanged — front-end commit); `tests/harness_ui/` **58** (was 57, +1).
+- No schema change (still v69). The client-side LR pool + the active-prompt dict are in-page state reconciled from WS broadcasts; nothing new persists to the DB.
+- Phase 3 (lair actions) is the remaining legendary-actions work.
+
 ## [2.166.0] - 2026-06-12 — "The Deferred Verdict" — Legendary-actions Phase 2b: the failed-save auto-prompt. v2.165.0 shipped the spendable legendary-resistance pool but the GM had to notice a failed save and click "spend" by hand. This commit wires the choice into the save-resolver hot path (RAW MM p.11: "If the creature fails a saving throw, it can choose to succeed instead"). When an NPC with a resistance charge left FAILS a feature save that would impose a condition, `_resolve_feature_save` no longer installs it — it defers the effect, stashes the held condition template in a prompt-keyed context registry, and broadcasts `legendary_resistance_prompt` so the GM gets a "Spend Legendary Resistance?" choice. Spending (the existing endpoint, now accepting a `prompt_id`) flips the save to a success — no condition installs, the pool decrements, `legendary_resistance_resolved(passed=True)` fires. Declining (a new endpoint) lets the failed save stand — the held condition installs, no charge spent, `legendary_resistance_resolved(passed=False, condition_installed=True)`. The deferral fires for EVERY one of the 14 `_resolve_feature_save` call sites against any legendary monster, since it lives in the shared resolver, not a per-feature branch.
 
 **Schema version:** 69

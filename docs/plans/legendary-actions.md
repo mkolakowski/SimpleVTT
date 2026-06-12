@@ -348,7 +348,19 @@ combatant.legendary_resistance = {
   state seeded lazily per combatant, so each new encounter starts with a
   full pool (effective `current` defaults to max) — the correct "per day"
   cadence without a wrong-cadence refill on the per-turn legendary-action
-  refresh or the PC long-rest hook. **Phase 2 complete.**
+  refresh or the PC long-rest hook.
+- Phase 2 UI ✅ v2.167.0: the GM-facing surface. `tabletop.html` gains
+  `_ensureLegendaryResistance(c)` (seeds the client `legendary_resistance`
+  pool from the template stat block, mirroring `_ensureLegendaryActions`),
+  a 🛡️ `.legendary-lr-meter` charge badge in the init-strip (renders when
+  either legendary actions OR resistance is present), a floating GM banner
+  `_renderLegendaryResistancePrompts()` (event-sourced from
+  `legendary_resistance_prompt`, Spend/Decline button pair per pending
+  prompt POSTing the `prompt_id`), and three `vtt:ws-message` handlers
+  (`legendary_resistance_prompt` / `_spent` / `_resolved`). 3 Playwright
+  tests in `tests/harness_ui/test_legendary_resistance_ui.py` (badge
+  render + prompt-banner-then-spend-clears + decline-POST). **Phase 2
+  complete (back-end + UI).**
 
 ### Phase 3 — Lair actions (M, ~3 commits)
 

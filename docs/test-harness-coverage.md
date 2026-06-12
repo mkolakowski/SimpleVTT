@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2371 in `tests/harness/` + 57 in `tests/harness_ui/` (as of v2.166.0, 2026-06-12).
+**Total tests:** 2371 in `tests/harness/` + 58 in `tests/harness_ui/` (as of v2.167.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3292,6 +3292,15 @@ v2.160.0 legendary-actions Phase 1c (UI) + v2.162.0 (target-pick) — GM init-tr
 | `test_wing_attack_save_aoe_opens_picker_and_posts_targets` | v2.162.0 — Wing Attack seeded with `save_ability`+`damage` → button flagged `data-is-save-aoe="1"`; clicking opens the (stubbed) `vttOpenMultiTargetPicker`; the picked ids ride along as `aoe_target_combatant_ids` on the POST. |
 | `test_wing_attack_save_aoe_picker_cancel_aborts_spend` | v2.162.0 — stubbed picker resolves `null` (cancel) → no `/use_legendary_action` POST fires + the button stays enabled. |
 | `test_legendary_aoe_resolved_card_renders_per_target_pills` | v2.163.0 — drives `window._appendLegendaryAoeResolved` with a 3-target payload; asserts the 👑 roll-log card shows the save line + a `chip-hit` saved pill, a `chip-miss` failed pill carrying the damage + type, and a `chip-buff` pending pill. |
+
+### `test_legendary_resistance_ui.py`
+v2.167.0 legendary-actions Phase 2 UI — the GM-facing surface for the per-day resistance pool + the failed-save prompt. Seeds a two-combatant battle into `localStorage` (Hero + Ancient Red Dragon carrying `legendary_resistance: {max:3,current:3}`, no action options) so it exercises the client render + WS-handler path without the server hub. Asserts the 🛡️ `.legendary-lr-meter` badge renders, and that a `legendary_resistance_prompt` WS message (dispatched via a `vtt:ws-message` CustomEvent) surfaces the floating `#_legendary_resistance_prompt` banner with Spend/Decline buttons that POST the prompt_id.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_lr_badge_renders` | The dragon's card shows the `.legendary-lr-meter` badge containing "3/3" even with no legendary-action options; no 👑 `.legendary-meter` is present. |
+| `test_lr_prompt_banner_appears_and_spend_clears_it` | No banner before any prompt; dispatching `legendary_resistance_prompt` surfaces `#_legendary_resistance_prompt` with "Ancient Red Dragon", "WIS DC 16", a "Spend (3 left)" + "Decline" pair; clicking Spend POSTs `/spend_legendary_resistance` with the `prompt_id`; a following `legendary_resistance_resolved` event clears the banner. |
+| `test_lr_decline_button_posts_decline` | Dispatching the prompt then clicking Decline POSTs `/decline_legendary_resistance` carrying the `prompt_id`. |
 
 ---
 

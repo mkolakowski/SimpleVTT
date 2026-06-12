@@ -1374,6 +1374,18 @@
         white-space: nowrap;
         font-variant-numeric: tabular-nums;
     }
+    /* v2.167.0 — Legendary Resistance per-day badge. Cooler steel-blue
+       tint to read as a defensive trait, distinct from the gold action
+       meter. Diamond glyphs (◆/◇) for charges left/spent. */
+    .legendary-lr-meter {
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: 1px;
+        color: #8fc7e6;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
     .legendary-btns { display: flex; gap: 4px; flex-wrap: wrap; }
     .legendary-act-btn {
         font-size: 10px;
@@ -6476,6 +6488,28 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         }
     }
 
+    /* v2.167.0 — seed a legendary creature's per-day Legendary Resistance
+     * pool from the source token template's projected stat block
+     * (sheet.legendary_resistance_per_day, RAW MM p.11). Idempotent: once
+     * ``legendary_resistance`` is present we never re-derive it, so a
+     * server-side spend (which lands via the legendary_resistance_spent /
+     * legendary_resistance_resolved WS handlers) is preserved across
+     * renders. PCs and monsters without the trait are no-ops. The pool is
+     * battle-scoped NPC state — a fresh encounter starts a combatant with
+     * no pool, so the first render seeds a full pool (correct "per day"
+     * cadence by-design, matching the server's lazy seeding). The actual
+     * budget gate is server-side (/spend_legendary_resistance); this is the
+     * client-side badge surface only. */
+    function _ensureLegendaryResistance(c) {
+        if (!c || c.char_id || !c.token_template_id) return;
+        if (c.legendary_resistance && typeof c.legendary_resistance === 'object') return;
+        const tmpl = allTemplates.find(t => t.id === c.token_template_id);
+        const perDay = (tmpl && tmpl.sheet)
+            ? parseInt(tmpl.sheet.legendary_resistance_per_day, 10) : 0;
+        if (!perDay || perDay < 1) return;
+        c.legendary_resistance = { max: perDay, current: perDay };
+    }
+
     /* v2.4.31: heal stale combatants in localStorage that pre-date the
      * action-economy ``economy`` object. Called from ``renderBattle`` before
      * the per-row HTML loop so every combatant has the field; defensive
@@ -7352,6 +7386,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (!c.image_url && _resolveCombatantImage(c)) _healedAny = true;
             _ensureEconomy(c);
             _ensureLegendaryActions(c);
+            _ensureLegendaryResistance(c);
             // v2.99.67 — re-project speed_walk from the linked sheet
             // on every render so stale localStorage / older battle_update
             // payloads don't pin the Mov cap at 30 when the sheet says 40
@@ -7601,33 +7636,54 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // budget gate is server-side in /use_legendary_action; the
                 // disabled state is a UX hint that mirrors it.
                 let legendaryStrip = '';
-                if (IS_GM && Array.isArray(c.legendary_action_options) && c.legendary_action_options.length) {
-                    const _pool = c.legendary_actions || { max: 3, current: 3 };
-                    const _cur = Math.max(0, parseInt(_pool.current, 10) || 0);
-                    const _max = Math.max(1, parseInt(_pool.max, 10) || 3);
-                    const _dots = '●'.repeat(Math.min(_cur, _max))
-                        + '○'.repeat(Math.max(0, _max - _cur));
-                    const _ownTurn = isActive;
-                    const _laBtns = c.legendary_action_options.map(opt => {
-                        const _disabled = _ownTurn || opt.cost > _cur;
-                        const _nm = String(opt.name).replace(/"/g, '&quot;');
-                        const _ttl = _ownTurn
-                            ? 'Cannot spend on the creature&#39;s own turn'
-                            : `Spend ${opt.cost} legendary action point${opt.cost === 1 ? '' : 's'}`;
-                        const _saveAb = String(opt.save_ability || '').trim();
-                        const _hasDmg = !!String(opt.damage || '').trim();
-                        const _isSaveAoe = !!_saveAb && _hasDmg;
-                        return `<button type="button" class="legendary-act-btn"
-                            data-idx="${i}" data-action-id="${opt.id}"
-                            data-action-name="${_nm}" data-cost="${opt.cost}"
-                            data-save-ability="${_saveAb}" data-is-save-aoe="${_isSaveAoe ? '1' : ''}"
-                            ${_disabled ? 'disabled' : ''} title="${_ttl}">
-                            ${_nm} <span class="la-cost">${opt.cost}</span>
-                        </button>`;
-                    }).join('');
+                const _hasLaOpts = Array.isArray(c.legendary_action_options) && c.legendary_action_options.length;
+                const _lrPool = (c.legendary_resistance && typeof c.legendary_resistance === 'object')
+                    ? c.legendary_resistance : null;
+                if (IS_GM && (_hasLaOpts || _lrPool)) {
+                    let _meter = '';
+                    let _laBtns = '';
+                    if (_hasLaOpts) {
+                        const _pool = c.legendary_actions || { max: 3, current: 3 };
+                        const _cur = Math.max(0, parseInt(_pool.current, 10) || 0);
+                        const _max = Math.max(1, parseInt(_pool.max, 10) || 3);
+                        const _dots = '●'.repeat(Math.min(_cur, _max))
+                            + '○'.repeat(Math.max(0, _max - _cur));
+                        const _ownTurn = isActive;
+                        _laBtns = c.legendary_action_options.map(opt => {
+                            const _disabled = _ownTurn || opt.cost > _cur;
+                            const _nm = String(opt.name).replace(/"/g, '&quot;');
+                            const _ttl = _ownTurn
+                                ? 'Cannot spend on the creature&#39;s own turn'
+                                : `Spend ${opt.cost} legendary action point${opt.cost === 1 ? '' : 's'}`;
+                            const _saveAb = String(opt.save_ability || '').trim();
+                            const _hasDmg = !!String(opt.damage || '').trim();
+                            const _isSaveAoe = !!_saveAb && _hasDmg;
+                            return `<button type="button" class="legendary-act-btn"
+                                data-idx="${i}" data-action-id="${opt.id}"
+                                data-action-name="${_nm}" data-cost="${opt.cost}"
+                                data-save-ability="${_saveAb}" data-is-save-aoe="${_isSaveAoe ? '1' : ''}"
+                                ${_disabled ? 'disabled' : ''} title="${_ttl}">
+                                ${_nm} <span class="la-cost">${opt.cost}</span>
+                            </button>`;
+                        }).join('');
+                        _meter = `<span class="legendary-meter" title="Legendary action points ${_cur}/${_max}">👑 ${_dots} ${_cur}/${_max}</span>`;
+                    }
+                    // v2.167.0 — Legendary Resistance badge. Shows the
+                    // remaining per-day charges (RAW MM p.11). When a held
+                    // save is pending, the GM acts on the floating prompt
+                    // banner (_renderLegendaryResistancePrompts), not here —
+                    // this badge is read-only pool state.
+                    let _lrBadge = '';
+                    if (_lrPool) {
+                        const _lrCur = Math.max(0, parseInt(_lrPool.current, 10) || 0);
+                        const _lrMax = Math.max(1, parseInt(_lrPool.max, 10) || 1);
+                        const _lrDots = '◆'.repeat(Math.min(_lrCur, _lrMax))
+                            + '◇'.repeat(Math.max(0, _lrMax - _lrCur));
+                        _lrBadge = `<span class="legendary-lr-meter" title="Legendary Resistance ${_lrCur}/${_lrMax} per day">🛡️ ${_lrDots} ${_lrCur}/${_lrMax}</span>`;
+                    }
+                    const _btnsHtml = _laBtns ? `<div class="legendary-btns">${_laBtns}</div>` : '';
                     legendaryStrip = `<div class="legendary-strip">
-                        <span class="legendary-meter" title="Legendary action points ${_cur}/${_max}">👑 ${_dots} ${_cur}/${_max}</span>
-                        <div class="legendary-btns">${_laBtns}</div>
+                        ${_meter}${_lrBadge}${_btnsHtml}
                     </div>`;
                 }
                 // v2.49.96 — Init/HP text + action-economy chips share
@@ -8327,6 +8383,69 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             combatant.legendary_actions = { max: _max, current: Math.min(_cur, _max) };
             saveBattle();
             renderBattle();
+            return;
+        }
+        // v2.167.0 — legendary_resistance_prompt — a legendary monster
+        // FAILED a feature save that would impose a condition and still
+        // has a charge left, so the server deferred the effect and is
+        // asking the GM to spend a charge (flip to success) or let the
+        // save stand. Stash the prompt (keyed by prompt_id) and surface
+        // the floating Spend/Decline banner. Also patch the combatant's
+        // LR pool so the init-strip badge reflects the broadcast count.
+        if (msg.type === 'legendary_resistance_prompt') {
+            const data = msg.data || {};
+            const promptId = data.prompt_id;
+            if (!promptId) return;
+            window._legendaryResistancePrompts = window._legendaryResistancePrompts || {};
+            window._legendaryResistancePrompts[promptId] = data;
+            const combId = data.combatant_id;
+            if (combId != null) {
+                const combatant = (battle.combatants || []).find(c => c.id === combId);
+                if (combatant) {
+                    const _max = Math.max(1, parseInt(data.max, 10) || 1);
+                    const _cur = Math.max(0, parseInt(data.current, 10) || 0);
+                    combatant.legendary_resistance = { max: _max, current: Math.min(_cur, _max) };
+                    saveBattle();
+                    renderBattle();
+                }
+            }
+            if (typeof window._renderLegendaryResistancePrompts === 'function') {
+                window._renderLegendaryResistancePrompts();
+            }
+            return;
+        }
+        // v2.167.0 — legendary_resistance_spent — the server decremented a
+        // legendary creature's per-day resistance pool. Patch the matching
+        // combatant + re-render so the 🛡️ badge reflects the new count.
+        // Authoritative absolute set, idempotent on replay.
+        if (msg.type === 'legendary_resistance_spent') {
+            const data = msg.data || {};
+            const combId = data.combatant_id;
+            if (combId == null) return;
+            const combatant = (battle.combatants || []).find(c => c.id === combId);
+            if (!combatant) return;
+            const _max = Math.max(1, parseInt(data.max, 10) || 1);
+            const _cur = Math.max(0, parseInt(data.current, 10) || 0);
+            combatant.legendary_resistance = { max: _max, current: Math.min(_cur, _max) };
+            saveBattle();
+            renderBattle();
+            return;
+        }
+        // v2.167.0 — legendary_resistance_resolved — the deferred save was
+        // resolved (spent → flipped to success, or declined → held
+        // condition installed). Drop the prompt from the active dict and
+        // re-run the banner so the row clears. The condition install (on
+        // decline) and the pool decrement (on spend) ride their own
+        // battle_update / legendary_resistance_spent broadcasts.
+        if (msg.type === 'legendary_resistance_resolved') {
+            const data = msg.data || {};
+            const promptId = data.prompt_id;
+            if (promptId && window._legendaryResistancePrompts) {
+                delete window._legendaryResistancePrompts[promptId];
+            }
+            if (typeof window._renderLegendaryResistancePrompts === 'function') {
+                window._renderLegendaryResistancePrompts();
+            }
             return;
         }
         // v2.19.0 Phase C.1: buff_update — server installed / removed a
@@ -9200,6 +9319,117 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     btn.style.opacity = '1';
                 }
             });
+        });
+    };
+
+    // v2.167.0 — Legendary Resistance prompt banner. GM-only. When a
+    // legendary monster FAILS a feature save that would impose a
+    // condition and still has a charge left, the server defers the
+    // effect and broadcasts ``legendary_resistance_prompt``; the WS
+    // handler stashes it in ``_legendaryResistancePrompts`` (keyed by
+    // prompt_id) and re-runs this renderer. Each active prompt gets a
+    // Spend / Decline button pair: Spend POSTs /spend_legendary_resistance
+    // (flips the save to a success — no condition, pool −1), Decline POSTs
+    // /decline_legendary_resistance (the held condition installs, no
+    // charge spent). The server answers both with a
+    // legendary_resistance_resolved broadcast whose handler drops the
+    // prompt from the dict and re-runs this renderer → the row clears.
+    // Mirrors _renderRepeatedSavePanel's floating-card pattern but is
+    // event-sourced (from WS) rather than derived from battle state.
+    window._legendaryResistancePrompts = window._legendaryResistancePrompts || {};
+    window._renderLegendaryResistancePrompts = function () {
+        const HOST_ID = '_legendary_resistance_prompt';
+        let host = document.getElementById(HOST_ID);
+
+        const isGm = (typeof ME !== 'undefined') && ME.isGm;
+        const prompts = isGm
+            ? Object.values(window._legendaryResistancePrompts || {})
+            : [];
+
+        if (!prompts.length) {
+            if (host) host.remove();
+            return;
+        }
+
+        if (!host) {
+            host = document.createElement('div');
+            host.id = HOST_ID;
+            // Bottom-left so it doesn't collide with the BI die banner
+            // (bottom:18px;right) or the repeated-save panel (bottom:140px;
+            // right). Steel-blue border to match the LR badge palette.
+            host.style.cssText = (
+                'position:fixed;bottom:18px;left:18px;z-index:9100;'
+                + 'background:rgba(18,26,34,0.92);color:#e8f2fa;'
+                + 'border:2px solid #4f86a8;border-radius:10px;'
+                + 'padding:10px 14px;min-width:280px;max-width:340px;'
+                + 'font-size:14px;box-shadow:0 6px 18px rgba(0,0,0,0.5);'
+                + 'backdrop-filter:blur(6px);'
+            );
+            document.body.appendChild(host);
+        }
+
+        const header = (
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+            + '<span style="font-size:18px;">🛡️</span>'
+            + '<strong>Legendary Resistance</strong>'
+            + '</div>'
+        );
+        const rowHtml = prompts.map(p => {
+            const name = _escH(p.combatant_name || 'Creature');
+            const feat = _escH(p.feature_name || 'a save');
+            const ab = _escH(String(p.save_ability || '').toUpperCase());
+            const dc = parseInt(p.save_dc || 0, 10) || 0;
+            const cond = _escH(p.condition_key || '');
+            const cur = parseInt(p.current || 0, 10) || 0;
+            const condHint = cond ? ' → ' + cond : '';
+            return (
+                '<div style="margin-bottom:8px;padding-bottom:8px;'
+                + 'border-bottom:1px solid rgba(255,255,255,0.12);">'
+                + '<div style="font-size:12px;opacity:0.9;margin-bottom:6px;line-height:1.35;">'
+                + '<strong>' + name + '</strong> failed ' + ab + ' DC ' + dc
+                + ' (' + feat + ')' + condHint
+                + '</div>'
+                + '<div style="display:flex;gap:6px;">'
+                + '<button class="_lr_spend_btn" data-prompt-id="' + _escH(p.prompt_id)
+                + '" style="flex:1;">Spend (' + cur + ' left)</button>'
+                + '<button class="_lr_decline_btn" data-prompt-id="' + _escH(p.prompt_id)
+                + '" style="flex:1;">Decline</button>'
+                + '</div>'
+                + '</div>'
+            );
+        }).join('');
+        host.innerHTML = header + rowHtml;
+
+        const _post = async (btn, endpoint) => {
+            const promptId = btn.getAttribute('data-prompt-id') || '';
+            host.querySelectorAll('button').forEach(b => { b.disabled = true; b.style.opacity = '0.6'; });
+            try {
+                const r = await fetch(
+                    '/api/campaign/' + CAMPAIGN_ID + '/' + endpoint,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt_id: promptId }),
+                    }
+                );
+                if (!r.ok) {
+                    const txt = await r.text();
+                    console.warn('Legendary resistance ' + endpoint + ' failed:', txt);
+                    host.querySelectorAll('button').forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+                    return;
+                }
+                // Success → server emits legendary_resistance_resolved,
+                // whose handler drops the prompt + re-runs this renderer.
+            } catch (err) {
+                console.warn('Legendary resistance ' + endpoint + ' error:', err);
+                host.querySelectorAll('button').forEach(b => { b.disabled = false; b.style.opacity = '1'; });
+            }
+        };
+        host.querySelectorAll('._lr_spend_btn').forEach(btn => {
+            btn.addEventListener('click', () => _post(btn, 'spend_legendary_resistance'));
+        });
+        host.querySelectorAll('._lr_decline_btn').forEach(btn => {
+            btn.addEventListener('click', () => _post(btn, 'decline_legendary_resistance'));
         });
     };
 
