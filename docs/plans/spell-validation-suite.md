@@ -1,8 +1,8 @@
 # Spell-validation test suite — plan
 
-**Status:** 🟠 in progress (v2.49.108, 2026-05-22) — Phase 2A v1 landed: `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized over `(caster, spell, slot)` rows. v1 covers single-target attack-roll spells (Fire Bolt). Filed: save spells, multi-beam (Scorching Ray / Eldritch Blast), auto-hit (Magic Missile) — each needs a different response-shape adapter.
+**Status:** 🟠 in progress (v2.182.1, 2026-06-12) — Phase 1 smoke catalog landed: `test_spell_catalog_smoke.py` patches one scratch caster with the whole 319-spell catalog + abundant slots and casts every spell by index, asserting the floor contract (no 500, `spell_cast` broadcast emitted). All 319 pass with zero skips. Earlier (v2.49.108): Phase 2A v1 — `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized over `(caster, spell, slot)` rows, covering single-target attack-roll spells (Fire Bolt). Filed: 2A save spells, multi-beam (Scorching Ray / Eldritch Blast), auto-hit (Magic Missile) — each needs a different response-shape adapter.
 **Authors:** rolling
-**Last updated:** 2026-05-22
+**Last updated:** 2026-06-12
 
 A plan to expand `tests/harness/` so every spell in
 `app/data/local/dnd5e/spells/` (319 SRD entries as of v2.49.102, plus
@@ -437,7 +437,7 @@ A summary of the non-test helpers this plan asks for:
 ## Status tracking
 
 - [ ] Phase 0 — Inventory + sister doc
-- [ ] Phase 1 — Smoke catalog (`test_spell_catalog_smoke.py`)
+- [✅] Phase 1 — Smoke catalog (`test_spell_catalog_smoke.py`) — v2.182.1: all 319 spells cast without 500, zero skips.
 - [🟠] Phase 2A — Damage assertions (v1 v2.49.108: Fire Bolt attack-roll; filed save / multi-beam / auto-hit follow-ups)
 - [ ] Phase 2B — Save assertions
 - [ ] Phase 2C — Attack assertions

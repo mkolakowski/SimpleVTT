@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2437 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.0, 2026-06-12).
+**Total tests:** 2439 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.1, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3278,6 +3278,14 @@ Unit tests for the loader + parser. Pure Python; doesn't need the harness server
 | `test_dice_range_empty_string` | `""` and whitespace → (0, 0). |
 | `test_dice_range_whitespace_tolerated` | ` 1d10 + 3 ` and `8 d 6` parse the same as their compact forms. |
 | `test_damage_actions_finds_damage_only` | Filters action lists to entries with non-empty `damage`. |
+
+### `test_spell_catalog_smoke.py`
+Phase 1 smoke catalog (`docs/plans/spell-validation-suite.md`). Patches one scratch caster (Thalindra) with the WHOLE 319-spell SRD catalog + 999 slots/level in a single `/sheet-fields` PATCH, then loops casting every spell by index and asserts the floor contract — no 500/404/409, a `spell_cast` broadcast per cast — collecting every failure so a content edit that breaks any one spell names the offending slug. One test (not 319 parameterized) to pay the autouse `clean_pcs` long-rest cost once and stay under the runtime budget (~11 s). Sheet is restored in `finally`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_every_catalog_spell_casts_without_500` | Every catalog spell casts at HTTP 200 (floor); the `spell_cast` broadcast count is ≥ 90 % of successful casts. Any non-200 is collected into the assertion message with slug + level + body. |
+| `test_smoke_catalog_is_nonempty` | Guard: the loader finds ≥ 300 spells so the smoke can't pass vacuously on an empty glob. |
 
 ### `test_spell_catalog_damage.py`
 Parameterized over `(caster_name, spell_slug, spell_index, slot_level, base_dmg_expr, upcast_dice)` rows in the `DAMAGE_SPELL_CASES` table. v1 has one row (Fire Bolt at Wizard L5 → 2d10). Each case long-rests the caster, seeds a target combatant, casts the spell, and asserts `response.auto_attack_damage_rolled` is inside the dice expression's [min, max]. Damage type is verified against the catalog JSON.

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.182.1] - 2026-06-12 — "The Whole Spellbook" — Spell-validation suite Phase 1: smoke catalog. The suite at `docs/plans/spell-validation-suite.md` already had a Phase 2A damage slice (`test_spell_catalog_damage.py`, one Fire Bolt row) but no floor coverage — 319 SRD spells shipped, only a couple dozen had any test, and a content edit to one of the other ~290 could roll the wrong dice, drop a damage field, or 500 the cast without anything catching it before production. This commit lands Phase 1: a single smoke test that patches one scratch caster (Thalindra) with the WHOLE 319-spell catalog + 999 slots at every level in one `/sheet-fields` PATCH, then casts every spell by index and asserts the floor contract — HTTP 200 (no 500/404/409), and a `spell_cast` broadcast per cast. Every failure is collected so a regression names the offending slug. All 319 spells pass with zero skips, in ~11 s. One test, not 319 parameterized cases, because the autouse `clean_pcs` fixture long-rests all 15 demo PCs per test — paying that 319× would blow the runtime budget; the loop pays it once.
+
+**Schema version:** 69
+**Commit summary:** **Test + docs commit. (A) New `tests/harness/test_spell_catalog_smoke.py` — `test_every_catalog_spell_casts_without_500` (patch scratch caster with the full catalog + abundant slots, cast each spell by index, assert 200 + broadcast floor, restore in finally) + `test_smoke_catalog_is_nonempty` guard. (B) `docs/plans/spell-validation-suite.md` — Phase 1 checkbox + status line flipped to landed. (C) `docs/test-harness-coverage.md` — new section + harness total 2437 → 2439. (D) wiki status refreshed to 🟠 partial.**
+**Description:** A CI-gated content-drift gate over the full spell catalog — the cheapest way to keep all 319 spells from silently breaking. PATCH because it adds no endpoint, schema, or user-facing surface — it's test + doc only. Reuses the existing `spell_catalog.load_all_spells()` loader and the `/sheet-fields` PATCH inject/restore pattern from `test_cast_spell.py`. No `_SKIP_SLUGS` were needed — the whole catalog casts cleanly today.
+
+### Added
+- `tests/harness/test_spell_catalog_smoke.py` — Phase 1 smoke catalog: every SRD spell casts without 500 + emits a `spell_cast` broadcast (2 tests).
+
+### Changed
+- `docs/plans/spell-validation-suite.md` — Phase 1 marked ✅ landed (status line + checkbox).
+- `docs/test-harness-coverage.md` — new `test_spell_catalog_smoke.py` section; harness total 2437 → 2439.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — spell-validation-suite status ⚪ proposed → 🟠 partial (Phase 1 smoke + 2A damage landed).
+- `app/version.py` — `APP_VERSION` 2.182.0 → 2.182.1 (PATCH: test + doc, no code change). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.182.1.
+
 ## [2.182.0] - 2026-06-12 — "The Waning Light" — Fade-tracker UI surfacing. The v2.181.0 `POST /set_regional_fade` endpoint modeled the RAW MM-p.11 "regional effects fade over 1d10 days" countdown on the battle state, but nothing in the browser drove it — a GM had to hit the endpoint by hand. This commit wires the tracker into the floating lair panel. The GM's `#_lair_action_panel` gains a "🕯️ Regional Fade" block beneath the regional effects: a **Start fade (1d10 days)** button when no countdown is running, or a **N / M days remaining** readout with **Advance a day** + **Clear fade** controls once it is (the Advance button disappears at `faded`). Each button POSTs `/set_regional_fade`; the server's `regional_fade_changed` broadcast re-renders the panel live. Players get a read-only atmospheric cue on their `#_regional_effects_panel` ("The lair's power is waning…" / "…has faded from the land") — no day numbers, no controls, matching the v2.180.0 atmosphere-not-mechanics split.
 
 **Schema version:** 69
