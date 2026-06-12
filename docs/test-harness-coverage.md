@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2407 in `tests/harness/` + 65 in `tests/harness_ui/` (as of v2.174.0, 2026-06-12).
+**Total tests:** 2414 in `tests/harness/` + 65 in `tests/harness_ui/` (as of v2.175.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -185,6 +185,19 @@ v2.169.0 legendary-actions Phase 3b (see [legendary-actions.md](../plans/legenda
 | `test_trigger_lair_action_unknown_action_409` | Bad `action_id` → 409 `unknown_lair_action`. |
 | `test_trigger_lair_action_missing_action_id_400` | Missing `action_id` → 400. |
 | `test_trigger_lair_action_player_403` | Non-GM caller → 403. |
+
+### `test_lair_init_20.py`
+v2.175.0 legendary-actions (see [legendary-actions.md](../plans/legendary-actions.md)) — server-authoritative initiative-count-20 prompt. RAW MM p.11: lair actions fire on initiative count 20. When a `PUT /battle` lands the turn order in the init-20 zone (active combatant initiative ≤ 20, or every combatant above 20) and the lair is active + hasn't already acted / broadcast this round, the server fires a `lair_init_20_reached` WS broadcast carrying `{lair_slug, owner_name, round}`. Deduped per round via a `lair_init20_broadcast_round` marker parked on the battle state (carried forward across PUTs that omit it). Tests drive `PUT /battle` directly with manual NPC combatants carrying `lair_actions`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_init_20_broadcast_when_active_at_or_below_20` | Active combatant at init 20 (≤ 20) + in_lair → server broadcasts `lair_init_20_reached` carrying `lair_slug`, `owner_name` ("Ancient Red Dragon"), `round`. |
+| `test_no_broadcast_when_active_above_20` | Active combatant at init 25 (> 20) with a sub-20 combatant present → count 20 not yet reached → no broadcast. |
+| `test_all_combatants_above_20_broadcasts` | Every combatant above 20 → init count 20 falls after the last turn → broadcasts regardless of turn_index. |
+| `test_no_broadcast_out_of_lair` | `in_lair` False → no init-20 prompt even at init 20. |
+| `test_deduped_within_same_round` | A second PUT in the same round (still in the init-20 zone, omitting the dedup marker so carry-forward restores it) does NOT re-broadcast. |
+| `test_next_round_rebroadcasts` | A new round re-arms the prompt — dedup is per-round, so round 2 broadcasts again. |
+| `test_no_broadcast_when_already_acted_this_round` | `lair_acted_round == round` → the init-20 prompt is suppressed (already moot). |
 
 ### `test_monster_legendary_action_cost.py`
 v2.159.33 legendary-actions Phase 1a (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python data-invariant guard: every SRD legendary action whose name carries a `(Costs N Actions)` suffix has its `cost` integer set to N (not the default 1). Walks the shipped `app/data/local/dnd5e/monsters/*.json` content layer directly. Phase 1a backfilled 39 cost integers across 30 monsters from the suffix; this test guards the invariant against future SRD-rebuild drift so the Phase 1b `/use_legendary_action` budget gate doesn't silently re-break.

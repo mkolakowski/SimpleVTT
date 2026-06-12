@@ -8531,6 +8531,27 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }
             return;
         }
+        // v2.175.0 — lair_init_20_reached — the server detected the turn
+        // order crossing into initiative count 20 (RAW MM p.11). It's
+        // broadcast once per round (server-deduped). Surface a one-shot
+        // toast to the GM so they're nudged to fire the lair action even
+        // if the panel is scrolled off-screen; the panel's banner + border
+        // glow is render-derived (v2.174.0) and updates on the paired
+        // battle_update. GM-only (the panel + prompt are GM surfaces).
+        if (msg.type === 'lair_init_20_reached') {
+            if (IS_GM) {
+                const data = msg.data || {};
+                (window.showToast || function (m) { console.log(m); })(
+                    '🌋 Initiative count 20 — ' + (data.owner_name || 'the lair')
+                    + ' may take a lair action.',
+                    'info',
+                );
+            }
+            if (typeof window._renderLairActionPanel === 'function') {
+                window._renderLairActionPanel();
+            }
+            return;
+        }
         // v2.19.0 Phase C.1: buff_update — server installed / removed a
         // buff on a combatant. Replace the combatant's buffs list and
         // re-render badges. The whole list is broadcast (not just a
@@ -9676,9 +9697,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         host.innerHTML = header + toggleBtn + actionsHtml;
 
         // v2.174.0 — glow the panel border when initiative count 20 is
-        // reached and the lair hasn't acted yet, and fire a one-shot toast
-        // the first time we cross into init 20 each round so the GM is
-        // prompted even if the panel is scrolled off-screen.
+        // reached and the lair hasn't acted yet. The one-shot toast is
+        // server-driven as of v2.175.0 (the `lair_init_20_reached` WS
+        // broadcast, deduped per round on the server) so it can't double-
+        // fire across renders; this block only handles the visual glow.
         const _init20Live = inLair && init20Reached && !actedThisRound;
         if (_init20Live) {
             host.style.borderColor = '#ff8a3d';
@@ -9686,15 +9708,6 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         } else {
             host.style.borderColor = '#c2541f';
             host.style.boxShadow = '0 6px 18px rgba(0,0,0,0.5)';
-        }
-        if (_init20Live && curRound != null
-                && window._lairInit20PromptedRound !== curRound) {
-            window._lairInit20PromptedRound = curRound;
-            (window.showToast || function (m) { console.log(m); })(
-                '🌋 Initiative count 20 — ' + (owner.name || 'the lair')
-                + ' may take a lair action.',
-                'info',
-            );
         }
 
         const _toggleEl = host.querySelector('#_lair_toggle_btn');

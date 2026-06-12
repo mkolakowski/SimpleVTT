@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.175.0] - 2026-06-12 — "The Tolling Bell" — Lair-action initiative-20 server broadcast. v2.174.0 surfaced the init-20 prompt client-side (a render-derived banner + a client-deduped toast). This commit promotes the toast to a **server-authoritative** WS broadcast so the prompt is harness-testable and can't drift from the turn order. When a `PUT /battle` lands the turn order in the init-20 zone — the active combatant's initiative ≤ 20 (combatants above 20 already acted; the lair acts before the first ≤ 20), or every combatant is above 20 (count 20 falls after the last turn) — and the lair is active and hasn't already acted/broadcast this round, `update_battle` fires a `lair_init_20_reached` broadcast carrying `{lair_slug, owner_name, round}`. It's deduped per round via a `lair_init20_broadcast_round` marker parked on the battle-state JSON column (carried forward across the routine PUTs that omit it, re-armed on `/set_in_lair`), so it fires once when the turn order crosses count 20 — not on every intervening PUT. The client's render-derived banner + border glow (v2.174.0) stay; the one-shot toast now rides the new `lair_init_20_reached` WS handler (GM-only) instead of a render-time client dedup, so it can't double-fire across re-renders. Still a **prompt, not a gate** — the once-per-round + no-repeat guards (v2.172.0–v2.173.0) are the hard rules.
+
+**Schema version:** 69
+**Commit summary:** **Back-end + front-end commit. (A) `app/routes/tabletop_routes.py::update_battle` — server-side init-20 detection (active initiative ≤ 20 or all-combatants-above-20) gated on `in_lair` + not-already-acted + per-round dedup; broadcasts `lair_init_20_reached` `{lair_slug, owner_name, round}` after the `battle_update`; parks `lair_init20_broadcast_round` on the state; carry-forward guard preserves it across PUTs. (B) `set_in_lair` — re-arms (`None`) the init-20 dedup marker on lair toggle. (C) `app/templates/tabletop.html` — new `lair_init_20_reached` WS handler fires the GM toast + re-renders the panel; the v2.174.0 render-time client toast is removed (the banner + border glow stay). (D) `tests/harness/test_lair_init_20.py` — 7 new harness tests (reached→broadcast, above-20→no-broadcast, all-above-20→broadcast, out-of-lair→none, per-round dedup, next-round re-arm, already-acted→suppressed).**
+**Description:** The init-20 detection mirrors the v2.174.0 client logic exactly (`activeInitiative <= 20 || allCombatantsAbove20`), but runs in `update_battle` so the prompt is broadcast from the server — authoritative and assertable in the HTTP+WS harness, where a pure client-render couldn't be. The dedup marker rides the existing battle-state JSON column (no schema change) like the other lair flags, and the carry-forward guard stops a routine init-tracker PUT (which never round-trips the key) from re-arming the prompt mid-round. Moving the toast from a render-time client dedup to the WS handler removes the last spot where the prompt could double-fire (two renders in the same round). The banner + glow remain render-derived because they're continuous visual state, not a one-shot event.
+
+### Added
+- `app/routes/tabletop_routes.py` — `lair_init_20_reached` broadcast + server-side init-20 detection + `lair_init20_broadcast_round` dedup marker in `update_battle`.
+- `tests/harness/test_lair_init_20.py` — 7 new harness tests for the init-20 broadcast contract.
+
+### Changed
+- `app/routes/tabletop_routes.py::set_in_lair` — re-arms `lair_init20_broadcast_round` on lair toggle.
+- `app/routes/tabletop_routes.py::update_battle` — carry-forward guard preserves `lair_init20_broadcast_round`.
+- `app/templates/tabletop.html` — new `lair_init_20_reached` WS handler (GM toast); the v2.174.0 render-time client toast removed (banner + glow retained).
+- `docs/plans/legendary-actions.md` — init-20 server broadcast noted shipped.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the init-20 server broadcast.
+- `docs/test-harness-coverage.md` — new `test_lair_init_20.py` section (7 tests); `tests/harness/` total bumped.
+- `app/version.py` — `APP_VERSION` 2.174.0 → 2.175.0 (MINOR: new WS broadcast). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.175.0.
+
+### Notes
+- No schema change (still v69). `lair_init20_broadcast_round` rides the existing battle-state JSON column.
+- New WS broadcast `lair_init_20_reached` `{lair_slug, owner_name, round}` from `PUT /battle`. GM-only on the client (the panel + prompt are GM surfaces).
+- The init-20 prompt remains advisory; the hard RAW guards (one-per-round, no-repeat) are server-enforced from v2.172.0–v2.173.0.
+
 ## [2.174.0] - 2026-06-12 — "The Twentieth Count" — Lair-action initiative-20 auto-surfacing. RAW MM p.11: lair actions fire on initiative count 20 (losing ties). The previous lair work surfaced a passive "init 20" label but left the GM to remember when count 20 actually arrives in the turn order. This commit makes the floating 🌋 panel *prompt* the GM: as turns advance, `_renderLairActionPanel` derives "init 20 reached" from the live turn order — the active combatant's initiative is ≤ 20 (combatants above 20 have already acted; the lair acts before the first ≤ 20 combatant), or every combatant is above 20 (so count 20 falls after the last turn). When reached and the lair hasn't acted this round, the panel shows a bright "⚠️ Initiative count 20 — {owner} acts now." banner, glows its border, and fires a one-shot toast (deduped per round) so the GM is nudged even if the panel is scrolled off-screen. Before count 20 it shows a subdued "Initiative count 20 not yet reached." hint; after the lair acts it falls back to the existing "already acted this round" state. This stays a **prompt, not a gate** — the timing remains GM-driven by design (the once-per-round + no-repeat guards from v2.172.0–v2.173.0 are the hard rules); the panel just surfaces *when* RAW says the lair should act. Pure front-end change: no new endpoint, no WS-shape change, no schema change — the detection is a function of the battle state every client already holds.
 
 **Schema version:** 69

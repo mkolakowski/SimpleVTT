@@ -456,6 +456,20 @@ combatant.legendary_resistance = {
   the hard rules. Front-end only (no endpoint / WS / schema change);
   1 new Playwright test. The lair-action RAW cadence is now both enforced
   and surfaced.
+- Initiative-20 server broadcast (✅ **shipped v2.175.0** "The Tolling
+  Bell"): RAW MM p.11 — promotes the v2.174.0 client-derived prompt to a
+  server-authoritative WS event. When a `/battle` PUT lands the turn order
+  in the init-20 zone (active combatant initiative ≤ 20, or every
+  combatant above 20) and the lair is active + hasn't already acted /
+  broadcast this round, the server fires `lair_init_20_reached` carrying
+  `{lair_slug, owner_name, round}`. Deduped per round via a
+  `lair_init20_broadcast_round` marker parked on the battle-state JSON
+  (carried forward across PUTs that omit it; re-armed on `set_in_lair`).
+  The client toast now rides this broadcast (the v2.174.0 render-time
+  toast was removed to avoid a double-fire; the banner + border glow stay
+  render-derived). No schema change. 7 new harness tests in
+  `tests/harness/test_lair_init_20.py`. The init-20 prompt is now
+  authoritative + harness-testable, not just client-derived.
 
 ### Non-goals (v1)
 

@@ -24077,6 +24077,8 @@ async def set_in_lair(
     state["last_lair_action_id"] = ""
     # v2.173.0 — also reset the once-per-round counter.
     state["lair_acted_round"] = None
+    # v2.175.0 — re-arm the init-20 broadcast dedup on lair toggle.
+    state["lair_init20_broadcast_round"] = None
     hub.set_battle(campaign_id, state)
 
     await hub.broadcast(campaign_id, {
@@ -85366,6 +85368,13 @@ async def update_battle(
         # reason (RAW MM p.11: one lair action per round).
         if "lair_acted_round" not in state and "lair_acted_round" in _prev_battle:
             state["lair_acted_round"] = _prev_battle.get("lair_acted_round")
+        # v2.175.0 — carry forward the init-20 broadcast dedup marker. The
+        # client never round-trips this key, so without the carry-forward
+        # every PUT while in the init-20 zone would re-broadcast.
+        if ("lair_init20_broadcast_round" not in state
+                and "lair_init20_broadcast_round" in _prev_battle):
+            state["lair_init20_broadcast_round"] = _prev_battle.get(
+                "lair_init20_broadcast_round")
 
     # v2.99.185 — NPC concentration-drop auto-cascade. Closes a
     # v2.99.179 filed item. Walk the prev/new combatants for any
@@ -85439,8 +85448,72 @@ async def update_battle(
         bool(state.get("active"))
         and not bool(_prev_battle.get("active"))
     )
+    # v2.175.0 — RAW MM p.11: lair actions fire on initiative count 20.
+    # Server-authoritative detection of "init 20 reached" so the prompt is
+    # broadcast (not just client-derived as in v2.174.0). Mirrors the
+    # client logic: the active combatant's initiative <= 20 (combatants
+    # above 20 already acted; the lair acts before the first <= 20), or
+    # every combatant is above 20 (count 20 falls after the last turn).
+    # Deduped per round via `lair_init20_broadcast_round` so it fires once
+    # when the turn order crosses into count 20, not on every PUT. Computed
+    # before set_battle so the dedup marker persists in the saved state.
+    _lair_init20_payload = None
+    if isinstance(state, dict) and bool(state.get("in_lair")):
+        _combs = state.get("combatants") or []
+        _n = len(_combs)
+        if _n:
+            try:
+                _ti = int(state.get("turn_index") or 0)
+            except (TypeError, ValueError):
+                _ti = 0
+            try:
+                _cur_round = int(state.get("round") or 0)
+            except (TypeError, ValueError):
+                _cur_round = 0
+
+            def _init_of(_c):
+                try:
+                    return float((_c or {}).get("initiative") or 0)
+                except (TypeError, ValueError):
+                    return 0.0
+
+            _active_init = _init_of(_combs[_ti % _n])
+            _all_above_20 = all(_init_of(c) > 20 for c in _combs)
+            _reached = (_active_init <= 20) or _all_above_20
+
+            try:
+                _acted_round = state.get("lair_acted_round")
+                _already_acted = (_acted_round is not None
+                                  and int(_acted_round) == _cur_round)
+            except (TypeError, ValueError):
+                _already_acted = False
+            try:
+                _last_bcast = state.get("lair_init20_broadcast_round")
+                _already_bcast = (_last_bcast is not None
+                                  and int(_last_bcast) == _cur_round)
+            except (TypeError, ValueError):
+                _already_bcast = False
+
+            if _reached and not _already_acted and not _already_bcast:
+                _owner_name = ""
+                for _c in _combs:
+                    if isinstance(_c, dict) and _c.get("lair_actions"):
+                        _owner_name = _c.get("name") or ""
+                        break
+                state["lair_init20_broadcast_round"] = _cur_round
+                _lair_init20_payload = {
+                    "lair_slug": state.get("lair_slug") or "",
+                    "owner_name": _owner_name,
+                    "round": _cur_round,
+                }
+
     hub.set_battle(campaign_id, state)
     await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    if _lair_init20_payload is not None:
+        await hub.broadcast(campaign_id, {
+            "type": "lair_init_20_reached",
+            "data": _lair_init20_payload,
+        })
 
     # v2.99.185 — Fire the NPC concentration-drop cascade for each
     # NPC that lost concentration via this PUT. Calling AFTER
