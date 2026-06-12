@@ -78,6 +78,18 @@ def _battle_json(in_lair: bool = False, turn_index: int = 0) -> str:
                         "effect": "prone",
                     },
                 ],
+                "regional_effects": [
+                    {
+                        "id": "minor-earthquakes",
+                        "name": "Minor Earthquakes",
+                        "desc": "Small earthquakes are common within 6 miles of the lair.",
+                    },
+                    {
+                        "id": "fouled-water",
+                        "name": "Warm, Foul Water",
+                        "desc": "Water sources within 1 mile are supernaturally warm and tainted by sulfur.",
+                    },
+                ],
             },
         ],
         "turn_index": turn_index,
@@ -419,3 +431,22 @@ def test_lair_action_resolved_renders_roll_log_card(gm_page: Page):
     expect(failed).to_contain_text("fire")
     # Passed save → green saved pill.
     expect(card.locator(".result-pill.chip-hit")).to_contain_text("Bandit Two")
+
+
+def test_regional_effects_render_in_panel(gm_page: Page):
+    """v2.179.0 — the lair-action panel lists the lair's passive regional
+    effects (RAW MM p.11) under a "Regional Effects" heading. They render
+    whenever the lair owner is on the field — no Enter-lair toggle needed —
+    since they radiate while the creature dwells in its lair."""
+    # Out of lair: regional effects still show (they're passive/always-on).
+    _seed_battle(gm_page, in_lair=False)
+    gm_page.goto(tabletop_url())
+
+    panel = gm_page.locator("#_lair_action_panel")
+    expect(panel).to_be_visible(timeout=5000)
+    expect(panel).to_contain_text("Regional Effects", timeout=3000)
+    expect(panel).to_contain_text("Minor Earthquakes")
+    expect(panel).to_contain_text("Warm, Foul Water")
+    expect(panel).to_contain_text("supernaturally warm")
+    # No Enter-lair toggle needed — regional effects render out of lair too.
+    expect(panel.locator("#_lair_toggle_btn")).to_contain_text("Enter lair")

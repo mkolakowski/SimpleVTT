@@ -497,6 +497,15 @@ combatant.legendary_resistance = {
   monster-sheet projection as `out["regional_effects"]`. 13 new
   pure-Python unit tests (`tests/harness/test_regional_effects.py`).
   Metallic dragons + Lich/Kraken are a filed follow-up data backfill.
+- Regional-effects GM panel (✅ **shipped v2.179.0** "The Living Land"):
+  the GM's floating lair-action panel (`#_lair_action_panel`) now lists
+  the lair's passive regional effects under a "🌐 Regional Effects"
+  heading (name + RAW description per effect). Rendered as a static
+  descriptive list whenever the lair owner is on the field, independent
+  of the Enter/Exit-lair toggle (RAW MM p.11: regional effects radiate
+  while the creature dwells in its lair, distinct from the initiative-20
+  actions). `_ensureLairActions` seeds `c.regional_effects` from the
+  projected sheet. Front-end only; 1 new Playwright test.
 
 ### Non-goals (v1)
 

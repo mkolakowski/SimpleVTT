@@ -6529,6 +6529,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         if (!acts.length) return;
         c.lair_actions = acts;
         c.lair_slug = (tmpl.sheet.monster_slug || '');
+        // v2.179.0 — also seed the lair's passive regional effects (RAW MM
+        // p.11, curated in app/content/regional_effects.py, folded onto the
+        // sheet as regional_effects). Flavor-only descriptive entries the GM
+        // panel lists so the table's environment text is one click away.
+        c.regional_effects = (Array.isArray(tmpl.sheet.regional_effects))
+            ? tmpl.sheet.regional_effects : [];
     }
 
     /* v2.4.31: heal stale combatants in localStorage that pre-date the
@@ -9705,7 +9711,34 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }).join('');
         }
 
-        host.innerHTML = header + toggleBtn + actionsHtml;
+        // v2.179.0 — passive regional effects (RAW MM p.11). Distinct from
+        // the initiative-20 lair actions: these radiate while the creature
+        // dwells in its lair (no save / damage engine), so they render as a
+        // static descriptive list under the actions, always visible whenever
+        // the lair owner is on the field — no Enter-lair toggle required.
+        let regionalHtml = '';
+        const regional = Array.isArray(owner.regional_effects) ? owner.regional_effects : [];
+        if (regional.length) {
+            regionalHtml = (
+                '<div style="margin-top:8px;padding-top:8px;'
+                + 'border-top:1px solid rgba(255,255,255,0.18);">'
+                + '<div style="font-size:12px;font-weight:600;opacity:0.85;'
+                + 'margin-bottom:5px;">🌐 Regional Effects</div>'
+                + regional.map(e => {
+                    const enm = _escH(e.name || 'Effect');
+                    const edesc = _escH(e.desc || '');
+                    return (
+                        '<div style="font-size:11px;line-height:1.35;'
+                        + 'margin-bottom:5px;opacity:0.9;">'
+                        + '<strong>' + enm + '.</strong> ' + edesc
+                        + '</div>'
+                    );
+                }).join('')
+                + '</div>'
+            );
+        }
+
+        host.innerHTML = header + toggleBtn + actionsHtml + regionalHtml;
 
         // v2.174.0 — glow the panel border when initiative count 20 is
         // reached and the lair hasn't acted yet. The one-shot toast is

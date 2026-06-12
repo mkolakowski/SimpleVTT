@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.179.0] - 2026-06-12 — "The Living Land" — Regional effects surfaced in the GM lair panel. v2.178.0 shipped the regional-effects data + projection (`sheet.regional_effects`) but nothing read it on the client — the effect text reached the browser and went nowhere. This commit closes that loop: the GM's floating 🌋 lair-action panel (`#_lair_action_panel`) now lists the lair's passive **regional effects** under a "🌐 Regional Effects" heading — name + rephrased RAW description per effect. They render as a static descriptive list whenever the lair owner is on the field, **independent of the Enter/Exit-lair toggle**, because RAW MM p.11 regional effects radiate while the creature merely *dwells* in its lair (unlike the initiative-20 lair *actions*, which are the in-combat triggers). The GM can now read and narrate the environment without leaving the table view.
+
+**Schema version:** 69
+**Commit summary:** **Front-end-only commit. (A) `app/templates/tabletop.html` — `_ensureLairActions` also seeds `c.regional_effects` from `tmpl.sheet.regional_effects` (alongside `lair_actions` / `lair_slug`); `_renderLairActionPanel` renders a static "🌐 Regional Effects" list (name + desc per effect) under the action list, always visible whenever the lair owner is present regardless of in-lair state. (B) `tests/harness_ui/test_lair_action_ui.py` — the seeded dragon gains a `regional_effects` array; 1 new Playwright test asserts the panel lists the effects out of lair.**
+**Description:** Regional effects are flavor-only (no save/damage), so the panel renders them as plain bolded-name + description text rather than Trigger buttons. They sit below the lair actions, separated by a divider, and show even when out of lair — the toggle gates the initiative-20 *actions*, not the passive region. No endpoint, no broadcast, no schema change — the data already rode the projected sheet from v2.178.0.
+
+### Added
+- `app/templates/tabletop.html` — `_renderLairActionPanel` renders a "🌐 Regional Effects" descriptive list (name + desc per effect) under the lair actions, always visible for the lair owner.
+- `tests/harness_ui/test_lair_action_ui.py` — `test_regional_effects_render_in_panel` (panel lists the regional effects out of lair).
+
+### Changed
+- `app/templates/tabletop.html` — `_ensureLairActions` also seeds `c.regional_effects` from the source template's projected sheet.
+- `tests/harness_ui/test_lair_action_ui.py` — seeded dragon combatant gains a `regional_effects` array.
+- `docs/plans/legendary-actions.md` — regional-effects UI surfacing noted shipped (v2.179.0).
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the regional-effects panel.
+- `docs/test-harness-coverage.md` — `test_lair_action_ui.py` +1 (regional effects panel); UI total 68 → 69.
+- `app/version.py` — `APP_VERSION` 2.178.0 → 2.179.0 (MINOR: new user-facing UI surface). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.179.0.
+
+### Notes
+- No schema / endpoint / broadcast change — the regional-effects data already rode `sheet.regional_effects` from v2.178.0; this commit only reads it on the client.
+- Regional effects render independent of the in-lair toggle (RAW MM p.11: they radiate while the creature dwells in its lair, distinct from the initiative-20 lair actions).
+
 ## [2.178.0] - 2026-06-12 — "The Settled Reign" — Regional effects (RAW MM p.11). A dragon's lair shapes more than initiative count 20: the *Monster Manual* gives each lair-bearing dragon a set of **regional effects** — passive, zone-wide environmental changes that radiate from the lair while the creature dwells there (minor earthquakes, fouled water, labyrinthine thickets) and fade over ~1d10 days once it dies. These are distinct from the initiative-20 lair actions: no save, no damage, no engine — they're descriptive flavor a GM narrates. This commit adds them for all five chromatic dragons via a new leaf module `app/content/regional_effects.py` that mirrors `lair_actions.py`: per-color lists of `{id, name, desc}` entries keyed by `adult-*` / `ancient-*` slug (a color's ages share the same region, RAW), with a deep-copy `regional_effects_for_slug()` helper. The monster-sheet projection (`_monster_dict_to_sheet`) folds them onto the sheet as `regional_effects`, alongside `lair_actions`.
 
 **Schema version:** 69
