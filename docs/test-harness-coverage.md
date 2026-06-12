@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2497 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.14, 2026-06-12).
+**Total tests:** 2501 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.15, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -513,6 +513,16 @@ v2.183.14 — spell-validation suite Phase 4 (fourth complex-spell deep-dive). M
 | `test_three_darts_split_across_distinct_targets` | Cast at three distinct targets → three `auto_hit_targets` entries with three distinct combatant ids, each a 1d4+1 (2-5) force roll that applied non-zero damage ("one creature or several"). |
 | `test_darts_auto_hit_with_no_attack_roll` | The response carries `auto_hit_targets` and **not** `auto_attack_beams` (no spell-attack path), and every dart applies > 0 across dice seeds 1-6 (no dart ever misses) — the contrast with Eldritch Blast's missable beams. Long-rests between casts so the L1 slots don't deplete. |
 | `test_aggregate_is_exact_sum_of_darts` | Seeded for determinism: each dart's `damage_applied == rolled` (full-HP force targets), and the total applied equals the sum of the per-dart rolls — no rider on the auto-hit path (Empowered Evocation +INT doesn't touch it). |
+
+### `test_cast_spiritual_weapon.py`
+v2.183.15 — spell-validation suite Phase 4 (fifth complex-spell deep-dive). Spiritual Weapon is the Cleric's bonus-action floating attacker: a 1d8 + spellcasting-mod melee spell attack, "+1d8 per two slot levels above 2nd." Modeled on `/use_spiritual_weapon` (`n`d8 + mod where `n = 1 + (slot_level - 2) // 2`). The summon / concentration-drop dismiss / single-attack lifecycle is fenced by `test_use_spiritual_weapon.py`; this file owns the upcast scaling + the catalog-vs-runtime concentration divergence. Caster: Brother Tavik Stonebrow (demo Cleric); spellcasting mod read from the live sheet. The endpoint doesn't gate on slots, so the 4th-level upcast cast needs no L4 slot.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_spiritual_weapon_present_in_catalog` | Catalog anchor — present as a 2nd-level bonus-action melee spell attack (1d8 force, `attack_roll: true`), with the `higher_level` note documenting the +1d8-per-two-levels upcast scaling. |
+| `test_base_cast_rolls_a_single_d8` | At a 2nd-level slot a hit's `damage_rolled` lands in [1 + mod, 8 + mod] force (a single d8 + spellcasting mod). |
+| `test_upcast_adds_a_die_per_two_levels` | A 4th-level cast (→ 2d8) hits with `damage_rolled` above a single d8's ceiling (8 + mod) — impossible for one die, proving the upcast tier added a second die; capped at 16 + mod. Seeds until such a hit appears. |
+| `test_cast_binds_concentration_despite_catalog_flag` | House-rule divergence: catalog flags `concentration: false`, but the cast returns a `concentration_bound: true` weapon and broadcasts a `concentration_update` for "Spiritual Weapon" (`ended: false`). |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
