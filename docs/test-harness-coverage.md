@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2501 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.15, 2026-06-12).
+**Total tests:** 2503 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.16, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -523,6 +523,20 @@ v2.183.15 — spell-validation suite Phase 4 (fifth complex-spell deep-dive). Sp
 | `test_base_cast_rolls_a_single_d8` | At a 2nd-level slot a hit's `damage_rolled` lands in [1 + mod, 8 + mod] force (a single d8 + spellcasting mod). |
 | `test_upcast_adds_a_die_per_two_levels` | A 4th-level cast (→ 2d8) hits with `damage_rolled` above a single d8's ceiling (8 + mod) — impossible for one die, proving the upcast tier added a second die; capped at 16 + mod. Seeds until such a hit appears. |
 | `test_cast_binds_concentration_despite_catalog_flag` | House-rule divergence: catalog flags `concentration: false`, but the cast returns a `concentration_bound: true` weapon and broadcasts a `concentration_update` for "Spiritual Weapon" (`ended: false`). |
+
+### `test_cast_hold_person.py`
+`/cast_hold_person` — a 2nd-level concentration enchantment that paralyzes a humanoid on a failed WIS save. The first six tests cover the endpoint contract (target-count gating by slot level, slot spend/refund). v2.183.16 appended the Phase 4 deep-dive: the installed buff is the canonical Paralyzed condition (`tabletop_routes.py:31011` `_make_paralyzed_buff` / `:31118` `_make_hold_person_paralyzed_buff`), and the RAW end-of-turn WIS re-save is wired via `/use_repeated_save` (`:23034`) off the buff's install-time `repeated_save_ability`/`repeated_save_dc` stamps. The auto-fail-saves / melee-auto-crit Paralyzed mechanics remain GM-narrated `raw_effects` (not engine-enforced). Caster: Brother Tavik Stonebrow (demo Cleric) on Krieger Stonefist (demo Barbarian, speed 40).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_hold_person_installs_paralyzed_buff` | L2 cast on Krieger → 1 target, `speed_reduction_ft == 40` (full base speed → effective 0), `concentration: true`, affected entry `installed: true`. |
+| `test_cast_hold_person_upcast_l4_allows_3_targets` | L4 upcast → `max_targets == 3`; only Krieger resolves (1 affected), 2 fakes → `unaffected` with `reason: not_found`. |
+| `test_cast_hold_person_l2_with_2_targets_rejected` | L2 caps at 1 target; 2 targets → 409 `too_many_targets` (`max: 1`, `got: 2`). |
+| `test_cast_hold_person_l1_slot_rejected` | `slot_level == 1` → 400 (Hold Person is L2). |
+| `test_cast_hold_person_rejects_invalid_class` | Barbarian isn't on the Hold Person class list → 400. |
+| `test_cast_hold_person_undo_refunds_slot` | Cast carries a `cast_id`; `/undo_attack_damage` with it broadcasts a `spell_slot_update` refunding the L2 cleric slot (`used` − 1). |
+| `test_cast_hold_person_buff_carries_paralyzed_contract` | Phase 4 — the installed combatant buff carries `key == "paralyzed"`, `concentration: true`, `source: "hold-person-spell"`, the WIS re-save stamps (`repeated_save_ability == "WIS"`, `repeated_save_dc > 0`), `speed_reduction_ft == 40`, and the full RAW `raw_effects` narration (incapacitated / can't speak / auto-fail STR-DEX / melee auto-crit / "WIS save at end of each turn" / "Only affects Humanoids"). |
+| `test_cast_hold_person_end_of_turn_wis_resave` | Phase 4 — `/use_repeated_save {buff_key: "paralyzed"}` resolves a WIS save vs the stamped DC; a seed-loop (re-casting + long-resting Tavik to refill L2 slots) observes both a pass (`buff_dropped: true`, buff gone) and a fail (`buff_dropped: false`, buff persists); the save is always WIS vs a positive DC. |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.

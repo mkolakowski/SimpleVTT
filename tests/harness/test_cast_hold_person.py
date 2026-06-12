@@ -212,3 +212,122 @@ async def test_cast_hold_person_undo_refunds_slot(
     assert ssu["data"]["class_slug"] == "cleric"
     assert ssu["data"]["level"] == 2
     assert ssu["data"]["used"] == used_after_cast - 1  # slot refunded
+
+
+# --- v2.183.16 Phase 4 deep-dive: the Paralyzed incapacitation stack ---
+# The endpoint-contract tests above prove target-count gating + slot
+# spend/refund. These two own the bespoke spell story the others skip:
+# the installed Paralyzed condition's full contract, and the RAW
+# end-of-turn WIS re-save (PHB p.290 / Hold Person) wired via
+# /use_repeated_save off the buff's install-time stamps.
+
+
+async def _combatant_buffs(gm_client, combatant_id):
+    state = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+    )).json().get("battle") or {}
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            return c.get("buffs") or []
+    return []
+
+
+async def _long_rest(gm_client, char_id) -> None:
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/rest",
+        json={"type": "long"},
+    )
+
+
+async def _seed_dice(gm_client, seed) -> None:
+    await gm_client.post("/api/test/dice/seed", json={"seed": seed})
+
+
+async def test_cast_hold_person_buff_carries_paralyzed_contract(
+    gm_client, tavik_and_krieger,
+):
+    """The installed buff is the canonical Paralyzed condition, not a
+    bespoke per-spell shape. Reading Krieger's combatant buffs after a
+    L2 cast must surface: key=="paralyzed", concentration, the
+    hold-person source tag, the WIS end-of-turn re-save stamps, and the
+    full RAW raw_effects narration (incapacitated / can't speak /
+    auto-fail STR-DEX / melee auto-crit) plus the source-specific
+    "WIS save at end of each turn" + "Only affects Humanoids" lines.
+    """
+    tavik, krieger, kr_tok = tavik_and_krieger
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_hold_person",
+        json={"character_id": tavik["id"], "class_slug": "cleric",
+              "slot_level": 2, "target_combatant_ids": [kr_tok],
+              "override": True},
+    )
+    assert resp.status_code == 200, resp.text
+
+    buffs = await _combatant_buffs(gm_client, kr_tok)
+    para = next((b for b in buffs if b.get("key") == "paralyzed"), None)
+    assert para is not None, buffs
+    assert para["concentration"] is True
+    assert para["source"] == "hold-person-spell"
+    assert para["source_char_id"] == tavik["id"]
+    # Install-time re-save stamps that wire /use_repeated_save.
+    assert para["repeated_save_ability"] == "WIS"
+    assert int(para["repeated_save_dc"]) > 0
+    # speed → 0 is the only mechanically-enforced bit.
+    assert para["effects"]["speed_reduction_ft"] == 40
+
+    raw = para.get("raw_effects") or []
+    joined = " | ".join(raw).lower()
+    assert "incapacitated" in joined
+    assert "can't speak" in joined
+    assert "auto-fail str / dex saves" in joined
+    assert "auto-crit" in joined
+    assert any("wis save at end of each turn" in r.lower() for r in raw)
+    assert any("only affects humanoids" in r.lower() for r in raw)
+
+
+async def test_cast_hold_person_end_of_turn_wis_resave(
+    gm_client, tavik_and_krieger,
+):
+    """RAW: "At the end of each of its turns, the target can make
+    another WIS save; on a success the spell ends." /use_repeated_save
+    resolves that save against the buff's stamped DC and drops the buff
+    on a pass. Seed-loop (re-casting fresh + long-resting Tavik to
+    refill L2 slots each iter) until BOTH a pass and a fail are
+    observed; assert the save is always WIS vs a positive DC, and that
+    buff_dropped tracks the pass/fail outcome.
+    """
+    tavik, krieger, kr_tok = tavik_and_krieger
+    saw_pass = False
+    saw_fail = False
+    for seed in range(1, 60):
+        await _long_rest(gm_client, tavik["id"])  # refill spent L2 slots
+        cast = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_hold_person",
+            json={"character_id": tavik["id"], "class_slug": "cleric",
+                  "slot_level": 2, "target_combatant_ids": [kr_tok],
+                  "override": True},
+        )
+        assert cast.status_code == 200, cast.text
+        await _seed_dice(gm_client, seed)
+        rs = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_repeated_save",
+            json={"character_id": krieger["id"], "buff_key": "paralyzed"},
+        )
+        assert rs.status_code == 200, rs.text
+        data = rs.json()
+        assert data["save_ability"] == "WIS"
+        assert int(data["save_dc"]) > 0
+        if data["passed"]:
+            assert data["buff_dropped"] is True
+            still = await _combatant_buffs(gm_client, kr_tok)
+            assert not any(b.get("key") == "paralyzed" for b in still), \
+                "passed save must drop the paralyzed buff"
+            saw_pass = True
+        else:
+            assert data["buff_dropped"] is False
+            saw_fail = True
+        if saw_pass and saw_fail:
+            break
+    await _seed_dice(gm_client, None)  # reset determinism for siblings
+    assert saw_pass, "no seed in range produced a passed WIS re-save"
+    assert saw_fail, "no seed in range produced a failed WIS re-save"
