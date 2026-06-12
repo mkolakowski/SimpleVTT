@@ -2,7 +2,7 @@
 
 **Status:** 🟠 in progress (v2.182.4, 2026-06-12) — Phase 2D heal assertions landed: `test_spell_catalog_heal.py` casts every healing spell (7) at the caster and range-checks the `spell_cast` broadcast's `auto_heal_rolled` against the declared healing dice shifted by the caster's spellcasting mod; zero skips. Phase 2C attack assertions landed (v2.182.3): `test_spell_catalog_attack.py` casts every spell-attack-roll spell (15) at an NPC and asserts the derived attack bonus = `prof + spellcasting mod` (uniform across one caster) + the hit/miss verdict follows the d20 rules vs target AC; a seeded test proves crit-doubling (Fire Bolt 2d10 → 4d10); zero skips. Phase 2B save assertions landed (v2.182.2): `test_spell_catalog_save.py` casts every save-bearing spell (~116) at an NPC and asserts the response's save ability matches the JSON + the DC matches the caster's spell-save-DC formula (uniform across one caster's spells); zero skips. Phase 1 smoke catalog landed (v2.182.1): `test_spell_catalog_smoke.py` patches one scratch caster with the whole 319-spell catalog + abundant slots and casts every spell by index, asserting the floor contract (no 500, `spell_cast` broadcast emitted); all 319 pass with zero skips. Earlier (v2.49.108): Phase 2A v1 — `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized over `(caster, spell, slot)` rows, covering single-target attack-roll spells (Fire Bolt). Filed: 2A save spells, multi-beam (Scorching Ray / Eldritch Blast), auto-hit (Magic Missile) — each needs a different response-shape adapter.
 **Authors:** rolling
-**Last updated:** 2026-06-12 (Phase 2A auto-hit backfill — all four damage shapes done)
+**Last updated:** 2026-06-12 (Phase 2G AoE shape drift gate — HTTP /place_aoe geometry filed)
 
 A plan to expand `tests/harness/` so every spell in
 `app/data/local/dnd5e/spells/` (319 SRD entries as of v2.49.102, plus
@@ -252,13 +252,33 @@ Faerie Fire, Confusion, Banishment, …) need a forced-fail save (via
 have dedicated-endpoint tests (`test_cast_hold_person.py`,
 `test_cast_bane.py`, `test_spell_condition_catalog_confusion_banishment.py`).
 
-### 2G — `test_spell_catalog_aoe.py`
-For every spell with `actions[*].aoe_shape`:
-- `/place_aoe` accepts the spell + shape + size + caster pos.
-- Targets inside the AoE get the broadcast.
-- Targets outside don't.
-- Shape coverage matches RAW (sphere = circle from center, cube =
-  square from corner, cone = wedge, line = rectangle).
+### 2G — `test_spell_catalog_aoe.py` 🟠 (v2.183.2 — shape drift gate landed; HTTP geometry filed)
+**Shipped (v2.183.2):** a pure-Python content-drift gate (no HTTP/WS,
+same shape as the 2H range gate). The server treats a spell as an AoE
+only when an action's `area.shape` is in
+`tabletop_routes._AOE_SHAPE_SET = {sphere, cone, line, cube,
+self_sphere, self_cube}` AND `size_ft > 0` (`_extract_aoe_area`). That
+module imports fastapi so it can't be imported by the harness — the
+test replicates the frozenset locally (same approach Phase 2E/2F take)
+and keeps it in lock step via count + two-way coverage assertions. It
+iterates the catalog and asserts every spell declaring a non-empty
+`area.shape` (note: the catalog uses `actions[*].area.shape`, not the
+`aoe_shape` this plan originally sketched) uses a RAW-valid shape with
+positive `size_ft`; the one `line` spell (Lightning Bolt) carries a
+positive `secondary_ft` width; the AoE count is exactly 27 (sphere ×15,
+cone ×4, cube ×5, line ×1, self_sphere ×1, self_cube ×1) so a zeroed
+shape can't pass vacuously; and no catalog shape falls outside the set
+/ no replicated entry is dead. Catches a corrupted shape ("sphere" →
+"spheer") or zeroed size that would make the server silently stop
+painting the template.
+
+**Filed follow-up (not in v2.183.2):** the HTTP `/place_aoe` geometry
+test — for a spell cast without targets, `/place_aoe` accepts the
+`cast_id` + `center` + `target_combatant_ids`; targets inside the
+template get the `spell_cast_aoe_resolved` broadcast, targets outside
+don't; shape coverage matches RAW (sphere = circle from center, cube =
+square from corner, cone = wedge, line = rectangle). Needs map + token
+positioning — materially more setup than the content gate above.
 
 ### 2H — `test_spell_catalog_range.py` ✅ (v2.182.7)
 **Shipped:** a pure-Python gate (no HTTP/WS) that parses all 319
@@ -490,7 +510,7 @@ A summary of the non-test helpers this plan asks for:
 - [✅] Phase 2D — Heal assertions (`test_spell_catalog_heal.py`) — v2.182.4: all 7 healers' `auto_heal_rolled` (read off the `spell_cast` WS) range-checked against dice + spellcasting mod, zero skips.
 - [✅] Phase 2E — Concentration assertions (`test_spell_catalog_concentration.py`) — v2.182.5: all 5 concentration buff-spells (Bless, Heroism, Shield of Faith, Protection from Evil and Good, Haste) self-cast; install carries the concentration flag + the prior anchor is dropped via the one-at-a-time swap (asserted in battle state + `replaced_concentration` broadcast), zero skips.
 - [✅] Phase 2F — Buff install assertions (`test_spell_catalog_buff_install.py`) — v2.182.6: all 9 `_SPELL_BUFF_MAP` spells cast on a separate target; installed key/name/duration_rounds/concentration asserted against the expected payload table, zero skips.
-- [ ] Phase 2G — AoE assertions
+- [x] Phase 2G — AoE assertions (v2.183.2: shape drift gate; HTTP /place_aoe geometry filed)
 - [✅] Phase 2H — Range assertions (`test_spell_catalog_range.py`) — v2.182.7: all 319 spell ranges parsed via `range_parser` and asserted against their RAW category (Self→0, Touch→5, N feet→N, N miles→N×5280, Special/Unlimited/Sight→None) + numeric value; pure-Python, zero drift. (HTTP cast-from-position gate filed as follow-up.)
 - [ ] Phase 3 — Buff effect validation
 - [ ] Phase 4 — Bespoke complex-spell tests
