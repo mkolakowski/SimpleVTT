@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2436 in `tests/harness/` + 70 in `tests/harness_ui/` (as of v2.181.0, 2026-06-12).
+**Total tests:** 2437 in `tests/harness/` + 70 in `tests/harness_ui/` (as of v2.181.1, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3187,6 +3187,7 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_unknown_slug_404` | `GET /wiki/no-such-page` → 404. |
 | `test_wiki_traversal_blocked` | URL-encoded `../` in the slug → 404 / 400 (path-traversal blocked). |
 | `test_wiki_markdown_guide_renders` | v2.43.14: `/wiki/realtime-broadcasts-catalog` (a `.md` source) renders through the markdown package + wraps in `wiki_md.html`. Asserts `<h1`, `<table`, the catalog's title, and the `wiki-nav` menu (v2.49.9). |
+| `test_wiki_lair_regional_catalog_renders` | v2.181.1: `GET /wiki/lair-regional-catalog` (a `.md` source) → 200, body contains "lair actions" + "regional effects" + a known curated entry ("Magma Erupts") + `<h1` + `<table` + the `wiki-nav` menu. The reader-facing catalog of the five chromatic dragon lairs (mirrors the `app/content/` leaf modules). |
 | `test_wiki_doc_serves_plan` | v2.49.9: `GET /wiki/doc/plan-test-harness` → 200, body contains the plan's H1 + the nav menu. Resolves through the `_DOC_ALLOWLIST` mapping to `docs/plans/test-harness.md`. |
 | `test_wiki_doc_serves_ruler_plan` | v2.49.66: `GET /wiki/doc/plan-ruler-and-range` → 200, body contains "ruler" + "range" + the nav menu. Resolves through the allowlist to `docs/plans/ruler-and-range.md`. |
 | `test_wiki_doc_serves_simulacrum_plan` | v2.49.68: `GET /wiki/doc/plan-player-simulacrum` → 200, body contains "simulacrum" + the nav menu. Resolves through the allowlist to `docs/plans/player-simulacrum.md`. |

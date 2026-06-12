@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.181.1] - 2026-06-12 — "The Bestiary Index" — A reader-facing wiki catalog of every authored lair. The lair-action + regional-effect arc (v2.168.0–v2.181.0) shipped its data in two `app/content/` leaf modules and surfaced it in-play through the GM/player floating panels — but there was no single human-readable page a GM could open to see *what's actually in the game*. This commit adds `docs/wiki/lair-regional-catalog.md`: a per-color catalog of all five chromatic dragons' lair actions (save / DC / effect table) and regional effects (bulleted flavor), plus a side-by-side "how the two differ" primer and the RAW MM page citations. It mirrors `lair_actions.py` + `regional_effects.py` — the leaf modules stay the source of truth; this page is the navigable index. Surfaced through the wiki per the surface-every-doc rule (Available guides table + on-disk README), with a per-slug render smoke test.
+
+**Schema version:** 69
+**Commit summary:** **Docs commit. (A) New `docs/wiki/lair-regional-catalog.md` — catalogs the five chromatic dragon lairs (lair actions + regional effects) mirroring the two `app/content/` leaf modules. (B) Surfaced via `app/templates/wiki.html` + `docs/wiki/README.md` "Available guides" tables. (C) `tests/harness/test_wiki.py` — new `test_wiki_lair_regional_catalog_renders` + landing-page assertion for the new slug.**
+**Description:** A no-code doc drop closing the discoverability gap on the lair-actions arc: the data has been live since v2.168.0 but a GM had no rendered reference to scan before a session. The catalog is a mirror of the leaf modules (not a new source of truth) so future data backfills — metallic dragons, Lich, Kraken — update the modules first, then this page. Doc + test only; no app behavior change.
+
+### Added
+- `docs/wiki/lair-regional-catalog.md` — reader-facing catalog of all five chromatic dragon lairs (lair actions + regional effects), with RAW MM page citations.
+- `tests/harness/test_wiki.py` — `test_wiki_lair_regional_catalog_renders` (200 + H1 + a known curated entry + nav injection).
+
+### Changed
+- `app/templates/wiki.html` + `docs/wiki/README.md` — new "Lair actions & regional effects catalog" row in the Available guides table.
+- `tests/harness/test_wiki.py` — `test_wiki_home_renders` asserts the new `/wiki/lair-regional-catalog` slug appears on the landing page.
+- `docs/test-harness-coverage.md` — `test_wiki.py` section updated; harness total 2436 → 2437.
+- `app/version.py` — `APP_VERSION` 2.181.0 → 2.181.1 (PATCH: doc + test, no code change). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.181.1.
+
 ## [2.181.0] - 2026-06-12 — "The Slow Unmaking" — Regional-effect fade tracker (RAW MM p.11). A dragon's regional effects don't snap off the instant it dies — the *Monster Manual* says they "fade over the course of 1d10 days." This commit models that decay as a GM-driven countdown on the battle state, via a new `POST /api/campaign/{cid}/set_regional_fade` endpoint. `action: "start"` rolls 1d10 and seeds a `regional_fade` object (`{lair_slug, days_total, days_remaining, faded}`); `action: "advance"` ticks one in-world day off (`days_remaining − 1`, flipping `faded` to True at 0); `action: "clear"` removes the tracker. Each call broadcasts `regional_fade_changed` so every client can reflect the countdown. The fade state is GM-only and rides the battle-state JSON (carried across `/battle` PUTs by the existing carry-forward guard) — no schema change.
 
 **Schema version:** 69

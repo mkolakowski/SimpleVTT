@@ -86,6 +86,8 @@ async def test_wiki_home_renders():
     assert "/wiki/testing-checklist" in resp.text
     # v2.151.3: TODONE completed-to-do archive listed in Repo documentation.
     assert "/wiki/doc/todone" in resp.text
+    # v2.181.1: lair-actions + regional-effects catalog listed in available guides.
+    assert "/wiki/lair-regional-catalog" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -138,6 +140,25 @@ async def test_wiki_reactions_guide_renders():
     assert "reactions" in resp.text.lower()
     assert "trigger event" in resp.text.lower()
     assert "<h1" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_lair_regional_catalog_renders():
+    """v2.181.1: GET /wiki/lair-regional-catalog — markdown reference
+    under docs/wiki/ rendered + wrapped + nav-injected. Catalogs each
+    chromatic dragon lair's lair actions + regional effects (mirrors the
+    app/content leaf modules)."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/lair-regional-catalog")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # H1 contains "Lair actions & regional effects catalog".
+    assert "lair actions" in resp.text.lower()
+    assert "regional effects" in resp.text.lower()
+    # A known curated entry from the red dragon's volcanic lair.
+    assert "Magma Erupts" in resp.text
+    assert "<h1" in resp.text
+    assert "<table" in resp.text
     assert 'class="wiki-nav"' in resp.text
 
 
