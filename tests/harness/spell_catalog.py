@@ -72,6 +72,22 @@ def save_ability_of(spell: dict) -> str:
     return (raw or "").strip().upper()[:3]
 
 
+def is_attack_spell(spell: dict) -> bool:
+    """True when ``/cast_spell`` resolves this spell as a spell-attack
+    roll (Fire Bolt, Eldritch Blast, …) rather than a save. Mirrors the
+    endpoint's gate (``tabletop_routes.py`` ~line 19172): an ``attack_roll``
+    flag on the spell or any action, AND no ``save_ability`` (save spells
+    take the T.3 save-resolution branch even if mis-tagged with an attack
+    flag). The conjunction matters — a spell carrying both flags is routed
+    to the save branch by the endpoint, so the test must classify it the
+    same way to avoid asserting attack fields that won't be populated.
+    """
+    has_attack = bool(spell.get("attack_roll")) or any(
+        bool(a.get("attack_roll")) for a in (spell.get("actions") or [])
+    )
+    return has_attack and not save_ability_of(spell)
+
+
 def dice_range(expression: str) -> tuple[int, int]:
     """Parse a dice expression and return ``(min, max)`` total bounds.
 

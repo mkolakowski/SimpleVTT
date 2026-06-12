@@ -6,7 +6,13 @@ server — pure-Python pytest cases.
 """
 from __future__ import annotations
 
-from .spell_catalog import damage_actions, dice_range, load_all_spells, save_ability_of
+from .spell_catalog import (
+    damage_actions,
+    dice_range,
+    is_attack_spell,
+    load_all_spells,
+    save_ability_of,
+)
 
 
 def test_load_all_spells_returns_non_empty():
@@ -103,3 +109,23 @@ def test_save_ability_of_resolution():
     # No save anywhere → empty.
     assert save_ability_of({"actions": [{"id": "cast", "damage": "8d6"}]}) == ""
     assert save_ability_of({}) == ""
+
+
+def test_is_attack_spell_resolution():
+    """is_attack_spell mirrors the endpoint's gate: an attack_roll flag
+    (top-level or on an action) AND no save_ability. A spell carrying
+    both flags is routed to the save branch, so it must NOT classify as
+    an attack spell."""
+    # Top-level attack flag, no save → attack spell.
+    assert is_attack_spell({"attack_roll": True}) is True
+    # Attack flag on an action → attack spell.
+    assert is_attack_spell({"actions": [{"id": "cast", "attack_roll": True}]}) is True
+    # Attack flag BUT also a save → routed to save branch, not an attack.
+    assert is_attack_spell(
+        {"attack_roll": True, "actions": [{"save_ability": "dex"}]}
+    ) is False
+    # Save only → not an attack.
+    assert is_attack_spell({"actions": [{"save_ability": "dex"}]}) is False
+    # Neither → not an attack.
+    assert is_attack_spell({"actions": [{"id": "cast", "damage": "8d6"}]}) is False
+    assert is_attack_spell({}) is False

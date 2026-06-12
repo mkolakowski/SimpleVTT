@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2442 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.2, 2026-06-12).
+**Total tests:** 2446 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.3, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3295,6 +3295,15 @@ Phase 2B save assertions. Patches the scratch caster (Thalindra) with the whole 
 |------|-----------------|
 | `test_every_save_spell_dc_and_ability` | Every save spell returns its JSON save ability + the uniform caster DC; ≥ 100 spells asserted; ability/DC mismatches collected with the offending slug. |
 | `test_save_catalog_subset_nonempty` | Guard: ≥ 100 save spells exist so the catalog test can't pass vacuously. |
+
+### `test_spell_catalog_attack.py`
+Phase 2C spell-attack-roll assertions. Patches the scratch caster (Thalindra) with the whole catalog + 999 slots/level, seeds one very-high-HP NPC bandit, then casts every spell `/cast_spell` resolves as a spell-attack roll (15 spells with an `attack_roll` flag and no `save_ability`). Derives the attack bonus from `auto_attack_total` minus the natural d20 (parsed from `auto_attack_breakdown`'s `[N]`) and asserts it equals the caster's `prof + spellcasting mod` (uniform); asserts `auto_attack_hit` follows the d20 rules (nat 20 hits, nat 1 misses, else `total >= AC`). Crit-doubling is proven deterministically via `/api/test/dice/seed`. Mismatches collected by slug. ~7 s.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_every_attack_spell_bonus_and_hit` | Every attack spell's derived bonus = `prof + spell mod` (uniform) + the hit/miss verdict matches nat/AC rules; ≥ 12 spells asserted; bonus/hit mismatches collected by slug. |
+| `test_attack_crit_doubles_damage_dice` | Seeds the RNG until Fire Bolt crits, then asserts the damage breakdown shows the doubled dice count (2d10 → 4d10) and the rolled damage is inside the doubled range; the crit registers as a hit. |
+| `test_attack_catalog_subset_nonempty` | Guard: ≥ 12 attack-roll spells exist so the catalog test can't pass vacuously. |
 
 ### `test_spell_catalog_damage.py`
 Parameterized over `(caster_name, spell_slug, spell_index, slot_level, base_dmg_expr, upcast_dice)` rows in the `DAMAGE_SPELL_CASES` table. v1 has one row (Fire Bolt at Wizard L5 → 2d10). Each case long-rests the caster, seeds a target combatant, casts the spell, and asserts `response.auto_attack_damage_rolled` is inside the dice expression's [min, max]. Damage type is verified against the catalog JSON.
