@@ -58,7 +58,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Magic-item automation](../plans/magic-items-automation.md) | Markdown (design) | Contributors | ✅ framework shipped Phases 1–8 (v2.158.74–v2.159.25); Phase 9 content tail (~250 items) is P2 |
 | [Exhaustion levels](../plans/exhaustion-levels.md) | Markdown (design) | Contributors | ✅ Phases 0–4 shipped (v2.159.17–.22) · 32 tests · framework complete |
 | [Carrying capacity](../plans/carrying-capacity.md) | Markdown (design) | Contributors | ✅ Phases 0-3 shipped (v2.159.26–.30) · 38 tests · Bag of Holding live |
-| [Legendary actions + lair actions](../plans/legendary-actions.md) | Markdown (design) | Contributors | 🟠 Phases 1a + 1b + 1c-UI shipped (v2.159.33–2.160.1) — cost backfill + budget gate + /use_legendary_action endpoint + turn-start refresh + GM init-tracker spend buttons + Adult Red Dragon demo template; Phase 1c damage-dispatch chaining + Phases 2–3 pending |
+| [Legendary actions + lair actions](../plans/legendary-actions.md) | Markdown (design) | Contributors | 🟠 Phases 1a + 1b + 1c shipped (v2.159.33–2.161.0) — cost backfill + budget gate + /use_legendary_action endpoint + turn-start refresh + GM init-tracker spend buttons + Adult Red Dragon demo template + server-side save-AoE damage dispatch; Phase 1c attack-roll dispatch + UI target-pick + Phases 2–3 pending |
 | [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
 | [Unified mini-sheet](../plans/unified-mini-sheet.md) | Markdown (design) | Contributors | ⚪ proposed · 3 mockups · Phase 1–3 unstarted |
 | [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |

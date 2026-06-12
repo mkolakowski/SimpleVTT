@@ -20,9 +20,24 @@ v2.160.0) — the budget surface + GM control are live:
   Young Red Dragon is non-legendary RAW). 2 HTTP harness tests guard
   the seed wiring.
 
-The remaining Phase 1c work is server-side damage-dispatch chaining
-(roll the attack/AoE through `/npc_attack` in the same request for
-attack-shape actions) + a chat-card surface.
+- **Phase 1c (server save-AoE) ✅ v2.161.0** — `/use_legendary_action`
+  now resolves the spent action's definition from the monster template
+  (`_resolve_legendary_action_def`) and, when it carries a `save_ability`
+  + `damage` and the caller passes `aoe_target_combatant_ids`, rolls each
+  target's save server-side (`_resolve_feature_save`) and applies
+  save-or-take damage (`_apply_damage_to_combatant`), broadcasting
+  `legendary_action_aoe_resolved`. Validated against the Adult Red
+  Dragon's Wing Attack (cost 2, DEX DC 22, 2d6+8 bludgeoning). 2 HTTP
+  harness tests.
+
+The data shapes turned out more varied than the original "attack_roll +
+damage" assumption: the demo dragon's legendary options are a save-AoE
+(Wing Attack), a reference-attack (Tail Attack → base "Tail" action), and
+a no-damage utility (Detect). v2.161.0 covers the save-AoE slice. The
+remaining Phase 1c work is the attack-roll/reference-attack dispatch
+(Tail Attack), the UI target-pick wiring (the v2.160.0 strip doesn't yet
+send `aoe_target_combatant_ids`), and a chat-card surface for
+`legendary_action_aoe_resolved`.
 **Authors:** rolling
 **Last updated:** 2026-06-11
 
@@ -245,10 +260,22 @@ combatant.legendary_resistance = {
   — `_ensureLegendaryActions` seed helper, `.legendary-strip` render,
   click → `/use_legendary_action`, `legendary_action_pool_update` WS
   handler, 3 Playwright UI tests (`test_legendary_action_buttons.py`).
-- Phase 1c (server, pending): damage-dispatch chaining (the endpoint
-  optionally calls into `/npc_attack`'s damage pipeline when the action
-  has `attack_roll`+`damage`, or routes through the AoE save-resolver
-  when the action has `save_ability`); chat-card surface.
+- Phase 1c (server save-AoE) ✅ v2.161.0: `/use_legendary_action`
+  resolves the spent action def from the monster template
+  (`_resolve_legendary_action_def`); when it has `save_ability`+`damage`
+  and the caller passes `aoe_target_combatant_ids`, loops the targets
+  (spender excluded), rolls each save via `_resolve_feature_save`
+  (caster_char_id=0, source=legendary-action-save), applies save-or-take
+  damage via `_apply_damage_to_combatant` (is_attack=False), and
+  broadcasts `legendary_action_aoe_resolved` (data: combatant_id +
+  combatant_name + action_id + action_name + save_ability + save_dc +
+  damage_type + results[]). 2 HTTP tests
+  (`test_wing_attack_aoe_resolves_saves_and_damage`,
+  `test_wing_attack_without_targets_skips_dispatch`).
+- Phase 1c (server, pending): attack-roll / reference-attack dispatch
+  (Tail Attack → base "Tail" action); UI target-pick wiring (the
+  v2.160.0 strip doesn't yet send `aoe_target_combatant_ids`); chat-card
+  surface for `legendary_action_aoe_resolved`.
 
 ### Phase 2 — Legendary resistance pool (S, ~2 commits)
 

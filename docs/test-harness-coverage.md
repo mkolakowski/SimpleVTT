@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2355 in `tests/harness/` + 54 in `tests/harness_ui/` (as of v2.160.1, 2026-06-11).
+**Total tests:** 2357 in `tests/harness/` + 54 in `tests/harness_ui/` (as of v2.161.0, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -100,7 +100,7 @@ v2.159.18 exhaustion-levels Phase 2 — disadvantage wiring at Lv 1 (ability che
 | `test_exhaustion_lv3_npc_imposes_check_disadvantage` | NPC mirror path — set exhaustion via `combatant_id` + skip_roll_state + /roll → response carries an exhaustion label. |
 
 ### `test_use_legendary_action.py`
-v2.159.34 legendary-actions Phase 1b (see [legendary-actions.md](../plans/legendary-actions.md)) — budget gate + spend endpoint `POST /api/campaign/{cid}/use_legendary_action`. RAW DMG p.11: 3 legendary-action points per round, spent at the END of another creature's turn (never the legendary creature's own), refreshed at the START of the legendary creature's turn. Phase 1b is the budget gate only — damage dispatch chains via a follow-up `/npc_attack` (Phase 1c).
+v2.159.34 legendary-actions Phase 1b + v2.161.0 Phase 1c (see [legendary-actions.md](../plans/legendary-actions.md)) — budget gate + spend endpoint `POST /api/campaign/{cid}/use_legendary_action`. RAW DMG p.11: 3 legendary-action points per round, spent at the END of another creature's turn (never the legendary creature's own), refreshed at the START of the legendary creature's turn. Phase 1b is the budget gate; Phase 1c (v2.161.0) chains server-side save-AoE damage dispatch — when the spent action carries a `save_ability` + `damage` and the caller passes `aoe_target_combatant_ids`, the server resolves the action def from the monster template, rolls each target's save, and applies save-or-take damage, broadcasting `legendary_action_aoe_resolved`.
 
 | Test | What it asserts |
 |------|-----------------|
@@ -111,6 +111,8 @@ v2.159.34 legendary-actions Phase 1b (see [legendary-actions.md](../plans/legend
 | `test_turn_start_refreshes_legendary_action_pool` | Spend to 1, advance turn back to the dragon → pool resets to 3; broadcast carries `reason=turn_start_refresh`. |
 | `test_use_legendary_action_missing_combatant_id_400` | Missing `combatant_id` → 400. |
 | `test_use_legendary_action_player_caller_403` | Non-GM caller → 403 (NPC legendary actions are GM-authorised). |
+| `test_wing_attack_aoe_resolves_saves_and_damage` | Phase 1c. Adult Red Dragon spends Wing Attack (cost 2) with `aoe_target_combatant_ids`; server rolls each NPC target's DEX save (DC 22), applies save-or-take 2d6+8 bludgeoning; spender excluded; `damage_dealt > 0` iff `passed is False`; `legendary_action_aoe_resolved` broadcast carries save_ability=DEX, save_dc=22, damage_type=bludgeoning, 2 results. |
+| `test_wing_attack_without_targets_skips_dispatch` | Phase 1c. Wing Attack with no `aoe_target_combatant_ids` → pool still spent, `aoe_results == []` (dispatch is opt-in via targets). |
 
 ### `test_monster_legendary_action_cost.py`
 v2.159.33 legendary-actions Phase 1a (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python data-invariant guard: every SRD legendary action whose name carries a `(Costs N Actions)` suffix has its `cost` integer set to N (not the default 1). Walks the shipped `app/data/local/dnd5e/monsters/*.json` content layer directly. Phase 1a backfilled 39 cost integers across 30 monsters from the suffix; this test guards the invariant against future SRD-rebuild drift so the Phase 1b `/use_legendary_action` budget gate doesn't silently re-break.

@@ -560,6 +560,48 @@ def _refresh_legendary_action_pool(combatant: dict) -> bool:
     return True
 
 
+# v2.161.0 Phase 1c (server) — resolve a spent legendary action's
+# structured definition from the spender's projected stat block so the
+# server can dispatch its damage (save-AoE) rather than trusting the
+# client to send the save_dc/damage. Mirrors how /npc_attack reads the
+# action off ``_monster_template_to_sheet`` but filters to the
+# legendary_action category + matches by id (falling back to name).
+def _resolve_legendary_action_def(
+    db: Session, campaign_id: int, spender: dict,
+    action_id: str, action_name: str,
+) -> "dict | None":
+    """Return the legendary-action dict (carrying ``save_ability`` /
+    ``save_dc`` / ``damage`` / ``damage_type`` / ``attack_roll``) the
+    GM just spent, resolved from the spender combatant's monster
+    template. ``None`` when the spender isn't a templated monster or no
+    matching legendary action exists.
+    """
+    tmpl_id = spender.get("token_template_id")
+    if not tmpl_id:
+        return None
+    try:
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(tmpl_id),
+        ).first()
+    except (TypeError, ValueError):
+        tmpl = None
+    if not tmpl:
+        return None
+    sheet = _monster_template_to_sheet(tmpl, campaign_id)
+    actions = sheet.get("actions") or []
+    want_id = (action_id or "").strip()
+    want_name = (action_name or "").strip().lower()
+    fallback = None
+    for a in actions:
+        if not isinstance(a, dict) or a.get("category") != "legendary_action":
+            continue
+        if want_id and str(a.get("id") or "") == want_id:
+            return a
+        if want_name and str(a.get("name") or "").strip().lower() == want_name:
+            fallback = a
+    return fallback
+
+
 # v2.19.0 Phase C.1: buff slot helpers. A "buff" is a structured timed
 # effect installed on a combatant in the hub battle state — Rage,
 # Hunter's Mark, Hex, Bless, Faerie Fire, etc. Unlike the action-economy
@@ -23169,6 +23211,21 @@ async def use_legendary_action(
       ``target_combatant_id`` (optional) — informational; the actual
                                 damage dispatch happens via a
                                 follow-up `/npc_attack` call.
+      ``aoe_target_combatant_ids`` (optional, v2.161.0) — list of
+                                combatant ids the GM picked as caught in
+                                a save-AoE legendary action (e.g. the
+                                Adult Red Dragon's Wing Attack). When the
+                                spent action resolves (server-side, from
+                                the spender's stat block) to a save-AoE
+                                — ``save_ability`` + ``save_dc`` +
+                                ``damage`` — the endpoint rolls each
+                                target's save and applies save-or-take
+                                damage (full on a fail, none on a pass)
+                                via the shared `_resolve_feature_save` +
+                                `_apply_damage_to_combatant` helpers. PC
+                                targets get a roll-request prompt instead
+                                (damage stays GM-manual for them in v1,
+                                matching the NPC-cast AoE convention).
 
     Auth: GM only (NPC combatants are GM-controlled).
 
@@ -23190,6 +23247,12 @@ async def use_legendary_action(
     target_combatant_id = (
         str(body.get("target_combatant_id") or "").strip() or None
     )
+    aoe_target_ids_raw = body.get("aoe_target_combatant_ids") or []
+    aoe_target_ids = [
+        str(x).strip()
+        for x in aoe_target_ids_raw
+        if isinstance(x, (str, int)) and str(x).strip()
+    ]
     try:
         cost = int(body.get("cost") or 1)
     except (TypeError, ValueError):
@@ -23284,8 +23347,116 @@ async def use_legendary_action(
             **payload,
         },
     })
+
+    # v2.161.0 Phase 1c (server) — save-AoE damage dispatch. Resolve the
+    # spent action from the spender's stat block; when it's a save-AoE
+    # (e.g. the dragon's Wing Attack — DEX DC 22, 2d6+8) and the GM
+    # supplied the caught-target list, roll each target's save + apply
+    # save-or-take damage (full on fail, none on pass — dragon AoE
+    # legendary actions are save-or-take, not save-for-half). PC targets
+    # get a roll-request prompt; their damage stays GM-manual for v1
+    # (matches the /npc_cast_spell AoE convention).
+    aoe_results: list[dict] = []
+    if aoe_target_ids:
+        action_def = _resolve_legendary_action_def(
+            db, campaign_id, spender, action_id, action_name,
+        )
+        save_ability = str(
+            (action_def or {}).get("save_ability") or "",
+        ).strip().upper()
+        damage_expr = str((action_def or {}).get("damage") or "").strip()
+        damage_type = str((action_def or {}).get("damage_type") or "").strip()
+        try:
+            save_dc = int((action_def or {}).get("save_dc") or 0)
+        except (TypeError, ValueError):
+            save_dc = 0
+        if save_ability and damage_expr and save_dc:
+            spender_name = str(spender.get("name") or "Legendary creature")
+            # Cap for hub safety (mirrors the Javelin of Lightning loop).
+            for tid in aoe_target_ids[:24]:
+                if tid == combatant_id:
+                    continue
+                target_c = _lookup_combatant(campaign_id, tid)
+                if not target_c:
+                    aoe_results.append(
+                        {"combatant_id": tid, "reason": "not_found"},
+                    )
+                    continue
+                try:
+                    sr = await _resolve_feature_save(
+                        db, campaign_id,
+                        caster_char_id=0,
+                        caster_char_name=spender_name,
+                        target_combatant=target_c,
+                        save_ability=save_ability,
+                        dc=save_dc,
+                        note_label=(
+                            f"{action_name} (DC {save_dc} {save_ability})"
+                        ),
+                        condition_buff=None,
+                        repeated_save=False,
+                        source="legendary-action-save",
+                        campaign=campaign,
+                        prompt_user=user,
+                        feature_name=f"👑 {action_name}",
+                    )
+                except Exception:
+                    logging.exception(
+                        "Legendary AoE save resolve failed for tid=%s", tid,
+                    )
+                    aoe_results.append(
+                        {"combatant_id": tid, "reason": "save_error"},
+                    )
+                    continue
+
+                damage_dealt = 0
+                passed = sr.get("passed")
+                # passed is None for PC targets (prompted — damage
+                # deferred / GM-manual); only NPC targets resolve inline.
+                if passed is False:
+                    try:
+                        r = dice_mod.roll(damage_expr)
+                        damage_dealt = int(r.total)
+                    except dice_mod.DiceParseError:
+                        damage_dealt = 0
+                    if damage_dealt > 0:
+                        try:
+                            await _apply_damage_to_combatant(
+                                db, campaign_id, target_c,
+                                damage_amount=damage_dealt,
+                                damage_type=damage_type,
+                                is_attack=False, is_magical=False,
+                            )
+                        except Exception:
+                            logging.exception(
+                                "Legendary AoE damage apply failed for "
+                                "tid=%s", tid,
+                            )
+                aoe_results.append({
+                    "combatant_id": tid,
+                    "name": target_c.get("name") or "Target",
+                    "passed": passed,
+                    "prompted": bool(sr.get("prompted")),
+                    "damage_dealt": damage_dealt,
+                })
+            if aoe_results:
+                await hub.broadcast(campaign_id, {
+                    "type": "legendary_action_aoe_resolved",
+                    "data": {
+                        "combatant_id": combatant_id,
+                        "combatant_name": payload["combatant_name"],
+                        "action_id": action_id,
+                        "action_name": action_name,
+                        "save_ability": save_ability,
+                        "save_dc": save_dc,
+                        "damage_type": damage_type,
+                        "results": aoe_results,
+                    },
+                })
+
     return {
         "ok": True,
+        "aoe_results": aoe_results,
         **payload,
     }
 

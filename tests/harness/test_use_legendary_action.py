@@ -23,12 +23,21 @@ Coverage:
     broadcast with `reason=turn_start_refresh`.
   - 400 missing combatant_id.
   - 403 non-GM caller.
+
+v2.161.0 — Phase 1c (server) save-AoE damage dispatch:
+  - Wing Attack (DEX DC 22, 2d6+8) resolves each NPC target's save +
+    applies save-or-take damage (full on fail, none on pass) +
+    broadcasts `legendary_action_aoe_resolved`.
+  - the spender is excluded from its own AoE.
 """
+import pytest_asyncio
+
 from .conftest import CAMPAIGN_ID
 
 
-def _mkc(cid, char_id=None, hp_cur=30, hp_max=30, name="X", initiative=10):
-    return {
+def _mkc(cid, char_id=None, hp_cur=30, hp_max=30, name="X", initiative=10,
+         token_template_id=None):
+    c = {
         "id": cid,
         "char_id": char_id,
         "name": name,
@@ -38,6 +47,31 @@ def _mkc(cid, char_id=None, hp_cur=30, hp_max=30, name="X", initiative=10):
         "buffs": [],
         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
     }
+    if token_template_id is not None:
+        c["token_template_id"] = token_template_id
+    return c
+
+
+async def _template_id_by_name(gm_client, name):
+    resp = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    assert resp.status_code == 200, resp.text
+    for t in resp.json():
+        if t.get("name") == name:
+            return t["id"]
+    raise AssertionError(
+        f"No {name!r} template in the demo seed. "
+        f"Found: {[t.get('name') for t in resp.json()]}"
+    )
+
+
+@pytest_asyncio.fixture
+async def adult_red_dragon_template_id(gm_client):
+    return await _template_id_by_name(gm_client, "Adult Red Dragon")
+
+
+@pytest_asyncio.fixture
+async def bandit_template_id(gm_client):
+    return await _template_id_by_name(gm_client, "Bandit")
 
 
 async def _seed_battle(gm_client, combatants, turn_index=0):
@@ -231,6 +265,95 @@ async def test_use_legendary_action_missing_combatant_id_400(gm_client):
         json={"action_name": "Tail Attack", "cost": 1},
     )
     assert resp.status_code == 400
+
+
+async def test_wing_attack_aoe_resolves_saves_and_damage(
+    gm_client, gm_ws, adult_red_dragon_template_id, bandit_template_id,
+):
+    """v2.161.0 — Wing Attack (cost 2, DEX DC 22, 2d6+8 save-or-take).
+    The spender carries the Adult Red Dragon template so the server
+    resolves the action's save_dc/damage from the stat block. Two
+    bandit-template NPC targets get their DEX saves rolled inline;
+    damage applies on a fail, none on a pass. The dragon itself is
+    excluded from its own AoE even when passed in the target list."""
+    dragon_cid = "npc_ard_aoe_spender"
+    b1 = "npc_ard_aoe_bandit1"
+    b2 = "npc_ard_aoe_bandit2"
+    # Dragon at idx 0; a bandit active (idx 1) so the dragon CAN spend.
+    await _seed_battle(gm_client, [
+        _mkc(dragon_cid, hp_cur=256, hp_max=256, name="Adult Red Dragon",
+             initiative=20, token_template_id=adult_red_dragon_template_id),
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit One", initiative=15,
+             token_template_id=bandit_template_id),
+        _mkc(b2, hp_cur=40, hp_max=40, name="Bandit Two", initiative=12,
+             token_template_id=bandit_template_id),
+    ], turn_index=1)
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_legendary_action",
+        json={
+            "combatant_id": dragon_cid,
+            "action_id": "wing-attack-costs-2-actions",
+            "action_name": "Wing Attack (Costs 2 Actions)",
+            "cost": 2,
+            # Include the dragon's own id to prove it's excluded.
+            "aoe_target_combatant_ids": [dragon_cid, b1, b2],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["pool_current"] == 1  # 3 → 1 (cost 2)
+
+    results = data["aoe_results"]
+    # The spender is excluded; only the two bandits resolve.
+    ids = {r["combatant_id"] for r in results}
+    assert ids == {b1, b2}, results
+    for r in results:
+        assert r["passed"] in (True, False), r
+        assert r["prompted"] is False  # NPC targets resolve inline
+        assert isinstance(r["damage_dealt"], int)
+        # Save-or-take: damage on a fail, none on a pass.
+        if r["passed"] is False:
+            assert r["damage_dealt"] > 0, r
+        else:
+            assert r["damage_dealt"] == 0, r
+
+    aoe_msg = await gm_ws.wait_for("legendary_action_aoe_resolved")
+    assert aoe_msg["data"]["combatant_id"] == dragon_cid
+    assert aoe_msg["data"]["save_ability"] == "DEX"
+    assert aoe_msg["data"]["save_dc"] == 22
+    assert aoe_msg["data"]["damage_type"] == "bludgeoning"
+    assert len(aoe_msg["data"]["results"]) == 2
+
+
+async def test_wing_attack_without_targets_skips_dispatch(
+    gm_client, adult_red_dragon_template_id,
+):
+    """v2.161.0 — no aoe_target_combatant_ids → pool still spends but
+    no AoE is resolved (aoe_results empty). Backward-compatible with the
+    Phase 1b budget-gate-only flow."""
+    dragon_cid = "npc_ard_no_targets"
+    filler = "npc_ard_no_targets_filler"
+    await _seed_battle(gm_client, [
+        _mkc(dragon_cid, hp_cur=256, hp_max=256, name="Adult Red Dragon",
+             initiative=20, token_template_id=adult_red_dragon_template_id),
+        _mkc(filler, hp_cur=40, hp_max=40, name="Filler", initiative=15),
+    ], turn_index=1)
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_legendary_action",
+        json={
+            "combatant_id": dragon_cid,
+            "action_id": "wing-attack-costs-2-actions",
+            "action_name": "Wing Attack (Costs 2 Actions)",
+            "cost": 2,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["pool_current"] == 1
+    assert data["aoe_results"] == []
 
 
 async def test_use_legendary_action_player_caller_403(alice_client, roster):
