@@ -5240,6 +5240,7 @@
                     else if (e.type === 'spell_cast_target_updated') _onSpellCastTargetUpdated(e.data);
                     else if (e.type === 'spell_cast_aoe_resolved') _onSpellCastAoeResolved(e.data);
                     else if (e.type === 'legendary_action_aoe_resolved') _appendLegendaryAoeResolved(e.data);
+                    else if (e.type === 'lair_action_resolved') _appendLairActionResolved(e.data);
                 } catch (err) {
                     console.warn('[rolllog] hydrate skipped', e.type, err);
                 }
@@ -6953,6 +6954,75 @@
     // Exposed for the harness so a Playwright test can drive the card
     // render without simulating a live WS broadcast.
     window._appendLegendaryAoeResolved = _appendLegendaryAoeResolved;
+
+    // v2.177.0 — lair-action result card. The server broadcasts
+    // ``lair_action_resolved`` when the GM fires a lair action (RAW MM
+    // p.11). v2.170.0 surfaced it as a transient GM toast; this renders a
+    // persistent roll-log card so the WHOLE table sees the count-20 beat —
+    // who saved, who took damage, who got a condition — instead of only
+    // the silent HP ticks. Per-target pills mirror the legendary AoE card:
+    // green ✅ SAVED, red ❌ for a failed save (with damage and/or the
+    // installed condition), neutral ⏳ for a PC whose save was prompted.
+    function _appendLairActionResolved(d) {
+        const ul = document.getElementById('roll-list');
+        if (!ul || !d || typeof d !== 'object') return;
+        const now = new Date();
+        const h = now.getHours(), m = now.getMinutes();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12  = (h % 12) || 12;
+        const hhmm = h12.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ' ' + ampm;
+        const owner  = d.owner_name || 'The lair';
+        const action = d.action_name || 'Lair Action';
+        const saveAb = String(d.save_ability || '').toUpperCase();
+        const saveDc = d.save_dc;
+        const dmgType = d.damage_type || '';
+        const effect = d.effect ? String(d.effect) : '';
+        const saveLine = (saveAb && saveDc != null && saveDc !== '')
+            ? `${escapeHTML(saveAb)} save · DC ${escapeHTML(String(saveDc))}`
+            : '';
+        const results = Array.isArray(d.results) ? d.results : [];
+        const pills = results.map(r => {
+            if (!r || typeof r !== 'object') return '';
+            const nm = escapeHTML(r.name || 'Target');
+            if (r.prompted && r.passed == null) {
+                return `<span class="result-pill chip-buff">⏳ ${nm} · save pending</span>`;
+            }
+            if (r.passed === true) {
+                return `<span class="result-pill chip-hit">✅ ${nm} · saved</span>`;
+            }
+            // Failed save (passed === false) → damage and/or condition.
+            const dmg = Number(r.damage_dealt || 0);
+            let tail = dmg > 0
+                ? ` · −${dmg}${dmgType ? ' ' + escapeHTML(dmgType) : ''}`
+                : '';
+            if (r.condition_installed && effect) {
+                tail += ` · ${escapeHTML(effect)}`;
+            }
+            return `<span class="result-pill chip-miss">❌ ${nm}${tail}</span>`;
+        }).filter(Boolean).join('');
+        const pillRow = pills ? `<div class="result-pills">${pills}</div>` : '';
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <div class="roll-card feature-used-card">
+                <div class="roll-card-header">
+                    <div class="roll-card-avatar">🌋</div>
+                    <span class="roll-card-user">${escapeHTML(owner)}</span>
+                    <span class="spell-cast-slot">Lair Action</span>
+                    <span class="roll-card-time">${hhmm}</span>
+                </div>
+                <div class="roll-card-body" style="padding:6px 10px 8px;">
+                    <div class="feature-used-name-row">
+                        <strong class="feature-used-name">${escapeHTML(action)}</strong>
+                        ${saveLine ? `<span class="feature-used-desc">· ${saveLine}</span>` : ''}
+                    </div>
+                    ${pillRow}
+                </div>
+            </div>`;
+        ul.appendChild(li);
+        _scrollRollLogToBottom();
+        _persistRollEntry('lair_action_resolved', d);
+    }
+    window._appendLairActionResolved = _appendLairActionResolved;
 
     // v2.99.63 — inline OA action buttons in the chat-log card.
     // The reaction_prompt broadcast (popup pipeline) carries

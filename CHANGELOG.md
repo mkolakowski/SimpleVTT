@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.177.0] - 2026-06-12 — "The Cavern's Ledger" — Lair-action roll-log card. When the GM fires a lair action (RAW MM p.11), the server has broadcast `lair_action_resolved` since v2.169.0, but the client only surfaced it as a transient GM toast — the moment vanished and left no trace, while the legendary save-AoE got a persistent roll-log card back in v2.163.0. This commit closes that gap: `lair_action_resolved` now renders a persistent **roll-log card** (`_appendLairActionResolved` in `tabletop.js`) the whole table sees — a 🌋 header naming the lair owner + "Lair Action", the action name + save line, and one pill per target (green ✅ saved / red ❌ with the damage dealt + any installed condition / neutral ⏳ for a PC whose save was prompted). It persists + hydrates like the other WS-only cards, so it survives a page reload. To make the card self-contained on reload (no live battle lookup needed), the server broadcast + response now carry a new `owner_name` field — resolved from the combatant whose `lair_slug` matches the battle's lair, falling back to any combatant carrying `lair_actions`.
+
+**Schema version:** 69
+**Commit summary:** **Back-end + front-end commit. (A) `app/routes/tabletop_routes.py::trigger_lair_action` — resolves the lair owner's display name from the battle combatants and adds `owner_name` to the `lair_action_resolved` broadcast + the JSON response (additive WS-shape change). (B) `app/static/tabletop.js` — new `_appendLairActionResolved(d)` roll-log card (modeled on v2.163.0's `_appendLegendaryAoeResolved`), exposed on `window`, persisted via `_persistRollEntry`, replayed in the roll-log hydration switch. (C) `app/templates/tabletop.html` — the `lair_action_resolved` WS handler now calls `window._appendLairActionResolved(data)` alongside the existing toast + panel update. (D) `tests/harness/test_trigger_lair_action.py` — 1 new HTTP test asserting the broadcast + response carry `owner_name`. (E) `tests/harness_ui/test_lair_action_ui.py` — 1 new Playwright test asserting the card renders with header + save line + per-target pills.**
+**Description:** The card reuses the legendary AoE card's structure (`.roll-card.feature-used-card` + `.result-pill` chips) so the two read consistently in the log. The only server change is the additive `owner_name` field — everything else was already in the broadcast. Resolving the owner server-side (rather than client-side from live battle state) keeps the persisted entry replayable on reload, where the battle state may not be loaded yet when the roll-log hydrates. The transient GM toast stays as the in-the-moment nudge; the card is the durable record for the whole table.
+
+### Added
+- `app/static/tabletop.js` — `_appendLairActionResolved(d)` roll-log card for `lair_action_resolved` (header + save line + per-target pills), persisted + hydrated like the other WS-only cards.
+- `app/routes/tabletop_routes.py` — `owner_name` field on the `lair_action_resolved` broadcast + response (resolved from the lair-owning combatant).
+- `tests/harness/test_trigger_lair_action.py` — `test_lair_action_resolved_carries_owner_name` (broadcast + response carry `owner_name`).
+- `tests/harness_ui/test_lair_action_ui.py` — `test_lair_action_resolved_renders_roll_log_card` (card header + DEX save line + ❌ damage pill + ✅ saved pill).
+
+### Changed
+- `app/templates/tabletop.html` — the `lair_action_resolved` WS handler now also renders the persistent roll-log card (the transient toast + panel update stay).
+- `app/static/tabletop.js` — roll-log hydration replay handles `lair_action_resolved`.
+- `docs/plans/legendary-actions.md` — lair-action roll-log card noted shipped.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the lair-action roll-log card.
+- `docs/test-harness-coverage.md` — `test_trigger_lair_action.py` +1 (owner_name), `test_lair_action_ui.py` +1 (roll-log card); both totals bumped.
+- `app/version.py` — `APP_VERSION` 2.176.0 → 2.177.0 (MINOR: additive WS field + new user-facing card). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.177.0.
+
+### Notes
+- No schema change (still v69). The WS-shape change is additive (`owner_name`) — older clients ignore the new field.
+- The card mirrors the v2.163.0 legendary AoE card structure for visual consistency in the roll log.
+
 ## [2.176.0] - 2026-06-12 — "The Stirring Lair" — Lair-action initiative-20 player visibility. The v2.175.0 `lair_init_20_reached` WS broadcast (RAW MM p.11) already reaches every client in the campaign, but the client handler only surfaced a toast to the GM — players felt nothing as the lair's cadence came around. This commit gives **players** an atmospheric cue: a non-GM client receiving the broadcast now shows a "🌋 The lair stirs…" toast, deliberately stripped of GM-only mechanics (no owner name, no "may take a lair action" phrasing) so the table feels the count-20 beat without leaking the GM's trigger surface. The GM still gets the full mechanical nudge ("🌋 Initiative count 20 — {owner} may take a lair action."). Pure front-end change: the broadcast shape is unchanged (it already carries `{lair_slug, owner_name, round}`), no new endpoint, no schema change — just a player branch in the existing `lair_init_20_reached` handler.
 
 **Schema version:** 69

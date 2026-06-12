@@ -452,3 +452,37 @@ async def test_trigger_lair_action_player_403(alice_client):
         json={"action_id": "magma-erupts", "aoe_target_combatant_ids": []},
     )
     assert resp.status_code == 403
+
+
+async def test_lair_action_resolved_carries_owner_name(
+    gm_client, gm_ws, bandit_template_id,
+):
+    """v2.177.0 — the `lair_action_resolved` broadcast (and response)
+    carries `owner_name`, the lair owner's display name, so the roll-log
+    card is self-contained on reload. Resolved from the combatant whose
+    `lair_slug` matches the battle's lair."""
+    dragon = {
+        "id": "npc_lair_owner_dragon", "char_id": None,
+        "token_template_id": None, "name": "Ancient Red Dragon",
+        "initiative": 20, "hp_current": 546, "hp_max": 546, "buffs": [],
+        "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+        "lair_slug": "adult-red-dragon",
+        "lair_actions": [{"id": "magma-erupts", "name": "Magma Erupts"}],
+    }
+    b1 = "npc_lair_owner_b1"
+    await _seed_battle(gm_client, [
+        dragon,
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="adult-red-dragon")
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={"action_id": "magma-erupts", "aoe_target_combatant_ids": [b1]},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["owner_name"] == "Ancient Red Dragon"
+
+    msg = await gm_ws.wait_for("lair_action_resolved")
+    assert msg["data"]["owner_name"] == "Ancient Red Dragon"

@@ -24314,10 +24314,27 @@ async def trigger_lair_action(
     state["lair_acted_round"] = current_round
     hub.set_battle(campaign_id, state)
 
+    # v2.177.0 — resolve the lair owner's display name for the roll-log
+    # card so the persisted entry is self-contained (survives reload
+    # without a live battle lookup). Prefer the combatant whose lair_slug
+    # matches; fall back to any combatant carrying lair_actions.
+    owner_name = ""
+    _owner_fallback = ""
+    for _c in (state.get("combatants") or []):
+        if not isinstance(_c, dict):
+            continue
+        if str(_c.get("lair_slug") or "").strip().lower() == lair_slug:
+            owner_name = str(_c.get("name") or "").strip()
+            break
+        if not _owner_fallback and _c.get("lair_actions"):
+            _owner_fallback = str(_c.get("name") or "").strip()
+    owner_name = owner_name or _owner_fallback
+
     await hub.broadcast(campaign_id, {
         "type": "lair_action_resolved",
         "data": {
             "lair_slug": lair_slug,
+            "owner_name": owner_name,
             "action_id": action_id,
             "action_name": action_name,
             "save_ability": save_ability,
@@ -24334,6 +24351,7 @@ async def trigger_lair_action(
     return {
         "ok": True,
         "lair_slug": lair_slug,
+        "owner_name": owner_name,
         "action_id": action_id,
         "action_name": action_name,
         "results": results,

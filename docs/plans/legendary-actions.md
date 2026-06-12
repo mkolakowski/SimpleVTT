@@ -478,6 +478,15 @@ combatant.legendary_resistance = {
   beat without leaking the GM's trigger surface; the GM keeps the
   mechanical nudge. Front-end only — broadcast shape unchanged, no
   endpoint / schema change. 2 new Playwright tests.
+- Lair-action roll-log card (✅ **shipped v2.177.0** "The Cavern's
+  Ledger"): the `lair_action_resolved` broadcast (live since v2.169.0)
+  now renders a persistent roll-log card (`_appendLairActionResolved` in
+  `tabletop.js`, modeled on v2.163.0's legendary AoE card) — 🌋 owner
+  header + "Lair Action", action name + save line, one pill per target
+  (✅ saved / ❌ damage + condition / ⏳ PC save pending). Persists +
+  hydrates like the other WS-only cards. The broadcast + response gain an
+  additive `owner_name` field (resolved from the lair-owning combatant)
+  so the card is self-contained on reload. 1 HTTP + 1 Playwright test.
 
 ### Non-goals (v1)
 

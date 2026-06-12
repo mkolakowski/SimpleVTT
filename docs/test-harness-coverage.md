@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2414 in `tests/harness/` + 67 in `tests/harness_ui/` (as of v2.176.0, 2026-06-12).
+**Total tests:** 2415 in `tests/harness/` + 68 in `tests/harness_ui/` (as of v2.177.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -185,6 +185,7 @@ v2.169.0 legendary-actions Phase 3b (see [legendary-actions.md](../plans/legenda
 | `test_trigger_lair_action_unknown_action_409` | Bad `action_id` → 409 `unknown_lair_action`. |
 | `test_trigger_lair_action_missing_action_id_400` | Missing `action_id` → 400. |
 | `test_trigger_lair_action_player_403` | Non-GM caller → 403. |
+| `test_lair_action_resolved_carries_owner_name` | v2.177.0 — the `lair_action_resolved` broadcast + JSON response carry `owner_name` (resolved from the combatant whose `lair_slug` matches the battle's lair) so the roll-log card is self-contained on reload. |
 
 ### `test_lair_init_20.py`
 v2.175.0 legendary-actions (see [legendary-actions.md](../plans/legendary-actions.md)) — server-authoritative initiative-count-20 prompt. RAW MM p.11: lair actions fire on initiative count 20. When a `PUT /battle` lands the turn order in the init-20 zone (active combatant initiative ≤ 20, or every combatant above 20) and the lair is active + hasn't already acted / broadcast this round, the server fires a `lair_init_20_reached` WS broadcast carrying `{lair_slug, owner_name, round}`. Deduped per round via a `lair_init20_broadcast_round` marker parked on the battle state (carried forward across PUTs that omit it). Tests drive `PUT /battle` directly with manual NPC combatants carrying `lair_actions`.
@@ -3375,6 +3376,7 @@ v2.170.0 legendary-actions Phase 3c UI — the GM-facing lair-action panel. Seed
 | `test_init_20_banner_surfaces_when_reached` | v2.174.0 — RAW MM p.11: when the active combatant's initiative ≤ 20 (init count 20 reached), the panel shows the "⚠️ Initiative count 20 — … acts now" banner; when the active combatant's initiative > 20 it shows the "not yet reached" hint instead. |
 | `test_init_20_player_gets_flavor_toast` | v2.176.0 — RAW MM p.11: a player (`alice_page`) receiving a `lair_init_20_reached` broadcast sees a "🌋 The lair stirs…" `.vtt-toast` and NOT the GM-only "may take a lair action" phrasing. |
 | `test_init_20_gm_gets_mechanical_toast` | v2.176.0 — the GM receiving `lair_init_20_reached` still sees the mechanical "may take a lair action" toast naming the owner ("Ancient Red Dragon"). |
+| `test_lair_action_resolved_renders_roll_log_card` | v2.177.0 — a `lair_action_resolved` broadcast renders a persistent `#roll-list .feature-used-card` headed by the owner ("Ancient Red Dragon") + "Lair Action" with the action name, "DEX save · DC 15" line, a ❌ chip-miss pill carrying the damage ("17 fire") for a failed save, and a ✅ chip-hit pill for a passed one. |
 
 ---
 

@@ -359,3 +359,63 @@ def test_init_20_gm_gets_mechanical_toast(gm_page: Page):
     toast = gm_page.locator(".vtt-toast").filter(has_text="may take a lair action")
     expect(toast).to_be_visible(timeout=3000)
     expect(toast).to_contain_text("Ancient Red Dragon")
+
+
+def _dispatch_lair_action_resolved_full(page: Page) -> None:
+    """Dispatch a fully-populated lair_action_resolved (the v2.177.0
+    broadcast shape) carrying owner_name + per-target results so the
+    roll-log card renders its header + save line + pills."""
+    page.evaluate(
+        """(slug) => {
+            document.dispatchEvent(new CustomEvent('vtt:ws-message', {detail: {
+                type: 'lair_action_resolved',
+                data: {
+                    lair_slug: slug,
+                    owner_name: 'Ancient Red Dragon',
+                    action_id: 'magma-erupts',
+                    action_name: 'Magma Erupts',
+                    save_ability: 'DEX',
+                    save_dc: 15,
+                    damage: '6d6',
+                    damage_type: 'fire',
+                    half_on_save: true,
+                    effect: '',
+                    results: [
+                        {combatant_id: 'a', name: 'Bandit One', passed: false,
+                         prompted: false, damage_dealt: 17, condition_installed: false},
+                        {combatant_id: 'b', name: 'Bandit Two', passed: true,
+                         prompted: false, damage_dealt: 0, condition_installed: false},
+                    ],
+                    last_lair_action_id: 'magma-erupts',
+                    lair_acted_round: 1,
+                },
+            }}));
+        }""",
+        _LAIR_SLUG,
+    )
+
+
+def test_lair_action_resolved_renders_roll_log_card(gm_page: Page):
+    """v2.177.0 — a lair_action_resolved broadcast renders a persistent
+    roll-log card (#roll-list) headed by the owner + "Lair Action" with the
+    action name, save line, and one result pill per target (❌ with damage
+    for a failed save, ✅ saved for a passed one)."""
+    _seed_battle(gm_page, in_lair=True, turn_index=1)
+    gm_page.goto(tabletop_url())
+
+    _dispatch_lair_action_resolved_full(gm_page)
+
+    # The roll-log drawer is collapsed by default, so the card is in the
+    # DOM but not "visible" — assert on presence + text content.
+    card = gm_page.locator("#roll-list .feature-used-card", has_text="Magma Erupts")
+    expect(card).to_have_count(1, timeout=3000)
+    expect(card).to_contain_text("Lair Action")
+    expect(card).to_contain_text("Ancient Red Dragon")
+    expect(card).to_contain_text("DEX save · DC 15")
+    # Failed save → red pill carrying the damage + type.
+    failed = card.locator(".result-pill.chip-miss")
+    expect(failed).to_contain_text("Bandit One")
+    expect(failed).to_contain_text("17")
+    expect(failed).to_contain_text("fire")
+    # Passed save → green saved pill.
+    expect(card.locator(".result-pill.chip-hit")).to_contain_text("Bandit Two")

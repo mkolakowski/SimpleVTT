@@ -8515,6 +8515,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }
             const _detail = _bits.length ? ` — ${_bits.join(' · ')}` : '';
             (window.showToast || function (m) { console.log(m); })(`🌋 ${_nm}${_detail}`, 'info');
+            // v2.177.0 — render a persistent roll-log card for the whole
+            // table (who saved / took damage / got a condition), not just
+            // the transient GM toast above.
+            if (typeof window._appendLairActionResolved === 'function') {
+                window._appendLairActionResolved(data);
+            }
             // v2.172.0 — park the no-repeat memory so the panel disables
             // this action's Trigger button until a different one is used
             // (RAW MM p.11: no same lair action two rounds in a row).
