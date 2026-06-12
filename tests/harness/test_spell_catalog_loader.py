@@ -6,7 +6,7 @@ server — pure-Python pytest cases.
 """
 from __future__ import annotations
 
-from .spell_catalog import damage_actions, dice_range, load_all_spells
+from .spell_catalog import damage_actions, dice_range, load_all_spells, save_ability_of
 
 
 def test_load_all_spells_returns_non_empty():
@@ -84,3 +84,22 @@ def test_damage_actions_finds_damage_only():
     assert damage_actions(spell_with_damage)[0]["damage_type"] == "fire"
     assert damage_actions(spell_no_damage) == []
     assert damage_actions({}) == []
+
+
+def test_save_ability_of_resolution():
+    """save_ability_of mirrors the endpoint: top-level first, else the
+    first action that carries one; uppercased + clipped to 3 chars; ''
+    when absent. The SRD stores it lowercase on actions."""
+    # From an action (the SRD shape).
+    assert save_ability_of({"actions": [{"id": "cast", "save_ability": "dex"}]}) == "DEX"
+    # Top-level wins over an action.
+    assert save_ability_of(
+        {"save_ability": "con", "actions": [{"save_ability": "dex"}]}
+    ) == "CON"
+    # First action with a save_ability wins among several.
+    assert save_ability_of(
+        {"actions": [{"id": "a"}, {"save_ability": "wis"}, {"save_ability": "cha"}]}
+    ) == "WIS"
+    # No save anywhere → empty.
+    assert save_ability_of({"actions": [{"id": "cast", "damage": "8d6"}]}) == ""
+    assert save_ability_of({}) == ""

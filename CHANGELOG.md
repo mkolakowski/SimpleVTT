@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.182.2] - 2026-06-12 — "The Saving Throw Ledger" — Spell-validation suite Phase 2B: save assertions. Building on the v2.182.1 Phase 1 smoke floor, this commit adds the first per-mechanic content-drift gate over the save-bearing slice of the catalog. `test_spell_catalog_save.py` patches one scratch caster (Thalindra) with the whole 319-spell catalog + 999 slots/level, seeds one very-high-HP NPC bandit, then casts every save spell (~116) at it and asserts two contracts: (1) the `/cast_spell` response's `auto_save_ability` matches the spell's declared JSON save ability — so a content edit that flips a spell's save from DEX to CON is caught the moment this runs; and (2) `auto_save_dc` matches the engine's spell-save-DC formula (`8 + proficiency + spellcasting mod`, replicating the WIS fallback for the unset-`spellcasting_ability` demo sheet), which must be uniform across all of one caster's spells — a spell wrongly carrying its own DC override breaks it. All ~116 save spells pass with zero skips, in ~7 s. Same single-test-loops scaffolding as Phase 1 to pay the autouse `clean_pcs` long-rest once.
+
+**Schema version:** 69
+**Commit summary:** **Test + docs commit. (A) New `tests/harness/test_spell_catalog_save.py` — `test_every_save_spell_dc_and_ability` (cast every save spell at an NPC, assert ability matches JSON + uniform DC, collect mismatches by slug) + `test_save_catalog_subset_nonempty` guard. (B) `tests/harness/spell_catalog.py` — new `save_ability_of()` helper mirroring the endpoint's save-ability resolution. (C) `tests/harness/test_spell_catalog_loader.py` — `test_save_ability_of_resolution` unit test. (D) `docs/plans/spell-validation-suite.md` — Phase 2B checkbox + status line flipped to landed. (E) `docs/test-harness-coverage.md` — new section + harness total 2439 → 2442.**
+**Description:** A CI-gated drift gate over every save spell's declared mechanics — the cheapest way to keep a content edit from silently changing a save ability or DC. PATCH because it adds no endpoint, schema, or user-facing surface — test + doc only. Reuses the Phase 1 inject/restore scaffolding and the existing `load_all_spells()` loader. No `_SKIP_SLUGS` were needed — every save spell asserts cleanly today.
+
+### Added
+- `tests/harness/test_spell_catalog_save.py` — Phase 2B save catalog: every save spell's ability + DC asserted (2 tests).
+- `tests/harness/spell_catalog.py` — `save_ability_of()` helper (mirrors the endpoint's top-level-then-action resolution).
+- `tests/harness/test_spell_catalog_loader.py` — `test_save_ability_of_resolution` unit test for the new helper.
+
+### Changed
+- `docs/plans/spell-validation-suite.md` — Phase 2B marked ✅ landed (status line + checkbox).
+- `docs/test-harness-coverage.md` — new `test_spell_catalog_save.py` section + loader-test row; harness total 2439 → 2442.
+- `app/version.py` — `APP_VERSION` 2.182.1 → 2.182.2 (PATCH: test + doc, no code change). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.182.2.
+
 ## [2.182.1] - 2026-06-12 — "The Whole Spellbook" — Spell-validation suite Phase 1: smoke catalog. The suite at `docs/plans/spell-validation-suite.md` already had a Phase 2A damage slice (`test_spell_catalog_damage.py`, one Fire Bolt row) but no floor coverage — 319 SRD spells shipped, only a couple dozen had any test, and a content edit to one of the other ~290 could roll the wrong dice, drop a damage field, or 500 the cast without anything catching it before production. This commit lands Phase 1: a single smoke test that patches one scratch caster (Thalindra) with the WHOLE 319-spell catalog + 999 slots at every level in one `/sheet-fields` PATCH, then casts every spell by index and asserts the floor contract — HTTP 200 (no 500/404/409), and a `spell_cast` broadcast per cast. Every failure is collected so a regression names the offending slug. All 319 spells pass with zero skips, in ~11 s. One test, not 319 parameterized cases, because the autouse `clean_pcs` fixture long-rests all 15 demo PCs per test — paying that 319× would blow the runtime budget; the loop pays it once.
 
 **Schema version:** 69

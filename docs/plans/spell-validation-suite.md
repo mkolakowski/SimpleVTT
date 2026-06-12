@@ -1,8 +1,8 @@
 # Spell-validation test suite — plan
 
-**Status:** 🟠 in progress (v2.182.1, 2026-06-12) — Phase 1 smoke catalog landed: `test_spell_catalog_smoke.py` patches one scratch caster with the whole 319-spell catalog + abundant slots and casts every spell by index, asserting the floor contract (no 500, `spell_cast` broadcast emitted). All 319 pass with zero skips. Earlier (v2.49.108): Phase 2A v1 — `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized over `(caster, spell, slot)` rows, covering single-target attack-roll spells (Fire Bolt). Filed: 2A save spells, multi-beam (Scorching Ray / Eldritch Blast), auto-hit (Magic Missile) — each needs a different response-shape adapter.
+**Status:** 🟠 in progress (v2.182.2, 2026-06-12) — Phase 2B save assertions landed: `test_spell_catalog_save.py` casts every save-bearing spell (~116) at an NPC and asserts the response's save ability matches the JSON + the DC matches the caster's spell-save-DC formula (uniform across one caster's spells); zero skips. Phase 1 smoke catalog landed (v2.182.1): `test_spell_catalog_smoke.py` patches one scratch caster with the whole 319-spell catalog + abundant slots and casts every spell by index, asserting the floor contract (no 500, `spell_cast` broadcast emitted); all 319 pass with zero skips. Earlier (v2.49.108): Phase 2A v1 — `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized over `(caster, spell, slot)` rows, covering single-target attack-roll spells (Fire Bolt). Filed: 2A save spells, multi-beam (Scorching Ray / Eldritch Blast), auto-hit (Magic Missile) — each needs a different response-shape adapter.
 **Authors:** rolling
-**Last updated:** 2026-06-12
+**Last updated:** 2026-06-12 (Phase 2B)
 
 A plan to expand `tests/harness/` so every spell in
 `app/data/local/dnd5e/spells/` (319 SRD entries as of v2.49.102, plus
@@ -439,7 +439,7 @@ A summary of the non-test helpers this plan asks for:
 - [ ] Phase 0 — Inventory + sister doc
 - [✅] Phase 1 — Smoke catalog (`test_spell_catalog_smoke.py`) — v2.182.1: all 319 spells cast without 500, zero skips.
 - [🟠] Phase 2A — Damage assertions (v1 v2.49.108: Fire Bolt attack-roll; filed save / multi-beam / auto-hit follow-ups)
-- [ ] Phase 2B — Save assertions
+- [✅] Phase 2B — Save assertions (`test_spell_catalog_save.py`) — v2.182.2: all ~116 save spells assert ability + uniform DC, zero skips.
 - [ ] Phase 2C — Attack assertions
 - [ ] Phase 2D — Heal assertions
 - [ ] Phase 2E — Concentration assertions

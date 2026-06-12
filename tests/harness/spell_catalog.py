@@ -57,6 +57,21 @@ def damage_actions(spell: dict) -> list[dict]:
     return [a for a in (spell.get("actions") or []) if (a.get("damage") or "").strip()]
 
 
+def save_ability_of(spell: dict) -> str:
+    """Return the spell's declared save ability as a 3-letter uppercase
+    code (``"DEX"`` / ``"WIS"`` / …), or ``""`` if the spell has no
+    save. Mirrors the resolution order ``/cast_spell`` uses (line
+    ~19463 of ``tabletop_routes.py``): a top-level ``save_ability``
+    first, else the first action that carries one. The SRD JSON stores
+    it lowercase on actions; we uppercase + clip to match the endpoint.
+    """
+    raw = spell.get("save_ability") or next(
+        (a.get("save_ability") for a in (spell.get("actions") or []) if a.get("save_ability")),
+        "",
+    )
+    return (raw or "").strip().upper()[:3]
+
+
 def dice_range(expression: str) -> tuple[int, int]:
     """Parse a dice expression and return ``(min, max)`` total bounds.
 
