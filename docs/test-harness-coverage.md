@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2461 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.0, 2026-06-12).
+**Total tests:** 2463 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.1, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3328,6 +3328,14 @@ Phase 2F buff-install payload assertions. Patches the scratch caster (Thalindra)
 |------|-----------------|
 | `test_every_buff_spell_installs_expected_payload` | Every buff-map spell installs on the target with the expected key/name/duration_rounds/concentration + non-empty effects; all 9 asserted; drift collected by slug. |
 | `test_buff_install_catalog_subset_nonempty` | Guard: ≥ 9 buff-install spells listed and every slug resolves to a real catalog spell. |
+
+### `test_spell_catalog_autohit.py`
+Phase 2A backfill — auto-hit damage (Magic Missile), the last of the four damage shapes. Flips `auto_apply_damage` on via the TEST_MODE `/api/test/campaign/{id}/flags` endpoint, then fires Magic Missile's 3 darts at an NPC (3 entries in `target_combatant_ids`) and asserts each `auto_hit_targets` entry rolled inside the `1d4+1` force band, carried force damage type, and applied non-zero damage. The server contract is "one in-band roll per target id sent" — dart count is the client's responsibility. Range-check only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_magic_missile_autohit_rolls_each_dart` | Magic Missile fires one in-band 1d4+1 force dart per target id, each applying non-zero damage; 3 darts asserted. |
+| `test_autohit_catalog_spell_present` | Guard: Magic Missile still carries a no-save, no-attack-roll force-damage action. |
 
 ### `test_spell_catalog_save_damage.py`
 Phase 2A backfill — save-for-half damage. Flips `campaign.auto_apply_damage` on (via the TEST_MODE `/api/test/campaign/{id}/flags` endpoint), patches the scratch caster (Thalindra) with the whole catalog + abundant slots, seeds one very-high-HP NPC, then casts 8 save-for-half spells: Fireball (8d6), Lightning Bolt (8d6), Burning Hands (3d6), Thunderwave (2d8), Shatter (3d8), Cone of Cold (8d8), plus the Sacred Flame (2d8 at L5) and Poison Spray (2d12 at L5) cantrips that exercise the save-block tier scaling. For each it range-checks `auto_save_damage_rolled` (the full pre-halving roll) against the dice band and asserts the damage type. Restores the flag in a `finally`. Range-check only.
