@@ -560,6 +560,47 @@ def _refresh_legendary_action_pool(combatant: dict) -> bool:
     return True
 
 
+def _resolve_legendary_resistance_max(
+    db: Session, campaign_id: int, combatant: dict,
+) -> int:
+    """v2.165.0 Phase 2a — the per-day legendary-resistance count for a
+    combatant, resolved from its monster template's projected stat block
+    (``legendary_resistance_per_day``, derived in ``_monster_dict_to_sheet``
+    from the "Legendary Resistance (N/Day)" special ability). Returns 0
+    when the combatant isn't a templated monster or has no legendary
+    resistance.
+    """
+    tmpl_id = combatant.get("token_template_id")
+    if not tmpl_id:
+        return 0
+    try:
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(tmpl_id),
+        ).first()
+    except (TypeError, ValueError):
+        tmpl = None
+    if not tmpl:
+        return 0
+    sheet = _monster_template_to_sheet(tmpl, campaign_id)
+    try:
+        return max(0, int(sheet.get("legendary_resistance_per_day") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _ensure_legendary_resistance_pool(combatant: dict, pool_max: int) -> dict:
+    """Initialize a combatant's legendary-resistance pool to
+    ``current = max = pool_max`` if missing. Returns the pool dict
+    (mutated onto ``combatant``). Mirrors ``_ensure_legendary_action_pool``.
+    """
+    pool = combatant.get("legendary_resistance")
+    if not isinstance(pool, dict):
+        m = max(0, int(pool_max or 0))
+        pool = {"max": m, "current": m}
+        combatant["legendary_resistance"] = pool
+    return pool
+
+
 # v2.161.0 Phase 1c (server) — resolve a spent legendary action's
 # structured definition from the spender's projected stat block so the
 # server can dispatch its damage (save-AoE) rather than trusting the
@@ -23629,6 +23670,116 @@ async def use_legendary_action(
         "aoe_results": aoe_results,
         "attack_result": attack_result,
         **payload,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/spend_legendary_resistance")
+async def spend_legendary_resistance(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.165.0 — Phase 2a of `docs/plans/legendary-actions.md`. Spend
+    one legendary resistance from a legendary creature's per-day pool to
+    turn a failed saving throw into a success (RAW MM p.11: "If the
+    creature fails a saving throw, it can choose to succeed instead").
+
+    Body:
+      ``combatant_id`` — the legendary creature's combatant id.
+
+    The pool's ``max`` seeds from the creature's stat block
+    (``legendary_resistance_per_day``, derived in
+    ``_monster_dict_to_sheet`` from the "Legendary Resistance (N/Day)"
+    special ability). Decrements the pool and broadcasts
+    ``legendary_resistance_spent`` so every client refreshes the
+    init-tracker badge.
+
+    Auth: GM only (legendary creatures are GM-controlled).
+
+    Errors:
+      400 missing ``combatant_id``.
+      403 non-member / non-GM.
+      404 combatant not in active battle.
+      409 ``no_legendary_resistance`` — the creature's stat block has
+          no Legendary Resistance special ability (max 0).
+      409 ``insufficient_legendary_resistance`` — pool already at 0.
+    """
+    body = await request.json()
+    combatant_id = str(body.get("combatant_id") or "").strip()
+    if not combatant_id:
+        raise HTTPException(400, "combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(
+            403, "GM only — legendary resistance is GM-authorised",
+        )
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    spender = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            spender = c
+            break
+    if spender is None:
+        raise HTTPException(404, "Combatant not found in active battle")
+
+    # Resolve the per-day max. Prefer an already-seeded pool's max so a
+    # prior spend's state isn't clobbered; otherwise read the stat block.
+    existing = spender.get("legendary_resistance")
+    if isinstance(existing, dict):
+        try:
+            pool_max = int(existing.get("max") or 0)
+        except (TypeError, ValueError):
+            pool_max = 0
+    else:
+        pool_max = _resolve_legendary_resistance_max(db, campaign_id, spender)
+    if pool_max <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "no_legendary_resistance",
+            "combatant_id": combatant_id,
+        })
+
+    pool = _ensure_legendary_resistance_pool(spender, pool_max)
+    try:
+        current = int(pool.get("current") or 0)
+    except (TypeError, ValueError):
+        current = 0
+    if current <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "insufficient_legendary_resistance",
+            "combatant_id": combatant_id,
+            "current": 0,
+            "max": pool_max,
+        })
+
+    pool["current"] = current - 1
+    hub.set_battle(campaign_id, state)
+    remaining = int(pool["current"])
+    combatant_name = str(spender.get("name") or "Legendary creature")
+
+    await hub.broadcast(campaign_id, {
+        "type": "legendary_resistance_spent",
+        "data": {
+            "combatant_id": combatant_id,
+            "combatant_name": combatant_name,
+            "max": pool_max,
+            "current": remaining,
+            "reason": "spent",
+        },
+    })
+
+    return {
+        "ok": True,
+        "combatant_id": combatant_id,
+        "combatant_name": combatant_name,
+        "max": pool_max,
+        "current": remaining,
     }
 
 
@@ -88212,6 +88363,23 @@ def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:
     # them up. Caller handles attack-button projection.
     if m.get("actions"):
         out["actions"] = m.get("actions")
+    # v2.165.0 Phase 2a — derive the per-day legendary-resistance count
+    # from the "Legendary Resistance (N/Day)" special ability (RAW MM
+    # p.11) so the Phase 2 resistance pool can seed from the stat block
+    # without editing every monster JSON. One code path covers all 15
+    # SRD legendary monsters + any homebrew carrying the special ability.
+    lr_per_day = 0
+    for a in (m.get("actions") or []):
+        if not isinstance(a, dict):
+            continue
+        nm = str(a.get("name") or "")
+        if "legendary resistance" in nm.lower():
+            mm = _re.search(r"\((\d+)\s*/\s*day\)", nm, _re.I)
+            if mm:
+                lr_per_day = int(mm.group(1))
+            break
+    if lr_per_day:
+        out["legendary_resistance_per_day"] = lr_per_day
     return out
 
 

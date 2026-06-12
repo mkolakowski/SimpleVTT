@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.165.0] - 2026-06-11 — "The Stubborn Will" — Legendary-actions Phase 2a: the legendary-resistance pool. A legendary creature can spend one of its per-day legendary resistances to turn a failed saving throw into a success (RAW MM p.11). This commit lands the spendable surface: `_monster_dict_to_sheet` now derives `legendary_resistance_per_day` by parsing the "Legendary Resistance (N/Day)" special ability off the stat block (the Adult Red Dragon → 3), and a new `POST /spend_legendary_resistance` endpoint seeds a per-combatant pool from that count, decrements it, and broadcasts `legendary_resistance_spent` so the init-tracker badge refreshes everywhere. The failed-save auto-prompt that surfaces the choice to the GM is the Phase 2b follow-up; this commit is the engine + spend endpoint.
+
+**Schema version:** 69
+**Commit summary:** **Back-end commit. (A) `app/routes/tabletop_routes.py` — `_monster_dict_to_sheet` derives `legendary_resistance_per_day` (regex `\(N/Day\)` off the "Legendary Resistance" special ability; one code path covers all 15 SRD legendary monsters + homebrew). New helpers `_resolve_legendary_resistance_max` (reads the projected stat block) + `_ensure_legendary_resistance_pool` (seeds `{max, current}` onto the combatant, mirrors `_ensure_legendary_action_pool`). New endpoint `POST /api/campaign/{cid}/spend_legendary_resistance` — GM-only; resolves the per-day max from the spender's template, seeds + decrements the pool, broadcasts `legendary_resistance_spent`. 409s on `no_legendary_resistance` (max 0) + `insufficient_legendary_resistance` (pool 0). (B) `tests/harness/test_spend_legendary_resistance.py` — 6 new tests (suite 2359 → 2365): happy-path 3 → 2 + broadcast; drain to 0 then 409; non-legendary bandit 409; 404 unknown; 400 missing id; 403 non-GM.**
+**Description:** The first slice of Phase 2 in `docs/plans/legendary-actions.md`. The derivation is at projection time rather than baked into each monster JSON, so any creature with the standard "Legendary Resistance (N/Day)" SRD special ability picks it up automatically. The pool seeds lazily on first spend (like the Phase 1b legendary-action pool) rather than at battle-add, so non-legendary combatants never carry the field. Damage/save interception is deliberately deferred: this endpoint is the manual GM "spend a resistance" button; Phase 2b wires the auto-prompt into the save-resolver hot path so a failed save on a creature with `current > 0` surfaces "Spend Legendary Resistance?" to the GM.
+
+### Added
+- `app/routes/tabletop_routes.py::spend_legendary_resistance` — `POST /api/campaign/{cid}/spend_legendary_resistance`; GM-only spend of a per-day legendary resistance; broadcasts `legendary_resistance_spent`.
+- `app/routes/tabletop_routes.py::_resolve_legendary_resistance_max` + `::_ensure_legendary_resistance_pool` — stat-block max resolver + combatant pool seeder.
+- `tests/harness/test_spend_legendary_resistance.py` — 6 tests (happy + drain-to-409 + non-legendary 409 + 404 + 400 + 403).
+
+### Changed
+- `app/routes/tabletop_routes.py::_monster_dict_to_sheet` — derives `legendary_resistance_per_day` from the "Legendary Resistance (N/Day)" special ability.
+- `docs/plans/legendary-actions.md` — Phase 2a marked shipped; Phase 2b (failed-save auto-prompt) narrowed.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the Phase 2a resistance pool.
+- `docs/test-harness-coverage.md` — `tests/harness/` total 2359 → 2365; new `test_spend_legendary_resistance.py` section.
+- `app/version.py` — `APP_VERSION` 2.164.0 → 2.165.0 (MINOR: new backward-compatible endpoint). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.165.0.
+
+### Notes
+- Total harness count: **2365** in `tests/harness/` (was 2359, +6); `tests/harness_ui/` **57** (unchanged).
+- No schema change (still v69). The combatant `legendary_resistance` pool lives in the realtime hub's battle state (same as the Phase 1b `legendary_actions` pool), not the DB.
+- Phase 2b will add the auto-prompt on failed-save broadcasts + the long-rest pool refill.
+
 ## [2.164.0] - 2026-06-11 — "The Lashing Tail" — Legendary-actions Phase 1c (server): the reference-attack dispatch, closing Phase 1c. The Adult Red Dragon's "Tail Attack" legendary action carries no inline attack data — RAW it just reads "the dragon makes a tail attack", pointing at the base **Tail** action (+14 / 2d8+8 bludgeoning). Until now spending it only decremented the pool; the GM rolled the swing by hand. This commit teaches `/use_legendary_action` to recognise a reference-attack (no save, no inline damage, name "<X> Attack" matching a base attack on the spender's stat block), resolve that base action, roll `2d20kh1 + attack_bonus` vs the target's AC, and on a hit roll (crit-doubled) damage and apply it via the shared `_apply_damage_to_combatant` helper — the same to-hit pattern the Unwavering Punish endpoint uses. A `feature_used(source=legendary-action-attack)` broadcast renders the swing as a chat card. With save-AoE (v2.161.0) and now reference-attack dispatch both landed, every Phase 1c slice ships.
 
 **Schema version:** 69

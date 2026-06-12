@@ -322,12 +322,18 @@ combatant.legendary_resistance = {
 
 ### Phase 2 — Legendary resistance pool (S, ~2 commits)
 
-- Phase 2a: data backfill — add `legendary_resistance_per_day` int
-  at the monster top level (parse from the special-ability name).
-- Phase 2b: pool field on combatant + `/spend_legendary_resistance`
-  endpoint + GM prompt on failed-save broadcasts when pool > 0.
-  Harness: lich fails CON save → prompt fires; spend → save flips
-  to success; pool 3 → 2; long rest refills.
+- Phase 2a ✅ v2.165.0: derivation + spend endpoint. `_monster_dict_to_sheet`
+  derives `legendary_resistance_per_day` from the "Legendary Resistance
+  (N/Day)" special ability (Adult Red Dragon → 3); `_resolve_legendary_resistance_max`
+  + `_ensure_legendary_resistance_pool` seed a per-combatant `{max, current}`
+  pool; `POST /spend_legendary_resistance` (GM-only) decrements it and
+  broadcasts `legendary_resistance_spent`. 6 harness tests in
+  `test_spend_legendary_resistance.py` (happy + drain-to-409 + non-legendary
+  409 + 404 + 400 + 403).
+- Phase 2b (pending): GM auto-prompt on failed-save broadcasts when the
+  target's pool > 0 (intercept in the save-resolver hot path) + long-rest
+  pool refill. Harness: creature fails a save → prompt fires; spend → save
+  flips to success; long rest refills the pool.
 
 ### Phase 3 — Lair actions (M, ~3 commits)
 

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2359 in `tests/harness/` + 57 in `tests/harness_ui/` (as of v2.164.0, 2026-06-11).
+**Total tests:** 2365 in `tests/harness/` + 57 in `tests/harness_ui/` (as of v2.165.0, 2026-06-11).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -115,6 +115,18 @@ v2.159.34 legendary-actions Phase 1b + v2.161.0 Phase 1c (see [legendary-actions
 | `test_wing_attack_without_targets_skips_dispatch` | Phase 1c. Wing Attack with no `aoe_target_combatant_ids` → pool still spent, `aoe_results == []` (dispatch is opt-in via targets). |
 | `test_tail_attack_reference_resolves_attack_and_damage` | Phase 1c. Adult Red Dragon spends Tail Attack (cost 1) with a single `target_combatant_id`; server resolves the base "Tail" action (+14 / 2d8+8), rolls 2d20kh1+14 vs the bandit's AC, applies (crit-doubled) damage on a hit; `attack_result.base_action_name == "Tail"`, hit-consistency (damage>0 iff hit), `feature_used(source=legendary-action-attack)` broadcast. |
 | `test_tail_attack_without_target_skips_attack_dispatch` | Phase 1c. Tail Attack with no `target_combatant_id` → pool still spent, `attack_result is None` (reference-attack dispatch is opt-in via target). |
+
+### `test_spend_legendary_resistance.py`
+v2.165.0 legendary-actions Phase 2a (see [legendary-actions.md](../plans/legendary-actions.md)) — the per-day legendary-resistance pool. `POST /api/campaign/{cid}/spend_legendary_resistance` lets a legendary creature spend one resistance to turn a failed save into a success (RAW MM p.11). The pool's `max` seeds from the stat block — `_monster_dict_to_sheet` derives `legendary_resistance_per_day` from the "Legendary Resistance (N/Day)" special ability (Adult Red Dragon → 3). Decrements + broadcasts `legendary_resistance_spent`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_spend_legendary_resistance_decrements_pool` | Adult Red Dragon first spend → 200; pool 3 → 2; `legendary_resistance_spent(reason=spent)` broadcast carries max=3, current=2, combatant_name. |
+| `test_spend_legendary_resistance_drains_to_zero_then_409` | 3 spends drain 3 → 2 → 1 → 0; 4th attempt → 409 `insufficient_legendary_resistance` with current=0, max=3. |
+| `test_spend_legendary_resistance_non_legendary_409` | A Bandit (no Legendary Resistance special ability, max 0) → 409 `no_legendary_resistance`. |
+| `test_spend_legendary_resistance_unknown_combatant_404` | combatant id not in the active battle → 404. |
+| `test_spend_legendary_resistance_missing_combatant_id_400` | Missing `combatant_id` → 400. |
+| `test_spend_legendary_resistance_player_caller_403` | Non-GM caller → 403 (legendary resistance is GM-authorised). |
 
 ### `test_monster_legendary_action_cost.py`
 v2.159.33 legendary-actions Phase 1a (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python data-invariant guard: every SRD legendary action whose name carries a `(Costs N Actions)` suffix has its `cost` integer set to N (not the default 1). Walks the shipped `app/data/local/dnd5e/monsters/*.json` content layer directly. Phase 1a backfilled 39 cost integers across 30 monsters from the suffix; this test guards the invariant against future SRD-rebuild drift so the Phase 1b `/use_legendary_action` budget gate doesn't silently re-break.
