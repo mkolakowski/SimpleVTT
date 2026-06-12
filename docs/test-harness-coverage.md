@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2515 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.20, 2026-06-12).
+**Total tests:** 2518 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.21, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -580,6 +580,15 @@ Wish (L9 Conjuration) — the spell-validation suite's L9 narration-only capston
 | `test_wish_present_in_catalog` | Catalog shape: `level_int == 9`, school Conjuration, "self" range, "instantaneous" duration, `concentration: false`, Sorcerer + Wizard lists. SRD-build quirk pin: the cast action carries `damage == "1d10"` necrotic but no `attack_roll` / `save_ability` (narration-grade stress backlash, not an auto-resolved hit). |
 | `test_cast_wish_spends_l9_slot_and_broadcasts` | Wish rides `/cast_spell` → 200, `ok: true`, `slot.level == 9`, `slot.used >= 1`; `spell_cast` broadcast carries `spell_name == "Wish"`, `spell_level == 9`, `spell_casting_time == "1 action"`. Contract: doesn't 500, spends the slot, names the spell. |
 | `test_cast_wish_is_non_concentration` | Instantaneous + non-concentration: the cast does NOT flag concentration on the response and installs no `concentration-wish` anchor on the caster. |
+
+### `test_cast_conjure_family.py`
+The Conjure X family (narration-only summons) — the spell-validation suite's reference case for summon spells with NO engine wiring, in deliberate contrast to Conjure Animals (`/cast_conjure_animals`). The five higher siblings (Conjure Celestial L7, Elemental L5, Fey L6, Minor Elementals L4, Woodland Beings L4) have no bespoke endpoint and no `_SPELL_BUFF_MAP` entry: they ride the generic `/cast_spell` path (spends a slot + broadcasts `spell_cast`), and the GM stands up the conjured stat block by hand. Cast fixture patches Conjure Minor Elementals + a druid L4 slot onto Mira Greenleaf (Druid), restored in finally. v2.183.21 — Phase 4 deep-dive (eleventh).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_conjure_family_present_in_catalog` | Catalog shape across all five siblings: each is Conjuration at the right `level_int` (7/5/6/4/4), carries the right spell-list membership, and has a single cast action with no `save_ability` / `attack_roll` / `damage` (auto-resolves nothing). Catalog-vs-runtime concentration divergence pin: each `concentration` flag is `false` yet the duration starts with "Up to" (the Open5e concentration convention). |
+| `test_cast_conjure_minor_elementals_narration_only` | Conjure Minor Elementals rides `/cast_spell` → 200, `ok: true`, `slot.level == 4`, `slot.used >= 1`; `spell_cast` broadcast carries `spell_name == "Conjure Minor Elementals"`, `spell_level == 4`, `spell_casting_time == "1 minute"`. Narration contract: the response carries NO `combatants` / `token_ids` summon payload (contrast `/cast_conjure_animals`). |
+| `test_cast_conjure_installs_no_buff_or_anchor` | No `_SPELL_BUFF_MAP` entry and no AoE template: the generic cast installs neither a spell buff nor a `concentration-conjure-*` anchor on the caster (diff of buff keys before/after has no `conjure`/`concentration` keys), and the response is not flagged concentration. |
 
 ### `test_cast_spell_target.py`
 Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
