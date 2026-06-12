@@ -409,6 +409,18 @@ combatant.legendary_resistance = {
   the panel + toast the outcome. 4 Playwright tests in
   `tests/harness_ui/test_lair_action_ui.py`. **Closes Phase 3 (and the
   lair-action arc).**
+- Chromatic backfill (✅ **shipped v2.171.0** "The Four Colored Lairs"):
+  the remaining four chromatic dragons added to `LAIR_ACTIONS_BY_SLUG`
+  with no engine change — Black (swamp, MM p.88), Blue (desert, p.91),
+  Green (forest, p.94), White (arctic, p.101), each 3 RAW lair actions
+  keyed to adult + ancient. Three new condition templates (`blinded` /
+  `restrained` / `charmed`) join `prone` / `poisoned` in
+  `_LAIR_ACTION_CONDITION_BUFFS`. RAW actions that don't map onto the
+  save-or-damage / condition engine (magical darkness, walls of
+  brush/ice, white's ranged ice shards) carry empty save/damage as
+  descriptive entries the GM resolves manually. 6 new unit tests +
+  1 new trigger harness test. **Filed follow-up:** metallic dragons +
+  Lich + Kraken (same drop-in path).
 
 ### Non-goals (v1)
 

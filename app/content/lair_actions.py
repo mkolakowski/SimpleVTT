@@ -30,13 +30,21 @@ on the sheet rather than `category: "lair_action"` in the unified
 `actions` list — the initiative-20 scheduler reads this array directly
 and no other read site wants lair actions surfaced.
 
-Red dragons (every age) share the same volcanic lair (RAW: lair actions
-are tied to the LAIR, not the creature's age), so the adult and ancient
-red dragon map to the identical action set. Other chromatic/metallic
-lairs (white = ice, black = swamp, etc.) + the Lich / Kraken are filed
-as a follow-up backfill — this v1 ships the demo's Adult Red Dragon
-fixture (and its ancient counterpart) fully and correctly rather than
-hand-authoring 15 monsters' worth of data at risk of RAW errors.
+Dragons of every age share the same lair-action set per color (RAW: lair
+actions are tied to the LAIR, not the creature's age), so the adult and
+ancient slugs of each color map to the identical list. RAW MM only gives
+lair actions to dragons that occupy a lair (adult and older) — young
+dragons and wyrmlings have none, so only the `adult-*` / `ancient-*`
+slugs are keyed.
+
+Coverage: all five CHROMATIC dragons (black MM p.88, blue p.91, green
+p.94, red p.98, white p.101). Metallic dragons + the Lich / Kraken are a
+filed follow-up backfill (they drop into `LAIR_ACTIONS_BY_SLUG` with no
+code change). Some RAW lair actions don't map onto the save-or-damage /
+condition engine (magical darkness, walls of ice/brush, the white
+dragon's ranged ice-shard attack) — those are carried as descriptive
+entries (empty `save_ability` + `damage`) so the GM sees the option text
+and resolves the geometry manually; the engine simply broadcasts them.
 """
 from __future__ import annotations
 
@@ -94,11 +102,220 @@ _RED_DRAGON_VOLCANIC_LAIR: list[dict] = [
     },
 ]
 
+# RAW MM p.88 — Black Dragon, "Lair Actions" (swamp lair).
+_BLACK_DRAGON_SWAMP_LAIR: list[dict] = [
+    {
+        "id": "grasping-tide",
+        "name": "Grasping Tide",
+        "desc": ("A pool of water the dragon can see within 120 ft. surges. "
+                 "Each creature within 20 ft. of that pool must succeed on a "
+                 "DC 15 Strength save or be pulled up to 20 ft. into the "
+                 "water and knocked prone."),
+        "save_ability": "STR",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "prone",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "swarming-insects",
+        "name": "Swarming Insects",
+        "desc": ("Swarms of insects fill a 20-ft-radius sphere centered on a "
+                 "point the dragon can see within 120 ft. Each creature in "
+                 "the area makes a DC 15 Constitution save, taking 10 (3d6) "
+                 "piercing damage on a fail, or half on a success. The swarm "
+                 "lingers as difficult terrain until the dragon acts again."),
+        "save_ability": "CON",
+        "save_dc": 15,
+        "damage": "3d6",
+        "damage_type": "piercing",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "magical-darkness",
+        "name": "Magical Darkness",
+        "desc": ("Magical darkness spreads from a point the dragon can see "
+                 "within 60 ft., filling a 15-ft-radius sphere until the "
+                 "dragon uses this action again or dies. Darkvision can't see "
+                 "through it; nonmagical light can't illuminate it. (No save "
+                 "— GM places the area.)"),
+        "save_ability": "",
+        "save_dc": 0,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 15},
+    },
+]
+
+# RAW MM p.91 — Blue Dragon, "Lair Actions" (desert lair).
+_BLUE_DRAGON_DESERT_LAIR: list[dict] = [
+    {
+        "id": "ceiling-collapse",
+        "name": "Ceiling Collapse",
+        "desc": ("Part of the ceiling collapses above a creature the dragon "
+                 "can see within 120 ft. The target makes a DC 15 Dexterity "
+                 "save, taking 10 (3d6) bludgeoning damage on a fail (and is "
+                 "knocked prone and buried), or half on a success."),
+        "save_ability": "DEX",
+        "save_dc": 15,
+        "damage": "3d6",
+        "damage_type": "bludgeoning",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "point", "size_ft": 0},
+    },
+    {
+        "id": "sand-cloud",
+        "name": "Sand Cloud",
+        "desc": ("A cloud of sand swirls in a 20-ft-radius sphere centered on "
+                 "a point the dragon can see within 120 ft. Each creature "
+                 "there must succeed on a DC 15 Constitution save or be "
+                 "blinded for 1 minute (repeat save at end of each turn)."),
+        "save_ability": "CON",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "blinded",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "lightning-arc",
+        "name": "Lightning Arc",
+        "desc": ("Lightning arcs in a 5-ft-wide line between two solid "
+                 "surfaces the dragon can see within 120 ft. Each creature in "
+                 "that line makes a DC 15 Dexterity save or takes 10 (3d6) "
+                 "lightning damage (no half on a success)."),
+        "save_ability": "DEX",
+        "save_dc": 15,
+        "damage": "3d6",
+        "damage_type": "lightning",
+        "half_on_save": False,
+        "effect": "",
+        "area": {"shape": "line", "size_ft": 5},
+    },
+]
+
+# RAW MM p.94 — Green Dragon, "Lair Actions" (forest lair).
+_GREEN_DRAGON_FOREST_LAIR: list[dict] = [
+    {
+        "id": "grasping-roots",
+        "name": "Grasping Roots and Vines",
+        "desc": ("Grasping roots and vines erupt in a 20-ft radius around a "
+                 "point the dragon can see within 120 ft.; that area becomes "
+                 "difficult terrain. Each creature there must succeed on a DC "
+                 "15 Strength save or be restrained."),
+        "save_ability": "STR",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "restrained",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "wall-of-tangled-brush",
+        "name": "Wall of Tangled Brush",
+        "desc": ("A wall of tangled brush up to 60 ft. long, 10 ft. high, and "
+                 "5 ft. thick springs up. A creature in the wall's space when "
+                 "it appears makes a DC 15 Dexterity save, taking 18 (4d8) "
+                 "piercing damage on a fail (and pushed out), or half on a "
+                 "success."),
+        "save_ability": "DEX",
+        "save_dc": 15,
+        "damage": "4d8",
+        "damage_type": "piercing",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "wall", "size_ft": 60},
+    },
+    {
+        "id": "magical-fog",
+        "name": "Magical Fog",
+        "desc": ("The dragon wreathes one creature it can see within 120 ft. "
+                 "in beguiling fog. The target must succeed on a DC 15 Wisdom "
+                 "save or be charmed by the dragon until initiative count 20 "
+                 "on the next round."),
+        "save_ability": "WIS",
+        "save_dc": 15,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "charmed",
+        "area": {"shape": "single", "size_ft": 0},
+    },
+]
+
+# RAW MM p.101 — White Dragon, "Lair Actions" (arctic lair).
+_WHITE_DRAGON_ARCTIC_LAIR: list[dict] = [
+    {
+        "id": "freezing-fog",
+        "name": "Freezing Fog",
+        "desc": ("Freezing fog fills a 20-ft-radius sphere centered on a "
+                 "point the dragon can see within 120 ft. Each creature there "
+                 "makes a DC 10 Constitution save, taking 10 (3d6) cold "
+                 "damage on a fail, or half on a success. The fog is heavily "
+                 "obscured and lingers until the dragon acts again."),
+        "save_ability": "CON",
+        "save_dc": 10,
+        "damage": "3d6",
+        "damage_type": "cold",
+        "half_on_save": True,
+        "effect": "",
+        "area": {"shape": "sphere", "size_ft": 20},
+    },
+    {
+        "id": "jagged-ice",
+        "name": "Jagged Ice Shards",
+        "desc": ("The dragon flings jagged ice at up to three creatures it "
+                 "can see within 120 ft. Make a ranged attack (+7 to hit) "
+                 "against each; a hit deals 10 (3d6) piercing damage. (GM "
+                 "rolls the attacks manually — no save.)"),
+        "save_ability": "",
+        "save_dc": 0,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "",
+        "area": {"shape": "multi", "size_ft": 0},
+    },
+    {
+        "id": "ice-wall",
+        "name": "Opaque Wall of Ice",
+        "desc": ("A wall of ice up to 30 ft. long, 30 ft. high, and 1 ft. "
+                 "thick rises on a solid surface the dragon can see within "
+                 "120 ft. Each creature in its space is pushed 5 ft. out. (No "
+                 "save — GM places the wall.)"),
+        "save_ability": "",
+        "save_dc": 0,
+        "damage": "",
+        "damage_type": "",
+        "half_on_save": False,
+        "effect": "",
+        "area": {"shape": "wall", "size_ft": 30},
+    },
+]
+
 # Keyed by monster slug (the `slug` field on the shipped SRD monster
-# JSON). Red dragons of every age share the volcanic lair.
+# JSON). Dragons of every lair-bearing age (adult + ancient) share their
+# color's lair-action set.
 LAIR_ACTIONS_BY_SLUG: dict[str, list[dict]] = {
+    "adult-black-dragon": _BLACK_DRAGON_SWAMP_LAIR,
+    "ancient-black-dragon": _BLACK_DRAGON_SWAMP_LAIR,
+    "adult-blue-dragon": _BLUE_DRAGON_DESERT_LAIR,
+    "ancient-blue-dragon": _BLUE_DRAGON_DESERT_LAIR,
+    "adult-green-dragon": _GREEN_DRAGON_FOREST_LAIR,
+    "ancient-green-dragon": _GREEN_DRAGON_FOREST_LAIR,
     "adult-red-dragon": _RED_DRAGON_VOLCANIC_LAIR,
     "ancient-red-dragon": _RED_DRAGON_VOLCANIC_LAIR,
+    "adult-white-dragon": _WHITE_DRAGON_ARCTIC_LAIR,
+    "ancient-white-dragon": _WHITE_DRAGON_ARCTIC_LAIR,
 }
 
 

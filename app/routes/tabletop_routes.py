@@ -23978,6 +23978,49 @@ _LAIR_ACTION_CONDITION_BUFFS: dict[str, dict] = {
             "disadvantage on ability checks",
         ],
     },
+    # v2.171.0 chromatic backfill. Blinded (Blue Dragon sand cloud) —
+    # RAW lasts 1 minute with a repeated save; 10 rounds is the GM-ended
+    # default mirroring the prone timer above.
+    "blinded": {
+        "key": "blinded",
+        "name": "Blinded (lair action)",
+        "icon": "🌫️",
+        "duration_rounds": 10,
+        "concentration": False,
+        "effects": [
+            "can't see; automatically fails sight-based checks",
+            "attack rolls have disadvantage",
+            "attacks against the blinded creature have advantage",
+        ],
+    },
+    # Restrained (Black grasping tide / Green grasping roots) — RAW ends
+    # when the creature breaks free (a STR check); 10 rounds GM-ended.
+    "restrained": {
+        "key": "restrained",
+        "name": "Restrained (lair action)",
+        "icon": "🪢",
+        "duration_rounds": 10,
+        "concentration": False,
+        "effects": [
+            "speed becomes 0",
+            "attack rolls have disadvantage",
+            "attacks against the restrained creature have advantage",
+            "disadvantage on Dexterity saving throws",
+        ],
+    },
+    # Charmed (Green Dragon magical fog) — RAW until initiative count 20
+    # on the next round: 1 round.
+    "charmed": {
+        "key": "charmed",
+        "name": "Charmed (lair action)",
+        "icon": "💚",
+        "duration_rounds": 1,
+        "concentration": False,
+        "effects": [
+            "can't attack the charmer or target it with harmful effects",
+            "the charmer has advantage on social checks against the creature",
+        ],
+    },
 }
 
 

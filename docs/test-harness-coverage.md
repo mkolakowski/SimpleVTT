@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2394 in `tests/harness/` + 62 in `tests/harness_ui/` (as of v2.170.0, 2026-06-12).
+**Total tests:** 2401 in `tests/harness/` + 62 in `tests/harness_ui/` (as of v2.171.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -141,7 +141,7 @@ v2.166.0 legendary-actions Phase 2b (see [legendary-actions.md](../plans/legenda
 | `test_decline_player_caller_403` | Non-GM caller → 403 (legendary resistance is GM-authorised). |
 
 ### `test_lair_actions.py`
-v2.168.0 legendary-actions Phase 3a (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python unit tests against the `app.content.lair_actions` leaf module. Curated RAW lair-action data (Red Dragon volcanic lair) folded onto the projected monster sheet by `_monster_dict_to_sheet`. No HTTP fixtures.
+v2.168.0 legendary-actions Phase 3a + v2.171.0 chromatic backfill (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python unit tests against the `app.content.lair_actions` leaf module. Curated RAW lair-action data (all five chromatic dragons' lairs) folded onto the projected monster sheet by `_monster_dict_to_sheet`. No HTTP fixtures.
 
 | Test | What it asserts |
 |------|-----------------|
@@ -156,6 +156,12 @@ v2.168.0 legendary-actions Phase 3a (see [legendary-actions.md](../plans/legenda
 | `test_returned_list_is_a_deep_copy` | Mutating the returned list/dicts doesn't corrupt the module-level source. |
 | `test_lair_action_by_id_resolves_known_action` | `lair_action_by_id("adult-red-dragon", "magma-erupts")` → the Magma Erupts dict. |
 | `test_lair_action_by_id_unknown_id_returns_none` / `test_lair_action_by_id_unknown_slug_returns_none` / `test_lair_action_by_id_blank_id_returns_none` | Unknown id, unknown slug, and blank/None id → `None`. |
+| `test_all_ten_chromatic_slugs_are_keyed` | adult + ancient × black/blue/green/red/white = 10 slugs keyed, each 3 actions. |
+| `test_each_chromatic_color_shares_adult_and_ancient` | Per color, adult + ancient resolve to identical action lists. |
+| `test_black_swamp_lair_shape` | Black: grasping-tide (STR prone), swarming-insects (CON 3d6 piercing half), magical-darkness (descriptive: empty save/damage/effect). |
+| `test_blue_desert_lair_shape` | Blue: sand-cloud (CON blinded), lightning-arc (3d6 lightning, half_on_save=False). |
+| `test_green_forest_lair_shape` | Green: grasping-roots (STR restrained), magical-fog (WIS charmed), wall-of-tangled-brush (4d8, half). |
+| `test_white_arctic_lair_shape` | White: freezing-fog (CON DC 10, 3d6 cold), jagged-ice + ice-wall descriptive (empty save/damage/effect). |
 
 ### `test_trigger_lair_action.py`
 v2.169.0 legendary-actions Phase 3b (see [legendary-actions.md](../plans/legendary-actions.md)) — the lair-action engine. Two GM endpoints: `POST /set_in_lair` toggles the battle's `in_lair` flag + records `lair_slug`; `POST /trigger_lair_action` resolves a lair action against the GM-picked caught targets, reusing the legendary save-AoE dispatch (`_resolve_feature_save` → roll → `_apply_damage_to_combatant`). NPC targets resolve inline; PC targets get a roll-request prompt. HTTP + WS.
@@ -168,6 +174,7 @@ v2.169.0 legendary-actions Phase 3b (see [legendary-actions.md](../plans/legenda
 | `test_set_in_lair_player_403` | Non-GM caller → 403. |
 | `test_trigger_magma_erupts_damage_save_for_half` | Magma Erupts (DEX DC 15, 6d6 fire, half): two bandit NPCs resolve DEX saves inline, failed saves take damage; `lair_action_resolved` carries DEX/15/6d6/fire/half_on_save=True + 2 results. |
 | `test_trigger_tremor_installs_prone_on_fail` | Tremor (DEX DC 15, no damage, prone): `damage_dealt == 0`; failed save → `condition_installed`; broadcast `effect=prone`, `damage=""`, `half_on_save=False`. |
+| `test_trigger_sand_cloud_installs_blinded_on_fail` | v2.171.0 — Blue Dragon Sand Cloud (CON DC 15, no damage, blinded): failed save → `condition_installed`; broadcast `effect=blinded`, `damage=""`. Exercises the new `blinded` condition template. |
 | `test_trigger_lair_action_not_in_lair_409` | `in_lair` False → 409 `not_in_lair`. |
 | `test_trigger_lair_action_unknown_action_409` | Bad `action_id` → 409 `unknown_lair_action`. |
 | `test_trigger_lair_action_missing_action_id_400` | Missing `action_id` → 400. |

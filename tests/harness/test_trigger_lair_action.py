@@ -219,6 +219,42 @@ async def test_trigger_tremor_installs_prone_on_fail(
     assert msg["data"]["half_on_save"] is False
 
 
+async def test_trigger_sand_cloud_installs_blinded_on_fail(
+    gm_client, gm_ws, bandit_template_id,
+):
+    """v2.171.0 chromatic backfill — Blue Dragon Sand Cloud (CON DC 15, no
+    damage, blinded). Exercises the new `blinded` condition template added
+    to `_LAIR_ACTION_CONDITION_BUFFS`."""
+    b1 = "npc_lair_sand_b1"
+    await _seed_battle(gm_client, [
+        _mkc(b1, hp_cur=40, hp_max=40, name="Bandit Blind", initiative=15,
+             token_template_id=bandit_template_id),
+    ], in_lair=True, lair_slug="adult-blue-dragon")
+
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/trigger_lair_action",
+        json={
+            "action_id": "sand-cloud",
+            "aoe_target_combatant_ids": [b1],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["action_name"] == "Sand Cloud"
+    r = data["results"][0]
+    assert r["passed"] in (True, False), r
+    assert r["damage_dealt"] == 0
+    if r["passed"] is False:
+        assert r["condition_installed"] is True, r
+
+    msg = await gm_ws.wait_for("lair_action_resolved")
+    assert msg["data"]["action_id"] == "sand-cloud"
+    assert msg["data"]["save_ability"] == "CON"
+    assert msg["data"]["effect"] == "blinded"
+    assert msg["data"]["damage"] == ""
+
+
 async def test_trigger_lair_action_not_in_lair_409(
     gm_client, bandit_template_id,
 ):

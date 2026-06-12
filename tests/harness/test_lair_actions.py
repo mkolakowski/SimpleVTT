@@ -90,6 +90,95 @@ def test_returned_list_is_a_deep_copy():
     assert LAIR_ACTIONS_BY_SLUG["adult-red-dragon"][0]["save_dc"] != 999
 
 
+# ── chromatic backfill (v2.171.0) ────────────────────────────────────────────
+
+
+def test_all_ten_chromatic_slugs_are_keyed():
+    """Adult + ancient × black/blue/green/red/white = 10 lair slugs."""
+    colors = ("black", "blue", "green", "red", "white")
+    for color in colors:
+        for age in ("adult", "ancient"):
+            slug = f"{age}-{color}-dragon"
+            assert slug in LAIR_ACTIONS_BY_SLUG, slug
+            assert len(lair_actions_for_slug(slug)) == 3
+
+
+def test_each_chromatic_color_shares_adult_and_ancient():
+    for color in ("black", "blue", "green", "white"):
+        adult = lair_actions_for_slug(f"adult-{color}-dragon")
+        ancient = lair_actions_for_slug(f"ancient-{color}-dragon")
+        assert adult == ancient
+        assert [a["id"] for a in adult] == [a["id"] for a in ancient]
+
+
+def test_black_swamp_lair_shape():
+    la = lair_actions_for_slug("adult-black-dragon")
+    ids = {a["id"] for a in la}
+    assert ids == {"grasping-tide", "swarming-insects", "magical-darkness"}
+    tide = next(a for a in la if a["id"] == "grasping-tide")
+    assert tide["save_ability"] == "STR"
+    assert tide["effect"] == "prone"
+    assert tide["damage"] == ""
+    insects = next(a for a in la if a["id"] == "swarming-insects")
+    assert insects["save_ability"] == "CON"
+    assert insects["damage"] == "3d6"
+    assert insects["damage_type"] == "piercing"
+    assert insects["half_on_save"] is True
+    # Magical darkness has no engine effect — a descriptive entry.
+    dark = next(a for a in la if a["id"] == "magical-darkness")
+    assert dark["save_ability"] == ""
+    assert dark["save_dc"] == 0
+    assert dark["damage"] == ""
+    assert dark["effect"] == ""
+
+
+def test_blue_desert_lair_shape():
+    la = lair_actions_for_slug("adult-blue-dragon")
+    ids = {a["id"] for a in la}
+    assert ids == {"ceiling-collapse", "sand-cloud", "lightning-arc"}
+    sand = next(a for a in la if a["id"] == "sand-cloud")
+    assert sand["save_ability"] == "CON"
+    assert sand["effect"] == "blinded"
+    assert sand["damage"] == ""
+    arc = next(a for a in la if a["id"] == "lightning-arc")
+    assert arc["damage"] == "3d6"
+    assert arc["damage_type"] == "lightning"
+    # Lightning arc deals full or nothing — no half on a success.
+    assert arc["half_on_save"] is False
+
+
+def test_green_forest_lair_shape():
+    la = lair_actions_for_slug("adult-green-dragon")
+    ids = {a["id"] for a in la}
+    assert ids == {"grasping-roots", "wall-of-tangled-brush", "magical-fog"}
+    roots = next(a for a in la if a["id"] == "grasping-roots")
+    assert roots["save_ability"] == "STR"
+    assert roots["effect"] == "restrained"
+    fog = next(a for a in la if a["id"] == "magical-fog")
+    assert fog["save_ability"] == "WIS"
+    assert fog["effect"] == "charmed"
+    wall = next(a for a in la if a["id"] == "wall-of-tangled-brush")
+    assert wall["damage"] == "4d8"
+    assert wall["half_on_save"] is True
+
+
+def test_white_arctic_lair_shape():
+    la = lair_actions_for_slug("adult-white-dragon")
+    ids = {a["id"] for a in la}
+    assert ids == {"freezing-fog", "jagged-ice", "ice-wall"}
+    fog = next(a for a in la if a["id"] == "freezing-fog")
+    assert fog["save_ability"] == "CON"
+    assert fog["save_dc"] == 10
+    assert fog["damage"] == "3d6"
+    assert fog["damage_type"] == "cold"
+    # The ranged ice-shard attack + opaque ice wall are descriptive.
+    for did in ("jagged-ice", "ice-wall"):
+        d = next(a for a in la if a["id"] == did)
+        assert d["save_ability"] == ""
+        assert d["damage"] == ""
+        assert d["effect"] == ""
+
+
 # ── lair_action_by_id ────────────────────────────────────────────────────────
 
 
