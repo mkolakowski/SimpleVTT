@@ -2,7 +2,7 @@
 
 **Status:** 🟠 in progress (v2.182.4, 2026-06-12) — Phase 2D heal assertions landed: `test_spell_catalog_heal.py` casts every healing spell (7) at the caster and range-checks the `spell_cast` broadcast's `auto_heal_rolled` against the declared healing dice shifted by the caster's spellcasting mod; zero skips. Phase 2C attack assertions landed (v2.182.3): `test_spell_catalog_attack.py` casts every spell-attack-roll spell (15) at an NPC and asserts the derived attack bonus = `prof + spellcasting mod` (uniform across one caster) + the hit/miss verdict follows the d20 rules vs target AC; a seeded test proves crit-doubling (Fire Bolt 2d10 → 4d10); zero skips. Phase 2B save assertions landed (v2.182.2): `test_spell_catalog_save.py` casts every save-bearing spell (~116) at an NPC and asserts the response's save ability matches the JSON + the DC matches the caster's spell-save-DC formula (uniform across one caster's spells); zero skips. Phase 1 smoke catalog landed (v2.182.1): `test_spell_catalog_smoke.py` patches one scratch caster with the whole 319-spell catalog + abundant slots and casts every spell by index, asserting the floor contract (no 500, `spell_cast` broadcast emitted); all 319 pass with zero skips. Earlier (v2.49.108): Phase 2A v1 — `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized over `(caster, spell, slot)` rows, covering single-target attack-roll spells (Fire Bolt). Filed: 2A save spells, multi-beam (Scorching Ray / Eldritch Blast), auto-hit (Magic Missile) — each needs a different response-shape adapter.
 **Authors:** rolling
-**Last updated:** 2026-06-12 (Phase 2E)
+**Last updated:** 2026-06-12 (Phase 2F)
 
 A plan to expand `tests/harness/` so every spell in
 `app/data/local/dnd5e/spells/` (319 SRD entries as of v2.49.102, plus
@@ -215,13 +215,22 @@ Filed follow-ups (not in v2.182.5): damage-to-caster concentration
 save broadcasts, and failing the save dropping the spell's installed
 buff(s).
 
-### 2F — `test_spell_catalog_buff_install.py`
-For every spell with a known buff side effect (Bless, Bane, Hex,
-Hunter's Mark, Faerie Fire, Hold Person, Sleep, etc.):
-- Casting installs the buff on the target combatant.
-- Buff has correct `key`, `name`, `duration_rounds`, `effects`.
-- Buff key matches the canonical name used by the auto-uplift /
-  intercept paths in `_attack_dice_uplifts` (`app/routes/tabletop_routes.py`).
+### 2F — `test_spell_catalog_buff_install.py` ✅ (v2.182.6)
+**Shipped:** iterates the 9 `_SPELL_BUFF_MAP` entries (Bless, Heroism,
+Shield of Faith, Aid, Sanctuary, Protection from Evil and Good, Mage
+Armor, Haste, Longstrider). Each is cast on a **separate** PC target
+(the cross-combatant `_install_buff` path, distinct from 2E's self-
+cast swap path). Asserts the installed buff's `key`, `name`,
+`duration_rounds`, and `concentration` flag match an expected table
+mirroring the registry; `effects` is asserted non-empty. These install
+unconditionally (no save gate), so the test is deterministic.
+
+Filed follow-up (not in v2.182.6): the save-gated condition installs
+(`_SPELL_CONDITION_MAP` — Hold Person → Paralyzed, Bane → Baned,
+Faerie Fire, Confusion, Banishment, …) need a forced-fail save (via
+`/api/test/dice/seed`) to install deterministically; several already
+have dedicated-endpoint tests (`test_cast_hold_person.py`,
+`test_cast_bane.py`, `test_spell_condition_catalog_confusion_banishment.py`).
 
 ### 2G — `test_spell_catalog_aoe.py`
 For every spell with `actions[*].aoe_shape`:
@@ -451,7 +460,7 @@ A summary of the non-test helpers this plan asks for:
 - [✅] Phase 2C — Attack assertions (`test_spell_catalog_attack.py`) — v2.182.3: all 15 spell-attack-roll spells assert bonus = prof + spell mod + hit/miss vs AC; seeded crit-doubling test (2d10 → 4d10), zero skips.
 - [✅] Phase 2D — Heal assertions (`test_spell_catalog_heal.py`) — v2.182.4: all 7 healers' `auto_heal_rolled` (read off the `spell_cast` WS) range-checked against dice + spellcasting mod, zero skips.
 - [✅] Phase 2E — Concentration assertions (`test_spell_catalog_concentration.py`) — v2.182.5: all 5 concentration buff-spells (Bless, Heroism, Shield of Faith, Protection from Evil and Good, Haste) self-cast; install carries the concentration flag + the prior anchor is dropped via the one-at-a-time swap (asserted in battle state + `replaced_concentration` broadcast), zero skips.
-- [ ] Phase 2F — Buff install assertions
+- [✅] Phase 2F — Buff install assertions (`test_spell_catalog_buff_install.py`) — v2.182.6: all 9 `_SPELL_BUFF_MAP` spells cast on a separate target; installed key/name/duration_rounds/concentration asserted against the expected payload table, zero skips.
 - [ ] Phase 2G — AoE assertions
 - [ ] Phase 2H — Range assertions
 - [ ] Phase 3 — Buff effect validation

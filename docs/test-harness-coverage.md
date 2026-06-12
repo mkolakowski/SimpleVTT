@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2451 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.5, 2026-06-12).
+**Total tests:** 2453 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.6, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3320,6 +3320,14 @@ Phase 2E concentration assertions. Patches the scratch caster (Thalindra) with t
 |------|-----------------|
 | `test_every_concentration_spell_installs_and_swaps` | Every concentration buff-spell installs with the `concentration` flag set; the next cast drops the prior anchor (battle state + `replaced_concentration` broadcast); ≥ 4 asserted. |
 | `test_concentration_catalog_subset_nonempty` | Guard: ≥ 5 concentration buff-spells listed and every slug resolves to a real catalog spell. |
+
+### `test_spell_catalog_buff_install.py`
+Phase 2F buff-install payload assertions. Patches the scratch caster (Thalindra) with the whole catalog + 999 slots/level, seeds a battle, then casts each of the 9 `_SPELL_BUFF_MAP` spells (Bless, Heroism, Shield of Faith, Aid, Sanctuary, Protection from Evil and Good, Mage Armor, Haste, Longstrider) at a **separate** PC target (Krieger) — the cross-combatant `_install_buff` path, distinct from 2E's self-cast. Reads the target's installed buff off live battle state and asserts its `key` (== slug), `name`, `duration_rounds`, and `concentration` flag against an expected table mirroring the registry; `effects` asserted non-empty. Deterministic — these buffs install unconditionally (no save gate). Failures collected by slug.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_every_buff_spell_installs_expected_payload` | Every buff-map spell installs on the target with the expected key/name/duration_rounds/concentration + non-empty effects; all 9 asserted; drift collected by slug. |
+| `test_buff_install_catalog_subset_nonempty` | Guard: ≥ 9 buff-install spells listed and every slug resolves to a real catalog spell. |
 
 ### `test_spell_catalog_damage.py`
 Parameterized over `(caster_name, spell_slug, spell_index, slot_level, base_dmg_expr, upcast_dice)` rows in the `DAMAGE_SPELL_CASES` table. v1 has one row (Fire Bolt at Wizard L5 → 2d10). Each case long-rests the caster, seeds a target combatant, casts the spell, and asserts `response.auto_attack_damage_rolled` is inside the dice expression's [min, max]. Damage type is verified against the catalog JSON.
