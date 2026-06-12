@@ -23942,6 +23942,293 @@ async def decline_legendary_resistance(
     }
 
 
+# ----------- API: Lair actions (legendary-actions Phase 3b) -----------
+
+# v2.169.0 — condition templates for lair-action effects. Lair actions
+# whose `effect` is a condition (not damage) install one of these on a
+# failed save, reusing the `_resolve_feature_save` condition-buff path
+# (PC targets defer the install to /roll_request/{id}/respond; NPC
+# targets install inline). Shaped like `_SPELL_CONDITION_MAP` entries.
+_LAIR_ACTION_CONDITION_BUFFS: dict[str, dict] = {
+    # Tremor (Red Dragon volcanic lair) — knocked prone, no RAW timer
+    # (ends when the creature stands). 10 rounds mirrors the
+    # `open-hand-prone` default; the GM ends it via /end_buff.
+    "prone": {
+        "key": "prone",
+        "name": "Prone (Tremor)",
+        "icon": "🫳",
+        "duration_rounds": 10,
+        "concentration": False,
+        "effects": [
+            "movement costs double to crawl; rising costs half speed",
+            "disadvantage on attack rolls while prone",
+            "attacks against prone target: advantage within 5 ft, disadvantage at range",
+        ],
+    },
+    # Volcanic Gases — poisoned until the end of the creature's next
+    # turn (RAW): 1 round.
+    "poisoned": {
+        "key": "poisoned",
+        "name": "Poisoned (Volcanic Gases)",
+        "icon": "🤢",
+        "duration_rounds": 1,
+        "concentration": False,
+        "effects": [
+            "disadvantage on attack rolls",
+            "disadvantage on ability checks",
+        ],
+    },
+}
+
+
+@router.post("/api/campaign/{campaign_id}/set_in_lair")
+async def set_in_lair(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.169.0 — Phase 3b of `docs/plans/legendary-actions.md`. Toggle
+    the active battle's "in lair" flag and record which lair the encounter
+    is happening in. RAW MM p.11: "When a creature is in its lair, it can
+    take lair actions" on initiative count 20.
+
+    Body:
+      ``in_lair``    — bool. When False, clears ``lair_slug`` too.
+      ``lair_slug``  — the monster slug whose lair actions apply
+                       (e.g. ``adult-red-dragon``). Required when
+                       ``in_lair`` is True.
+
+    Persists ``in_lair`` + ``lair_slug`` onto the battle-state dict
+    (carried across `/battle` PUTs by the v2.169.0 carry-forward guard)
+    and broadcasts ``in_lair_changed`` so every client's init-tracker
+    surfaces / hides the lair-action control.
+
+    Auth: GM only.
+
+    Errors:
+      400 ``in_lair`` True but ``lair_slug`` missing.
+      403 non-member / non-GM.
+      404 no active battle.
+    """
+    body = await request.json()
+    in_lair = bool(body.get("in_lair"))
+    lair_slug = str(body.get("lair_slug") or "").strip().lower()
+    if in_lair and not lair_slug:
+        raise HTTPException(400, "lair_slug is required when in_lair is true")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only — lair state is GM-authorised")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+
+    state["in_lair"] = in_lair
+    state["lair_slug"] = lair_slug if in_lair else ""
+    hub.set_battle(campaign_id, state)
+
+    await hub.broadcast(campaign_id, {
+        "type": "in_lair_changed",
+        "data": {"in_lair": in_lair, "lair_slug": state["lair_slug"]},
+    })
+    return {"ok": True, "in_lair": in_lair, "lair_slug": state["lair_slug"]}
+
+
+@router.post("/api/campaign/{campaign_id}/trigger_lair_action")
+async def trigger_lair_action(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.169.0 — Phase 3b of `docs/plans/legendary-actions.md`. Resolve
+    a lair action against the GM-picked caught targets. RAW MM p.11: on
+    initiative count 20 (losing ties) the creature in its lair takes a
+    lair action; the GM drives it from the init-tracker.
+
+    Body:
+      ``action_id``                  — a lair-action id from the lair's
+                                       roster (e.g. ``magma-erupts``).
+      ``lair_slug`` (optional)       — the lair source slug; defaults to
+                                       the battle state's ``lair_slug``.
+      ``aoe_target_combatant_ids``   — list of combatant ids caught in
+                                       the area.
+
+    Dispatch (mirrors the legendary save-AoE path in
+    ``use_legendary_action``):
+      - Resolves the action via ``_lair_action_by_id``.
+      - For a damage action (``damage`` set) the area damage is rolled
+        ONCE; each target rolls its own save. NPC targets resolve inline
+        — full damage on a fail, half on a pass when ``half_on_save``,
+        none otherwise. PC targets get a roll-request prompt (damage
+        stays GM-manual for them in v1, matching the AoE convention).
+      - For a condition action (``effect`` set, no damage — Tremor →
+        prone, Volcanic Gases → poisoned) the condition installs on a
+        failed save via the shared ``_resolve_feature_save`` buff path.
+      Broadcasts ``lair_action_resolved`` with the per-target results.
+
+    Auth: GM only.
+
+    Errors:
+      400 missing ``action_id``.
+      403 non-member / non-GM.
+      404 no active battle.
+      409 ``not_in_lair`` — the battle's ``in_lair`` flag is False.
+      409 ``unknown_lair_action`` — slug/action_id didn't resolve.
+    """
+    body = await request.json()
+    action_id = str(body.get("action_id") or "").strip()
+    if not action_id:
+        raise HTTPException(400, "action_id is required")
+    aoe_target_ids_raw = body.get("aoe_target_combatant_ids") or []
+    aoe_target_ids = [
+        str(x).strip()
+        for x in aoe_target_ids_raw
+        if isinstance(x, (str, int)) and str(x).strip()
+    ]
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only — lair actions are GM-authorised")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    if not bool(state.get("in_lair")):
+        return JSONResponse(status_code=409, content={
+            "error": "not_in_lair",
+            "action_id": action_id,
+        })
+
+    lair_slug = (
+        str(body.get("lair_slug") or "").strip().lower()
+        or str(state.get("lair_slug") or "").strip().lower()
+    )
+    action_def = _lair_action_by_id(lair_slug, action_id)
+    if not action_def:
+        return JSONResponse(status_code=409, content={
+            "error": "unknown_lair_action",
+            "lair_slug": lair_slug,
+            "action_id": action_id,
+        })
+
+    action_name = str(action_def.get("name") or action_id)
+    save_ability = str(action_def.get("save_ability") or "").strip().upper()
+    try:
+        save_dc = int(action_def.get("save_dc") or 0)
+    except (TypeError, ValueError):
+        save_dc = 0
+    damage_expr = str(action_def.get("damage") or "").strip()
+    damage_type = str(action_def.get("damage_type") or "").strip()
+    half_on_save = bool(action_def.get("half_on_save"))
+    effect = str(action_def.get("effect") or "").strip().lower()
+    condition_buff = (
+        dict(_LAIR_ACTION_CONDITION_BUFFS[effect])
+        if (not damage_expr and effect in _LAIR_ACTION_CONDITION_BUFFS)
+        else None
+    )
+
+    # Area damage rolls ONCE for the whole AoE (RAW area-effect rule).
+    full_damage = 0
+    if damage_expr:
+        try:
+            full_damage = int(dice_mod.roll(damage_expr).total)
+        except dice_mod.DiceParseError:
+            full_damage = 0
+
+    source_name = action_def.get("name") or "Lair"
+    results: list[dict] = []
+    for tid in aoe_target_ids[:24]:
+        target_c = _lookup_combatant(campaign_id, tid)
+        if not target_c:
+            results.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        if save_ability and save_dc:
+            try:
+                sr = await _resolve_feature_save(
+                    db, campaign_id,
+                    caster_char_id=0,
+                    caster_char_name=str(source_name),
+                    target_combatant=target_c,
+                    save_ability=save_ability,
+                    dc=save_dc,
+                    note_label=f"{action_name} (DC {save_dc} {save_ability})",
+                    condition_buff=condition_buff,
+                    repeated_save=False,
+                    source="lair-action-save",
+                    campaign=campaign,
+                    prompt_user=user,
+                    feature_name=f"🌋 {action_name}",
+                )
+            except Exception:
+                logging.exception(
+                    "Lair-action save resolve failed for tid=%s", tid,
+                )
+                results.append({"combatant_id": tid, "reason": "save_error"})
+                continue
+        else:
+            sr = {"passed": None, "prompted": False, "condition_installed": False}
+
+        passed = sr.get("passed")
+        damage_dealt = 0
+        # NPC targets resolve inline (passed True/False). PC targets are
+        # prompted (passed None) — damage / condition stay deferred.
+        if damage_expr and passed is not None:
+            if passed is False:
+                damage_dealt = full_damage
+            elif half_on_save:
+                damage_dealt = full_damage // 2
+            if damage_dealt > 0:
+                try:
+                    await _apply_damage_to_combatant(
+                        db, campaign_id, target_c,
+                        damage_amount=damage_dealt,
+                        damage_type=damage_type,
+                        is_attack=False, is_magical=False,
+                    )
+                except Exception:
+                    logging.exception(
+                        "Lair-action damage apply failed for tid=%s", tid,
+                    )
+        results.append({
+            "combatant_id": tid,
+            "name": target_c.get("name") or "Target",
+            "passed": passed,
+            "prompted": bool(sr.get("prompted")),
+            "damage_dealt": damage_dealt,
+            "condition_installed": bool(sr.get("condition_installed")),
+        })
+
+    await hub.broadcast(campaign_id, {
+        "type": "lair_action_resolved",
+        "data": {
+            "lair_slug": lair_slug,
+            "action_id": action_id,
+            "action_name": action_name,
+            "save_ability": save_ability,
+            "save_dc": save_dc,
+            "damage": damage_expr,
+            "damage_type": damage_type,
+            "half_on_save": half_on_save,
+            "effect": effect,
+            "results": results,
+        },
+    })
+    return {
+        "ok": True,
+        "lair_slug": lair_slug,
+        "action_id": action_id,
+        "action_name": action_name,
+        "results": results,
+    }
+
+
 # ----------- API: Cutting Words (Lore Bard Lv 3) -----------
 
 # v2.67.0 Phase 1 — Reactions automation foundation.
@@ -84948,6 +85235,17 @@ async def update_battle(
     _prev_battle = hub.get_battle(campaign_id) or {}
     _prev_turn = _prev_battle.get("turn_index") if _prev_battle else None
     _new_turn = state.get("turn_index")
+
+    # v2.169.0 — carry forward the lair-action flags. `/battle` PUT
+    # replaces the whole state dict with the client body, which (pre-3c
+    # UI) doesn't round-trip `in_lair` / `lair_slug`. Without this guard a
+    # routine init-tracker save would silently clear the lair state set by
+    # `/set_in_lair`. Preserve them whenever the client omits the key.
+    if isinstance(state, dict) and isinstance(_prev_battle, dict):
+        if "in_lair" not in state and "in_lair" in _prev_battle:
+            state["in_lair"] = _prev_battle.get("in_lair")
+        if "lair_slug" not in state and "lair_slug" in _prev_battle:
+            state["lair_slug"] = _prev_battle.get("lair_slug")
 
     # v2.99.185 — NPC concentration-drop auto-cascade. Closes a
     # v2.99.179 filed item. Walk the prev/new combatants for any

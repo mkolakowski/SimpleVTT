@@ -378,12 +378,28 @@ combatant.legendary_resistance = {
   "shadowy tendrils" / "memory-shred", Kraken, other chromatic
   dragons) drop into `LAIR_ACTIONS_BY_SLUG` with no code change — a
   data-only follow-up.
-- Phase 3b: `in_lair` toggle on the encounter; initiative-20
-  scheduler entry; `lair_action_prompt` + `trigger_lair_action`
-  endpoint; AoE dispatch via existing geometry templates.
-- Phase 3c: harness — ancient-red-dragon in lair, turn count
-  reaches 20, lair-action prompt fires; GM picks "magma erupts";
-  DEX-save AoE applies to all combatants in the AoE.
+- Phase 3b (✅ **shipped v2.169.0** "The Floor Strikes Back"): the
+  lair-action engine. Two GM endpoints — `POST /set_in_lair` toggles
+  the active battle's `in_lair` flag + records `lair_slug` (broadcasts
+  `in_lair_changed`); `POST /trigger_lair_action` resolves a chosen
+  lair action against the GM-picked caught targets, reusing the
+  legendary save-AoE dispatch (`_resolve_feature_save` → roll →
+  `_apply_damage_to_combatant`). Area damage rolls once; NPC targets
+  resolve inline (save-or-take, or save-for-half for Magma Erupts);
+  PC targets get a roll-request prompt (damage GM-manual). Condition
+  lair actions (Tremor → prone, Volcanic Gases → poisoned) install on
+  a failed save via the shared buff path. Resolution fans out over
+  `lair_action_resolved`. The `in_lair` / `lair_slug` flags ride the
+  battle-state JSON column and survive `/battle` PUTs via a
+  carry-forward guard (no schema change). Lair actions stay fully
+  GM-driven — no initiative-20 scheduler rewrite; the GM fires the
+  trigger on count 20 and the once-per-round discipline is surfaced in
+  the Phase 3c UI. 10 harness tests in
+  `tests/harness/test_trigger_lair_action.py`.
+- Phase 3c: the GM lair-action UI — an `in_lair` toggle control + a
+  floating lair-action banner (mirroring `_renderLegendaryResistancePrompts`)
+  with an action picker POSTing `/trigger_lair_action`, plus a
+  Playwright test driving the WS flow.
 
 ### Non-goals (v1)
 
