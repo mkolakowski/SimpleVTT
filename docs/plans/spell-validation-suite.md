@@ -2,7 +2,7 @@
 
 **Status:** 🟠 in progress (v2.182.4, 2026-06-12) — Phase 2D heal assertions landed: `test_spell_catalog_heal.py` casts every healing spell (7) at the caster and range-checks the `spell_cast` broadcast's `auto_heal_rolled` against the declared healing dice shifted by the caster's spellcasting mod; zero skips. Phase 2C attack assertions landed (v2.182.3): `test_spell_catalog_attack.py` casts every spell-attack-roll spell (15) at an NPC and asserts the derived attack bonus = `prof + spellcasting mod` (uniform across one caster) + the hit/miss verdict follows the d20 rules vs target AC; a seeded test proves crit-doubling (Fire Bolt 2d10 → 4d10); zero skips. Phase 2B save assertions landed (v2.182.2): `test_spell_catalog_save.py` casts every save-bearing spell (~116) at an NPC and asserts the response's save ability matches the JSON + the DC matches the caster's spell-save-DC formula (uniform across one caster's spells); zero skips. Phase 1 smoke catalog landed (v2.182.1): `test_spell_catalog_smoke.py` patches one scratch caster with the whole 319-spell catalog + abundant slots and casts every spell by index, asserting the floor contract (no 500, `spell_cast` broadcast emitted); all 319 pass with zero skips. Earlier (v2.49.108): Phase 2A v1 — `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized over `(caster, spell, slot)` rows, covering single-target attack-roll spells (Fire Bolt). Filed: 2A save spells, multi-beam (Scorching Ray / Eldritch Blast), auto-hit (Magic Missile) — each needs a different response-shape adapter.
 **Authors:** rolling
-**Last updated:** 2026-06-12 (Phase 2G complete — shape drift gate + HTTP /place_aoe geometry)
+**Last updated:** 2026-06-12 (Phase 2A complete — exact-value 2A.2 seeded breakdown gate)
 
 A plan to expand `tests/harness/` so every spell in
 `app/data/local/dnd5e/spells/` (319 SRD entries as of v2.49.102, plus
@@ -189,8 +189,14 @@ shipped v2.183.1 in `test_spell_catalog_autohit.py` — Magic Missile's
 3 darts (`auto_hit_targets`) range-checked against `1d4+1` force, one
 roll per target id sent (dart count is client-side). **All four Phase 2A
 damage shapes — attack-roll, multi-beam, save-for-half, auto-hit — are
-now covered.** Only the exact-value (TEST_MODE dice-seed) follow-up
-remains filed (Phase 2A.2).
+now covered.** The exact-value (TEST_MODE dice-seed) follow-up
+shipped v2.183.4 in `test_spell_catalog_exact_damage.py` (Phase 2A.2 ✅) —
+one test seeds the RNG via `POST /api/test/dice/seed` and parses the
+engine's breakdown string for arithmetic self-consistency (dice count,
+roll bounds, subtotals → grand total → reported `rolled`) across all
+four shapes (Fire Bolt 2d10 attack-roll, Scorching Ray 2d6/beam,
+Fireball 8d6 save-for-half, Magic Missile 1d4+1/dart auto-hit). **Phase
+2A is now complete at both band and exact-value granularity.**
 
 For every spell with `actions[*].damage` non-empty:
 - Damage breakdown matches the declared dice expression
@@ -510,7 +516,7 @@ A summary of the non-test helpers this plan asks for:
 
 - [ ] Phase 0 — Inventory + sister doc
 - [✅] Phase 1 — Smoke catalog (`test_spell_catalog_smoke.py`) — v2.182.1: all 319 spells cast without 500, zero skips.
-- [🟠] Phase 2A — Damage assertions (v1 v2.49.108: Fire Bolt attack-roll; v2.182.8: multi-beam backfill (`test_spell_catalog_multibeam.py`) — Scorching Ray 3×2d6 + Eldritch Blast 2×1d10; v2.183.0: save-for-half backfill (`test_spell_catalog_save_damage.py`) — 8 spells' `auto_save_damage_rolled` + new TEST_MODE `/api/test/campaign/{id}/flags` toggle; v2.183.1: auto-hit backfill (`test_spell_catalog_autohit.py`) — Magic Missile 3-dart `auto_hit_targets`; all four damage shapes covered, only exact-value Phase 2A.2 filed)
+- [✅] Phase 2A — Damage assertions (v1 v2.49.108: Fire Bolt attack-roll; v2.182.8: multi-beam backfill (`test_spell_catalog_multibeam.py`) — Scorching Ray 3×2d6 + Eldritch Blast 2×1d10; v2.183.0: save-for-half backfill (`test_spell_catalog_save_damage.py`) — 8 spells' `auto_save_damage_rolled` + new TEST_MODE `/api/test/campaign/{id}/flags` toggle; v2.183.1: auto-hit backfill (`test_spell_catalog_autohit.py`) — Magic Missile 3-dart `auto_hit_targets`; **v2.183.4: exact-value Phase 2A.2 (`test_spell_catalog_exact_damage.py`)** — seeded RNG + breakdown self-consistency across all four shapes; Phase 2A complete at both band and exact granularity)
 - [✅] Phase 2B — Save assertions (`test_spell_catalog_save.py`) — v2.182.2: all ~116 save spells assert ability + uniform DC, zero skips.
 - [✅] Phase 2C — Attack assertions (`test_spell_catalog_attack.py`) — v2.182.3: all 15 spell-attack-roll spells assert bonus = prof + spell mod + hit/miss vs AC; seeded crit-doubling test (2d10 → 4d10), zero skips.
 - [✅] Phase 2D — Heal assertions (`test_spell_catalog_heal.py`) — v2.182.4: all 7 healers' `auto_heal_rolled` (read off the `spell_cast` WS) range-checked against dice + spellcasting mod, zero skips.
