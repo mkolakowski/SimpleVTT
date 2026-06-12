@@ -431,6 +431,19 @@ combatant.legendary_resistance = {
   Trigger button ("Used last round"). 4 new harness tests + 1 Playwright
   test. (Once-per-round / init-20 cadence stays GM-driven — the panel
   surfaces "init 20".)
+- Once-per-round counter (✅ **shipped v2.173.0** "The Single Strike"):
+  RAW MM p.11 — a creature takes only one lair action per round.
+  `trigger_lair_action` parks the round the lair last acted as
+  `state["lair_acted_round"]` (compared to the init-tracker's
+  `state["round"]`) and rejects a *second* action in the same round —
+  even a different one — with `409 lair_already_acted_this_round` unless
+  `override` is set. Checked *before* the no-repeat gate (broader rule).
+  Advancing the round frees the next action automatically; `set_in_lair`
+  clears the counter; the carry-forward guard preserves it across
+  `/battle` PUTs. The GM panel disables every Trigger ("Acted this
+  round") + prepends an "already acted this round" banner. The two RAW
+  lair restrictions (one-per-round + no-repeat) are now both enforced.
+  Restructured to 6 harness tests (net +2).
 
 ### Non-goals (v1)
 

@@ -105,20 +105,22 @@ def _dispatch_in_lair_changed(page: Page, in_lair: bool) -> None:
     )
 
 
-def _dispatch_lair_action_resolved(page: Page, action_id: str) -> None:
+def _dispatch_lair_action_resolved(page: Page, action_id: str,
+                                   acted_round=None) -> None:
     page.evaluate(
         """(args) => {
+            const data = {
+                action_id: args.actionId,
+                action_name: 'Magma Erupts',
+                last_lair_action_id: args.actionId,
+                results: [],
+            };
+            if (args.actedRound !== null) data.lair_acted_round = args.actedRound;
             document.dispatchEvent(new CustomEvent('vtt:ws-message', {detail: {
-                type: 'lair_action_resolved',
-                data: {
-                    action_id: args.actionId,
-                    action_name: 'Magma Erupts',
-                    last_lair_action_id: args.actionId,
-                    results: [],
-                },
+                type: 'lair_action_resolved', data,
             }}));
         }""",
-        {"actionId": action_id},
+        {"actionId": action_id, "actedRound": acted_round},
     )
 
 
@@ -267,3 +269,26 @@ def test_resolved_action_disables_its_trigger_no_repeat(gm_page: Page):
     expect(disabled).to_contain_text("Used last round")
     expect(disabled).to_have_attribute("data-action-id", "magma-erupts")
     expect(panel.locator("._lair_trigger_btn:not([disabled])")).to_have_count(1)
+
+
+def test_resolved_action_disables_all_triggers_once_per_round(gm_page: Page):
+    """v2.173.0 — RAW MM p.11: one lair action per round. When a
+    lair_action_resolved broadcast carries `lair_acted_round` matching the
+    battle's round, EVERY Trigger button is disabled + relabelled "Acted
+    this round" and an "already acted this round" banner is shown."""
+    _seed_battle(gm_page, in_lair=True)
+    gm_page.goto(tabletop_url())
+
+    panel = gm_page.locator("#_lair_action_panel")
+    expect(panel).to_be_visible(timeout=5000)
+    expect(panel.locator("._lair_trigger_btn")).to_have_count(2, timeout=3000)
+    expect(panel.locator("._lair_trigger_btn:not([disabled])")).to_have_count(2)
+
+    # Battle is seeded at round 1; mark the lair as having acted this round.
+    _dispatch_lair_action_resolved(gm_page, "magma-erupts", acted_round=1)
+
+    # Both triggers now disabled + relabelled; banner shown.
+    disabled = panel.locator("._lair_trigger_btn[disabled]")
+    expect(disabled).to_have_count(2, timeout=3000)
+    expect(disabled.first).to_contain_text("Acted this round")
+    expect(panel).to_contain_text("Lair already acted this round")

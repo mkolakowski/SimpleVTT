@@ -8489,6 +8489,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // v2.172.0 — entering / leaving a lair resets the
                 // no-repeat memory (RAW MM p.11).
                 battle.last_lair_action_id = data.last_lair_action_id || '';
+                // v2.173.0 — and the once-per-round counter.
+                battle.lair_acted_round = (data.lair_acted_round == null)
+                    ? null : data.lair_acted_round;
             }
             if (typeof window._renderLairActionPanel === 'function') {
                 window._renderLairActionPanel();
@@ -8517,6 +8520,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // (RAW MM p.11: no same lair action two rounds in a row).
             if (battle && typeof battle === 'object') {
                 battle.last_lair_action_id = data.last_lair_action_id || data.action_id || '';
+                // v2.173.0 — record the round the lair acted so the panel
+                // can disable all triggers until the round advances.
+                if (data.lair_acted_round != null) {
+                    battle.lair_acted_round = data.lair_acted_round;
+                }
             }
             if (typeof window._renderLairActionPanel === 'function') {
                 window._renderLairActionPanel();
@@ -9583,10 +9591,24 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         // battle state; disable its Trigger button until a different
         // action is used.
         const lastActionId = (battle && battle.last_lair_action_id) || '';
+        // v2.173.0 — RAW MM p.11: one lair action per round. When the lair
+        // already acted this round (lair_acted_round === the battle's
+        // round counter), every Trigger is disabled until the round
+        // advances past initiative count 20.
+        const curRound = (battle && battle.round != null) ? battle.round : null;
+        const actedRound = (battle && battle.lair_acted_round != null)
+            ? battle.lair_acted_round : null;
+        const actedThisRound = (actedRound != null) && (actedRound === curRound);
 
         let actionsHtml = '';
         if (inLair) {
-            actionsHtml = (owner.lair_actions || []).map(a => {
+            if (actedThisRound) {
+                actionsHtml = (
+                    '<div style="font-size:12px;opacity:0.85;padding:4px 0;'
+                    + 'color:#f4c89c;">Lair already acted this round (init 20).</div>'
+                );
+            }
+            actionsHtml += (owner.lair_actions || []).map(a => {
                 const aid = _escH(a.id || '');
                 const anm = _escH(a.name || 'Lair action');
                 const dmg = a.damage ? (_escH(a.damage) + ' ' + _escH(a.damage_type || '')) : '';
@@ -9596,13 +9618,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const eff = a.effect ? _escH(a.effect) : '';
                 const meta = [dmg, sv, eff].filter(Boolean).join(' · ');
                 const usedLast = (a.id || '') === lastActionId && lastActionId !== '';
-                const btn = usedLast
-                    ? ('<button class="_lair_trigger_btn" data-action-id="' + aid
+                let btn;
+                if (actedThisRound) {
+                    btn = ('<button class="_lair_trigger_btn" data-action-id="' + aid
                         + '" data-action-name="' + anm + '" disabled '
                         + 'style="width:100%;opacity:0.5;cursor:not-allowed;">'
-                        + 'Used last round</button>')
-                    : ('<button class="_lair_trigger_btn" data-action-id="' + aid
+                        + 'Acted this round</button>');
+                } else if (usedLast) {
+                    btn = ('<button class="_lair_trigger_btn" data-action-id="' + aid
+                        + '" data-action-name="' + anm + '" disabled '
+                        + 'style="width:100%;opacity:0.5;cursor:not-allowed;">'
+                        + 'Used last round</button>');
+                } else {
+                    btn = ('<button class="_lair_trigger_btn" data-action-id="' + aid
                         + '" data-action-name="' + anm + '" style="width:100%;">Trigger</button>');
+                }
                 return (
                     '<div style="margin-bottom:6px;padding-bottom:6px;'
                     + 'border-bottom:1px solid rgba(255,255,255,0.12);">'
@@ -9678,6 +9708,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         if (r.status === 409 && txt.indexOf('lair_action_repeated') !== -1) {
                             (window.showToast || function (m) { console.log(m); })(
                                 '🌋 ' + actionName + ' was used last round — pick a different lair action.',
+                                'warn',
+                            );
+                        } else if (r.status === 409 && txt.indexOf('lair_already_acted_this_round') !== -1) {
+                            (window.showToast || function (m) { console.log(m); })(
+                                '🌋 The lair has already acted this round (one lair action per round).',
                                 'warn',
                             );
                         }

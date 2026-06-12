@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2405 in `tests/harness/` + 63 in `tests/harness_ui/` (as of v2.172.0, 2026-06-12).
+**Total tests:** 2407 in `tests/harness/` + 64 in `tests/harness_ui/` (as of v2.173.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -175,10 +175,12 @@ v2.169.0 legendary-actions Phase 3b (see [legendary-actions.md](../plans/legenda
 | `test_trigger_magma_erupts_damage_save_for_half` | Magma Erupts (DEX DC 15, 6d6 fire, half): two bandit NPCs resolve DEX saves inline, failed saves take damage; `lair_action_resolved` carries DEX/15/6d6/fire/half_on_save=True + 2 results. |
 | `test_trigger_tremor_installs_prone_on_fail` | Tremor (DEX DC 15, no damage, prone): `damage_dealt == 0`; failed save → `condition_installed`; broadcast `effect=prone`, `damage=""`, `half_on_save=False`. |
 | `test_trigger_sand_cloud_installs_blinded_on_fail` | v2.171.0 — Blue Dragon Sand Cloud (CON DC 15, no damage, blinded): failed save → `condition_installed`; broadcast `effect=blinded`, `damage=""`. Exercises the new `blinded` condition template. |
-| `test_trigger_same_action_twice_is_409_no_repeat` | v2.172.0 — RAW MM p.11: same action twice → `409 lair_action_repeated`; first trigger parks `last_lair_action_id="magma-erupts"`. |
-| `test_trigger_repeat_with_override_succeeds` | `override: true` bypasses the no-repeat guard → 200. |
-| `test_trigger_different_action_clears_no_repeat` | A different action this round moves the memory off the previous one; the first action is then triggerable again. |
-| `test_set_in_lair_clears_no_repeat_memory` | `set_in_lair` resets `last_lair_action_id` (carried empty in `in_lair_changed`); the previously-used action fires cleanly afterward. |
+| `test_once_per_round_blocks_second_action` | v2.173.0 — RAW MM p.11: one lair action per round. A second action (even a different one) in the same round → `409 lair_already_acted_this_round`; first trigger parks `lair_acted_round=1`. |
+| `test_once_per_round_override_succeeds` | `override: true` bypasses the once-per-round gate → 200. |
+| `test_next_round_frees_lair_action` | Pre-seed round=2 / `lair_acted_round=1`; a fresh action in the new round → 200, `lair_acted_round=2` (one per round, not one per battle). |
+| `test_no_repeat_same_action_next_round_409` | v2.172.0 — same action two rounds in a row → `409 lair_action_repeated`. Pre-seeded round=2 / `lair_acted_round=1` so only the no-repeat gate fires. |
+| `test_no_repeat_override_succeeds` | `override: true` bypasses the no-repeat guard → 200. |
+| `test_set_in_lair_clears_lair_memory` | `set_in_lair` resets both `last_lair_action_id` (→ "") and `lair_acted_round` (→ `None`), carried in `in_lair_changed`; the previously-used action fires cleanly afterward. |
 | `test_trigger_lair_action_not_in_lair_409` | `in_lair` False → 409 `not_in_lair`. |
 | `test_trigger_lair_action_unknown_action_409` | Bad `action_id` → 409 `unknown_lair_action`. |
 | `test_trigger_lair_action_missing_action_id_400` | Missing `action_id` → 400. |
@@ -3356,6 +3358,7 @@ v2.170.0 legendary-actions Phase 3c UI — the GM-facing lair-action panel. Seed
 | `test_toggle_posts_set_in_lair` | Clicking the toggle POSTs `/set_in_lair` with `{in_lair:true, lair_slug:"ancient-red-dragon"}`. |
 | `test_trigger_posts_trigger_lair_action` | In the in-lair state, clicking Trigger opens the (stubbed) multi-target picker then POSTs `/trigger_lair_action` with `action_id:"magma-erupts"`, the lair_slug, and the picked `aoe_target_combatant_ids`. |
 | `test_resolved_action_disables_its_trigger_no_repeat` | v2.172.0 — after a `lair_action_resolved` parks `last_lair_action_id`, that action's Trigger button is disabled + reads "Used last round" while the other stays enabled (RAW MM p.11 no-repeat). |
+| `test_resolved_action_disables_all_triggers_once_per_round` | v2.173.0 — a `lair_action_resolved` carrying `lair_acted_round` matching the battle's round disables EVERY Trigger ("Acted this round") + shows the "already acted this round" banner (RAW MM p.11 one-per-round). |
 
 ---
 

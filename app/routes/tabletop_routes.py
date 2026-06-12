@@ -24075,6 +24075,8 @@ async def set_in_lair(
     # v2.172.0 — entering or leaving a lair resets the no-repeat memory
     # (RAW MM p.11: the two-rounds-in-a-row restriction is per-lair).
     state["last_lair_action_id"] = ""
+    # v2.173.0 — also reset the once-per-round counter.
+    state["lair_acted_round"] = None
     hub.set_battle(campaign_id, state)
 
     await hub.broadcast(campaign_id, {
@@ -24083,6 +24085,7 @@ async def set_in_lair(
             "in_lair": in_lair,
             "lair_slug": state["lair_slug"],
             "last_lair_action_id": "",
+            "lair_acted_round": None,
         },
     })
     return {"ok": True, "in_lair": in_lair, "lair_slug": state["lair_slug"]}
@@ -24132,6 +24135,9 @@ async def trigger_lair_action(
       404 no active battle.
       409 ``not_in_lair`` — the battle's ``in_lair`` flag is False.
       409 ``unknown_lair_action`` — slug/action_id didn't resolve.
+      409 ``lair_already_acted_this_round`` — the lair already took an
+          action this round and ``override`` not set (RAW MM p.11: one
+          lair action per round).
       409 ``lair_action_repeated`` — same action as the previous lair
           turn and ``override`` not set (RAW MM p.11).
     """
@@ -24173,10 +24179,34 @@ async def trigger_lair_action(
             "action_id": action_id,
         })
 
+    override = bool(body.get("override"))
+
+    # v2.173.0 — RAW MM p.11: a creature takes ONE lair action per round
+    # (on initiative count 20). The round the lair last acted is parked on
+    # the battle state; reject a second action in the same round unless the
+    # GM passes override=true. The round advances via the init-tracker's
+    # `round` counter on the battle-state dict, so a fresh round frees it.
+    try:
+        current_round = int(state.get("round") or 0)
+    except (TypeError, ValueError):
+        current_round = 0
+    acted_round = state.get("lair_acted_round")
+    if not override and acted_round is not None:
+        try:
+            already = int(acted_round) == current_round
+        except (TypeError, ValueError):
+            already = False
+        if already:
+            return JSONResponse(status_code=409, content={
+                "error": "lair_already_acted_this_round",
+                "lair_slug": lair_slug,
+                "action_id": action_id,
+                "round": current_round,
+            })
+
     # v2.172.0 — RAW MM p.11: a creature can't use the same lair action
     # two rounds in a row. The previous lair turn's action id is parked on
     # the battle state; reject a repeat unless the GM passes override=true.
-    override = bool(body.get("override"))
     last_action_id = str(state.get("last_lair_action_id") or "").strip()
     if not override and last_action_id and action_id == last_action_id:
         return JSONResponse(status_code=409, content={
@@ -24277,6 +24307,9 @@ async def trigger_lair_action(
     # lair turn can't re-use it (RAW MM p.11), and clients can disable its
     # Trigger button until a different action is used.
     state["last_lair_action_id"] = action_id
+    # v2.173.0 — mark the round the lair acted so a second action this
+    # round is rejected (one lair action per round, RAW MM p.11).
+    state["lair_acted_round"] = current_round
     hub.set_battle(campaign_id, state)
 
     await hub.broadcast(campaign_id, {
@@ -24293,6 +24326,7 @@ async def trigger_lair_action(
             "effect": effect,
             "results": results,
             "last_lair_action_id": action_id,
+            "lair_acted_round": current_round,
         },
     })
     return {
@@ -24302,6 +24336,7 @@ async def trigger_lair_action(
         "action_name": action_name,
         "results": results,
         "last_lair_action_id": action_id,
+        "lair_acted_round": current_round,
     }
 
 
@@ -85327,6 +85362,10 @@ async def update_battle(
         # reason as the flags above.
         if "last_lair_action_id" not in state and "last_lair_action_id" in _prev_battle:
             state["last_lair_action_id"] = _prev_battle.get("last_lair_action_id")
+        # v2.173.0 — carry forward the once-per-round counter for the same
+        # reason (RAW MM p.11: one lair action per round).
+        if "lair_acted_round" not in state and "lair_acted_round" in _prev_battle:
+            state["lair_acted_round"] = _prev_battle.get("lair_acted_round")
 
     # v2.99.185 — NPC concentration-drop auto-cascade. Closes a
     # v2.99.179 filed item. Walk the prev/new combatants for any
