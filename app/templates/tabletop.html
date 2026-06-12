@@ -1352,6 +1352,65 @@
         color: #ff9090;
         border-color: rgba(255,112,112,.5);
     }
+    /* v2.160.0 — legendary-action strip (GM init-tracker, legendary
+       creatures only). The pool meter shows spent/total dots; each
+       option is a spend button. Amber/gold palette to read as
+       "boss mechanic," distinct from the green economy chips and the
+       purple buff chips. Buttons sit at the 32px dense-panel floor
+       per CLAUDE.md's compact row-based-UI exception. */
+    .legendary-strip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 4px;
+        flex-wrap: wrap;
+    }
+    .legendary-meter {
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: 1px;
+        color: #f0c060;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+    .legendary-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+    .legendary-act-btn {
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1;
+        padding: 4px 6px;
+        min-height: 32px;
+        border: 1px solid rgba(240,192,96,.45);
+        border-radius: 3px;
+        background: rgba(240,192,96,.1);
+        color: #f0c060;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .legendary-act-btn:hover:not(:disabled) {
+        background: rgba(240,192,96,.22);
+        border-color: rgba(240,192,96,.7);
+    }
+    .legendary-act-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+    .legendary-act-btn .la-cost {
+        font-size: 9px;
+        font-weight: 700;
+        padding: 1px 4px;
+        border-radius: 8px;
+        background: rgba(240,192,96,.22);
+        color: #ffe0a0;
+        font-variant-numeric: tabular-nums;
+    }
     /* v2.4.21: roll-state pill + death-saves tracker share one row. The
        roll pill shrinks to content; the death-saves tracker auto-hides
        its 6-pip row when the character is alive. */
@@ -6383,6 +6442,34 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         };
     }
 
+    /* v2.160.0 — seed a legendary creature's per-round action-point
+     * pool + the option list (name + cost) from the source token
+     * template's projected stat block. Idempotent: once
+     * ``legendary_action_options`` is present we never re-derive it,
+     * so a server-side spend (which lands on ``legendary_actions`` via
+     * the legendary_action_pool_update WS handler) is preserved across
+     * renders. PCs (``char_id``) and non-legendary monsters are no-ops.
+     * RAW DMG p.11: default 3 points/round; the spend endpoint
+     * (/use_legendary_action) is the authoritative budget gate — this
+     * is purely the client-side surface that renders the buttons. */
+    function _ensureLegendaryActions(c) {
+        if (!c || c.char_id || !c.token_template_id) return;
+        if (Array.isArray(c.legendary_action_options)) return;
+        const tmpl = allTemplates.find(t => t.id === c.token_template_id);
+        const acts = (tmpl && tmpl.sheet && Array.isArray(tmpl.sheet.actions))
+            ? tmpl.sheet.actions : [];
+        const legendary = acts.filter(a => a && (a.category || '') === 'legendary_action');
+        if (!legendary.length) return;
+        c.legendary_action_options = legendary.map(a => ({
+            id: a.id || String(a.name || 'legendary-action').toLowerCase().replace(/\s+/g, '-'),
+            name: a.name || 'Legendary Action',
+            cost: Math.max(1, Math.min(3, parseInt(a.cost, 10) || 1)),
+        }));
+        if (!c.legendary_actions || typeof c.legendary_actions !== 'object') {
+            c.legendary_actions = { max: 3, current: 3 };
+        }
+    }
+
     /* v2.4.31: heal stale combatants in localStorage that pre-date the
      * action-economy ``economy`` object. Called from ``renderBattle`` before
      * the per-row HTML loop so every combatant has the field; defensive
@@ -7258,6 +7345,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         for (const c of battle.combatants) {
             if (!c.image_url && _resolveCombatantImage(c)) _healedAny = true;
             _ensureEconomy(c);
+            _ensureLegendaryActions(c);
             // v2.99.67 — re-project speed_walk from the linked sheet
             // on every render so stale localStorage / older battle_update
             // payloads don't pin the Mov cap at 30 when the sheet says 40
@@ -7496,6 +7584,42 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const buffChips = buffs.length
                     ? `<div class="buff-chips">${buffs.map(buffChip).join('')}</div>`
                     : '';
+                // v2.160.0 — legendary-action strip. GM-only; renders only
+                // for combatants seeded with legendary_action_options (the
+                // _ensureLegendaryActions heal above attaches them for
+                // legendary monsters). Pool meter (spent/total dots) + one
+                // spend button per option. Buttons disable on the
+                // creature's own turn (RAW DMG p.11: legendary actions are
+                // spent at the END of ANOTHER creature's turn) and when the
+                // option's cost exceeds the remaining pool. The actual
+                // budget gate is server-side in /use_legendary_action; the
+                // disabled state is a UX hint that mirrors it.
+                let legendaryStrip = '';
+                if (IS_GM && Array.isArray(c.legendary_action_options) && c.legendary_action_options.length) {
+                    const _pool = c.legendary_actions || { max: 3, current: 3 };
+                    const _cur = Math.max(0, parseInt(_pool.current, 10) || 0);
+                    const _max = Math.max(1, parseInt(_pool.max, 10) || 3);
+                    const _dots = '●'.repeat(Math.min(_cur, _max))
+                        + '○'.repeat(Math.max(0, _max - _cur));
+                    const _ownTurn = isActive;
+                    const _laBtns = c.legendary_action_options.map(opt => {
+                        const _disabled = _ownTurn || opt.cost > _cur;
+                        const _nm = String(opt.name).replace(/"/g, '&quot;');
+                        const _ttl = _ownTurn
+                            ? 'Cannot spend on the creature&#39;s own turn'
+                            : `Spend ${opt.cost} legendary action point${opt.cost === 1 ? '' : 's'}`;
+                        return `<button type="button" class="legendary-act-btn"
+                            data-idx="${i}" data-action-id="${opt.id}"
+                            data-action-name="${_nm}" data-cost="${opt.cost}"
+                            ${_disabled ? 'disabled' : ''} title="${_ttl}">
+                            ${_nm} <span class="la-cost">${opt.cost}</span>
+                        </button>`;
+                    }).join('');
+                    legendaryStrip = `<div class="legendary-strip">
+                        <span class="legendary-meter" title="Legendary action points ${_cur}/${_max}">👑 ${_dots} ${_cur}/${_max}</span>
+                        <div class="legendary-btns">${_laBtns}</div>
+                    </div>`;
+                }
                 // v2.49.96 — Init/HP text + action-economy chips share
                 // one wrapping flex row so the chip strip sits inline with
                 // the stat line instead of stacking below it. Saves ~24 px
@@ -7519,6 +7643,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                                 ${economyChips}
                             </div>
                             ${buffChips}
+                            ${legendaryStrip}
                         </div>
                         ${sheetBtn}
                     </div>
@@ -7649,6 +7774,52 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     if (c.buffs.length !== before) break;  // removed one — done
                 }
                 pushBattle(); renderBattle();
+            }
+        }));
+
+        // v2.160.0 — legendary-action spend buttons. GM clicks an option
+        // → POST /use_legendary_action. The server is the budget gate
+        // (own-turn / pool-cost / decrement); on success it broadcasts
+        // legendary_action_pool_update (→ the WS handler below updates the
+        // pool meter + re-renders) and feature_used (→ chat card). On a
+        // 409 (own turn / insufficient points) we surface a toast and
+        // re-render to restore the button. stopPropagation keeps the
+        // click from toggling the card's expand/collapse.
+        list.querySelectorAll('.legendary-act-btn').forEach(btn => btn.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            if (btn.disabled) return;
+            const idx = parseInt(btn.dataset.idx, 10);
+            const c = battle.combatants[idx];
+            if (!c || !c.id) return;
+            const cost = Math.max(1, Math.min(3, parseInt(btn.dataset.cost, 10) || 1));
+            btn.disabled = true;
+            try {
+                const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/use_legendary_action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        combatant_id: c.id,
+                        action_id: btn.dataset.actionId || '',
+                        action_name: btn.dataset.actionName || 'Legendary Action',
+                        cost,
+                    }),
+                });
+                if (!r.ok) {
+                    let body; try { body = await r.json(); } catch { body = null; }
+                    const err = body && body.error ? body.error : r.status;
+                    const human = err === 'cannot_use_on_own_turn'
+                        ? 'Legendary actions can only be spent on another creature’s turn.'
+                        : (err === 'insufficient_legendary_action_points'
+                            ? 'Not enough legendary action points.'
+                            : `Legendary action failed: ${err}`);
+                    (window.showToast || function(m){ alert(m); })(human, 'error');
+                    renderBattle();  // restore the button (server rejected the spend)
+                }
+                // Success → server broadcasts legendary_action_pool_update;
+                // the WS handler updates c.legendary_actions + re-renders.
+            } catch (e) {
+                console.warn('use_legendary_action fetch failed:', e);
+                renderBattle();
             }
         }));
 
@@ -8100,6 +8271,25 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 saveBattle();
                 renderBattle();
             }
+            return;
+        }
+        // v2.160.0 — legendary_action_pool_update — server spent (or
+        // turn-start-refreshed) a legendary creature's action-point pool.
+        // Patch the matching combatant's pool field + re-render so the
+        // meter dots + button disabled-state reflect the new count. The
+        // broadcast is authoritative (the server is the budget gate), so
+        // this is a plain set, idempotent on replay.
+        if (msg.type === 'legendary_action_pool_update') {
+            const data = msg.data || {};
+            const combId = data.combatant_id;
+            if (combId == null) return;
+            const combatant = (battle.combatants || []).find(c => c.id === combId);
+            if (!combatant) return;
+            const _max = Math.max(1, parseInt(data.max, 10) || 3);
+            const _cur = Math.max(0, parseInt(data.current, 10) || 0);
+            combatant.legendary_actions = { max: _max, current: Math.min(_cur, _max) };
+            saveBattle();
+            renderBattle();
             return;
         }
         // v2.19.0 Phase C.1: buff_update — server installed / removed a

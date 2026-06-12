@@ -1,7 +1,7 @@
 # Legendary actions + lair actions — design plan
 
-**Status:** 🟠 Phases 1a + 1b shipped (re-audited 2026-06-11,
-v2.159.34) — the budget surface is live:
+**Status:** 🟠 Phases 1a + 1b + 1c (UI) shipped (re-audited 2026-06-11,
+v2.160.0) — the budget surface + GM control are live:
 - **Phase 1a ✅ v2.159.33** — cost-integer backfill across 30 monsters
   (39 actions).
 - **Phase 1b ✅ v2.159.34** — combatant `legendary_actions = {max, current}`
@@ -9,10 +9,15 @@ v2.159.34) — the budget surface is live:
   `POST /api/campaign/{cid}/use_legendary_action` endpoint (GM-only,
   own-turn gate, pool-cost gate, decrement, broadcasts
   `legendary_action_pool_update` + `feature_used`).
+- **Phase 1c (UI) ✅ v2.160.0** — GM init-tracker legendary-action strip:
+  pool meter (👑 ●●● 3/3) + a click-to-spend button per option (cost
+  pill, own-turn + insufficient-points disable), wired to the
+  /use_legendary_action endpoint, with a `legendary_action_pool_update`
+  WS handler driving the meter live. 3 Playwright UI tests.
 
-Phase 1c (chat-card surface + initiative-tracker chip + damage-dispatch
-chaining to `/npc_attack` for attack-shape actions) is the natural
-next slice.
+The remaining Phase 1c work is server-side damage-dispatch chaining
+(roll the attack/AoE through `/npc_attack` in the same request for
+attack-shape actions) + a chat-card surface.
 **Authors:** rolling
 **Last updated:** 2026-06-11
 
@@ -230,11 +235,15 @@ combatant.legendary_resistance = {
   Damage dispatch deferred to Phase 1c — Phase 1b is a budget gate
   only; the client (or a future commit) follows up with a regular
   `/npc_attack` call for attack-shape actions.
-- Phase 1c: damage-dispatch chaining (the endpoint optionally calls
-  into `/npc_attack`'s damage pipeline when the action has
-  `attack_roll`+`damage`, or routes through the AoE save-resolver when
-  the action has `save_ability`); chat-card surface + initiative-
-  tracker chip showing the legendary-action point count.
+- Phase 1c (UI) ✅ v2.160.0: initiative-tracker legendary-action strip
+  (pool meter + per-option spend buttons) in `app/templates/tabletop.html`
+  — `_ensureLegendaryActions` seed helper, `.legendary-strip` render,
+  click → `/use_legendary_action`, `legendary_action_pool_update` WS
+  handler, 3 Playwright UI tests (`test_legendary_action_buttons.py`).
+- Phase 1c (server, pending): damage-dispatch chaining (the endpoint
+  optionally calls into `/npc_attack`'s damage pipeline when the action
+  has `attack_roll`+`damage`, or routes through the AoE save-resolver
+  when the action has `save_ability`); chat-card surface.
 
 ### Phase 2 — Legendary resistance pool (S, ~2 commits)
 
