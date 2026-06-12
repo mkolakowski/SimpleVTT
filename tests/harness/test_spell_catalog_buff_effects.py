@@ -33,6 +33,15 @@ sign moves the delta and fails here.
   `_saver_bless_bane_save_suffix` appends the d4. Delta =
   `auto_save_rolled` with minus without.
 
+Phase 3c covers the flat-AC buffs (Shield of Faith / Mage Armor / Haste);
+the boosted-minus-baseline `target_ac` delta must equal the registry
+`ac_bonus`. Phase 3d covers the weapon-hit damage riders (Hunter's Mark /
+Hex): a real cast installs a `weapon_hit_bonus_dice: "1d6"` rider on the
+caster keyed to the target, and the caster's `/attack` against that target
+surfaces the rolled die in `auto_uplifts` under `source == <buff key>`. The
+gate pins the rider die (`1d6`) and Hex's necrotic type, so a registry edit
+to the die or damage type fails it.
+
 Both pre-seed the buff directly via PUT /battle (off the live combatant's
 `buffs` list — no `effects` gating, no save-fail loop), so the checks are
 fully deterministic. The catalog anchor (`test_*_present_in_catalog`)
@@ -486,4 +495,159 @@ async def test_ac_buff_spells_apply_exact_ac_bonus(gm_client, roster):
     )
     assert not failures, (
         f"{len(failures)} AC buff-effect failures:\n  " + "\n  ".join(failures)
+    )
+
+
+# --- Phase 3d: weapon-hit damage riders -------------------------------------
+
+# Hunter's Mark / Hex each install a concentration buff on the *caster*
+# carrying `effects.weapon_hit_bonus_dice: "1d6"` keyed to a target. When the
+# caster attacks that target, `_compute_attack_auto_uplifts` rolls the die and
+# surfaces it in the /attack response's `auto_uplifts` under `source == key`.
+# Installed by a real cast through the dedicated endpoint, so the gate catches
+# a registry edit to the rider die or its damage type. `damage_type=None`
+# means "defaults to the weapon's type" (Hunter's Mark), so the gate only
+# asserts a non-empty type there; Hex pins necrotic. `catalog=False` marks an
+# engine-only spell that isn't in the open SRD JSON layer (Hex is PHB-only) —
+# its behaviour is still gated, but it's excluded from the catalog anchor.
+_HIT_RIDER_BUFFS = {
+    "hunters-mark": {
+        "key": "hunters-mark", "endpoint": "cast_hunters_mark",
+        "caster": "Rowan Quickbow", "die": "1d6", "damage_type": None,
+        "body_extra": {}, "catalog": True,
+    },
+    "hex": {
+        "key": "hex", "endpoint": "cast_hex",
+        "caster": "Magnus Hexbinder", "die": "1d6", "damage_type": "necrotic",
+        "body_extra": {"ability": "STR"}, "catalog": False,
+    },
+}
+
+_HIT_RIDER_TOKEN = re.compile(r"1d6\[(\d+)\]=(\d+)")
+_HIT_RIDER_TARGET = "Krieger Stonefist"  # full HP so Colossus Slayer stays dark.
+
+
+async def _rider_seed_battle(gm_client, caster, target) -> str:
+    """Caster (also the attacker) + a full-HP target, both with empty buffs.
+    Returns the target's token id."""
+    caster_tok = f"tok_hitrider_caster_{caster['id']}"
+    target_tok = f"tok_hitrider_tgt_{target['id']}"
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {"id": caster_tok, "char_id": caster["id"], "name": caster["name"],
+                 "initiative": 15, "hp_current": 40, "hp_max": 40, "buffs": [],
+                 "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                {"id": target_tok, "char_id": target["id"], "name": target["name"],
+                 "initiative": 8, "hp_current": 60, "hp_max": 60, "buffs": [],
+                 "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+    return target_tok
+
+
+async def test_weapon_hit_rider_buffs_present_in_catalog():
+    """Catalog anchor for the catalog-backed weapon-hit riders (Hunter's
+    Mark). Hex is PHB-only (`catalog=False`) and intentionally not in the
+    open SRD JSON layer, so it's excluded here but still gated behaviourally.
+    """
+    by_slug = {(s.get("slug") or ""): s for s in load_all_spells()}
+    catalog_slugs = [s for s, spec in _HIT_RIDER_BUFFS.items() if spec["catalog"]]
+    assert catalog_slugs, "expected at least one catalog-backed weapon-hit rider"
+    missing = [slug for slug in catalog_slugs if slug not in by_slug]
+    assert not missing, f"weapon-hit-rider spells absent from catalog: {missing}"
+
+
+async def test_weapon_hit_riders_apply_exact_bonus_damage(gm_client, roster):
+    """For Hunter's Mark and Hex: real-cast the rider on a target, then have
+    the caster attack that target and assert the `auto_uplifts` entry sourced
+    from the buff carries exactly a `1d6` expression, an in-band roll that
+    matches its own breakdown + total, and the registry damage type.
+
+    The rider is rolled server-side per /attack; a dice seed pins the value so
+    the breakdown/total cross-check is stable. A registry edit that changes
+    the die (`1d6`→`1d8`), drops the rider, or retypes Hex away from necrotic
+    moves the assertion and fails here.
+    """
+    target = roster[_HIT_RIDER_TARGET]
+    failures: list[str] = []
+    checked = 0
+    try:
+        for slug, spec in _HIT_RIDER_BUFFS.items():
+            seed = 53000 + checked
+            caster = roster[spec["caster"]]
+
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/character/{caster['id']}/rest",
+                json={"type": "long"},
+            )
+            target_tok = await _rider_seed_battle(gm_client, caster, target)
+
+            body = {
+                "character_id": caster["id"],
+                "target_character_id": target["id"],
+                "slot_level": 1, "override": True, "override_range": True,
+            }
+            body.update(spec["body_extra"])
+            cast = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/{spec['endpoint']}", json=body,
+            )
+            if cast.status_code != 200:
+                failures.append(f"{slug}: cast HTTP {cast.status_code} {cast.text[:120]}")
+                continue
+            rider_target = cast.json().get("target_combatant_id") or target_tok
+
+            await _seed_dice(gm_client, seed)
+            atk = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": caster["id"], "attack_index": 0,
+                    "target_combatant_id": rider_target,
+                    "target_character_id": target["id"], "target_name": target["name"],
+                    "override": True, "override_range": True,
+                },
+            )
+            if atk.status_code != 200:
+                failures.append(f"{slug}: attack HTTP {atk.status_code} {atk.text[:120]}")
+                continue
+            ups = [u for u in (atk.json().get("auto_uplifts") or [])
+                   if u.get("source") == spec["key"]]
+            if len(ups) != 1:
+                failures.append(
+                    f"{slug}: expected exactly one '{spec['key']}' uplift, got "
+                    f"{[u.get('source') for u in (atk.json().get('auto_uplifts') or [])]}"
+                )
+                continue
+            u = ups[0]
+            if u.get("expression") != spec["die"]:
+                failures.append(f"{slug}: rider expression {u.get('expression')!r} != {spec['die']!r}")
+            m = _HIT_RIDER_TOKEN.search(u.get("breakdown") or "")
+            if not m:
+                failures.append(f"{slug}: no 1d6 token in rider breakdown {u.get('breakdown')!r}")
+                continue
+            rolled, sub = int(m.group(1)), int(m.group(2))
+            if not (1 <= rolled <= 6):
+                failures.append(f"{slug}: rider d6 roll {rolled} out of [1,6] ({u.get('breakdown')!r})")
+            if rolled != sub:
+                failures.append(f"{slug}: rider d6 token {rolled} != subtotal {sub} ({u.get('breakdown')!r})")
+            if int(u.get("total") or 0) != rolled:
+                failures.append(f"{slug}: rider total {u.get('total')} != rolled die {rolled}")
+            dt = (u.get("damage_type") or "").strip()
+            if spec["damage_type"] is None:
+                if not dt:
+                    failures.append(f"{slug}: rider damage_type is empty (expected weapon type)")
+            elif dt != spec["damage_type"]:
+                failures.append(f"{slug}: rider damage_type {dt!r} != {spec['damage_type']!r}")
+            checked += 1
+    finally:
+        await _seed_dice(gm_client, None)
+
+    assert checked == len(_HIT_RIDER_BUFFS), (
+        f"only exercised {checked}/{len(_HIT_RIDER_BUFFS)} weapon-hit-rider buffs"
+    )
+    assert not failures, (
+        f"{len(failures)} weapon-hit-rider failures:\n  " + "\n  ".join(failures)
     )
