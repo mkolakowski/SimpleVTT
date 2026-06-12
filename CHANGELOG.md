@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.176.0] - 2026-06-12 — "The Stirring Lair" — Lair-action initiative-20 player visibility. The v2.175.0 `lair_init_20_reached` WS broadcast (RAW MM p.11) already reaches every client in the campaign, but the client handler only surfaced a toast to the GM — players felt nothing as the lair's cadence came around. This commit gives **players** an atmospheric cue: a non-GM client receiving the broadcast now shows a "🌋 The lair stirs…" toast, deliberately stripped of GM-only mechanics (no owner name, no "may take a lair action" phrasing) so the table feels the count-20 beat without leaking the GM's trigger surface. The GM still gets the full mechanical nudge ("🌋 Initiative count 20 — {owner} may take a lair action."). Pure front-end change: the broadcast shape is unchanged (it already carries `{lair_slug, owner_name, round}`), no new endpoint, no schema change — just a player branch in the existing `lair_init_20_reached` handler.
+
+**Schema version:** 69
+**Commit summary:** **Front-end-only commit. `app/templates/tabletop.html` — the `lair_init_20_reached` WS handler gains a non-GM branch: players get a "🌋 The lair stirs…" flavor toast (no owner / no mechanics) while the GM keeps the mechanical "Initiative count 20 — {owner} may take a lair action." nudge. `tests/harness_ui/test_lair_action_ui.py` — 2 new Playwright tests (player flavor toast via `alice_page`; GM mechanical toast still fires).**
+**Description:** The server-side broadcast from v2.175.0 already fans out to all campaign WS connections, so no server change was needed — the only gap was the client handler gating the toast on `IS_GM`. Splitting it into a GM branch (mechanical) and a player branch (atmospheric) matches RAW: lair actions are overt environmental effects the whole table experiences, so a player cue is appropriate, but the owner identity + "may take a lair action" prompt is GM-facing scheduling info that stays GM-only. Modelled as a toast (not a persistent banner) to mirror the GM's one-shot nudge and because the players have no lair panel to host a banner.
+
+### Changed
+- `app/templates/tabletop.html` — `lair_init_20_reached` handler now branches on `IS_GM`: GM mechanical nudge vs. player "🌋 The lair stirs…" flavor toast.
+- `docs/plans/legendary-actions.md` — init-20 player visibility noted shipped.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the init-20 player toast.
+- `docs/test-harness-coverage.md` — `test_lair_action_ui.py` 7 → 9; harness_ui total bumped.
+- `app/version.py` — `APP_VERSION` 2.175.0 → 2.176.0 (MINOR: new user-facing UI behavior, backward-compatible). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.176.0.
+
+### Added
+- `tests/harness_ui/test_lair_action_ui.py` — 2 new Playwright tests: `test_init_20_player_gets_flavor_toast` (player sees "The lair stirs…", not the mechanical phrasing) + `test_init_20_gm_gets_mechanical_toast` (GM still sees owner + "may take a lair action").
+
+### Notes
+- No schema change (still v69). No new endpoint, no WS-shape change — the `lair_init_20_reached` broadcast from v2.175.0 is unchanged; this is a client-side handler branch.
+- The player cue is advisory flavor; the hard RAW guards (one-per-round, no-repeat) remain server-side (v2.172.0–v2.173.0) and GM-only.
+
 ## [2.175.0] - 2026-06-12 — "The Tolling Bell" — Lair-action initiative-20 server broadcast. v2.174.0 surfaced the init-20 prompt client-side (a render-derived banner + a client-deduped toast). This commit promotes the toast to a **server-authoritative** WS broadcast so the prompt is harness-testable and can't drift from the turn order. When a `PUT /battle` lands the turn order in the init-20 zone — the active combatant's initiative ≤ 20 (combatants above 20 already acted; the lair acts before the first ≤ 20), or every combatant is above 20 (count 20 falls after the last turn) — and the lair is active and hasn't already acted/broadcast this round, `update_battle` fires a `lair_init_20_reached` broadcast carrying `{lair_slug, owner_name, round}`. It's deduped per round via a `lair_init20_broadcast_round` marker parked on the battle-state JSON column (carried forward across the routine PUTs that omit it, re-armed on `/set_in_lair`), so it fires once when the turn order crosses count 20 — not on every intervening PUT. The client's render-derived banner + border glow (v2.174.0) stay; the one-shot toast now rides the new `lair_init_20_reached` WS handler (GM-only) instead of a render-time client dedup, so it can't double-fire across re-renders. Still a **prompt, not a gate** — the once-per-round + no-repeat guards (v2.172.0–v2.173.0) are the hard rules.
 
 **Schema version:** 69

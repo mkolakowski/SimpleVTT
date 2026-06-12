@@ -470,6 +470,14 @@ combatant.legendary_resistance = {
   render-derived). No schema change. 7 new harness tests in
   `tests/harness/test_lair_init_20.py`. The init-20 prompt is now
   authoritative + harness-testable, not just client-derived.
+- Initiative-20 player visibility (✅ **shipped v2.176.0** "The Stirring
+  Lair"): RAW MM p.11 — the v2.175.0 `lair_init_20_reached` broadcast
+  already reached every client, but the handler only toasted the GM. Now
+  a non-GM client shows a "🌋 The lair stirs…" flavor toast (no owner /
+  no "may take a lair action" mechanics) so the table feels the count-20
+  beat without leaking the GM's trigger surface; the GM keeps the
+  mechanical nudge. Front-end only — broadcast shape unchanged, no
+  endpoint / schema change. 2 new Playwright tests.
 
 ### Non-goals (v1)
 

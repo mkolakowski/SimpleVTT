@@ -8533,19 +8533,24 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         }
         // v2.175.0 — lair_init_20_reached — the server detected the turn
         // order crossing into initiative count 20 (RAW MM p.11). It's
-        // broadcast once per round (server-deduped). Surface a one-shot
-        // toast to the GM so they're nudged to fire the lair action even
-        // if the panel is scrolled off-screen; the panel's banner + border
-        // glow is render-derived (v2.174.0) and updates on the paired
-        // battle_update. GM-only (the panel + prompt are GM surfaces).
+        // broadcast once per round (server-deduped). The GM gets a mechanical
+        // nudge (owner + "may take a lair action") so they fire it even if the
+        // panel is scrolled off-screen; the panel's banner + border glow is
+        // render-derived (v2.174.0) and updates on the paired battle_update.
         if (msg.type === 'lair_init_20_reached') {
+            const data = msg.data || {};
+            const _lairToast = window.showToast || function (m) { console.log(m); };
             if (IS_GM) {
-                const data = msg.data || {};
-                (window.showToast || function (m) { console.log(m); })(
+                _lairToast(
                     '🌋 Initiative count 20 — ' + (data.owner_name || 'the lair')
                     + ' may take a lair action.',
                     'info',
                 );
+            } else {
+                // v2.176.0 — players get an atmospheric cue (no GM-only
+                // mechanics) so the table feels the lair cadence as count 20
+                // comes around each round.
+                _lairToast('🌋 The lair stirs…', 'info');
             }
             if (typeof window._renderLairActionPanel === 'function') {
                 window._renderLairActionPanel();

@@ -318,3 +318,44 @@ def test_init_20_banner_surfaces_when_reached(gm_page: Page):
     panel = gm_page.locator("#_lair_action_panel")
     expect(panel).to_be_visible(timeout=5000)
     expect(panel).to_contain_text("not yet reached", timeout=3000)
+
+
+def _dispatch_lair_init_20_reached(page: Page) -> None:
+    page.evaluate(
+        """(slug) => {
+            document.dispatchEvent(new CustomEvent('vtt:ws-message', {detail: {
+                type: 'lair_init_20_reached',
+                data: {lair_slug: slug, owner_name: 'Ancient Red Dragon', round: 1},
+            }}));
+        }""",
+        _LAIR_SLUG,
+    )
+
+
+def test_init_20_player_gets_flavor_toast(alice_page: Page):
+    """v2.176.0 — RAW MM p.11: a player (non-GM) receiving the
+    `lair_init_20_reached` broadcast sees an atmospheric "The lair stirs…"
+    toast — no GM-only mechanics (owner name / "may take a lair action")."""
+    _seed_battle(alice_page, in_lair=True, turn_index=1)
+    alice_page.goto(tabletop_url())
+
+    _dispatch_lair_init_20_reached(alice_page)
+
+    toast = alice_page.locator(".vtt-toast").filter(has_text="The lair stirs")
+    expect(toast).to_be_visible(timeout=3000)
+    # The player must NOT see the GM-only mechanical phrasing.
+    expect(alice_page.locator(".vtt-toast").filter(
+        has_text="may take a lair action")).to_have_count(0)
+
+
+def test_init_20_gm_gets_mechanical_toast(gm_page: Page):
+    """v2.176.0 — the GM still gets the mechanical nudge naming the owner
+    and "may take a lair action" (not the player flavor cue)."""
+    _seed_battle(gm_page, in_lair=True, turn_index=1)
+    gm_page.goto(tabletop_url())
+
+    _dispatch_lair_init_20_reached(gm_page)
+
+    toast = gm_page.locator(".vtt-toast").filter(has_text="may take a lair action")
+    expect(toast).to_be_visible(timeout=3000)
+    expect(toast).to_contain_text("Ancient Red Dragon")
