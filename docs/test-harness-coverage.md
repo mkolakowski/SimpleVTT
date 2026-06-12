@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2457 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.182.8, 2026-06-12).
+**Total tests:** 2461 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -3328,6 +3328,22 @@ Phase 2F buff-install payload assertions. Patches the scratch caster (Thalindra)
 |------|-----------------|
 | `test_every_buff_spell_installs_expected_payload` | Every buff-map spell installs on the target with the expected key/name/duration_rounds/concentration + non-empty effects; all 9 asserted; drift collected by slug. |
 | `test_buff_install_catalog_subset_nonempty` | Guard: ≥ 9 buff-install spells listed and every slug resolves to a real catalog spell. |
+
+### `test_spell_catalog_save_damage.py`
+Phase 2A backfill — save-for-half damage. Flips `campaign.auto_apply_damage` on (via the TEST_MODE `/api/test/campaign/{id}/flags` endpoint), patches the scratch caster (Thalindra) with the whole catalog + abundant slots, seeds one very-high-HP NPC, then casts 8 save-for-half spells: Fireball (8d6), Lightning Bolt (8d6), Burning Hands (3d6), Thunderwave (2d8), Shatter (3d8), Cone of Cold (8d8), plus the Sacred Flame (2d8 at L5) and Poison Spray (2d12 at L5) cantrips that exercise the save-block tier scaling. For each it range-checks `auto_save_damage_rolled` (the full pre-halving roll) against the dice band and asserts the damage type. Restores the flag in a `finally`. Range-check only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_every_save_spell_rolls_damage_in_range` | Each save-for-half spell rolls `auto_save_damage_rolled` inside its dice band with matching damage type; all 8 asserted; drift collected by slug. |
+| `test_save_damage_catalog_subset_present` | Guard: every slug resolves to a catalog spell that still carries a save_ability + damage action and no attack_roll. |
+
+### `test_campaign_flags.py`
+Coverage for the TEST_MODE-only `POST /api/test/campaign/{id}/flags` endpoint, which flips campaign booleans (today `auto_apply_damage`) without driving the multipart GM settings form. Used by the save-for-half damage test to enable the server-side damage roll.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_flags_read_then_toggle_then_restore` | A no-field POST reads the current value; setting true/false mutates + echoes; restore round-trips. |
+| `test_flags_unknown_campaign_404` | Unknown campaign id → 404. |
 
 ### `test_spell_catalog_multibeam.py`
 Phase 2A backfill — multi-beam attack-roll damage. Patches the scratch caster (Thalindra, Wizard L5) with the whole catalog + abundant slots, seeds a battle with a low-AC NPC so beams reliably connect, then casts Scorching Ray (3 rays of 2d6 fire at base slot 2) and Eldritch Blast (2 beams of 1d10 force at caster L5). For each spell it reads the `auto_attack_beams` list and asserts: the beam count matches the expected scaling; every hitting beam's `damage_rolled` falls in the single-beam dice band (widened on a crit beam, which doubles the dice); the aggregate `auto_attack_damage_rolled` equals the sum of the per-beam rolls; and the damage type matches the catalog. Retries up to 8× for a hitting beam. The multi-beam path populates `auto_attack_damage_rolled` on hit without `campaign.auto_apply_damage`, so no settings toggle is needed (unlike the save-for-half / auto-hit paths, still filed). Range-check only.
