@@ -59,6 +59,42 @@ _ATTACKER = "Krieger Stonefist"  # Barbarian, greataxe at attack_index 0.
 
 _D4_TOKEN = re.compile(r"1d4\[(\d+)\]=(\d+)")
 
+# Phase 3c — auto-applied flat AC buffs. Each value mirrors the spell's
+# `_SPELL_BUFF_MAP` entry's `effects.ac_bonus`, summed into `target_ac` by
+# `_read_target_ac`. The buff is installed by a *real cast* (not pre-seeded)
+# so a registry edit to the ac_bonus value is what the gate catches.
+_AC_BONUS_BUFFS = {
+    "shield-of-faith": 2,
+    "mage-armor": 3,
+    "haste": 2,
+}
+
+_AC_CASTER = "Thalindra Moonwhisper"
+_AC_CASTER_CLASS = "wizard"
+_AC_ATTACKER = "Pip Quickfingers"
+_AC_TARGET = "Krieger Stonefist"
+
+
+def _all_entries(spells: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for s in spells:
+        slug = (s.get("slug") or "").strip()
+        if not slug:
+            continue
+        out.append({
+            "name": s.get("name") or slug,
+            "_slug": slug,
+            "level": int(s.get("level_int") or 0),
+            "class": _AC_CASTER_CLASS,
+            "prepared": True,
+            "casting_time": s.get("casting_time") or "1 action",
+        })
+    return out
+
+
+def _abundant_slots() -> dict:
+    return {_AC_CASTER_CLASS: {str(lvl): {"total": 999, "used": 0} for lvl in range(1, 10)}}
+
 
 def _buff_payload(buff_key: str, attacker_id: int) -> dict:
     return {
@@ -313,4 +349,141 @@ async def test_bless_bane_save_uplift_contribution_is_exact(gm_client, roster):
     )
     assert not failures, (
         f"{len(failures)} save buff-effect failures:\n  " + "\n  ".join(failures)
+    )
+
+
+# --- Phase 3c: flat AC buffs ------------------------------------------------
+
+async def _ac_seed_battle(gm_client, caster, attacker, target) -> None:
+    """Caster + attacker + buffed target, all with empty buffs."""
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {"id": f"tok_acbuff_caster_{caster['id']}", "char_id": caster["id"],
+                 "name": caster["name"], "initiative": 20, "hp_current": 30, "hp_max": 30,
+                 "buffs": [], "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                {"id": f"tok_acbuff_atk_{attacker['id']}", "char_id": attacker["id"],
+                 "name": attacker["name"], "initiative": 14, "hp_current": 40, "hp_max": 40,
+                 "buffs": [], "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                {"id": f"tok_acbuff_tgt_{target['id']}", "char_id": target["id"],
+                 "name": target["name"], "initiative": 8, "hp_current": 60, "hp_max": 60,
+                 "buffs": [], "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
+async def _ac_target_buffs(gm_client, target_char_id: int) -> list[dict]:
+    got = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/battle")
+    combs = ((got.json() or {}).get("battle") or {}).get("combatants") or []
+    tgt = next((c for c in combs if c.get("char_id") == target_char_id), {})
+    return [b for b in (tgt.get("buffs") or []) if isinstance(b, dict)]
+
+
+async def test_ac_buff_spells_present_in_catalog():
+    """Catalog anchor for the AC-buff registry."""
+    by_slug = {(s.get("slug") or ""): s for s in load_all_spells()}
+    missing = [slug for slug in _AC_BONUS_BUFFS if slug not in by_slug]
+    assert not missing, f"AC-buff spells absent from catalog: {missing}"
+
+
+async def test_ac_buff_spells_apply_exact_ac_bonus(gm_client, roster):
+    """For Shield of Faith (+2), Mage Armor (+3), Haste (+2): cast the
+    spell on a target, attack the target before and after, and assert
+    `target_ac` rises by exactly the spell's RAW `ac_bonus`.
+
+    The buff is installed by a *real cast* (not pre-seeded), so the value
+    that drives the delta comes from `_SPELL_BUFF_MAP[slug].effects.ac_bonus`
+    — a registry edit to that number, or a dropped AC hook, fails the gate.
+    """
+    caster = roster[_AC_CASTER]
+    attacker = roster[_AC_ATTACKER]
+    target = roster[_AC_TARGET]
+    cid = caster["id"]
+
+    snap = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/character/{cid}/sheet-json")
+    sheet = (snap.json() or {}).get("sheet") or {}
+    orig_spells = sheet.get("spells") or []
+    orig_slots = sheet.get("spell_slots") or {}
+
+    spells = load_all_spells()
+    entries = _all_entries(spells)
+    idx_by_slug = {e["_slug"]: i for i, e in enumerate(entries)}
+    by_slug = {(s.get("slug") or ""): s for s in spells}
+
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{cid}/sheet-fields",
+        json={"spells": entries, "spell_slots": _abundant_slots()},
+    )
+    assert patch.status_code == 200, patch.text
+
+    async def _attack_target() -> int:
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": attacker["id"], "attack_index": 0,
+                "target_combatant_id": f"tok_acbuff_tgt_{target['id']}",
+                "target_character_id": target["id"], "target_name": target["name"],
+                "override": True, "override_range": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        return int(r.json()["target_ac"])
+
+    failures: list[str] = []
+    checked = 0
+    try:
+        for slug, ac_bonus in _AC_BONUS_BUFFS.items():
+            idx = idx_by_slug.get(slug)
+            spell = by_slug.get(slug)
+            if idx is None or spell is None:
+                failures.append(f"{slug}: not in catalog")
+                continue
+
+            # Fresh battle (clears any prior buff) → baseline AC.
+            await _ac_seed_battle(gm_client, caster, attacker, target)
+            baseline_ac = await _attack_target()
+
+            cast = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+                json={
+                    "character_id": cid, "spell_index": idx,
+                    "slot_level": int(spell.get("level_int") or 1) or 1,
+                    "class_slug": _AC_CASTER_CLASS,
+                    "target_character_id": target["id"],
+                    "target_combatant_id": f"tok_acbuff_tgt_{target['id']}",
+                    "target_name": target["name"],
+                    "override": True, "override_range": True,
+                },
+            )
+            if cast.status_code != 200:
+                failures.append(f"{slug}: cast HTTP {cast.status_code} {cast.text[:120]}")
+                continue
+            buffs = await _ac_target_buffs(gm_client, target["id"])
+            if not any(b.get("key") == slug for b in buffs):
+                failures.append(
+                    f"{slug}: buff not installed on target; keys {[b.get('key') for b in buffs]}"
+                )
+                continue
+
+            boosted_ac = await _attack_target()
+            if boosted_ac - baseline_ac != ac_bonus:
+                failures.append(
+                    f"{slug}: target_ac delta {boosted_ac - baseline_ac} != expected "
+                    f"+{ac_bonus} (baseline={baseline_ac}, boosted={boosted_ac})"
+                )
+            checked += 1
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{cid}/sheet-fields",
+            json={"spells": orig_spells, "spell_slots": orig_slots},
+        )
+
+    assert checked == len(_AC_BONUS_BUFFS), (
+        f"only exercised {checked}/{len(_AC_BONUS_BUFFS)} AC-buff spells"
+    )
+    assert not failures, (
+        f"{len(failures)} AC buff-effect failures:\n  " + "\n  ".join(failures)
     )
