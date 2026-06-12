@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.178.0] - 2026-06-12 — "The Settled Reign" — Regional effects (RAW MM p.11). A dragon's lair shapes more than initiative count 20: the *Monster Manual* gives each lair-bearing dragon a set of **regional effects** — passive, zone-wide environmental changes that radiate from the lair while the creature dwells there (minor earthquakes, fouled water, labyrinthine thickets) and fade over ~1d10 days once it dies. These are distinct from the initiative-20 lair actions: no save, no damage, no engine — they're descriptive flavor a GM narrates. This commit adds them for all five chromatic dragons via a new leaf module `app/content/regional_effects.py` that mirrors `lair_actions.py`: per-color lists of `{id, name, desc}` entries keyed by `adult-*` / `ancient-*` slug (a color's ages share the same region, RAW), with a deep-copy `regional_effects_for_slug()` helper. The monster-sheet projection (`_monster_dict_to_sheet`) folds them onto the sheet as `regional_effects`, alongside `lair_actions`.
+
+**Schema version:** 69
+**Commit summary:** **Back-end + content commit. (A) New `app/content/regional_effects.py` leaf module — `REGIONAL_EFFECTS_BY_SLUG` covering all ten chromatic lair slugs (adult + ancient × black/blue/green/red/white) as rephrased RAW MM-p.11 descriptive entries, plus a defensive deep-copy `regional_effects_for_slug(slug)` helper. (B) `app/routes/tabletop_routes.py` — import + projection fold-in: `out["regional_effects"]` mirrors the existing `out["lair_actions"]` derivation in `_monster_dict_to_sheet`. (C) `tests/harness/test_regional_effects.py` — 13 new pure-Python unit tests.**
+**Description:** Regional effects are flavor-only in v1 (no save/damage/condition engine), so the dict shape is intentionally minimal (`id`, `name`, `desc`) rather than the save/damage/area dict a lair action carries. The 1d10-day fade after the creature dies is a GM narration call; the engine just surfaces the effect text on the projected sheet. Descriptions are rephrased RAW summaries (not verbatim) citing the source page. Metallic dragons + the Lich / Kraken are a filed follow-up backfill — they drop into `REGIONAL_EFFECTS_BY_SLUG` with no code change.
+
+### Added
+- `app/content/regional_effects.py` — curated RAW MM-p.11 regional effects for all five chromatic dragons, with a deep-copy `regional_effects_for_slug()` helper.
+- `app/routes/tabletop_routes.py` — `_monster_dict_to_sheet` folds curated regional effects onto the projected monster sheet as `regional_effects`.
+- `tests/harness/test_regional_effects.py` — 13 unit tests (chromatic coverage, deep-copy isolation, adult/ancient share, blank/non-str → []).
+
+### Changed
+- `docs/plans/legendary-actions.md` — regional effects noted shipped (v2.178.0).
+- `app/templates/wiki.html` + `docs/wiki/README.md` — legendary-actions row refreshed to note the regional-effects module.
+- `docs/test-harness-coverage.md` — new `test_regional_effects.py` section (13 tests); harness total 2415 → 2428.
+- `app/version.py` — `APP_VERSION` 2.177.0 → 2.178.0 (MINOR: additive content + projection field). `SCHEMA_VERSION` unchanged (still 69).
+- `README.md` — version badge bumped to 2.178.0.
+
+### Notes
+- No schema change (still v69). The projection field `regional_effects` is additive — clients that don't read it are unaffected.
+- Flavor-only in v1: no save/damage/condition dispatch. The initiative-20 lair-action engine is untouched.
+
 ## [2.177.0] - 2026-06-12 — "The Cavern's Ledger" — Lair-action roll-log card. When the GM fires a lair action (RAW MM p.11), the server has broadcast `lair_action_resolved` since v2.169.0, but the client only surfaced it as a transient GM toast — the moment vanished and left no trace, while the legendary save-AoE got a persistent roll-log card back in v2.163.0. This commit closes that gap: `lair_action_resolved` now renders a persistent **roll-log card** (`_appendLairActionResolved` in `tabletop.js`) the whole table sees — a 🌋 header naming the lair owner + "Lair Action", the action name + save line, and one pill per target (green ✅ saved / red ❌ with the damage dealt + any installed condition / neutral ⏳ for a PC whose save was prompted). It persists + hydrates like the other WS-only cards, so it survives a page reload. To make the card self-contained on reload (no live battle lookup needed), the server broadcast + response now carry a new `owner_name` field — resolved from the combatant whose `lair_slug` matches the battle's lair, falling back to any combatant carrying `lair_actions`.
 
 **Schema version:** 69

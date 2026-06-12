@@ -487,6 +487,16 @@ combatant.legendary_resistance = {
   hydrates like the other WS-only cards. The broadcast + response gain an
   additive `owner_name` field (resolved from the lair-owning combatant)
   so the card is self-contained on reload. 1 HTTP + 1 Playwright test.
+- Regional effects (✅ **shipped v2.178.0** "The Settled Reign"): RAW MM
+  p.11 passive zone-wide regional effects — distinct from the
+  initiative-20 lair actions — for all five chromatic dragons. New leaf
+  module `app/content/regional_effects.py` mirrors `lair_actions.py`:
+  per-color descriptive entries (`{id, name, desc}` — flavor only, no
+  save/damage engine) keyed by `adult-*` / `ancient-*` slug, with a
+  deep-copy `regional_effects_for_slug()` helper. Folded into the
+  monster-sheet projection as `out["regional_effects"]`. 13 new
+  pure-Python unit tests (`tests/harness/test_regional_effects.py`).
+  Metallic dragons + Lich/Kraken are a filed follow-up data backfill.
 
 ### Non-goals (v1)
 

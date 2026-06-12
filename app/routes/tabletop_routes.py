@@ -3629,6 +3629,9 @@ from app.content.lair_actions import (
     lair_action_by_id as _lair_action_by_id,
     lair_actions_for_slug as _lair_actions_for_slug,
 )
+from app.content.regional_effects import (
+    regional_effects_for_slug as _regional_effects_for_slug,
+)
 
 
 def _combatant_oa_blocked_against(combatant: dict, mover_char_id: int) -> bool:
@@ -89121,6 +89124,9 @@ def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:
     lair = _lair_actions_for_slug(m.get("slug"))
     if lair:
         out["lair_actions"] = lair
+    reg = _regional_effects_for_slug(m.get("slug"))
+    if reg:
+        out["regional_effects"] = reg
     return out
 
 

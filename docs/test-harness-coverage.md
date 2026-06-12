@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2415 in `tests/harness/` + 68 in `tests/harness_ui/` (as of v2.177.0, 2026-06-12).
+**Total tests:** 2428 in `tests/harness/` + 68 in `tests/harness_ui/` (as of v2.178.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **⚠️ Run against a FRESH DB — not a long-lived shared container.** The harness talks to one shared Docker app + Postgres over HTTP/WS. Many tests PATCH demo character sheets (subclass / level / abilities / resources / HP) and seed in-memory battle state; fixtures restore on teardown, but a long *serial* run of the **whole** suite accumulates residual state in the shared DB (a stripped resource here, a leftover battle there). Running all ~1900 tests as a single serial batch against a stale container can therefore surface **~150+ false failures from cross-test contention, not code regressions** — verified when those same tests pass after `docker compose restart app` (which re-runs `reset_and_reseed`) or in smaller batches. **CI is the authoritative full-suite gate** (`.github/workflows/test-harness.yml` runs against a fresh container per push). Locally: run per-file / per-feature batches, and `docker compose restart app` to reseed before a clean run. If a full-suite run shows a wall of failures, reseed and re-check a sample in isolation before assuming a regression.
@@ -162,6 +162,22 @@ v2.168.0 legendary-actions Phase 3a + v2.171.0 chromatic backfill (see [legendar
 | `test_blue_desert_lair_shape` | Blue: sand-cloud (CON blinded), lightning-arc (3d6 lightning, half_on_save=False). |
 | `test_green_forest_lair_shape` | Green: grasping-roots (STR restrained), magical-fog (WIS charmed), wall-of-tangled-brush (4d8, half). |
 | `test_white_arctic_lair_shape` | White: freezing-fog (CON DC 10, 3d6 cold), jagged-ice + ice-wall descriptive (empty save/damage/effect). |
+
+### `test_regional_effects.py`
+v2.178.0 legendary-actions regional effects (see [legendary-actions.md](../plans/legendary-actions.md)) — pure-Python unit tests against the `app.content.regional_effects` leaf module. RAW MM p.11 passive zone-wide regional effects (flavor-only `{id, name, desc}` entries, distinct from initiative-20 lair actions) for all five chromatic dragons, folded onto the projected monster sheet as `regional_effects`. No HTTP fixtures.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_adult_red_dragon_has_three_regional_effects` | `regional_effects_for_slug("adult-red-dragon")` → 3 effects: minor-earthquakes, fouled-water, fire-portals. |
+| `test_every_effect_has_id_name_desc` | Every effect dict carries non-empty id/name/desc. |
+| `test_ancient_red_dragon_shares_the_volcanic_region` | Adult + ancient red dragon resolve to the identical effect set (region tied to the lair, not the age). |
+| `test_unknown_slug_returns_empty_list` | A non-lair slug (bandit) + a typo'd slug → `[]`. |
+| `test_blank_or_non_string_slug_returns_empty_list` | `""`, `None`, and an int slug → `[]`. |
+| `test_slug_lookup_is_case_and_whitespace_insensitive` | `"  Adult-Red-Dragon  "` → 3 effects. |
+| `test_returned_list_is_a_deep_copy` | Mutating the returned list/dicts doesn't corrupt the module-level source. |
+| `test_all_ten_chromatic_slugs_are_keyed` | adult + ancient × black/blue/green/red/white = 10 slugs keyed, each 3 effects. |
+| `test_each_chromatic_color_shares_adult_and_ancient` | Per color, adult + ancient resolve to identical effect lists. |
+| `test_black_swamp_region_shape` / `test_blue_desert_region_shape` / `test_green_forest_region_shape` / `test_white_arctic_region_shape` | Each color's three effect ids match the curated RAW set. |
 
 ### `test_trigger_lair_action.py`
 v2.169.0 legendary-actions Phase 3b (see [legendary-actions.md](../plans/legendary-actions.md)) — the lair-action engine. Two GM endpoints: `POST /set_in_lair` toggles the battle's `in_lair` flag + records `lair_slug`; `POST /trigger_lair_action` resolves a lair action against the GM-picked caught targets, reusing the legendary save-AoE dispatch (`_resolve_feature_save` → roll → `_apply_damage_to_combatant`). NPC targets resolve inline; PC targets get a roll-request prompt. HTTP + WS.
