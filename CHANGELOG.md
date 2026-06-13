@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.215.0] - 2026-06-13 — "The Stone Giant's Girdle"
+
+**Schema version:** 69
+
+**Commit summary:** Ability-score override engine Phase 2b (docs/plans/str-override.md): belt tier backfill via a per-inventory-item override. The SRD ships a single `belt-of-giant-strength` slug (rarity "varies") covering all six giant tiers (Hill 21 → Storm 29), so rather than mint fake per-tier slugs, the specific tier's score rides the inventory item via a new `_ability_set` field that wins over the catalog default in `_equipped_item_effects`.
+
+**Description:** Phase 2a (v2.214.0) shipped the boosted-score sheet display against the catalog default (Hill, STR 21). Representing the higher tiers needed a data-modeling decision because the SRD catalog has one slug for all six belts. The chosen approach: a per-inventory-item `_ability_set: {"STR": N}` override that the `_equipped_item_effects` walker merges over the catalog payload's `ability_set` (per-ability, so an item can raise one ability while inheriting any catalog defaults). This keeps the catalog faithful to the SRD's single slug and generalises to any future "varies"-rarity score-setting item. Zara Emberfire (Sorcerer, base STR 8 → mod -1) now wears an equipped+attuned Belt of Stone Giant Strength flagged `_ability_set: {"STR": 23}` — her 3rd attuned item (after the Eyes of Charming + Staff of Fire, RAW max) — so her effective STR is 23 (mod +6), a 15-point swing, with carry capacity 345 lb (vs. base 120). The override flows through every read site already wired (saves/checks/`/attack`/carry/sheet display) with no per-site changes. MINOR — additive override field on the existing substrate + a demo seed + tests, no schema change.
+
+### Added
+- Per-inventory-item `_ability_set` override read in `_equipped_item_effects` — merges over the catalog `ability_set` payload (per-ability) so one SRD slug can represent multiple tiers.
+- Demo seed: Belt of Stone Giant Strength (STR 23) on Zara Emberfire, equipped + attuned, with `_ability_set: {"STR": 23}`.
+- `tests/harness/test_item_belt_of_giant_strength.py`: 2 new tests (now 11 total) — `test_belt_tier_override_sets_higher_str` (effective STR 23 beats the catalog default 21) and `test_belt_tier_override_raises_carry_capacity` (345 lb).
+
+### Changed
+- `_MAGIC_ITEM_PASSIVES["belt-of-giant-strength"]` comment clarified: the `ability_set {STR: 21}` is now the catalog DEFAULT (Hill tier); higher tiers ride the per-item `_ability_set`.
+- `docs/plans/str-override.md`: Phase 2b marked shipped; the single-slug data-modeling question resolved in favour of the per-item override.
+- `docs/test-harness-coverage.md`: harness total 2589 → 2591; updated the `test_item_belt_of_giant_strength.py` section.
+
+---
+
 ## [2.214.0] - 2026-06-13 — "The Visible Might"
 
 **Schema version:** 69

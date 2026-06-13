@@ -57,6 +57,11 @@ async def garrik(roster):
     return roster["Garrik Ironside"]
 
 
+@pytest_asyncio.fixture
+async def zara(roster):
+    return roster["Zara Emberfire"]
+
+
 async def test_belt_exposes_effective_str_on_sheet_json(gm_client, garrik):
     """The override surface: ``derived.effective_abilities.STR`` reports
     base 18, effective 21, modifier +5 while the belt is worn."""
@@ -155,6 +160,34 @@ async def test_belt_unequip_reverts_override(gm_client, garrik):
             f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-fields",
             json={"inventory": snapshot},
         )
+
+
+async def test_belt_tier_override_sets_higher_str(gm_client, zara):
+    """Phase 2b (v2.215.0): the SRD ships a single `belt-of-giant-strength`
+    slug whose catalog default is the Hill tier (STR 21). A per-item
+    `_ability_set` override rides the inventory item and WINS over that
+    default. Zara Emberfire (Sorcerer, base STR 8 → mod -1) wears a Belt of
+    Stone Giant Strength flagged `_ability_set: {"STR": 23}`, so her
+    effective STR is 23 (mod +6) — NOT the catalog default 21."""
+    data = await _sheet_json(gm_client, zara["id"])
+    eff = (data.get("derived") or {}).get("effective_abilities") or {}
+    assert "STR" in eff, f"expected an STR override entry, got: {eff!r}"
+    assert eff["STR"]["base"] == 8
+    assert eff["STR"]["effective"] == 23, (
+        "expected the per-item tier override (23) to beat the catalog "
+        f"default (21), got: {eff['STR']!r}"
+    )
+    assert eff["STR"]["modifier"] == 6
+
+
+async def test_belt_tier_override_raises_carry_capacity(gm_client, zara):
+    """The Stone-tier override flows to carry capacity: 23 × 15 = 345 lb,
+    not the base 8 × 15 = 120 lb nor the Hill-default 21 × 15 = 315 lb."""
+    data = await _sheet_json(gm_client, zara["id"])
+    carry = (data.get("derived") or {}).get("carry") or {}
+    assert carry.get("carry_capacity_lb") == 345, (
+        f"expected carry capacity 345 (STR 23 × 15), got: {carry!r}"
+    )
 
 
 async def test_belt_boosts_weapon_attack_and_damage(gm_client, gm_ws, garrik):

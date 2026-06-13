@@ -3498,6 +3498,22 @@ def _sorcerer_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "staff-of-fire", "weight_lb": 4,
              "desc": "Very rare staff, attunement. Resistance to fire while held. 10 charges (regain 1d6+4 at dawn): cast burning hands (1), fireball (3), or wall of fire (4) using your spell save DC."},
+            # v2.215.0 — ability-score override Phase 2b: belt tier
+            # backfill via per-item override. Belt of Stone Giant
+            # Strength (STR 23, RAW DMG p.155, attunement). The SRD's
+            # single `belt-of-giant-strength` slug defaults to the Hill
+            # tier (STR 21) in _MAGIC_ITEM_PASSIVES; the `_ability_set`
+            # field on THIS item overrides it to 23, proving the per-item
+            # tier mechanism. Zara's base STR 8 (mod -1) becomes effective
+            # 23 (mod +6) while worn — a dramatic 15-point swing, visible
+            # on /sheet-json `derived.effective_abilities` + a carry jump
+            # (120 → 345). Her 3rd attuned item (RAW max), after the Eyes
+            # + Staff. See docs/plans/str-override.md.
+            {"name": "Belt of Giant Strength (Stone)", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "belt-of-giant-strength", "_ability_set": {"STR": 23},
+             "weight_lb": 0,
+             "desc": "Very rare wondrous item, attunement. While worn, your Strength score becomes 23 (Stone/Frost giant) if it isn't already higher. RAW DMG p.155."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer

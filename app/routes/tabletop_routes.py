@@ -32334,11 +32334,14 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # attunement; see docs/plans/str-override.md). While worn, your STR
     # *changes* to the belt's score — but only if higher (RAW). The
     # max(base, set) clause lives in `effective_ability_score`; this
-    # entry just declares the set value. Phase 1 ships the Hill-giant
-    # tier (STR 21) keyed to the single catalog slug; the higher tiers
-    # (Stone/Frost 23, Fire 25, Cloud 27, Storm 29) land in Phase 2.
-    # The override flows to STR saves + STR checks (/roll) and carry
-    # capacity (/sheet-json); weapon attack/damage is Phase 1b.
+    # entry just declares the set value. This is the catalog DEFAULT
+    # (Hill-giant tier, STR 21). The higher tiers (Stone/Frost 23,
+    # Fire 25, Cloud 27, Storm 29) share this single SRD slug
+    # (rarity "varies"); v2.215.0 lets the specific tier ride the
+    # inventory item via a per-item `_ability_set` override that wins
+    # over this default (see `_equipped_item_effects`). The override
+    # flows to STR saves + STR checks (/roll), weapon attack/damage
+    # (/attack, v2.213.0), and carry capacity (/sheet-json).
     "belt-of-giant-strength": [
         {"ability_set": {"STR": 21}, "requires_attunement": True},
     ],
@@ -33223,7 +33226,20 @@ def _equipped_item_effects(sheet: dict) -> dict:
             # per ability across all equipped items (two belts → bigger
             # wins, matching RAW "highest applies"). The base-vs-set
             # max() clause lives in `effective_ability_score`.
+            #
+            # v2.215.0 — per-inventory-item tier override. The SRD ships a
+            # single slug `belt-of-giant-strength` (rarity "varies")
+            # covering all six giant tiers (Hill 21 → Storm 29). Rather
+            # than mint fake per-tier slugs, the specific tier's score
+            # rides the inventory item via `_ability_set` and wins over
+            # the catalog default. The merge is per-ability so an item can
+            # raise one ability while inheriting any catalog defaults.
             aset = p.get("ability_set")
+            item_aset = item.get("_ability_set")
+            if isinstance(item_aset, dict) and item_aset:
+                merged = dict(aset) if isinstance(aset, dict) else {}
+                merged.update(item_aset)
+                aset = merged
             if isinstance(aset, dict):
                 for ab_key, ab_val in aset.items():
                     try:
