@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.183.24] - 2026-06-12 — "The Hungry Counterpart"
+
+**Schema version:** 69
+
+**Commit summary:** Bag of Devouring (RAW DMG p.153, very rare) ships as a catalog-only magic item — the cursed counterpart to the Bag of Holding — plus a harness test that pins the contract and the load-bearing carry-weight contrast.
+
+**Description:** The Bag of Devouring catalog row has lived under `app/data/local/dnd5e/items/` since the v2.158.73 schema pass, but nothing exercised it. This commit lands the test that pins it as **catalog-only**: a descriptive, GM-adjudicated row with no automation wiring (`passives: []`, `actions: []`, null charge fields, very-rare, no attunement). Its RAW curse mechanics — animal/vegetable matter devoured forever, a 50% chance of swallowing a creature that reaches in (DC 15 STR to escape), once-daily extraplanar ejection of stored objects, destruction-on-tear — are explicitly a v1 NON-GOAL of the magic-items-automation framework (`docs/plans/magic-items-automation.md` lines 162-167: cursed/sentient items don't map to the Phase 1-8 action templates), so they stay narration rather than getting a bespoke archetype. The load-bearing contrast pinned here: the carry-weight discount in `app.content.carry_weight` is driven solely by the per-item `_in_bag_of_holding: True` flag — a Bag of Devouring grants NO such discount (matter placed inside is consumed/destroyed, not carried weightlessly), so an item flagged `_in_bag_of_devouring: True` still counts its full weight. Test-only; no app-code change. PATCH.
+
+### Added
+- `tests/harness/test_bag_of_devouring.py` (2 tests): `test_bag_of_devouring_serves_as_catalog_only_item` asserts `GET /api/content/items/bag-of-devouring` returns a very-rare, no-attunement, no-wiring record; `test_bag_of_devouring_grants_no_carry_discount` asserts `sheet_inventory_weight_lb` still counts an item flagged `_in_bag_of_devouring` in full (7 + 59 = 66 lb) while the same item under `_in_bag_of_holding` IS discounted (7 lb).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2521 → 2523; added the `test_bag_of_devouring.py` section.
+
 ## [2.183.23] - 2026-06-12 — "The Focused Gate" — Spell-validation suite Phase 5 SHIPS, completing the plan: a dedicated CI gate over the spell-validation suite. With Phase 4 closed (v2.183.22), the only filed work left was the CI integration. The `harness` job already runs every spell test (it runs all of `tests/harness/`), so the regression net existed — but a failure surfaced buried in a 2521-test report. Phase 5 adds a dedicated, independently-dispatchable `spell-catalog` job whose red/green answers one question: "did a spell's contract break?" Selection is a new `spell_catalog` pytest marker, auto-applied **by filename** in `tests/harness/conftest.py` via a `pytest_collection_modifyitems` hook — the Phase 1-2 catalog iterators (`test_spell_*`), the Phase 3-4 per-spell deep-dives (`test_cast_*`), and the AC-buff deep-dive (`test_ac_buff_spells.py`), 260 tests across 55 files. New spell-validation files join the job automatically as long as they follow the naming convention, and `pytest tests/harness/ -m spell_catalog` runs just the spell suite locally. The job boots its own stack (so it doesn't fight the `harness` job over ports), runs `pytest -m spell_catalog -rA -v` (the `-rA` full summary makes a failure's spell slug + assertion greppable straight from the CI log), and uploads its own JUnit + HTML report. **The plan's `<90 s` / pytest-xdist target is deferred, not met:** the harness talks to ONE shared stateful stack (campaign 1, the shared demo PCs, the autouse `clean_pcs` reset) and the spell deep-dives patch spells onto shared PCs (Thalindra / Tavik / Mira / Magnus / Zara), so parallel workers would stomp each other's sheet patches — safe xdist needs per-worker stack isolation, tracked as a separate future effort. Until then the job favors determinism over wall-clock and runs serially. The whole 5-phase spell-validation plan is now complete.
 
 **Schema version:** 69

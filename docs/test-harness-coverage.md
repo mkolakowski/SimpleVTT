@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2521 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.23, 2026-06-12).
+**Total tests:** 2523 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.24, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -248,6 +248,14 @@ v2.159.30 carrying-capacity Phase 3 (CLOSES the plan) — Bag of Holding (RAW DM
 | Test | What it asserts |
 |------|-----------------|
 | `test_brakka_bag_of_holding_discounts_pack_weight` | `/sheet-json` for Brakka returns `derived.carry.inventory_weight_lb == 30` (7 greataxe + 8 javelins + 15 bag, NOT 89 with Explorer's pack counted), `carry_capacity_lb == 255` (STR 17 × 15), `is_over_capacity == False`. Catches a regression in the substrate's `_in_bag_of_holding` skip. |
+
+### `test_bag_of_devouring.py`
+v2.183.24 — Bag of Devouring (RAW DMG p.153, very rare). Catalog-only counterpart to the Bag of Holding: a descriptive, GM-adjudicated row with no automation wiring. Its cursed mechanics (creature-swallow on reach-in, daily extraplanar ejection, destruction-on-tear) are an explicit v1 NON-GOAL of the magic-items-automation framework (`docs/plans/magic-items-automation.md` lines 162-167), so they stay narration. Pins the load-bearing contrast: the carry-weight discount is `_in_bag_of_holding`-specific — a Bag of Devouring grants none.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_bag_of_devouring_serves_as_catalog_only_item` | `GET /api/content/items/bag-of-devouring` → 200; record is `rarity: "very rare"`, `attunement: False`, and catalog-only (`charges`/`charge_recovery` null, `passives == []`, `actions == []`). |
+| `test_bag_of_devouring_grants_no_carry_discount` | Pure-Python against `sheet_inventory_weight_lb`: an item flagged `_in_bag_of_devouring: True` still counts its full weight (7 + 59 = 66 lb); the SAME item under `_in_bag_of_holding: True` IS discounted (7 lb). Catches a spurious `_in_bag_of_devouring` skip leaking into the carry engine. |
 
 ### `test_goggles_of_night.py`
 v2.159.25 magic-items follow-up — Goggles of Night (RAW DMG p.172, uncommon, no attunement). First sensory-passive item in `_MAGIC_ITEM_PASSIVES` with `sees_in_darkness: True`. Composes with the v2.158.50 Devil's Sight darkness-blinded helper (`_pc_sees_in_darkness`) so a Goggles-equipped PC who's blinded by darkness shrugs off attack disadvantage exactly as a Devil's-Sight Warlock does. Pip Quickfingers (Halfling Rogue Lv 5 — no racial darkvision) carries the Goggles at inventory_index 10 in the demo seed.
