@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.200.0] - 2026-06-12 — "The Fading Draught"
+
+**Schema version:** 69
+
+**Commit summary:** Ninth self-buff potion — Potion of Invisibility (RAW DMG p.188, very rare): drink → invisible for 1 hour or until you attack or cast a spell, no concentration. The first self-buff potion that carries a *real* combat marker — `effects.invisible: True`, which the existing attack-resolution intercepts already read to grant an invisible attacker advantage — so it composes with zero new reader code.
+
+**Description:** A new `invisibility-potion` `_SPELL_BUFF_MAP` template carries `effects.invisible: True`, the same marker the Monk's Empty Body buff uses and the attack-resolution code already honours (an invisible attacker has advantage). The `_MAGIC_ITEM_ACTIONS['potion-of-invisibility']` self-buff entry installs it for 1 hour (600 rounds), the `/use_item_action` self-buff dispatch tuple gains the slug, a `👻 Drink` button lands via the `self-buff-drink` `ITEM_ACTION_SLUGS` kind, and Garrik Ironside carries a seeded instance. The "ends when you attack or cast a spell" nuance is GM-narrated. The `potion-of-invisibility.json` SRD catalog item already shipped in the master catalog. MINOR — additive buff template + catalog action + dispatch + UI button + seed, no schema change.
+
+### Added
+- `invisibility-potion` buff template (`effects.invisible: True`, 1 hour, no concentration) — composes with the existing invisible-attacker advantage intercepts.
+- `_MAGIC_ITEM_ACTIONS['potion-of-invisibility']` self-buff drink action; the `/use_item_action` self-buff dispatch tuple now includes `potion-of-invisibility`.
+- `ITEM_ACTION_SLUGS['potion-of-invisibility']` (`self-buff-drink` kind) → a `👻 Drink` button on the row.
+- Garrik Ironside's demo inventory gains a seeded Potion of Invisibility.
+- `tests/harness/test_potion_of_invisibility.py` (2 tests): in an active battle the drink installs the `invisibility-potion` buff carrying the `effects.invisible` marker; a bad action_key → 404.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2553 → 2555; added the `test_potion_of_invisibility.py` section.
+
 ## [2.199.0] - 2026-06-13 — "The Shrinking Sip"
 
 **Schema version:** 69

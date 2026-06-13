@@ -1621,6 +1621,29 @@ _SPELL_BUFF_MAP["diminution"] = {
     ),
 }
 
+# v2.200.0 — Potion of Invisibility (RAW DMG p.188, very rare): drink →
+# invisible for 1 hour or until you attack or cast a spell. The
+# `effects.invisible: True` marker is the one the attack-resolution
+# intercepts already read (an invisible attacker has advantage; attackers
+# vs an invisible target have disadvantage) — same marker the Monk's
+# Empty Body buff carries. The "ends when you attack/cast" nuance is
+# GM-narrated for v1 (the buff runs its full hour otherwise).
+_SPELL_BUFF_MAP["invisibility-potion"] = {
+    "key": "invisibility-potion",
+    "name": "Invisible",
+    "icon": "👻",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "invisible": True,
+    },
+    "desc": (
+        "Invisible for 1 hour or until you attack or cast a spell "
+        "(GM-narrated end). RAW DMG p.188."
+    ),
+}
+
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
@@ -32480,6 +32503,24 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "buff_key": "diminution",
             "duration_rounds": 600,  # up to 1d4 hours; modeled as 1 hour
             "summary_effect": "the reduce effect for up to 1d4 hours",
+        },
+    },
+    # v2.200.0 — ninth self-buff potion. RAW DMG p.188 Potion of
+    # Invisibility (very rare): drink → invisible for 1 hour or until you
+    # attack or cast a spell. Installs the `invisibility-potion` template
+    # whose `effects.invisible: True` marker the attack-resolution
+    # intercepts already honour (an invisible attacker has advantage), so
+    # it composes with no new reader code; the "ends when you attack/cast"
+    # nuance is GM-narrated.
+    "potion-of-invisibility": {
+        "key": "drink",
+        "name": "Drink Potion of Invisibility",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "invisibility-potion",
+            "duration_rounds": 600,  # 1 hour @ 6 s/round
+            "summary_effect": "invisible for 1 hour",
         },
     },
     # v2.193.0 — first OFFENSIVE consumable potion. RAW DMG p.187 Potion
@@ -79789,6 +79830,7 @@ async def use_item_action(
         "potion-of-resistance", "potion-of-invulnerability",
         "potion-of-growth", "potion-of-climbing",
         "potion-of-water-breathing", "potion-of-diminution",
+        "potion-of-invisibility",
     ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,

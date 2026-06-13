@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2553 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.199.0, 2026-06-13).
+**Total tests:** 2555 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.200.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2726,6 +2726,14 @@ v2.199.0 — Potion of Diminution (RAW DMG p.187, rare): the eighth self-buff po
 |------|-----------------|
 | `test_diminution_imposes_disadvantage_on_str_check` | Garrik drinks Diminution (`buff_key: "diminution"`, `buff_installed: True`), then a `/roll` STR check broadcasts a `roll` with `expression == "2d20kl1"` (disadvantage). |
 | `test_no_diminution_str_check_is_plain` | Control: without Diminution, Garrik's STR check rolls plain `1d20` — proving the disadvantage comes from the potion, not something innate. |
+
+### `test_potion_of_invisibility.py`
+v2.200.0 — Potion of Invisibility (RAW DMG p.188, very rare): the ninth self-buff potion and the first to carry a *real* combat marker. Drinking installs the `invisibility-potion` template carrying `effects.invisible: True` — the same marker the Monk's Empty Body buff uses and the attack-resolution intercepts already read to grant an invisible attacker advantage, so it composes with zero new reader code. The fixture puts Garrik in an active solo battle first (the install no-ops outside combat) and restores inventory + clears the battle in teardown. The "ends when you attack or cast a spell" nuance is GM-narrated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_invisibility_installs_buff_with_marker` | Garrik drinks Invisibility (`buff_key: "invisibility-potion"`, `buff_installed: True`, `consumed: True`); the buff lands on his combatant via `GET /buffs` AND carries the `effects.invisible: True` marker the attack code reads. |
+| `test_invisibility_bad_action_key_404` | A non-existent action_key (`vanish`) on the potion → 404. |
 
 ### `test_self_buff_potion_in_battle.py`
 v2.185.1 — in-battle proof that `_use_item_action_self_buff_potion` actually installs its buff. The per-potion tests only assert `buff_installed` is a *bool* (the install is best-effort and no-ops outside combat). This file puts Garrik in an active solo battle (`PUT /battle`, `active: True`) FIRST, then drinks each potion and asserts the install succeeded AND the buff key shows up in `GET /character/{id}/buffs`. The fixture snapshots/restores his inventory and clears the battle in teardown.

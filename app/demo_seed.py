@@ -3830,6 +3830,10 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-diminution",
              "desc": "Drink (action, /use_item_action drink) to gain the reduce effect: disadvantage on STR checks/saves, size one smaller, -1d4 weapon damage, for up to 1d4 hours. RAW DMG p.187."},
+            {"name": "Potion of Invisibility", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-invisibility",
+             "desc": "Drink (action, /use_item_action drink) to become invisible for 1 hour or until you attack or cast a spell. An invisible attacker has advantage on attacks. RAW DMG p.188."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20
