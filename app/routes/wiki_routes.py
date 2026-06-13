@@ -93,6 +93,7 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "plan-exhaustion-levels": Path("docs") / "plans" / "exhaustion-levels.md",
     "plan-carrying-capacity": Path("docs") / "plans" / "carrying-capacity.md",
     "plan-legendary-actions": Path("docs") / "plans" / "legendary-actions.md",
+    "plan-str-override": Path("docs") / "plans" / "str-override.md",
     "plan-encounters": Path("docs") / "encounters-plan.md",
     "plan-multi-system-refactor": Path("docs") / "multi-system-refactor.md",
 }

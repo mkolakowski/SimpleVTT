@@ -56,6 +56,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-carrying-capacity" in resp.text
     # v2.159.32: legendary-actions plan listed (top P1 of 2026-06-11 SRD audit refresh).
     assert "/wiki/doc/plan-legendary-actions" in resp.text
+    # v2.211.0: ability-score override plan listed (unblocks Belt of Giant Strength).
+    assert "/wiki/doc/plan-str-override" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.49.168: targeting system visual guide listed.
@@ -594,6 +596,21 @@ async def test_wiki_doc_serves_legendary_actions_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "legendary actions" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_str_override_plan():
+    """v2.211.0: GET /wiki/doc/plan-str-override — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/str-override.md``. Filed to
+    unblock Belt of Giant Strength (DMG p.155) + Amulet of Health
+    (DMG p.150) + Potion of Giant Strength (DMG p.187) — needs an
+    effective-ability-score override substrate (max(base, set))."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-str-override")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "ability-score override" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.211.0] - 2026-06-13 — "The Giant's Belt Blueprint"
+
+**Schema version:** 69
+
+**Commit summary:** Design plan for an ability-score **override** substrate (`docs/plans/str-override.md`) — the RAW `max(base, set)` engine that unblocks Belt of Giant Strength (DMG p.155), Amulet of Health (DMG p.150), and Potion of Giant Strength (DMG p.187). Doc-only commit; no engine code. Surfaced through `/wiki` per the surface-every-doc rule.
+
+**Description:** All three items *set* an ability score to a fixed value (Belt: STR 21/23/25/27/29 by giant type; Amulet: CON 19; Potion: temporary STR 21–29) rather than adding a bonus, and all apply only when the fixed value exceeds the creature's current score — distinct from the existing additive `ac_bonus`/`save_bonus`/`check_bonus` model. The plan designs an `effective_ability_score(sheet, ability)` helper that folds an `ability_set` payload (aggregated in `_equipped_item_effects`, max-per-ability) over the stored base via `max(base, override)`, then routes every mechanical STR read site (`/roll` weapon attack/damage, ability checks, skill checks, saves; the carry-capacity helper; sheet display) through it. Phasing: Phase 1 = substrate + STR read sites + Belt (Hill, STR 21); Phase 2 = belt-tier backfill + sheet display; Phase 3 = Amulet of Health + max-HP derivation; Phase 4 (filed) = the timed Potion path. Composes with the shipped carrying-capacity engine (its `sheet_carry_capacity_lb` is named read site #4). Wiki surfacing: `plan-str-override` allowlist row + landing-page "Design plans" row + `docs/wiki/README.md` row + a `test_wiki_doc_serves_str_override_plan` smoke test + the `test_wiki_home_renders` assertion. MINOR — additive doc + wiki surface, no schema change.
+
+### Added
+- `docs/plans/str-override.md` — Phase 0 design plan for the ability-score override substrate (RAW for Belt/Amulet/Potion of Giant Strength, the `effective_ability_score` resolver, read-site inventory, 4-phase rollout, non-goals, definition of done).
+- Wiki surface for the plan: `plan-str-override` in `_DOC_ALLOWLIST`, a "Design plans" row in `app/templates/wiki.html`, and a row in `docs/wiki/README.md`.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_str_override_plan` — asserts `/wiki/doc/plan-str-override` → 200 + the plan H1 + the nav menu; `test_wiki_home_renders` now asserts the landing page links the slug.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2581 → 2582; added the `test_wiki_doc_serves_str_override_plan` row.
+
+---
+
 ## [2.210.0] - 2026-06-13 — "The Kindled Staff"
 
 **Schema version:** 69
