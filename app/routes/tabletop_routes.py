@@ -32521,6 +32521,36 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.208.0 — fourth save-condition item through the generalized
+    # wand-of-fear handler. Eyes of Charming (RAW DMG p.168, uncommon,
+    # attunement): 3 charges (regain all at dawn). Expend 1 (action) to
+    # cast charm person at one humanoid within 30 ft — fixed DC 13 WIS
+    # save or Charmed for 1 hour. A near drop-in of the Staff of
+    # Charming entry; the only differences are the fixed DC, the
+    # 3-charge pool, and the feature label.
+    "eyes-of-charming": {
+        "requires_attunement": True,
+        "resource_key": "eyes-of-charming",
+        "actions": {
+            "cast-charm-person": {
+                "name": "Cast Charm Person (30 ft)",
+                "save_dc": 13,
+                "save_ability": "WIS",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 600,
+                "target_shape": "single",
+                "condition_key": "charmed",
+                "condition_label": "Charmed",
+                "condition_icon": "💗",
+                "condition_effects": [
+                    "can't attack the charmer or target it with harmful abilities/spells",
+                    "the charmer has advantage on social ability checks against it",
+                ],
+                "feature_name": "👁 Eyes of Charming",
+            },
+        },
+    },
     # v2.184.0 — first "self-buff" archetype: a consumable potion that
     # buffs the DRINKER rather than targeting others. RAW DMG p.187
     # Potion of Heroism (rare): drink (action) → 10 temporary hit
@@ -80024,7 +80054,8 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug in ("wand-of-fear", "wand-of-paralysis", "staff-of-charming"):
+    if slug in ("wand-of-fear", "wand-of-paralysis", "staff-of-charming",
+                "eyes-of-charming"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,

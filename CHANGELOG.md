@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.208.0] - 2026-06-12 — "The Crystal Gaze"
+
+**Schema version:** 69
+
+**Commit summary:** Fourth save-condition item through the generalized wand-of-fear handler — Eyes of Charming (RAW DMG p.168, uncommon, attunement): 3 charges (regain all at dawn); expend 1 (action) to cast charm person at one humanoid within 30 ft — fixed DC 13 WIS save or Charmed for 1 hour. A near drop-in of the Staff of Charming entry — fixed DC instead of the `"spell"` sentinel, a 3-charge pool, and a new feature label.
+
+**Description:** A new `_MAGIC_ITEM_ACTIONS['eyes-of-charming']` entry (charm person, WIS → Charmed, 30-ft single target, 1-hour duration, fixed DC 13) routes through the shared save-condition handler via the `/use_item_action` dispatch tuple. A `👁 Charm Person` button lands via the existing `single-target-save` `ITEM_ACTION_SLUGS` kind. Zara Emberfire (Draconic Sorcerer, Charlatan — a CHA face with no other attuned items) carries seeded Eyes of Charming (attuned, 1/3) + a 3-charge resource row (full refill at dawn). The "you and the target can see each other" / humanoid-only constraint is GM-narrated. The `eyes-of-charming.json` SRD catalog item already shipped. MINOR — additive catalog action + dispatch + UI button + seed, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS['eyes-of-charming']` save-condition action (charm person, WIS → Charmed, 30-ft single target, 1-hour duration, fixed DC 13, attunement); the `/use_item_action` save-condition dispatch tuple now includes `eyes-of-charming`.
+- `ITEM_ACTION_SLUGS['eyes-of-charming']` (`single-target-save` kind) → a `👁 Charm Person` button on the row.
+- Zara Emberfire's demo inventory gains seeded Eyes of Charming (attuned) + an `eyes-of-charming` resource row (3/3, full refill on long rest).
+- `tests/harness/test_use_item_action_eyes_of_charming.py` (3 tests): cast at 1 target → fixed DC 13 WIS, charges 3→2; over-cap charges → 400; empty lenses → 409 insufficient_charges.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2572 → 2575; added the `test_use_item_action_eyes_of_charming.py` section.
+
 ## [2.207.0] - 2026-06-12 — "The Honeyed Word"
 
 **Schema version:** 69

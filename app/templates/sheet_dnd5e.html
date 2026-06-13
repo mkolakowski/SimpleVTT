@@ -7274,6 +7274,17 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           label: '💗 Charm Person',
                           title: 'Staff of Charming — charm one creature within 30 ft, WIS save (your spell save DC) or Charmed 1 hour.',
                           max_range_ft: 30},
+        // v2.208.0 — fourth save-condition item via the generalized
+        // handler. Eyes of Charming (RAW DMG p.168): expend 1 of 3
+        // charges to cast charm person at one humanoid within 30 ft
+        // (fixed DC 13 WIS save or Charmed 1 hour). Same single-target-
+        // save flow as the Staff of Charming.
+        'eyes-of-charming': {kind: 'single-target-save',
+                          action_key: 'cast-charm-person',
+                          label: '👁 Charm Person',
+                          title: 'Eyes of Charming — charm one humanoid within 30 ft, DC 13 WIS save or Charmed 1 hour.',
+                          max_range_ft: 30,
+                          save_dc: 13},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder

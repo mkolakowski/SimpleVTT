@@ -3477,6 +3477,15 @@ def _sorcerer_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+            # v2.208.0 — Eyes of Charming (RAW DMG p.168, uncommon,
+            # attunement). 3 charges (regain all at dawn); expend 1 to
+            # cast charm person at one humanoid within 30 ft (DC 13 WIS
+            # save). Zara is a CHA face (Charlatan Sorcerer) with no
+            # other attuned items, so this is a clean 1/3 attunement.
+            {"name": "Eyes of Charming", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "eyes-of-charming", "weight_lb": 0,
+             "desc": "Uncommon wondrous item, attunement. Crystal lenses with 3 charges (regain all at dawn). Expend 1 (action) to cast charm person (DC 13) on a humanoid within 30 ft you can see."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer
@@ -3511,6 +3520,19 @@ def _sorcerer_sheet(name: str) -> dict:
                 "source": "Tiefling Infernal Legacy",
                 "class_slug": "tiefling",
                 "desc": "Action (Tiefling Lv 5+): cast Darkness without expending a spell slot. 1/long rest.",
+                "manual": False,
+            },
+            # v2.208.0 — Eyes of Charming charge pool (RAW DMG p.168):
+            # 3 charges, regain all at dawn (full refill on long rest).
+            # Decremented by the generalized save-condition handler when
+            # Zara casts charm person from the lenses.
+            {
+                "key": "eyes-of-charming",
+                "name": "Eyes of Charming",
+                "current": 3, "max": 3, "reset": "long",
+                "source": "magic item — Eyes of Charming",
+                "class_slug": "item",
+                "desc": "3 charges; expend 1 to cast charm person (DC 13) on a humanoid within 30 ft. Regain all at dawn.",
                 "manual": False,
             },
         ],
