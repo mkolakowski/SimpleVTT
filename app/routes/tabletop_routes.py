@@ -32606,6 +32606,27 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.202.0 — second save-imposing consumable potion. RAW DMG p.187
+    # Potion of Animal Friendship (uncommon): drink → cast animal
+    # friendship (DC 13 WIS save) at will for 1 hour. v1 models a single
+    # charm attempt against one beast that consumes the potion, routed
+    # through the generalised Mind-Reading WIS-save loop (no damage; the
+    # charm itself + the beast-only restriction are GM-narrated).
+    "potion-of-animal-friendship": {
+        "key": "charm",
+        "name": "Charm Beast",
+        "requires_attunement": False,
+        "consumable": True,
+        "actions": {
+            "charm": {
+                "name": "Charm Beast (10 ft)",
+                "save_dc": 13,
+                "save_ability": "WIS",
+                "feature_name": "🐾 Potion of Animal Friendship",
+                "summary_verb": "charms a beast",
+            },
+        },
+    },
 }
 
 
@@ -79855,7 +79876,7 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug == "potion-of-mind-reading":
+    if slug in ("potion-of-mind-reading", "potion-of-animal-friendship"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_potion_of_mind_reading(
             db, campaign_id, char, item, sheet, catalog,
@@ -80612,14 +80633,22 @@ async def _use_item_action_potion_of_mind_reading(
     probe as a WIS save that consumes the potion — no damage, the
     thought-reading itself is GM-narrated. Reuses the Fire Breath
     per-target save loop without the damage roll.
+
+    v2.202.0 — generalised to back any save-imposing, no-damage potion:
+    the feature label / verb come from the catalog `action_def` with
+    Mind-Reading fallbacks, so Potion of Animal Friendship routes through
+    the same loop (WIS DC 13, GM-narrated charm).
     """
     from sqlalchemy.orm.attributes import flag_modified
 
     slug = str(item.get("_slug") or "potion-of-mind-reading")
+    default_name = item.get("name") or "Potion of Mind Reading"
+    feature_name = str(action_def.get("feature_name") or "🧠 Potion of Mind Reading")
+    summary_verb = str(action_def.get("summary_verb") or "probes minds")
     if not isinstance(target_combatant_ids, list):
         raise HTTPException(400, "target_combatant_ids must be a list")
     if len(target_combatant_ids) > 24:
-        raise HTTPException(400, "Too many targets for Potion of Mind Reading")
+        raise HTTPException(400, f"Too many targets for {default_name}")
 
     save_dc = int(action_def.get("save_dc") or 13)
     save_ability = str(action_def.get("save_ability") or "WIS").upper()
@@ -80640,13 +80669,13 @@ async def _use_item_action_potion_of_mind_reading(
                 target_combatant=target_c,
                 save_ability=save_ability,
                 dc=save_dc,
-                note_label=f"Potion of Mind Reading (DC {save_dc} {save_ability})",
+                note_label=f"{default_name} (DC {save_dc} {save_ability})",
                 condition_buff=None,
                 repeated_save=False,
                 source=f"item-{slug}-save",
                 campaign=campaign,
                 prompt_user=prompt_user,
-                feature_name="🧠 Potion of Mind Reading",
+                feature_name=feature_name,
             )
         except Exception:
             logging.exception(
@@ -80679,7 +80708,7 @@ async def _use_item_action_potion_of_mind_reading(
         flag_modified(char, "sheet")
         db.commit()
 
-    item_name = item.get("name") or "Potion of Mind Reading"
+    item_name = default_name
     try:
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
@@ -80687,9 +80716,9 @@ async def _use_item_action_potion_of_mind_reading(
                 "character_id": char.id,
                 "caster_char_name": char.name,
                 "source": f"item-{slug}",
-                "label": "🧠 Potion of Mind Reading",
+                "label": feature_name,
                 "summary": (
-                    f"{char.name} drinks a {item_name} and probes minds "
+                    f"{char.name} drinks a {item_name} and {summary_verb} "
                     f"(DC {save_dc} {save_ability} save) "
                     f"— {len(results)} save(s) resolved."
                 ),

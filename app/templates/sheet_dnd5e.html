@@ -7158,6 +7158,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           title: 'Drink + probe one creature within 30 ft — DC 13 WIS save (no damage). Consumes the potion.',
                           max_range_ft: 30,
                           save_dc: 13},
+        // v2.202.0 — second single-target save consumable. Potion of
+        // Animal Friendship (RAW DMG p.187): drink + charm one beast
+        // within 10 ft (DC 13 WIS save, no damage — GM-narrated charm).
+        // Same single-target-save flow as Mind Reading.
+        'potion-of-animal-friendship': {kind: 'single-target-save',
+                          action_key: 'charm',
+                          label: '🐾 Charm Beast',
+                          title: 'Drink + charm one beast within 10 ft — DC 13 WIS save (no damage). Consumes the potion.',
+                          max_range_ft: 10,
+                          save_dc: 13},
         // v2.194.0 — first OFFENSIVE consumable button. Potion of Fire
         // Breath (RAW DMG p.187): drink + exhale fire at the area. Reuses
         // the necklace's `aoe-sphere` flow (center-target picker → /battle/

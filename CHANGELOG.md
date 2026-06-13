@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.202.0] - 2026-06-12 — "The Beast Whisperer"
+
+**Schema version:** 69
+
+**Commit summary:** Second save-imposing consumable potion — Potion of Animal Friendship (RAW DMG p.187, uncommon): drink → charm one beast within 10 ft (DC 13 WIS save), no damage. Generalises the v2.197.0 Mind-Reading WIS-save handler so the per-target save loop now backs any no-damage save-imposing potion via catalog-supplied labels.
+
+**Description:** The Mind-Reading handler (`_use_item_action_potion_of_mind_reading`) is generalised: the feature label and summary verb now come from the catalog `action_def` (`feature_name` / `summary_verb`) with Mind-Reading fallbacks, so a second potion routes through the same WIS-save loop with no new handler. A new `_MAGIC_ITEM_ACTIONS['potion-of-animal-friendship']` catalog entry exposes a `charm` action (DC 13 WIS, 10 ft), the dispatch routes both slugs through the shared handler, a `single-target-save` `🐾 Charm Beast` button lands via `ITEM_ACTION_SLUGS`, and Garrik Ironside carries a seeded instance. The charm itself, the at-will-for-1-hour duration, and the beast-only restriction are GM-narrated. The `potion-of-animal-friendship.json` SRD catalog item already shipped in the master catalog. MINOR — additive catalog action + handler generalisation + UI button + seed, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS['potion-of-animal-friendship']` (`charm` action, DC 13 WIS, 10 ft); the `/use_item_action` dispatch routes it through the shared save handler.
+- `ITEM_ACTION_SLUGS['potion-of-animal-friendship']` (`single-target-save` kind) → a `🐾 Charm Beast` button on the row.
+- Garrik Ironside's demo inventory gains a seeded Potion of Animal Friendship.
+- `tests/harness/test_potion_of_animal_friendship.py` (2 tests): drink+charm an NPC resolves a DC 13 WIS save, consumes the potion, and broadcasts `feature_used`; a bad action_key → 404.
+
+### Changed
+- `_use_item_action_potion_of_mind_reading` generalised to read `feature_name` / `summary_verb` from the catalog `action_def` (Mind-Reading fallbacks preserve existing behaviour) so it backs any no-damage save-imposing potion.
+- `docs/test-harness-coverage.md`: harness total 2557 → 2559; added the `test_potion_of_animal_friendship.py` section.
+
 ## [2.201.0] - 2026-06-12 — "The Borrowed Wings"
 
 **Schema version:** 69
