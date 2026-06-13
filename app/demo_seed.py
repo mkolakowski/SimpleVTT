@@ -3789,6 +3789,13 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-growth",
              "desc": "Drink (action, /use_item_action drink) to gain the enlarge effect (advantage on STR checks/saves; no concentration) for up to 1d4 hours. RAW DMG p.187."},
+            # v2.193.0 — first offensive consumable. Drinking exhales fire at
+            # the area (4d6 fire, DC 13 DEX save for half) and consumes the
+            # potion. Reuses the Necklace of Fireballs per-target save loop.
+            {"name": "Potion of Fire Breath", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-fire-breath",
+             "desc": "Drink + exhale fire (bonus action, /use_item_action breathe) at the area: each target makes a DC 13 DEX save, 4d6 fire, half on a success. Consumes the potion. RAW DMG p.187."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

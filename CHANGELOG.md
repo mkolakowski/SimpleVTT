@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.193.0] - 2026-06-12 — "The Dragon's Sip"
+
+**Schema version:** 69
+
+**Commit summary:** First OFFENSIVE consumable potion — Potion of Fire Breath (RAW DMG p.187, uncommon): drink → exhale fire at the area (each target makes a DC 13 DEX save, 4d6 fire, half on a success), consuming the potion.
+
+**Description:** Extends the consumable-automation arc from self-buffs to offense. A new `_use_item_action_potion_of_fire_breath` handler reuses the Necklace of Fireballs per-target save loop (`_resolve_feature_save` → roll → `_apply_damage_to_combatant`) but consumes the potion instead of decrementing a charge resource. The catalog entry declares an `actions` sub-map with a `breathe` action (DC 13 DEX, 4d6 fire, save for half); the `/use_item_action` dispatch routes `potion-of-fire-breath` to the new handler. A new `potion-of-fire-breath.json` SRD catalog item lands the master-catalog row, and Garrik Ironside carries a seeded instance. The RAW 3-breaths-over-an-hour nuance is GM-narrated for now — v1 models the whole potion as a single exhale. MINOR — additive content + handler + dispatch, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS['potion-of-fire-breath']` — offensive consumable with a `breathe` action (DC 13 DEX, 4d6 fire, save for half).
+- `_use_item_action_potion_of_fire_breath` handler; the `/use_item_action` dispatch routes the new slug to it.
+- `app/data/local/dnd5e/items/potion-of-fire-breath.json` — SRD catalog item (uncommon potion).
+- Garrik Ironside's demo inventory gains a seeded Potion of Fire Breath.
+- `tests/harness/test_potion_of_fire_breath.py` (2 tests): exhale at two bandits resolves a save per target + consumes the potion + broadcasts `feature_used`; a bad `drink` action_key → 404.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2543 → 2545; added the `test_potion_of_fire_breath.py` section.
+
 ## [2.192.1] - 2026-06-12 — "The Drifting Index"
 
 **Schema version:** 69
