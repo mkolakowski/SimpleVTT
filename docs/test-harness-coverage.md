@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2589 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.213.0, 2026-06-13).
+**Total tests:** 2589 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.214.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3940,6 +3940,14 @@ v2.198.0 — sheet inventory button for the Potion of Mind Reading. The save-imp
 | Test | What it asserts |
 |------|-----------------|
 | `test_mind_reading_button_renders` | Garrik's Potion of Mind Reading `.inv-row` shows a visible `.inv-item-action` button containing "Read Thoughts" (single-target-save kind, equipped consumable). |
+
+### `test_ability_override_display.py`
+v2.214.0 "The Visible Might" — ability-score override Phase 2a. The `#ab-card-view` ability cards render the EFFECTIVE score + modifier with an item-boost marker (a ▲ badge + accent colour) when an equipped item sets the score above its base (RAW `max(base, set)` — Belt of Giant Strength, DMG p.155). Garrik Ironside (base STR 18 → mod +4) wears an equipped+attuned Belt of Giant Strength (Hill, STR 21 → mod +5), so his STR card shows 21 with the badge; DEX (14, no override) shows the base value with the badge hidden.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_garrik_str_card_shows_boosted_score` | Garrik's `.ab-score-disp[data-ab="STR"]` reads "21" (effective, not base 18), `.ab-mod-disp[data-ab="STR"]` reads "+5", and `.ab-boost-badge[data-ab="STR"]` is visible. |
+| `test_garrik_dex_card_unboosted` | DEX has no override → `.ab-score-disp[data-ab="DEX"]` reads "14" (base) and `.ab-boost-badge[data-ab="DEX"]` is hidden. |
 
 ---
 

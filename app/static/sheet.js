@@ -35,12 +35,25 @@
 
         function updateCardFromInput(inp) {
             const ab    = inp.dataset.ab;
-            const score = parseInt(inp.value) || 10;
-            const mod   = Math.floor((score - 10) / 2);
+            const base  = parseInt(inp.value) || 10;
             const sd = abCardView.querySelector('.ab-score-disp[data-ab="' + ab + '"]');
             const md = abCardView.querySelector('.ab-mod-disp[data-ab="' + ab + '"]');
-            if (sd) sd.textContent = score;
+            // v2.214.0 — ability-score override Phase 2a: when an equipped
+            // item sets this ability (data-override holds the set value), the
+            // card shows the EFFECTIVE score = max(base, override) per RAW
+            // max(base, set). Display-only — roll-building still reads the raw
+            // form input, and /roll appends the override delta server-side.
+            const override = parseInt(sd && sd.dataset.override, 10);
+            const boosted  = !isNaN(override) && override > base;
+            const score = boosted ? override : base;
+            const mod   = Math.floor((score - 10) / 2);
+            if (sd) {
+                sd.textContent = score;
+                sd.style.color = boosted ? 'var(--s-accent)' : 'var(--s-fg)';
+            }
             if (md) md.textContent = (mod >= 0 ? '+' : '') + mod;
+            const badge = abCardView.querySelector('.ab-boost-badge[data-ab="' + ab + '"]');
+            if (badge) badge.style.display = boosted ? '' : 'none';
         }
 
         abEditBtn.addEventListener('click', function () {

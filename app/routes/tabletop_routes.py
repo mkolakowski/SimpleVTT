@@ -33391,6 +33391,28 @@ def _pc_attack_ability_override_delta(sheet: dict, attack: dict) -> int:
     return _ability_override_delta(sheet, ability)
 
 
+def _effective_abilities_for_sheet(sheet: dict) -> dict:
+    """v2.214.0 — build the per-ability override map the sheet UI + /sheet-json
+    consume: `{ "STR": {base, effective, modifier, source} }` for any ability
+    an equipped item sets above its base. Empty dict on a malformed sheet."""
+    out: dict = {}
+    try:
+        srcs = _equipped_item_effects(sheet).get("ability_set_sources", {})
+        for ab in ("STR", "DEX", "CON", "INT", "WIS", "CHA"):
+            base = _read_stored_ability(sheet, ab)
+            eff = effective_ability_score(sheet, ab)
+            if eff != base:
+                out[ab] = {
+                    "base": base,
+                    "effective": eff,
+                    "modifier": _ability_score_modifier(eff),
+                    "source": srcs.get(ab),
+                }
+    except Exception:
+        return {}
+    return out
+
+
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
     """v2.99.81 — swap the leading die on an unarmed/monk-weapon
     attack with the Monk's Martial Arts die when it's larger.
@@ -89458,6 +89480,14 @@ def get_sheet(
     sheet = char.sheet or get_template(char.template)
     if char.template == "dnd5e":
         normalize_dnd5e_sheet(sheet)
+    # v2.214.0 — ability-score override Phase 2a: surface the EFFECTIVE
+    # ability scores (Belt of Giant Strength etc., docs/plans/str-override.md)
+    # so the ability card renders the boosted value + an item-boosted marker.
+    # Mirrors the /sheet-json `derived.effective_abilities` block. Only
+    # abilities an equipped item sets above their base appear.
+    effective_abilities = (
+        _effective_abilities_for_sheet(sheet) if char.template == "dnd5e" else {}
+    )
     return templates.TemplateResponse(
         template_name,
         {
@@ -89468,6 +89498,7 @@ def get_sheet(
             "is_gm": is_gm,
             "campaign": campaign,
             "class_roster": class_levels_summary(sheet) if char.template == "dnd5e" else [],
+            "effective_abilities": effective_abilities,
             "animate_gifs": user.animate_gifs,
         },
     )
@@ -89866,24 +89897,9 @@ async def get_character_sheet_json(
         # ability an equipped item sets above its base, and feed the
         # effective STR into the carry-capacity derivation so the meter
         # reflects the boost. Only overridden abilities appear.
-        try:
-            eff_abilities: dict = {}
-            _aset = _equipped_item_effects(sheet).get("ability_set", {})
-            for _ab in ("STR", "DEX", "CON", "INT", "WIS", "CHA"):
-                _base = _read_stored_ability(sheet, _ab)
-                _eff = effective_ability_score(sheet, _ab)
-                if _eff != _base:
-                    eff_abilities[_ab] = {
-                        "base": _base,
-                        "effective": _eff,
-                        "modifier": _ability_score_modifier(_eff),
-                        "source": _aset and _equipped_item_effects(sheet)
-                        .get("ability_set_sources", {}).get(_ab),
-                    }
-            if eff_abilities:
-                derived["effective_abilities"] = eff_abilities
-        except Exception:
-            pass
+        eff_abilities = _effective_abilities_for_sheet(sheet)
+        if eff_abilities:
+            derived["effective_abilities"] = eff_abilities
         try:
             from ..content.carry_weight import sheet_carry_summary
             _eff_str = effective_ability_score(sheet, "STR")
@@ -90675,6 +90691,10 @@ def character_sheet_page(
             "sheet_template": sheet_template,
             "system": get_system(campaign.game_system),
             "class_roster": class_levels_summary(page_sheet) if char.template == "dnd5e" else [],
+            "effective_abilities": (
+                _effective_abilities_for_sheet(page_sheet)
+                if char.template == "dnd5e" else {}
+            ),
             "animate_gifs": user.animate_gifs,
         },
     )

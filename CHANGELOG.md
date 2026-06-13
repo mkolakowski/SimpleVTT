@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.214.0] - 2026-06-13 — "The Visible Might"
+
+**Schema version:** 69
+
+**Commit summary:** Ability-score override engine Phase 2a (docs/plans/str-override.md): the character sheet's ability card now renders the EFFECTIVE score + modifier with an item-boosted marker (a ▲ badge + accent colour) when an equipped item sets the score above its base (RAW max(base, set) — Belt of Giant Strength, DMG p.155). Display-only — roll-building still reads the raw form input, and `/roll` appends the override delta server-side, so no double-counting.
+
+**Description:** New `_effective_abilities_for_sheet(sheet)` helper centralises the per-ability override map (`{ability: {base, effective, modifier, source}}` for any ability an equipped item sets above its base); `/sheet-json`, the API `get_sheet` panel route, and the standalone `character_sheet_page` route all build it from this one helper. The `sheet_dnd5e.html` `#ab-card-view` reads the new `effective_abilities` template var: when an ability is overridden it renders the effective score (accent-coloured), a ▲ boost badge, the effective modifier, and a tooltip ("STR 21 — boosted from 18 by Belt of Giant Strength"). `sheet.js` `updateCardFromInput` is now override-aware via a `data-override` attribute on the score element: as the player edits the base score in edit-view, the card shows `max(base, override)` and toggles the badge live (so raising STR above the belt's value un-boosts the marker). Garrik Ironside's STR card now shows 21 (mod +5) with the badge while his belt is worn; DEX (no override) shows the base 14 with the badge hidden. Phase 2b (remaining belt tiers Stone/Frost 23, Fire 25, Cloud 27, Storm 29) is filed separately. MINOR — additive UI surface + route var + helper, no schema change.
+
+### Added
+- `_effective_abilities_for_sheet(sheet)` helper in `tabletop_routes.py` — single source for the per-ability override map.
+- Ability card item-boost rendering in `sheet_dnd5e.html`: effective score + ▲ badge + accent colour + tooltip when an equipped item overrides the score; `data-override` attribute drives the live edit-view recompute.
+- `tests/harness_ui/test_ability_override_display.py` (2 tests): Garrik's STR card shows 21 / +5 with the boost badge visible; DEX shows the base 14 with the badge hidden.
+
+### Changed
+- `sheet.js` `updateCardFromInput` computes the displayed score as `max(base, data-override)` and toggles the boost badge — display-only, so click-to-roll still builds from the raw modifier (the server appends the override delta).
+- The API `get_sheet` + standalone `character_sheet_page` routes pass `effective_abilities` to the template; `/sheet-json`'s `derived.effective_abilities` now reuses the shared helper.
+- `docs/plans/str-override.md`: Phase 2 marked partial (2a shipped, tier backfill 2b filed).
+- `docs/test-harness-coverage.md`: UI suite total 81 → 83; added the `test_ability_override_display.py` section.
+
+---
+
 ## [2.213.0] - 2026-06-13 — "The Giant's Swing"
 
 **Schema version:** 69

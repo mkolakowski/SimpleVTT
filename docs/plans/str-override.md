@@ -1,6 +1,6 @@
 # Ability-score override engine — design plan
 
-**Status:** 🟠 Phase 1 + 1b shipped (v2.213.0). Phase 0 (plan) ✅ v2.211.0. Phase 1 (override substrate + STR saves/checks + carry capacity + Belt of Giant Strength Hill tier) ✅ v2.212.0. Phase 1b (weapon attack/damage read site on `/attack`) ✅ v2.213.0 — the `/attack` endpoint now appends the effective-STR modifier delta to both the to-hit roll and the damage expression for STR-keyed weapons. Phases 2 / 3 / 4 remain open.
+**Status:** 🟠 Phase 1 + 1b + 2a shipped. Phase 0 (plan) ✅ v2.211.0. Phase 1 (override substrate + STR saves/checks + carry capacity + Belt of Giant Strength Hill tier) ✅ v2.212.0. Phase 1b (weapon attack/damage read site on `/attack`) ✅ v2.213.0 — the `/attack` endpoint now appends the effective-STR modifier delta to both the to-hit roll and the damage expression for STR-keyed weapons. Phase 2a (sheet display of the boosted ability score with an item-boost marker) ✅ v2.214.0. Phase 2b (belt tier backfill) filed. Phases 3 / 4 remain open.
 
 **Authors:** rolling
 **Last updated:** 2026-06-13
@@ -103,11 +103,11 @@ The `/attack` endpoint resolves attack/damage from the sheet's stored attack ent
 
 Shipped: two pure helpers — `_attack_override_ability(sheet, attack)` infers the weapon's backing ability (disambiguates STR vs DEX by matching the baked `attack_bonus − proficiency_bonus` modifier against the base STR/DEX mods, finesse-desc fallback), and `_pc_attack_ability_override_delta(sheet, attack)` returns the override modifier delta for that ability (0 for non-overridden abilities, so a STR belt never inflates a DEX bow/finesse weapon). The `/attack` endpoint applies the delta to both `damage_expr_raw` (mirroring the Hex Warrior swap) and the to-hit `atk_expr`. Harness: `test_belt_boosts_weapon_attack_and_damage` + `test_belt_weapon_boost_reverts_on_unequip` on Garrik's Greatsword.
 
-### Phase 2 — Belt tier backfill + sheet display (S–M, ~1 commit)
+### Phase 2 — Belt tier backfill + sheet display (S–M, split into 2a/2b)
 
-- Remaining belt tiers (Stone/Frost 23, Fire 25, Cloud 27, Storm 29) as catalog rows.
-- Sheet renders the effective ability score + modifier with an item-boosted marker.
-- Playwright test asserts the boosted score renders.
+**Phase 2a — Sheet display ✅ v2.214.0.** The `#ab-card-view` ability cards render the *effective* score + modifier with an item-boost marker (a ▲ badge + accent colour) when an equipped item sets the score above its base. `_effective_abilities_for_sheet(sheet)` is the shared helper feeding all three sheet-rendering surfaces (`/sheet-json`, the API `get_sheet`, the page `character_sheet_page`); `sheet.js`'s `updateCardFromInput` reads a `data-override` attribute so unsaved player edits keep the boosted display correct (display-only — roll-building still reads the raw inputs and the server appends the delta). Playwright `test_ability_override_display.py` (2 tests) asserts Garrik's STR card shows 21/+5 with the badge visible and DEX (unboosted) shows 14 with the badge hidden.
+
+**Phase 2b — Belt tier backfill (filed).** Remaining belt tiers (Stone/Frost 23, Fire 25, Cloud 27, Storm 29) as catalog rows. Open data-modeling question: the SRD ships a single slug `belt-of-giant-strength` (rarity "varies") covering all six tiers in its description, so multi-tier representation needs either separate catalog slugs or a per-inventory-item override field.
 
 ### Phase 3 — Amulet of Health + max-HP derivation (M, ~1 commit)
 

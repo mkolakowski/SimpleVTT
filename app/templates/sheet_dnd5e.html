@@ -576,16 +576,22 @@
 
             {# ── Card view (default) ── #}
             <div id="ab-card-view" style="display:grid;gap:8px;margin-top:8px;">
+                {% set eff_abilities = effective_abilities|default({}) %}
                 {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
-                {% set score = sheet.get('abilities',{}).get(ab,10) %}
-                {% set mod = (score - 10) // 2 %}
-                <button type="button" class="roll-btn ab-roll-card"
+                {% set base_score = sheet.get('abilities',{}).get(ab,10) %}
+                {% set ov = eff_abilities.get(ab) %}
+                {% set score = ov.effective if ov else base_score %}
+                {% set mod = ov.modifier if ov else (base_score - 10) // 2 %}
+                <button type="button" class="roll-btn ab-roll-card{{ ' ab-boosted' if ov else '' }}"
                         data-roll-ability="{{ ab }}" data-ab="{{ ab }}"
-                        title="Roll {{ ab }} check"
+                        title="{% if ov %}{{ ab }} {{ ov.effective }} — boosted from {{ ov.base }}{% if ov.source %} by {{ ov.source }}{% endif %}. Click to roll {{ ab }} check.{% else %}Roll {{ ab }} check{% endif %}"
                         style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:90px;padding:8px 4px;background:var(--s-card);border:1px solid var(--s-border);border-radius:8px;cursor:pointer;width:100%;">
                     <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
                     <span style="width:32px;height:1px;background:var(--s-border);margin:1px 0;"></span>
-                    <span class="ab-score-disp" data-ab="{{ ab }}" style="font-size:22px;font-weight:700;color:var(--s-fg);line-height:1.1;">{{ score }}</span>
+                    <span style="display:flex;align-items:center;gap:3px;line-height:1.1;">
+                        <span class="ab-score-disp" data-ab="{{ ab }}" data-override="{{ ov.effective if ov else '' }}" style="font-size:22px;font-weight:700;color:{{ 'var(--s-accent)' if ov else 'var(--s-fg)' }};">{{ score }}</span>
+                        <span class="ab-boost-badge" data-ab="{{ ab }}" title="Item-boosted" style="font-size:11px;color:var(--s-accent);{{ '' if ov else 'display:none;' }}">▲</span>
+                    </span>
                     <span class="ab-mod-disp"   data-ab="{{ ab }}" style="font-size:12px;font-weight:600;color:var(--s-accent);background:var(--s-mod-bg);padding:1px 7px;border-radius:8px;min-width:32px;text-align:center;">{{ '+' if mod >= 0 else '' }}{{ mod }}</span>
                 </button>
                 {% endfor %}
