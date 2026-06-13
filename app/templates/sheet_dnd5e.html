@@ -7250,6 +7250,18 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           title: 'Wand of Fear — 30-ft cone, DC 15 WIS save or Frightened 1 min.',
                           length_ft: 30,
                           apex_half_angle_deg: 26.57},  // RAW PHB p.204
+        // v2.206.0 — second save-condition wand. Wand of Paralysis
+        // (RAW DMG p.213) is single-target (a ray), so it reuses the
+        // `single-target-save` flow (pick one creature in range → POST
+        // the id) rather than the cone flow. The server resolves the
+        // CON save + installs the paralyzed condition + decrements a
+        // charge (synced to the mini-sheet via the resource_update WS).
+        'wand-of-paralysis': {kind: 'single-target-save',
+                          action_key: 'cast-paralysis',
+                          label: '💫 Paralyze',
+                          title: 'Wand of Paralysis — ray at one creature within 60 ft, DC 15 CON save or Paralyzed 1 min.',
+                          max_range_ft: 60,
+                          save_dc: 15},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder

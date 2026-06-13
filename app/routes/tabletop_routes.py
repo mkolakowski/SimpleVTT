@@ -32458,6 +32458,37 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.206.0 — second save-condition wand, routed through the
+    # generalized Wand of Fear handler. RAW DMG p.213 Wand of Paralysis
+    # (rare, attunement): 7 charges; spend 1 to fire a ray at one
+    # creature within 60 ft → DC 15 CON save or paralyzed for 1 minute
+    # (repeated save at end of each of its turns). Single-target (no
+    # cone geometry) — the condition key / label / icon / effects all
+    # live here so the handler is content-agnostic.
+    "wand-of-paralysis": {
+        "requires_attunement": True,
+        "resource_key": "wand-of-paralysis",
+        "actions": {
+            "cast-paralysis": {
+                "name": "Fire Paralysis Ray (60 ft)",
+                "save_dc": 15,
+                "save_ability": "CON",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 10,
+                "target_shape": "ray",
+                "condition_key": "paralyzed",
+                "condition_label": "Paralyzed",
+                "condition_icon": "💫",
+                "condition_effects": [
+                    "incapacitated — can't move or speak",
+                    "auto-fail STR and DEX saving throws",
+                    "attacks against it have advantage; melee hits within 5 ft crit",
+                ],
+                "feature_name": "💫 Wand of Paralysis",
+            },
+        },
+    },
     # v2.184.0 — first "self-buff" archetype: a consumable potion that
     # buffs the DRINKER rather than targeting others. RAW DMG p.187
     # Potion of Heroism (rare): drink (action) → 10 temporary hit
@@ -79961,7 +79992,7 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug == "wand-of-fear":
+    if slug in ("wand-of-fear", "wand-of-paralysis"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,
@@ -79970,6 +80001,7 @@ async def use_item_action(
             charges=body.get("charges"),
             campaign=campaign,
             prompt_user=user,
+            slug=slug,
         )
     if slug == "potion-of-fire-breath":
         action_def = catalog["actions"][action_key]
@@ -81214,16 +81246,20 @@ async def _use_item_action_wand_of_fear(
     charges=None,
     campaign=None,
     prompt_user=None,
+    slug="wand-of-fear",
 ):
-    """v2.159.11 — Phase 8k Wand of Fear handler. RAW DMG p.213: 7
-    charges, regains 1d6+1 at dawn. Spend 1 charge: each creature in
-    a 30-ft cone makes a DC 15 WIS save or is Frightened of you for
-    1 minute (repeated save at end of each of its turns). No damage —
-    the rider is the condition install. Reuses the
+    """v2.159.11 — Phase 8k Wand of Fear handler, generalized v2.206.0
+    into a shared save-condition wand handler (Wand of Fear + Wand of
+    Paralysis). Spend N charges → each named target makes a save (DC +
+    ability from the action_def) or takes a condition install for the
+    action_def's duration (repeated save at end of each turn). No
+    damage — the rider is the condition. Reuses the
     ``_resolve_feature_save`` + ``condition_buff`` pattern (same as
-    Conquering Presence / Fear-spell path).
+    Conquering Presence / Fear-spell path). The condition key / name /
+    icon / effects + the feature label all come from the action_def so
+    a new save-condition wand is a pure catalog entry; the defaults
+    reproduce the original Wand of Fear (WIS → frightened) verbatim.
     """
-    slug = "wand-of-fear"
     res_key = str(catalog.get("resource_key") or slug)
 
     # Charge validation (v1: always 1, but kept symmetric with the
@@ -81270,24 +81306,31 @@ async def _use_item_action_wand_of_fear(
     if not isinstance(target_combatant_ids, list):
         raise HTTPException(400, "target_combatant_ids must be a list")
     if len(target_combatant_ids) > 24:
-        raise HTTPException(400, "Too many targets for Wand of Fear")
+        raise HTTPException(400, "Too many targets for this wand")
 
     save_dc = int(action_def.get("save_dc") or 15)
     save_ability = str(action_def.get("save_ability") or "WIS").upper()
     dur_rounds = int(action_def.get("duration_rounds") or 10)
 
-    frightened_buff = {
-        "key": "frightened",
-        "name": f"Frightened (Wand of Fear — {char.name})",
-        "icon": "😱",
+    cond_key = str(action_def.get("condition_key") or "frightened")
+    cond_label = str(action_def.get("condition_label") or "Frightened")
+    cond_icon = str(action_def.get("condition_icon") or "😱")
+    cond_effects = action_def.get("condition_effects") or [
+        "disadvantage on ability checks / attacks while source in sight",
+        "can't willingly move closer to source",
+    ]
+    feature_name = str(action_def.get("feature_name") or "😱 Wand of Fear")
+    item_name = item.get("name") or slug
+
+    condition_buff = {
+        "key": cond_key,
+        "name": f"{cond_label} ({item_name} — {char.name})",
+        "icon": cond_icon,
         "duration_rounds": dur_rounds,
         "duration_max": dur_rounds,
         "concentration": False,
         "source_item": slug,
-        "effects": [
-            "disadvantage on ability checks / attacks while source in sight",
-            "can't willingly move closer to source",
-        ],
+        "effects": list(cond_effects),
     }
 
     results = []
@@ -81306,17 +81349,17 @@ async def _use_item_action_wand_of_fear(
                 target_combatant=target_c,
                 save_ability=save_ability,
                 dc=save_dc,
-                note_label=f"Wand of Fear (DC {save_dc} {save_ability})",
-                condition_buff=frightened_buff,
+                note_label=f"{item_name} (DC {save_dc} {save_ability})",
+                condition_buff=condition_buff,
                 repeated_save=True,
                 source=f"item-{slug}-save",
                 campaign=campaign,
                 prompt_user=prompt_user,
-                feature_name="😱 Wand of Fear",
+                feature_name=feature_name,
             )
         except Exception:
             logging.exception(
-                "Wand of Fear save resolve failed for tid=%s", tid,
+                "%s save resolve failed for tid=%s", item_name, tid,
             )
             results.append({"combatant_id": tid, "reason": "save_error"})
             continue
@@ -81346,6 +81389,7 @@ async def _use_item_action_wand_of_fear(
         })
     except Exception:
         pass
+    shape = str(action_def.get("target_shape") or "cone")
     try:
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
@@ -81353,10 +81397,10 @@ async def _use_item_action_wand_of_fear(
                 "character_id": char.id,
                 "caster_char_name": char.name,
                 "source": f"item-{slug}",
-                "label": "😱 Wand of Fear",
+                "label": feature_name,
                 "summary": (
-                    f"{char.name} unleashes the {item.get('name')} — "
-                    f"DC {save_dc} {save_ability} cone against "
+                    f"{char.name} unleashes the {item_name} — "
+                    f"DC {save_dc} {save_ability} {shape} against "
                     f"{len(results)} target(s). "
                     f"({res_row['current']}/{res_max} charges left.)"
                 ),

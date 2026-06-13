@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.206.0] - 2026-06-12 — "The Frozen Marionette"
+
+**Schema version:** 69
+
+**Commit summary:** Second save-condition wand — Wand of Paralysis (RAW DMG p.213, rare, attunement): 7 charges; expend 1 to fire a paralysis ray at one creature within 60 ft — DC 15 CON save or Paralyzed for 1 minute (repeat save at the end of each of its turns), regaining 1d6+1 charges at dawn. Lands as a near-pure catalog+seed+UI addition by generalizing the Wand of Fear handler into a content-agnostic save-condition wand: the save DC/ability, the condition (key/label/icon/effects), the feature name, and the target shape all come from the catalog `action_def`.
+
+**Description:** `_use_item_action_wand_of_fear` is generalized into a shared save-condition wand handler (it takes a `slug` and reads condition + save metadata from `action_def`; the defaults reproduce the original Fear wand's WIS→frightened cone verbatim). A new `_MAGIC_ITEM_ACTIONS['wand-of-paralysis']` entry overrides those defaults with DC 15 CON→paralyzed, a 60-ft ray, and a 1-minute duration; the `/use_item_action` dispatch tuple routes both `wand-of-fear` and `wand-of-paralysis` through the shared handler, passing `slug=slug`. A `💫 Paralyze` button lands via the existing `single-target-save` `ITEM_ACTION_SLUGS` kind (pick one creature in range → resolve the save). Magnus Hexbinder carries a seeded Wand of Paralysis (attuned — his second attuned wand, 2/3 against the RAW cap) + a 7-charge resource row with 1d6+1 recharge. The `wand-of-paralysis.json` SRD catalog item already shipped. MINOR — additive catalog action + dispatch + UI button + seed, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS['wand-of-paralysis']` save-condition action (DC 15 CON → Paralyzed, 60-ft ray, 1 charge, 1-minute duration, attunement); the `/use_item_action` save-condition dispatch tuple now includes `wand-of-paralysis`.
+- `ITEM_ACTION_SLUGS['wand-of-paralysis']` (`single-target-save` kind) → a `💫 Paralyze` button on the row.
+- Magnus Hexbinder's demo inventory gains a seeded Wand of Paralysis (attuned) + a `wand-of-paralysis` resource row (7/7, 1d6+1 recharge, long-rest reset).
+- `tests/harness/test_use_item_action_wand_of_paralysis.py` (3 tests): cast at 2 targets → DC 15 CON, charges 7→6, both ids in results; over-cap charges → 400; empty wand → 409 insufficient_charges.
+
+### Changed
+- `_use_item_action_wand_of_fear` generalized into a content-agnostic save-condition wand handler — reads condition (key/label/icon/effects), save DC/ability, feature name, duration, and target shape from the catalog `action_def`; defaults reproduce the original Wand of Fear (WIS → frightened cone). Non-breaking: the Fear-wand tests stay green.
+- `docs/test-harness-coverage.md`: harness total 2566 → 2569; added the `test_use_item_action_wand_of_paralysis.py` section.
+
 ## [2.205.0] - 2026-06-12 — "The Forked Bolt"
 
 **Schema version:** 69

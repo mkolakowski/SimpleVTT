@@ -2061,6 +2061,16 @@ def _warlock_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-fear",
              "desc": "RAW DMG p.213 (rare, attunement). 7 charges (regain 1d6+1 at dawn). Action: spend 1 charge to project a 30-ft cone — DC 15 WIS save or Frightened of you for 1 min (repeat save at end of each turn). Wired via /use_item_action with action_key=\"cast-fear\"."},
+            # v2.206.0 — second save-condition wand, routed through the
+            # generalized Wand of Fear handler. Wand of Paralysis (RAW
+            # DMG p.213 — rare, attunement). 7 charges; spend 1 to fire
+            # a ray at one creature within 60 ft → DC 15 CON save or
+            # paralyzed for 1 minute (repeat save). Single-target (no
+            # cone). Magnus is at 2/3 attuned items with this added.
+            {"name": "Wand of Paralysis", "type": "gear", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-paralysis",
+             "desc": "RAW DMG p.213 (rare, attunement). 7 charges (regain 1d6+1 at dawn). Action: spend 1 charge to fire a ray at one creature within 60 ft — DC 15 CON save or Paralyzed for 1 min (repeat save at end of each turn). Wired via /use_item_action with action_key=\"cast-paralysis\"."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's
@@ -2350,6 +2360,19 @@ def _warlock_sheet(name: str) -> dict:
                 "source": "magic item — Wand of Fear",
                 "class_slug": "item",
                 "desc": "RAW DMG p.213. 7 charges. Spend 1 via /use_item_action (cast-fear): 30-ft cone, DC 15 WIS save or Frightened 1 min. Recovers 1d6+1 at dawn.",
+                "manual": False,
+            },
+            # v2.206.0 — Wand of Paralysis charge counter. Same shape
+            # as the Wand of Fear (7 charges, 1d6+1 recharge); the
+            # save / condition live in the catalog action_def.
+            {
+                "key": "wand-of-paralysis",
+                "name": "Wand of Paralysis",
+                "current": 7, "max": 7, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "magic item — Wand of Paralysis",
+                "class_slug": "item",
+                "desc": "RAW DMG p.213. 7 charges. Spend 1 via /use_item_action (cast-paralysis): ray at one creature within 60 ft, DC 15 CON save or Paralyzed 1 min. Recovers 1d6+1 at dawn.",
                 "manual": False,
             },
         ],
