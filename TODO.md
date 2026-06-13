@@ -17,11 +17,62 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) for the current re-prioritisation, and [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) for the prior pass. The 2026-06-11 refresh closes the prior audit's magic-items + Exhaustion + Pact-Boon + Battle-Master + Paladin-Lv-15/20 P1/P2 items as ✅ shipped, and promotes **NEW: legendary actions + lair actions** to the top P1 slot.
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (2026-06-13 refresh)](#srd-5e-audit-2026-06-13-refresh) for the current re-prioritisation, then [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) and [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) for the prior passes. The 2026-06-13 refresh closes the 2026-06-11 audit's **NEW #1 P1 (legendary actions + lair actions)** plus legendary resistance and most of the spell-validation suite as ✅ shipped, and records the **NEW ability-score override engine** (Belt/Amulet/Headband/Gauntlets/Potion of Giant Strength + Manuals & Tomes) as a fully-shipped surface that wasn't on any prior audit.
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (2026-06-13 refresh)
+
+**Audit scope.** Third pass against `app/data/local/dnd5e/` capturing the delta over ~63 MINOR/PATCH releases between v2.159.30 → v2.222.0 (the largest single window so far). Re-shapes the [Design Plans Backlog](#design-plans-backlog) priorities. Excludes setting-specific / post-SRD content (Tasha's, Xanathar's-beyond-SRD, Strixhaven, etc.) and homebrew, same as the prior passes.
+
+### Headline state (delta vs 2026-06-11)
+
+| Layer | 2026-06-11 coverage | 2026-06-13 coverage | Movement |
+|---|---|---|---|
+| Spells (319 SRD) | ~66% mechanical | ~70% mechanical | Spell-validation suite went from 1 catalog test (Fire Bolt) to **~18 catalog suites** (loader, smoke, damage, exact-damage, save, save-damage, attack, heal, conditions, concentration, range, aoe, aoe-placement, autohit, multibeam, buff-install, buff-effects, upcast) — CI-gated catalog drift is now broad. |
+| Monsters (322 SRD) | ~75% mechanical | ~85% mechanical | **Legendary actions, legendary resistance, AND lair actions all ✅** — the 2026-06-11 audit's NEW #1 P1 surface, closed end-to-end v2.159.32–v2.167.0. |
+| Conditions (15/15) | ~85% | ~85% | No movement. |
+| Items (292 SRD) | ~50% framework + 42 wired | framework ✅ + **~49 items wired in code** (35 `_MAGIC_ITEM_ACTIONS` + 10 `_MAGIC_ITEM_PASSIVES` + 6 `_MAGIC_ITEM_ATTACK_RIDERS`) | Content tail still the long pole, but the **NEW ability-score override engine** (below) added a whole item class. |
+| Ability-score override engine (NEW) | not audited | ✅ shipped | RAW `max(base, set)` runtime engine + 6 drop-ins: Belt of Giant Strength (Hill), Amulet of Health, Headband of Intellect, Gauntlets of Ogre Power, Potion of Giant Strength (tiered), Manuals & Tomes (permanent +2). v2.211.0–v2.222.0. |
+| Class features (133) | ~82% | ~82% | No movement this window. |
+
+### What closed since 2026-06-11
+
+✅ **Legendary actions + legendary resistance + lair actions** ([plan ⚪→✅](docs/plans/legendary-actions.md)) — the prior audit's NEW #1 P1, shipped v2.159.32–v2.167.0: per-round action-point budget, `/use_legendary_action` dispatch (attack + AoE-save shapes + chat card), a 3/day legendary-resistance pool with deferred failed-save interception (`/spend_legendary_resistance` + `/decline_legendary_resistance` + GM prompt banner), and curated `lair_actions` data + `/trigger_lair_action` (initiative-20 trigger, AoE dispatch, GM banner). The single biggest un-planned SRD surface from the prior audit is now closed.
+
+✅ **Ability-score override engine + 6 drop-in items** ([plan ⚪→✅](docs/plans/str-override.md)) — a surface that wasn't on any prior audit. RAW `max(base, set)` runtime semantics via `effective_ability_score`, routed through every read site (saves, checks, sheet card, carry capacity, `/sheet-json`). Drop-ins: Belt of Giant Strength (Hill, STR 21), Amulet of Health (CON 19, with boosted-max-HP threading into combat + all rest/heal paths), Headband of Intellect (INT 19), Gauntlets of Ogre Power (STR 19), Potion of Giant Strength (tiered timed buff), and the six Manuals & Tomes (DMG pp.180/208) as a permanent base-score `permanent_boost` archetype. v2.211.0–v2.222.0.
+
+✅ **Spell-validation suite — most of it** ([plan 🟠](docs/plans/spell-validation-suite.md)) — the 2026-06-11 audit's carry-over P1. From a single Fire Bolt slice to ~18 catalog suites covering loader/damage/save/attack/heal/conditions/concentration/range/aoe/upcast and more. The CI-gated drift net the prior audits kept asking for is now largely in place.
+
+✅ **Magic-item action backfill — continued** (Phase 9 of [magic-items-automation](docs/plans/magic-items-automation.md)) — ~49 items now wired in code (vs 42). New since the prior audit: Potion of Heroism / Resistance / Mind Reading / Diminution, Wand of Lightning Bolts / Paralysis, Eyes of Charming, Stone of Good Luck, Staff of Fire, plus the ability-score passives above.
+
+### Remaining gaps (re-prioritized)
+
+With magic-item framework, legendary/lair actions, and the ability-score engine all closed, there is **no single headline P1 surface left** — the remaining work is breadth (content tails) and a handful of mid-size class/spell features.
+
+🟡 **P2 — Magic-item action backfill long tail.** ~245 of 294 SRD items still have no code-side wiring. The framework + templates are all in place; each remaining item is a content commit. Bag of Devouring is shipped; pick the next ~10–15-item batch from the Phase 1–8 templates (on-hit riders, charge-with-spell, passive buff, nat-20 hook).
+
+🟡 **P2 — Ability-score engine drop-in tail (NEW, small).** The override substrate now trivially absorbs: the **giant-tier Belts** (Stone/Frost STR 23, Fire 25, Cloud 27, Storm 29 — one passive row + demo seed each) and the **Ioun Stone ability variants** (Strength/Dexterity/Constitution/Intelligence/Wisdom/Charisma — +2-to-max-20 equipped boost). Each is a ~1-commit slice on the shipped engine.
+
+🟡 **P2 — Spell-validation suite finishers.** The catalog suites are broad now; remaining work is closing the specific cast paths still flagged partial (upcast scaling on the ~110 cast-and-broadcast-only spells).
+
+🟡 **P2 — Wizard capstone Spell Mastery / Signature Spells, Aura of Courage, Reactions v3 pending-damage state machine, Sorcerer Quickened Spell.** Unchanged from 2026-06-11.
+
+🟢 **P3 — Eldritch Knight Phase 2 read sites; class-feature ⚪ tail** (Barbarian Lv 9–20, Monk Deflect Missiles / Diamond Soul / Empty Body / Perfect Self, Ranger Lv 10–20 minus Vanish, Rogue Reliable Talent / Slippery Mind / Elusive / Stroke of Luck). Unchanged.
+
+### Removed from gap list (since shipped)
+
+- ~~Legendary actions + lair actions~~ — closed (the prior audit's NEW #1 P1).
+- ~~Legendary resistance~~ — closed.
+- ~~Spell-validation suite Phase 1+~~ — mostly closed (broad catalog coverage; only cast-path finishers remain).
+
+### Out-of-scope (unchanged)
+
+Same as the prior passes: Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope. Out-of-scope-by-design RAW-narrative features unchanged.
 
 ---
 

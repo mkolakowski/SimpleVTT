@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.222.1] - 2026-06-13 — "The Third Reading"
+
+**Schema version:** 69
+
+**Commit summary:** SRD 5e audit pass #3 — a third dated refresh in `TODO.md` capturing the v2.159.30 → v2.222.0 delta.
+
+**Description:** Doc-only. Adds an "SRD 5e Audit (2026-06-13 refresh)" section to [`TODO.md`](TODO.md) covering the largest single audit window so far (~63 releases). Records what closed since the 2026-06-11 pass: the prior audit's NEW #1 P1 surface (legendary actions + legendary resistance + lair actions, v2.159.32–v2.167.0), the bulk of the spell-validation suite (1 → ~18 catalog suites), and the entirely-new ability-score override engine + its six drop-in items (v2.211.0–v2.222.0). Re-prioritizes the remaining gaps: with the magic-item framework, legendary/lair actions, and the ability engine all closed, there is no single headline P1 left — the work is now breadth (the ~245-item magic-item content tail) plus small drop-in slices (giant-tier Belts, Ioun Stone ability variants) on the shipped engine. Updates the audit quick-map pointer at the top of the file. No code, schema, or endpoint changes — exempt from the harness-test rule. `TODO.md` is already surfaced through `/wiki` (the `todo` allowlist slug), so no wiki wiring needed.
+
+### Changed
+- `TODO.md`: new "SRD 5e Audit (2026-06-13 refresh)" section with headline-state delta table, what-closed list, re-prioritized gaps, and updated quick-map pointer.
+
 ## [2.222.0] - 2026-06-13 — "The Studied Page"
 
 **Schema version:** 69
