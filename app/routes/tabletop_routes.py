@@ -1686,6 +1686,40 @@ _SPELL_BUFF_MAP["clairvoyance-potion"] = {
     ),
 }
 
+# v2.204.0 — Potion of Gaseous Form (RAW DMG p.187, rare): drink → the
+# gaseous form spell (up to 1 hour). RAW: resistance to nonmagical damage,
+# advantage on STR/DEX/CON saves, a 10-ft hover fly speed; can't attack,
+# cast, or manipulate objects. The resistance is a real engine effect — the
+# `effects.resistance_to` list carries every `nonmagical-<type>` entry the
+# F6 matcher (`_resistance_matches_damage`) understands, so `_resistance_
+# halve` halves any nonmagical hit while letting magical-source damage
+# through at full. The 10-ft hover rides the same `fly_speed_ft` marker the
+# flight buffs use. The save advantage and the can't-act restriction are
+# GM-narrated.
+_SPELL_BUFF_MAP["gaseous-form-potion"] = {
+    "key": "gaseous-form-potion",
+    "name": "Gaseous Form",
+    "icon": "💨",
+    "duration_rounds": 600,  # up to 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "resistance_to": [
+            "nonmagical-bludgeoning", "nonmagical-piercing",
+            "nonmagical-slashing", "nonmagical-fire", "nonmagical-cold",
+            "nonmagical-lightning", "nonmagical-thunder", "nonmagical-acid",
+            "nonmagical-poison", "nonmagical-necrotic", "nonmagical-radiant",
+            "nonmagical-psychic", "nonmagical-force",
+        ],
+        "fly_speed_ft": 10,  # hover
+    },
+    "desc": (
+        "Gaseous form for up to 1 hour: resistance to nonmagical damage, "
+        "advantage on STR/DEX/CON saves, 10-ft hover; can't attack, cast, "
+        "or manipulate objects (GM-narrated). RAW DMG p.187."
+    ),
+}
+
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
@@ -32594,6 +32628,23 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "buff_key": "clairvoyance-potion",
             "duration_rounds": 100,  # 10 minutes @ 6 s/round
             "summary_effect": "a clairvoyance sensor for 10 minutes",
+        },
+    },
+    # v2.204.0 — twelfth self-buff potion. RAW DMG p.187 Potion of Gaseous
+    # Form (rare): drink → gaseous form for up to 1 hour. Installs the
+    # `gaseous-form-potion` template whose `effects.resistance_to`
+    # (nonmagical-<type> list) the `_resistance_halve` engine honours and
+    # whose `effects.fly_speed_ft: 10` the flight readers surface; the save
+    # advantage + can't-act restriction are GM-narrated.
+    "potion-of-gaseous-form": {
+        "key": "drink",
+        "name": "Drink Potion of Gaseous Form",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "gaseous-form-potion",
+            "duration_rounds": 600,  # up to 1 hour @ 6 s/round
+            "summary_effect": "gaseous form for up to 1 hour",
         },
     },
     # v2.193.0 — first OFFENSIVE consumable potion. RAW DMG p.187 Potion
@@ -79925,7 +79976,7 @@ async def use_item_action(
         "potion-of-growth", "potion-of-climbing",
         "potion-of-water-breathing", "potion-of-diminution",
         "potion-of-invisibility", "potion-of-flying",
-        "potion-of-clairvoyance",
+        "potion-of-clairvoyance", "potion-of-gaseous-form",
     ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.204.0] - 2026-06-12 — "The Vaporous Veil"
+
+**Schema version:** 69
+
+**Commit summary:** Twelfth self-buff potion — Potion of Gaseous Form (RAW DMG p.187, rare): drink → gaseous form for up to 1 hour, no concentration. Carries a real, composable engine effect — `effects.resistance_to` lists every `nonmagical-<type>` entry the F6 resistance matcher understands, so `_resistance_halve` halves any nonmagical hit while letting magical-source damage through — plus a 10-ft hover via the `fly_speed_ft` marker.
+
+**Description:** A new `gaseous-form-potion` `_SPELL_BUFF_MAP` template whose `effects.resistance_to` carries the full nonmagical-damage list (`nonmagical-bludgeoning`, …, `nonmagical-force`) that `_resistance_halve` / `_resistance_matches_damage` already honour, and `effects.fly_speed_ft: 10` for the hover. The `_MAGIC_ITEM_ACTIONS['potion-of-gaseous-form']` self-buff entry installs it for up to 1 hour (600 rounds), the `/use_item_action` self-buff dispatch tuple gains the slug, a `💨 Drink` button lands via the `self-buff-drink` `ITEM_ACTION_SLUGS` kind, and Garrik Ironside carries a seeded instance. The advantage on STR/DEX/CON saves and the can't-attack/cast/manipulate restriction are GM-narrated. The `potion-of-gaseous-form.json` SRD catalog item already shipped in the master catalog. MINOR — additive buff template + catalog action + dispatch + UI button + seed, no schema change.
+
+### Added
+- `gaseous-form-potion` buff template (`effects.resistance_to` = nonmagical-damage list + `effects.fly_speed_ft: 10`, up to 1 hour, no concentration) — composes with the existing resistance + flight engine readers.
+- `_MAGIC_ITEM_ACTIONS['potion-of-gaseous-form']` self-buff drink action; the `/use_item_action` self-buff dispatch tuple now includes `potion-of-gaseous-form`.
+- `ITEM_ACTION_SLUGS['potion-of-gaseous-form']` (`self-buff-drink` kind) → a `💨 Drink` button on the row.
+- Garrik Ironside's demo inventory gains a seeded Potion of Gaseous Form.
+- `tests/harness/test_potion_of_gaseous_form.py` (2 tests): in an active battle the drink installs the buff carrying both the nonmagical `resistance_to` list and the `fly_speed_ft` marker; a bad action_key → 404.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2561 → 2563; added the `test_potion_of_gaseous_form.py` section.
+
 ## [2.203.0] - 2026-06-12 — "The Distant Eye"
 
 **Schema version:** 69
