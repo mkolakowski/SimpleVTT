@@ -22826,7 +22826,10 @@ async def use_lay_on_hands(
     # on Hands restores up to N HP — it doesn't push above max.
     target_hp = (target.sheet or {}).get("hp") or {}
     target_cur = int(target_hp.get("current") or 0)
-    target_max = int(target_hp.get("max") or 0)
+    # v2.221.0 — clamp at the target's effective ceiling (stored max + a
+    # CON-setting item's boost) so Lay on Hands can top an Amulet-of-Health
+    # wearer up to their boosted pool.
+    target_max = _sheet_heal_ceiling(target.sheet or {})
     new_cur = min(target_max, target_cur + amount) if target_max > 0 else (target_cur + amount)
     actual_healed = new_cur - target_cur
     result = _apply_hp_change(target, new_cur)
@@ -33600,6 +33603,24 @@ def _effective_max_hp_for_sheet(sheet: dict) -> dict | None:
         return None
 
 
+def _sheet_heal_ceiling(sheet: dict) -> int:
+    """The HP a restore may clamp to for a PC sheet: stored ``hp.max``
+    plus any CON-setting item's max-HP boost (Amulet of Health). Returns
+    the stored max when no override applies. The single source of truth
+    for heal/rest clamps so every restore path honors the boosted pool
+    (v2.220.0 combat heal + long rest; v2.221.0 short rest / Second Wind
+    / Lay on Hands)."""
+    hp = sheet.get("hp") if isinstance(sheet.get("hp"), dict) else {}
+    base_max = int(hp.get("max") or 0)
+    try:
+        emh = _effective_max_hp_for_sheet(sheet)
+        if emh:
+            return base_max + int(emh.get("delta") or 0)
+    except Exception:  # noqa: BLE001
+        pass
+    return base_max
+
+
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
     """v2.99.81 — swap the leading die on an unarmed/monk-weapon
     attack with the Monk's Martial Arts die when it's larger.
@@ -44278,8 +44299,11 @@ async def use_second_wind(
     # Apply HP via _apply_hp_change so the death-save state machine
     # picks up a dying fighter waking up cleanly.
     hp = dict(sheet.get("hp") or {})
-    hp_max = int(hp.get("max") or 0)
     hp_cur = int(hp.get("current") or 0)
+    # v2.221.0 — clamp at the effective ceiling (stored max + a CON-setting
+    # item's boost) so Second Wind can refill an Amulet-of-Health wearer
+    # up to their boosted pool.
+    hp_max = _sheet_heal_ceiling(sheet)
     new_hp = min(hp_max, hp_cur + recovered) if hp_max > 0 else (hp_cur + recovered)
 
     # Decrement counter.
@@ -79929,7 +79953,12 @@ async def rest_character(
         recovered = 1
         breakdown = ""
 
-    new_hp = min(hp_max, hp_cur + recovered) if hp_max > 0 else (hp_cur + recovered)
+    # v2.221.0 — clamp at the effective ceiling (stored max + a CON-setting
+    # item's boost) so a short rest can refill an Amulet-of-Health wearer
+    # up to their boosted pool, consistent with the v2.220.0 combat heal +
+    # long-rest clamps.
+    _sr_max = _sheet_heal_ceiling(sheet)
+    new_hp = min(_sr_max, hp_cur + recovered) if _sr_max > 0 else (hp_cur + recovered)
     hd["current"] = hd_cur - 1
     hd["max"] = hd_max
     # v2.99.25 — Warlock Pact Magic short-rest slot refresh. RAW

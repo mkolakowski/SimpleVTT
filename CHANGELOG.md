@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.221.0] - 2026-06-13 — "The Steady Mend"
+
+**Schema version:** 69
+
+**Commit summary:** Thread the Amulet of Health's boosted max HP through the remaining non-combat heal clamps — short-rest hit dice, Second Wind, and Lay on Hands — so every restore path is consistent with the v2.220.0 combat heal + long-rest fill. Introduces a shared `_sheet_heal_ceiling(sheet)` helper (stored `hp.max` + any CON-setting item's max-HP delta) as the single source of truth for heal/rest clamps, and routes the three leftover sites through it.
+
+**Description:** v2.220.0 ("The Fuller Cup") closed the combat heal-clamp + long-rest asymmetry but explicitly left the remaining non-combat heal paths capping at the stored `hp.max`. This commit finishes the job: a new `_sheet_heal_ceiling(sheet)` helper computes the effective ceiling (stored `hp.max` plus the Amulet of Health's `_effective_max_hp_for_sheet` delta, falling back to the stored max when no CON-setting item applies), and the three leftover heal clamps now read it — the short-rest hit-die heal (`rest_character`, `type: short`), Second Wind (Fighter feature), and Lay on Hands (Paladin → target). The clamp stays non-destructive throughout: stored `hp.max` is never mutated, so unequipping the amulet instantly drops the ceiling back with no revert step. The helper is deliberately the read-time source of truth so future weight/CON-shaping items compose without touching each restore site again. Demo: Brother Tavik Stonebrow (Cleric Lv 8, stored max 67, effective 83) at 67 HP can now be topped past 67 by a short rest (up to 83) or by Sir Caelan's Lay on Hands — both previously capped at 67. Second Wind has no amulet-wearing Fighter in the demo (Garrik wears the Belt of Giant Strength, not the Amulet), so it isn't directly exercised, but it reads the same shared helper as the two covered paths. MINOR — additive heal-clamp augmentation + shared helper + tests, no schema change.
+
+### Added
+- `_sheet_heal_ceiling(sheet)` helper: the single source of truth for heal/rest clamps — stored `hp.max` plus any CON-setting item's (Amulet of Health) max-HP delta via `_effective_max_hp_for_sheet`, falling back to the stored max.
+- `tests/harness/test_amulet_health_rest_heal_paths.py` (2 tests): a short rest at the stored max heals past it via the amulet ceiling; Lay on Hands tops an Amulet-of-Health wearer past their stored max.
+
+### Changed
+- `rest_character` (short-rest branch): the hit-die heal now clamps at `_sheet_heal_ceiling` instead of the stored `hp.max`.
+- Second Wind (Fighter feature): heal clamps at `_sheet_heal_ceiling`.
+- `use_lay_on_hands`: the target heal clamps at `_sheet_heal_ceiling(target.sheet)`.
+- `docs/plans/str-override.md`: Phase 3's remaining non-combat heal paths marked shipped.
+- `docs/test-harness-coverage.md`: harness total 2607 → 2609; added the `test_amulet_health_rest_heal_paths.py` section.
+
+---
+
 ## [2.220.0] - 2026-06-13 — "The Fuller Cup"
 
 **Schema version:** 69
