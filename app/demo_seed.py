@@ -1649,6 +1649,18 @@ def _bard_sheet(name: str) -> dict:
              "properties": "finesse, magic",
              "_slug": "demon-slayer",
              "desc": "Rare rapier, attunement. +1 attack/damage; while attuned, deals +2d6 piercing damage to fiends (RAW DMG p.166). Frighten-on-hit save deferred."},
+            # v2.207.0 — Staff of Charming (RAW DMG p.201, rare,
+            # attunement). 10 charges (regain 1d8+2 at dawn); the
+            # marquee charge-action casts charm person at one creature
+            # within 30 ft using Lyra's spell save DC (14). Lyra now
+            # wears 3 attuned items (Cloak + Demon Slayer + Staff) — at
+            # the RAW 3-item cap. The command / comprehend-languages
+            # charge-spells + the enchantment-reflection reaction are
+            # GM-narrated.
+            {"name": "Staff of Charming", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "staff-of-charming", "weight_lb": 4,
+             "desc": "Rare staff, attunement. 10 charges (regain 1d8+2 at dawn). Expend 1 to cast charm person, command, or comprehend languages using your spell save DC. Also a magic quarterstaff. Can turn a failed save vs an enchantment spell that targets only you into a success (once per dawn), and reflect a passed save back with a reaction + 1 charge."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit
@@ -1676,6 +1688,20 @@ def _bard_sheet(name: str) -> dict:
                 "source": "bard Lv 1 / Lv 5 (Font of Inspiration)",
                 "class_slug": "bard",
                 "desc": "Bonus action — pick an ally within 60 ft; they gain a Bardic Inspiration d8 for 10 minutes (add to one attack, check, or save). Refreshes on short rest from Lv 5.",
+                "manual": False,
+            },
+            # v2.207.0 — Staff of Charming charge pool (RAW DMG p.201):
+            # 10 charges, regain 1d8+2 at dawn. Decremented by the
+            # generalized save-condition wand handler when Lyra casts
+            # charm person from the staff.
+            {
+                "key": "staff-of-charming",
+                "name": "Staff of Charming",
+                "current": 10, "max": 10, "reset": "long",
+                "charge_recovery": "1d8+2",
+                "source": "magic item — Staff of Charming",
+                "class_slug": "item",
+                "desc": "10 charges; expend 1 to cast charm person / command / comprehend languages using your spell save DC. Regain 1d8+2 at dawn.",
                 "manual": False,
             },
         ],

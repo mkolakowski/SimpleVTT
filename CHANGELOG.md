@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.207.0] - 2026-06-12 — "The Honeyed Word"
+
+**Schema version:** 69
+
+**Commit summary:** Third save-condition item through the generalized wand-of-fear handler — Staff of Charming (RAW DMG p.201, rare, attunement): 10 charges (regain 1d8+2 at dawn); expend 1 to cast charm person at one creature within 30 ft — WIS save at *the wielder's spell save DC* or Charmed for 1 hour. Adds a `"save_dc": "spell"` catalog sentinel so the shared handler computes the caster's spell save DC from the sheet rather than a fixed number.
+
+**Description:** The generalized `_use_item_action_wand_of_fear` save-condition handler gains a `"spell"` sentinel for `action_def["save_dc"]`: when present it resolves the wielder's spell save DC via `_compute_spell_save_dc_from_sheet(sheet)` instead of reading a fixed integer — faithful to RAW staff/wand wording ("using your spell save DC") and reusable by any future spell-DC item. A new `_MAGIC_ITEM_ACTIONS['staff-of-charming']` entry (charm person, WIS → Charmed, 30-ft single target, 1-hour duration, DC = `"spell"`) routes through the shared handler via the `/use_item_action` dispatch tuple. A `💗 Charm Person` button lands via the existing `single-target-save` `ITEM_ACTION_SLUGS` kind. Lyra Sunstrider (Bard Lv 6, spell save DC 14) carries a seeded Staff of Charming (attuned — her third attuned item, 3/3 against the RAW cap) + a 10-charge resource row with 1d8+2 recharge. The staff's other two charge-spells (command, comprehend languages), the magic-quarterstaff mode, and the enchantment-reflection reaction are GM-narrated. The `staff-of-charming.json` SRD catalog item already shipped. MINOR — additive catalog action + handler sentinel + dispatch + UI button + seed, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS['staff-of-charming']` save-condition action (charm person, WIS → Charmed, 30-ft single target, 1-hour duration, `save_dc: "spell"`, attunement); the `/use_item_action` save-condition dispatch tuple now includes `staff-of-charming`.
+- `ITEM_ACTION_SLUGS['staff-of-charming']` (`single-target-save` kind) → a `💗 Charm Person` button on the row.
+- Lyra Sunstrider's demo inventory gains a seeded Staff of Charming (attuned) + a `staff-of-charming` resource row (10/10, 1d8+2 recharge, long-rest reset).
+- `tests/harness/test_use_item_action_staff_of_charming.py` (3 tests): cast at 1 target → save_dc=14 (Lyra's computed spell save DC) WIS, charges 10→9; over-cap charges → 400; empty staff → 409 insufficient_charges.
+
+### Changed
+- `_use_item_action_wand_of_fear` (generalized save-condition wand handler) now honours a `"spell"` sentinel on `action_def["save_dc"]` — resolves the wielder's spell save DC from the sheet instead of a fixed integer. Non-breaking: the Fear / Paralysis wands keep their fixed DCs.
+- `docs/test-harness-coverage.md`: harness total 2569 → 2572; added the `test_use_item_action_staff_of_charming.py` section.
+
 ## [2.206.0] - 2026-06-12 — "The Frozen Marionette"
 
 **Schema version:** 69

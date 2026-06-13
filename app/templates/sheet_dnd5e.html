@@ -7262,6 +7262,18 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           title: 'Wand of Paralysis — ray at one creature within 60 ft, DC 15 CON save or Paralyzed 1 min.',
                           max_range_ft: 60,
                           save_dc: 15},
+        // v2.207.0 — third save-condition item via the generalized
+        // handler. Staff of Charming (RAW DMG p.201): expend 1 of 10
+        // charges to cast charm person at one creature within 30 ft
+        // (WIS save at YOUR spell save DC, computed server-side from
+        // the sheet — no fixed DC here). Same single-target-save flow
+        // as Wand of Paralysis; server installs the charmed condition
+        // + decrements a charge (synced via the resource_update WS).
+        'staff-of-charming': {kind: 'single-target-save',
+                          action_key: 'cast-charm-person',
+                          label: '💗 Charm Person',
+                          title: 'Staff of Charming — charm one creature within 30 ft, WIS save (your spell save DC) or Charmed 1 hour.',
+                          max_range_ft: 30},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder

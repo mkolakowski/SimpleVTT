@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2569 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.206.0, 2026-06-12).
+**Total tests:** 2572 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.207.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2461,6 +2461,15 @@ v2.206.0 magic-items-automation content tail — Wand of Paralysis (RAW DMG p.21
 | `test_wand_of_paralysis_cast_2_targets` | Cast at 2 NPC targets → 200; `save_dc: 15`, `save_ability: CON`, `charges_spent: 1`, resource 7→6, both target ids in `results`. |
 | `test_wand_of_paralysis_over_cap_returns_400` | `charges: 2` when catalog max=1 → 400 (shared min/max charge validator). |
 | `test_wand_of_paralysis_empty_returns_409` | Drain the wand to 0 via /sheet-fields; invoke → 409 `insufficient_charges`, `current: 0`. Restores in teardown. |
+
+### `test_use_item_action_staff_of_charming.py`
+v2.207.0 magic-items-automation content tail — Staff of Charming (RAW DMG p.201, rare, attunement) through the same `/use_item_action` endpoint + the generalized `_use_item_action_wand_of_fear` save-condition handler. The marquee charge-action casts charm person (WIS → Charmed, 30-ft single target, 1-hour). New wrinkle: the catalog sets `save_dc: "spell"`, a sentinel that makes the handler compute the wielder's spell save DC from the sheet (`_compute_spell_save_dc_from_sheet`) rather than a fixed number. Seeded on **Lyra Sunstrider** (Bard Lv 6, spell save DC 14 — her third attuned item, 3/3 cap); the staff index is looked up by `_slug`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_staff_of_charming_cast_uses_spell_dc` | Cast at 1 NPC target → 200; `save_dc: 14` (Lyra's computed spell save DC via the `"spell"` sentinel), `save_ability: WIS`, `charges_spent: 1`, resource 10→9, target id in `results`. |
+| `test_staff_of_charming_over_cap_returns_400` | `charges: 2` when catalog max=1 → 400 (shared min/max charge validator). |
+| `test_staff_of_charming_empty_returns_409` | Drain the staff to 0 via /sheet-fields; invoke → 409 `insufficient_charges`, `current: 0`. Restores in teardown. |
 
 ### `test_dragon_slayer_rider.py`
 v2.158.93 magic-items-automation Phase 5c — Dragon Slayer Longsword (RAW DMG p.166). First conditional rider: the rider catalog entry carries a `condition(target_combatant) → bool` predicate that section 6c invokes after the attunement check. Caelan's seed gets the longsword (attack_index 2, inventory_index 7, +1 attack/damage baked in, equipped + attuned). Tests use the existing battle-seed pattern (PUT a battle with a synthetic target carrying `creature_type: "dragon"` or `"humanoid"`) to exercise both branches.

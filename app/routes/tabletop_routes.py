@@ -32489,6 +32489,38 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.207.0 — third save-condition item through the generalized
+    # wand-of-fear handler. Staff of Charming (RAW DMG p.201, rare,
+    # attunement): 10 charges (regain 1d8+2 at dawn). The marquee
+    # action — expend 1 charge to cast charm person at one creature
+    # within 30 ft, "using your spell save DC" (WIS save or Charmed for
+    # 1 hour). The "spell" save_dc sentinel makes the handler compute
+    # the wielder's spell save DC from the sheet rather than a fixed
+    # number. The staff's other two charge-spells (command, comprehend
+    # languages) + the enchantment-reflection reaction are GM-narrated.
+    "staff-of-charming": {
+        "requires_attunement": True,
+        "resource_key": "staff-of-charming",
+        "actions": {
+            "cast-charm-person": {
+                "name": "Cast Charm Person (30 ft)",
+                "save_dc": "spell",
+                "save_ability": "WIS",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 600,
+                "target_shape": "single",
+                "condition_key": "charmed",
+                "condition_label": "Charmed",
+                "condition_icon": "💗",
+                "condition_effects": [
+                    "can't attack the charmer or target it with harmful abilities/spells",
+                    "the charmer has advantage on social ability checks against it",
+                ],
+                "feature_name": "💗 Staff of Charming",
+            },
+        },
+    },
     # v2.184.0 — first "self-buff" archetype: a consumable potion that
     # buffs the DRINKER rather than targeting others. RAW DMG p.187
     # Potion of Heroism (rare): drink (action) → 10 temporary hit
@@ -79992,7 +80024,7 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug in ("wand-of-fear", "wand-of-paralysis"):
+    if slug in ("wand-of-fear", "wand-of-paralysis", "staff-of-charming"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,
@@ -81308,7 +81340,11 @@ async def _use_item_action_wand_of_fear(
     if len(target_combatant_ids) > 24:
         raise HTTPException(400, "Too many targets for this wand")
 
-    save_dc = int(action_def.get("save_dc") or 15)
+    raw_dc = action_def.get("save_dc")
+    if isinstance(raw_dc, str) and raw_dc.strip().lower() == "spell":
+        save_dc = _compute_spell_save_dc_from_sheet(sheet)
+    else:
+        save_dc = int(raw_dc or 15)
     save_ability = str(action_def.get("save_ability") or "WIS").upper()
     dur_rounds = int(action_def.get("duration_rounds") or 10)
 
