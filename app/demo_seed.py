@@ -3842,6 +3842,10 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-animal-friendship",
              "desc": "Drink (action, /use_item_action charm) to charm one beast within 10 ft (DC 13 WIS save) — cast animal friendship at will for 1 hour. RAW DMG p.187."},
+            {"name": "Potion of Clairvoyance", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-clairvoyance",
+             "desc": "Drink (action, /use_item_action drink) to cast clairvoyance — a scrying sensor (sight or sound) at a chosen spot for 10 minutes. RAW DMG p.187."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

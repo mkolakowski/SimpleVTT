@@ -1667,6 +1667,25 @@ _SPELL_BUFF_MAP["flying-potion"] = {
     ),
 }
 
+# v2.203.0 — Potion of Clairvoyance (RAW DMG p.187, rare): drink → the
+# clairvoyance spell (a scrying sensor for 10 minutes). A purely
+# descriptive buff like Water Breathing — the engine tracks no scrying
+# rule, so the template carries no mechanical effect; it just surfaces on
+# the init strip with a duration. The sensor itself is GM-narrated.
+_SPELL_BUFF_MAP["clairvoyance-potion"] = {
+    "key": "clairvoyance-potion",
+    "name": "Clairvoyance",
+    "icon": "🔮",
+    "duration_rounds": 100,  # 10 minutes @ 6 s/round
+    "duration_max": 100,
+    "concentration": False,
+    "effects": {},
+    "desc": (
+        "A clairvoyance sensor (sight or sound) at a chosen spot for 10 "
+        "minutes (GM-narrated). RAW DMG p.187."
+    ),
+}
+
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
@@ -32560,6 +32579,21 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "buff_key": "flying-potion",
             "duration_rounds": 600,  # 1 hour @ 6 s/round
             "summary_effect": "a flying speed for 1 hour",
+        },
+    },
+    # v2.203.0 — eleventh self-buff potion. RAW DMG p.187 Potion of
+    # Clairvoyance (rare): drink → the clairvoyance spell (a scrying sensor
+    # for 10 minutes). A purely descriptive buff (no mechanical marker) —
+    # the sensor is GM-narrated; the install just surfaces it on the strip.
+    "potion-of-clairvoyance": {
+        "key": "drink",
+        "name": "Drink Potion of Clairvoyance",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "clairvoyance-potion",
+            "duration_rounds": 100,  # 10 minutes @ 6 s/round
+            "summary_effect": "a clairvoyance sensor for 10 minutes",
         },
     },
     # v2.193.0 — first OFFENSIVE consumable potion. RAW DMG p.187 Potion
@@ -79891,6 +79925,7 @@ async def use_item_action(
         "potion-of-growth", "potion-of-climbing",
         "potion-of-water-breathing", "potion-of-diminution",
         "potion-of-invisibility", "potion-of-flying",
+        "potion-of-clairvoyance",
     ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,

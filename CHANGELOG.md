@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.203.0] - 2026-06-12 — "The Distant Eye"
+
+**Schema version:** 69
+
+**Commit summary:** Eleventh self-buff potion — Potion of Clairvoyance (RAW DMG p.187, rare): drink → the clairvoyance spell (a scrying sensor for 10 minutes), no concentration. A purely descriptive buff like Water Breathing — it surfaces on the init strip with a duration; the sensor itself is GM-narrated.
+
+**Description:** A new `clairvoyance-potion` `_SPELL_BUFF_MAP` template (no mechanical effect, 10-minute / 100-round duration, 🔮 icon). The `_MAGIC_ITEM_ACTIONS['potion-of-clairvoyance']` self-buff entry installs it, the `/use_item_action` self-buff dispatch tuple gains the slug, a `🔮 Drink` button lands via the `self-buff-drink` `ITEM_ACTION_SLUGS` kind, and Garrik Ironside carries a seeded instance. The scrying sensor (sight or sound at a chosen spot) is GM-narrated. The `potion-of-clairvoyance.json` SRD catalog item already shipped in the master catalog. MINOR — additive buff template + catalog action + dispatch + UI button + seed, no schema change.
+
+### Added
+- `clairvoyance-potion` buff template (no mechanical effect, 10 minutes, no concentration) — surfaces the scrying sensor on the strip.
+- `_MAGIC_ITEM_ACTIONS['potion-of-clairvoyance']` self-buff drink action; the `/use_item_action` self-buff dispatch tuple now includes `potion-of-clairvoyance`.
+- `ITEM_ACTION_SLUGS['potion-of-clairvoyance']` (`self-buff-drink` kind) → a `🔮 Drink` button on the row.
+- Garrik Ironside's demo inventory gains a seeded Potion of Clairvoyance.
+- `tests/harness/test_potion_of_clairvoyance.py` (2 tests): in an active battle the drink installs the `clairvoyance-potion` buff; a bad action_key → 404.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2559 → 2561; added the `test_potion_of_clairvoyance.py` section.
+
 ## [2.202.0] - 2026-06-12 — "The Beast Whisperer"
 
 **Schema version:** 69
