@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.201.0] - 2026-06-12 — "The Borrowed Wings"
+
+**Schema version:** 69
+
+**Commit summary:** Tenth self-buff potion — Potion of Flying (RAW DMG p.187, very rare): drink → a flying speed equal to your walking speed for 1 hour, no concentration. Carries the same `effects.fly_speed_ft` marker the Stormborn / levitate / dragon-wings flight buffs use, so the flying capability surfaces for the UI/GM on the 2D map with no new reader code.
+
+**Description:** A new `flying-potion` `_SPELL_BUFF_MAP` template carries `effects.fly_speed_ft: 30` (the default PC walking speed). The `_MAGIC_ITEM_ACTIONS['potion-of-flying']` self-buff entry installs it for 1 hour (600 rounds), the `/use_item_action` self-buff dispatch tuple gains the slug, a `🕊️ Drink` button lands via the `self-buff-drink` `ITEM_ACTION_SLUGS` kind, and Garrik Ironside carries a seeded instance. A non-30-ft drinker is GM-adjusted; the falls-when-it-ends and outdoors-only nuances are GM-narrated. The `potion-of-flying.json` SRD catalog item already shipped in the master catalog. MINOR — additive buff template + catalog action + dispatch + UI button + seed, no schema change.
+
+### Added
+- `flying-potion` buff template (`effects.fly_speed_ft: 30`, 1 hour, no concentration) — reuses the established flight marker.
+- `_MAGIC_ITEM_ACTIONS['potion-of-flying']` self-buff drink action; the `/use_item_action` self-buff dispatch tuple now includes `potion-of-flying`.
+- `ITEM_ACTION_SLUGS['potion-of-flying']` (`self-buff-drink` kind) → a `🕊️ Drink` button on the row.
+- Garrik Ironside's demo inventory gains a seeded Potion of Flying.
+- `tests/harness/test_potion_of_flying.py` (2 tests): in an active battle the drink installs the `flying-potion` buff carrying the `effects.fly_speed_ft` marker; a bad action_key → 404.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2555 → 2557; added the `test_potion_of_flying.py` section.
+
 ## [2.200.0] - 2026-06-12 — "The Fading Draught"
 
 **Schema version:** 69

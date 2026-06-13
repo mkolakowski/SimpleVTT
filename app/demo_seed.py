@@ -3834,6 +3834,10 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-invisibility",
              "desc": "Drink (action, /use_item_action drink) to become invisible for 1 hour or until you attack or cast a spell. An invisible attacker has advantage on attacks. RAW DMG p.188."},
+            {"name": "Potion of Flying", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-flying",
+             "desc": "Drink (action, /use_item_action drink) to gain a flying speed equal to your walking speed for 1 hour. You fall if still aloft when it ends. RAW DMG p.187."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

@@ -1644,6 +1644,29 @@ _SPELL_BUFF_MAP["invisibility-potion"] = {
     ),
 }
 
+# v2.201.0 — Potion of Flying (RAW DMG p.187, very rare): a flying speed
+# equal to your walking speed for 1 hour. Carries the same
+# `effects.fly_speed_ft` marker the Stormborn/levitate/dragon-wings flight
+# buffs use, so it surfaces the flying capability for the UI/GM on the 2D
+# map. Modeled at 30 ft (the default PC walking speed); a non-30-ft drinker
+# is GM-adjusted. RAW: you fall if you end your turn aloft with the potion
+# expired — GM-narrated.
+_SPELL_BUFF_MAP["flying-potion"] = {
+    "key": "flying-potion",
+    "name": "Flying",
+    "icon": "🕊️",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "fly_speed_ft": 30,  # = walking speed (default 30 ft)
+    },
+    "desc": (
+        "Flying speed equal to your walking speed for 1 hour. You fall if "
+        "still aloft when it ends (GM-narrated). RAW DMG p.187."
+    ),
+}
+
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
@@ -32521,6 +32544,22 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "buff_key": "invisibility-potion",
             "duration_rounds": 600,  # 1 hour @ 6 s/round
             "summary_effect": "invisible for 1 hour",
+        },
+    },
+    # v2.201.0 — tenth self-buff potion. RAW DMG p.187 Potion of Flying
+    # (very rare): drink → a flying speed equal to your walking speed for 1
+    # hour. Installs the `flying-potion` template carrying the
+    # `effects.fly_speed_ft` marker the flight buffs already use; the falls-
+    # when-it-ends and outdoors nuances are GM-narrated.
+    "potion-of-flying": {
+        "key": "drink",
+        "name": "Drink Potion of Flying",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "flying-potion",
+            "duration_rounds": 600,  # 1 hour @ 6 s/round
+            "summary_effect": "a flying speed for 1 hour",
         },
     },
     # v2.193.0 — first OFFENSIVE consumable potion. RAW DMG p.187 Potion
@@ -79830,7 +79869,7 @@ async def use_item_action(
         "potion-of-resistance", "potion-of-invulnerability",
         "potion-of-growth", "potion-of-climbing",
         "potion-of-water-breathing", "potion-of-diminution",
-        "potion-of-invisibility",
+        "potion-of-invisibility", "potion-of-flying",
     ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
