@@ -2955,6 +2955,19 @@ def _barbarian_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_ability_bonus": {"WIS": 2},
              "desc": "Very rare wondrous item, attunement. This incandescent blue sphere orbits your head and increases your Wisdom by 2, to a maximum of 20. RAW DMG p.176."},
+            # v2.231.0 — awareness passive drop-in. Ioun Stone of Awareness
+            # (RAW DMG p.176, rare, attunement): a dark blue rhomboid that
+            # keeps you from being surprised while it orbits your head. The
+            # flag rides the shared `ioun-stone` slug via
+            # `_cannot_be_surprised` (no ability payload), surfacing on
+            # `/sheet-json` derived.cannot_be_surprised. Krieger's 2nd
+            # attuned item (after the Ioun Stone of Wisdom, RAW max 3) and
+            # his second ioun stone — a thematic fit for a Barbarian's
+            # Danger Sense.
+            {"name": "Ioun Stone of Awareness", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_cannot_be_surprised": True,
+             "desc": "Rare wondrous item, attunement. This dark blue rhomboid orbits your head; while it does, you can't be surprised. RAW DMG p.176."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature

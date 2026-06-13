@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.231.0] - 2026-06-13 — "The Dark Blue Rhomboid"
+
+**Schema version:** 69
+
+**Commit summary:** Ioun Stone of Awareness — the fourth non-ability Ioun variant on the shared slug, surfacing a can't-be-surprised passive (`derived.cannot_be_surprised`).
+
+**Description:** The **Ioun Stone of Awareness** (RAW DMG p.176, rare, attunement) is a dark blue rhomboid that keeps you from being surprised while it orbits your head. It joins the Protection (v2.228.0), Reserve (v2.229.0), and Sustenance (v2.230.0) variants as the fourth non-ability stone on the single shared `ioun-stone` slug: the flag rides the inventory item via `_cannot_be_surprised: True` (no ability payload), aggregates in `_equipped_item_effects` (boolean OR into a new `cannot_be_surprised` field + `cannot_be_surprised_sources`), and surfaces on `/sheet-json` as `derived.cannot_be_surprised = {sources}`. Demo: Krieger Stonefist (Barbarian) wears it as his 2nd attuned item (after the Ioun Stone of Wisdom, RAW max 3) — his second ioun stone, so the can't-be-surprised flag and the WIS bonus compose on the one slug via distinct per-item riders. A thematic fit for a Barbarian's Danger Sense. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `cannot_be_surprised` / `cannot_be_surprised_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped+attuned items carrying a `_cannot_be_surprised` rider or payload default).
+- `/sheet-json` `derived.cannot_be_surprised = {sources}` — present only when an equipped+attuned item sets the flag.
+- Demo seed: Ioun Stone of Awareness on Krieger Stonefist (`_slug: "ioun-stone"`, `_cannot_be_surprised: True`, equipped + attuned — his 2nd attunement slot and second ioun stone).
+- `tests/harness/test_item_ioun_stone_awareness.py` (3 tests): `derived.cannot_be_surprised` with the stone named in sources; the two ioun stones coexist (flag + WIS 13→15); and unequip drops the flag.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2636 → 2639; added the `test_item_ioun_stone_awareness.py` section.
+
 ## [2.230.0] - 2026-06-13 — "The Clear Spindle"
 
 **Schema version:** 69

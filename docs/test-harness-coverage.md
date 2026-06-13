@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2636 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.230.0, 2026-06-13).
+**Total tests:** 2639 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.231.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2483,6 +2483,15 @@ v2.228.0 — Ioun Stone of Protection (RAW DMG p.176, rare, attunement): the fir
 |------|-----------------|
 | `test_ioun_stone_protection_grants_ac_bonus` | Krieger swings at Mira → `target_ac == 16` (15 base + stone +1). |
 | `test_ioun_stone_protection_unequip_reverts_ac` | PATCH the stone to `equipped: False` → `target_ac == 15` (base, no bonus); restores the original inventory on teardown. |
+
+### `test_item_ioun_stone_awareness.py`
+v2.231.0 — Ioun Stone of Awareness (RAW DMG p.176, rare, attunement): the fourth non-ability Ioun variant on the shared `ioun-stone` slug and the first to surface an awareness passive. The can't-be-surprised flag rides the inventory item via `_cannot_be_surprised: True` (no ability payload), aggregates in `_equipped_item_effects` (boolean OR into `cannot_be_surprised`), and surfaces on `/sheet-json` as `derived.cannot_be_surprised = {sources}`. Krieger Stonefist (Barbarian) wears it as his 2nd attuned item and second ioun stone — the flag and the WIS bonus compose on one slug via distinct per-item riders.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_awareness_exposes_cannot_be_surprised_on_sheet_json` | `GET /sheet-json` → `derived.cannot_be_surprised` present with "Ioun Stone of Awareness" in `sources`. |
+| `test_awareness_coexists_with_wisdom_ioun` | Both of Krieger's ioun stones compose: `derived.cannot_be_surprised` set AND `derived.effective_abilities.WIS` = `{base 13, effective 15}` (the second stone's `_ability_bonus`). |
+| `test_awareness_unequip_drops_flag` | PATCH the Awareness stone to `equipped: False` → `derived.cannot_be_surprised` absent; restores the original inventory on teardown. |
 
 ### `test_item_ioun_stone_sustenance.py`
 v2.230.0 — Ioun Stone of Sustenance (RAW DMG p.176, rare, attunement): the third non-ability Ioun variant on the shared `ioun-stone` slug and the first to surface a sustenance passive. The no-eat/no-drink flag rides the inventory item via `_no_food_or_drink: True` (no ability payload), aggregates in `_equipped_item_effects` (boolean OR into `no_food_or_drink`), and surfaces on `/sheet-json` as `derived.no_food_or_drink = {sources}`. Rowan Quickbow (Ranger) wears it as his 3rd attuned item and second ioun stone — the flag and the CHA bonus compose on one slug via distinct per-item riders.
