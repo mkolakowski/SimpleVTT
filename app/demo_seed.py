@@ -3530,6 +3530,16 @@ def _monk_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
              "_slug": "amulet-of-proof-against-detection",
              "desc": "Uncommon wondrous item, attunement. While wearing it you are hidden from divination magic — you can't be targeted by such magic or perceived through magical scrying sensors. RAW DMG p.150."},
+            # v2.238.0 — Winged Boots (RAW DMG p.214, uncommon, attunement).
+            # Kael's 3rd attuned item (after Bracers + Amulet, RAW max 3).
+            # While worn he has a flying speed equal to his walking speed (up
+            # to 4 hours, GM-narrated). The `flying_speed` flag rides the
+            # `winged-boots` catalog payload and surfaces on /sheet-json as
+            # derived.flying_speed — on-theme for a fast, mobile Open Hand Monk.
+            {"name": "Winged Boots", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
+             "_slug": "winged-boots",
+             "desc": "Uncommon wondrous item, attunement. While you wear these boots, you have a flying speed equal to your walking speed. You can fly for up to 4 hours, all at once or in shorter flights. RAW DMG p.214."},
         ],
         "feats": [],
         # v2.18.0: Ki counter (max = monk level). Refreshes on short rest.

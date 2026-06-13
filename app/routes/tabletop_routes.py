@@ -32538,6 +32538,15 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "slippers-of-spider-climbing": [
         {"spider_climb": True},
     ],
+    # v2.238.0 — Winged Boots (RAW DMG p.214, uncommon, attunement). RAW:
+    # "while you wear these boots, you have a flying speed equal to your
+    # walking speed. You can use the boots to fly for up to 4 hours, all at
+    # once or in several shorter flights..." The 4-hour charge budget is
+    # GM-narrated in v1; the boolean flag surfaces the flying-speed ability
+    # as a derived read.
+    "winged-boots": [
+        {"flying_speed": True, "requires_attunement": True},
+    ],
 }
 
 
@@ -33543,6 +33552,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # GM-narrated in v1, same as Potion of Climbing).
         "spider_climb": False,
         "spider_climb_sources": [],
+        # v2.238.0 — flying-speed passive. Boolean OR across equipped items
+        # carrying the field; surfaced on `/sheet-json` derived. Winged
+        # Boots (RAW DMG p.214) is the first entry — while worn you have a
+        # flying speed equal to your walking speed (the 4-hour charge budget
+        # is GM-narrated in v1).
+        "flying_speed": False,
+        "flying_speed_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33761,6 +33777,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_spider_climb") or p.get("spider_climb"):
                 out["spider_climb"] = True
                 out["spider_climb_sources"].append(item_name)
+            # v2.238.0 — flying-speed passive (Winged Boots, RAW DMG p.214).
+            # Boolean OR; the flag rides the item via the `flying_speed`
+            # payload (or a per-item `_flying_speed` rider).
+            if item.get("_flying_speed") or p.get("flying_speed"):
+                out["flying_speed"] = True
+                out["flying_speed_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90821,6 +90843,12 @@ async def get_character_sheet_json(
             if _item_eff.get("spider_climb"):
                 derived["spider_climb"] = {
                     "sources": list(_item_eff.get("spider_climb_sources") or []),
+                }
+            # v2.238.0 — flying speed (Winged Boots). Only present when an
+            # equipped+attuned item sets the flag.
+            if _item_eff.get("flying_speed"):
+                derived["flying_speed"] = {
+                    "sources": list(_item_eff.get("flying_speed_sources") or []),
                 }
         except Exception:
             pass

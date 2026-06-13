@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.238.0] - 2026-06-13 — "The Borrowed Sky"
+
+**Schema version:** 69
+
+**Commit summary:** Winged Boots — flying-speed passive (`derived.flying_speed`) on a new boolean-OR substrate field, riding the `winged-boots` catalog payload (attunement-gated).
+
+**Description:** The **Winged Boots** (RAW DMG p.214, uncommon, attunement) give the wearer a flying speed equal to their walking speed for up to 4 hours, all at once or in several shorter flights. They reuse the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health / Amulet of Proof / Mantle of Spell Resistance / Slippers of Spider Climbing): the `flying_speed` flag rides the `winged-boots` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects` (a new `flying_speed` field + `flying_speed_sources`), and surfaces on `/sheet-json` as `derived.flying_speed = {sources}`. The 4-hour charge budget is GM-narrated in v1 — this exposes the ability as a derived read. Demo: Kael Brightleaf (Way of the Open Hand Monk) wears them as his 3rd attuned item (Bracers of Defense + Amulet of Proof against Detection + boots, RAW max 3) — on-theme for a fast, mobile monk. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `flying_speed` / `flying_speed_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped+attuned items carrying the `flying_speed` payload or a per-item `_flying_speed` rider).
+- `/sheet-json` `derived.flying_speed = {sources}` — present only when an equipped+attuned item sets the flag.
+- `winged-boots` entry in `_MAGIC_ITEM_PASSIVES` (`flying_speed: True`, `requires_attunement: True`).
+- Demo seed: Winged Boots on Kael Brightleaf (`_slug: "winged-boots"`, equipped + attuned — his 3rd attunement slot).
+- `tests/harness/test_item_winged_boots.py` (3 tests): `derived.flying_speed` lists the boots in sources; the flag drops when attunement is removed; composes with the Amulet of Proof's `scry_proof`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2657 → 2660; added the `test_item_winged_boots.py` section.
+
 ## [2.237.0] - 2026-06-13 — "The Sure-Footed Tread"
 
 **Schema version:** 69
