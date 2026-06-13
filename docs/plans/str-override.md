@@ -123,7 +123,7 @@ Shipped: the timed half of the engine. A `giant-strength` template in `_SPELL_BU
 
 ## Non-goals (v1)
 
-- Ability-score **bonuses** that stack additively (e.g. Manual of Gainful Exercise's permanent +2) — those are a base-score edit, not a runtime override; out of scope for the override substrate.
+- Ability-score **bonuses** that stack additively (e.g. Manual of Gainful Exercise's permanent +2) — those are a base-score edit, not a runtime override; out of scope for the override substrate. **✅ Shipped on their own substrate v2.222.0** — the six Manuals & Tomes (DMG pp.180/208) ship as a `permanent_boost` archetype on `/use_item_action` that edits `sheet.abilities[X] += 2` and consumes the book; the boosted base then flows through this engine's `effective_ability_score` max(base, set) chain, composing with equipped overrides + timed buffs. See `test_item_manual_of_ability.py`.
 - Headband of Intellect (INT 19) ✅ v2.218.0 — same shape as Belt/Amulet, shipped as a pure data drop-in (`_MAGIC_ITEM_PASSIVES` row + seed on Mira Greenleaf + tests).
 - Gauntlets of Ogre Power (STR 19) ✅ v2.219.0 — identical drop-in, composes with the Belt of Giant Strength via the highest-wins map (`_MAGIC_ITEM_PASSIVES` row + seed on Rowan Quickbow + tests).
 - Ability-score **drain** (negative overrides from monster effects) — a different sign; the `max(base, override)` clause is one-directional by design.

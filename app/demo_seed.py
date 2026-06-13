@@ -1686,6 +1686,17 @@ def _bard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "staff-of-charming", "weight_lb": 4,
              "desc": "Rare staff, attunement. 10 charges (regain 1d8+2 at dawn). Expend 1 to cast charm person, command, or comprehend languages using your spell save DC. Also a magic quarterstaff. Can turn a failed save vs an enchantment spell that targets only you into a success (once per dawn), and reflect a passed save back with a reaction + 1 charge."},
+            # v2.222.0 — Manuals & Tomes demo fixture: a permanent
+            # ability-boost book. RAW DMG p.208 Tome of Leadership and
+            # Influence (very rare, no attunement): reading it permanently
+            # raises CHA by 2. Routed through /use-item-action's new
+            # `permanent_boost` archetype, which edits sheet.abilities.CHA
+            # and consumes the book. Seeded on Lyra (Bard, CHA 17) — her
+            # key stat — so reading it takes effective CHA 17 → 19.
+            {"name": "Tome of Leadership and Influence", "type": "magic",
+             "qty": 1, "consumable": True, "weight_lb": 5,
+             "_slug": "tome-of-leadership-and-influence",
+             "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Charisma score by 2 (and its maximum). The tome then loses its magic for a century. RAW DMG p.208."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit

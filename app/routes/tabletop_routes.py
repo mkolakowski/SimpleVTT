@@ -33036,6 +33036,86 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.222.0 — Manuals & Tomes: permanent ability-score boost books (RAW
+    # DMG pp.180/208). A new "permanent_boost" archetype distinct from the
+    # self-buff potions (timed) and the equipped-item overrides (runtime
+    # max(base,set)): reading the book PERMANENTLY raises one ability by 2
+    # and the book is consumed. RAW the maximum for that score also rises
+    # by 2, so the +2 always lands (no 20 cap clamp) — the boost is a flat
+    # base-score edit, the v1 non-goal from docs/plans/str-override.md now
+    # shipped on its own substrate. All six are very rare, no attunement.
+    "manual-of-gainful-exercise": {
+        "key": "read",
+        "name": "Read Manual of Gainful Exercise",
+        "requires_attunement": False,
+        "consumable": True,
+        "permanent_boost": {
+            "ability": "STR",
+            "amount": 2,
+            "feature_name": "📖 Manual of Gainful Exercise",
+            "summary_effect": "Strength permanently increases by 2",
+        },
+    },
+    "manual-of-bodily-health": {
+        "key": "read",
+        "name": "Read Manual of Bodily Health",
+        "requires_attunement": False,
+        "consumable": True,
+        "permanent_boost": {
+            "ability": "CON",
+            "amount": 2,
+            "feature_name": "📖 Manual of Bodily Health",
+            "summary_effect": "Constitution permanently increases by 2",
+        },
+    },
+    "manual-of-quickness-of-action": {
+        "key": "read",
+        "name": "Read Manual of Quickness of Action",
+        "requires_attunement": False,
+        "consumable": True,
+        "permanent_boost": {
+            "ability": "DEX",
+            "amount": 2,
+            "feature_name": "📖 Manual of Quickness of Action",
+            "summary_effect": "Dexterity permanently increases by 2",
+        },
+    },
+    "tome-of-clear-thought": {
+        "key": "read",
+        "name": "Read Tome of Clear Thought",
+        "requires_attunement": False,
+        "consumable": True,
+        "permanent_boost": {
+            "ability": "INT",
+            "amount": 2,
+            "feature_name": "📖 Tome of Clear Thought",
+            "summary_effect": "Intelligence permanently increases by 2",
+        },
+    },
+    "tome-of-understanding": {
+        "key": "read",
+        "name": "Read Tome of Understanding",
+        "requires_attunement": False,
+        "consumable": True,
+        "permanent_boost": {
+            "ability": "WIS",
+            "amount": 2,
+            "feature_name": "📖 Tome of Understanding",
+            "summary_effect": "Wisdom permanently increases by 2",
+        },
+    },
+    "tome-of-leadership-and-influence": {
+        "key": "read",
+        "name": "Read Tome of Leadership and Influence",
+        "requires_attunement": False,
+        "consumable": True,
+        "permanent_boost": {
+            "ability": "CHA",
+            "amount": 2,
+            "feature_name": "📖 Tome of Leadership and Influence",
+            "summary_effect": "Charisma permanently increases by 2",
+        },
+    },
 }
 
 
@@ -80658,6 +80738,14 @@ async def use_item_action(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
             resistance_type=body.get("resistance_type"),
         )
+    if slug in (
+        "manual-of-gainful-exercise", "manual-of-bodily-health",
+        "manual-of-quickness-of-action", "tome-of-clear-thought",
+        "tome-of-understanding", "tome-of-leadership-and-influence",
+    ):
+        return await _use_item_action_permanent_boost(
+            db, campaign_id, char, item, sheet, catalog, inv_idx,
+        )
     raise HTTPException(409, "unknown item action handler")
 
 
@@ -81251,6 +81339,100 @@ async def _use_item_action_self_buff_potion(
         "temp_hp_granted": temp_amount,
         "buff_installed": buff_installed,
         "buff_key": buff_key,
+        "consumed": consumed,
+        "remaining_qty": remaining_qty,
+    }
+
+
+async def _use_item_action_permanent_boost(
+    db, campaign_id, char, item, sheet, catalog, inv_idx,
+):
+    """v2.222.0 — Manuals & Tomes: permanently raise one ability score by 2
+    and consume the book. RAW DMG pp.180/208 — reading the book over 48
+    hours within 6 days increases the score AND its maximum by 2, then the
+    book loses its magic. Because the maximum rises too, the +2 always
+    lands — there is no 20-cap clamp. This is a flat base-score edit
+    (sheet.abilities[X] += 2), distinct from the timed self-buff potions
+    and the equipped-item runtime overrides; the boosted base composes
+    with those automatically via the existing effective_ability_score
+    max(base, set) chain.
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    spec = catalog.get("permanent_boost") or {}
+    ability = str(spec.get("ability") or "").strip().upper()
+    amount = int(spec.get("amount") or 0)
+    if not ability or amount == 0:
+        raise HTTPException(409, "item has no permanent_boost config")
+
+    abilities = dict(sheet.get("abilities") or {})
+    old_score = int(abilities.get(ability) or 10)
+    new_score = old_score + amount
+    abilities[ability] = new_score
+    sheet["abilities"] = abilities
+
+    # Consume the book (decrement qty; drop the row at 0).
+    inventory = list(sheet.get("inventory") or [])
+    consumed = False
+    remaining_qty = None
+    if 0 <= inv_idx < len(inventory):
+        new_item = dict(inventory[inv_idx])
+        qty = int(new_item.get("qty") or 1)
+        remaining_qty = max(0, qty - 1)
+        consumed = True
+        if remaining_qty <= 0:
+            inventory.pop(inv_idx)
+        else:
+            new_item["qty"] = remaining_qty
+            inventory[inv_idx] = new_item
+        sheet["inventory"] = inventory
+
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    item_name = item.get("name") or "Book"
+    feature_name = spec.get("feature_name") or catalog.get("name") or f"Read {item_name}"
+    effect_text = spec.get("summary_effect") or f"{ability} permanently +{amount}"
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{item.get('_slug') or 'permanent-boost'}",
+                "label": feature_name,
+                "summary": (
+                    f"{char.name} reads a {item_name}: {effect_text} "
+                    f"({ability} {old_score} → {new_score})."
+                ),
+            },
+        })
+    except Exception:
+        pass
+    # Inventory panel re-render (the book is consumed).
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "inventory_update",
+            "data": {
+                "character_id": char.id,
+                "inventory_index": inv_idx if remaining_qty else -1,
+                "item_name": item_name,
+                "qty": remaining_qty or 0,
+                "was_removed": not remaining_qty,
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item_name,
+        "action_key": catalog.get("key") or "read",
+        "ability": ability,
+        "amount": amount,
+        "old_score": old_score,
+        "new_score": new_score,
         "consumed": consumed,
         "remaining_qty": remaining_qty,
     }

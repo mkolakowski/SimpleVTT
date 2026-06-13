@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2609 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.221.0, 2026-06-13).
+**Total tests:** 2611 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.222.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2418,6 +2418,14 @@ v2.220.0 ability-score override engine, Phase 3 combat follow-up (docs/plans/str
 |------|-----------------|
 | `test_heal_at_stored_max_uses_amulet_ceiling` | Tavik at stored max → self Healing Word → `auto_heal_applied > 0` and `stored_max < hp_after <= effective` (83). The combat clamp reads the boosted pool. |
 | `test_heal_at_stored_max_caps_without_amulet` | Guard: amulet unequipped → same heal at stored max → `auto_heal_applied == 0` (clamp falls back to `hp.max`). Restores inventory + full HP on teardown. |
+
+### `test_item_manual_of_ability.py`
+v2.222.0 Manuals & Tomes — permanent ability-score boost books (RAW DMG pp.180/208). A new `permanent_boost` archetype on `/use_item_action`: reading the book edits `sheet.abilities[X] += 2` and consumes it (no 20-cap clamp — RAW the maximum rises too). Distinct from the timed self-buff potions and equipped-item runtime overrides; the boosted base composes via the existing `effective_ability_score` chain. Lyra Sunstrider (Bard, base CHA 17) carries a Tome of Leadership and Influence.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_reading_tome_permanently_raises_cha` | Lyra reads the tome → response `ability=CHA, amount=2, new_score=old+2, consumed`; `/sheet-json` shows stored `abilities.CHA` is `old+2` and CHA is absent from derived `effective_abilities` (a permanent base edit is not a runtime override); the book is gone from inventory. Restores abilities + inventory on teardown. |
+| `test_wrong_action_key_on_tome_404s` | Guard: a mismatched `action_key` (`drink` vs the tome's `read`) returns 404 without mutating the sheet. |
 
 ### `test_amulet_health_rest_heal_paths.py`
 v2.221.0 ability-score override engine, Phase 3 remaining heal paths (docs/plans/str-override.md) — the Amulet of Health's boosted max HP now drives the remaining non-combat heal clamps via the shared `_sheet_heal_ceiling(sheet)` helper: short-rest hit dice, Second Wind, and Lay on Hands. Non-destructive (stored `hp.max` never mutated). Tavik Stonebrow (Cleric Lv 8, stored max 67, effective 83). Second Wind isn't directly exercised (no amulet-wearing Fighter in the demo) but reads the same helper.

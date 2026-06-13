@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.222.0] - 2026-06-13 — "The Studied Page"
+
+**Schema version:** 69
+
+**Commit summary:** Manuals & Tomes — the six RAW permanent ability-score boost books (DMG pp.180/208). Reading a Manual of Gainful Exercise / Bodily Health / Quickness of Action or a Tome of Clear Thought / Understanding / Leadership and Influence permanently raises the matching ability by 2 and consumes the book. A new `permanent_boost` archetype on `/use_item_action`, distinct from the timed self-buff potions and the equipped-item runtime overrides — it's a flat base-score edit that composes with the override engine automatically.
+
+**Description:** The ability-score override engine (v2.211.0-v2.219.0) deliberately left **permanent base-score boosts** as a v1 non-goal (docs/plans/str-override.md): the override substrate models items that *set* a score at runtime via RAW max(base, set), but the Manuals/Tomes *edit the base score itself*. This commit ships them on their own substrate. Six entries in `_MAGIC_ITEM_ACTIONS` carry a `permanent_boost: {ability, amount}` config; the new `_use_item_action_permanent_boost` handler edits `sheet.abilities[X] += 2` and consumes the book. RAW (DMG p.180): "Your score increases by 2, **as does your maximum for that score**" — because the maximum rises in lockstep, the +2 always lands and there is no 20-cap clamp. The boosted base flows automatically into every read site the override engine already wired (`effective_ability_score`'s max(base, set) chain, saves, ability/skill checks, the sheet ability card, carry capacity, `/sheet-json`) and composes with equipped overrides + timed buffs through the same highest-wins resolution. Demo: Lyra Sunstrider (Bard, base CHA 17) carries a Tome of Leadership and Influence; reading it takes her base CHA 17 → 19. All six books are very rare, no attunement, and ship as discoverable SRD content JSONs. MINOR — additive item archetype + handler + content + seed + tests, no schema change.
+
+### Added
+- `permanent_boost` archetype: six `_MAGIC_ITEM_ACTIONS` entries (`manual-of-gainful-exercise` STR, `manual-of-bodily-health` CON, `manual-of-quickness-of-action` DEX, `tome-of-clear-thought` INT, `tome-of-understanding` WIS, `tome-of-leadership-and-influence` CHA), each `+2` to its ability.
+- `_use_item_action_permanent_boost` handler: edits `sheet.abilities[X] += amount`, consumes the book, broadcasts `feature_used` + `inventory_update`.
+- Six SRD content JSONs under `app/data/local/dnd5e/items/` for catalog discoverability.
+- Demo seed: Tome of Leadership and Influence on Lyra Sunstrider (Bard, CHA 17).
+- `tests/harness/test_item_manual_of_ability.py` (2 tests): reading the tome raises base CHA by 2 on `/sheet-json` (stored + derived) and consumes the book; a wrong `action_key` returns 404.
+
+### Changed
+- `use_item_action`: dispatch branch routes the six book slugs to `_use_item_action_permanent_boost`.
+- `docs/plans/str-override.md`: the permanent base-score-boost non-goal marked shipped on its own substrate.
+- `docs/test-harness-coverage.md`: harness total 2609 → 2611; added the `test_item_manual_of_ability.py` section.
+
+---
+
 ## [2.221.0] - 2026-06-13 — "The Steady Mend"
 
 **Schema version:** 69
