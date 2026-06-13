@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.205.0] - 2026-06-12 — "The Forked Bolt"
+
+**Schema version:** 69
+
+**Commit summary:** Third charge-tracked wand — Wand of Lightning Bolts (RAW DMG p.213, rare, attunement): 7 charges; expend N (1-7) to cast Lightning Bolt (DC 15) at slot level 3+(N-1), regaining 1d6+1 charges at dawn. A near drop-in of the Wand of Fireballs through the generalized `_use_item_action_charge_wand` handler — only the spell (a 100-ft line vs the Fireball sphere) and the demo home differ.
+
+**Description:** A new `_MAGIC_ITEM_ACTIONS['wand-of-lightning-bolts']` catalog entry (`spell_slug: lightning-bolt`, `base_slot_level: 3`, 1-7 charges, attunement) reuses the existing charge-wand handler; the `/use_item_action` charge-wand dispatch tuple gains the slug. The handler's broadcast summary was hardcoded to "Magic Missile" (a latent wart that mis-labelled the Fireballs wand too) — it now derives the spell display name from `spell_slug`, so all three wands name the right spell. A `⚡ Cast Lightning` spinner button lands via the `spinner` `ITEM_ACTION_SLUGS` kind. Garrik Ironside carries a seeded Wand of Lightning Bolts (attuned) + its 7-charge resource row with 1d6+1 recharge — seeded on Garrik rather than Thalindra because she's already at the RAW 3-item attunement cap (Cloak + Pearl + Fireballs wand); this is Garrik's first attuned item. The `wand-of-lightning-bolts.json` SRD catalog item already shipped. MINOR — additive catalog action + dispatch + UI button + seed, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS['wand-of-lightning-bolts']` charge-wand action (Lightning Bolt, base slot level 3, 1-7 charges, attunement); the `/use_item_action` charge-wand dispatch tuple now includes `wand-of-lightning-bolts`.
+- `ITEM_ACTION_SLUGS['wand-of-lightning-bolts']` (`spinner` kind) → a `⚡ Cast Lightning` button on the row.
+- Garrik Ironside's demo inventory gains a seeded Wand of Lightning Bolts (attuned) + a `wand-of-lightning-bolts` resource row (7/7, 1d6+1 recharge, long-rest reset).
+- `tests/harness/test_use_item_action_lightning_wand.py` (3 tests): 1 charge → Lv 3 cast; 3 charges → Lv 5 cast; detuned → 409 attunement required.
+
+### Changed
+- `_use_item_action_charge_wand` broadcast summary now derives the spell display name from `spell_slug` instead of hardcoding "Magic Missile" — fixes the mis-labelled Fireballs-wand summary and names Lightning Bolt correctly.
+- `docs/test-harness-coverage.md`: harness total 2563 → 2566; added the `test_use_item_action_lightning_wand.py` section.
+
 ## [2.204.0] - 2026-06-12 — "The Vaporous Veil"
 
 **Schema version:** 69

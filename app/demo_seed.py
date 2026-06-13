@@ -3850,6 +3850,18 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-gaseous-form",
              "desc": "Drink (action, /use_item_action drink) to enter gaseous form for up to 1 hour: resistance to nonmagical damage, advantage on STR/DEX/CON saves, 10-ft hover; can't attack or cast. RAW DMG p.187."},
+            # v2.205.0 — third charge-tracked wand (RAW DMG p.213, rare,
+            # attunement). Same template as the Wand of Fireballs (7
+            # charges, base slot level 3, 1d6+1 recharge) but casts
+            # Lightning Bolt (a 100-ft line) instead of Fireball.
+            # Seeded on Garrik (not Thalindra) because she's already at
+            # the RAW 3-item attunement cap (Cloak + Pearl + Fireballs
+            # wand); Garrik attunes nothing else, so this is his first
+            # attuned item. RAW-legal: wands carry no class restriction.
+            {"name": "Wand of Lightning Bolts", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-lightning-bolts",
+             "desc": "Rare wand, attunement. 7 charges. Expend N (1-7) charges to cast Lightning Bolt (DC 15) at slot level 3+(N-1). Regains 1d6+1 charges at dawn (long rest)."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20
@@ -3914,6 +3926,20 @@ def _fighter_sheet(name: str) -> dict:
                 "source": "fighter Lv 9",
                 "class_slug": "fighter",
                 "desc": "Free — when you'd make a saving throw, spend an Indomitable use to roll with advantage instead. 1 use per long rest (2 at Lv 13, 3 at Lv 17).",
+                "manual": False,
+            },
+            # v2.205.0 — Wand of Lightning Bolts charge counter. Same
+            # shape as the Fireballs wand (7 charges, 1d6+1 recharge);
+            # the spell + base slot level live in the catalog. Paired
+            # with the Wand of Lightning Bolts entry in Garrik's
+            # inventory above.
+            {
+                "key": "wand-of-lightning-bolts",
+                "name": "Wand of Lightning Bolts",
+                "current": 7, "max": 7, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "item-wand-of-lightning-bolts",
+                "desc": "7 charges. Spend 1-7 to cast Lightning Bolt at slot level 3+(N-1). Regains 1d6+1 charges on long rest.",
                 "manual": False,
             },
         ],

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2563 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.204.0, 2026-06-12).
+**Total tests:** 2566 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.205.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2443,6 +2443,15 @@ v2.158.87 magic-items-automation Phase 4c — Wand of Fireballs through the same
 | `test_fireball_wand_single_charge_casts_lv3` | 1 charge → `cast_slot_level: 3` (base=3 + 0). |
 | `test_fireball_wand_multi_charge_casts_higher` | 3 charges → `cast_slot_level: 5` (base=3 + 2). |
 | `test_fireball_wand_requires_attunement_409` | Detune the wand via /attune; invoke /use_item_action → 409 attunement required. Restores attunement in teardown. |
+
+### `test_use_item_action_lightning_wand.py`
+v2.205.0 magic-items-automation content tail — Wand of Lightning Bolts (RAW DMG p.213, rare, attunement) through the same `/use_item_action` endpoint + generalized `_use_item_action_charge_wand` handler. Identical template to the Fireballs wand (`base_slot_level: 3`, 1d6+1 recharge); `spell_slug: lightning-bolt`. Seeded on **Garrik** (not Thalindra, who's at the 3-attunement cap) — his first attuned item; the wand index is looked up by `_slug`. Same commit generalized the handler's broadcast summary to derive the spell name from `spell_slug` (was hardcoded "Magic Missile").
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_lightning_wand_single_charge_casts_lv3` | 1 charge → `cast_slot_level: 3` (base=3 + 0); `spell_slug: lightning-bolt`, `item_name: Wand of Lightning Bolts`. |
+| `test_lightning_wand_multi_charge_casts_higher` | 3 charges → `cast_slot_level: 5` (base=3 + 2). |
+| `test_lightning_wand_requires_attunement_409` | Detune the wand via /attune; invoke /use_item_action → 409 attunement required. Restores attunement in teardown. |
 
 ### `test_dragon_slayer_rider.py`
 v2.158.93 magic-items-automation Phase 5c — Dragon Slayer Longsword (RAW DMG p.166). First conditional rider: the rider catalog entry carries a `condition(target_combatant) → bool` predicate that section 6c invokes after the attunement check. Caelan's seed gets the longsword (attack_index 2, inventory_index 7, +1 attack/damage baked in, equipped + attuned). Tests use the existing battle-seed pattern (PUT a battle with a synthetic target carrying `creature_type: "dragon"` or `"humanoid"`) to exercise both branches.

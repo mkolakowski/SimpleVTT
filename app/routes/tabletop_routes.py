@@ -32307,6 +32307,24 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
         "max_charges": 7,
         "base_slot_level": 3,
     },
+    # v2.205.0 — third charge-tracked wand. RAW DMG p.213 Wand of
+    # Lightning Bolts (rare, attunement): 7 charges; 1 charge casts
+    # Lightning Bolt (save DC 15) at 3rd level, each extra charge
+    # upcasts by 1. Identical template shape to Wand of Fireballs
+    # (base_slot_level 3, 1d6+1 recharge) — only the spell_slug + the
+    # line-vs-sphere AoE shape differ, and that shape lives in the
+    # spell JSON the client-side cast resolves. Drop-in for the
+    # generalized _use_item_action_charge_wand handler.
+    "wand-of-lightning-bolts": {
+        "key": "cast-lightning-bolt",
+        "name": "Cast Lightning Bolt (Wand)",
+        "resource_key": "wand-of-lightning-bolts",
+        "spell_slug": "lightning-bolt",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 7,
+        "base_slot_level": 3,
+    },
     # v2.158.88 — Phase 4d: first multi-action item. Different shape
     # from the wands: 3 distinct action_keys on one item, each with
     # its own charge cost + spell. Uses the ``actions`` subkey to
@@ -79906,7 +79924,8 @@ async def use_item_action(
             db, campaign_id, char, item, sheet, catalog, slot_level_raw,
             class_slug, inventory, inv_idx,
         )
-    if slug in ("wand-of-magic-missiles", "wand-of-fireballs"):
+    if slug in ("wand-of-magic-missiles", "wand-of-fireballs",
+                "wand-of-lightning-bolts"):
         return await _use_item_action_charge_wand(
             db, campaign_id, char, item, sheet, catalog, slug,
             body.get("charges"),
@@ -80196,6 +80215,11 @@ async def _use_item_action_charge_wand(
     db.commit()
 
     spell_slug = catalog.get("spell_slug") or "magic-missile"
+    # v2.205.0: derive the spell display name from the slug so the
+    # broadcast summary names the right spell (was hardcoded "Magic
+    # Missile" pre-v2.205.0, which mis-labelled Fireball + the new
+    # Lightning Bolt wand).
+    spell_name = " ".join(p.capitalize() for p in str(spell_slug).split("-"))
     # v2.158.87: cast_slot_level = base + (charges - 1). MM base=1
     # so 1 charge → Lv 1; Fireball base=3 so 1 charge → Lv 3.
     base_slot = int(catalog.get("base_slot_level") or 1)
@@ -80223,7 +80247,7 @@ async def _use_item_action_charge_wand(
                 "label": catalog.get("name") or "Use item",
                 "summary": (
                     f"{char.name} expended {charges} charge(s) from the "
-                    f"{item.get('name')} to cast Magic Missile at Lv "
+                    f"{item.get('name')} to cast {spell_name} at Lv "
                     f"{cast_slot_level}."
                 ),
             },

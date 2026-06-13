@@ -7073,6 +7073,17 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           submit_label: 'Cast',
                           control_label: 'Charges',
                           cast_level: (n) => n + 2},
+        // v2.205.0 — Wand of Lightning Bolts. Same spinner shape as the
+        // Fireballs wand (1-7 charges, base Lv 3 + upcast); the spell is
+        // a 100-ft line instead of a sphere.
+        'wand-of-lightning-bolts': {action_key: 'cast-lightning-bolt', param: 'charges',
+                          label: '⚡ Cast Lightning',
+                          kind: 'spinner', min: 1, max: 7,
+                          title: '⚡ Wand of Lightning Bolts',
+                          body: 'Spend 1-7 charges to cast Lightning Bolt (1 charge = Lv 3 base; each extra charge upcasts by 1).',
+                          submit_label: 'Cast',
+                          control_label: 'Charges',
+                          cast_level: (n) => n + 2},
         // v2.158.90 — Phase 3d: multi-action shape. Mirrors the
         // server-side actions sub-map for the Staff of Healing (RAW
         // DMG p.202). The modal is 2-stage: pick one of 3 actions
