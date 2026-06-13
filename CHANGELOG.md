@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.212.0] - 2026-06-13 — "The Hill Giant's Girdle"
+
+**Schema version:** 69
+
+**Commit summary:** Ability-score override engine Phase 1 (docs/plans/str-override.md): a RAW `max(base, set)` substrate that lets a magic item *set* an ability score. Belt of Giant Strength (Hill, STR 21, DMG p.155) is the first consumer — the override flows to STR saves + STR checks (`/roll`) and carry capacity (`/sheet-json`). Weapon attack/damage is deferred to Phase 1b.
+
+**Description:** `_equipped_item_effects` grows an `ability_set` aggregation (ability key → highest set-value across equipped+attuned items). New pure helpers in `tabletop_routes.py`: `_read_stored_ability` (schema-drift-tolerant), `_ability_score_modifier`, `effective_ability_score` (folds the override over the base via RAW `max(base, set)`, clamped to 30), `_ability_override_delta` (the modifier delta a roll appends), and `_ability_for_roll` (maps a save/check stat_key or skill stat_ability to a canonical ability key). The `/roll` endpoint appends the override modifier delta to STR-keyed saves and ability/skill checks — distinct from and composing additively with the existing flat save/check item bonuses (Garrik's Stone of Good Luck +1 and the belt's +1 STR-mod delta both apply). `/sheet-json` gains `derived.effective_abilities` (only abilities an item overrides appear, with base/effective/modifier/source) and feeds the effective STR into the carry-capacity derivation so the carry meter reflects the boost. The `carry_weight` leaf module's `sheet_carry_capacity_lb` / `sheet_is_over_capacity` / `sheet_carry_summary` gain an optional `effective_str` param (None falls back to the stored score, keeping the module pure). `belt-of-giant-strength` is added to `_MAGIC_ITEM_PASSIVES` (`ability_set {STR: 21}`, attunement). Garrik Ironside (base STR 18 → mod +4) carries a seeded equipped+attuned Belt of Giant Strength (Hill) — his 3rd attuned item (RAW max) — so his effective STR is 21 (mod +5), carry capacity 315 lb (vs. base 270), and STR saves + Athletics gain the +1 delta. MINOR — additive substrate + read sites + catalog passive + seed, no schema change.
+
+### Added
+- Ability-score override substrate: `ability_set` aggregation in `_equipped_item_effects`; `_read_stored_ability` / `_ability_score_modifier` / `effective_ability_score` / `_ability_override_delta` / `_ability_for_roll` helpers; `_normalize_ability_key` + `_ABILITY_KEY_ALIASES`.
+- `_MAGIC_ITEM_PASSIVES['belt-of-giant-strength']` → `ability_set {STR: 21}` (Hill tier, attunement).
+- `/sheet-json` `derived.effective_abilities` — per-ability `{base, effective, modifier, source}` for any ability an equipped item sets above its base.
+- Garrik Ironside's demo inventory gains a seeded Belt of Giant Strength (Hill, attuned).
+- `tests/harness/test_item_belt_of_giant_strength.py` (5 tests): effective STR on `/sheet-json` (18→21, mod +5), carry capacity 315, STR-save override delta annotation, Athletics override delta annotation, unequip-reverts (STR override gone + carry back to 270, with inventory snapshot/restore).
+
+### Changed
+- `/roll` appends the ability-score override modifier delta to STR-keyed saves + ability/skill checks (composes additively with flat save/check item bonuses).
+- `carry_weight.sheet_carry_capacity_lb` / `sheet_is_over_capacity` / `sheet_carry_summary` accept an optional `effective_str`; `/sheet-json` passes the override-folded STR.
+- `docs/plans/str-override.md`: Phase 1 marked shipped; weapon attack/damage re-scoped to a new Phase 1b.
+- `docs/test-harness-coverage.md`: harness total 2582 → 2587; added the `test_item_belt_of_giant_strength.py` section.
+
+---
+
 ## [2.211.0] - 2026-06-13 — "The Giant's Belt Blueprint"
 
 **Schema version:** 69

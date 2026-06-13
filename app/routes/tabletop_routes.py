@@ -16841,6 +16841,28 @@ async def roll_dice(
     if _item_check_bonus > 0:
         expr = f"{expr}+{_item_check_bonus}"
 
+    # v2.212.0 — ability-score override (Belt of Giant Strength etc.,
+    # see docs/plans/str-override.md). When an equipped item SETS the
+    # rolled ability above its base (RAW max(base, set)), append the
+    # MODIFIER delta (mod(effective) − mod(base)) to STR-keyed saves and
+    # checks. Distinct from the flat save/check bonuses above — those are
+    # item bonuses to the roll; this is a change to the ability score the
+    # client already baked into the expression. Composes additively.
+    _item_override_delta = 0
+    _override_ability = ""
+    if (
+        _char is not None
+        and isinstance(_char.sheet, dict)
+        and (stat_key_lc.endswith("_save") or _is_ability_check)
+    ):
+        _override_ability = _ability_for_roll(stat_key_lc, stat_ability_raw)
+        if _override_ability:
+            _item_override_delta = _ability_override_delta(
+                _char.sheet, _override_ability,
+            )
+    if _item_override_delta > 0:
+        expr = f"{expr}+{_item_override_delta}"
+
     try:
         result = dice_mod.roll(expr)
     except dice_mod.DiceParseError as e:
@@ -16869,6 +16891,22 @@ async def roll_dice(
             _src_label_ck = " + ".join(_item_check_sources)
             result.breakdown = (
                 f"{result.breakdown} (+{_item_check_bonus} {_src_label_ck})"
+            )
+        except Exception:
+            pass
+
+    # v2.212.0 — mirror annotation for the ability-score override delta.
+    if _item_override_delta > 0 and _override_ability and _char is not None:
+        try:
+            import copy as _copy_item_override
+            result = _copy_item_override.copy(result)
+            _ov_src = (
+                _equipped_item_effects(_char.sheet)
+                .get("ability_set_sources", {})
+                .get(_override_ability)
+            ) or f"{_override_ability} override"
+            result.breakdown = (
+                f"{result.breakdown} (+{_item_override_delta} {_ov_src})"
             )
         except Exception:
             pass
@@ -32292,6 +32330,18 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "stone-of-good-luck-luckstone": [
         {"check_bonus": 1, "save_bonus": 1, "requires_attunement": True},
     ],
+    # v2.212.0 — Belt of Giant Strength (RAW DMG p.155, requires
+    # attunement; see docs/plans/str-override.md). While worn, your STR
+    # *changes* to the belt's score — but only if higher (RAW). The
+    # max(base, set) clause lives in `effective_ability_score`; this
+    # entry just declares the set value. Phase 1 ships the Hill-giant
+    # tier (STR 21) keyed to the single catalog slug; the higher tiers
+    # (Stone/Frost 23, Fire 25, Cloud 27, Storm 29) land in Phase 2.
+    # The override flows to STR saves + STR checks (/roll) and carry
+    # capacity (/sheet-json); weapon attack/damage is Phase 1b.
+    "belt-of-giant-strength": [
+        {"ability_set": {"STR": 21}, "requires_attunement": True},
+    ],
 }
 
 
@@ -33100,6 +33150,16 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # `save_bonus` field).
         "check_bonus": 0,
         "check_bonus_sources": [],
+        # v2.212.0 — ability-score override substrate (see
+        # docs/plans/str-override.md). `ability_set` maps an ability key
+        # ("STR"/"CON"/…) to the HIGHEST set-value across equipped+attuned
+        # items carrying an `ability_set` payload. RAW "only if higher"
+        # (Belt of Giant Strength / Amulet of Health) is applied later in
+        # `effective_ability_score` via max(base, override); the walker
+        # just collects the highest item-set value here. Belt of Giant
+        # Strength (Hill, STR 21) is the first entry.
+        "ability_set": {},
+        "ability_set_sources": {},
         # v2.159.24 — sensory passives. `sees_in_darkness` is the
         # boolean union across all equipped magic-item passives; the
         # sources list lets a UI surface "darkvision via Goggles of
@@ -33158,6 +33218,25 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if ck:
                 out["check_bonus"] += ck
                 out["check_bonus_sources"].append(item_name)
+            # v2.212.0 — ability-score override. A payload's `ability_set`
+            # maps ability key → fixed score. Keep the highest set-value
+            # per ability across all equipped items (two belts → bigger
+            # wins, matching RAW "highest applies"). The base-vs-set
+            # max() clause lives in `effective_ability_score`.
+            aset = p.get("ability_set")
+            if isinstance(aset, dict):
+                for ab_key, ab_val in aset.items():
+                    try:
+                        ab_score = int(ab_val)
+                    except (TypeError, ValueError):
+                        continue
+                    ab_norm = str(ab_key).strip().upper()[:3]
+                    if not ab_norm:
+                        continue
+                    prev = out["ability_set"].get(ab_norm)
+                    if prev is None or ab_score > prev:
+                        out["ability_set"][ab_norm] = ab_score
+                        out["ability_set_sources"][ab_norm] = item_name
             # v2.159.24 — sensory passives. Boolean OR across passives;
             # the source name lets a UI describe which item granted
             # darkvision.
@@ -33165,6 +33244,107 @@ def _equipped_item_effects(sheet: dict) -> dict:
                 out["sees_in_darkness"] = True
                 out["sees_in_darkness_sources"].append(item_name)
     return out
+
+
+# v2.212.0 — ability-score override substrate. See
+# docs/plans/str-override.md. Maps the inconsistent stored ability
+# shapes onto a canonical 3-letter uppercase key, resolves a creature's
+# EFFECTIVE score by folding equipped-item `ability_set` overrides over
+# the stored base via RAW max(base, set), and exposes a modifier helper.
+# Belt of Giant Strength / Amulet of Health are the first consumers.
+_ABILITY_KEY_ALIASES: dict[str, str] = {
+    "STR": "STR", "STRENGTH": "STR",
+    "DEX": "DEX", "DEXTERITY": "DEX",
+    "CON": "CON", "CONSTITUTION": "CON",
+    "INT": "INT", "INTELLIGENCE": "INT",
+    "WIS": "WIS", "WISDOM": "WIS",
+    "CHA": "CHA", "CHARISMA": "CHA",
+}
+
+
+def _normalize_ability_key(ability: str) -> str:
+    """Fold a free-form ability token ("str", "Strength", "STR") onto
+    the canonical 3-letter uppercase key. Returns "" when unrecognized."""
+    raw = str(ability or "").strip().upper()
+    if raw in _ABILITY_KEY_ALIASES:
+        return _ABILITY_KEY_ALIASES[raw]
+    return _ABILITY_KEY_ALIASES.get(raw[:3], "")
+
+
+def _read_stored_ability(sheet: dict, ability: str) -> int:
+    """Read a PC's STORED ability score off the sheet, tolerant of the
+    schema-drift shapes the codebase carries (uppercase "STR", lowercase
+    "strength"/"str", nested {"score": N}). Falls back to 10. Mirrors
+    `carry_weight._str_score_from_sheet` but generalized to any ability."""
+    canon = _normalize_ability_key(ability)
+    if not canon or not isinstance(sheet, dict):
+        return 10
+    abilities = sheet.get("abilities")
+    if isinstance(abilities, dict):
+        long_name = {
+            "STR": "strength", "DEX": "dexterity", "CON": "constitution",
+            "INT": "intelligence", "WIS": "wisdom", "CHA": "charisma",
+        }[canon]
+        for k in (canon, canon.lower(), canon.capitalize(),
+                  long_name, long_name.capitalize()):
+            v = abilities.get(k)
+            if isinstance(v, (int, float)):
+                return max(1, min(30, int(v)))
+            if isinstance(v, dict):
+                inner = v.get("score")
+                if isinstance(inner, (int, float)):
+                    return max(1, min(30, int(inner)))
+    return 10
+
+
+def _ability_score_modifier(score: int) -> int:
+    """RAW PHB p.13: modifier = (score - 10) // 2 (floor division, so
+    odd scores round down toward the lower modifier)."""
+    try:
+        return (int(score) - 10) // 2
+    except (TypeError, ValueError):
+        return 0
+
+
+def effective_ability_score(sheet: dict, ability: str) -> int:
+    """Resolve a creature's EFFECTIVE ability score: the higher of the
+    stored base and any equipped-item `ability_set` override. RAW
+    "only if higher" (Belt of Giant Strength DMG p.155, Amulet of
+    Health DMG p.150) is the max() here. Pure function on the sheet."""
+    canon = _normalize_ability_key(ability)
+    base = _read_stored_ability(sheet, canon)
+    if not canon:
+        return base
+    try:
+        override = _equipped_item_effects(sheet).get("ability_set", {}).get(canon)
+    except Exception:
+        override = None
+    if isinstance(override, int) and override > base:
+        return min(30, override)
+    return base
+
+
+def _ability_override_delta(sheet: dict, ability: str) -> int:
+    """The MODIFIER delta a /roll read site appends for an overridden
+    ability: mod(effective) − mod(base). 0 when no override applies."""
+    canon = _normalize_ability_key(ability)
+    if not canon:
+        return 0
+    base = _read_stored_ability(sheet, canon)
+    eff = effective_ability_score(sheet, canon)
+    return _ability_score_modifier(eff) - _ability_score_modifier(base)
+
+
+def _ability_for_roll(stat_key_lc: str, stat_ability_raw: str) -> str:
+    """Derive the canonical ability key a save/check roll is keyed to.
+    Saves/checks carry a ``<abbr>_save`` / ``<abbr>_check`` stat_key;
+    skill checks carry ``stat_ability`` (e.g. "STR" for Athletics).
+    Returns "" when the roll isn't ability-keyed."""
+    if stat_key_lc.endswith("_save") or stat_key_lc.endswith("_check"):
+        return _normalize_ability_key(stat_key_lc.split("_", 1)[0])
+    if stat_ability_raw:
+        return _normalize_ability_key(stat_ability_raw)
+    return ""
 
 
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
@@ -89621,9 +89801,33 @@ async def get_character_sheet_json(
     # this endpoint.
     derived: dict = {}
     if char.template == "dnd5e":
+        # v2.212.0 — ability-score override (Belt of Giant Strength etc.,
+        # docs/plans/str-override.md). Expose the EFFECTIVE scores for any
+        # ability an equipped item sets above its base, and feed the
+        # effective STR into the carry-capacity derivation so the meter
+        # reflects the boost. Only overridden abilities appear.
+        try:
+            eff_abilities: dict = {}
+            _aset = _equipped_item_effects(sheet).get("ability_set", {})
+            for _ab in ("STR", "DEX", "CON", "INT", "WIS", "CHA"):
+                _base = _read_stored_ability(sheet, _ab)
+                _eff = effective_ability_score(sheet, _ab)
+                if _eff != _base:
+                    eff_abilities[_ab] = {
+                        "base": _base,
+                        "effective": _eff,
+                        "modifier": _ability_score_modifier(_eff),
+                        "source": _aset and _equipped_item_effects(sheet)
+                        .get("ability_set_sources", {}).get(_ab),
+                    }
+            if eff_abilities:
+                derived["effective_abilities"] = eff_abilities
+        except Exception:
+            pass
         try:
             from ..content.carry_weight import sheet_carry_summary
-            derived["carry"] = sheet_carry_summary(sheet)
+            _eff_str = effective_ability_score(sheet, "STR")
+            derived["carry"] = sheet_carry_summary(sheet, effective_str=_eff_str)
         except Exception:
             pass
     return {

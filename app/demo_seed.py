@@ -3970,6 +3970,17 @@ def _fighter_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "stone-of-good-luck-luckstone",
              "desc": "Uncommon wondrous item, attunement. While on your person you gain +1 to ability checks and saving throws. RAW DMG p.207."},
+            # v2.212.0 — ability-score override Phase 1. Belt of Giant
+            # Strength (Hill, STR 21, RAW DMG p.155, attunement). Garrik's
+            # base STR 18 (mod +4) becomes effective 21 (mod +5) while
+            # worn — visible on /sheet-json `derived.effective_abilities`
+            # + a +45 lb carry-capacity jump (270 → 315). The override
+            # delta also rides STR saves + Athletics checks in /roll. His
+            # 3rd attuned item (the RAW max). See docs/plans/str-override.md.
+            {"name": "Belt of Giant Strength (Hill)", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "belt-of-giant-strength", "weight_lb": 0,
+             "desc": "Rare wondrous item, attunement. While worn, your Strength score becomes 21 (Hill giant) if it isn't already higher. RAW DMG p.155."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

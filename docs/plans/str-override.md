@@ -1,6 +1,6 @@
 # Ability-score override engine — design plan
 
-**Status:** ⚪ proposed (Phase 0 = this doc, filed 2026-06-13, v2.211.0).
+**Status:** 🟠 Phase 1 shipped (v2.212.0). Phase 0 (plan) ✅ v2.211.0. Phase 1 (override substrate + STR saves/checks + carry capacity + Belt of Giant Strength Hill tier) ✅ v2.212.0. Weapon attack/damage was re-scoped out of Phase 1 into a new **Phase 1b** during implementation — the `/attack` endpoint reads pre-baked attack entries off the sheet rather than recomputing the STR modifier per roll, a materially larger surface than the `/roll` save/check append path. Phases 1b / 2 / 3 / 4 remain open.
 
 **Authors:** rolling
 **Last updated:** 2026-06-13
@@ -88,14 +88,18 @@ The worn items (Belt, Amulet) gate on equipped+attuned. The potion is a **timed*
 
 ### Phase 0 — Plan (this doc) ⚪ v2.211.0
 
-### Phase 1 — Override substrate + STR read sites (M, ~1 commit)
+### Phase 1 — Override substrate + STR save/check/carry read sites (M, ~1 commit) ✅ v2.212.0
 
 - `ability_set` aggregation in `_equipped_item_effects`.
-- `effective_ability_score(sheet, ability)` helper + `_read_stored_ability` schema-drift-tolerant reader.
-- Switch the `/roll` STR attack/damage/check/save read sites to the effective score.
-- Switch `sheet_carry_capacity_lb` to the effective STR.
-- Belt of Giant Strength (Hill, STR 21) as the first `_MAGIC_ITEM_PASSIVES` entry + demo seed on a martial PC (Garrik / Krieger).
-- Harness: equip belt → STR attack/Athletics/STR save/carry-capacity all reflect STR 21; unequip → revert.
+- `effective_ability_score(sheet, ability)` + `_read_stored_ability` (schema-drift-tolerant) + `_ability_score_modifier` + `_ability_override_delta` + `_ability_for_roll`.
+- `/roll` appends the override modifier delta to STR-keyed saves + ability/skill checks (composing additively with the flat save/check item bonuses).
+- `sheet_carry_capacity_lb` (and the summary/over-capacity helpers) take an optional `effective_str`; `/sheet-json` passes the override-folded STR and exposes `derived.effective_abilities`.
+- Belt of Giant Strength (Hill, STR 21) as the first `_MAGIC_ITEM_PASSIVES` entry + demo seed on Garrik Ironside (base STR 18 → effective 21).
+- Harness `test_item_belt_of_giant_strength.py` (5 tests): effective STR on `/sheet-json`, carry 315, STR-save + Athletics override deltas, unequip-reverts.
+
+### Phase 1b (filed) — Weapon attack/damage read site
+
+The `/attack` endpoint resolves attack/damage from the sheet's stored attack entries (the ability modifier is baked in at seed/sheet-edit time, not recomputed per roll from STR), so routing it through `effective_ability_score` is a materially larger surface than the `/roll` save/check append landed in Phase 1. Filed as its own commit: recompute the STR-based attack/damage modifier (or apply the override delta) when an `ability_set` override is active, plus a harness test proving an equipped belt changes the attack bonus + damage.
 
 ### Phase 2 — Belt tier backfill + sheet display (S–M, ~1 commit)
 

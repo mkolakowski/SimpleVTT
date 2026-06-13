@@ -130,10 +130,20 @@ def _str_score_from_sheet(sheet: dict) -> int:
     return 10
 
 
-def sheet_carry_capacity_lb(sheet: dict) -> int:
+def sheet_carry_capacity_lb(
+    sheet: dict,
+    effective_str: "int | None" = None,
+) -> int:
     """RAW PHB p.176: carrying capacity = ``STR × 15 lb``. Returns
-    an integer (RAW; weight thresholds are always whole numbers)."""
-    return _str_score_from_sheet(sheet) * 15
+    an integer (RAW; weight thresholds are always whole numbers).
+
+    v2.212.0 — ability-score override (Belt of Giant Strength etc.,
+    docs/plans/str-override.md). The route layer resolves the EFFECTIVE
+    STR (folding equipped-item overrides over the base) and passes it
+    in; when ``effective_str`` is None this falls back to the stored
+    score so the leaf module stays pure (no item-passive knowledge)."""
+    str_score = effective_str if isinstance(effective_str, int) else _str_score_from_sheet(sheet)
+    return max(1, str_score) * 15
 
 
 def sheet_inventory_weight_lb(
@@ -184,21 +194,26 @@ def sheet_inventory_weight_lb(
 def sheet_is_over_capacity(
     sheet: dict,
     catalog_weight_by_slug: "dict[str, str] | None" = None,
+    effective_str: "int | None" = None,
 ) -> bool:
     """True when current inventory weight exceeds carry capacity."""
     return (
         sheet_inventory_weight_lb(sheet, catalog_weight_by_slug)
-        > sheet_carry_capacity_lb(sheet)
+        > sheet_carry_capacity_lb(sheet, effective_str)
     )
 
 
 def sheet_carry_summary(
     sheet: dict,
     catalog_weight_by_slug: "dict[str, str] | None" = None,
+    effective_str: "int | None" = None,
 ) -> dict:
     """Bundle the three derivations for ``/sheet-json``'s ``derived``
-    response key. Keeps the route layer's wiring trivial."""
-    cap = sheet_carry_capacity_lb(sheet)
+    response key. Keeps the route layer's wiring trivial.
+
+    v2.212.0 — ``effective_str`` lets the route pass the override-folded
+    STR (Belt of Giant Strength) so the carry meter reflects the boost."""
+    cap = sheet_carry_capacity_lb(sheet, effective_str)
     weight = sheet_inventory_weight_lb(sheet, catalog_weight_by_slug)
     return {
         "carry_capacity_lb": cap,
