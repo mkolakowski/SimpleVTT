@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2598 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.217.0, 2026-06-13).
+**Total tests:** 2601 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.218.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2401,6 +2401,15 @@ v2.216.0 ability-score override engine Phase 3 (docs/plans/str-override.md) — 
 | `test_amulet_raises_effective_max_hp` | `derived.effective_max_hp` = `{level 8, delta 16, base == stored hp.max, effective == stored + 16}` (CON mod delta +2 × level 8). |
 | `test_amulet_adds_con_save_override_delta` | `POST /roll` `con_save` for Tavik → breakdown contains "Amulet of Health" (the +2 modifier delta annotation). |
 | `test_amulet_unequip_reverts_override` | PATCH the amulet to `equipped: False` → `effective_abilities` drops CON + `effective_max_hp` is None; restores the original inventory on teardown. |
+
+### `test_item_headband_of_intellect.py`
+v2.218.0 ability-score override engine drop-in (docs/plans/str-override.md) — Headband of Intellect (RAW DMG p.173, uncommon, attunement). While worn, INT *becomes* 19 if higher — same `ability_set` substrate as the Belt (STR) and Amulet (CON), on INT. A pure data drop-in (one `_MAGIC_ITEM_PASSIVES` row + seed + tests), proving the engine takes score-setting items as data, not code. Mira Greenleaf (Druid, base INT 10 → mod 0) wears an equipped+attuned Headband — her 2nd attuned item (after the Vorpal Scimitar).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_headband_exposes_effective_int_on_sheet_json` | `GET /sheet-json` → `derived.effective_abilities.INT` = `{base 10, effective 19, modifier 4}` with source naming "Headband of Intellect". |
+| `test_headband_adds_int_save_override_delta` | `POST /roll` `int_save` for Mira → breakdown contains "+4" and "Headband of Intellect" (the modifier delta annotation). |
+| `test_headband_unequip_reverts_override` | PATCH the headband to `equipped: False` → `effective_abilities` drops INT; restores the original inventory on teardown. |
 
 ### `test_item_ring_of_protection.py`
 v2.158.76 magic-items-automation Phase 1b — second catalog entry. Same +1 AC / +1 saves shape as the Cloak (RAW DMG p.191) on a different slot (finger vs neck), validating that the v2.158.74 catalog scales additively. Tavik Stonebrow (Cleric Lv 8, AC 18, WIS save +6) is the canary because his base AC + save mod are clean integers and he's a different PC from Thalindra so the AC + save assertions don't interact.

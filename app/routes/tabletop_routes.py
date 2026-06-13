@@ -32376,6 +32376,15 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "amulet-of-health": [
         {"ability_set": {"CON": 19}, "requires_attunement": True},
     ],
+    # v2.218.0 — Headband of Intellect (RAW DMG p.173, uncommon,
+    # attunement; see docs/plans/str-override.md). While worn, your INT
+    # *becomes* 19 if not already higher — same `ability_set` substrate as
+    # the Belt/Amulet, on INT. The override flows to INT saves + INT-based
+    # ability/skill checks (Arcana/History/Investigation/Nature) via /roll
+    # automatically; a pure data drop-in on the now-complete engine.
+    "headband-of-intellect": [
+        {"ability_set": {"INT": 19}, "requires_attunement": True},
+    ],
 }
 
 

@@ -1889,6 +1889,18 @@ def _druid_sheet(name: str) -> dict:
              "properties": "finesse, light, magic",
              "_slug": "vorpal-sword",
              "desc": "Legendary scimitar, attunement. +3 attack/damage; on a natural 20 attack roll, cut off the target's head — the creature dies if it can't survive without a head (RAW DMG p.209). Constructs, oozes, and plants are exempt."},
+            # v2.218.0 — ability-score override engine drop-in
+            # (docs/plans/str-override.md). Headband of Intellect (RAW DMG
+            # p.173, uncommon, attunement): while worn, INT *becomes* 19 if
+            # not already higher. Same `ability_set` substrate as the
+            # Belt/Amulet, on INT. Seeded on Mira (Druid, base INT 10 → mod
+            # 0) — her 2nd attuned item (after the Vorpal Scimitar, RAW max
+            # 3) — so effective INT 19 (mod +4), a clean +4 delta on INT
+            # saves + Arcana/Nature/History/Investigation checks.
+            {"name": "Headband of Intellect", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "headband-of-intellect",
+             "desc": "Uncommon wondrous item, attunement. Your Intelligence score is 19 while worn (no effect if your INT is already 19+). RAW DMG p.173."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).

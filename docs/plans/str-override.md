@@ -120,7 +120,7 @@ Shipped: the timed half of the engine. A `giant-strength` template in `_SPELL_BU
 ## Non-goals (v1)
 
 - Ability-score **bonuses** that stack additively (e.g. Manual of Gainful Exercise's permanent +2) — those are a base-score edit, not a runtime override; out of scope for the override substrate.
-- Headband of Intellect (INT 19), Gauntlets of Ogre Power (STR 19) — same shape as Belt/Amulet, drop in via data once Phase 1 lands; not separately phased.
+- Headband of Intellect (INT 19) ✅ v2.218.0 — same shape as Belt/Amulet, shipped as a pure data drop-in (`_MAGIC_ITEM_PASSIVES` row + seed on Mira Greenleaf + tests). Gauntlets of Ogre Power (STR 19) is the next identical drop-in.
 - Ability-score **drain** (negative overrides from monster effects) — a different sign; the `max(base, override)` clause is one-directional by design.
 - Retroactive carry-weight encumbrance recompute (the carry engine already reads STR live, so this flows for free).
 

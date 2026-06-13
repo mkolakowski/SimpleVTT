@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.218.0] - 2026-06-13 — "The Clever Circlet"
+
+**Schema version:** 69
+
+**Commit summary:** First drop-in on the completed ability-score override engine (docs/plans/str-override.md): Headband of Intellect (RAW DMG p.173, uncommon, attunement) — while worn, your Intelligence score *becomes* 19 if it isn't already higher. Pure data: one `_MAGIC_ITEM_PASSIVES` row (`ability_set {INT: 19}`) + a demo seed + tests. No new code paths — the override flows through every read site the engine already wired (saves, ability/skill checks, sheet display, `/sheet-json`).
+
+**Description:** The override engine (Phases 0-4, v2.211.0-v2.217.0) was built so that score-setting items are data, not code. The Headband proves it: adding `headband-of-intellect` to `_MAGIC_ITEM_PASSIVES` with `ability_set {INT: 19}` (attunement) makes effective INT resolve via the existing RAW max(base, set), and that flows automatically into INT saves + INT-based ability/skill checks (Arcana/History/Investigation/Nature) at `/roll`, the boosted-ability sheet card (the v2.214.0 display reads `effective_abilities`), and `/sheet-json`'s `derived.effective_abilities`. Demo: Mira Greenleaf (Druid, base INT 10 → mod 0) wears an equipped+attuned Headband of Intellect — her 2nd attuned item (after the Vorpal Scimitar, RAW max 3) — so effective INT 19 (mod +4), a clean +4 delta. MINOR — additive catalog passive + seed + tests, no schema change.
+
+### Added
+- `headband-of-intellect` entry in `_MAGIC_ITEM_PASSIVES` (`ability_set {INT: 19}`, attunement).
+- Demo seed: Headband of Intellect on Mira Greenleaf, equipped + attuned.
+- `tests/harness/test_item_headband_of_intellect.py` (3 tests): effective INT 19 on `/sheet-json`, INT-save override delta (+4), unequip-reverts.
+
+### Changed
+- `docs/plans/str-override.md`: Headband listed as a shipped drop-in (was a filed non-goal example).
+- `docs/test-harness-coverage.md`: harness total 2598 → 2601; added the `test_item_headband_of_intellect.py` section.
+
+---
+
 ## [2.217.0] - 2026-06-13 — "The Giant's Draught"
 
 **Schema version:** 69
