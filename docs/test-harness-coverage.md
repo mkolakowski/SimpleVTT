@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2587 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.212.0, 2026-06-13).
+**Total tests:** 2589 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.213.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2378,7 +2378,7 @@ v2.209.0 magic-items — Stone of Good Luck (Luckstone, RAW DMG p.207, uncommon,
 | `test_stone_of_good_luck_grants_skill_check_bonus` | `POST /roll` `Athletics` with `stat_ability="STR"` for Garrik → breakdown contains "Stone of Good Luck" (ability-based skill checks also pick up the check bonus). |
 
 ### `test_item_belt_of_giant_strength.py`
-v2.212.0 ability-score override engine Phase 1 (docs/plans/str-override.md) — Belt of Giant Strength (RAW DMG p.155, attunement). While worn, STR *becomes* the belt's score if higher (RAW `max(base, set)`). The override flows to three read sites: `/sheet-json` `derived.effective_abilities.STR`, the carry-capacity derivation (effective STR × 15), and `/roll` STR saves + STR-based checks (modifier delta). Garrik Ironside (base STR 18 → mod +4) carries an equipped+attuned Belt of Giant Strength (Hill, STR 21 → mod +5) in the demo seed — his 3rd attuned item. Weapon attack/damage is Phase 1b (out of scope).
+v2.212.0 ability-score override engine Phase 1 (docs/plans/str-override.md) — Belt of Giant Strength (RAW DMG p.155, attunement). While worn, STR *becomes* the belt's score if higher (RAW `max(base, set)`). The override flows to three read sites: `/sheet-json` `derived.effective_abilities.STR`, the carry-capacity derivation (effective STR × 15), and `/roll` STR saves + STR-based checks (modifier delta). Garrik Ironside (base STR 18 → mod +4) carries an equipped+attuned Belt of Giant Strength (Hill, STR 21 → mod +5) in the demo seed — his 3rd attuned item. v2.213.0 (Phase 1b) adds the weapon attack/damage read site: `/attack` appends the effective-STR modifier delta to both the to-hit roll and the damage expression for STR-keyed weapons (DEX bows/finesse untouched).
 
 | Test | What it asserts |
 |------|-----------------|
@@ -2387,6 +2387,8 @@ v2.212.0 ability-score override engine Phase 1 (docs/plans/str-override.md) — 
 | `test_belt_adds_str_save_override_delta` | `POST /roll` `str_save` for Garrik → breakdown contains "Belt of Giant Strength" (the +1 modifier delta annotation, composing with the Stone of Good Luck's +1). |
 | `test_belt_adds_athletics_override_delta` | `POST /roll` `Athletics` with `stat_ability="STR"` → breakdown contains "Belt of Giant Strength" (override delta fires for ability-based skill checks too). |
 | `test_belt_unequip_reverts_override` | PATCH the belt to `equipped: False` → `effective_abilities` drops STR + carry capacity returns to 270; restores the original inventory on teardown. |
+| `test_belt_boosts_weapon_attack_and_damage` | `POST /attack` Greatsword (index 0) → `damage_expr == "2d6+4+1"` + to-hit flat bonus == 9 (base +8 + belt +1). Phase 1b. |
+| `test_belt_weapon_boost_reverts_on_unequip` | PATCH belt `equipped: False` → `/attack` Greatsword `damage_expr == "2d6+4"` + to-hit flat == 8; restores inventory on teardown. Phase 1b. |
 
 ### `test_item_ring_of_protection.py`
 v2.158.76 magic-items-automation Phase 1b — second catalog entry. Same +1 AC / +1 saves shape as the Cloak (RAW DMG p.191) on a different slot (finger vs neck), validating that the v2.158.74 catalog scales additively. Tavik Stonebrow (Cleric Lv 8, AC 18, WIS save +6) is the canary because his base AC + save mod are clean integers and he's a different PC from Thalindra so the AC + save assertions don't interact.

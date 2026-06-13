@@ -1,6 +1,6 @@
 # Ability-score override engine — design plan
 
-**Status:** 🟠 Phase 1 shipped (v2.212.0). Phase 0 (plan) ✅ v2.211.0. Phase 1 (override substrate + STR saves/checks + carry capacity + Belt of Giant Strength Hill tier) ✅ v2.212.0. Weapon attack/damage was re-scoped out of Phase 1 into a new **Phase 1b** during implementation — the `/attack` endpoint reads pre-baked attack entries off the sheet rather than recomputing the STR modifier per roll, a materially larger surface than the `/roll` save/check append path. Phases 1b / 2 / 3 / 4 remain open.
+**Status:** 🟠 Phase 1 + 1b shipped (v2.213.0). Phase 0 (plan) ✅ v2.211.0. Phase 1 (override substrate + STR saves/checks + carry capacity + Belt of Giant Strength Hill tier) ✅ v2.212.0. Phase 1b (weapon attack/damage read site on `/attack`) ✅ v2.213.0 — the `/attack` endpoint now appends the effective-STR modifier delta to both the to-hit roll and the damage expression for STR-keyed weapons. Phases 2 / 3 / 4 remain open.
 
 **Authors:** rolling
 **Last updated:** 2026-06-13
@@ -97,9 +97,11 @@ The worn items (Belt, Amulet) gate on equipped+attuned. The potion is a **timed*
 - Belt of Giant Strength (Hill, STR 21) as the first `_MAGIC_ITEM_PASSIVES` entry + demo seed on Garrik Ironside (base STR 18 → effective 21).
 - Harness `test_item_belt_of_giant_strength.py` (5 tests): effective STR on `/sheet-json`, carry 315, STR-save + Athletics override deltas, unequip-reverts.
 
-### Phase 1b (filed) — Weapon attack/damage read site
+### Phase 1b — Weapon attack/damage read site (S–M, ~1 commit) ✅ v2.213.0
 
-The `/attack` endpoint resolves attack/damage from the sheet's stored attack entries (the ability modifier is baked in at seed/sheet-edit time, not recomputed per roll from STR), so routing it through `effective_ability_score` is a materially larger surface than the `/roll` save/check append landed in Phase 1. Filed as its own commit: recompute the STR-based attack/damage modifier (or apply the override delta) when an `ability_set` override is active, plus a harness test proving an equipped belt changes the attack bonus + damage.
+The `/attack` endpoint resolves attack/damage from the sheet's stored attack entries (the ability modifier is baked in at seed/sheet-edit time, not recomputed per roll from STR), so routing it through `effective_ability_score` is a materially larger surface than the `/roll` save/check append landed in Phase 1.
+
+Shipped: two pure helpers — `_attack_override_ability(sheet, attack)` infers the weapon's backing ability (disambiguates STR vs DEX by matching the baked `attack_bonus − proficiency_bonus` modifier against the base STR/DEX mods, finesse-desc fallback), and `_pc_attack_ability_override_delta(sheet, attack)` returns the override modifier delta for that ability (0 for non-overridden abilities, so a STR belt never inflates a DEX bow/finesse weapon). The `/attack` endpoint applies the delta to both `damage_expr_raw` (mirroring the Hex Warrior swap) and the to-hit `atk_expr`. Harness: `test_belt_boosts_weapon_attack_and_damage` + `test_belt_weapon_boost_reverts_on_unequip` on Garrik's Greatsword.
 
 ### Phase 2 — Belt tier backfill + sheet display (S–M, ~1 commit)
 

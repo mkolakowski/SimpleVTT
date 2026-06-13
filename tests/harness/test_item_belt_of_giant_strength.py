@@ -13,7 +13,10 @@ The override flows to three read sites this commit wires:
     (mod(effective) − mod(base)) with a breakdown attribution.
 
 Weapon attack/damage (baked into the sheet's stored attack entries via
-``/attack``) is Phase 1b — out of scope here.
+``/attack``) is Phase 1b (v2.213.0): the belt's +1 effective-STR modifier
+delta flows into Garrik's Greatsword (a STR weapon) to-hit roll AND damage
+expression. DEX-keyed attacks (bows / finesse) are untouched by the
+STR-setting belt.
 
 Demo fixture: Garrik Ironside (Fighter, base STR 18 → mod +4) carries an
 equipped + attuned Belt of Giant Strength (Hill, STR 21 → mod +5). So:
@@ -22,11 +25,23 @@ equipped + attuned Belt of Giant Strength (Hill, STR 21 → mod +5). So:
   - STR saves + Athletics gain the +1 modifier delta on top of the
     Stone of Good Luck's existing +1 (the two substrates compose).
 """
+import re
+
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
 
 _BELT_SLUG = "belt-of-giant-strength"
+
+
+def _attack_flat_bonus(data):
+    """Extract the flat to-hit bonus from an /attack response: the d20
+    rolled value is in the breakdown (``1d20[N]=N``), so the flat bonus is
+    ``attack_total − N``. Garrik has no roll_state / buffs, so the d20 is a
+    single die."""
+    m = re.search(r"1d20\[(\d+)\]=\d+", data["attack_breakdown"])
+    assert m, f"unexpected attack_breakdown shape: {data['attack_breakdown']!r}"
+    return data["attack_total"] - int(m.group(1))
 
 
 async def _sheet_json(gm_client, char_id):
@@ -134,6 +149,71 @@ async def test_belt_unequip_reverts_override(gm_client, garrik):
         )
         assert (derived2.get("carry") or {}).get("carry_capacity_lb") == 270, (
             "expected carry capacity 270 (base STR 18 × 15) after unequip"
+        )
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-fields",
+            json={"inventory": snapshot},
+        )
+
+
+async def test_belt_boosts_weapon_attack_and_damage(gm_client, gm_ws, garrik):
+    """Phase 1b: the belt's +1 effective-STR modifier delta flows into
+    Garrik's Greatsword (a STR weapon, attack_index 0, baked +8 = STR +4 +
+    PB +4). The to-hit flat bonus reads +9 and the damage expression carries
+    the +1 (``2d6+4`` → ``2d6+4+1``). ``damage_expr`` rides on the
+    ``weapon_attack`` broadcast."""
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={"character_id": garrik["id"], "attack_index": 0, "override": True},
+    )
+    assert resp.status_code == 200, resp.text
+    msg = await gm_ws.wait_for("weapon_attack")
+    data = msg["data"]
+    assert data["attack_name"] == "Greatsword"
+    assert data["damage_expr"] == "2d6+4+1", (
+        f"expected belt +1 appended to damage expr, got {data['damage_expr']!r}"
+    )
+    assert _attack_flat_bonus(data) == 9, (
+        "expected effective to-hit flat +9 (base +8 + belt +1), got "
+        f"{_attack_flat_bonus(data)}"
+    )
+
+
+async def test_belt_weapon_boost_reverts_on_unequip(gm_client, gm_ws, garrik):
+    """Unequipping the belt reverts the weapon boost: the Greatsword's
+    damage expression drops back to ``2d6+4`` and the to-hit flat to +8.
+    Restores the original inventory on teardown."""
+    data = await _sheet_json(gm_client, garrik["id"])
+    inv = list((data.get("sheet") or {}).get("inventory") or [])
+    snapshot = [dict(it) if isinstance(it, dict) else it for it in inv]
+    belt_idx = next(
+        (i for i, it in enumerate(inv)
+         if isinstance(it, dict) and it.get("_slug") == _BELT_SLUG),
+        None,
+    )
+    assert belt_idx is not None, "Garrik has no belt-of-giant-strength item"
+    try:
+        inv[belt_idx] = {**inv[belt_idx], "equipped": False}
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-fields",
+            json={"inventory": inv},
+        )
+        gm_ws.mark()
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={"character_id": garrik["id"], "attack_index": 0,
+                  "override": True},
+        )
+        assert resp.status_code == 200, resp.text
+        msg = await gm_ws.wait_for("weapon_attack")
+        data2 = msg["data"]
+        assert data2["damage_expr"] == "2d6+4", (
+            f"expected base damage expr after unequip, got {data2['damage_expr']!r}"
+        )
+        assert _attack_flat_bonus(data2) == 8, (
+            "expected base to-hit flat +8 after unequip, got "
+            f"{_attack_flat_bonus(data2)}"
         )
     finally:
         await gm_client.patch(

@@ -33347,6 +33347,50 @@ def _ability_for_roll(stat_key_lc: str, stat_ability_raw: str) -> str:
     return ""
 
 
+def _attack_override_ability(sheet: dict, attack: dict) -> str:
+    """v2.213.0 — infer which ability score backs a weapon attack, for the
+    ability-score override read site (Belt of Giant Strength). No explicit
+    `attack.ability_used` field exists, so we mirror the
+    `_two_weapon_fighting_ability_mod` heuristic but disambiguate STR vs
+    DEX by matching the baked modifier (attack_bonus − proficiency_bonus)
+    against the BASE STR/DEX modifiers. This keeps a STR belt from boosting
+    a DEX-based ranged/finesse weapon whose desc lacks "finesse". Falls back
+    to the finesse-desc heuristic when the baked mod is ambiguous (STR and
+    DEX share a modifier) or unparseable."""
+    if not isinstance(sheet, dict) or not isinstance(attack, dict):
+        return "STR"
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    raw = str(attack.get("attack_bonus") or "").strip()
+    baked: "int | None" = None
+    if raw and pb > 0:
+        import re as _re
+        m = _re.match(r"^\s*([+\-]?\d+)", raw)
+        if m:
+            try:
+                baked = int(m.group(1)) - pb
+            except (TypeError, ValueError):
+                baked = None
+    if baked is not None:
+        str_mod = _ability_score_modifier(_read_stored_ability(sheet, "STR"))
+        dex_mod = _ability_score_modifier(_read_stored_ability(sheet, "DEX"))
+        if baked == str_mod and baked != dex_mod:
+            return "STR"
+        if baked == dex_mod and baked != str_mod:
+            return "DEX"
+    desc = (attack.get("desc") or "").lower()
+    return "DEX" if "finesse" in desc else "STR"
+
+
+def _pc_attack_ability_override_delta(sheet: dict, attack: dict) -> int:
+    """v2.213.0 — the modifier delta a weapon attack/damage gains from an
+    equipped ability-score override (Belt of Giant Strength). Resolves the
+    weapon's backing ability, then returns mod(effective) − mod(base) for
+    it. 0 when no override applies to that ability (so DEX-keyed attacks are
+    untouched by a STR-setting belt)."""
+    ability = _attack_override_ability(sheet, attack)
+    return _ability_override_delta(sheet, ability)
+
+
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
     """v2.99.81 — swap the leading die on an unarmed/monk-weapon
     attack with the Monk's Martial Arts die when it's larger.
@@ -82866,6 +82910,17 @@ async def use_attack(
             if _hex_warrior_delta_dmg > 0
             else f"{damage_expr_raw}{_hex_warrior_delta_dmg}"
         )
+    # v2.213.0 — STR-override Phase 1b (docs/plans/str-override.md):
+    # an equipped ability-score override (Belt of Giant Strength,
+    # DMG p.155) raises the weapon's effective STR, so the modifier
+    # delta mod(effective)−mod(base) appends to damage. _pc_attack_
+    # ability_override_delta resolves the weapon's backing ability and
+    # returns 0 for DEX-keyed attacks, so a STR belt never inflates a
+    # bow. Mirrors the Hex Warrior swap above; applied to the attack
+    # roll in the to-hit block below.
+    _str_override_delta = _pc_attack_ability_override_delta(sheet, attack)
+    if _str_override_delta > 0 and damage_expr_raw:
+        damage_expr_raw = f"{damage_expr_raw}+{_str_override_delta}"
 
     is_save = save_dc > 0 and save_ability
 
@@ -83075,6 +83130,11 @@ async def use_attack(
                 f"+{_hex_warrior_delta}" if _hex_warrior_delta > 0
                 else f"{_hex_warrior_delta}"
             )
+        # v2.213.0 — STR-override Phase 1b: append the same effective-STR
+        # modifier delta computed for damage above to the to-hit roll, so
+        # an equipped Belt of Giant Strength boosts attack rolls as well.
+        if _str_override_delta > 0:
+            atk_expr += f"+{_str_override_delta}"
         # v2.97.34 — append buff-driven attack modifiers (Sacred
         # Weapon / Bless / Bane). The suffix is "" when none apply,
         # so this is a no-op for ordinary attacks.

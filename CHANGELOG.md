@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.213.0] - 2026-06-13 — "The Giant's Swing"
+
+**Schema version:** 69
+
+**Commit summary:** Ability-score override engine Phase 1b (docs/plans/str-override.md): route STR-based weapon attack + damage through the effective ability score so an equipped Belt of Giant Strength (DMG p.155) boosts the wielder's hits, not just saves/checks/carry. The `/attack` endpoint appends the `mod(effective)−mod(base)` STR delta to both the to-hit roll and the damage expression; DEX-keyed attacks (bows / finesse) are untouched.
+
+**Description:** Phase 1 (v2.212.0) covered the `/roll` save/check append + carry capacity. Weapon attack/damage lives on a different endpoint (`/attack`, `use_attack`) that reads pre-baked `attack_bonus` / `damage` entries off the sheet rather than recomputing the STR modifier per roll — a materially larger surface, deferred to this Phase 1b. Two new pure helpers in `tabletop_routes.py`: `_attack_override_ability` infers which ability backs a weapon attack (no explicit `attack.ability_used` field exists — it disambiguates STR vs DEX by matching the baked modifier `attack_bonus − proficiency_bonus` against the BASE STR/DEX mods, falling back to the finesse-desc heuristic), and `_pc_attack_ability_override_delta` returns the override modifier delta for that ability (0 for non-overridden abilities, so a STR-setting belt never inflates a DEX bow/finesse weapon). The `/attack` endpoint applies the delta to `damage_expr_raw` (mirroring the Hex Warrior swap) and to the to-hit `atk_expr`. Garrik Ironside (base STR 18 → mod +4, belt sets STR 21 → mod +5) now swings his Greatsword at effective +9 to-hit (base +8 + belt +1) for `2d6+4+1` damage; unequipping the belt reverts both. MINOR — additive read site on an existing endpoint + two helpers + tests, no schema change.
+
+### Added
+- `_attack_override_ability` + `_pc_attack_ability_override_delta` helpers in `tabletop_routes.py` — resolve a weapon attack's backing ability and the equipped ability-score override delta for it.
+- `tests/harness/test_item_belt_of_giant_strength.py`: 2 new tests (now 7 total) — `test_belt_boosts_weapon_attack_and_damage` (Greatsword to-hit flat +9, damage expr `2d6+4+1`) and `test_belt_weapon_boost_reverts_on_unequip` (back to +8 / `2d6+4`, with inventory snapshot/restore).
+
+### Changed
+- `/attack` (`use_attack`) appends the effective-STR modifier delta to both the to-hit roll and the damage expression when an equipped ability-score override applies to the weapon's ability.
+- `docs/plans/str-override.md`: Phase 1b marked shipped.
+- `docs/test-harness-coverage.md`: harness total 2587 → 2589; updated the `test_item_belt_of_giant_strength.py` section.
+
+---
+
 ## [2.212.0] - 2026-06-13 — "The Hill Giant's Girdle"
 
 **Schema version:** 69
