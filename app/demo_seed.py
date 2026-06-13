@@ -3002,6 +3002,17 @@ def _barbarian_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_cannot_be_surprised": True,
              "desc": "Rare wondrous item, attunement. This dark blue rhomboid orbits your head; while it does, you can't be surprised. RAW DMG p.176."},
+            # v2.239.0 — Boots of Speed (RAW DMG p.155, rare, attunement).
+            # Krieger's 3rd attuned item (after the two Ioun Stones, RAW
+            # max 3). A bonus action doubles his walking speed and gives
+            # opportunity attacks against him disadvantage. The
+            # `speed_doubling` flag rides the `boots-of-speed` catalog
+            # payload and surfaces on /sheet-json as derived.speed_doubling
+            # — on-theme for a Barbarian closing distance on a target.
+            {"name": "Boots of Speed", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
+             "_slug": "boots-of-speed",
+             "desc": "Rare wondrous item, attunement. Bonus action to click the heels together: your walking speed doubles and opportunity attacks against you have disadvantage, for up to 10 minutes. RAW DMG p.155."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature

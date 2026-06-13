@@ -32547,6 +32547,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "winged-boots": [
         {"flying_speed": True, "requires_attunement": True},
     ],
+    # v2.239.0 — Boots of Speed (RAW DMG p.155, rare, attunement). RAW:
+    # "while you wear these boots, you can use a bonus action and click the
+    # boots' heels together. If you do, the boots double your walking speed,
+    # and any creature that makes an opportunity attack against you has
+    # disadvantage on the attack roll..." (up to 10 minutes per activation).
+    # The bonus-action toggle + 10-minute budget are GM-narrated in v1; the
+    # boolean flag surfaces the ability as a derived read.
+    "boots-of-speed": [
+        {"speed_doubling": True, "requires_attunement": True},
+    ],
 }
 
 
@@ -33559,6 +33569,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # is GM-narrated in v1).
         "flying_speed": False,
         "flying_speed_sources": [],
+        # v2.239.0 — speed-doubling passive. Boolean OR across equipped
+        # items carrying the field; surfaced on `/sheet-json` derived.
+        # Boots of Speed (RAW DMG p.155) is the first entry — a bonus
+        # action doubles your walking speed and gives opportunity attacks
+        # against you disadvantage (the toggle + 10-minute budget are
+        # GM-narrated in v1).
+        "speed_doubling": False,
+        "speed_doubling_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33783,6 +33801,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_flying_speed") or p.get("flying_speed"):
                 out["flying_speed"] = True
                 out["flying_speed_sources"].append(item_name)
+            # v2.239.0 — speed-doubling passive (Boots of Speed, RAW DMG
+            # p.155). Boolean OR; the flag rides the item via the
+            # `speed_doubling` payload (or a per-item `_speed_doubling` rider).
+            if item.get("_speed_doubling") or p.get("speed_doubling"):
+                out["speed_doubling"] = True
+                out["speed_doubling_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90849,6 +90873,12 @@ async def get_character_sheet_json(
             if _item_eff.get("flying_speed"):
                 derived["flying_speed"] = {
                     "sources": list(_item_eff.get("flying_speed_sources") or []),
+                }
+            # v2.239.0 — speed doubling (Boots of Speed). Only present when
+            # an equipped+attuned item sets the flag.
+            if _item_eff.get("speed_doubling"):
+                derived["speed_doubling"] = {
+                    "sources": list(_item_eff.get("speed_doubling_sources") or []),
                 }
         except Exception:
             pass

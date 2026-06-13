@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.239.0] - 2026-06-13 — "The Clicking Heels"
+
+**Schema version:** 69
+
+**Commit summary:** Boots of Speed — speed-doubling passive (`derived.speed_doubling`) on a new boolean-OR substrate field, riding the `boots-of-speed` catalog payload (attunement-gated).
+
+**Description:** The **Boots of Speed** (RAW DMG p.155, rare, attunement) let the wearer use a bonus action to click the heels together, doubling their walking speed and giving opportunity attacks against them disadvantage, for up to 10 minutes. They reuse the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health / Amulet of Proof / Mantle of Spell Resistance / Slippers of Spider Climbing / Winged Boots): the `speed_doubling` flag rides the `boots-of-speed` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects` (a new `speed_doubling` field + `speed_doubling_sources`), and surfaces on `/sheet-json` as `derived.speed_doubling = {sources}`. The bonus-action toggle + 10-minute budget are GM-narrated in v1 — this exposes the ability as a derived read. Demo: Krieger Stonefist (Barbarian) wears them as his 3rd attuned item (Ioun Stone of Wisdom + Ioun Stone of Awareness + boots, RAW max 3) — on-theme for a barbarian closing distance on a target. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `speed_doubling` / `speed_doubling_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped+attuned items carrying the `speed_doubling` payload or a per-item `_speed_doubling` rider).
+- `/sheet-json` `derived.speed_doubling = {sources}` — present only when an equipped+attuned item sets the flag.
+- `boots-of-speed` entry in `_MAGIC_ITEM_PASSIVES` (`speed_doubling: True`, `requires_attunement: True`).
+- Demo seed: Boots of Speed on Krieger Stonefist (`_slug: "boots-of-speed"`, equipped + attuned — his 3rd attunement slot).
+- `tests/harness/test_item_boots_of_speed.py` (3 tests): `derived.speed_doubling` lists the boots in sources; the flag drops when attunement is removed; composes with the Ioun Stone of Awareness's `cannot_be_surprised`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2660 → 2663; added the `test_item_boots_of_speed.py` section.
+
 ## [2.238.0] - 2026-06-13 — "The Borrowed Sky"
 
 **Schema version:** 69

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2660 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.238.0, 2026-06-13).
+**Total tests:** 2663 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.239.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2483,6 +2483,15 @@ v2.228.0 — Ioun Stone of Protection (RAW DMG p.176, rare, attunement): the fir
 |------|-----------------|
 | `test_ioun_stone_protection_grants_ac_bonus` | Krieger swings at Mira → `target_ac == 16` (15 base + stone +1). |
 | `test_ioun_stone_protection_unequip_reverts_ac` | PATCH the stone to `equipped: False` → `target_ac == 15` (base, no bonus); restores the original inventory on teardown. |
+
+### `test_item_boots_of_speed.py`
+v2.239.0 — Boots of Speed (RAW DMG p.155, rare, attunement): a bonus action doubles walking speed and gives opportunity attacks against you disadvantage, for up to 10 minutes. Reuses the boolean-OR passive substrate: the `speed_doubling` flag rides the `boots-of-speed` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.speed_doubling = {sources}` (the toggle + 10-minute budget are GM-narrated in v1). Krieger Stonefist (Barbarian) wears them as his 3rd attuned item (Ioun Stone of Wisdom + Ioun Stone of Awareness + boots).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_boots_of_speed_expose_speed_doubling` | `GET /sheet-json` → `derived.speed_doubling` present with "Boots of Speed" in `sources`. |
+| `test_boots_of_speed_require_attunement` | PATCH the boots to `attuned: False` → `derived.speed_doubling` absent (attunement-gated); restores the original inventory on teardown. |
+| `test_boots_of_speed_compose_with_awareness` | The flag composes with Krieger's Ioun Stone of Awareness — `derived.cannot_be_surprised` still reports alongside `speed_doubling` from the same walker. |
 
 ### `test_item_winged_boots.py`
 v2.238.0 — Winged Boots (RAW DMG p.214, uncommon, attunement): flying speed equal to walking speed for up to 4 hours. Reuses the boolean-OR passive substrate: the `flying_speed` flag rides the `winged-boots` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.flying_speed = {sources}` (the 4-hour charge budget is GM-narrated in v1). Kael Brightleaf (Way of the Open Hand Monk) wears them as his 3rd attuned item (Bracers of Defense + Amulet of Proof + boots).
