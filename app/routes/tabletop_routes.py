@@ -1485,25 +1485,41 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Speed increases by 10 ft for 1 hour.",
     },
-    # v2.186.0 — Potion of Resistance (RAW DMG p.188, uncommon): drink →
-    # resistance to one damage type for 1 hour, no concentration. v1 ships
-    # the fire instance (the most common demo case); `effects.resistance_to`
-    # is read live by `_resistance_halve` / `_resistance_halve_npc`, so the
-    # halving runs through the real damage pipeline (no new mechanics).
-    # Other types drop in as sibling templates (resistance-cold, etc.).
-    "resistance-fire": {
-        "key": "resistance-fire",
-        "name": "Resistance (Fire)",
-        "icon": "🔥",
+}
+
+
+# v2.186.0 / v2.187.0 — Potion of Resistance (RAW DMG p.188, uncommon): drink →
+# resistance to one damage type for 1 hour, no concentration. RAW the GM picks
+# the damage type, so we generate a `resistance-<type>` buff template for every
+# one of the ten RAW damage types. `effects.resistance_to` is read live by
+# `_resistance_halve` / `_resistance_halve_npc`, so the halving runs through the
+# real damage pipeline (no new mechanics). The inventory item carries a
+# `resistance_type` that the self-buff handler maps to the matching template.
+_RESISTANCE_DAMAGE_ICONS = {
+    "acid": "🧪",
+    "cold": "❄️",
+    "fire": "🔥",
+    "force": "✨",
+    "lightning": "⚡",
+    "necrotic": "💀",
+    "poison": "☠️",
+    "psychic": "🧠",
+    "radiant": "☀️",
+    "thunder": "🔊",
+}
+for _rdt, _rdi in _RESISTANCE_DAMAGE_ICONS.items():
+    _SPELL_BUFF_MAP[f"resistance-{_rdt}"] = {
+        "key": f"resistance-{_rdt}",
+        "name": f"Resistance ({_rdt.title()})",
+        "icon": _rdi,
         "duration_rounds": 600,  # 1 hour RAW
         "duration_max": 600,
         "concentration": False,
         "effects": {
-            "resistance_to": ["fire"],
+            "resistance_to": [_rdt],
         },
-        "desc": "Resistance to fire damage for 1 hour.",
-    },
-}
+        "desc": f"Resistance to {_rdt} damage for 1 hour.",
+    }
 
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
@@ -32242,23 +32258,23 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "summary_effect": "Haste for 1 minute",
         },
     },
-    # v2.186.0 — third self-buff potion. RAW DMG p.188 Potion of Resistance
-    # (uncommon): drink → resistance to one damage type for 1 hour, no
-    # concentration. v1 ships the fire instance; the `resistance-fire`
-    # _SPELL_BUFF_MAP template carries `effects.resistance_to: ["fire"]`,
-    # which the damage pipeline halves live. Unlike Heroism/Speed this is
-    # the first self-buff with a mechanically-enforced (non-marker) effect.
+    # v2.186.0 / v2.187.0 — third self-buff potion. RAW DMG p.188 Potion of
+    # Resistance (uncommon): drink → resistance to one damage type for 1 hour,
+    # no concentration. RAW the GM picks the type, so this single catalog entry
+    # is type-agnostic: the inventory item carries a `resistance_type`, which
+    # the self-buff handler maps to the matching `resistance-<type>` template
+    # (any of the ten RAW damage types). That template's `effects.resistance_to`
+    # is halved live by the damage pipeline. Unlike Heroism/Speed this is the
+    # first self-buff with a mechanically-enforced (non-marker) effect.
     "potion-of-resistance": {
         "key": "drink",
-        "name": "Drink Potion of Fire Resistance",
+        "name": "Drink Potion of Resistance",
         "requires_attunement": False,
         "consumable": True,
         "self_buff": {
-            "buff_key": "resistance-fire",
-            "buff_name": "Resistance (Fire)",
-            "icon": "🔥",
+            "buff_key": "resistance",
             "duration_rounds": 600,  # 1 hour @ 6 s/round
-            "summary_effect": "resistance to fire damage for 1 hour",
+            "summary_effect": "resistance to one damage type for 1 hour",
         },
     },
 }
@@ -79871,15 +79887,30 @@ async def _use_item_action_self_buff_potion(
 
     # 3. Bless buff on the drinker (best-effort — needs an active battle).
     buff_key = str(spec.get("buff_key") or "bless")
+    # v2.187.0 — Potion of Resistance: RAW the GM picks the damage type, so
+    # the inventory item carries a `resistance_type`. When the catalog asks
+    # for a generic resistance buff, swap in the matching typed template so
+    # one catalog entry covers all ten RAW damage types. The template owns
+    # the name/icon for resistance potions (the spec's are type-agnostic).
+    resist_type = None
+    if buff_key.startswith("resistance"):
+        rt = str(item.get("resistance_type") or "").strip().lower()
+        if rt and f"resistance-{rt}" in _SPELL_BUFF_MAP:
+            buff_key = f"resistance-{rt}"
+            resist_type = rt
     buff_installed = False
     template = _SPELL_BUFF_MAP.get(buff_key) or {}
     if template:
         buff = dict(template)
         buff["effects"] = dict(template.get("effects") or {})
         buff["key"] = buff_key
-        buff["name"] = spec.get("buff_name") or buff.get("name")
-        if spec.get("icon"):
-            buff["icon"] = spec["icon"]
+        if resist_type:
+            buff["name"] = template.get("name")
+            buff["icon"] = template.get("icon")
+        else:
+            buff["name"] = spec.get("buff_name") or buff.get("name")
+            if spec.get("icon"):
+                buff["icon"] = spec["icon"]
         # RAW: a potion's buff carries no concentration and runs its own
         # duration (e.g. Heroism's Bless = 1 hour, Speed's Haste = 1 min).
         buff["concentration"] = False
@@ -79909,7 +79940,10 @@ async def _use_item_action_self_buff_potion(
             })
         except Exception:
             pass
-    effect_text = spec.get("summary_effect") or f"the {buff_key} effect"
+    if resist_type:
+        effect_text = f"resistance to {resist_type} damage for 1 hour"
+    else:
+        effect_text = spec.get("summary_effect") or f"the {buff_key} effect"
     try:
         await hub.broadcast(campaign_id, {
             "type": "feature_used",

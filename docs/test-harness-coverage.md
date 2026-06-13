@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2535 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.186.1, 2026-06-12).
+**Total tests:** 2537 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.187.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2654,6 +2654,14 @@ v2.186.1 — end-to-end proof that the fire-resistance buff actually halves inco
 |------|-----------------|
 | `test_fire_damage_is_halved` | After drinking, 20 fire damage drops Garrik's HP by exactly 10 (halved before HP application). |
 | `test_cold_damage_is_not_halved` | Control: 20 cold damage drops HP by the full 20 — proving the buff is type-specific (the fire instance, not a `["all"]` wildcard). |
+
+### `test_potion_of_resistance_type_pick.py`
+v2.187.0 — proof that the Potion of Resistance is type-aware: the RAW GM-chosen damage type is carried on the inventory item (`resistance_type`) and the handler maps it to the matching `resistance-<type>` template. Garrik carries a second typed instance (Potion of Cold Resistance); this file drinks it in battle and proves the live damage pipeline halves COLD but not FIRE — the mirror image of `test_potion_of_resistance_damage_halving.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cold_damage_is_halved` | After drinking Cold Resistance (`buff_key: "resistance-cold"`, item_name "Potion of Cold Resistance"), 20 cold damage drops Garrik's HP by exactly 10. |
+| `test_fire_damage_is_not_halved` | Control: 20 fire damage drops HP by the full 20 — proving the type-pick selected cold, not fire. |
 
 ### `test_self_buff_potion_in_battle.py`
 v2.185.1 — in-battle proof that `_use_item_action_self_buff_potion` actually installs its buff. The per-potion tests only assert `buff_installed` is a *bool* (the install is best-effort and no-ops outside combat). This file puts Garrik in an active solo battle (`PUT /battle`, `active: True`) FIRST, then drinks each potion and asserts the install succeeded AND the buff key shows up in `GET /character/{id}/buffs`. The fixture snapshots/restores his inventory and clears the battle in teardown.

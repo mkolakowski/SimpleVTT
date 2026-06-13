@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.187.0] - 2026-06-12 — "The Chosen Element"
+
+**Schema version:** 69
+
+**Commit summary:** Potion of Resistance becomes type-aware — RAW the GM picks the damage type, so the inventory item now carries a `resistance_type` that the self-buff handler maps to any of the ten RAW damage-type templates, replacing v2.186.0's hardcoded fire instance.
+
+**Description:** v2.186.0 shipped Potion of Resistance with a single hardcoded `resistance-fire` instance. RAW (DMG p.188) the resistance is to one GM-chosen damage type, so this commit generalizes it across all ten RAW damage types (acid, cold, fire, force, lightning, necrotic, poison, psychic, radiant, thunder). The single `resistance-fire` `_SPELL_BUFF_MAP` literal is replaced by a generation loop that builds a `resistance-<type>` template for each type (each carrying `effects.resistance_to: [<type>]`, no concentration, 1-hour duration). The inventory item carries a `resistance_type` field, and the generic `_use_item_action_self_buff_potion` handler resolves the catalog's type-agnostic `buff_key: "resistance"` to the matching typed template — so one catalog entry covers every type with type-aware name/icon/summary. Garrik Ironside now carries a Potion of Cold Resistance alongside his fire instance to prove the type-pick. The live damage pipeline (`_resistance_halve`) was already type-specific (since v2.99.121), so no engine work was needed. MINOR — additive templates + new seed data + a generalized (backward-compatible) catalog entry, no schema change.
+
+### Added
+- `_SPELL_BUFF_MAP["resistance-<type>"]` for all ten RAW damage types, generated from `_RESISTANCE_DAMAGE_ICONS` (each carries `effects.resistance_to: [<type>]`, no concentration, 600-round duration).
+- Demo seed: Garrik Ironside carries a Potion of Cold Resistance (`resistance_type: "cold"`) alongside his fire instance.
+- `tests/harness/test_potion_of_resistance_type_pick.py` (2 tests): `test_cold_damage_is_halved` (drink Cold Resistance → 20 cold → HP −10) and `test_fire_damage_is_not_halved` (control: 20 fire → HP −20), proving the type-pick selected cold not fire.
+
+### Changed
+- `_MAGIC_ITEM_ACTIONS["potion-of-resistance"]`: now type-agnostic — `buff_key: "resistance"`, label "Drink Potion of Resistance", no hardcoded fire name/icon. The handler resolves the type from the item's `resistance_type`.
+- `_use_item_action_self_buff_potion`: resolves a `resistance`-prefixed `buff_key` to `resistance-<item.resistance_type>` and flows the template's name/icon + a type-aware summary.
+- Demo seed: Garrik's existing Potion of Fire Resistance now carries `resistance_type: "fire"`.
+- `docs/test-harness-coverage.md`: harness total 2535 → 2537; added the `test_potion_of_resistance_type_pick.py` section.
+
 ## [2.186.1] - 2026-06-12 — "The Halved Flame"
 
 **Schema version:** 69
