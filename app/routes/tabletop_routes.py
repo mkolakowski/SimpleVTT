@@ -32478,6 +32478,34 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.210.0 — Staff of Fire (RAW DMG p.202, very rare, attunement):
+    # 10 charges (regains 1d6+4 at dawn). Casts burning hands (1
+    # charge), fireball (3 charges), or wall of fire (4 charges) "using
+    # your spell save DC". v1 ships the marquee Fireball action through
+    # the generalized save-for-half AoE-damage handler (same path as the
+    # Necklace of Fireballs): 8d6 fire, 20-ft sphere, DEX save, the DC
+    # resolved from the wielder's sheet via the "spell" sentinel. RAW the
+    # Fireball is a fixed 3-charge spend (no upcast), so min=max=3 and
+    # the UI sends no charge picker. Burning Hands (cone) + Wall of Fire,
+    # the always-on fire resistance, and the destroy-on-empty d20 are
+    # GM-narrated. The staff-of-fire.json SRD catalog item already ships.
+    "staff-of-fire": {
+        "requires_attunement": True,
+        "resource_key": "staff-of-fire",
+        "actions": {
+            "cast-fireball": {
+                "name": "Cast Fireball (Staff)",
+                "feature_name": "🔥 Staff of Fire",
+                "save_dc": "spell",
+                "save_ability": "DEX",
+                "dice": "8d6",
+                "damage_type": "fire",
+                "save_for_half": True,
+                "min_charges": 3,
+                "max_charges": 3,
+            },
+        },
+    },
     # v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear (RAW
     # DMG p.213). 7 charges (regains 1d6+1 at dawn), spend 1 to cast
     # Fear-Cone: each creature in a 30-ft cone makes a DC 15 WIS save
@@ -80103,7 +80131,7 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug == "necklace-of-fireballs":
+    if slug in ("necklace-of-fireballs", "staff-of-fire"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_necklace_of_fireballs(
             db, campaign_id, char, item, sheet, catalog,
@@ -80112,6 +80140,7 @@ async def use_item_action(
             charges=body.get("charges"),
             campaign=campaign,
             prompt_user=user,
+            slug=slug,
         )
     if slug in ("wand-of-fear", "wand-of-paralysis", "staff-of-charming",
                 "eyes-of-charming"):
@@ -81172,23 +81201,32 @@ async def _use_item_action_necklace_of_fireballs(
     charges=None,
     campaign=None,
     prompt_user=None,
+    slug="necklace-of-fireballs",
 ):
     """v2.159.9 — Phase 8i Necklace of Fireballs handler. RAW DMG
     p.183: each bead is a 3rd-level Fireball (8d6 fire, DC 15 DEX
     save half, 20-ft sphere). v2.159.10 — Phase 8j: hurl multiple
     beads at once to upcast — 8d6 + (N-1)d6 per extra bead, max 6
     beads (full necklace = 13d6). Reads body.charges; defaults to 1.
+
+    v2.210.0 — generalized into a shared save-for-half AoE-damage
+    handler: the save DC/ability, dice (or ``dice_fn``), damage type,
+    charge cost, and feature label all come from the ``action_def`` so
+    a new fire/lightning AoE item is a pure catalog entry. The Staff of
+    Fire's Fireball action routes through here. When ``charges`` is
+    omitted it defaults to the action's ``min_charges`` (the staff's
+    Fireball is a fixed 3-charge spend with no upcast, so the UI sends
+    no charge picker).
     """
-    slug = "necklace-of-fireballs"
     res_key = str(catalog.get("resource_key") or slug)
 
     # v2.159.10 — Phase 8j: validate bead count from body.charges.
-    try:
-        n_charges = int(charges or 1)
-    except (TypeError, ValueError):
-        raise HTTPException(400, "charges must be an int")
     min_c = int(action_def.get("min_charges") or 1)
     max_c = int(action_def.get("max_charges") or 1)
+    try:
+        n_charges = int(charges) if charges is not None else min_c
+    except (TypeError, ValueError):
+        raise HTTPException(400, "charges must be an int")
     if n_charges < min_c or n_charges > max_c:
         raise HTTPException(
             400,
@@ -81227,7 +81265,14 @@ async def _use_item_action_necklace_of_fireballs(
     if len(target_combatant_ids) > 24:
         raise HTTPException(400, "Too many targets for Necklace of Fireballs")
 
-    save_dc = int(action_def.get("save_dc") or 15)
+    # v2.210.0 — honour the "spell" save-DC sentinel (same as the
+    # save-condition wand handler): the Staff of Fire casts "using your
+    # spell save DC" per RAW DMG p.202, so resolve it from the sheet.
+    raw_dc = action_def.get("save_dc")
+    if isinstance(raw_dc, str) and raw_dc.strip().lower() == "spell":
+        save_dc = _compute_spell_save_dc_from_sheet(sheet)
+    else:
+        save_dc = int(raw_dc or 15)
     save_ability = str(action_def.get("save_ability") or "DEX").upper()
     # v2.159.10 — Phase 8j: dice scales with bead count via dice_fn.
     dice_fn = action_def.get("dice_fn")
@@ -81237,6 +81282,9 @@ async def _use_item_action_necklace_of_fireballs(
         dice = str(action_def.get("dice") or "8d6")
     damage_type = str(action_def.get("damage_type") or "fire")
     save_for_half = bool(action_def.get("save_for_half"))
+    # v2.210.0 — feature label is content-driven so the shared handler
+    # serves both the Necklace and the Staff of Fire.
+    feature_name = str(action_def.get("feature_name") or "💥 Necklace of Fireballs")
 
     # Per-target save resolution.
     results = []
@@ -81255,13 +81303,13 @@ async def _use_item_action_necklace_of_fireballs(
                 target_combatant=target_c,
                 save_ability=save_ability,
                 dc=save_dc,
-                note_label=f"Necklace of Fireballs (DC {save_dc} {save_ability})",
+                note_label=f"{item.get('name') or slug} (DC {save_dc} {save_ability})",
                 condition_buff=None,
                 repeated_save=False,
                 source=f"item-{slug}-save",
                 campaign=campaign,
                 prompt_user=prompt_user,
-                feature_name="💥 Necklace of Fireballs",
+                feature_name=feature_name,
             )
         except Exception:
             logging.exception(
@@ -81331,13 +81379,13 @@ async def _use_item_action_necklace_of_fireballs(
                 "character_id": char.id,
                 "caster_char_name": char.name,
                 "source": f"item-{slug}",
-                "label": "💥 Necklace of Fireballs",
+                "label": feature_name,
                 "summary": (
-                    f"{char.name} hurls "
-                    f"{n_charges} bead{'s' if n_charges > 1 else ''} from the "
-                    f"{item.get('name')} — fireball erupts ({dice} fire). "
+                    f"{char.name} unleashes {item.get('name')} — "
+                    f"{dice} {damage_type} ({n_charges} charge"
+                    f"{'s' if n_charges > 1 else ''}). "
                     f"({len(results)} save(s) resolved; "
-                    f"{res_row['current']}/{res_max} beads left.)"
+                    f"{res_row['current']}/{res_max} charges left.)"
                 ),
             },
         })

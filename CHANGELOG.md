@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.210.0] - 2026-06-13 — "The Kindled Staff"
+
+**Schema version:** 69
+
+**Commit summary:** Staff of Fire (RAW DMG p.202, very rare, attunement): 10 charges; cast burning hands (1), fireball (3), or wall of fire (4) "using your spell save DC". v1 ships the marquee Fireball action by generalizing the Necklace of Fireballs handler into a content-agnostic save-for-half AoE-damage handler — the save DC (incl. the `"spell"` sentinel), dice, damage type, charge cost, and feature label all come from the catalog `action_def`.
+
+**Description:** `_use_item_action_necklace_of_fireballs` becomes a shared save-for-half AoE-damage handler: it takes a `slug`, honours the `"spell"` save-DC sentinel (resolving the wielder's spell save DC from the sheet — same primitive the Staff/Wand of Charming use), defaults the charge spend to the action's `min_charges` when `charges` is omitted, and reads its feature label from `action_def["feature_name"]`. The Necklace's behaviour is byte-for-byte unchanged (its catalog entry keeps a fixed DC 15 and a `dice_fn` upcast). A new `_MAGIC_ITEM_ACTIONS['staff-of-fire']` entry routes its `cast-fireball` action (8d6 fire, 20-ft sphere, DEX save at `"spell"` DC, fixed 3-charge spend) through the shared handler via the `/use_item_action` dispatch. A `🔥 Cast Fireball` button lands via the existing `aoe-sphere` `ITEM_ACTION_SLUGS` kind (no charge picker — the server defaults the spend to 3). Zara Emberfire (Tiefling Sorcerer Lv 5, spell save DC 14, fire-flavoured) carries a seeded Staff of Fire (attuned — her 2nd attuned item, after the Eyes of Charming) + a 10-charge resource row (1d6+4 recharge). The staff's burning hands (cone) + wall of fire actions, the always-on fire resistance, and the destroy-on-empty d20 are GM-narrated. The `staff-of-fire.json` SRD catalog item already shipped. MINOR — additive catalog action + handler generalization + dispatch + UI button + seed, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS['staff-of-fire']` Fireball action (8d6 fire, 20-ft sphere, DEX save at `save_dc: "spell"`, fixed 3-charge spend, attunement); the `/use_item_action` AoE-damage dispatch branch now includes `staff-of-fire`.
+- `ITEM_ACTION_SLUGS['staff-of-fire']` (`aoe-sphere` kind) → a `🔥 Cast Fireball` button on the row.
+- Zara Emberfire's demo inventory gains a seeded Staff of Fire (attuned) + a `staff-of-fire` resource row (10/10, 1d6+4 recharge, long-rest reset).
+- `tests/harness/test_use_item_action_staff_of_fire.py` (3 tests): Fireball at 2 targets (no charges param) → save_dc=14 DEX, dice=8d6, charges_spent=3, 10→7; under-min (1 charge) → 400; drained staff → 409 insufficient_charges.
+
+### Changed
+- `_use_item_action_necklace_of_fireballs` generalized into a shared save-for-half AoE-damage handler: `slug` param, `"spell"` save-DC sentinel, charge spend defaults to `min_charges`, feature label from `action_def`. Non-breaking — the Necklace keeps its fixed DC 15 + `dice_fn` upcast.
+- `docs/test-harness-coverage.md`: harness total 2578 → 2581; added the `test_use_item_action_staff_of_fire.py` section.
+
 ## [2.209.0] - 2026-06-12 — "The Lucky Agate"
 
 **Schema version:** 69

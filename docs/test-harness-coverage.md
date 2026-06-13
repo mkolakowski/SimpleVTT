@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2578 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.209.0, 2026-06-12).
+**Total tests:** 2581 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.210.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2555,6 +2555,15 @@ v2.159.9 magic-items-automation Phase 8i — Necklace of Fireballs (RAW DMG p.18
 | `test_necklace_3_bead_upcast` | v2.159.10 Phase 8j: POST with `charges: 3` → 200, `charges_spent: 3`, `dice: "10d6"`, resource current drops 6→3 (steps by N, not 1). |
 | `test_necklace_over_cap_returns_400` | v2.159.10: POST with `charges: 7` when `max_charges=6` → 400 (out-of-range validation in the handler). |
 | `test_necklace_empty_returns_409` | Drain the necklace to 0 beads via `/sheet-fields` PATCH, then throw → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
+
+### `test_use_item_action_staff_of_fire.py`
+v2.210.0 magic-items — Staff of Fire (RAW DMG p.202, very rare, attunement). The Necklace of Fireballs handler is generalized into a content-agnostic save-for-half AoE-damage handler: it takes a `slug`, honours the `"spell"` save-DC sentinel (resolved from the wielder's sheet), defaults the charge spend to the action's `min_charges` when `charges` is omitted, and reads its feature label from `action_def`. The Staff's marquee Fireball action (8d6 fire, 20-ft sphere, DEX save, fixed 3-charge spend) routes through it. Zara Emberfire (Tiefling Sorcerer Lv 5, spell save DC 14) carries an equipped+attuned Staff of Fire + a `staff-of-fire` resource row (10/10). The Fixture force-reseeds the charges to 10 and snapshots for teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_staff_of_fire_fireball_2_targets` | Cast Fireball at 2 targets with no `charges` param → 200 with `save_dc: 14` (Zara's spell save DC via the `"spell"` sentinel), `save_ability: "DEX"`, `dice: "8d6"`, `charges_spent: 3` (defaults to min), `resource.current: 7` (10→7), both ids resolved. |
+| `test_staff_of_fire_under_min_returns_400` | POST with `charges: 1` (Fireball is min=max=3) → 400 out-of-range. |
+| `test_staff_of_fire_empty_returns_409` | Drain the staff to 2 charges (below the 3-charge Fireball cost) via `/sheet-fields`, then cast → 409 with `error: "insufficient_charges"` + `current: 2`. Teardown restores the snapshot. |
 
 ### `test_arrow_of_slaying.py`
 v2.159.1 magic-items-automation Phase 8a — Arrow of Slaying (Giants) (RAW DMG p.151). First ammunition-shape catalog row, extending the v2.158.102 `on_hit_save` substrate with a new `effect: "damage"` variant for save-for-half damage. Rowan Quickbow's Longbow (Arrow of Slaying — Giants) attack at attack_index 2 fires the rider via `_slug` match. New Hill Giant token template (`sheet.type="giant"`) gives the helper-resolution path a real RAW target.

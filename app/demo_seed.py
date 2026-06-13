@@ -3486,6 +3486,18 @@ def _sorcerer_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "eyes-of-charming", "weight_lb": 0,
              "desc": "Uncommon wondrous item, attunement. Crystal lenses with 3 charges (regain all at dawn). Expend 1 (action) to cast charm person (DC 13) on a humanoid within 30 ft you can see."},
+            # v2.210.0 — Staff of Fire (RAW DMG p.202, very rare,
+            # attunement). 10 charges (regain 1d6+4 at dawn). Casts
+            # burning hands (1), fireball (3), or wall of fire (4)
+            # "using your spell save DC" (Zara's = 14). v1 surfaces the
+            # marquee Fireball action (8d6 fire, 20-ft sphere, DEX save)
+            # through the generalized save-for-half AoE handler. Zara
+            # (Tiefling Sorcerer, fire-flavoured via Hellish Rebuke) is a
+            # natural wielder — her 2nd attuned item, after the Eyes.
+            {"name": "Staff of Fire", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "staff-of-fire", "weight_lb": 4,
+             "desc": "Very rare staff, attunement. Resistance to fire while held. 10 charges (regain 1d6+4 at dawn): cast burning hands (1), fireball (3), or wall of fire (4) using your spell save DC."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer
@@ -3533,6 +3545,19 @@ def _sorcerer_sheet(name: str) -> dict:
                 "source": "magic item — Eyes of Charming",
                 "class_slug": "item",
                 "desc": "3 charges; expend 1 to cast charm person (DC 13) on a humanoid within 30 ft. Regain all at dawn.",
+                "manual": False,
+            },
+            # v2.210.0 — Staff of Fire charge pool (RAW DMG p.202): 10
+            # charges, regain 1d6+4 at dawn (full refill on long rest in
+            # v1). The generalized AoE-damage handler decrements 3 per
+            # Fireball cast.
+            {
+                "key": "staff-of-fire",
+                "name": "Staff of Fire",
+                "current": 10, "max": 10, "reset": "long",
+                "source": "magic item — Staff of Fire",
+                "class_slug": "item",
+                "desc": "10 charges; Fireball costs 3 (8d6 fire, 20-ft sphere, DEX save at your spell save DC). Regain 1d6+4 at dawn.",
                 "manual": False,
             },
         ],

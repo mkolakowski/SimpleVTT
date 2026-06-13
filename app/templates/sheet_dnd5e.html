@@ -7237,6 +7237,21 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                               control_label: 'Beads to spend',
                               cast_level: (n) => 2 + n,  // Lv = 3 base, +1 per extra
                           }},
+        // v2.210.0 — Staff of Fire (RAW DMG p.202). Marquee Fireball
+        // action reuses the necklace's `aoe-sphere` flow (center picker
+        // → /battle/sphere-targets → AoE confirm modal → POST). RAW the
+        // Fireball is a fixed 3-charge spend (no upcast), so there's no
+        // charge_picker — the server defaults the spend to the action's
+        // min_charges (3). DC is the wielder's spell save DC (computed
+        // server-side). Burning Hands + Wall of Fire are GM-narrated.
+        'staff-of-fire': {kind: 'aoe-sphere',
+                          action_key: 'cast-fireball',
+                          label: '🔥 Cast Fireball',
+                          title: 'Staff of Fire — Fireball, 20-ft sphere, DEX save (your spell save DC, half on pass). Spends 3 charges.',
+                          radius_ft: 20,
+                          max_range_ft: 120,
+                          save_dc: 15,
+                          submit_label: '🔥 Fire'},
         // v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear
         // (RAW DMG p.213). 30-ft cone, DC 15 WIS save or Frightened
         // for 1 minute. Flow: pick a target to define the cone
