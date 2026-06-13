@@ -1581,6 +1581,22 @@ _SPELL_BUFF_MAP["climbing"] = {
     ),
 }
 
+# v2.196.0 — Potion of Water Breathing (RAW DMG p.188, uncommon): breathe
+# underwater for 1 hour. The engine tracks no suffocation/drowning rule,
+# so this is a purely descriptive buff — it surfaces on the init strip
+# with a duration but carries no mechanical effect intercept (GM-narrated,
+# like the climbing speed half of Potion of Climbing).
+_SPELL_BUFF_MAP["water-breathing"] = {
+    "key": "water-breathing",
+    "name": "Water Breathing",
+    "icon": "🫧",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {},
+    "desc": "Breathe underwater for 1 hour (GM-narrated).",
+}
+
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
@@ -32384,6 +32400,22 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "buff_key": "climbing",
             "duration_rounds": 600,  # 1 hour @ 6 s/round
             "summary_effect": "a climbing speed + advantage to climb for 1 hour",
+        },
+    },
+    # v2.196.0 — seventh self-buff potion. RAW DMG p.188 Potion of Water
+    # Breathing (uncommon): drink → breathe underwater for 1 hour, no
+    # concentration. Installs the `water-breathing` template — a purely
+    # descriptive buff (the engine tracks no drowning rule), so it
+    # surfaces on the init strip with a duration but no mechanical effect.
+    "potion-of-water-breathing": {
+        "key": "drink",
+        "name": "Drink Potion of Water Breathing",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "water-breathing",
+            "duration_rounds": 600,  # 1 hour @ 6 s/round
+            "summary_effect": "breathe underwater for 1 hour",
         },
     },
     # v2.193.0 — first OFFENSIVE consumable potion. RAW DMG p.187 Potion
@@ -79575,6 +79607,7 @@ async def use_item_action(
         "potion-of-heroism", "potion-of-speed",
         "potion-of-resistance", "potion-of-invulnerability",
         "potion-of-growth", "potion-of-climbing",
+        "potion-of-water-breathing",
     ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,

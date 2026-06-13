@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.196.0] - 2026-06-12 — "The Tidal Lungful"
+
+**Schema version:** 69
+
+**Commit summary:** Seventh self-buff potion — Potion of Water Breathing (RAW DMG p.188, uncommon): drink → breathe underwater for 1 hour, no concentration. A purely descriptive buff (the engine tracks no drowning rule), so it surfaces on the init strip with a duration but carries no mechanical intercept.
+
+**Description:** Continues the consumable-automation arc with the first purely-descriptive self-buff. A new `water-breathing` `_SPELL_BUFF_MAP` template carries an empty `effects` map — the engine models no suffocation/drowning rule, so the buff is GM-narrated (like the climbing-speed half of Potion of Climbing in v2.195.0). The `_MAGIC_ITEM_ACTIONS['potion-of-water-breathing']` self-buff entry installs it for 1 hour, no concentration, and the `/use_item_action` self-buff dispatch tuple gains the new slug. A `🫧 Drink` button lands on the sheet row via the `self-buff-drink` `ITEM_ACTION_SLUGS` kind, and Garrik Ironside carries a seeded instance. The `potion-of-water-breathing.json` SRD catalog item already shipped in the master catalog. MINOR — additive content + buff template + catalog action + UI button, no endpoint or schema change.
+
+### Added
+- `water-breathing` buff template (empty `effects`, 1 hour, no concentration) — a descriptive init-strip buff.
+- `_MAGIC_ITEM_ACTIONS['potion-of-water-breathing']` self-buff drink action; the `/use_item_action` self-buff dispatch tuple now includes `potion-of-water-breathing`.
+- `ITEM_ACTION_SLUGS['potion-of-water-breathing']` (`self-buff-drink` kind) → a `🫧 Drink` button on the row.
+- Garrik Ironside's demo inventory gains a seeded Potion of Water Breathing.
+- `tests/harness/test_potion_of_water_breathing.py` (2 tests): in an active battle the drink installs the `water-breathing` buff (consumed True, key on the combatant); a bad `breathe` action_key → 404.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2547 → 2549; added the `test_potion_of_water_breathing.py` section.
+
 ## [2.195.0] - 2026-06-12 — "The Stonebound Draught"
 
 **Schema version:** 69

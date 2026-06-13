@@ -3805,6 +3805,14 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-climbing",
              "desc": "Drink (action, /use_item_action drink) to gain a climbing speed + advantage on STR (Athletics) checks to climb for 1 hour. RAW DMG p.187."},
+            # v2.196.0 — seventh self-buff potion. Potion of Water Breathing
+            # (RAW DMG p.188, uncommon): drink → breathe underwater for 1
+            # hour. Purely descriptive (the engine tracks no drowning rule),
+            # so the buff is GM-narrated.
+            {"name": "Potion of Water Breathing", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-water-breathing",
+             "desc": "Drink (action, /use_item_action drink) to breathe underwater for 1 hour. RAW DMG p.188."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20
