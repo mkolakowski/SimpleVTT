@@ -1485,6 +1485,24 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Speed increases by 10 ft for 1 hour.",
     },
+    # v2.186.0 — Potion of Resistance (RAW DMG p.188, uncommon): drink →
+    # resistance to one damage type for 1 hour, no concentration. v1 ships
+    # the fire instance (the most common demo case); `effects.resistance_to`
+    # is read live by `_resistance_halve` / `_resistance_halve_npc`, so the
+    # halving runs through the real damage pipeline (no new mechanics).
+    # Other types drop in as sibling templates (resistance-cold, etc.).
+    "resistance-fire": {
+        "key": "resistance-fire",
+        "name": "Resistance (Fire)",
+        "icon": "🔥",
+        "duration_rounds": 600,  # 1 hour RAW
+        "duration_max": 600,
+        "concentration": False,
+        "effects": {
+            "resistance_to": ["fire"],
+        },
+        "desc": "Resistance to fire damage for 1 hour.",
+    },
 }
 
 
@@ -32222,6 +32240,25 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "icon": "⚡",
             "duration_rounds": 10,  # 1 minute @ 6 s/round
             "summary_effect": "Haste for 1 minute",
+        },
+    },
+    # v2.186.0 — third self-buff potion. RAW DMG p.188 Potion of Resistance
+    # (uncommon): drink → resistance to one damage type for 1 hour, no
+    # concentration. v1 ships the fire instance; the `resistance-fire`
+    # _SPELL_BUFF_MAP template carries `effects.resistance_to: ["fire"]`,
+    # which the damage pipeline halves live. Unlike Heroism/Speed this is
+    # the first self-buff with a mechanically-enforced (non-marker) effect.
+    "potion-of-resistance": {
+        "key": "drink",
+        "name": "Drink Potion of Fire Resistance",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "resistance-fire",
+            "buff_name": "Resistance (Fire)",
+            "icon": "🔥",
+            "duration_rounds": 600,  # 1 hour @ 6 s/round
+            "summary_effect": "resistance to fire damage for 1 hour",
         },
     },
 }
@@ -79338,7 +79375,7 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug in ("potion-of-heroism", "potion-of-speed"):
+    if slug in ("potion-of-heroism", "potion-of-speed", "potion-of-resistance"):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
         )

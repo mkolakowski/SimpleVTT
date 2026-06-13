@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.186.0] - 2026-06-12 — "The Tempered Flesh"
+
+**Schema version:** 69
+
+**Commit summary:** Potion of Resistance ships as the third "self-buff" magic-item action — and the first whose effect is *mechanically enforced* rather than a display marker: drinking it installs a fire-resistance buff that the live damage pipeline reads to halve incoming fire damage for 1 hour.
+
+**Description:** The first two self-buff potions (Heroism → Bless, Speed → Haste) installed buffs whose effects are mostly display/marker flags. Potion of Resistance (RAW DMG p.188, uncommon) is the first self-buff with a *real* engine effect: `/use_item_action` with `action_key: "drink"` installs a `resistance-fire` buff carrying `effects.resistance_to: ["fire"]`, and that field is read live by `_resistance_halve` / `_resistance_halve_npc` in the damage-resolution path — so fire damage to the drinker is actually halved for the duration. No new mechanics were needed: the resistance-halving read site has been in production since v2.99.121 (Petrified). RAW the potion grants resistance to one GM-chosen type; v1 ships the fire instance (the most common demo case), and sibling types (cold, acid, …) drop in later as additional `_SPELL_BUFF_MAP` templates without handler work. Reuses the generic `_use_item_action_self_buff_potion` handler from v2.185.0 unchanged — only a new buff template + catalog entry + the dispatch-slug tuple. Garrik Ironside carries a Potion of Fire Resistance alongside his Heroism + Speed potions. MINOR — additive endpoint behavior + new catalog/seed data, no schema change.
+
+### Added
+- `_SPELL_BUFF_MAP["resistance-fire"]`: new buff template (`effects.resistance_to: ["fire"]`, no concentration, 600-round duration) — the first self-buff template with a mechanically-enforced effect.
+- `_MAGIC_ITEM_ACTIONS["potion-of-resistance"]`: third `self_buff` archetype (buff_key `resistance-fire`, no temp HP, 1-hour duration, `consumable: True`, no attunement).
+- Demo seed: Garrik Ironside carries a Potion of Fire Resistance (qty 1).
+- `tests/harness/test_use_item_action_potion_of_resistance.py` (3 tests): happy path (buff install + consume + WS line + sheet reflection, no temp HP), in-battle proof that the installed buff carries the live `resistance_to: ["fire"]` effect, unknown-action 404.
+
+### Changed
+- `use_item_action` dispatch: the self-buff branch now matches `slug in ("potion-of-heroism", "potion-of-speed", "potion-of-resistance")`.
+- `docs/test-harness-coverage.md`: harness total 2530 → 2533; added the `test_use_item_action_potion_of_resistance.py` section.
+
 ## [2.185.1] - 2026-06-12 — "The Proven Potion"
 
 **Schema version:** 69

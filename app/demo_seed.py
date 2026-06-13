@@ -3748,6 +3748,15 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-speed",
              "desc": "Drink (action, /use_item_action drink) to gain the effect of Haste (no concentration) for 1 minute. RAW DMG p.187."},
+            # v2.186.0 — third self-buff potion. Potion of Resistance (RAW
+            # DMG p.188, uncommon). v1 ships the fire instance: drink →
+            # resistance to fire damage (live damage-pipeline halving) for
+            # 1 hour, no concentration. First self-buff with a mechanically
+            # enforced effect (vs. Heroism/Speed's marker buffs).
+            {"name": "Potion of Fire Resistance", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-resistance",
+             "desc": "Drink (action, /use_item_action drink) to gain resistance to fire damage (no concentration) for 1 hour. RAW DMG p.188."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20
