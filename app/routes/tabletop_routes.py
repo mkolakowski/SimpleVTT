@@ -1560,6 +1560,27 @@ _SPELL_BUFF_MAP["growth"] = {
     ),
 }
 
+# v2.195.0 — Potion of Climbing (RAW DMG p.187, common): a climbing speed
+# equal to your walking speed + advantage on Strength (Athletics) checks to
+# climb, for 1 hour. RAW the advantage is climb-only; v1 models it as the
+# `str_check` advantage marker (the generalized reader honours it), and the
+# climbing speed itself is GM-narrated (no climb-speed numeric is tracked).
+_SPELL_BUFF_MAP["climbing"] = {
+    "key": "climbing",
+    "name": "Climbing",
+    "icon": "🧗",
+    "duration_rounds": 600,  # 1 hour @ 6 s/round
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "advantage_on": ["str_check"],
+    },
+    "desc": (
+        "Climbing speed equal to your walking speed (GM-narrated); "
+        "advantage on Strength (Athletics) checks to climb. 1 hour."
+    ),
+}
+
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
@@ -32346,6 +32367,23 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "buff_key": "growth",
             "duration_rounds": 600,  # up to 1d4 hours; modeled as 1 hour
             "summary_effect": "the enlarge effect for up to 1d4 hours",
+        },
+    },
+    # v2.195.0 — sixth self-buff potion. RAW DMG p.187 Potion of Climbing
+    # (common): drink → a climbing speed equal to your walking speed +
+    # advantage on Strength (Athletics) checks to climb, for 1 hour, no
+    # concentration. Installs the `climbing` template whose
+    # `advantage_on: ["str_check"]` marker the generalized STR-advantage
+    # reader honours; the climbing speed itself is GM-narrated.
+    "potion-of-climbing": {
+        "key": "drink",
+        "name": "Drink Potion of Climbing",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "climbing",
+            "duration_rounds": 600,  # 1 hour @ 6 s/round
+            "summary_effect": "a climbing speed + advantage to climb for 1 hour",
         },
     },
     # v2.193.0 — first OFFENSIVE consumable potion. RAW DMG p.187 Potion
@@ -79536,7 +79574,7 @@ async def use_item_action(
     if slug in (
         "potion-of-heroism", "potion-of-speed",
         "potion-of-resistance", "potion-of-invulnerability",
-        "potion-of-growth",
+        "potion-of-growth", "potion-of-climbing",
     ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,

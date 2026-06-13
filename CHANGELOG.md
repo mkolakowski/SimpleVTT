@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.195.0] - 2026-06-12 — "The Stonebound Draught"
+
+**Schema version:** 69
+
+**Commit summary:** Sixth self-buff potion — Potion of Climbing (RAW DMG p.187, common): drink → a climbing speed equal to your walking speed + advantage on Strength (Athletics) checks to climb, for 1 hour, no concentration.
+
+**Description:** Continues the consumable-automation arc. A new `climbing` `_SPELL_BUFF_MAP` template carries `advantage_on: ["str_check"]` — the marker the generalized STR-check-advantage reader has honoured since v2.192.0 (rage-only before that) — so the mechanical half rides the existing intercept with no new wiring. The `_MAGIC_ITEM_ACTIONS['potion-of-climbing']` self-buff entry installs it for 1 hour, no concentration, and the `/use_item_action` self-buff dispatch tuple gains the new slug. RAW the advantage is climb-only Athletics; v1 models it as the broader `str_check` marker, and the climbing speed itself is GM-narrated (no climb-speed numeric is tracked). A `🧗 Drink` button lands on the sheet row via the `self-buff-drink` `ITEM_ACTION_SLUGS` kind, and Garrik Ironside carries a seeded instance. The `potion-of-climbing.json` SRD catalog item already shipped in the master catalog. MINOR — additive content + buff template + catalog action + UI button, no endpoint or schema change.
+
+### Added
+- `climbing` buff template (`effects.advantage_on: ["str_check"]`, 1 hour, no concentration) — the RAW climb-advantage half.
+- `_MAGIC_ITEM_ACTIONS['potion-of-climbing']` self-buff drink action; the `/use_item_action` self-buff dispatch tuple now includes `potion-of-climbing`.
+- `ITEM_ACTION_SLUGS['potion-of-climbing']` (`self-buff-drink` kind) → a `🧗 Drink` button on the row.
+- Garrik Ironside's demo inventory gains a seeded Potion of Climbing.
+- `tests/harness/test_potion_of_climbing.py` (2 tests): Garrik drinks Climbing → a STR ability check rolls `2d20kh1`; control without Climbing rolls plain `1d20`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2545 → 2547; added the `test_potion_of_climbing.py` section.
+
 ## [2.194.0] - 2026-06-12 — "The Kindled Tap"
 
 **Schema version:** 69

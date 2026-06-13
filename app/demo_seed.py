@@ -3796,6 +3796,15 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-fire-breath",
              "desc": "Drink + exhale fire (bonus action, /use_item_action breathe) at the area: each target makes a DC 13 DEX save, 4d6 fire, half on a success. Consumes the potion. RAW DMG p.187."},
+            # v2.195.0 — sixth self-buff potion. Potion of Climbing (RAW
+            # DMG p.187, common): drink → a climbing speed + advantage on
+            # STR (Athletics) checks to climb for 1 hour. The advantage
+            # half is mechanical via the generalized STR-check reader; the
+            # climb speed is GM-narrated.
+            {"name": "Potion of Climbing", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-climbing",
+             "desc": "Drink (action, /use_item_action drink) to gain a climbing speed + advantage on STR (Athletics) checks to climb for 1 hour. RAW DMG p.187."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20
