@@ -973,6 +973,16 @@ def _cleric_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "amulet-of-health", "weight_lb": 0,
              "desc": "Rare wondrous item, attunement. While worn, your Constitution score becomes 19 if it isn't already higher. The CON change retroactively adjusts your max HP. RAW DMG p.150."},
+            # v2.233.0 — Periapt of Health (RAW DMG p.184, uncommon, NO
+            # attunement). While worn you're immune to contracting disease.
+            # Needs no attunement, so it composes with Tavik's three attuned
+            # items without exceeding the RAW cap — thematic on a Cleric. The
+            # `disease_immune` flag rides the `periapt-of-health` catalog
+            # payload and surfaces on /sheet-json as derived.disease_immune.
+            {"name": "Periapt of Health", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 0,
+             "_slug": "periapt-of-health",
+             "desc": "Uncommon wondrous item. While wearing this pendant you are immune to contracting any disease; an existing disease's effects are suppressed while worn. RAW DMG p.184."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action

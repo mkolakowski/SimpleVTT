@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.233.0] - 2026-06-13 — "The Steadfast Pendant"
+
+**Schema version:** 69
+
+**Commit summary:** Periapt of Health — disease-immunity passive (`derived.disease_immune`) on a new boolean-OR substrate field, riding the `periapt-of-health` catalog payload.
+
+**Description:** The **Periapt of Health** (RAW DMG p.184, uncommon, no attunement) is a pendant that makes you immune to contracting disease while worn (and suppresses an existing disease's effects). It reuses the boolean-OR passive substrate proven by the Ioun Stone of Sustenance (v2.230.0) and Awareness (v2.231.0): the `disease_immune` flag rides the `periapt-of-health` catalog payload, aggregates in `_equipped_item_effects` (a new `disease_immune` field + `disease_immune_sources`), and surfaces on `/sheet-json` as `derived.disease_immune = {sources}`. Disease mechanics are descriptive-only in v1 — this exposes the immunity as a derived read. Demo: Brother Tavik Stonebrow (Cleric Lv 8) wears it — thematic on a Cleric, and because it needs **no attunement** it composes with his three attuned items (Ring of Protection, Staff of Healing, Amulet of Health) without exceeding the RAW cap of 3. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `disease_immune` / `disease_immune_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped items carrying a `disease_immune` payload or `_disease_immune` rider).
+- `periapt-of-health` entry in `_MAGIC_ITEM_PASSIVES` (`disease_immune: True`, no attunement).
+- `/sheet-json` `derived.disease_immune = {sources}` — present only when an equipped item sets the flag.
+- Demo seed: Periapt of Health on Brother Tavik Stonebrow (`_slug: "periapt-of-health"`, equipped, no attunement — composes with his 3 attuned items).
+- `tests/harness/test_item_periapt_of_health.py` (3 tests): `derived.disease_immune` with the periapt named in sources; the flag coexists with the Amulet's CON 19 override; and unequip drops the flag.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2642 → 2645; added the `test_item_periapt_of_health.py` section.
+
 ## [2.232.0] - 2026-06-13 — "The Dull Grey Stone"
 
 **Schema version:** 69

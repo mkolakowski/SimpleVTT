@@ -32488,6 +32488,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "periapt-of-wound-closure": [
         {"double_hit_die_healing": True, "requires_attunement": True},
     ],
+    # v2.233.0 — Periapt of Health (RAW DMG p.184, uncommon, no attunement).
+    # RAW: "while wearing this pendant, you are immune to contracting any
+    # disease. If you're already infected with a disease, the effects … are
+    # suppressed while you wear it." The `disease_immune` flag aggregates in
+    # `_equipped_item_effects` (boolean OR, same substrate as the Ioun Stone
+    # of Sustenance / Awareness passives) and surfaces on `/sheet-json` as
+    # `derived.disease_immune = {sources}`. Disease mechanics are descriptive
+    # in v1 — this exposes the immunity as a derived read.
+    "periapt-of-health": [
+        {"disease_immune": True},
+    ],
 }
 
 
@@ -33458,6 +33469,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # proficiency bonus by 1.
         "proficiency_bonus": 0,
         "proficiency_bonus_sources": [],
+        # v2.233.0 — disease-immunity passive. Boolean OR across equipped
+        # items carrying the field; surfaced on `/sheet-json` derived.
+        # Periapt of Health (RAW DMG p.184) is the first entry — while worn
+        # you're immune to contracting disease.
+        "disease_immune": False,
+        "disease_immune_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33637,6 +33654,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if pb:
                 out["proficiency_bonus"] += pb
                 out["proficiency_bonus_sources"].append(item_name)
+            # v2.233.0 — disease-immunity passive (Periapt of Health, RAW
+            # DMG p.184). Boolean OR; the flag rides the item via the
+            # `disease_immune` payload (or a per-item `_disease_immune`
+            # rider).
+            if item.get("_disease_immune") or p.get("disease_immune"):
+                out["disease_immune"] = True
+                out["disease_immune_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90648,6 +90672,12 @@ async def get_character_sheet_json(
                     "effective": _pb_base + _pb_bonus,
                     "bonus": _pb_bonus,
                     "sources": list(_item_eff.get("proficiency_bonus_sources") or []),
+                }
+            # v2.233.0 — disease immunity (Periapt of Health). Only present
+            # when an equipped item sets the flag.
+            if _item_eff.get("disease_immune"):
+                derived["disease_immune"] = {
+                    "sources": list(_item_eff.get("disease_immune_sources") or []),
                 }
         except Exception:
             pass

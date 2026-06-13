@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2642 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.232.0, 2026-06-13).
+**Total tests:** 2645 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.233.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2483,6 +2483,15 @@ v2.228.0 — Ioun Stone of Protection (RAW DMG p.176, rare, attunement): the fir
 |------|-----------------|
 | `test_ioun_stone_protection_grants_ac_bonus` | Krieger swings at Mira → `target_ac == 16` (15 base + stone +1). |
 | `test_ioun_stone_protection_unequip_reverts_ac` | PATCH the stone to `equipped: False` → `target_ac == 15` (base, no bonus); restores the original inventory on teardown. |
+
+### `test_item_periapt_of_health.py`
+v2.233.0 — Periapt of Health (RAW DMG p.184, uncommon, no attunement): immunity to contracting disease while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness): the `disease_immune` flag rides the `periapt-of-health` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.disease_immune = {sources}`. Brother Tavik Stonebrow (Cleric Lv 8) wears it — no attunement, so it composes with his three attuned items without exceeding the RAW cap.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_periapt_exposes_disease_immune_on_sheet_json` | `GET /sheet-json` → `derived.disease_immune` present with "Periapt of Health" in `sources`. |
+| `test_periapt_coexists_with_attuned_items` | The flag and the Amulet of Health override compose: `derived.disease_immune` set AND `derived.effective_abilities.CON.effective` = 19. |
+| `test_periapt_unequip_drops_flag` | PATCH the periapt to `equipped: False` → `derived.disease_immune` absent; restores the original inventory on teardown. |
 
 ### `test_item_ioun_stone_mastery.py`
 v2.232.0 — Ioun Stone of Mastery (RAW DMG p.176, legendary, attunement): the last common SRD Ioun variant on the shared `ioun-stone` slug and the first to carry a real mechanical effect (a +1 proficiency-bonus override) rather than a passive flag. The +1 rides the inventory item via `_proficiency_bonus: 1`, sums in `_equipped_item_effects` (new `proficiency_bonus` field), surfaces on `/sheet-json` as `derived.proficiency_bonus = {base, effective, bonus, sources}`, and is appended to proficient saving throws in `/roll` (gated on `sheet["saving_throws"][ability]`). Quan Reelstep (Drunken Master Monk Lv 5) wears it as his 2nd attuned item — STR+DEX save proficient (PB 3→4), belt boosts only CON, so DEX/STR saves read the +1 unconfounded.
