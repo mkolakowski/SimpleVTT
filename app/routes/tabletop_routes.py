@@ -32521,6 +32521,14 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-resistance": [
         {"requires_attunement": True},
     ],
+    # v2.236.0 — Mantle of Spell Resistance (RAW DMG p.180, rare,
+    # attunement). RAW: "you have advantage on saving throws against
+    # spells while you wear this cloak." A descriptive-only advantage in
+    # v1 — surfaced as a derived read; the resolver doesn't yet fold it
+    # into save rolls automatically.
+    "mantle-of-spell-resistance": [
+        {"spell_save_advantage": True, "requires_attunement": True},
+    ],
 }
 
 
@@ -33511,6 +33519,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # rider on the shared `ring-of-resistance` slug.
         "resistance_to": [],
         "resistance_sources": [],
+        # v2.236.0 — spell-save-advantage passive. Boolean OR across
+        # equipped+attuned items carrying the field; surfaced on
+        # `/sheet-json` derived. Mantle of Spell Resistance (RAW DMG p.180)
+        # is the first entry — while worn you have advantage on saving
+        # throws against spells.
+        "spell_save_advantage": False,
+        "spell_save_advantage_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33716,6 +33731,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
                 if _rt_norm and _rt_norm not in out["resistance_to"]:
                     out["resistance_to"].append(_rt_norm)
                     out["resistance_sources"].append(item_name)
+            # v2.236.0 — spell-save-advantage passive (Mantle of Spell
+            # Resistance, RAW DMG p.180). Boolean OR; the flag rides the
+            # item via the `spell_save_advantage` payload (or a per-item
+            # `_spell_save_advantage` rider).
+            if item.get("_spell_save_advantage") or p.get("spell_save_advantage"):
+                out["spell_save_advantage"] = True
+                out["spell_save_advantage_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90764,6 +90786,12 @@ async def get_character_sheet_json(
                 derived["resistances"] = {
                     "types": _item_resist_types,
                     "sources": list(_item_eff.get("resistance_sources") or []),
+                }
+            # v2.236.0 — spell-save advantage (Mantle of Spell Resistance).
+            # Only present when an equipped+attuned item sets the flag.
+            if _item_eff.get("spell_save_advantage"):
+                derived["spell_save_advantage"] = {
+                    "sources": list(_item_eff.get("spell_save_advantage_sources") or []),
                 }
         except Exception:
             pass

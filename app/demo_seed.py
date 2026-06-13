@@ -3352,6 +3352,17 @@ def _monk_drunken_sheet(name: str) -> dict:
              "attuned": True, "weight_lb": 0,
              "_slug": "ioun-stone", "_proficiency_bonus": 1,
              "desc": "Legendary wondrous item, attunement. This dull grey ioun stone orbits your head and increases your proficiency bonus by 1. RAW DMG p.176."},
+            # v2.236.0 — Mantle of Spell Resistance (RAW DMG p.180, rare,
+            # attunement). Quan's 3rd attuned item (RAW max 3). While worn
+            # you have advantage on saving throws against spells. Rides the
+            # `mantle-of-spell-resistance` catalog payload (`spell_save_advantage`);
+            # surfaced on /sheet-json as derived.spell_save_advantage. A
+            # monk deflecting hostile magic with a flowing mantle is on-theme.
+            {"name": "Mantle of Spell Resistance", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 0,
+             "attuned": True, "weight_lb": 1,
+             "_slug": "mantle-of-spell-resistance",
+             "desc": "Rare wondrous item, attunement. You have advantage on saving throws against spells while you wear this cloak. RAW DMG p.180."},
         ],
         "feats": [],
         "resources": [

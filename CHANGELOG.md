@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.236.0] - 2026-06-13 — "The Unruffled Cloak"
+
+**Schema version:** 69
+
+**Commit summary:** Mantle of Spell Resistance — spell-save-advantage passive (`derived.spell_save_advantage`) on a new boolean-OR substrate field, riding the `mantle-of-spell-resistance` catalog payload.
+
+**Description:** The **Mantle of Spell Resistance** (RAW DMG p.180, rare, attunement) grants advantage on saving throws against spells while worn. It reuses the boolean-OR passive substrate (Sustenance v2.230.0 / Awareness v2.231.0 / Periapt of Health v2.233.0 / Amulet of Proof v2.234.0): the `spell_save_advantage` flag rides the `mantle-of-spell-resistance` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects` (a new `spell_save_advantage` field + `spell_save_advantage_sources`), and surfaces on `/sheet-json` as `derived.spell_save_advantage = {sources}`. The advantage is descriptive-only in v1 — this exposes the protection as a derived read; the save resolver doesn't yet fold it into rolls automatically. Demo: Quan Reelstep (Way of the Drunken Master Monk) wears it as his 3rd attuned item (Belt of Dwarvenkind + Ioun Stone of Mastery + mantle, RAW max 3) — a monk deflecting hostile magic with a flowing mantle. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `spell_save_advantage` / `spell_save_advantage_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped+attuned items carrying the `spell_save_advantage` payload or a per-item `_spell_save_advantage` rider).
+- `/sheet-json` `derived.spell_save_advantage = {sources}` — present only when an equipped+attuned item sets the flag.
+- `mantle-of-spell-resistance` entry in `_MAGIC_ITEM_PASSIVES` (`spell_save_advantage: True`, `requires_attunement: True`).
+- Demo seed: Mantle of Spell Resistance on Quan Reelstep (`_slug: "mantle-of-spell-resistance"`, equipped + attuned — his 3rd attunement slot).
+- `tests/harness/test_item_mantle_of_spell_resistance.py` (3 tests): `derived.spell_save_advantage` lists the mantle in sources; composes with the Ioun Stone of Mastery's proficiency bonus (PB 4); unequip drops the flag.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2651 → 2654; added the `test_item_mantle_of_spell_resistance.py` section.
+
 ## [2.235.1] - 2026-06-13 — "The Honest Ember"
 
 **Schema version:** 69
