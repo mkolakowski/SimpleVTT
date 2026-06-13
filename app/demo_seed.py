@@ -2654,6 +2654,18 @@ def _ranger_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+            # v2.219.0 — ability-score override engine drop-in
+            # (docs/plans/str-override.md). Gauntlets of Ogre Power (RAW DMG
+            # p.171, uncommon, attunement): while worn, STR *becomes* 19 if
+            # not already higher. Same `ability_set` substrate as the Belt
+            # of Giant Strength, on STR — composes with it via the
+            # highest-wins map. Seeded on Rowan (Ranger, base STR 12 → mod
+            # +1) — his 1st attuned item (RAW max 3) — so effective STR 19
+            # (mod +4): a +3 STR-save/check delta and carry cap 180 → 285.
+            {"name": "Gauntlets of Ogre Power", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "gauntlets-of-ogre-power",
+             "desc": "Uncommon wondrous item, attunement. Your Strength score is 19 while worn (no effect if your STR is already 19+). RAW DMG p.171."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,

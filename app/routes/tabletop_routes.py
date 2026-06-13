@@ -32385,6 +32385,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "headband-of-intellect": [
         {"ability_set": {"INT": 19}, "requires_attunement": True},
     ],
+    # v2.219.0 — Gauntlets of Ogre Power (RAW DMG p.171, uncommon,
+    # attunement; see docs/plans/str-override.md). While worn, your STR
+    # *becomes* 19 if not already higher — same `ability_set` substrate as
+    # the Belt (STR), so it composes with the Belt of Giant Strength via
+    # the highest-wins map (a Hill belt's 21 would win; ungauntleted a low
+    # STR is raised to 19). The override flows to STR saves/checks, weapon
+    # attack/damage (/attack), and carry capacity automatically; a pure
+    # data drop-in on the now-complete engine.
+    "gauntlets-of-ogre-power": [
+        {"ability_set": {"STR": 19}, "requires_attunement": True},
+    ],
 }
 
 

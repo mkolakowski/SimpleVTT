@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.219.0] - 2026-06-13 — "The Ogre's Grip"
+
+**Schema version:** 69
+
+**Commit summary:** Second drop-in on the completed ability-score override engine (docs/plans/str-override.md): Gauntlets of Ogre Power (RAW DMG p.171, uncommon, attunement) — while worn, your Strength score *becomes* 19 if it isn't already higher. Pure data: one `_MAGIC_ITEM_PASSIVES` row (`ability_set {STR: 19}`) + a demo seed + tests. No new code paths — the override flows through every read site the engine already wired (saves, ability/skill checks, sheet display, carry capacity, `/sheet-json`).
+
+**Description:** Like the Headband (v2.218.0), the Gauntlets prove the engine takes score-setting items as data, not code. Adding `gauntlets-of-ogre-power` to `_MAGIC_ITEM_PASSIVES` with `ability_set {STR: 19}` (attunement) makes effective STR resolve via the existing RAW max(base, set), composing with the Belt of Giant Strength through the same highest-wins map — wear both and the larger value wins. The override flows automatically into STR saves + STR-based ability/skill checks (Athletics) at `/roll`, the boosted-ability sheet card (the v2.214.0 display reads `effective_abilities`), carry capacity (STR × 15), and `/sheet-json`'s `derived.effective_abilities`. Demo: Rowan Quickbow (Ranger, base STR 12 → mod +1, 180 lb cap) wears an equipped+attuned Gauntlets of Ogre Power — his 1st attuned item (RAW max 3) — so effective STR 19 (mod +4), a +3 delta, carry capacity 285 lb. MINOR — additive catalog passive + seed + tests, no schema change.
+
+### Added
+- `gauntlets-of-ogre-power` entry in `_MAGIC_ITEM_PASSIVES` (`ability_set {STR: 19}`, attunement).
+- Demo seed: Gauntlets of Ogre Power on Rowan Quickbow, equipped + attuned.
+- `tests/harness/test_item_gauntlets_of_ogre_power.py` (4 tests): effective STR 19 on `/sheet-json`, carry capacity 285, STR-save override delta (+3), unequip-reverts.
+
+### Changed
+- `docs/plans/str-override.md`: Gauntlets listed as a shipped drop-in alongside the Headband.
+- `docs/test-harness-coverage.md`: harness total 2601 → 2605; added the `test_item_gauntlets_of_ogre_power.py` section.
+
+---
+
 ## [2.218.0] - 2026-06-13 — "The Clever Circlet"
 
 **Schema version:** 69
