@@ -26,6 +26,40 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    """Toggle the campaign's auto-apply-damage flag. The `/attack` path
+    only lands `damage_applied` on the target token when this flag is on;
+    without it `damage_applied` stays 0 and the halving assertions can't
+    observe the resistance pipeline."""
+    form = {
+        "name": "Demo Campaign",
+        "description": "demo",
+        "game_system": "dnd5e",
+        "gm_tab_color": "",
+        "font_override": "",
+        "default_encounter_id": "",
+        "hp_threshold_1": "",
+        "hp_threshold_2": "",
+        "hp_threshold_3": "",
+        "hp_threshold_4": "",
+        "auto_play_playlist_id": "",
+        "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form, follow_redirects=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def auto_apply_on(gm_client):
+    await _set_auto_apply(gm_client, True)
+    yield
+    await _set_auto_apply(gm_client, False)
+
+
 async def _seed_dice(gm_client, seed: int):
     resp = await gm_client.post(
         "/api/test/dice/seed", json={"seed": seed},
@@ -82,7 +116,7 @@ async def zara_rested(gm_client, roster):
 
 
 async def test_tiefling_halves_fire_damage(
-    gm_client, gm_ws, thalindra_rested, zara_rested,
+    gm_client, gm_ws, thalindra_rested, zara_rested, auto_apply_on,
 ):
     """Thalindra casts Fire Bolt at Zara (Tiefling Sorcerer). The
     damage rolls 2d10; after Hellish Resistance halves it, the
@@ -131,7 +165,7 @@ async def test_tiefling_halves_fire_damage(
 
 
 async def test_no_resistance_for_non_tiefling(
-    gm_client, gm_ws, thalindra_rested, roster,
+    gm_client, gm_ws, thalindra_rested, roster, auto_apply_on,
 ):
     """Control: Thalindra casts Fire Bolt at Pip (Halfling — no fire
     resistance). damage_applied should equal damage_rolled (no

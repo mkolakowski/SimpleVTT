@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.235.1] - 2026-06-13 — "The Honest Ember"
+
+**Schema version:** 69
+
+**Commit summary:** Fix pre-existing `test_hellish_resistance.py` failure — the two attack-path fire-damage tests never enabled the campaign's auto-apply-damage flag, so `damage_applied` stayed 0 and the halving assertions couldn't observe the resistance pipeline.
+
+**Description:** `tests/harness/test_hellish_resistance.py` casts Fire Bolt through the `/attack` endpoint and asserts on the response's `damage_applied`. But `/attack` only lands `damage_applied` on the target token when `campaign.auto_apply_damage` is on — and the test never set it (unlike its sibling `test_dragonborn_ancestry_resistance.py`, which carries an `auto_apply_on` fixture). With the flag off, every hit reported `damage_applied = 0` (`auto_applied: false`), so the Tiefling-halving test never found a halved hit and the non-Tiefling control never found a full hit. Both failed independently of any resistance logic. The fix ports the same `auto_apply_on` fixture (POSTs `auto_apply_damage=on` to `/campaign/{cid}/settings`, restores off in teardown) and wires it into both tests. Test-only change — no app code touched, harness total unchanged at 2651. PATCH.
+
+### Fixed
+- `tests/harness/test_hellish_resistance.py`: added the `auto_apply_on` fixture (mirrors `test_dragonborn_ancestry_resistance.py`) and wired it into `test_tiefling_halves_fire_damage` + `test_no_resistance_for_non_tiefling`, so the `/attack` damage is auto-applied to the target token and the halving / no-halving assertions can observe it. Both tests pass.
+
 ## [2.235.0] - 2026-06-13 — "The Warded Band"
 
 **Schema version:** 69
