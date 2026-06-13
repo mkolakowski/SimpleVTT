@@ -1521,6 +1521,23 @@ for _rdt, _rdi in _RESISTANCE_DAMAGE_ICONS.items():
         "desc": f"Resistance to {_rdt} damage for 1 hour.",
     }
 
+# v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): resistance to
+# ALL damage for 1 minute. Reuses the v2.99.121 `resistance_to: ["all"]`
+# wildcard that `_resistance_halve` already honours, so no new intercept is
+# needed — the damage pipeline halves every type while this buff is active.
+_SPELL_BUFF_MAP["resistance-all"] = {
+    "key": "resistance-all",
+    "name": "Invulnerability (All Damage)",
+    "icon": "🛡️",
+    "duration_rounds": 10,  # 1 minute @ 6 s/round
+    "duration_max": 10,
+    "concentration": False,
+    "effects": {
+        "resistance_to": ["all"],
+    },
+    "desc": "Resistance to all damage for 1 minute.",
+}
+
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
@@ -32275,6 +32292,22 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "buff_key": "resistance",
             "duration_rounds": 600,  # 1 hour @ 6 s/round
             "summary_effect": "resistance to one damage type for 1 hour",
+        },
+    },
+    # v2.190.0 — fourth self-buff potion. RAW DMG p.188 Potion of
+    # Invulnerability (rare): drink → resistance to ALL damage for 1
+    # minute, no concentration. Reuses the `resistance-all` template
+    # whose `effects.resistance_to: ["all"]` wildcard the damage
+    # pipeline already honours — every type is halved while active.
+    "potion-of-invulnerability": {
+        "key": "drink",
+        "name": "Drink Potion of Invulnerability",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "resistance-all",
+            "duration_rounds": 10,  # 1 minute @ 6 s/round
+            "summary_effect": "resistance to all damage for 1 minute",
         },
     },
 }
@@ -79391,7 +79424,10 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug in ("potion-of-heroism", "potion-of-speed", "potion-of-resistance"):
+    if slug in (
+        "potion-of-heroism", "potion-of-speed",
+        "potion-of-resistance", "potion-of-invulnerability",
+    ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
             resistance_type=body.get("resistance_type"),

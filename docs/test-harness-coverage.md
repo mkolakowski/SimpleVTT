@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2539 in `tests/harness/` + 77 in `tests/harness_ui/` (as of v2.189.0, 2026-06-12).
+**Total tests:** 2541 in `tests/harness/` + 77 in `tests/harness_ui/` (as of v2.190.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2670,6 +2670,14 @@ v2.188.0 — drink-time damage-type pick for a GENERIC (untyped) Potion of Resis
 |------|-----------------|
 | `test_chosen_lightning_is_halved` | Drink the generic potion with `resistance_type: "lightning"` (`buff_key: "resistance-lightning"`), then 20 lightning damage drops HP by exactly 10. |
 | `test_unchosen_fire_is_not_halved` | Control: 20 fire damage drops HP by the full 20 — proving the drink-time pick was lightning, not fire. |
+
+### `test_potion_of_invulnerability.py`
+v2.190.0 — Potion of Invulnerability (RAW DMG p.188, rare): the fourth self-buff potion. Drinking installs the `resistance-all` template whose `effects.resistance_to: ["all"]` wildcard `_resistance_halve` already honours, so EVERY damage type is halved for 1 minute (no concentration). Garrik drinks his seeded potion in an active battle; the file proves two unrelated types are both halved from the single wildcard.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_fire_is_halved` | Drink in battle (`buff_key: "resistance-all"`, `buff_installed: True`), then 20 fire damage drops HP by exactly 10. |
+| `test_necrotic_is_also_halved` | A different type from the same wildcard: 20 necrotic also drops HP by 10 — distinguishes Invulnerability (all types) from Potion of Resistance (one chosen type). |
 
 ### `test_self_buff_potion_in_battle.py`
 v2.185.1 — in-battle proof that `_use_item_action_self_buff_potion` actually installs its buff. The per-potion tests only assert `buff_installed` is a *bool* (the install is best-effort and no-ops outside combat). This file puts Garrik in an active solo battle (`PUT /battle`, `active: True`) FIRST, then drinks each potion and asserts the install succeeded AND the buff key shows up in `GET /character/{id}/buffs`. The fixture snapshots/restores his inventory and clears the battle in teardown.

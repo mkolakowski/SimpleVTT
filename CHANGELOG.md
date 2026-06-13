@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.190.0] - 2026-06-12 — "The Liquid Iron"
+
+**Schema version:** 69
+
+**Commit summary:** Fourth self-buff potion — Potion of Invulnerability (RAW DMG p.188, rare): drink → resistance to **all** damage for 1 minute, reusing the `resistance_to: ["all"]` wildcard the damage pipeline already honours.
+
+**Description:** Continues the consumable-automation arc. A new `resistance-all` `_SPELL_BUFF_MAP` template carries `effects.resistance_to: ["all"]` — the v2.99.121 wildcard that `_resistance_halve` already matches against every damage type — so a single buff halves all ten RAW types with zero new intercept wiring. The `_MAGIC_ITEM_ACTIONS['potion-of-invulnerability']` self-buff entry installs it for 1 minute (10 rounds), no concentration, and the `/use_item_action` self-buff dispatch tuple gains the new slug. A new `potion-of-invulnerability.json` SRD catalog item lands the master-catalog row, and Garrik Ironside carries a seeded instance alongside his three Potion of Resistance rows. MINOR — additive content + buff template + catalog action, no endpoint or schema change.
+
+### Added
+- `resistance-all` buff template (`effects.resistance_to: ["all"]`, 1 minute, no concentration) — halves every damage type via the existing wildcard.
+- `_MAGIC_ITEM_ACTIONS['potion-of-invulnerability']` self-buff drink action; the `/use_item_action` self-buff dispatch tuple now includes `potion-of-invulnerability`.
+- `app/data/local/dnd5e/items/potion-of-invulnerability.json` — SRD catalog item (rare potion).
+- Demo seed: Garrik Ironside carries a Potion of Invulnerability.
+- `tests/harness/test_potion_of_invulnerability.py` (2 tests): drink in battle installs `resistance-all`; 20 fire → -10 and 20 necrotic → -10 (two unrelated types from the one wildcard).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2539 → 2541; added the `test_potion_of_invulnerability.py` section.
+
 ## [2.189.0] - 2026-06-12 — "The Apothecary's Menu"
 
 **Schema version:** 69
