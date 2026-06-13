@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.194.0] - 2026-06-12 — "The Kindled Tap"
+
+**Schema version:** 69
+
+**Commit summary:** Sheet inventory button for the Potion of Fire Breath — the offensive consumable shipped API-only in v2.193.0; this adds an `aoe-sphere` `ITEM_ACTION_SLUGS` entry so the row renders a 🔥 Exhale Fire button that drives the center-target → sphere-targets → AoE-confirm click chain.
+
+**Description:** Closes the UI gap left by v2.193.0, mirroring how v2.191.0 added Drink buttons for the parameterless self-buff potions. The Potion of Fire Breath reuses the existing `aoe-sphere` kind (center-target picker → `/battle/sphere-targets` with `radius_ft` → AoE-confirm modal → `/use_item_action` with `target_combatant_ids`) rather than inventing a new flow. To make that kind serve an offensive consumable, the hardcoded sphere confirm-modal DC is parameterized to `cfg.save_dc || 15` and the submit label to `cfg.submit_label || '💥 Fire'`, and the consumed-row sync gate is broadened from the resistance-pick/self-buff-drink kinds to fire for any `data.consumed` response so the potion row drops after exhaling. MINOR — additive UI, no endpoint or schema change.
+
+### Added
+- `ITEM_ACTION_SLUGS['potion-of-fire-breath']` (`aoe-sphere` kind, `breathe` action, 15 ft radius / 30 ft range, DC 13) → a 🔥 Exhale Fire button on the row.
+- `tests/harness_ui/test_fire_breath_button_ui.py` (1 test): Garrik's Potion of Fire Breath row renders the Exhale Fire button (the full click chain needs a loaded battle/map, so this proves the button renders).
+
+### Changed
+- Parameterized the `aoe-sphere` confirm-modal DC (`cfg.save_dc || 15`) and submit label (`cfg.submit_label || '💥 Fire'`) so the offensive consumable narrates its own DC.
+- Broadened the consumed-row sync to fire for any `data.consumed` response (was resistance-pick / self-buff-drink only).
+- `docs/test-harness-coverage.md`: UI total 79 → 80; added the `test_fire_breath_button_ui.py` section.
+
 ## [2.193.0] - 2026-06-12 — "The Dragon's Sip"
 
 **Schema version:** 69

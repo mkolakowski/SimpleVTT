@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2545 in `tests/harness/` + 79 in `tests/harness_ui/` (as of v2.193.0, 2026-06-12).
+**Total tests:** 2545 in `tests/harness/` + 80 in `tests/harness_ui/` (as of v2.194.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3786,6 +3786,13 @@ v2.191.0 — plain Drink buttons for the parameterless self-buff potions (Herois
 |------|-----------------|
 | `test_self_buff_drink_buttons_render` | Each of the three rows (Potion of Heroism / Speed / Invulnerability) shows a visible `.inv-item-action` Drink button. |
 | `test_invulnerability_drink_posts_plain_action` | Clicking 🛡️ Drink on Potion of Invulnerability POSTs `/use_item_action` with `action_key:"drink"` and NO `resistance_type` (no modal). POST intercepted via `page.route` so the seeded potion isn't consumed. |
+
+### `test_fire_breath_button_ui.py`
+v2.194.0 — sheet inventory button for the Potion of Fire Breath. The offensive consumable shipped API-only in v2.193.0; the `aoe-sphere` `ITEM_ACTION_SLUGS` entry renders a 🔥 Exhale Fire button (the full center-target → sphere-targets → AoE-confirm click chain needs a loaded battle/map, so this proves the button renders only). Garrik carries the seeded potion.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_fire_breath_button_renders` | Garrik's Potion of Fire Breath `.inv-row` shows a visible `.inv-item-action` button containing "Exhale Fire" (aoe-sphere kind, equipped consumable). |
 
 ---
 

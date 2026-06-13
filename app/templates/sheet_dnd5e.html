@@ -7136,6 +7136,18 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           label: '⚡ Drink', title: '⚡ Potion of Speed'},
         'potion-of-invulnerability': {kind: 'self-buff-drink', action_key: 'drink',
                           label: '🛡️ Drink', title: '🛡️ Potion of Invulnerability'},
+        // v2.194.0 — first OFFENSIVE consumable button. Potion of Fire
+        // Breath (RAW DMG p.187): drink + exhale fire at the area. Reuses
+        // the necklace's `aoe-sphere` flow (center-target picker → /battle/
+        // sphere-targets → AoE confirm modal → POST), then consumes the
+        // potion (the broadened `data.consumed` sync drops the local row).
+        'potion-of-fire-breath': {kind: 'aoe-sphere',
+                          action_key: 'breathe',
+                          label: '🔥 Exhale Fire',
+                          title: 'Drink + exhale fire — each creature in the area makes a DC 13 DEX save, 4d6 fire (half on a success). Consumes the potion.',
+                          radius_ft: 15,
+                          max_range_ft: 30,
+                          save_dc: 13},
         // v2.159.6 — Phase 8f: Javelin of Lightning AoE-line wire-up.
         // The Use button opens a 2-stage flow: stage 1 picks the
         // javelin's target via vttOpenMultiTargetPicker (existing
@@ -7753,9 +7765,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     } catch (e) {}
                     const aoePicked = await window._showAoEConfirmModal({
                         title: `${cfg.label || '💥 Throw Bead'}`,
-                        body: `${cfg.radius_ft || 20}-ft sphere centered on the picked target. Each creature in the burst must make a DC 15 DEX save (half on pass).`,
+                        body: `${cfg.radius_ft || 20}-ft area centered on the picked target. Each creature in the burst must make a DC ${cfg.save_dc || 15} DEX save (half on pass).`,
                         combatants: sphereResults,
-                        submit_label: '💥 Fire',
+                        submit_label: cfg.submit_label || '💥 Fire',
                     });
                     if (aoePicked === null) return;
                     body.action_key = cfg.action_key;
@@ -7888,10 +7900,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // v2.189.0 — consumed potion sync: drop / decrement the
                     // local inventory row so the button doesn't linger on a
                     // spent potion. The server already consumed it; mirror
-                    // its `remaining_qty` locally.
-                    if ((cfg.kind === 'resistance-pick'
-                            || cfg.kind === 'self-buff-drink')
-                            && data.consumed) {
+                    // its `remaining_qty` locally. v2.194.0 — gate on
+                    // `data.consumed` alone so any consumable (incl. the
+                    // offensive Potion of Fire Breath, kind 'aoe-sphere')
+                    // syncs; charge-tracked items don't return `consumed`.
+                    if (data.consumed) {
                         if (!data.remaining_qty || data.remaining_qty <= 0) {
                             inventory.splice(idx, 1);
                         } else {
