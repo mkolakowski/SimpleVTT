@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
@@ -23,6 +24,26 @@ from .helpers import WSCollector, login_client, open_ws
 
 
 CAMPAIGN_ID = int(os.getenv("HARNESS_TEST_CAMPAIGN", "1"))
+
+
+# v2.183.23 — spell-validation suite Phase 5. Auto-tag the
+# spell-validation files with the ``spell_catalog`` marker by filename
+# so the dedicated CI job (`pytest -m spell_catalog`) selects them
+# without a hand-maintained path list. New spell-validation files join
+# the job automatically as long as they follow the naming convention:
+# the catalog-iterating Phase 1-2 files (``test_spell_*``), the Phase
+# 3-4 per-spell deep-dives (``test_cast_*``), plus the AC-buff deep-dive
+# (``test_ac_buff_spells``). The marker is also useful locally —
+# ``pytest tests/harness/ -m spell_catalog`` runs just the spell suite.
+_SPELL_CATALOG_PREFIXES = ("test_spell_", "test_cast_")
+_SPELL_CATALOG_EXACT = {"test_ac_buff_spells.py"}
+
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        fn = Path(str(item.fspath)).name
+        if fn.startswith(_SPELL_CATALOG_PREFIXES) or fn in _SPELL_CATALOG_EXACT:
+            item.add_marker("spell_catalog")
 
 
 @pytest_asyncio.fixture

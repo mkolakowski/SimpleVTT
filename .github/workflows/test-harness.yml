@@ -145,6 +145,127 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  # v2.183.23 — spell-validation suite Phase 5 (see
+  # docs/plans/spell-validation-suite.md). A dedicated, independently-
+  # dispatchable gate over the spell-validation suite: the Phase 1-2
+  # catalog iterators + the Phase 3-4 per-spell deep-dives, selected by
+  # the ``spell_catalog`` marker (auto-applied by filename in
+  # tests/harness/conftest.py). A red ``spell-catalog`` job says "a
+  # spell's contract broke" without hunting through the full harness
+  # report. Boots its own stack so it doesn't fight the harness job over
+  # ports.
+  #
+  # Runs SERIALLY (no pytest-xdist). The plan's <90 s / xdist target is
+  # deferred: the harness talks to ONE shared stateful stack (campaign
+  # 1, the shared demo PCs, the autouse ``clean_pcs`` reset), and the
+  # spell deep-dives patch spells onto shared PCs (Thalindra / Tavik /
+  # Mira / Magnus / Zara) — parallel workers would stomp each other's
+  # sheet patches. Safe xdist needs per-worker stack isolation, a
+  # separate future effort; until then this job favors determinism over
+  # wall-clock.
+  spell-catalog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install test deps
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Write CI .env
+        run: |
+          cat > .env <<'EOF'
+          APP_PORT=8013
+          APP_SECRET_KEY=ci-deterministic-not-a-real-secret-spell-${{ github.run_id }}
+          APP_BASE_URL=http://localhost:8013
+          APP_ALLOW_LOCAL_REGISTRATION=true
+          ADMINS=demo-gm@example.com
+          CHARACTER_TEMPLATES=generic,dnd5e
+          APP_DEFAULT_THEME=sepia
+          GOOGLE_SSO_ENABLED=false
+          GOOGLE_SSO_CLIENT_ID=
+          GOOGLE_SSO_CLIENT_SECRET=
+          POSTGRES_USER=simplevtt
+          POSTGRES_PASSWORD=ci-test-password
+          POSTGRES_DB=simplevtt
+          BACKUP_CRON=0 3 * * *
+          KEEP_DAILY=7
+          KEEP_WEEKLY=4
+          DEMO_MODE=true
+          DEMO_RESET_INTERVAL_MINUTES=60
+          DEMO_RESET_ON_BOOT=true
+          DEMO_CREDENTIALS_VISIBLE=true
+          TEST_MODE=true
+          EOF
+
+      - name: Build and start stack
+        run: docker compose up -d --build
+
+      - name: Wait for /healthz
+        run: |
+          for i in {1..45}; do
+            if curl -fs http://localhost:8013/healthz > /dev/null; then
+              echo "Stack healthy after ~$((i*2))s"
+              curl -s http://localhost:8013/version
+              exit 0
+            fi
+            echo "Waiting for stack... ($i/45)"
+            sleep 2
+          done
+          echo "Stack didn't become healthy in 90s. Dumping logs."
+          docker compose logs app | tail -100
+          exit 1
+
+      - name: Sanity-check demo seed
+        run: |
+          curl -s -c /tmp/cookies.txt -X POST http://localhost:8013/login \
+            -d "email=demo-gm@example.com&password=demopass" -L > /dev/null
+          ROSTER=$(curl -s -b /tmp/cookies.txt http://localhost:8013/api/campaign/1/roster)
+          echo "$ROSTER" | grep -q "Thalindra Moonwhisper" || { echo "missing Thalindra"; exit 1; }
+          echo "$ROSTER" | grep -q "Brother Tavik Stonebrow" || { echo "missing Tavik"; exit 1; }
+          echo "$ROSTER" | grep -q "Mira Greenleaf" || { echo "missing Mira"; exit 1; }
+          echo "$ROSTER" | grep -q "Magnus Hexbinder" || { echo "missing Magnus"; exit 1; }
+          echo "$ROSTER" | grep -q "Zara Emberfire" || { echo "missing Zara"; exit 1; }
+
+      # ``-m spell_catalog`` selects the spell-validation suite (~260
+      # tests). ``-rA`` prints a full per-test summary so a failure's
+      # spell slug + assertion is greppable straight from the CI log
+      # without re-running locally (the Phase 5 failure-triage goal).
+      - name: Run spell-validation suite
+        run: |
+          mkdir -p reports
+          pytest tests/harness/ -m spell_catalog \
+            --junitxml=reports/spell-catalog.xml \
+            --html=reports/spell-catalog.html \
+            --self-contained-html \
+            -rA -v
+
+      - name: Upload spell-catalog reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: spell-catalog-reports
+          path: reports/
+          retention-days: 14
+
+      - name: Dump server logs on failure
+        if: failure()
+        run: docker compose logs app | tail -200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
   # Phase 4.5 (v2.13.1): Playwright UI-layer harness. Runs in parallel
   # with the harness job above so total wall-clock stays flat;
   # independent stack boot so the two jobs don't fight over ports.
