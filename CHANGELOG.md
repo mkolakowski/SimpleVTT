@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.226.0] - 2026-06-13 — "The Dwarven Cinch"
+
+**Schema version:** 69
+
+**Commit summary:** Belt of Dwarvenkind — the first magic item whose single passive payload composes two existing override substrates at once: a capped-additive CON +2 (max 20) and darkvision 60 ft.
+
+**Description:** Every ability/sense item shipped to date lit up exactly one substrate field — the Ioun Stone the `ability_bonus` engine (v2.224.0), the Goggles of Night the `sees_in_darkness` engine (v2.159.24). The **Belt of Dwarvenkind** (RAW DMG p.155, rare, attunement) is the first to ride both in one payload: it *increases* CON by 2 "to a maximum of 20" (capped-additive, same field as the Ioun Stone of Fortitude) AND grants darkvision out to 60 ft (same field as the Goggles). Neither needed new engine code — `_equipped_item_effects` already aggregates both, so the belt's CON bonus flows to `/sheet-json` (`derived.effective_abilities.CON` + the second-order `effective_max_hp`) and its darkvision flows to the darkness-blinded `/attack` path. This proves the override substrate composes orthogonally: a single item can stack ability + sensory effects without bespoke wiring. The belt's other RAW benefits (advantage on saves vs poison, poison resistance, advantage on CHA(Persuasion) with dwarves, speak/read Dwarvish, the dwarf-only darkvision gate) are descriptive-only in v1 and live in the item desc. Demo: Quan Reelstep (Way of the Drunken Master Monk, Human, base CON 14 → effective 16, mod +2 → +3) wears the belt — his 1st attuned item, and as a non-dwarf he qualifies for the darkvision gate. MINOR — additive content + tests on the shipped substrate, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES["belt-of-dwarvenkind"]`: a single payload combining `ability_bonus {"CON": 2}` + `ability_bonus_cap 20` (capped-additive) with `sees_in_darkness` + `darkvision_ft 60` (sensory) — the first multi-substrate item.
+- Demo seed: Belt of Dwarvenkind on Quan Reelstep (Drunken Master Monk, base CON 14 → effective 16), equipped + attuned (his 1st of the RAW-3 attunement slots).
+- `tests/harness/test_item_belt_of_dwarvenkind.py` (3 tests): effective CON 16 (mod +3) with belt source on `/sheet-json`, the belt's darkvision canceling darkness-blinded attack disadvantage (mirror of the Goggles path), and unequip reverting the CON bonus.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2622 → 2625; added the `test_item_belt_of_dwarvenkind.py` section.
+
 ## [2.225.0] - 2026-06-13 — "The Full Constellation"
 
 **Schema version:** 69

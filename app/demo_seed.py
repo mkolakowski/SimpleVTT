@@ -3243,6 +3243,18 @@ def _monk_drunken_sheet(name: str) -> dict:
             {"name": "Jug of cheap wine", "type": "gear", "qty": 1,
              "weight_lb": 5,
              "desc": "Folk Hero flair — the prop the drunken weave hides behind."},
+            # v2.226.0 — Belt of Dwarvenkind (RAW DMG p.155, rare,
+            # attunement). Quan's 1st attuned item (he had none). Composes
+            # two substrate fields at once: CON 14 → 16 (capped-additive
+            # `ability_bonus`, same engine as the Ioun Stone) AND darkvision
+            # 60 ft (`sees_in_darkness`, same field as Goggles of Night). As
+            # a Human (non-dwarf) Quan qualifies for the belt's darkvision
+            # gate. The CON +2 also bumps his effective max-HP (+1/level).
+            {"name": "Belt of Dwarvenkind", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 0,
+             "attuned": True, "weight_lb": 0,
+             "_slug": "belt-of-dwarvenkind",
+             "desc": "Rare wondrous item, attunement. CON +2 (max 20); advantage on saves vs poison and resistance to poison damage; darkvision 60 ft; advantage on CHA(Persuasion) with dwarves; speak/read/write Dwarvish. RAW DMG p.155."},
         ],
         "feats": [],
         "resources": [

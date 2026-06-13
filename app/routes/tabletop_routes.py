@@ -32424,6 +32424,26 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ioun-stone": [
         {"ability_bonus": {}, "ability_bonus_cap": 20, "requires_attunement": True},
     ],
+    # v2.226.0 — Belt of Dwarvenkind (RAW DMG p.155, rare, attunement).
+    # The first item to compose TWO existing substrate fields in a single
+    # payload: a capped-additive CON +2 to max 20 (the v2.224.0 Ioun
+    # `ability_bonus` substrate) AND darkvision 60 ft (the v2.159.24
+    # Goggles-of-Night `sees_in_darkness` substrate). Zero new engine code —
+    # both fields already aggregate in `_equipped_item_effects` and flow to
+    # `/sheet-json` (effective CON + effective max-HP) and the darkness-
+    # blinded attack path. The belt's other RAW benefits (advantage on
+    # saves vs poison, poison resistance, advantage on CHA(Persuasion) with
+    # dwarves, speak/read Dwarvish, the dwarf-only darkvision gate) are
+    # descriptive-only in v1 and live in the item desc.
+    "belt-of-dwarvenkind": [
+        {
+            "ability_bonus": {"CON": 2},
+            "ability_bonus_cap": 20,
+            "sees_in_darkness": True,
+            "darkvision_ft": 60,
+            "requires_attunement": True,
+        },
+    ],
 }
 
 
