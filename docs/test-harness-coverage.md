@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2628 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.227.0, 2026-06-13).
+**Total tests:** 2630 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.228.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2475,6 +2475,14 @@ v2.227.0 — Periapt of Wound Closure (RAW DMG p.184, uncommon, attunement): the
 | `test_periapt_doubles_short_rest_hit_die_healing` | Seraphine `/rest` short → `hit_die_healing_doubled is True`, `recovered_pre_double` ≥ 1, `recovered == 2 × recovered_pre_double`, and the breakdown names "Periapt of Wound Closure". |
 | `test_short_rest_without_periapt_not_doubled` | Control: Pip (no periapt) `/rest` short → `hit_die_healing_doubled is False`, `recovered_pre_double` is null. |
 | `test_periapt_unequip_stops_doubling` | Unequip the periapt → `/rest` short no longer doubles (flag False, pre null); restores the original inventory on teardown. |
+
+### `test_item_ioun_stone_protection.py`
+v2.228.0 — Ioun Stone of Protection (RAW DMG p.176, rare, attunement): the first non-ability Ioun variant and the first item to ride a per-inventory-item AC override. It grants +1 AC with no ability payload; rather than mint a fake per-variant slug, the AC bonus rides the inventory item via `_ac_bonus: 1` on the shared `ioun-stone` slug and wins over the catalog default in `_equipped_item_effects` (same per-item shape as `_ability_set` / `_ability_bonus`). Mira Greenleaf (Druid, base AC 15 = studded leather 12 + DEX +3) wears it equipped+attuned (her 3rd attuned item) → combat AC 16.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ioun_stone_protection_grants_ac_bonus` | Krieger swings at Mira → `target_ac == 16` (15 base + stone +1). |
+| `test_ioun_stone_protection_unequip_reverts_ac` | PATCH the stone to `equipped: False` → `target_ac == 15` (base, no bonus); restores the original inventory on teardown. |
 
 ### `test_item_ring_of_protection.py`
 v2.158.76 magic-items-automation Phase 1b — second catalog entry. Same +1 AC / +1 saves shape as the Cloak (RAW DMG p.191) on a different slot (finger vs neck), validating that the v2.158.74 catalog scales additively. Tavik Stonebrow (Cleric Lv 8, AC 18, WIS save +6) is the canary because his base AC + save mod are clean integers and he's a different PC from Thalindra so the AC + save assertions don't interact.

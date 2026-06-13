@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.228.0] - 2026-06-13 — "The Dusty Rose Prism"
+
+**Schema version:** 69
+
+**Commit summary:** Ioun Stone of Protection — the first non-ability Ioun variant and the first item to ride a per-inventory-item AC override (`_ac_bonus`).
+
+**Description:** Every Ioun Stone shipped so far raised an ability score via the per-item `_ability_bonus` rider on the shared `ioun-stone` slug. The **Ioun Stone of Protection** (RAW DMG p.176, rare, attunement) is the first variant with no ability payload at all: it grants +1 AC while the dusty-rose prism orbits your head. To land it on the single shared slug without minting a fake per-variant slug, `_equipped_item_effects` now reads a per-inventory-item `_ac_bonus` override that wins over the catalog payload's `ac_bonus` default — the same per-item override shape the giant belt tiers (`_ability_set`) and ability ioun variants (`_ability_bonus`) already use. The bonus flows through the existing AC aggregation, so an attack against the wielder reports `target_ac` raised by 1 with no other wiring. The stone's other RAW clauses are descriptive-only in v1. Demo: Mira Greenleaf (Druid, base AC 15 = studded leather 12 + DEX +3) wears an equipped + attuned stone — her 3rd attuned item (after the Vorpal Scimitar + Headband of Intellect, RAW max 3) — so her combat AC is 16. MINOR — additive per-item AC override + content + tests on the shipped substrate, no schema change.
+
+### Added
+- Per-inventory-item `_ac_bonus` override in `_equipped_item_effects`: an item's `_ac_bonus` wins over the catalog payload's `ac_bonus` default, mirroring the `_ability_set` / `_ability_bonus` per-item rider pattern.
+- Demo seed: Ioun Stone of Protection on Mira Greenleaf (`_slug: "ioun-stone"`, `_ac_bonus: 1`, equipped + attuned — her 3rd of the RAW-3 attunement slots).
+- `tests/harness/test_item_ioun_stone_protection.py` (2 tests): an attack against Mira reports `target_ac` 16 (15 base + 1 stone), and unequipping the stone reverts `target_ac` to 15.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2628 → 2630; added the `test_item_ioun_stone_protection.py` section.
+
 ## [2.227.0] - 2026-06-13 — "The Closing Wound"
 
 **Schema version:** 69

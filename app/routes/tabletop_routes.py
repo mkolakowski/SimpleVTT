@@ -33428,8 +33428,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
                 continue
             if p.get("requires_no_shield") and _pc_is_wearing_shield(sheet):
                 continue
+            # v2.228.0 — per-inventory-item AC override. The SRD ships a
+            # single `ioun-stone` slug; the Protection variant (RAW DMG
+            # p.176, +1 AC) carries no ability payload, so its AC bonus
+            # rides the inventory item via `_ac_bonus` and wins over the
+            # catalog default (mirrors the `_ability_bonus` tier pattern).
+            item_ac = item.get("_ac_bonus")
             try:
-                ac = int(p.get("ac_bonus") or 0)
+                ac = int(item_ac) if item_ac is not None else int(p.get("ac_bonus") or 0)
             except (TypeError, ValueError):
                 ac = 0
             if ac:

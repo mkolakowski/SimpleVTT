@@ -1943,6 +1943,17 @@ def _druid_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "headband-of-intellect",
              "desc": "Uncommon wondrous item, attunement. Your Intelligence score is 19 while worn (no effect if your INT is already 19+). RAW DMG p.173."},
+            # v2.228.0 — per-item AC override drop-in. Ioun Stone of
+            # Protection (RAW DMG p.176, rare, attunement): grants +1 AC
+            # while orbiting your head. Rides the shared `ioun-stone` slug
+            # — the AC bonus is carried by `_ac_bonus` (no ability payload),
+            # winning over the catalog default in `_equipped_item_effects`.
+            # Mira's 3rd attuned item (after Vorpal Scimitar + Headband,
+            # RAW max 3). Base AC 15 → 16.
+            {"name": "Ioun Stone of Protection", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_ac_bonus": 1, "weight_lb": 0,
+             "desc": "Rare wondrous item, attunement. This dusty rose prism orbits your head, granting +1 AC. RAW DMG p.176."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).
