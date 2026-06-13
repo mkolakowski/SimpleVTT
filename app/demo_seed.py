@@ -3813,6 +3813,14 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-water-breathing",
              "desc": "Drink (action, /use_item_action drink) to breathe underwater for 1 hour. RAW DMG p.188."},
+            # v2.197.0 — second save-imposing consumable. Drinking probes a
+            # creature's mind (DC 13 WIS save; on a failure you read its
+            # surface thoughts) and consumes the potion. No damage — the
+            # thought-reading is GM-narrated. Reuses the Fire Breath save loop.
+            {"name": "Potion of Mind Reading", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-mind-reading",
+             "desc": "Drink + probe a mind (action, /use_item_action read): the target makes a DC 13 WIS save; on a failure you read its surface thoughts. Consumes the potion. RAW DMG p.187."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

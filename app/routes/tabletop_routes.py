@@ -32443,6 +32443,25 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.197.0 — second save-imposing consumable. RAW DMG p.187 Potion of
+    # Mind Reading (rare): drink → the detect thoughts effect (target makes
+    # a DC 13 WIS save; on a failure you read its surface thoughts). v1
+    # models the initial single-creature probe as a WIS save that consumes
+    # the potion — no damage, the thought-reading itself is GM-narrated.
+    # Reuses the Fire Breath per-target save loop (sans the damage roll).
+    "potion-of-mind-reading": {
+        "key": "read",
+        "name": "Read Thoughts",
+        "requires_attunement": False,
+        "consumable": True,
+        "actions": {
+            "read": {
+                "name": "Read Thoughts (30 ft)",
+                "save_dc": 13,
+                "save_ability": "WIS",
+            },
+        },
+    },
 }
 
 
@@ -79603,6 +79622,15 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
+    if slug == "potion-of-mind-reading":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_potion_of_mind_reading(
+            db, campaign_id, char, item, sheet, catalog,
+            action_key, action_def, inv_idx,
+            target_combatant_ids=body.get("target_combatant_ids") or [],
+            campaign=campaign,
+            prompt_user=user,
+        )
     if slug in (
         "potion-of-heroism", "potion-of-speed",
         "potion-of-resistance", "potion-of-invulnerability",
@@ -80329,6 +80357,117 @@ async def _use_item_action_potion_of_fire_breath(
         "item_name": item_name,
         "action_key": action_key,
         "dice": dice,
+        "save_dc": save_dc,
+        "save_ability": save_ability,
+        "results": results,
+        "consumed": consumed,
+        "remaining_qty": remaining_qty,
+    }
+
+
+async def _use_item_action_potion_of_mind_reading(
+    db, campaign_id, char, item, sheet, catalog,
+    action_key, action_def, inv_idx,
+    target_combatant_ids: list,
+    campaign=None,
+    prompt_user=None,
+):
+    """v2.197.0 — Potion of Mind Reading (RAW DMG p.187, rare): drink →
+    the detect thoughts effect (each probed creature makes a DC 13 WIS
+    save; on a failure you read its surface thoughts). v1 models the
+    probe as a WIS save that consumes the potion — no damage, the
+    thought-reading itself is GM-narrated. Reuses the Fire Breath
+    per-target save loop without the damage roll.
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    slug = str(item.get("_slug") or "potion-of-mind-reading")
+    if not isinstance(target_combatant_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
+    if len(target_combatant_ids) > 24:
+        raise HTTPException(400, "Too many targets for Potion of Mind Reading")
+
+    save_dc = int(action_def.get("save_dc") or 13)
+    save_ability = str(action_def.get("save_ability") or "WIS").upper()
+
+    results = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        target_c = _lookup_combatant(campaign_id, tid)
+        if not target_c:
+            results.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        try:
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=int(char.id),
+                caster_char_name=str(char.name or ""),
+                target_combatant=target_c,
+                save_ability=save_ability,
+                dc=save_dc,
+                note_label=f"Potion of Mind Reading (DC {save_dc} {save_ability})",
+                condition_buff=None,
+                repeated_save=False,
+                source=f"item-{slug}-save",
+                campaign=campaign,
+                prompt_user=prompt_user,
+                feature_name="🧠 Potion of Mind Reading",
+            )
+        except Exception:
+            logging.exception(
+                "Mind Reading save resolve failed for tid=%s", tid,
+            )
+            results.append({"combatant_id": tid, "reason": "save_error"})
+            continue
+        results.append({
+            "combatant_id": tid,
+            "name": target_c.get("name") or "Target",
+            "passed": sr.get("passed"),
+        })
+
+    # Consume the potion (decrement qty; drop the row at 0).
+    inventory = list(sheet.get("inventory") or [])
+    consumed = False
+    remaining_qty = None
+    if 0 <= inv_idx < len(inventory):
+        new_item = dict(inventory[inv_idx])
+        qty = int(new_item.get("qty") or 1)
+        remaining_qty = max(0, qty - 1)
+        consumed = True
+        if remaining_qty <= 0:
+            inventory.pop(inv_idx)
+        else:
+            new_item["qty"] = remaining_qty
+            inventory[inv_idx] = new_item
+        sheet["inventory"] = inventory
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
+
+    item_name = item.get("name") or "Potion of Mind Reading"
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": "🧠 Potion of Mind Reading",
+                "summary": (
+                    f"{char.name} drinks a {item_name} and probes minds "
+                    f"(DC {save_dc} {save_ability} save) "
+                    f"— {len(results)} save(s) resolved."
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item_name,
+        "action_key": action_key,
         "save_dc": save_dc,
         "save_ability": save_ability,
         "results": results,

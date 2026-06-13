@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.197.0] - 2026-06-12 — "The Purple Probe"
+
+**Schema version:** 69
+
+**Commit summary:** Second save-imposing consumable — Potion of Mind Reading (RAW DMG p.187, rare): drink → the detect thoughts effect (the probed creature makes a DC 13 WIS save; on a failure you read its surface thoughts), consuming the potion. API-only this commit (single-target, doesn't fit the AoE button kinds), like Fire Breath shipped in v2.193.0.
+
+**Description:** Extends the save-imposing-consumable line started by Fire Breath. A new `_use_item_action_potion_of_mind_reading` handler reuses the Fire Breath per-target save loop (`_resolve_feature_save`) but drops the damage roll — no HP changes, the thought-reading itself is GM-narrated. The catalog entry declares an `actions` sub-map with a `read` action (DC 13 WIS); the `/use_item_action` dispatch routes `potion-of-mind-reading` to the new handler, consuming the potion on use and broadcasting `feature_used`. The `potion-of-mind-reading.json` SRD catalog item already shipped in the master catalog, and Garrik Ironside carries a seeded instance. A sheet button is a natural follow-up (it needs a single-target picker, deferred). MINOR — additive handler + dispatch + content, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS['potion-of-mind-reading']` — save-imposing consumable with a `read` action (DC 13 WIS, no damage).
+- `_use_item_action_potion_of_mind_reading` handler; the `/use_item_action` dispatch routes the new slug to it.
+- Garrik Ironside's demo inventory gains a seeded Potion of Mind Reading.
+- `tests/harness/test_potion_of_mind_reading.py` (2 tests): probe a bandit resolves a WIS save + consumes the potion + broadcasts `feature_used`; a bad `drink` action_key → 404.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2549 → 2551; added the `test_potion_of_mind_reading.py` section.
+
 ## [2.196.0] - 2026-06-12 — "The Tidal Lungful"
 
 **Schema version:** 69

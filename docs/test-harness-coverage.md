@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2549 in `tests/harness/` + 80 in `tests/harness_ui/` (as of v2.196.0, 2026-06-12).
+**Total tests:** 2551 in `tests/harness/` + 80 in `tests/harness_ui/` (as of v2.197.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2686,6 +2686,14 @@ v2.193.0 — Potion of Fire Breath (RAW DMG p.187, uncommon): the first OFFENSIV
 |------|-----------------|
 | `test_fire_breath_exhales_and_consumes` | `breathe` at two bandits → 200, `save_dc: 13`, `save_ability: "DEX"`, `dice: "4d6"`, `consumed: True`, `remaining_qty: 0`; results carry both target ids with `passed`/`damage_dealt` keys; a `feature_used` broadcast (`source: item-potion-of-fire-breath`) fires. (Damage isn't asserted — bare NPC tokens defer the save, matching the Necklace/Javelin tests.) |
 | `test_fire_breath_bad_action_key_404` | Error path: a `drink` action_key (Fire Breath only exposes `breathe`) → 404. |
+
+### `test_potion_of_mind_reading.py`
+v2.197.0 — Potion of Mind Reading (RAW DMG p.187, rare): the second save-imposing consumable. Drinking probes a creature's mind — the target makes a DC 13 WIS save; on a failure you read its surface thoughts — and the potion is consumed. Reuses the Fire Breath per-target save loop (`_resolve_feature_save`) without the damage roll (no HP changes; the thought-reading is GM-narrated). Garrik probes an NPC bandit in an active battle.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mind_reading_probes_and_consumes` | `read` at a bandit → 200, `save_dc: 13`, `save_ability: "WIS"`, `consumed: True`, `remaining_qty: 0`; results carry the target id with a `passed` key; a `feature_used` broadcast (`source: item-potion-of-mind-reading`) fires. (Save outcome isn't asserted — bare NPC tokens defer the save.) |
+| `test_mind_reading_bad_action_key_404` | Error path: a `drink` action_key (Mind Reading only exposes `read`) → 404. |
 
 ### `test_potion_of_growth.py`
 v2.192.0 — Potion of Growth (RAW DMG p.187, uncommon): the fifth self-buff potion. Drinking installs the `growth` template carrying `effects.advantage_on: ["str_check", "str_save"]`. v2.192.0 generalized the STR-advantage readers (rage-only until now) so any marker-bearing buff composes. Mirrors `test_rage_str_save.py`: Thalindra casts Gust of Wind (STR save) at Garrik; the save-roll swaps `1d20 → 2d20kh1` when the target has STR-save advantage. Garrik (Fighter) has no innate STR-save advantage, so Growth is the sole source — a clean control.
