@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.192.0] - 2026-06-12 — "The Towering Draught"
+
+**Schema version:** 69
+
+**Commit summary:** Fifth self-buff potion — Potion of Growth (RAW DMG p.187, uncommon): drink → the enlarge effect (advantage on STR checks and STR saving throws, no concentration) for up to 1d4 hours, by generalizing the STR-advantage intercept that was rage-only until now.
+
+**Description:** Continues the consumable-automation arc. The STR-check/STR-save advantage readers (`_pc_has_rage_str_save_advantage` / `_pc_has_rage_str_check_advantage`) were key-gated to the `rage` buff; this commit drops that gate so they scan any combatant buff carrying `str_check` / `str_save` in `effects.advantage_on`. A new `growth` `_SPELL_BUFF_MAP` template carries those markers, and `_MAGIC_ITEM_ACTIONS['potion-of-growth']` installs it (600 rounds, no concentration) via the existing self-buff drink dispatch. The broadcast helpers no longer hardcode "🦬 Rage" — a new `_str_advantage_buff_label` helper derives the actual buff's name + icon so both rage and growth narrate correctly. Garrik Ironside carries a seeded Potion of Growth. MINOR — additive content + buff template + generalized intercept, no endpoint or schema change.
+
+### Added
+- `growth` buff template (`effects.advantage_on: ["str_check", "str_save"]`, 600 rounds, no concentration) — the RAW enlarge mechanical half.
+- `_MAGIC_ITEM_ACTIONS['potion-of-growth']` self-buff drink action; the `/use_item_action` self-buff dispatch tuple now includes `potion-of-growth`.
+- `_str_advantage_buff_label(campaign_id, char_id, marker)` — derives a STR-advantage buff's display name + icon for the broadcast copy (falls back to Rage).
+- Garrik Ironside's demo inventory gains a seeded Potion of Growth.
+- `tests/harness/test_potion_of_growth.py` (2 tests): Garrik drinks Growth → a STR-save spell aimed at him rolls `2d20kh1`; control without Growth rolls plain `1d20`.
+
+### Changed
+- Generalized `_pc_has_rage_str_save_advantage` / `_pc_has_rage_str_check_advantage` to match any buff with the STR-advantage marker, not just `rage` — Growth (and future enlarge-like buffs) now compose.
+- The STR-advantage broadcast helpers derive the buff label/icon dynamically instead of hardcoding Rage's.
+- `docs/test-harness-coverage.md`: harness total 2541 → 2543; added the `test_potion_of_growth.py` section.
+
 ## [2.191.0] - 2026-06-12 — "The Ready Draught"
 
 **Schema version:** 69

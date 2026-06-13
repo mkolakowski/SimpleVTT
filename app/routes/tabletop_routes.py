@@ -1538,6 +1538,28 @@ _SPELL_BUFF_MAP["resistance-all"] = {
     "desc": "Resistance to all damage for 1 minute.",
 }
 
+# v2.192.0 — Potion of Growth (RAW DMG p.187, uncommon): the "enlarge"
+# half of the enlarge/reduce spell for 1d4 hours, no concentration.
+# RAW (PHB p.237): size doubles + advantage on STR checks and STR saving
+# throws + weapon attacks deal +1d4. The advantage half composes via the
+# (now-generalized) `_pc_has_rage_str_*_advantage` marker readers; the
+# size + the +1d4 weapon die remain GM-narrated (descriptive) for v1.
+_SPELL_BUFF_MAP["growth"] = {
+    "key": "growth",
+    "name": "Growth (Enlarged)",
+    "icon": "🪴",
+    "duration_rounds": 600,  # up to 1d4 hours; modeled as 1 hour
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "advantage_on": ["str_check", "str_save"],
+    },
+    "desc": (
+        "Size doubled (Large); advantage on STR checks and STR saving "
+        "throws; weapon attacks deal +1d4 (GM-narrated). Up to 1d4 hours."
+    ),
+}
+
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
@@ -32310,6 +32332,22 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "summary_effect": "resistance to all damage for 1 minute",
         },
     },
+    # v2.192.0 — fifth self-buff potion. RAW DMG p.187 Potion of Growth
+    # (uncommon): drink → the enlarge effect for up to 1d4 hours, no
+    # concentration. Installs the `growth` template whose
+    # `advantage_on: ["str_check", "str_save"]` marker the generalized
+    # STR-advantage readers now honour (was rage-only pre-v2.192.0).
+    "potion-of-growth": {
+        "key": "drink",
+        "name": "Drink Potion of Growth",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "growth",
+            "duration_rounds": 600,  # up to 1d4 hours; modeled as 1 hour
+            "summary_effect": "the enlarge effect for up to 1d4 hours",
+        },
+    },
 }
 
 
@@ -37346,20 +37384,18 @@ def _pc_has_rage_str_save_advantage(
     while raging.
 
     Returns True only when (a) save_ability == "STR" and (b) the
-    saving PC's combatant carries an active ``rage`` buff with
-    ``str_save`` in its ``effects.advantage_on`` list.
+    saving PC's combatant carries any active buff with ``str_save``
+    in its ``effects.advantage_on`` list.
+
+    v2.192.0 — generalized from rage-only to any marker-bearing buff
+    so Potion of Growth (the enlarge effect) composes through the same
+    intercept. Rage still qualifies (it carries the marker); the name
+    keeps "rage" for call-site stability.
 
     Wired into the 3 save-roll construction sites (`/cast_spell`
     single-target PC save, AoE PC save, `/place_aoe` PC server-rolled
     save). Caller swaps `1d20 → 2d20kh1` when this returns True;
     composes safely with other advantage sources via kh1-of-kh1.
-
-    Distinct from `_pc_has_rage_active_buff` (v2.57.0 Mindless Rage —
-    blocks charm/fright install when raging at Lv 6+) and
-    `_attacker_has_str_attack_advantage` (v2.49.238 — STR attack
-    advantage while raging). Closes the third RAW Rage benefit
-    that was descriptive-only until now (the buff carries the
-    ``str_save`` marker since v2.20.0 but no consumer ever read it).
     """
     if (save_ability or "").strip().upper() != "STR":
         return False
@@ -37373,8 +37409,6 @@ def _pc_has_rage_str_save_advantage(
             continue
         for b in (c.get("buffs") or []):
             if not isinstance(b, dict):
-                continue
-            if (b.get("key") or "").strip().lower() != "rage":
                 continue
             effects = b.get("effects")
             if not isinstance(effects, dict):
@@ -37393,18 +37427,25 @@ async def _broadcast_rage_str_save_advantage(
     Emits a `feature_used` event with `source: "rage-str-save"` so
     the chat card surfaces the trigger ("Krieger raging — advantage
     on STR save.").
+
+    v2.192.0 — the granting buff is no longer always Rage (Potion of
+    Growth carries the same marker), so the copy is derived from the
+    actual buff's name/icon rather than hardcoding "Rage".
     """
     if not char:
         return
+    label, icon = _str_advantage_buff_label(
+        campaign_id, char.id, "str_save",
+    )
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": char.id,
             "character_name": char.name,
             "user_color": char.color,
-            "feature_name": "🦬 Rage — advantage on STR save",
+            "feature_name": f"{icon} {label} — advantage on STR save",
             "feature_desc": (
-                f"{char.name} is raging: advantage on the Strength "
+                f"{char.name} has {label}: advantage on the Strength "
                 f"saving throw."
             ),
             "source": "rage-str-save",
@@ -37419,17 +37460,17 @@ def _pc_has_rage_str_check_advantage(
     (PHB p.48): "you have advantage on Strength checks and Strength
     saving throws" while raging.
 
-    Returns True when the PC's combatant carries an active ``rage``
-    buff with ``str_check`` in its ``effects.advantage_on`` list.
-    Caller (the `/roll` endpoint) gates this on the body's
-    ``stat_key == "str_check"`` BEFORE calling — this helper assumes
-    the call site has already established that the roll is a STR
-    check. Mirrors `_pc_has_rage_str_save_advantage` (v2.99.26) but
-    on `str_check` instead of `str_save`.
+    Returns True when the PC's combatant carries any active buff with
+    ``str_check`` in its ``effects.advantage_on`` list. Caller (the
+    `/roll` endpoint) gates this on the body's ``stat_key ==
+    "str_check"`` BEFORE calling — this helper assumes the call site
+    has already established that the roll is a STR check. Mirrors
+    `_pc_has_rage_str_save_advantage` (v2.99.26) but on `str_check`.
 
-    Closes the third descriptive-only half of Rage's `advantage_on`
-    marker. After v2.99.28, all three (str_check / str_save /
-    str_attack) are mechanically wired.
+    v2.192.0 — generalized from rage-only to any marker-bearing buff
+    so Potion of Growth (the enlarge effect) composes through the same
+    intercept. Rage still qualifies; the name keeps "rage" for
+    call-site stability.
     """
     if not char_id:
         return False
@@ -37441,8 +37482,6 @@ def _pc_has_rage_str_check_advantage(
             continue
         for b in (c.get("buffs") or []):
             if not isinstance(b, dict):
-                continue
-            if (b.get("key") or "").strip().lower() != "rage":
                 continue
             effects = b.get("effects")
             if not isinstance(effects, dict):
@@ -37459,23 +37498,59 @@ async def _broadcast_rage_str_check_advantage(
 ) -> None:
     """Companion broadcast for `_pc_has_rage_str_check_advantage`.
     Same flavor copy as the save variant, swapped "save" → "check".
+
+    v2.192.0 — copy derived from the granting buff (Rage or Growth).
     """
     if not char:
         return
+    label, icon = _str_advantage_buff_label(
+        campaign_id, char.id, "str_check",
+    )
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": char.id,
             "character_name": char.name,
             "user_color": char.color,
-            "feature_name": "🦬 Rage — advantage on STR check",
+            "feature_name": f"{icon} {label} — advantage on STR check",
             "feature_desc": (
-                f"{char.name} is raging: advantage on the Strength "
+                f"{char.name} has {label}: advantage on the Strength "
                 f"ability / skill check."
             ),
             "source": "rage-str-check",
         },
     })
+
+
+def _str_advantage_buff_label(
+    campaign_id: int, char_id: "int | None", marker: str,
+) -> "tuple[str, str]":
+    """v2.192.0 — find the active buff on ``char_id``'s combatant that
+    grants STR ``marker`` advantage (``str_save`` / ``str_check``) and
+    return its (name, icon). Falls back to ("Rage", "🦬") so legacy
+    callers never see an empty label. Used by the STR-advantage
+    feature_used broadcasts so the chat copy names the real source
+    (Rage, Growth, …) rather than hardcoding Rage.
+    """
+    state = hub.get_battle(campaign_id)
+    if state and char_id:
+        for c in state.get("combatants") or []:
+            if c.get("char_id") != char_id:
+                continue
+            for b in (c.get("buffs") or []):
+                if not isinstance(b, dict):
+                    continue
+                effects = b.get("effects")
+                if not isinstance(effects, dict):
+                    continue
+                adv = effects.get("advantage_on") or []
+                if isinstance(adv, list) and marker in adv:
+                    return (
+                        str(b.get("name") or "Rage"),
+                        str(b.get("icon") or "🦬"),
+                    )
+            break
+    return ("Rage", "🦬")
 
 
 def _target_condition_immune(
@@ -79427,6 +79502,7 @@ async def use_item_action(
     if slug in (
         "potion-of-heroism", "potion-of-speed",
         "potion-of-resistance", "potion-of-invulnerability",
+        "potion-of-growth",
     ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,

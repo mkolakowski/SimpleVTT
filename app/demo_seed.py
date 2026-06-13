@@ -3780,6 +3780,15 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-invulnerability",
              "desc": "Drink (action, /use_item_action drink) to gain resistance to all damage (no concentration) for 1 minute. RAW DMG p.188."},
+            # v2.192.0 — fifth self-buff potion. Potion of Growth (RAW
+            # DMG p.187, uncommon): drink → the enlarge effect (advantage
+            # on STR checks/saves, +1d4 weapon damage, size Large) for up
+            # to 1d4 hours, no concentration. The advantage half is
+            # mechanical via the generalized STR-advantage readers.
+            {"name": "Potion of Growth", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-growth",
+             "desc": "Drink (action, /use_item_action drink) to gain the enlarge effect (advantage on STR checks/saves; no concentration) for up to 1d4 hours. RAW DMG p.187."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20
