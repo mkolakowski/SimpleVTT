@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.185.1] - 2026-06-12 — "The Proven Potion"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only — adds the in-battle harness coverage that proves `_use_item_action_self_buff_potion` actually installs its buff (the per-potion tests only assert `buff_installed` is a bool, because the install best-effort no-ops outside combat).
+
+**Description:** v2.184.0 / v2.185.0 shipped the self-buff potions (Heroism → Bless, Speed → Haste), but their happy-path tests run against PCs that aren't in an active battle, so `buff_installed` comes back `False` and they can only assert it's a *bool*. The buff-install path itself was therefore unproven end-to-end. This commit closes that gap: a new test file puts Garrik in an active solo battle first (`PUT /battle` with `active: True`), then drinks each potion and asserts (a) the response reports `buff_installed: True` and (b) the buff key (`haste` / `bless`) actually appears in `GET /character/{id}/buffs`. The fixture snapshots/restores Garrik's inventory and clears the battle in teardown so it doesn't leak. No app code changes. PATCH.
+
+### Added
+- `tests/harness/test_self_buff_potion_in_battle.py` (2 tests): `test_potion_of_speed_installs_haste_in_battle` and `test_potion_of_heroism_installs_bless_in_battle` — each starts an active battle, drinks the potion, asserts `buff_installed: True` + the buff key present in the live combatant buff list (plus `temp_hp_granted: 10` for Heroism).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2528 → 2530; added the `test_self_buff_potion_in_battle.py` section.
+
 ## [2.185.0] - 2026-06-12 — "The Quickened Draught"
 
 **Schema version:** 69
