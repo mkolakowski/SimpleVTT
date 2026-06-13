@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.232.0] - 2026-06-13 — "The Dull Grey Stone"
+
+**Schema version:** 69
+
+**Commit summary:** Ioun Stone of Mastery — the last common SRD Ioun variant on the shared slug, surfacing a +1 proficiency-bonus override (`derived.proficiency_bonus`) applied to proficient saves in `/roll`.
+
+**Description:** The **Ioun Stone of Mastery** (RAW DMG p.176, legendary, attunement) is a dull grey stone that raises your proficiency bonus by 1 while it orbits your head. It joins the Protection (v2.228.0), Reserve (v2.229.0), Sustenance (v2.230.0), and Awareness (v2.231.0) variants as the fifth non-ability stone on the single shared `ioun-stone` slug — and the first to carry a *real mechanical* effect rather than a passive flag. The +1 rides the inventory item via `_proficiency_bonus: 1` (no ability payload), sums in `_equipped_item_effects` (a new `proficiency_bonus` field + `proficiency_bonus_sources`), surfaces on `/sheet-json` as `derived.proficiency_bonus = {base, effective, bonus, sources}`, and is appended to **proficient saving throws** in `/roll` (the client bakes the base PB into the expression, so a proficient save needs the extra +N; the server gates on `sheet["saving_throws"][ABILITY]`, mirroring the v2.212.0 ability-override delta). A new `effective_proficiency_bonus(sheet)` helper folds base PB + item bonus. Demo: Quan Reelstep (Way of the Drunken Master Monk Lv 5) wears it as his 2nd attuned item (after the Belt of Dwarvenkind, RAW max 3) — he is class-proficient in STR + DEX saves (PB 3 → 4), and the belt boosts only CON, so the Mastery +1 reads on his DEX/STR saves unconfounded. Skill-check / attack / spell-DC routing is deferred (skill rolls don't carry the skill name reliably; attacks bake `attack_bonus` separately) — saves are the contained, RAW-correct first surface. MINOR — additive substrate field + helper + derived exposure + `/roll` routing + content + tests, no schema change.
+
+### Added
+- `proficiency_bonus` / `proficiency_bonus_sources` aggregation in `_equipped_item_effects` (summed across equipped+attuned items carrying a `_proficiency_bonus` rider or payload default; per-item value wins — same shape as `_ac_bonus` / `_spell_reserve_levels`).
+- `effective_proficiency_bonus(sheet)` helper: base `proficiency_bonus` (default 2) + summed item bonus.
+- `/sheet-json` `derived.proficiency_bonus = {base, effective, bonus, sources}` — present only when an equipped+attuned item raises PB.
+- `/roll` appends the item PB bonus to **proficient** saving throws (gated on `sheet["saving_throws"][ability]`), with a cosmetic breakdown annotation naming the stone. Non-proficient saves, skill checks, and attacks are untouched.
+- Demo seed: Ioun Stone of Mastery on Quan Reelstep (`_slug: "ioun-stone"`, `_proficiency_bonus: 1`, equipped + attuned — his 2nd attunement slot and first ioun stone).
+- `tests/harness/test_item_ioun_stone_mastery.py` (3 tests): `derived.proficiency_bonus` base 3 / effective 4 / bonus 1 with the stone named in sources; a proficient DEX save `/roll` picks up the +1 and "Ioun Stone of Mastery" in the breakdown; a non-proficient CON save does NOT.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2639 → 2642; added the `test_item_ioun_stone_mastery.py` section.
+
 ## [2.231.0] - 2026-06-13 — "The Dark Blue Rhomboid"
 
 **Schema version:** 69

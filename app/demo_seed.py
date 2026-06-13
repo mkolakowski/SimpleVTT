@@ -3317,6 +3317,18 @@ def _monk_drunken_sheet(name: str) -> dict:
              "attuned": True, "weight_lb": 0,
              "_slug": "belt-of-dwarvenkind",
              "desc": "Rare wondrous item, attunement. CON +2 (max 20); advantage on saves vs poison and resistance to poison damage; darkvision 60 ft; advantage on CHA(Persuasion) with dwarves; speak/read/write Dwarvish. RAW DMG p.155."},
+            # v2.232.0 — Ioun Stone of Mastery (RAW DMG p.176, legendary,
+            # attunement). Quan's 2nd attuned item. Raises his proficiency
+            # bonus by 1 (PB 3 → 4) via the shared `ioun-stone` slug + the
+            # per-item `_proficiency_bonus` rider. Surfaced on /sheet-json
+            # derived.proficiency_bonus and applied to his proficient
+            # STR/DEX saves in /roll. Belt boosts only CON, so his DEX/STR
+            # save proficiency reads the Mastery +1 unconfounded.
+            {"name": "Ioun Stone of Mastery", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 0,
+             "attuned": True, "weight_lb": 0,
+             "_slug": "ioun-stone", "_proficiency_bonus": 1,
+             "desc": "Legendary wondrous item, attunement. This dull grey ioun stone orbits your head and increases your proficiency bonus by 1. RAW DMG p.176."},
         ],
         "feats": [],
         "resources": [

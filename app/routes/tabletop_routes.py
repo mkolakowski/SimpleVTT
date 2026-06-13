@@ -16895,6 +16895,28 @@ async def roll_dice(
     if _item_override_delta > 0:
         expr = f"{expr}+{_item_override_delta}"
 
+    # v2.232.0 — proficiency-bonus override (Ioun Stone of Mastery, RAW
+    # DMG p.176: "+1 to your proficiency bonus"). Append the item PB bonus
+    # to PROFICIENT saving throws only — the client baked the base PB into
+    # the expression, so a proficient save needs the extra +N. Skill
+    # checks / attacks / spell DCs are out of scope here (skill rolls don't
+    # carry the skill name reliably; attacks bake attack_bonus separately).
+    _item_pb_bonus = 0
+    _pb_save_ability = ""
+    if (
+        _char is not None
+        and isinstance(_char.sheet, dict)
+        and stat_key_lc.endswith("_save")
+    ):
+        _pb_save_ability = _ability_for_roll(stat_key_lc, stat_ability_raw)
+        _saves = _char.sheet.get("saving_throws") or {}
+        if _pb_save_ability and isinstance(_saves, dict) and _saves.get(_pb_save_ability):
+            _item_eff_pb = _equipped_item_effects(_char.sheet)
+            _item_pb_bonus = int(_item_eff_pb.get("proficiency_bonus") or 0)
+            _item_pb_sources = list(_item_eff_pb.get("proficiency_bonus_sources") or [])
+    if _item_pb_bonus > 0:
+        expr = f"{expr}+{_item_pb_bonus}"
+
     try:
         result = dice_mod.roll(expr)
     except dice_mod.DiceParseError as e:
@@ -16938,6 +16960,18 @@ async def roll_dice(
             ) or f"{_override_ability} override"
             result.breakdown = (
                 f"{result.breakdown} (+{_item_override_delta} {_ov_src})"
+            )
+        except Exception:
+            pass
+
+    # v2.232.0 — mirror annotation for the proficiency-bonus override.
+    if _item_pb_bonus > 0 and _item_pb_sources:
+        try:
+            import copy as _copy_item_pb
+            result = _copy_item_pb.copy(result)
+            _pb_src_label = " + ".join(_item_pb_sources)
+            result.breakdown = (
+                f"{result.breakdown} (+{_item_pb_bonus} {_pb_src_label})"
             )
         except Exception:
             pass
@@ -33417,6 +33451,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # orbits your head you can't be surprised.
         "cannot_be_surprised": False,
         "cannot_be_surprised_sources": [],
+        # v2.232.0 — proficiency-bonus override. Summed additive bonus across
+        # equipped+attuned items carrying the field; surfaced on `/sheet-json`
+        # derived and applied to proficient saves in `/roll`. Ioun Stone of
+        # Mastery (RAW DMG p.176) is the first entry — it raises your
+        # proficiency bonus by 1.
+        "proficiency_bonus": 0,
+        "proficiency_bonus_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33584,6 +33625,18 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_cannot_be_surprised") or p.get("cannot_be_surprised"):
                 out["cannot_be_surprised"] = True
                 out["cannot_be_surprised_sources"].append(item_name)
+            # v2.232.0 — proficiency-bonus override (Ioun Stone of Mastery,
+            # RAW DMG p.176). Summed additive; the +1 rides the shared
+            # `ioun-stone` slug via the per-item `_proficiency_bonus` rider
+            # (or a payload default).
+            item_pb = item.get("_proficiency_bonus")
+            try:
+                pb = int(item_pb) if item_pb is not None else int(p.get("proficiency_bonus") or 0)
+            except (TypeError, ValueError):
+                pb = 0
+            if pb:
+                out["proficiency_bonus"] += pb
+                out["proficiency_bonus_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -33723,6 +33776,20 @@ def _ability_override_delta(sheet: dict, ability: str) -> int:
     base = _read_stored_ability(sheet, canon)
     eff = effective_ability_score(sheet, canon)
     return _ability_score_modifier(eff) - _ability_score_modifier(base)
+
+
+def effective_proficiency_bonus(sheet: dict) -> int:
+    """Resolve a creature's EFFECTIVE proficiency bonus.
+
+    Base is the stored ``proficiency_bonus`` (default 2); equipped+attuned
+    items carrying a ``proficiency_bonus`` payload sum onto it (Ioun Stone
+    of Mastery DMG p.176: "+1 to your proficiency bonus"). Pure function."""
+    base = int((sheet or {}).get("proficiency_bonus") or 2)
+    try:
+        eff = _equipped_item_effects(sheet)
+    except Exception:
+        eff = {}
+    return base + int(eff.get("proficiency_bonus") or 0)
 
 
 def _ability_for_roll(stat_key_lc: str, stat_ability_raw: str) -> str:
@@ -90570,6 +90637,17 @@ async def get_character_sheet_json(
             if _item_eff.get("cannot_be_surprised"):
                 derived["cannot_be_surprised"] = {
                     "sources": list(_item_eff.get("cannot_be_surprised_sources") or []),
+                }
+            # v2.232.0 — proficiency-bonus override (Ioun Stone of Mastery).
+            # Only present when an equipped+attuned item raises PB.
+            _pb_bonus = int(_item_eff.get("proficiency_bonus") or 0)
+            if _pb_bonus > 0:
+                _pb_base = int(sheet.get("proficiency_bonus") or 2)
+                derived["proficiency_bonus"] = {
+                    "base": _pb_base,
+                    "effective": _pb_base + _pb_bonus,
+                    "bonus": _pb_bonus,
+                    "sources": list(_item_eff.get("proficiency_bonus_sources") or []),
                 }
         except Exception:
             pass
