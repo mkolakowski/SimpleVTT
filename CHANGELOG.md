@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.188.0] - 2026-06-12 — "The Drinker's Choice"
+
+**Schema version:** 69
+
+**Commit summary:** `/use_item_action` now accepts a `resistance_type` override so a *generic* (untyped) Potion of Resistance lets the drinker pick the damage type at drink-time — RAW the resistance is to one type the drinker chooses, not one baked into the item.
+
+**Description:** v2.187.0 made Potion of Resistance type-aware via a per-item `resistance_type` seed field (pre-typed fire / cold instances). RAW (DMG p.188) the choice is the *drinker's* at the moment of drinking, so this commit threads an optional `resistance_type` field through the `/use_item_action` request body into `_use_item_action_self_buff_potion`. The handler now resolves the type from the request override first, falling back to the item's seeded `resistance_type` — so a generic potion (no seeded type) becomes any of the ten RAW damage types the drinker names. Garrik Ironside now carries a generic "Potion of Resistance" (no `resistance_type`) alongside his pre-typed fire + cold instances. No new endpoint; the existing `/use_item_action` gains one optional body field (backward-compatible — omitting it preserves the v2.187.0 seeded-type behavior). MINOR — additive endpoint behavior + new seed data, no schema change.
+
+### Added
+- `/use_item_action` accepts an optional `resistance_type` body field (drink-time damage-type pick for Potion of Resistance); resolved ahead of the item's seeded `resistance_type`.
+- Demo seed: Garrik Ironside carries a generic "Potion of Resistance" (no seeded type) for the drink-time pick.
+- `tests/harness/test_potion_of_resistance_drink_time_pick.py` (2 tests): drink the generic potion choosing lightning → 20 lightning halved to 10; control 20 fire unaffected.
+
+### Changed
+- `_use_item_action_self_buff_potion`: new `resistance_type` parameter; the resistance resolution prefers the request override over the item's seeded type.
+- `docs/test-harness-coverage.md`: harness total 2537 → 2539; added the `test_potion_of_resistance_drink_time_pick.py` section.
+
 ## [2.187.1] - 2026-06-12 — "The Ambiguous Slug"
 
 **Schema version:** 69

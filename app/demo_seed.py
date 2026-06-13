@@ -3764,6 +3764,14 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-resistance", "resistance_type": "cold",
              "desc": "Drink (action, /use_item_action drink) to gain resistance to cold damage (no concentration) for 1 hour. RAW DMG p.188."},
+            # v2.188.0 — a GENERIC (untyped) Potion of Resistance: RAW the
+            # drinker picks the damage type, so this carries no
+            # `resistance_type`. The drinker supplies one at drink-time via
+            # the `/use_item_action` body's `resistance_type` override.
+            {"name": "Potion of Resistance", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-resistance",
+             "desc": "Drink (action, /use_item_action drink) to gain resistance to one damage type you choose (no concentration) for 1 hour. RAW DMG p.188."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

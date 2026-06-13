@@ -79394,6 +79394,7 @@ async def use_item_action(
     if slug in ("potion-of-heroism", "potion-of-speed", "potion-of-resistance"):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
+            resistance_type=body.get("resistance_type"),
         )
     raise HTTPException(409, "unknown item action handler")
 
@@ -79837,6 +79838,7 @@ async def _use_item_action_flame_tongue(
 
 async def _use_item_action_self_buff_potion(
     db, campaign_id, char, item, sheet, catalog, inv_idx,
+    resistance_type=None,
 ):
     """v2.184.0 (Potion of Heroism) / v2.185.0 (Potion of Speed) —
     generic "self-buff" consumable handler. Drinking the potion buffs
@@ -79887,14 +79889,17 @@ async def _use_item_action_self_buff_potion(
 
     # 3. Bless buff on the drinker (best-effort — needs an active battle).
     buff_key = str(spec.get("buff_key") or "bless")
-    # v2.187.0 — Potion of Resistance: RAW the GM picks the damage type, so
-    # the inventory item carries a `resistance_type`. When the catalog asks
-    # for a generic resistance buff, swap in the matching typed template so
-    # one catalog entry covers all ten RAW damage types. The template owns
-    # the name/icon for resistance potions (the spec's are type-agnostic).
+    # v2.187.0 / v2.188.0 — Potion of Resistance: RAW the drinker (GM) picks
+    # the damage type. The type can come from the drink-time request
+    # (`resistance_type` override — the type-picker) or fall back to the
+    # item's seeded `resistance_type`. Either way we swap in the matching
+    # typed template so one catalog entry covers all ten RAW damage types.
+    # The template owns the name/icon for resistance potions.
     resist_type = None
     if buff_key.startswith("resistance"):
-        rt = str(item.get("resistance_type") or "").strip().lower()
+        rt = str(
+            resistance_type or item.get("resistance_type") or ""
+        ).strip().lower()
         if rt and f"resistance-{rt}" in _SPELL_BUFF_MAP:
             buff_key = f"resistance-{rt}"
             resist_type = rt
