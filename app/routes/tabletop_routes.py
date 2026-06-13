@@ -32510,6 +32510,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "amulet-of-proof-against-detection": [
         {"scry_proof": True, "requires_attunement": True},
     ],
+    # v2.235.0 — Ring of Resistance (RAW DMG p.192, rare, attunement).
+    # RAW: "you have resistance to one damage type while wearing this ring.
+    # The gem in the ring indicates the type." Each physical ring is a fixed
+    # type, so the resisted damage type rides the inventory item via the
+    # per-item `_resistance_type` rider (e.g. "fire") on the shared
+    # `ring-of-resistance` slug — the same shared-slug pattern as the Ioun
+    # Stone variants. The walker folds it into the `resistance_to` list,
+    # which `_resistance_halve` consults in the live damage pipeline.
+    "ring-of-resistance": [
+        {"requires_attunement": True},
+    ],
 }
 
 
@@ -33492,6 +33503,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # entry — while worn you're hidden from divination + scrying.
         "scry_proof": False,
         "scry_proof_sources": [],
+        # v2.235.0 — damage-resistance passive. Aggregated list of damage
+        # types resisted across equipped+attuned items; consulted by
+        # `_resistance_halve` (live damage pipeline) and surfaced on
+        # `/sheet-json` derived. Ring of Resistance (RAW DMG p.192) is the
+        # first entry — the type rides the per-item `_resistance_type`
+        # rider on the shared `ring-of-resistance` slug.
+        "resistance_to": [],
+        "resistance_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33685,6 +33704,18 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_scry_proof") or p.get("scry_proof"):
                 out["scry_proof"] = True
                 out["scry_proof_sources"].append(item_name)
+            # v2.235.0 — damage-resistance passive (Ring of Resistance, RAW
+            # DMG p.192). The resisted type rides the per-item
+            # `_resistance_type` rider (string) or a `resistance_to` payload
+            # list. Folded into the aggregated `resistance_to` list that
+            # `_resistance_halve` consults in the live damage pipeline.
+            _rt_raw = item.get("_resistance_type") or p.get("resistance_to")
+            _rt_list = [_rt_raw] if isinstance(_rt_raw, str) else (_rt_raw or [])
+            for _rt in _rt_list:
+                _rt_norm = str(_rt or "").strip().lower()
+                if _rt_norm and _rt_norm not in out["resistance_to"]:
+                    out["resistance_to"].append(_rt_norm)
+                    out["resistance_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -39625,6 +39656,22 @@ def _resistance_halve(
                 r, damage_type_l, is_magical=is_magical,
             ):
                 return damage_amount // 2, True
+    # v2.235.0 — equipped-item resistance (Ring of Resistance, RAW DMG
+    # p.192). Aggregated from equipped+attuned inventory items via
+    # `_equipped_item_effects`; the F6-aware per-entry compare matches the
+    # incoming type (a plain "fire" entry halves fire damage). Read after
+    # the sheet-level list so a permanent racial resistance still wins the
+    # short-circuit, but before buffs so an equipped ring halves even
+    # without an active buff.
+    try:
+        _item_resists = _equipped_item_effects(target_sheet).get("resistance_to") or []
+    except Exception:
+        _item_resists = []
+    for r in _item_resists:
+        if isinstance(r, str) and _resistance_matches_damage(
+            r, damage_type_l, is_magical=is_magical,
+        ):
+            return damage_amount // 2, True
     # v2.99.196 — Dragonborn ancestry fallback. When the sheet has
     # `dragonborn_ancestry` set (e.g. "bronze") but the explicit
     # damage_resistances list doesn't carry the derived type, halve
@@ -90708,6 +90755,15 @@ async def get_character_sheet_json(
             if _item_eff.get("scry_proof"):
                 derived["scry_proof"] = {
                     "sources": list(_item_eff.get("scry_proof_sources") or []),
+                }
+            # v2.235.0 — equipped-item damage resistance (Ring of
+            # Resistance). Only present when an equipped+attuned item
+            # resists at least one damage type.
+            _item_resist_types = list(_item_eff.get("resistance_to") or [])
+            if _item_resist_types:
+                derived["resistances"] = {
+                    "types": _item_resist_types,
+                    "sources": list(_item_eff.get("resistance_sources") or []),
                 }
         except Exception:
             pass

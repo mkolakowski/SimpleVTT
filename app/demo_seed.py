@@ -1490,6 +1490,19 @@ def _paladin_vengeance_sheet(name: str) -> dict:
              "hands": 0, "weight_lb": 0,
              "_slug": "periapt-of-wound-closure",
              "desc": "Uncommon wondrous item, attunement. You stabilize whenever you are dying at the start of your turn; and whenever you roll a Hit Die to regain hit points, double the number of hit points it restores. RAW DMG p.184."},
+            # v2.235.0 — Ring of Resistance (Fire) (RAW DMG p.192, rare,
+            # attunement). Seraphine's 3rd attuned item (RAW max 3). The
+            # fire resistance rides the per-item `_resistance_type: "fire"`
+            # rider on the shared `ring-of-resistance` slug; the walker
+            # folds it into the `resistance_to` list that `_resistance_halve`
+            # consults in the live damage pipeline — so fire damage to
+            # Seraphine is halved while worn. Thematic for a Vengeance
+            # paladin charging through danger after a sworn foe.
+            {"name": "Ring of Resistance (Fire)", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 0, "weight_lb": 0,
+             "_slug": "ring-of-resistance", "_resistance_type": "fire",
+             "desc": "Rare ring, attunement. You have resistance to fire damage while wearing this ring. RAW DMG p.192."},
         ],
         "resources": [
             {

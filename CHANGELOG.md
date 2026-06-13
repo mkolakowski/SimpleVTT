@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.235.0] - 2026-06-13 — "The Warded Band"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of Resistance — equipped-item damage resistance wired into the live `_resistance_halve` pipeline + surfaced on `/sheet-json` (`derived.resistances`).
+
+**Description:** The **Ring of Resistance** (RAW DMG p.192, rare, attunement) grants resistance to one damage type while worn — the gem indicates which. Unlike the recent passive-flag items, this is a **real mechanical effect**: the resisted type rides the inventory item via the per-item `_resistance_type` rider on the shared `ring-of-resistance` slug (the same shared-slug pattern as the Ioun Stone variants), aggregates in `_equipped_item_effects` (a new `resistance_to` list + `resistance_sources`), and is now **consulted by `_resistance_halve`** in the live damage pipeline — so matching typed damage applied via `PATCH .../sheet-fields` is halved without needing an active buff. The equipped-item resistance is checked after the sheet-level `damage_resistances` list (so a permanent racial resistance still short-circuits first) and before per-buff resistances, using the same F6-aware per-entry compare. It also surfaces on `/sheet-json` as `derived.resistances = {types, sources}`. Demo: Dame Seraphine Vael (Vengeance Paladin) wears a Ring of Resistance (Fire) as her 3rd attuned item (Sun Blade + Periapt of Wound Closure + ring, RAW max 3) — fire damage to her is halved, cold is not. MINOR — additive substrate field + damage-pipeline read + derived exposure + content + tests, no schema change.
+
+### Added
+- `resistance_to` / `resistance_sources` aggregation in `_equipped_item_effects` (folds the per-item `_resistance_type` rider or a `resistance_to` payload list, de-duped).
+- `_resistance_halve` now consults equipped-item resistances (via `_equipped_item_effects`) after the sheet-level list and before per-buff resistances.
+- `/sheet-json` `derived.resistances = {types, sources}` — present only when an equipped+attuned item resists at least one damage type.
+- `ring-of-resistance` entry in `_MAGIC_ITEM_PASSIVES` (`requires_attunement: True`; the type rides the per-item rider).
+- Demo seed: Ring of Resistance (Fire) on Dame Seraphine Vael (`_slug: "ring-of-resistance"`, `_resistance_type: "fire"`, equipped + attuned — her 3rd attunement slot).
+- `tests/harness/test_item_ring_of_resistance.py` (3 tests): `derived.resistances` lists fire with the ring in sources; 20 fire damage is halved to 10 through the live pipeline; 20 cold damage is unaffected (type-specific control).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2648 → 2651; added the `test_item_ring_of_resistance.py` section.
+
 ## [2.234.0] - 2026-06-13 — "The Hidden Sigil"
 
 **Schema version:** 69

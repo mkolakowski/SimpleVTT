@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2648 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.234.0, 2026-06-13).
+**Total tests:** 2651 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.235.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2483,6 +2483,15 @@ v2.228.0 — Ioun Stone of Protection (RAW DMG p.176, rare, attunement): the fir
 |------|-----------------|
 | `test_ioun_stone_protection_grants_ac_bonus` | Krieger swings at Mira → `target_ac == 16` (15 base + stone +1). |
 | `test_ioun_stone_protection_unequip_reverts_ac` | PATCH the stone to `equipped: False` → `target_ac == 15` (base, no bonus); restores the original inventory on teardown. |
+
+### `test_item_ring_of_resistance.py`
+v2.235.0 — Ring of Resistance (RAW DMG p.192, rare, attunement): resistance to one damage type (the gem indicates which). Unlike the recent passive flags this is a real mechanical effect — the resisted type rides the inventory item via the per-item `_resistance_type` rider on the shared `ring-of-resistance` slug, aggregates in `_equipped_item_effects` (`resistance_to` list), and is consulted by `_resistance_halve` in the live damage pipeline so matching damage is halved through `PATCH .../sheet-fields`. Surfaces on `/sheet-json` as `derived.resistances = {types, sources}`. Dame Seraphine Vael (Vengeance Paladin) wears a Ring of Resistance (Fire) as her 3rd attuned item.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ring_exposes_resistances_on_sheet_json` | `GET /sheet-json` → `derived.resistances.types` contains "fire" with "Ring of Resistance" in `sources`. |
+| `test_ring_halves_matching_damage` | 20 fire damage to the fire-resisted wearer drops HP by only 10 — `_resistance_halve` halves it; restores HP on teardown. |
+| `test_ring_does_not_halve_other_types` | Control: 20 cold damage applies in full (−20) — the resistance is type-specific; restores HP on teardown. |
 
 ### `test_item_amulet_of_proof_against_detection.py`
 v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon, attunement): hidden from divination magic + magical scrying while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health): the `scry_proof` flag rides the `amulet-of-proof-against-detection` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`. Kael Brightleaf (Monk Lv 7) wears it as his 2nd attuned item.
