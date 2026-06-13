@@ -33397,6 +33397,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # set. Periapt of Wound Closure (RAW DMG p.184) is the first entry.
         "double_hit_die_healing": False,
         "double_hit_die_healing_sources": [],
+        # v2.229.0 — stored-spell capacity. `spell_reserve_levels` is the
+        # summed spell-level buffer across equipped+attuned items carrying
+        # the field; surfaced on `/sheet-json` derived. Ioun Stone of
+        # Reserve (RAW DMG p.176) is the first entry — it holds up to 3
+        # levels of spells. (The cast-into / cast-from mechanic is
+        # descriptive-only in v1; this exposes the capacity.)
+        "spell_reserve_levels": 0,
+        "spell_reserve_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33533,6 +33541,23 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if p.get("double_hit_die_healing"):
                 out["double_hit_die_healing"] = True
                 out["double_hit_die_healing_sources"].append(item_name)
+            # v2.229.0 — stored-spell capacity (Ioun Stone of Reserve, RAW
+            # DMG p.176). The shared `ioun-stone` slug carries no default,
+            # so the level buffer rides the inventory item via
+            # `_spell_reserve_levels` and wins over any payload default —
+            # same per-item override shape as `_ac_bonus` / `_ability_bonus`.
+            # Capacities sum across items.
+            item_reserve = item.get("_spell_reserve_levels")
+            try:
+                reserve = (
+                    int(item_reserve) if item_reserve is not None
+                    else int(p.get("spell_reserve_levels") or 0)
+                )
+            except (TypeError, ValueError):
+                reserve = 0
+            if reserve:
+                out["spell_reserve_levels"] += reserve
+                out["spell_reserve_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90500,6 +90525,18 @@ async def get_character_sheet_json(
             from ..content.carry_weight import sheet_carry_summary
             _eff_str = effective_ability_score(sheet, "STR")
             derived["carry"] = sheet_carry_summary(sheet, effective_str=_eff_str)
+        except Exception:
+            pass
+        # v2.229.0 — stored-spell capacity (Ioun Stone of Reserve). Only
+        # present when an equipped+attuned item carries a reserve buffer.
+        try:
+            _item_eff = _equipped_item_effects(sheet)
+            _reserve = int(_item_eff.get("spell_reserve_levels") or 0)
+            if _reserve > 0:
+                derived["spell_reserve"] = {
+                    "levels": _reserve,
+                    "sources": list(_item_eff.get("spell_reserve_sources") or []),
+                }
         except Exception:
             pass
     return {

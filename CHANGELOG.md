@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.229.0] - 2026-06-13 — "The Pearly Spindle"
+
+**Schema version:** 69
+
+**Commit summary:** Ioun Stone of Reserve — the second non-ability Ioun variant on the shared slug, surfacing a stored-spell capacity (`derived.spell_reserve`).
+
+**Description:** The **Ioun Stone of Reserve** (RAW DMG p.176, rare, attunement) is a pearly-white spindle that holds up to 3 levels of spells cast into it. It joins the Ioun Stone of Protection (v2.228.0) as the second non-ability variant on the single shared `ioun-stone` slug: the capacity rides the inventory item via `_spell_reserve_levels: 3` (no ability payload), aggregates in `_equipped_item_effects` (a new `spell_reserve_levels` sum + `spell_reserve_sources`), and surfaces on `/sheet-json` as `derived.spell_reserve = {levels, sources}`. The cast-into / cast-from buffer mechanic is descriptive-only in v1 — this exposes the capacity as a derived read. Demo: Sir Caelan Lightbringer (Paladin half-caster) wears it as his 3rd attuned item (after the Dragon Slayer Longsword + Ioun Stone of Dexterity, RAW max 3) — his SECOND ioun stone, proving two stones compose on the one slug with different per-item riders (`_ability_bonus` for DEX, `_spell_reserve_levels` for the buffer). MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `spell_reserve_levels` / `spell_reserve_sources` aggregation in `_equipped_item_effects` (summed across equipped+attuned items carrying a `_spell_reserve_levels` rider; per-item override wins over any payload default — same shape as `_ac_bonus` / `_ability_bonus`).
+- `/sheet-json` `derived.spell_reserve = {levels, sources}` — present only when an equipped+attuned item carries a reserve buffer.
+- Demo seed: Ioun Stone of Reserve on Sir Caelan Lightbringer (`_slug: "ioun-stone"`, `_spell_reserve_levels: 3`, equipped + attuned — his 3rd attunement slot and second ioun stone).
+- `tests/harness/test_item_ioun_stone_reserve.py` (3 tests): `derived.spell_reserve.levels == 3` with the stone named in sources; the two ioun stones coexist (Reserve buffer + DEX 10→12); and unequip drops the capacity.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2630 → 2633; added the `test_item_ioun_stone_reserve.py` section.
+
 ## [2.228.0] - 2026-06-13 — "The Dusty Rose Prism"
 
 **Schema version:** 69

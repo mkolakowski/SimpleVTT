@@ -1239,6 +1239,20 @@ def _paladin_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_ability_bonus": {"DEX": 2},
              "desc": "Very rare wondrous item, attunement. This deep red sphere orbits your head and increases your Dexterity by 2, to a maximum of 20. RAW DMG p.176."},
+            # v2.229.0 — stored-spell capacity drop-in. Ioun Stone of
+            # Reserve (RAW DMG p.176, rare, attunement): a pearly-white
+            # spindle that holds up to 3 levels of spells cast into it.
+            # The capacity rides the shared `ioun-stone` slug via
+            # `_spell_reserve_levels` (no ability payload), surfacing on
+            # `/sheet-json` derived.spell_reserve. Caelan's 3rd attuned item
+            # (after the Dragon Slayer + Ioun Stone of Dexterity, RAW max 3)
+            # — and his SECOND ioun stone, showing two stones composing on
+            # the one slug with different per-item riders. The cast-into /
+            # cast-from mechanic is descriptive-only in v1.
+            {"name": "Ioun Stone of Reserve", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_spell_reserve_levels": 3,
+             "desc": "Rare wondrous item, attunement. This pearly white spindle orbits your head and can store up to 3 levels of spells cast into it, holding them until you cast them. RAW DMG p.176."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:
