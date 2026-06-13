@@ -1,6 +1,6 @@
 # Ability-score override engine — design plan
 
-**Status:** 🟠 Phase 1 + 1b + 2 shipped. Phase 0 (plan) ✅ v2.211.0. Phase 1 (override substrate + STR saves/checks + carry capacity + Belt of Giant Strength Hill tier) ✅ v2.212.0. Phase 1b (weapon attack/damage read site on `/attack`) ✅ v2.213.0 — the `/attack` endpoint now appends the effective-STR modifier delta to both the to-hit roll and the damage expression for STR-keyed weapons. Phase 2a (sheet display of the boosted ability score with an item-boost marker) ✅ v2.214.0. Phase 2b (belt tier backfill via per-item `_ability_set` override) ✅ v2.215.0. Phases 3 / 4 remain open.
+**Status:** 🟠 Phase 1 + 1b + 2 + 3 shipped. Phase 0 (plan) ✅ v2.211.0. Phase 1 (override substrate + STR saves/checks + carry capacity + Belt of Giant Strength Hill tier) ✅ v2.212.0. Phase 1b (weapon attack/damage read site on `/attack`) ✅ v2.213.0 — the `/attack` endpoint now appends the effective-STR modifier delta to both the to-hit roll and the damage expression for STR-keyed weapons. Phase 2a (sheet display of the boosted ability score with an item-boost marker) ✅ v2.214.0. Phase 2b (belt tier backfill via per-item `_ability_set` override) ✅ v2.215.0. Phase 3 (Amulet of Health: CON 19 override + display-derived max-HP) ✅ v2.216.0. Phase 4 (Potion of Giant Strength, timed) remains open.
 
 **Authors:** rolling
 **Last updated:** 2026-06-13
@@ -109,10 +109,9 @@ Shipped: two pure helpers — `_attack_override_ability(sheet, attack)` infers t
 
 **Phase 2b — Belt tier backfill ✅ v2.215.0.** The data-modeling question (the SRD ships a single slug `belt-of-giant-strength`, rarity "varies", covering all six tiers) is resolved in favour of a **per-inventory-item override**: an `_ability_set: {"STR": N}` field on the inventory item wins over the catalog payload's `ability_set` default in `_equipped_item_effects` (merged per-ability). This keeps the catalog faithful to the SRD's one slug and generalises to any future "varies"-rarity score-setting item. Demo: Zara Emberfire (Sorcerer, base STR 8) wears a Belt of Stone Giant Strength flagged `_ability_set: {"STR": 23}` → effective STR 23 (mod +6), carry 345 lb. Harness `test_belt_tier_override_sets_higher_str` + `test_belt_tier_override_raises_carry_capacity` assert the override beats the Hill default (21).
 
-### Phase 3 — Amulet of Health + max-HP derivation (M, ~1 commit)
+### Phase 3 — Amulet of Health + max-HP derivation (M) ✅ v2.216.0
 
-- `ability_set: {"CON": 19}` payload + the chosen max-HP derivation (a vs b above).
-- Demo seed + harness test asserting effective CON 19 + adjusted max HP.
+Shipped: `amulet-of-health` in `_MAGIC_ITEM_PASSIVES` (`ability_set {CON: 19}`, attunement) — the CON override flows automatically into CON saves (`/roll`) and the Phase 2a boosted-ability sheet card. The max-HP second-order effect chose **option (a) display-derived**: new `_effective_max_hp_for_sheet(sheet)` computes `{base, effective, delta, level, source}` from the effective-vs-base CON modifier delta × total level (new `_sheet_total_level` helper), surfaced as `/sheet-json` `derived.effective_max_hp`. The stored `hp.max` is left untouched so combat damage math is unchanged in v1 (mutating the stored max in combat is a filed follow-up). Demo: Brother Tavik Stonebrow (Cleric Lv 8, base CON 14 → mod +2, stored max 67) → effective CON 19 (mod +4), effective max HP 83. Harness `test_item_amulet_of_health.py` (4 tests): effective CON, effective max HP +16, CON-save delta, unequip-reverts.
 
 ### Phase 4 (filed) — Potion of Giant Strength (timed)
 

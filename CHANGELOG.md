@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.216.0] - 2026-06-13 — "The Amulet of Vigor"
+
+**Schema version:** 69
+
+**Commit summary:** Ability-score override engine Phase 3 (docs/plans/str-override.md): Amulet of Health (RAW DMG p.150, rare, attunement) — while worn, your Constitution score *becomes* 19 if it isn't already higher, and the CON change retroactively adjusts max HP. Reuses the same `ability_set` substrate as the Belt of Giant Strength, but on CON, plus a new second-order max-HP derivation surfaced on `/sheet-json`.
+
+**Description:** The amulet adds `amulet-of-health` to `_MAGIC_ITEM_PASSIVES` (`ability_set {CON: 19}`, attunement) — so the CON override flows automatically into CON saves (`/roll`) and the boosted-ability sheet card (the v2.214.0 Phase 2a display already reads `effective_abilities`, so the CON card renders 19 with the ▲ badge for free). The marquee Phase 3 work is CON's second-order effect on max HP: per RAW, raising CON raises max HP by the CON-modifier increase × character level. New `_effective_max_hp_for_sheet(sheet)` helper computes `{base, effective, delta, level, source}` from the effective-vs-base CON modifier delta times total level (new `_sheet_total_level` helper sums `classes[].level` or reads the top-level `level`). This is **display-derived** (option (a) in the plan): the stored `hp.max` is left untouched so combat damage math is unchanged in v1; `/sheet-json` exposes the effective figure as `derived.effective_max_hp`. Brother Tavik Stonebrow (Cleric Lv 8, base CON 14 → mod +2, stored max HP 67) carries an equipped+attuned Amulet of Health — his 3rd attuned item (after the Ring of Protection + Staff of Healing, RAW max) — so his effective CON is 19 (mod +4), effective max HP 83 (67 + 2 mod-delta × 8 levels), and CON saves gain the +2 delta. MINOR — additive catalog passive + derived field + two helpers + seed + tests, no schema change.
+
+### Added
+- `amulet-of-health` entry in `_MAGIC_ITEM_PASSIVES` (`ability_set {CON: 19}`, attunement).
+- `_effective_max_hp_for_sheet(sheet)` + `_sheet_total_level(sheet)` helpers in `tabletop_routes.py`; `/sheet-json` `derived.effective_max_hp` (present only when an equipped item overrides CON above its base).
+- Demo seed: Amulet of Health on Brother Tavik Stonebrow, equipped + attuned.
+- `tests/harness/test_item_amulet_of_health.py` (4 tests): effective CON 19, effective max HP +16 (= 83) with the stored max untouched, CON-save override delta, and unequip-reverts.
+
+### Changed
+- `docs/plans/str-override.md`: Phase 3 marked shipped (display-derived max-HP).
+- `docs/test-harness-coverage.md`: harness total 2591 → 2595; added the `test_item_amulet_of_health.py` section.
+
+---
+
 ## [2.215.0] - 2026-06-13 — "The Stone Giant's Girdle"
 
 **Schema version:** 69

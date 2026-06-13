@@ -32345,6 +32345,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "belt-of-giant-strength": [
         {"ability_set": {"STR": 21}, "requires_attunement": True},
     ],
+    # v2.216.0 — Amulet of Health (RAW DMG p.150, rare, attunement; see
+    # docs/plans/str-override.md). While worn, your CON *becomes* 19 if
+    # not already higher — same `ability_set` substrate as the belt, but
+    # CON instead of STR. The score override flows to CON saves (/roll)
+    # automatically; the second-order max-HP effect (CON drives +mod/level
+    # HP) is surfaced as a DERIVED field `effective_max_hp` on /sheet-json
+    # (display-derived per the plan's option (a) — the stored hp.max is
+    # left untouched so combat damage math is unchanged in v1).
+    "amulet-of-health": [
+        {"ability_set": {"CON": 19}, "requires_attunement": True},
+    ],
 }
 
 
@@ -33427,6 +33438,61 @@ def _effective_abilities_for_sheet(sheet: dict) -> dict:
     except Exception:
         return {}
     return out
+
+
+def _sheet_total_level(sheet: dict) -> int:
+    """Total character level: the top-level `level` (single-class PCs) or
+    the sum of `classes[].level` (multiclass). Falls back to 1."""
+    if not isinstance(sheet, dict):
+        return 1
+    classes = sheet.get("classes")
+    if isinstance(classes, list) and classes:
+        total = 0
+        for c in classes:
+            if isinstance(c, dict):
+                try:
+                    total += int(c.get("level") or 0)
+                except (TypeError, ValueError):
+                    continue
+        if total > 0:
+            return total
+    try:
+        return max(1, int(sheet.get("level") or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _effective_max_hp_for_sheet(sheet: dict) -> dict | None:
+    """v2.216.0 — the Amulet of Health's second-order effect (RAW DMG
+    p.150): setting CON to 19 retroactively adjusts max HP by the CON
+    *modifier* delta times character level. Display-derived (option (a)
+    in docs/plans/str-override.md): the stored `hp.max` is left untouched;
+    this returns the effective figure for the sheet/sheet-json to show.
+
+    Returns `{base, effective, delta, level, source}` only when an equipped
+    item overrides CON above its base; otherwise None."""
+    try:
+        base_con = _read_stored_ability(sheet, "CON")
+        eff_con = effective_ability_score(sheet, "CON")
+        if eff_con <= base_con:
+            return None
+        mod_delta = _ability_score_modifier(eff_con) - _ability_score_modifier(base_con)
+        if mod_delta == 0:
+            return None
+        level = _sheet_total_level(sheet)
+        hp = sheet.get("hp") if isinstance(sheet.get("hp"), dict) else {}
+        base_max = int(hp.get("max") or 0)
+        delta = mod_delta * level
+        srcs = _equipped_item_effects(sheet).get("ability_set_sources", {})
+        return {
+            "base": base_max,
+            "effective": base_max + delta,
+            "delta": delta,
+            "level": level,
+            "source": srcs.get("CON"),
+        }
+    except Exception:
+        return None
 
 
 def _apply_monk_martial_arts_die(sheet: dict, attack_name: str, damage_expr: str) -> str:
@@ -89916,6 +89982,11 @@ async def get_character_sheet_json(
         eff_abilities = _effective_abilities_for_sheet(sheet)
         if eff_abilities:
             derived["effective_abilities"] = eff_abilities
+        # v2.216.0 — Amulet of Health second-order max-HP effect. Only
+        # present when an equipped item overrides CON above its base.
+        eff_max_hp = _effective_max_hp_for_sheet(sheet)
+        if eff_max_hp:
+            derived["effective_max_hp"] = eff_max_hp
         try:
             from ..content.carry_weight import sheet_carry_summary
             _eff_str = effective_ability_score(sheet, "STR")

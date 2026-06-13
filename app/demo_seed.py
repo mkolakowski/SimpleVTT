@@ -948,6 +948,18 @@ def _cleric_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "staff-of-healing",
              "desc": "Rare staff, attunement. 10 charges. Cast Cure Wounds (1-4 charges → Lv 1-4), Lesser Restoration (2 charges), or Mass Cure Wounds (5 charges). Regains 1d6+4 charges at dawn (long rest)."},
+            # v2.216.0 — ability-score override Phase 3: Amulet of Health
+            # (RAW DMG p.150, rare, attunement). While worn, your CON
+            # *becomes* 19 if it isn't already higher — and the CON change
+            # retroactively adjusts max HP. Tavik (Cleric Lv 8, base CON 14
+            # → mod +2) becomes effective CON 19 (mod +4) while worn: +2
+            # CON-mod × 8 levels = +16 to his max HP (67 → 83, surfaced as
+            # /sheet-json `derived.effective_max_hp`). His 3rd attuned item
+            # (RAW max), after the Ring + Staff. See docs/plans/str-override.md.
+            {"name": "Amulet of Health", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "amulet-of-health", "weight_lb": 0,
+             "desc": "Rare wondrous item, attunement. While worn, your Constitution score becomes 19 if it isn't already higher. The CON change retroactively adjusts your max HP. RAW DMG p.150."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2591 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.215.0, 2026-06-13).
+**Total tests:** 2595 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.216.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2391,6 +2391,16 @@ v2.212.0 ability-score override engine Phase 1 (docs/plans/str-override.md) — 
 | `test_belt_weapon_boost_reverts_on_unequip` | PATCH belt `equipped: False` → `/attack` Greatsword `damage_expr == "2d6+4"` + to-hit flat == 8; restores inventory on teardown. Phase 1b. |
 | `test_belt_tier_override_sets_higher_str` | Zara Emberfire's `GET /sheet-json` → `derived.effective_abilities.STR` = `{base 8, effective 23, modifier 6}` — the per-item `_ability_set` (23) beats the catalog Hill default (21). Phase 2b. |
 | `test_belt_tier_override_raises_carry_capacity` | Zara's `derived.carry.carry_capacity_lb` == 345 (effective STR 23 × 15, vs. base 120). Phase 2b. |
+
+### `test_item_amulet_of_health.py`
+v2.216.0 ability-score override engine Phase 3 (docs/plans/str-override.md) — Amulet of Health (RAW DMG p.150, attunement). While worn, CON *becomes* 19 if higher (same `ability_set` substrate as the belt, on CON), and the CON change retroactively adjusts max HP. The max-HP effect is display-derived: `/sheet-json` `derived.effective_max_hp` adds the CON-modifier delta × character level to the stored max (the stored `hp.max` is left untouched in v1). Brother Tavik Stonebrow (Cleric Lv 8, base CON 14 → mod +2, stored max 67) carries an equipped+attuned Amulet of Health — his 3rd attuned item.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_amulet_exposes_effective_con_on_sheet_json` | `GET /sheet-json` → `derived.effective_abilities.CON` = `{base 14, effective 19, modifier 4}`. |
+| `test_amulet_raises_effective_max_hp` | `derived.effective_max_hp` = `{level 8, delta 16, base == stored hp.max, effective == stored + 16}` (CON mod delta +2 × level 8). |
+| `test_amulet_adds_con_save_override_delta` | `POST /roll` `con_save` for Tavik → breakdown contains "Amulet of Health" (the +2 modifier delta annotation). |
+| `test_amulet_unequip_reverts_override` | PATCH the amulet to `equipped: False` → `effective_abilities` drops CON + `effective_max_hp` is None; restores the original inventory on teardown. |
 
 ### `test_item_ring_of_protection.py`
 v2.158.76 magic-items-automation Phase 1b — second catalog entry. Same +1 AC / +1 saves shape as the Cloak (RAW DMG p.191) on a different slot (finger vs neck), validating that the v2.158.74 catalog scales additively. Tavik Stonebrow (Cleric Lv 8, AC 18, WIS save +6) is the canary because his base AC + save mod are clean integers and he's a different PC from Thalindra so the AC + save assertions don't interact.
