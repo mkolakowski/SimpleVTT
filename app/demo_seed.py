@@ -1455,6 +1455,17 @@ def _paladin_vengeance_sheet(name: str) -> dict:
              "properties": "versatile (1d10), magic",
              "_slug": "sun-blade",
              "desc": "Rare longsword, attunement. +2 attack/damage; radiant damage type; +1d8 radiant vs. undead (RAW DMG p.205). Bonus action: bright light in a 15-ft radius."},
+            # v2.227.0 — Periapt of Wound Closure (RAW DMG p.184,
+            # uncommon, attunement). Seraphine's 2nd attuned item (after
+            # the Sun Blade). The `double_hit_die_healing` passive doubles
+            # her rolled short-rest Hit-Die recovery — a frontline
+            # paladin's natural fit. The RAW auto-stabilize-when-dying
+            # clause is descriptive-only in v1 (a start-of-turn trigger).
+            {"name": "Periapt of Wound Closure", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 0, "weight_lb": 0,
+             "_slug": "periapt-of-wound-closure",
+             "desc": "Uncommon wondrous item, attunement. You stabilize whenever you are dying at the start of your turn; and whenever you roll a Hit Die to regain hit points, double the number of hit points it restores. RAW DMG p.184."},
         ],
         "resources": [
             {

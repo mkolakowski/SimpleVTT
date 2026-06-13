@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.227.0] - 2026-06-13 — "The Closing Wound"
+
+**Schema version:** 69
+
+**Commit summary:** Periapt of Wound Closure — the first magic item to ride the rest-heal substrate: an equipped+attuned periapt doubles the rolled short-rest Hit-Die recovery.
+
+**Description:** The override substrate to date covered AC/saves/checks, ability scores, and senses. The **Periapt of Wound Closure** (RAW DMG p.184, uncommon, attunement) opens a new surface — rest-time healing. RAW: "whenever you roll a Hit Die to regain hit points, double the number of hit points it restores." A new boolean field `double_hit_die_healing` aggregates (boolean OR) across equipped+attuned items in `_equipped_item_effects`, and the `/rest` short-rest path reads it to double the rolled recovery. The response gains `hit_die_healing_doubled` (bool) and `recovered_pre_double` (the pre-doubling roll, or null) so a client can verify `recovered == 2 × pre` regardless of the HP-cap clamp; the breakdown is annotated `×2 (Periapt of Wound Closure)`. The periapt's other RAW clause — auto-stabilize when dying at the start of your turn — is a start-of-turn trigger not modeled in v1 (descriptive in the item desc). Demo: Dame Seraphine Vael (Oath of Vengeance Paladin, d10 HD) wears an equipped+attuned periapt — her 2nd attuned item after the Sun Blade. MINOR — additive substrate field + content + response fields + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES["periapt-of-wound-closure"]`: `double_hit_die_healing` passive (the first rest-heal substrate entry).
+- `double_hit_die_healing` / `double_hit_die_healing_sources` aggregation in `_equipped_item_effects` (boolean union across equipped+attuned items).
+- Demo seed: Periapt of Wound Closure on Dame Seraphine Vael (equipped + attuned, her 2nd of the RAW-3 attunement slots).
+- `tests/harness/test_item_periapt_of_wound_closure.py` (3 tests): short rest doubling (`recovered == 2 × recovered_pre_double`, flag set, periapt named in breakdown), a no-periapt control (not doubled, `recovered_pre_double` null), and unequip stopping the doubling.
+
+### Changed
+- `/rest` short-rest response: new `hit_die_healing_doubled` (bool) and `recovered_pre_double` (int|null) fields; the doubled Hit-Die recovery and the annotated breakdown.
+- `docs/test-harness-coverage.md`: harness total 2625 → 2628; added the `test_item_periapt_of_wound_closure.py` section.
+
 ## [2.226.0] - 2026-06-13 — "The Dwarven Cinch"
 
 **Schema version:** 69

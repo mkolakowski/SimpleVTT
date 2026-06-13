@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2625 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.226.0, 2026-06-13).
+**Total tests:** 2628 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.227.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2466,6 +2466,15 @@ v2.226.0 — Belt of Dwarvenkind (RAW DMG p.155, rare, attunement): the first ma
 | `test_belt_exposes_effective_con_on_sheet_json` | `GET /sheet-json` → `derived.effective_abilities.CON` = `{base 14, effective 16, modifier 3}` with source naming "Belt of Dwarvenkind" — a pure additive +2 under the cap. |
 | `test_belt_darkvision_negates_darkness_blinded_disadvantage` | Quan darkness-blinded + belt equipped → `/attack` breakdown has no `2d20kl1` and `roll_state_applied` is not `disadvantage_attacker_blinded` (mirror of the Goggles path, proving the second substrate field rides the same payload). |
 | `test_belt_unequip_reverts_con_bonus` | PATCH the belt to `equipped: False` → `effective_abilities` drops CON; restores the original inventory on teardown. |
+
+### `test_item_periapt_of_wound_closure.py`
+v2.227.0 — Periapt of Wound Closure (RAW DMG p.184, uncommon, attunement): the first magic item on the rest-heal substrate. RAW "double the number of hit points a Hit Die restores" — an equipped+attuned periapt doubles the rolled short-rest recovery via the new `double_hit_die_healing` field on `_equipped_item_effects`, read by `/rest`. The response gains `hit_die_healing_doubled` (bool) + `recovered_pre_double` (int|null). Dame Seraphine Vael (Oath of Vengeance Paladin, d10 HD) wears it equipped+attuned (her 2nd attuned item). The periapt's auto-stabilize-when-dying clause is descriptive-only in v1.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_periapt_doubles_short_rest_hit_die_healing` | Seraphine `/rest` short → `hit_die_healing_doubled is True`, `recovered_pre_double` ≥ 1, `recovered == 2 × recovered_pre_double`, and the breakdown names "Periapt of Wound Closure". |
+| `test_short_rest_without_periapt_not_doubled` | Control: Pip (no periapt) `/rest` short → `hit_die_healing_doubled is False`, `recovered_pre_double` is null. |
+| `test_periapt_unequip_stops_doubling` | Unequip the periapt → `/rest` short no longer doubles (flag False, pre null); restores the original inventory on teardown. |
 
 ### `test_item_ring_of_protection.py`
 v2.158.76 magic-items-automation Phase 1b — second catalog entry. Same +1 AC / +1 saves shape as the Cloak (RAW DMG p.191) on a different slot (finger vs neck), validating that the v2.158.74 catalog scales additively. Tavik Stonebrow (Cleric Lv 8, AC 18, WIS save +6) is the canary because his base AC + save mod are clean integers and he's a different PC from Thalindra so the AC + save assertions don't interact.

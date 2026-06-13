@@ -32444,6 +32444,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_attunement": True,
         },
     ],
+    # v2.227.0 — Periapt of Wound Closure (RAW DMG p.184, uncommon,
+    # attunement). RAW: "whenever you roll a Hit Die to regain hit points,
+    # double the number of hit points it restores." The `double_hit_die_
+    # healing` flag is read by the short-rest endpoint, which doubles the
+    # rolled recovery. The other RAW clause — auto-stabilize when dying at
+    # the start of your turn — is a start-of-turn trigger not modeled in
+    # v1 (descriptive only, lives in the item desc).
+    "periapt-of-wound-closure": [
+        {"double_hit_die_healing": True, "requires_attunement": True},
+    ],
 }
 
 
@@ -33381,6 +33391,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # Night" rather than the generic devil's-sight label.
         "sees_in_darkness": False,
         "sees_in_darkness_sources": [],
+        # v2.227.0 — rest-heal passive. `double_hit_die_healing` is the
+        # boolean union across equipped+attuned items carrying the field;
+        # the short-rest endpoint doubles the rolled Hit-Die recovery when
+        # set. Periapt of Wound Closure (RAW DMG p.184) is the first entry.
+        "double_hit_die_healing": False,
+        "double_hit_die_healing_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33505,6 +33521,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if p.get("sees_in_darkness"):
                 out["sees_in_darkness"] = True
                 out["sees_in_darkness_sources"].append(item_name)
+            # v2.227.0 — rest-heal passive. Boolean OR across passives;
+            # the short-rest endpoint reads this to double the rolled
+            # Hit-Die recovery (Periapt of Wound Closure, RAW DMG p.184).
+            if p.get("double_hit_die_healing"):
+                out["double_hit_die_healing"] = True
+                out["double_hit_die_healing_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -80144,6 +80166,27 @@ async def rest_character(
         recovered = 1
         breakdown = ""
 
+    # v2.227.0 — Periapt of Wound Closure (RAW DMG p.184): "whenever you
+    # roll a Hit Die to regain hit points, double the number of hit points
+    # it restores." An equipped+attuned periapt doubles the rolled recovery
+    # (reported pre-clamp in `recovered`/`recovered_pre_double`). Reuses the
+    # `_equipped_item_effects` substrate's `double_hit_die_healing` union.
+    hit_die_healing_doubled = False
+    recovered_pre_double = recovered
+    try:
+        _rest_effects = _equipped_item_effects(sheet)
+    except Exception:  # noqa: BLE001
+        _rest_effects = {}
+    if _rest_effects.get("double_hit_die_healing"):
+        recovered = recovered * 2
+        hit_die_healing_doubled = True
+        _phd_src = _rest_effects.get("double_hit_die_healing_sources") or []
+        _phd_name = _phd_src[0] if _phd_src else "Periapt of Wound Closure"
+        breakdown = (
+            f"{breakdown} ×2 ({_phd_name})" if breakdown
+            else f"{recovered_pre_double} ×2 ({_phd_name})"
+        )
+
     # v2.221.0 — clamp at the effective ceiling (stored max + a CON-setting
     # item's boost) so a short rest can refill an Amulet-of-Health wearer
     # up to their boosted pool, consistent with the v2.220.0 combat heal +
@@ -80336,6 +80379,14 @@ async def rest_character(
         "expression": expr,
         "recovered": recovered,
         "breakdown": breakdown,
+        # v2.227.0 — Periapt of Wound Closure: True when an equipped+attuned
+        # periapt doubled the rolled Hit-Die recovery. `recovered_pre_double`
+        # is the pre-doubling roll (null when not doubled) so a client/test
+        # can verify recovered == 2 × pre regardless of the HP-cap clamp.
+        "hit_die_healing_doubled": hit_die_healing_doubled,
+        "recovered_pre_double": (
+            recovered_pre_double if hit_die_healing_doubled else None
+        ),
         "resources": refilled_resources,
         # v2.99.39 — Sorcerous Restoration: how many SP the Lv 20
         # capstone refunded this short rest. 0 for every non-Lv-20
