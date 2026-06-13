@@ -32499,6 +32499,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "periapt-of-health": [
         {"disease_immune": True},
     ],
+    # v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon,
+    # attunement). RAW: "while wearing it, you are hidden from divination
+    # magic. You can't be targeted by such magic or perceived through magical
+    # scrying sensors." The `scry_proof` flag aggregates in
+    # `_equipped_item_effects` (boolean OR, same substrate as the disease-
+    # immunity passive) and surfaces on `/sheet-json` as
+    # `derived.scry_proof = {sources}`. Divination/scrying mechanics are
+    # descriptive in v1 — this exposes the protection as a derived read.
+    "amulet-of-proof-against-detection": [
+        {"scry_proof": True, "requires_attunement": True},
+    ],
 }
 
 
@@ -33475,6 +33486,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # you're immune to contracting disease.
         "disease_immune": False,
         "disease_immune_sources": [],
+        # v2.234.0 — scry-proof passive. Boolean OR across equipped+attuned
+        # items carrying the field; surfaced on `/sheet-json` derived.
+        # Amulet of Proof against Detection (RAW DMG p.150) is the first
+        # entry — while worn you're hidden from divination + scrying.
+        "scry_proof": False,
+        "scry_proof_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33661,6 +33678,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_disease_immune") or p.get("disease_immune"):
                 out["disease_immune"] = True
                 out["disease_immune_sources"].append(item_name)
+            # v2.234.0 — scry-proof passive (Amulet of Proof against
+            # Detection, RAW DMG p.150). Boolean OR; the flag rides the
+            # item via the `scry_proof` payload (or a per-item
+            # `_scry_proof` rider).
+            if item.get("_scry_proof") or p.get("scry_proof"):
+                out["scry_proof"] = True
+                out["scry_proof_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90678,6 +90702,12 @@ async def get_character_sheet_json(
             if _item_eff.get("disease_immune"):
                 derived["disease_immune"] = {
                     "sources": list(_item_eff.get("disease_immune_sources") or []),
+                }
+            # v2.234.0 — scry proof (Amulet of Proof against Detection).
+            # Only present when an equipped+attuned item sets the flag.
+            if _item_eff.get("scry_proof"):
+                derived["scry_proof"] = {
+                    "sources": list(_item_eff.get("scry_proof_sources") or []),
                 }
         except Exception:
             pass

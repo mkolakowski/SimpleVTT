@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.234.0] - 2026-06-13 — "The Hidden Sigil"
+
+**Schema version:** 69
+
+**Commit summary:** Amulet of Proof against Detection — scry-proof passive (`derived.scry_proof`) on a new boolean-OR substrate field, riding the `amulet-of-proof-against-detection` catalog payload.
+
+**Description:** The **Amulet of Proof against Detection** (RAW DMG p.150, uncommon, attunement) hides its wearer from divination magic — they can't be targeted by such magic or perceived through magical scrying sensors. It reuses the boolean-OR passive substrate (Sustenance v2.230.0 / Awareness v2.231.0 / Periapt of Health v2.233.0): the `scry_proof` flag rides the `amulet-of-proof-against-detection` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects` (a new `scry_proof` field + `scry_proof_sources`), and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`. Divination/scrying mechanics are descriptive-only in v1 — this exposes the protection as a derived read. Demo: Kael Brightleaf (Monk Lv 7) wears it as his 2nd attuned item (after the Bracers of Defense, RAW max 3) — thematic on a secluded, meditative Monk. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `scry_proof` / `scry_proof_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped+attuned items carrying a `scry_proof` payload or `_scry_proof` rider).
+- `amulet-of-proof-against-detection` entry in `_MAGIC_ITEM_PASSIVES` (`scry_proof: True`, `requires_attunement: True`).
+- `/sheet-json` `derived.scry_proof = {sources}` — present only when an equipped+attuned item sets the flag.
+- Demo seed: Amulet of Proof against Detection on Kael Brightleaf (`_slug: "amulet-of-proof-against-detection"`, equipped + attuned — his 2nd attunement slot).
+- `tests/harness/test_item_amulet_of_proof_against_detection.py` (3 tests): `derived.scry_proof` with the amulet named in sources; the flag coexists with his Bracers of Defense; and unequip drops the flag.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2645 → 2648; added the `test_item_amulet_of_proof_against_detection.py` section.
+
 ## [2.233.0] - 2026-06-13 — "The Steadfast Pendant"
 
 **Schema version:** 69

@@ -3484,6 +3484,17 @@ def _monk_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "bracers-of-defense",
              "desc": "Rare wondrous item, attunement. +2 AC while wearing no armor and using no shield."},
+            # v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150,
+            # uncommon, attunement). Kael's 2nd attuned item (after the
+            # Bracers, RAW max 3). While worn he's hidden from divination
+            # and magical scrying. The `scry_proof` flag rides the
+            # `amulet-of-proof-against-detection` catalog payload and
+            # surfaces on /sheet-json as derived.scry_proof — thematic on a
+            # secluded, meditative Monk.
+            {"name": "Amulet of Proof against Detection", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
+             "_slug": "amulet-of-proof-against-detection",
+             "desc": "Uncommon wondrous item, attunement. While wearing it you are hidden from divination magic — you can't be targeted by such magic or perceived through magical scrying sensors. RAW DMG p.150."},
         ],
         "feats": [],
         # v2.18.0: Ki counter (max = monk level). Refreshes on short rest.

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2645 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.233.0, 2026-06-13).
+**Total tests:** 2648 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.234.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2483,6 +2483,15 @@ v2.228.0 — Ioun Stone of Protection (RAW DMG p.176, rare, attunement): the fir
 |------|-----------------|
 | `test_ioun_stone_protection_grants_ac_bonus` | Krieger swings at Mira → `target_ac == 16` (15 base + stone +1). |
 | `test_ioun_stone_protection_unequip_reverts_ac` | PATCH the stone to `equipped: False` → `target_ac == 15` (base, no bonus); restores the original inventory on teardown. |
+
+### `test_item_amulet_of_proof_against_detection.py`
+v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon, attunement): hidden from divination magic + magical scrying while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health): the `scry_proof` flag rides the `amulet-of-proof-against-detection` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`. Kael Brightleaf (Monk Lv 7) wears it as his 2nd attuned item.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_amulet_exposes_scry_proof_on_sheet_json` | `GET /sheet-json` → `derived.scry_proof` present with "Amulet of Proof against Detection" in `sources`. |
+| `test_amulet_coexists_with_bracers_ac` | The scry-proof flag rides alongside Kael's Bracers of Defense (still in inventory) — the new boolean field composes with the existing AC-bonus item. |
+| `test_amulet_unequip_drops_flag` | PATCH the amulet to `equipped: False` → `derived.scry_proof` absent; restores the original inventory on teardown. |
 
 ### `test_item_periapt_of_health.py`
 v2.233.0 — Periapt of Health (RAW DMG p.184, uncommon, no attunement): immunity to contracting disease while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness): the `disease_immune` flag rides the `periapt-of-health` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.disease_immune = {sources}`. Brother Tavik Stonebrow (Cleric Lv 8) wears it — no attunement, so it composes with his three attuned items without exceeding the RAW cap.
