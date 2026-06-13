@@ -8718,6 +8718,18 @@ async def _apply_heal_to_combatant(
             )
         except Exception:  # noqa: BLE001
             effective_max = hp_max
+        # v2.220.0 — a CON-setting item (Amulet of Health) raises the
+        # effective max-HP ceiling so heals restore up to the boosted
+        # pool, not just the stored hp.max. The combat-side companion to
+        # the display-derived _effective_max_hp_for_sheet on /sheet-json
+        # (v2.216.0). Added BEFORE exhaustion so RAW order holds: max is
+        # augmented (Aid + Amulet), THEN exhaustion halves the result.
+        try:
+            _emh = _effective_max_hp_for_sheet(sheet)
+            if _emh:
+                effective_max += int(_emh.get("delta") or 0)
+        except Exception:  # noqa: BLE001
+            pass
         # v2.159.20 — exhaustion Phase 3b: Lv 4 halves the effective
         # HP max (heal can never push current above floor(max/2)).
         # Applied AFTER the buff bonus so a Lv 4 PC with Aid still
@@ -79697,7 +79709,18 @@ async def rest_character(
     _refill_feature_uses(sheet, rest_type)
 
     if rest_type == "long":
-        long_rest_new_cur = hp_max if hp_max > 0 else hp_cur
+        # v2.220.0 — long rest restores up to the *effective* max, which
+        # includes a CON-setting item's boost (Amulet of Health) via the
+        # same _effective_max_hp_for_sheet delta the combat heal-clamp
+        # reads. Keeps "full HP" consistent between resting and healing.
+        _lr_max = hp_max
+        try:
+            _emh_lr = _effective_max_hp_for_sheet(sheet)
+            if _emh_lr:
+                _lr_max += int(_emh_lr.get("delta") or 0)
+        except Exception:  # noqa: BLE001
+            pass
+        long_rest_new_cur = _lr_max if _lr_max > 0 else hp_cur
         hp["temp"] = 0
         hd["max"] = hd_max
         hd["current"] = min(hd_max, hd_cur + max(1, hd_max // 2)) if hd_max > 0 else hd_cur

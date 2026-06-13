@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2605 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.219.0, 2026-06-13).
+**Total tests:** 2607 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.220.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2410,6 +2410,14 @@ v2.218.0 ability-score override engine drop-in (docs/plans/str-override.md) — 
 | `test_headband_exposes_effective_int_on_sheet_json` | `GET /sheet-json` → `derived.effective_abilities.INT` = `{base 10, effective 19, modifier 4}` with source naming "Headband of Intellect". |
 | `test_headband_adds_int_save_override_delta` | `POST /roll` `int_save` for Mira → breakdown contains "+4" and "Headband of Intellect" (the modifier delta annotation). |
 | `test_headband_unequip_reverts_override` | PATCH the headband to `equipped: False` → `effective_abilities` drops INT; restores the original inventory on teardown. |
+
+### `test_amulet_health_combat_max_hp.py`
+v2.220.0 ability-score override engine, Phase 3 combat follow-up (docs/plans/str-override.md) — the Amulet of Health's boosted max HP now drives the combat heal-clamp, not just the v2.216.0 `/sheet-json` display. `_apply_heal_to_combatant` folds the `_effective_max_hp_for_sheet` CON-override delta into its effective-max ceiling (non-destructive — stored `hp.max` is never mutated). Tavik Stonebrow (Cleric Lv 8, stored max 67, effective 83) self-casts Healing Word from his stored max.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_heal_at_stored_max_uses_amulet_ceiling` | Tavik at stored max → self Healing Word → `auto_heal_applied > 0` and `stored_max < hp_after <= effective` (83). The combat clamp reads the boosted pool. |
+| `test_heal_at_stored_max_caps_without_amulet` | Guard: amulet unequipped → same heal at stored max → `auto_heal_applied == 0` (clamp falls back to `hp.max`). Restores inventory + full HP on teardown. |
 
 ### `test_item_gauntlets_of_ogre_power.py`
 v2.219.0 ability-score override engine drop-in (docs/plans/str-override.md) — Gauntlets of Ogre Power (RAW DMG p.171, uncommon, attunement). While worn, STR *becomes* 19 if not already higher — same `ability_set` substrate as the Belt (STR), Amulet (CON), and Headband (INT). A pure data drop-in (one `_MAGIC_ITEM_PASSIVES` row + seed + tests), composing with the Belt via the highest-wins map. Rowan Quickbow (Ranger, base STR 12 → mod +1) wears equipped+attuned Gauntlets — his 1st attuned item.

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.220.0] - 2026-06-13 — "The Fuller Cup"
+
+**Schema version:** 69
+
+**Commit summary:** The Amulet of Health's boosted max HP now drives the combat heal-clamp and the long-rest fill, not just the `/sheet-json` display. Phase 3 (v2.216.0) surfaced the CON-override max-HP boost as a display-derived `derived.effective_max_hp` but left the stored `hp.max` — and therefore the heal/rest ceilings — untouched, so a heal or rest still capped at the un-boosted max. This folds the same `_effective_max_hp_for_sheet` delta into `_apply_heal_to_combatant`'s effective-max computation and the long-rest fill, so both restore up to the boosted pool.
+
+**Description:** RAW DMG p.150: the Amulet of Health sets CON to 19, raising max HP by the CON-modifier delta × character level. v2.216.0 chose option (a) display-derived — the stored `hp.max` stays untouched (non-destructive, no unequip-revert bookkeeping, no clobbering player max edits) and the effective figure is exposed on `/sheet-json`. This commit closes the filed combat follow-up: the canonical combat heal helper `_apply_heal_to_combatant` (the path behind Cure Wounds, Healing Word, Aid, and the feature self-heals) now adds the amulet's `_effective_max_hp_for_sheet` delta to its effective-max ceiling — mirroring the existing v2.97.42 Aid `_buff_hp_max_bonus` extension and ordered BEFORE the v2.159.20 exhaustion Lv 4 halving so RAW order holds (augment max with Aid + Amulet, then halve). The long-rest fill (`/rest` `type: long`) gets the same delta so "full HP" is consistent between resting and combat healing — without this the asymmetry surfaced as a real bug: a long-rested Tavik sat at the stored 67 while his combat ceiling was 83, so Life Domain's Blessed Healer self-heal would then land mid-combat (67 < 83) where it previously no-op'd. The clamp stays non-destructive: stored `hp.max` is never mutated, so unequipping the amulet instantly drops the ceiling back with no revert step. Demo: Brother Tavik Stonebrow (Cleric Lv 8, stored max HP 67, effective 83) long-rests to 83 and at 67 HP can be healed up to 83; with the amulet removed the same heal caps at 67. MINOR — additive heal-clamp + rest-fill augmentation + tests, no schema change. The remaining non-combat heal paths (short-rest hit dice, Second Wind, Lay on Hands) still cap at the stored max and are a possible follow-up.
+
+### Changed
+- `_apply_heal_to_combatant` (PC branch): the effective-max heal ceiling now includes the Amulet of Health's CON-override max-HP delta via `_effective_max_hp_for_sheet`, applied before the exhaustion Lv 4 halving.
+- `rest_character` (long-rest branch): the HP fill restores up to the same effective max (stored + CON-override delta), so a long rest tops a Amulet-of-Health wearer up to the boosted pool.
+- `docs/plans/str-override.md`: Phase 3's max-HP combat follow-up marked shipped.
+- `docs/test-harness-coverage.md`: harness total 2605 → 2607; added the `test_amulet_health_combat_max_hp.py` section.
+
+### Added
+- `tests/harness/test_amulet_health_combat_max_hp.py` (2 tests): heal at stored max lands via the amulet ceiling (applied > 0, current rises above stored max); guard — with the amulet unequipped the same heal caps at the stored max (applied == 0).
+
+---
+
 ## [2.219.0] - 2026-06-13 — "The Ogre's Grip"
 
 **Schema version:** 69
