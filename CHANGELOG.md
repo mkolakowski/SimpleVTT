@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.230.0] - 2026-06-13 — "The Clear Spindle"
+
+**Schema version:** 69
+
+**Commit summary:** Ioun Stone of Sustenance — the third non-ability Ioun variant on the shared slug, surfacing a no-eat/no-drink passive (`derived.no_food_or_drink`).
+
+**Description:** The **Ioun Stone of Sustenance** (RAW DMG p.176, rare, attunement) is a clear spindle that removes the need to eat or drink while it orbits your head. It joins the Protection (v2.228.0) and Reserve (v2.229.0) variants as the third non-ability stone on the single shared `ioun-stone` slug: the flag rides the inventory item via `_no_food_or_drink: True` (no ability payload), aggregates in `_equipped_item_effects` (boolean OR into a new `no_food_or_drink` field + `no_food_or_drink_sources`), and surfaces on `/sheet-json` as `derived.no_food_or_drink = {sources}`. Demo: Rowan Quickbow (Ranger) wears it as his 3rd attuned item (after the Gauntlets of Ogre Power + Ioun Stone of Charisma, RAW max 3) — his second ioun stone, so the sustenance flag and the CHA bonus compose on the one slug via distinct per-item riders. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `no_food_or_drink` / `no_food_or_drink_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped+attuned items carrying a `_no_food_or_drink` rider or payload default).
+- `/sheet-json` `derived.no_food_or_drink = {sources}` — present only when an equipped+attuned item sets the flag.
+- Demo seed: Ioun Stone of Sustenance on Rowan Quickbow (`_slug: "ioun-stone"`, `_no_food_or_drink: True`, equipped + attuned — his 3rd attunement slot and second ioun stone).
+- `tests/harness/test_item_ioun_stone_sustenance.py` (3 tests): `derived.no_food_or_drink` with the stone named in sources; the two ioun stones coexist (sustenance flag + CHA 8→10); and unequip drops the flag.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2633 → 2636; added the `test_item_ioun_stone_sustenance.py` section.
+
 ## [2.229.0] - 2026-06-13 — "The Pearly Spindle"
 
 **Schema version:** 69

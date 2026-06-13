@@ -33405,6 +33405,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # descriptive-only in v1; this exposes the capacity.)
         "spell_reserve_levels": 0,
         "spell_reserve_sources": [],
+        # v2.230.0 — sustenance passive. Boolean OR across equipped+attuned
+        # items carrying the field; surfaced on `/sheet-json` derived. Ioun
+        # Stone of Sustenance (RAW DMG p.176) is the first entry — while it
+        # orbits your head you don't need to eat or drink.
+        "no_food_or_drink": False,
+        "no_food_or_drink_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33558,6 +33564,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if reserve:
                 out["spell_reserve_levels"] += reserve
                 out["spell_reserve_sources"].append(item_name)
+            # v2.230.0 — sustenance passive (Ioun Stone of Sustenance, RAW
+            # DMG p.176). Boolean OR; the no-eat/no-drink flag rides the
+            # shared `ioun-stone` slug via the per-item `_no_food_or_drink`
+            # rider (or a payload default).
+            if item.get("_no_food_or_drink") or p.get("no_food_or_drink"):
+                out["no_food_or_drink"] = True
+                out["no_food_or_drink_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90536,6 +90549,10 @@ async def get_character_sheet_json(
                 derived["spell_reserve"] = {
                     "levels": _reserve,
                     "sources": list(_item_eff.get("spell_reserve_sources") or []),
+                }
+            if _item_eff.get("no_food_or_drink"):
+                derived["no_food_or_drink"] = {
+                    "sources": list(_item_eff.get("no_food_or_drink_sources") or []),
                 }
         except Exception:
             pass

@@ -2759,6 +2759,19 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_ability_bonus": {"CHA": 2},
              "desc": "Very rare wondrous item, attunement. This pale lavender ellipsoid orbits your head and increases your Charisma by 2, to a maximum of 20. RAW DMG p.176."},
+            # v2.230.0 — sustenance passive drop-in. Ioun Stone of
+            # Sustenance (RAW DMG p.176, rare, attunement): a clear spindle
+            # that removes the need to eat or drink while it orbits your
+            # head. The flag rides the shared `ioun-stone` slug via
+            # `_no_food_or_drink` (no ability payload), surfacing on
+            # `/sheet-json` derived.no_food_or_drink. Rowan's 3rd attuned
+            # item (after the Gauntlets + Ioun Stone of Charisma, RAW max 3)
+            # and his second ioun stone — a fitting boon for a ranger on
+            # long wilderness treks.
+            {"name": "Ioun Stone of Sustenance", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_no_food_or_drink": True,
+             "desc": "Rare wondrous item, attunement. This clear spindle orbits your head; while it does, you don't need to eat or drink. RAW DMG p.176."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,
