@@ -18,14 +18,23 @@ import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
 
-GUST_OF_WIND_INDEX = 15  # Thalindra's STR-save spell (see test_rage_str_save)
-
 
 async def _sheet(gm_client, char_id):
     r = await gm_client.get(
         f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
     )
     return (r.json() or {}).get("sheet") or {}
+
+
+async def _spell_index(gm_client, char_id, name):
+    """Resolve a spell's index in the sheet's spell list by name — robust to
+    demo-seed spell-list reordering (the indices drift as spells are added)."""
+    sheet = await _sheet(gm_client, char_id)
+    for i, sp in enumerate(sheet.get("spells") or []):
+        nm = sp.get("name") if isinstance(sp, dict) else sp
+        if str(nm).strip().lower() == name.strip().lower():
+            return i
+    return -1
 
 
 def _growth_index(inventory):
@@ -53,12 +62,12 @@ def _last_roll_request(gm_ws):
     return msgs[-1] if msgs else None
 
 
-async def _cast_gust_at(gm_client, thal, garrik):
+async def _cast_gust_at(gm_client, thal, garrik, gust_index):
     return await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
         json={
             "character_id": thal["id"],
-            "spell_index": GUST_OF_WIND_INDEX,
+            "spell_index": gust_index,
             "slot_level": 2, "class_slug": "wizard",
             "target_combatant_id": f"tok_grow_{garrik['id']}",
             "target_character_id": garrik["id"],
@@ -78,13 +87,14 @@ async def battle_thal_garrik(gm_client, roster):
     )
     garrik_sheet = await _sheet(gm_client, garrik["id"])
     inv = list(garrik_sheet.get("inventory") or [])
+    gust_index = await _spell_index(gm_client, thal["id"], "Gust of Wind")
     await gm_client.put(
         f"/api/campaign/{CAMPAIGN_ID}/battle",
         json={"combatants": [_tok(thal), _tok(garrik)],
               "turn_index": 0, "round": 1, "active": True},
     )
     try:
-        yield thal, garrik, inv
+        yield thal, garrik, inv, gust_index
     finally:
         await gm_client.patch(
             f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-fields",
@@ -102,9 +112,10 @@ async def test_growth_grants_advantage_on_str_save(
 ):
     """Garrik drinks Potion of Growth → a STR-save spell aimed at him
     rolls 2d20kh1 (advantage from the enlarge effect)."""
-    thal, garrik, inv = battle_thal_garrik
+    thal, garrik, inv, gust_index = battle_thal_garrik
     idx = _growth_index(inv)
     assert idx >= 0, "Garrik must carry a Potion of Growth"
+    assert gust_index >= 0, "Thalindra must know Gust of Wind"
 
     drink = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/use_item_action",
@@ -116,7 +127,7 @@ async def test_growth_grants_advantage_on_str_save(
     assert body["buff_installed"] is True, body
 
     gm_ws.mark()
-    resp = await _cast_gust_at(gm_client, thal, garrik)
+    resp = await _cast_gust_at(gm_client, thal, garrik, gust_index)
     assert resp.status_code == 200, resp.text
     assert resp.json()["auto_save_ability"] == "STR"
 
@@ -133,9 +144,9 @@ async def test_no_growth_str_save_is_plain(
 ):
     """Control: without Growth, Garrik's STR save rolls plain 1d20 —
     proving the advantage comes from the potion, not something innate."""
-    thal, garrik, _inv = battle_thal_garrik
+    thal, garrik, _inv, gust_index = battle_thal_garrik
     gm_ws.mark()
-    resp = await _cast_gust_at(gm_client, thal, garrik)
+    resp = await _cast_gust_at(gm_client, thal, garrik, gust_index)
     assert resp.status_code == 200, resp.text
 
     rr = _last_roll_request(gm_ws)

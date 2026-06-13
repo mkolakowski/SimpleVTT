@@ -31,14 +31,20 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
-# Thalindra's wizard spell list — Gust of Wind is the STR-save spell
-# appended at v2.99.26. Index 15 (after Poison Spray at 14).
-GUST_OF_WIND_INDEX = 15
-BANISHMENT_THAL_INDEX = 13  # CHA save — control case (Krieger has no
-                            # CHA-save advantage from race / class).
-                            # DEX save (Fireball) would trigger Danger
-                            # Sense; WIS save would be clean but
-                            # Thalindra has no WIS-save spell.
+async def _spell_index(gm_client, char_id, name):
+    """Resolve a spell's index in the sheet's spell list by name — robust to
+    demo-seed spell-list reordering (hardcoded indices drift as spells are
+    added). Gust of Wind is Thalindra's STR-save trigger; Banishment is the
+    CHA-save control (Krieger has no CHA-save advantage to confound it)."""
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    sheet = (r.json() or {}).get("sheet") or {}
+    for i, sp in enumerate(sheet.get("spells") or []):
+        nm = sp.get("name") if isinstance(sp, dict) else sp
+        if str(nm).strip().lower() == name.strip().lower():
+            return i
+    return -1
 
 
 async def _seed_battle(gm_client, combatants):
@@ -103,6 +109,8 @@ async def test_rage_grants_advantage_on_str_save(
     """
     thal = thalindra_rested
     krieger = krieger_rested
+    gust_index = await _spell_index(gm_client, thal["id"], "Gust of Wind")
+    assert gust_index >= 0, "Thalindra must know Gust of Wind"
     await _seed_battle(gm_client, [_tok(thal), _tok(krieger)])
     # Activate Rage on Krieger.
     r = await gm_client.post(
@@ -116,7 +124,7 @@ async def test_rage_grants_advantage_on_str_save(
         f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
         json={
             "character_id": thal["id"],
-            "spell_index": GUST_OF_WIND_INDEX,
+            "spell_index": gust_index,
             "slot_level": 2,
             "class_slug": "wizard",
             "target_combatant_id": f"tok_rss_{krieger['id']}",
@@ -151,13 +159,15 @@ async def test_rage_skips_str_save_when_not_raging(
     """
     thal = thalindra_rested
     krieger = krieger_rested
+    gust_index = await _spell_index(gm_client, thal["id"], "Gust of Wind")
+    assert gust_index >= 0, "Thalindra must know Gust of Wind"
     await _seed_battle(gm_client, [_tok(thal), _tok(krieger)])
     gm_ws.mark()
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
         json={
             "character_id": thal["id"],
-            "spell_index": GUST_OF_WIND_INDEX,
+            "spell_index": gust_index,
             "slot_level": 2,
             "class_slug": "wizard",
             "target_combatant_id": f"tok_rss_{krieger['id']}",
@@ -191,6 +201,8 @@ async def test_rage_skips_non_str_save_when_raging(
     """
     thal = thalindra_rested
     krieger = krieger_rested
+    banishment_index = await _spell_index(gm_client, thal["id"], "Banishment")
+    assert banishment_index >= 0, "Thalindra must know Banishment"
     await _seed_battle(gm_client, [_tok(thal), _tok(krieger)])
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_rage",
@@ -202,7 +214,7 @@ async def test_rage_skips_non_str_save_when_raging(
         f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
         json={
             "character_id": thal["id"],
-            "spell_index": BANISHMENT_THAL_INDEX,
+            "spell_index": banishment_index,
             "slot_level": 4,
             "class_slug": "wizard",
             "target_combatant_id": f"tok_rss_{krieger['id']}",

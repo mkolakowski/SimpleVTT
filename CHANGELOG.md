@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.192.1] - 2026-06-12 — "The Drifting Index"
+
+**Schema version:** 69
+
+**Commit summary:** Test-infra fix — the STR-save advantage harness tests (`test_potion_of_growth.py`, `test_rage_str_save.py`) resolve their trigger spell's index by name at runtime instead of hardcoding it, so demo-seed spell-list reordering no longer breaks them.
+
+**Description:** Both files hardcoded `GUST_OF_WIND_INDEX = 15` (and `BANISHMENT_THAL_INDEX = 13`) into Thalindra's wizard spell list. Spells added to the seed since those constants were written shifted the list — Gust of Wind is now at index 19 and Banishment at 17 — so `cast_spell` was firing the wrong spell and the `auto_save_ability` assertions failed (empty / WIS instead of STR / CHA). Each test now calls a small `_spell_index(client, char_id, name)` helper that reads the character's `sheet-json` spell list and finds the index by name, making the suite robust to future seed reordering. No production code change. PATCH — test-only.
+
+### Fixed
+- `test_potion_of_growth.py` + `test_rage_str_save.py`: resolve Gust of Wind / Banishment indices dynamically by name (via `sheet-json`) instead of hardcoding drifted constants.
+
+### Changed
+- `docs/test-harness-coverage.md`: version stamp v2.192.0 → v2.192.1 (test count unchanged at 2543).
+
 ## [2.192.0] - 2026-06-12 — "The Towering Draught"
 
 **Schema version:** 69
