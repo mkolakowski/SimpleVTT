@@ -3821,6 +3821,15 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-mind-reading",
              "desc": "Drink + probe a mind (action, /use_item_action read): the target makes a DC 13 WIS save; on a failure you read its surface thoughts. Consumes the potion. RAW DMG p.187."},
+            # v2.199.0 — eighth self-buff potion, first DEbuff one. Potion of
+            # Diminution (RAW DMG p.187, rare): drink → the reduce effect for
+            # up to 1d4 hours (disadvantage on STR checks/saves; size one
+            # smaller; -1d4 weapon damage). The STR-check disadvantage half is
+            # mechanical via the v2.199.0 intercept; the rest is GM-narrated.
+            {"name": "Potion of Diminution", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-diminution",
+             "desc": "Drink (action, /use_item_action drink) to gain the reduce effect: disadvantage on STR checks/saves, size one smaller, -1d4 weapon damage, for up to 1d4 hours. RAW DMG p.187."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

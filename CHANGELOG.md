@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.199.0] - 2026-06-13 — "The Shrinking Sip"
+
+**Schema version:** 69
+
+**Commit summary:** Eighth self-buff potion and the first DEbuff one — Potion of Diminution (RAW DMG p.187, rare): drink → the "reduce" effect of enlarge/reduce for up to 1d4 hours (disadvantage on STR checks/saves, size one smaller, -1d4 weapon damage), no concentration. The mirror image of Potion of Growth, riding a new marker-driven STR-check disadvantage intercept in `/roll`.
+
+**Description:** The first potion that *debuffs* the drinker. A new `diminution` `_SPELL_BUFF_MAP` template carries `disadvantage_on: ["str_check", "str_save"]` — the inverse of Growth's `advantage_on` marker. A new `_pc_has_str_check_disadvantage` reader (mirror of `_pc_has_rage_str_check_advantage`) reads it off the combatant's buffs, and the `/roll` endpoint now swaps `1d20 → 2d20kl1` for a STR check when the rolling PC carries the marker, composing with the existing advantage swap via RAW PHB p.173 cancel logic (advantage + disadvantage → straight d20). The `_MAGIC_ITEM_ACTIONS['potion-of-diminution']` self-buff entry installs it for up to 1d4 hours (modeled as 1 hour), the `/use_item_action` self-buff dispatch tuple gains the slug, a `🤏 Drink` button lands via the `self-buff-drink` `ITEM_ACTION_SLUGS` kind, and Garrik Ironside carries a seeded instance. The size reduction and -1d4 weapon damage are GM-narrated. The `potion-of-diminution.json` SRD catalog item already shipped in the master catalog. MINOR — additive buff template + disadvantage reader/broadcast + `/roll` intercept + catalog action + UI button, no schema change.
+
+### Added
+- `diminution` buff template (`effects.disadvantage_on: ["str_check", "str_save"]`, up to 1d4 hours, no concentration) — the reduce-effect debuff.
+- `_pc_has_str_check_disadvantage` reader + `_str_disadvantage_buff_label` + `_broadcast_str_check_disadvantage` — the inverse of the STR-check advantage trio.
+- `/roll` STR-check disadvantage intercept: swaps `1d20 → 2d20kl1` for a marker-bearing PC's STR check; cancels against a concurrent advantage swap per RAW PHB p.173.
+- `_MAGIC_ITEM_ACTIONS['potion-of-diminution']` self-buff drink action; the `/use_item_action` self-buff dispatch tuple now includes `potion-of-diminution`.
+- `ITEM_ACTION_SLUGS['potion-of-diminution']` (`self-buff-drink` kind) → a `🤏 Drink` button on the row.
+- Garrik Ironside's demo inventory gains a seeded Potion of Diminution.
+- `tests/harness/test_potion_of_diminution.py` (2 tests): in an active battle the drink installs the `diminution` buff and a subsequent STR check rolls `2d20kl1`; the control (no potion) rolls a plain `1d20`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2551 → 2553; added the `test_potion_of_diminution.py` section.
+
 ## [2.198.0] - 2026-06-12 — "The Thoughtful Tap"
 
 **Schema version:** 69

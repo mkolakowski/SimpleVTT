@@ -1597,6 +1597,30 @@ _SPELL_BUFF_MAP["water-breathing"] = {
     "desc": "Breathe underwater for 1 hour (GM-narrated).",
 }
 
+# v2.199.0 — Potion of Diminution (RAW DMG p.187, rare): the "reduce"
+# effect of enlarge/reduce for 1d4 hours — size becomes one smaller,
+# DISadvantage on STR checks and STR saving throws, weapon attacks deal
+# -1d4. The mirror image of Potion of Growth: where Growth installs an
+# `advantage_on` marker, Diminution installs a `disadvantage_on` marker
+# read by the v2.199.0 STR-check disadvantage intercept in `/roll`. The
+# size reduction and the -1d4 weapon damage stay GM-narrated for v1.
+_SPELL_BUFF_MAP["diminution"] = {
+    "key": "diminution",
+    "name": "Diminution (Reduced)",
+    "icon": "🤏",
+    "duration_rounds": 600,  # up to 1d4 hours; modeled as 1 hour
+    "duration_max": 600,
+    "concentration": False,
+    "effects": {
+        "disadvantage_on": ["str_check", "str_save"],
+    },
+    "desc": (
+        "Size reduced (one size smaller); disadvantage on STR checks and "
+        "STR saving throws; weapon attacks deal -1d4 (GM-narrated). Up to "
+        "1d4 hours."
+    ),
+}
+
 
 # v2.49.51 — RAW (PHB p.290 condition definitions): these condition
 # buff keys all imply the "incapacitated" state, which RAW (PHB p.203
@@ -16620,6 +16644,26 @@ async def roll_dice(
             expr = expr.replace("1d20", "2d20kh1", 1)
             _rage_str_check_fired = True
 
+    # v2.199.0 — Potion of Diminution STR-check disadvantage. The inverse
+    # of the rage/Growth STR-check advantage above: when the rolling PC
+    # carries a buff with `str_check` in its `effects.disadvantage_on`
+    # (the `diminution` template), swap 1d20 → 2d20kl1. RAW PHB p.173 —
+    # advantage and disadvantage cancel: if the advantage block just
+    # expanded the expr to 2d20kh1, revert to a straight 1d20 (and clear
+    # the advantage-fired flag so its broadcast doesn't fire either).
+    _str_check_dis_fired = False
+    if (
+        _is_str_check_roll
+        and _char is not None
+        and _pc_has_str_check_disadvantage(campaign_id, _char.id)
+    ):
+        if "2d20kh1" in expr:
+            expr = expr.replace("2d20kh1", "1d20", 1)
+            _rage_str_check_fired = False
+        elif "1d20" in expr and "2d20kl1" not in expr:
+            expr = expr.replace("1d20", "2d20kl1", 1)
+            _str_check_dis_fired = True
+
     # v2.158.46 — Tides of Chaos (Wild Magic Sorcerer Lv 1+, PHB
     # p.103) advantage consumer. Phase 2 read site for the v2.99.227
     # `tides-of-chaos-active` buff (installed by /use_tides_of_chaos):
@@ -17090,6 +17134,9 @@ async def roll_dice(
     # roll result. The d20 swap happened pre-roll above.
     if _rage_str_check_fired and _char is not None:
         await _broadcast_rage_str_check_advantage(campaign_id, _char)
+    # v2.199.0 — Potion of Diminution STR-check disadvantage broadcast.
+    if _str_check_dis_fired and _char is not None:
+        await _broadcast_str_check_disadvantage(campaign_id, _char)
     return {"ok": True, "total": rec.total, "breakdown": rec.breakdown,
             "roll_state_applied": roll_state_applied or None}
 
@@ -32418,6 +32465,23 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "summary_effect": "breathe underwater for 1 hour",
         },
     },
+    # v2.199.0 — eighth self-buff potion, and the first DEbuff one. RAW
+    # DMG p.187 Potion of Diminution (rare): drink → the "reduce" effect
+    # of enlarge/reduce for up to 1d4 hours, no concentration. Installs
+    # the `diminution` template whose `disadvantage_on: ["str_check",
+    # "str_save"]` marker the v2.199.0 STR-check disadvantage intercept
+    # honours; the size reduction + -1d4 weapon damage are GM-narrated.
+    "potion-of-diminution": {
+        "key": "drink",
+        "name": "Drink Potion of Diminution",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "diminution",
+            "duration_rounds": 600,  # up to 1d4 hours; modeled as 1 hour
+            "summary_effect": "the reduce effect for up to 1d4 hours",
+        },
+    },
     # v2.193.0 — first OFFENSIVE consumable potion. RAW DMG p.187 Potion
     # of Fire Breath (uncommon): drink → for the next hour you can exhale
     # fire (each creature in the area makes a DC 13 DEX save, 4d6 fire,
@@ -37665,6 +37729,95 @@ def _str_advantage_buff_label(
                     )
             break
     return ("Rage", "🦬")
+
+
+def _pc_has_str_check_disadvantage(
+    campaign_id: int, char_id: "int | None",
+) -> bool:
+    """v2.199.0 — Potion of Diminution. Mirror of
+    `_pc_has_rage_str_check_advantage` but on the inverse marker:
+    returns True when the PC's combatant carries any active buff with
+    ``str_check`` in its ``effects.disadvantage_on`` list. Caller (the
+    `/roll` endpoint) gates this on the roll being a STR check before
+    calling. The reduce effect of enlarge/reduce is the first source.
+    """
+    if not char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            dis = effects.get("disadvantage_on") or []
+            if isinstance(dis, list) and "str_check" in dis:
+                return True
+        return False
+    return False
+
+
+def _str_disadvantage_buff_label(
+    campaign_id: int, char_id: "int | None", marker: str,
+) -> "tuple[str, str]":
+    """v2.199.0 — inverse of `_str_advantage_buff_label`: find the
+    active buff granting STR ``marker`` disadvantage (``str_check`` /
+    ``str_save``) and return its (name, icon). Falls back to
+    ("Diminution", "🤏"). Used by the disadvantage broadcast so the
+    chat copy names the real source.
+    """
+    state = hub.get_battle(campaign_id)
+    if state and char_id:
+        for c in state.get("combatants") or []:
+            if c.get("char_id") != char_id:
+                continue
+            for b in (c.get("buffs") or []):
+                if not isinstance(b, dict):
+                    continue
+                effects = b.get("effects")
+                if not isinstance(effects, dict):
+                    continue
+                dis = effects.get("disadvantage_on") or []
+                if isinstance(dis, list) and marker in dis:
+                    return (
+                        str(b.get("name") or "Diminution"),
+                        str(b.get("icon") or "🤏"),
+                    )
+            break
+    return ("Diminution", "🤏")
+
+
+async def _broadcast_str_check_disadvantage(
+    campaign_id: int, char: "Character | None",
+) -> None:
+    """v2.199.0 — companion broadcast for
+    `_pc_has_str_check_disadvantage`. Names the source buff (Diminution,
+    …) in the chat card alongside the rolled result.
+    """
+    if not char:
+        return
+    label, icon = _str_disadvantage_buff_label(
+        campaign_id, char.id, "str_check",
+    )
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": f"{icon} {label} — disadvantage on STR check",
+            "feature_desc": (
+                f"{char.name} has {label}: disadvantage on the Strength "
+                f"ability / skill check."
+            ),
+            "source": "diminution-str-check",
+        },
+    })
 
 
 def _target_condition_immune(
@@ -79635,7 +79788,7 @@ async def use_item_action(
         "potion-of-heroism", "potion-of-speed",
         "potion-of-resistance", "potion-of-invulnerability",
         "potion-of-growth", "potion-of-climbing",
-        "potion-of-water-breathing",
+        "potion-of-water-breathing", "potion-of-diminution",
     ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
