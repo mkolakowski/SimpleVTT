@@ -7140,6 +7140,18 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           label: '🧗 Drink', title: '🧗 Potion of Climbing'},
         'potion-of-water-breathing': {kind: 'self-buff-drink', action_key: 'drink',
                           label: '🫧 Drink', title: '🫧 Potion of Water Breathing'},
+        // v2.198.0 — single-target save consumable. Potion of Mind
+        // Reading (RAW DMG p.187): drink + probe one creature within
+        // 30 ft (DC 13 WIS save, no damage — narrated thought-reading).
+        // Reuses vttOpenMultiTargetPicker(required:1) but POSTs the
+        // single picked id straight as target_combatant_ids (no AoE
+        // sphere/cone expansion, no confirm modal). Consumes the potion.
+        'potion-of-mind-reading': {kind: 'single-target-save',
+                          action_key: 'read',
+                          label: '🧠 Read Thoughts',
+                          title: 'Drink + probe one creature within 30 ft — DC 13 WIS save (no damage). Consumes the potion.',
+                          max_range_ft: 30,
+                          save_dc: 13},
         // v2.194.0 — first OFFENSIVE consumable button. Potion of Fire
         // Breath (RAW DMG p.187): drink + exhale fire at the area. Reuses
         // the necklace's `aoe-sphere` flow (center-target picker → /battle/
@@ -7853,6 +7865,25 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     }
                     body.action_key = cfg.action_key;
                     body.resistance_type = chosen;
+                } else if (cfg.kind === 'single-target-save') {
+                    // v2.198.0 — single-target save consumable (Potion
+                    // of Mind Reading). Pick one creature in range, POST
+                    // the picked id straight through — no AoE expansion,
+                    // no confirm modal. Server resolves the WIS save and
+                    // consumes the potion.
+                    if (typeof window.vttOpenMultiTargetPicker !== 'function') {
+                        alert('Target picker unavailable. Reload the page.');
+                        return;
+                    }
+                    const picked = await window.vttOpenMultiTargetPicker({
+                        required: 1,
+                        spellName: cfg.label || 'Potion of Mind Reading',
+                        casterCharId: MY_CHAR_ID,
+                        rangeStr: `${cfg.max_range_ft || 30} ft`,
+                    });
+                    if (picked === null || !picked.length) return;
+                    body.action_key = cfg.action_key;
+                    body.target_combatant_ids = [picked[0]];
                 } else if (cfg.kind === 'self-buff-drink') {
                     // v2.191.0 — plain self-buff potion (Heroism / Speed /
                     // Invulnerability): no parameter, no modal — just drink.

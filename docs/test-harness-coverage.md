@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2551 in `tests/harness/` + 80 in `tests/harness_ui/` (as of v2.197.0, 2026-06-12).
+**Total tests:** 2551 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.198.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3817,6 +3817,13 @@ v2.194.0 — sheet inventory button for the Potion of Fire Breath. The offensive
 | Test | What it asserts |
 |------|-----------------|
 | `test_fire_breath_button_renders` | Garrik's Potion of Fire Breath `.inv-row` shows a visible `.inv-item-action` button containing "Exhale Fire" (aoe-sphere kind, equipped consumable). |
+
+### `test_mind_reading_button_ui.py`
+v2.198.0 — sheet inventory button for the Potion of Mind Reading. The save-imposing consumable shipped API-only in v2.197.0; the `single-target-save` `ITEM_ACTION_SLUGS` entry renders a 🧠 Read Thoughts button (the full picker → POST click chain needs a loaded battle/map, so this proves the button renders only). Garrik carries the seeded potion.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mind_reading_button_renders` | Garrik's Potion of Mind Reading `.inv-row` shows a visible `.inv-item-action` button containing "Read Thoughts" (single-target-save kind, equipped consumable). |
 
 ---
 

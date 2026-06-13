@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.198.0] - 2026-06-12 — "The Thoughtful Tap"
+
+**Schema version:** 69
+
+**Commit summary:** Sheet button for the Potion of Mind Reading (RAW DMG p.187). The save-imposing consumable shipped API-only in v2.197.0; this adds the `single-target-save` `ITEM_ACTION_SLUGS` kind so the inventory row renders a 🧠 Read Thoughts button that picks one creature in range and POSTs the WIS-save probe.
+
+**Description:** Wires the v2.197.0 `read` action to a sheet button. A new `single-target-save` click-handler kind opens `vttOpenMultiTargetPicker({required: 1})` to pick one target in range, then POSTs the picked id straight as `target_combatant_ids` to `/use_item_action` — no AoE sphere/cone expansion and no confirm modal (the simplest of the multi-target kinds). The existing `data.consumed` sync drops the spent potion row. `ITEM_ACTION_SLUGS['potion-of-mind-reading']` declares the `read` action, 30-ft range, DC 13. UI-only change against an endpoint that already had its harness coverage in v2.197.0; a Playwright render test proves the button shows. MINOR — additive UI kind + button, no endpoint or schema change.
+
+### Added
+- `single-target-save` `ITEM_ACTION_SLUGS` click-handler kind — pick one target via `vttOpenMultiTargetPicker`, POST the single id as `target_combatant_ids`.
+- `ITEM_ACTION_SLUGS['potion-of-mind-reading']` (`single-target-save` kind) → a 🧠 Read Thoughts button on the row.
+- `tests/harness_ui/test_mind_reading_button_ui.py` (1 test): Garrik's Potion of Mind Reading row renders the Read Thoughts button.
+
+### Changed
+- `docs/test-harness-coverage.md`: UI total 80 → 81; added the `test_mind_reading_button_ui.py` section.
+
 ## [2.197.0] - 2026-06-12 — "The Purple Probe"
 
 **Schema version:** 69
