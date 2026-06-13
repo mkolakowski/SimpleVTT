@@ -426,6 +426,17 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": True,
              "_slug": "goggles-of-night",
              "desc": "Uncommon wondrous item, no attunement. While you wear these dark lenses, you have darkvision out to 60 ft. Composes with the Devil's Sight attack-disadvantage helper so a darkness-blinded wielder doesn't roll at disadvantage on attacks."},
+            # v2.237.0 — Slippers of Spider Climbing (RAW DMG p.199,
+            # uncommon, no attunement). Lets Pip climb vertical surfaces
+            # and ceilings hands-free with a climbing speed equal to her
+            # walking speed (GM-narrated numeric in v1). Rides the
+            # `slippers-of-spider-climbing` catalog payload (`spider_climb`);
+            # surfaced on /sheet-json as derived.spider_climb. On-theme for
+            # a Halfling Rogue scaling walls. inventory_index 11.
+            {"name": "Slippers of Spider Climbing", "type": "gear", "qty": 1,
+             "equippable": True, "equipped": True,
+             "_slug": "slippers-of-spider-climbing",
+             "desc": "Uncommon wondrous item, no attunement. While you wear these light shoes, you can move up, down, and across vertical surfaces and upside down along ceilings, while leaving your hands free. You have a climbing speed equal to your walking speed. RAW DMG p.199."},
         ],
         "feats": [],
         "resources": [],

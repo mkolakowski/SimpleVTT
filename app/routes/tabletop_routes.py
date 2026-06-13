@@ -32529,6 +32529,15 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "mantle-of-spell-resistance": [
         {"spell_save_advantage": True, "requires_attunement": True},
     ],
+    # v2.237.0 — Slippers of Spider Climbing (RAW DMG p.199, uncommon, no
+    # attunement). RAW: "while you wear these slippers, you can move up,
+    # down, and across vertical surfaces and upside down along ceilings,
+    # while leaving your hands free. You have a climbing speed equal to
+    # your walking speed." The climbing-speed numeric is GM-narrated in v1
+    # (same as Potion of Climbing); the boolean flag surfaces the ability.
+    "slippers-of-spider-climbing": [
+        {"spider_climb": True},
+    ],
 }
 
 
@@ -33526,6 +33535,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # throws against spells.
         "spell_save_advantage": False,
         "spell_save_advantage_sources": [],
+        # v2.237.0 — spider-climb passive. Boolean OR across equipped
+        # items carrying the field; surfaced on `/sheet-json` derived.
+        # Slippers of Spider Climbing (RAW DMG p.199) is the first entry —
+        # while worn you can climb vertical surfaces / ceilings with a
+        # climbing speed equal to your walking speed (the numeric is
+        # GM-narrated in v1, same as Potion of Climbing).
+        "spider_climb": False,
+        "spider_climb_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33738,6 +33755,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_spell_save_advantage") or p.get("spell_save_advantage"):
                 out["spell_save_advantage"] = True
                 out["spell_save_advantage_sources"].append(item_name)
+            # v2.237.0 — spider-climb passive (Slippers of Spider Climbing,
+            # RAW DMG p.199). Boolean OR; the flag rides the item via the
+            # `spider_climb` payload (or a per-item `_spider_climb` rider).
+            if item.get("_spider_climb") or p.get("spider_climb"):
+                out["spider_climb"] = True
+                out["spider_climb_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90792,6 +90815,12 @@ async def get_character_sheet_json(
             if _item_eff.get("spell_save_advantage"):
                 derived["spell_save_advantage"] = {
                     "sources": list(_item_eff.get("spell_save_advantage_sources") or []),
+                }
+            # v2.237.0 — spider climb (Slippers of Spider Climbing). Only
+            # present when an equipped item sets the flag.
+            if _item_eff.get("spider_climb"):
+                derived["spider_climb"] = {
+                    "sources": list(_item_eff.get("spider_climb_sources") or []),
                 }
         except Exception:
             pass

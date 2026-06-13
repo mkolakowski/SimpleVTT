@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.237.0] - 2026-06-13 — "The Sure-Footed Tread"
+
+**Schema version:** 69
+
+**Commit summary:** Slippers of Spider Climbing — spider-climb passive (`derived.spider_climb`) on a new boolean-OR substrate field, riding the `slippers-of-spider-climbing` catalog payload.
+
+**Description:** The **Slippers of Spider Climbing** (RAW DMG p.199, uncommon, no attunement) let the wearer move up, down, and across vertical surfaces and upside down along ceilings, hands-free, with a climbing speed equal to their walking speed. It reuses the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health / Amulet of Proof / Mantle of Spell Resistance): the `spider_climb` flag rides the `slippers-of-spider-climbing` catalog payload, aggregates in `_equipped_item_effects` (a new `spider_climb` field + `spider_climb_sources`), and surfaces on `/sheet-json` as `derived.spider_climb = {sources}`. The climbing-speed numeric is GM-narrated in v1 (same treatment as the Potion of Climbing). Demo: Pip Quickfingers (Halfling Rogue) wears them — no attunement, so they ride alongside her full 3/3 attunement loadout (Cloak + Ring + Sword of Sharpness) and her no-attunement Goggles of Night. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `spider_climb` / `spider_climb_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped items carrying the `spider_climb` payload or a per-item `_spider_climb` rider).
+- `/sheet-json` `derived.spider_climb = {sources}` — present only when an equipped item sets the flag.
+- `slippers-of-spider-climbing` entry in `_MAGIC_ITEM_PASSIVES` (`spider_climb: True`, no attunement).
+- Demo seed: Slippers of Spider Climbing on Pip Quickfingers (`_slug: "slippers-of-spider-climbing"`, equipped, no attunement).
+- `tests/harness/test_item_slippers_of_spider_climbing.py` (3 tests): `derived.spider_climb` lists the slippers in sources; composes with the no-attunement Goggles of Night; unequip drops the flag.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2654 → 2657; added the `test_item_slippers_of_spider_climbing.py` section.
+
 ## [2.236.0] - 2026-06-13 — "The Unruffled Cloak"
 
 **Schema version:** 69
