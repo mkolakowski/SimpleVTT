@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.186.1] - 2026-06-12 — "The Halved Flame"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only — proves end-to-end that the v2.186.0 Potion of Fire Resistance buff actually *halves* incoming fire damage through the live pipeline, not merely that the buff installs.
+
+**Description:** v2.186.0 shipped the in-battle test that asserts the `resistance-fire` buff installs with `effects.resistance_to: ["fire"]`, but it stopped short of proving the damage pipeline acts on it. This commit closes that loop deterministically (no dice): Garrik drinks the potion in an active battle, then a typed-damage `PATCH .../sheet-fields` deals 20 fire damage and the test asserts his HP drops by exactly 10 (`_resistance_halve` reads the sheet `_buffs_active` mirror and floors the damage before HP application). A control deals 20 cold damage and asserts the full 20 lands — proving the buff is type-specific (the fire instance, not a `["all"]` wildcard). No app code changes. PATCH.
+
+### Added
+- `tests/harness/test_potion_of_resistance_damage_halving.py` (2 tests): `test_fire_damage_is_halved` (drink → 20 fire → HP −10) and `test_cold_damage_is_not_halved` (control: 20 cold → HP −20). The fixture drinks the potion in battle and restores inventory + clears the battle in teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2533 → 2535; added the `test_potion_of_resistance_damage_halving.py` section.
+
 ## [2.186.0] - 2026-06-12 — "The Tempered Flesh"
 
 **Schema version:** 69
