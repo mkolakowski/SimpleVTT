@@ -3933,6 +3933,18 @@ def _fighter_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-lightning-bolts",
              "desc": "Rare wand, attunement. 7 charges. Expend N (1-7) charges to cast Lightning Bolt (DC 15) at slot level 3+(N-1). Regains 1d6+1 charges at dawn (long rest)."},
+            # v2.209.0 — first passive ability-check item. Stone of Good
+            # Luck (Luckstone, RAW DMG p.207, uncommon, attunement):
+            # while carried, +1 to ability checks AND saving throws. The
+            # save half rides the existing v2.158.74 save substrate; the
+            # check half rides the new v2.209.0 ability-check read site.
+            # Seeded on Garrik (his 2nd attuned item, after the Wand) —
+            # STR-proficient saves + Athletics skill make both halves
+            # easy to assert in the harness.
+            {"name": "Stone of Good Luck", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "stone-of-good-luck-luckstone",
+             "desc": "Uncommon wondrous item, attunement. While on your person you gain +1 to ability checks and saving throws. RAW DMG p.207."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

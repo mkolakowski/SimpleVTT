@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.209.0] - 2026-06-12 — "The Lucky Agate"
+
+**Schema version:** 69
+
+**Commit summary:** First passive ability-check magic item — Stone of Good Luck (Luckstone, RAW DMG p.207, uncommon, attunement): while carried, +1 to ability checks AND saving throws. The save half rides the existing v2.158.74 `save_bonus` substrate (same path as Cloak of Protection); the check half is new — `_equipped_item_effects` grows a `check_bonus` field and the /roll endpoint appends it for ability checks and ability-based skill checks.
+
+**Description:** `_equipped_item_effects` gains a `check_bonus` (+ `check_bonus_sources`) field aggregated the same way as `ac_bonus`/`save_bonus`. The /roll endpoint grows an ability-check read site (mirroring the v2.158.74 save read site): when the roll is an ability check (`*_check` stat_key) or an ability-based skill check (carries `stat_ability` and isn't a `*_save`), the walker's `check_bonus` is appended to the expression (`1d20+X` → `1d20+X+1`) and the breakdown is annotated with the source item name. Crucially this fires on ability checks — the surface the Cloak/Ring deliberately skip — so the Luckstone is the first item to touch it. `_MAGIC_ITEM_PASSIVES['stone-of-good-luck-luckstone']` carries `{check_bonus: 1, save_bonus: 1, requires_attunement: True}`. Garrik Ironside (Fighter 9) carries a seeded Stone of Good Luck (attuned — his second attuned item, after the Wand of Lightning Bolts); his STR/CON-proficient saves + Athletics skill assert both halves. MINOR — additive passive field + read site + catalog passive + seed, no schema change.
+
+### Added
+- `_equipped_item_effects` returns a `check_bonus` (int) + `check_bonus_sources` (list) pair, aggregated per-payload like the existing AC/save bonuses.
+- /roll ability-check read site: appends the walker's `check_bonus` to the expression for ability checks (`*_check`) and ability-based skill checks (rolls carrying `stat_ability` that aren't saves), with a source-attributed breakdown annotation.
+- `_MAGIC_ITEM_PASSIVES['stone-of-good-luck-luckstone']` (+1 ability checks, +1 saves, attunement).
+- Garrik Ironside's demo inventory gains a seeded Stone of Good Luck (equipped + attuned).
+- `tests/harness/test_item_stone_of_good_luck.py` (3 tests): STR save → +1 Stone attribution; STR check → +1 Stone attribution (the new surface); Athletics skill check → +1 Stone attribution.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2575 → 2578; added the `test_item_stone_of_good_luck.py` section.
+
 ## [2.208.0] - 2026-06-12 — "The Crystal Gaze"
 
 **Schema version:** 69

@@ -16817,6 +16817,30 @@ async def roll_dice(
     if _item_save_bonus > 0:
         expr = f"{expr}+{_item_save_bonus}"
 
+    # v2.209.0 — Magic-items: passive ability-check bonuses from
+    # equipped+attuned items get appended for ability checks and
+    # ability-based skill checks (but NOT saves — those are handled by
+    # the save-bonus branch above, and NOT attacks, which route through
+    # /attack). Stone of Good Luck (Luckstone, +1) is the first catalog
+    # entry. An ability check is identified by a ``*_check`` stat_key
+    # (e.g. "int_check") OR a skill roll carrying ``stat_ability`` (e.g.
+    # "STR" for Athletics) that isn't a save.
+    _item_check_bonus = 0
+    _item_check_sources: list[str] = []
+    _is_ability_check = stat_key_lc.endswith("_check") or (
+        bool(stat_ability_raw) and not stat_key_lc.endswith("_save")
+    )
+    if (
+        _char is not None
+        and _is_ability_check
+        and isinstance(_char.sheet, dict)
+    ):
+        _item_eff_ck = _equipped_item_effects(_char.sheet)
+        _item_check_bonus = int(_item_eff_ck.get("check_bonus") or 0)
+        _item_check_sources = list(_item_eff_ck.get("check_bonus_sources") or [])
+    if _item_check_bonus > 0:
+        expr = f"{expr}+{_item_check_bonus}"
+
     try:
         result = dice_mod.roll(expr)
     except dice_mod.DiceParseError as e:
@@ -16833,6 +16857,18 @@ async def roll_dice(
             _src_label = " + ".join(_item_save_sources)
             result.breakdown = (
                 f"{result.breakdown} (+{_item_save_bonus} {_src_label})"
+            )
+        except Exception:
+            pass
+
+    # v2.209.0 — mirror annotation for the ability-check item bonus.
+    if _item_check_bonus > 0 and _item_check_sources:
+        try:
+            import copy as _copy_item_check
+            result = _copy_item_check.copy(result)
+            _src_label_ck = " + ".join(_item_check_sources)
+            result.breakdown = (
+                f"{result.breakdown} (+{_item_check_bonus} {_src_label_ck})"
             )
         except Exception:
             pass
@@ -32248,6 +32284,14 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_attunement": False,
         },
     ],
+    # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
+    # uncommon, attunement). While the stone is on your person you gain
+    # +1 to ability checks AND saving throws. The `save_bonus` rides the
+    # existing v2.158.74 save substrate; the new `check_bonus` field
+    # rides the v2.209.0 ability-check read site in /roll.
+    "stone-of-good-luck-luckstone": [
+        {"check_bonus": 1, "save_bonus": 1, "requires_attunement": True},
+    ],
 }
 
 
@@ -33020,6 +33064,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         "save_bonus": 0,
         "ac_bonus_sources": [],
         "save_bonus_sources": [],
+        # v2.209.0 — ability-check passive. `check_bonus` is the flat
+        # bonus applied to ability checks (and ability-based skill
+        # checks) by the /roll endpoint. Stone of Good Luck (Luckstone)
+        # is the first entry — RAW DMG p.207 grants +1 to BOTH ability
+        # checks (this field) and saving throws (the existing
+        # `save_bonus` field).
+        "check_bonus": 0,
+        "check_bonus_sources": [],
         # v2.159.24 — sensory passives. `sees_in_darkness` is the
         # boolean union across all equipped magic-item passives; the
         # sources list lets a UI surface "darkvision via Goggles of
@@ -33071,6 +33123,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if sv:
                 out["save_bonus"] += sv
                 out["save_bonus_sources"].append(item_name)
+            try:
+                ck = int(p.get("check_bonus") or 0)
+            except (TypeError, ValueError):
+                ck = 0
+            if ck:
+                out["check_bonus"] += ck
+                out["check_bonus_sources"].append(item_name)
             # v2.159.24 — sensory passives. Boolean OR across passives;
             # the source name lets a UI describe which item granted
             # darkvision.

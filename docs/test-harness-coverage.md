@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2575 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.208.0, 2026-06-12).
+**Total tests:** 2578 in `tests/harness/` + 81 in `tests/harness_ui/` (as of v2.209.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2367,6 +2367,15 @@ v2.158.74 magic-items-automation Phase 1a — Cloak of Protection (+1 AC, +1 sav
 | `test_cloak_of_protection_grants_ac_bonus` | Krieger swings at Thalindra → response `target_ac == 13` (base 12 + Cloak +1). Asserts on `target_ac` rather than the hit verdict to avoid dice flakiness. |
 | `test_cloak_of_protection_grants_save_bonus` | `POST /roll` with `stat_key="int_save"` for Thalindra (`1d20+6`) → breakdown contains "Cloak of Protection" + "+1" attribution; expression was rewritten to `1d20+6+1` server-side. |
 | `test_cloak_of_protection_save_skipped_for_non_save_rolls` | Save hook guard: `stat_key="int_check"` MUST NOT pick up the Cloak's +1 (saves and checks are RAW-distinct). Breakdown does not contain "Cloak of Protection". |
+
+### `test_item_stone_of_good_luck.py`
+v2.209.0 magic-items — Stone of Good Luck (Luckstone, RAW DMG p.207, uncommon, attunement): +1 to ability checks AND saving throws. The save half rides the existing v2.158.74 `save_bonus` substrate; the check half is new — `_equipped_item_effects` grows a `check_bonus` field and the `/roll` endpoint appends it for ability checks (`*_check`) and ability-based skill checks (rolls carrying `stat_ability`), the surface the Cloak/Ring deliberately skip. Garrik Ironside (Fighter 9) carries a permanent equipped+attuned Stone in the demo seed (his STR/CON saves + Athletics make both halves clean).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_stone_of_good_luck_grants_save_bonus` | `POST /roll` `str_save` for Garrik (`1d20+8`) → breakdown contains "Stone of Good Luck" + "+1" (existing save substrate). |
+| `test_stone_of_good_luck_grants_ability_check_bonus` | `POST /roll` `str_check` for Garrik (`1d20+4`) → breakdown contains "Stone of Good Luck" + "+1" (the NEW check read site — the surface the Cloak guard test asserts stays empty). |
+| `test_stone_of_good_luck_grants_skill_check_bonus` | `POST /roll` `Athletics` with `stat_ability="STR"` for Garrik → breakdown contains "Stone of Good Luck" (ability-based skill checks also pick up the check bonus). |
 
 ### `test_item_ring_of_protection.py`
 v2.158.76 magic-items-automation Phase 1b — second catalog entry. Same +1 AC / +1 saves shape as the Cloak (RAW DMG p.191) on a different slot (finger vs neck), validating that the v2.158.74 catalog scales additively. Tavik Stonebrow (Cleric Lv 8, AC 18, WIS save +6) is the canary because his base AC + save mod are clean integers and he's a different PC from Thalindra so the AC + save assertions don't interact.
