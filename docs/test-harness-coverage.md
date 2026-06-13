@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2541 in `tests/harness/` + 77 in `tests/harness_ui/` (as of v2.190.0, 2026-06-12).
+**Total tests:** 2541 in `tests/harness/` + 79 in `tests/harness_ui/` (as of v2.191.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3762,6 +3762,14 @@ v2.189.0 "The Apothecary's Menu" — the sheet-UI surface for the v2.188.0 drink
 | `test_generic_resistance_drink_button_renders` | The generic Potion of Resistance row shows a 🧪 Drink `.inv-item-action` button (resistance-pick kind in `ITEM_ACTION_SLUGS`, equipped consumable). |
 | `test_generic_potion_opens_type_picker_modal` | Clicking 🧪 Drink on the generic potion opens `#item-action-modal` containing "Potion of Resistance" + an `#ia-rtype` `<select>` with the ten RAW damage-type options; Cancel (`#ia-cancel`) dismisses without firing the endpoint. |
 | `test_generic_potion_drink_posts_chosen_type` | Picking "radiant" in `#ia-rtype` and clicking Drink (`#ia-confirm`) POSTs `/use_item_action` with `action_key:"drink"` + `resistance_type:"radiant"`. The POST is intercepted via `page.route` so the seeded potion isn't consumed. |
+
+### `test_self_buff_drink_buttons_ui.py`
+v2.191.0 — plain Drink buttons for the parameterless self-buff potions (Heroism / Speed / Invulnerability). They were API-only; only Potion of Resistance had a sheet button (v2.189.0). The `self-buff-drink` `ITEM_ACTION_SLUGS` kind renders a one-click Drink button (no modal) that POSTs `action_key:"drink"`. Garrik carries all three.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_self_buff_drink_buttons_render` | Each of the three rows (Potion of Heroism / Speed / Invulnerability) shows a visible `.inv-item-action` Drink button. |
+| `test_invulnerability_drink_posts_plain_action` | Clicking 🛡️ Drink on Potion of Invulnerability POSTs `/use_item_action` with `action_key:"drink"` and NO `resistance_type` (no modal). POST intercepted via `page.route` so the seeded potion isn't consumed. |
 
 ---
 

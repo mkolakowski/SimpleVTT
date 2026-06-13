@@ -7125,6 +7125,17 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           label: '🧪 Drink',
                           title: '🧪 Potion of Resistance',
                           body: 'Choose the damage type to resist (no concentration) for 1 hour.'},
+        // v2.191.0 — the other self-buff potions get a plain Drink
+        // button (no modal — they take no parameter). Heroism / Speed
+        // were API-only since v2.184/.185; Invulnerability since
+        // v2.190.0. The `self-buff-drink` kind POSTs `action_key:
+        // 'drink'` and consumes the local row on success.
+        'potion-of-heroism': {kind: 'self-buff-drink', action_key: 'drink',
+                          label: '🦁 Drink', title: '🦁 Potion of Heroism'},
+        'potion-of-speed': {kind: 'self-buff-drink', action_key: 'drink',
+                          label: '⚡ Drink', title: '⚡ Potion of Speed'},
+        'potion-of-invulnerability': {kind: 'self-buff-drink', action_key: 'drink',
+                          label: '🛡️ Drink', title: '🛡️ Potion of Invulnerability'},
         // v2.159.6 — Phase 8f: Javelin of Lightning AoE-line wire-up.
         // The Use button opens a 2-stage flow: stage 1 picks the
         // javelin's target via vttOpenMultiTargetPicker (existing
@@ -7826,6 +7837,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     }
                     body.action_key = cfg.action_key;
                     body.resistance_type = chosen;
+                } else if (cfg.kind === 'self-buff-drink') {
+                    // v2.191.0 — plain self-buff potion (Heroism / Speed /
+                    // Invulnerability): no parameter, no modal — just drink.
+                    body.action_key = cfg.action_key;
                 } else {
                     const n = await _showItemActionModal(cfg);
                     if (n === null) return;
@@ -7874,7 +7889,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // local inventory row so the button doesn't linger on a
                     // spent potion. The server already consumed it; mirror
                     // its `remaining_qty` locally.
-                    if (cfg.kind === 'resistance-pick' && data.consumed) {
+                    if ((cfg.kind === 'resistance-pick'
+                            || cfg.kind === 'self-buff-drink')
+                            && data.consumed) {
                         if (!data.remaining_qty || data.remaining_qty <= 0) {
                             inventory.splice(idx, 1);
                         } else {

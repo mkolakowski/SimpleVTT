@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.191.0] - 2026-06-12 — "The Ready Draught"
+
+**Schema version:** 69
+
+**Commit summary:** Plain Drink buttons for the parameterless self-buff potions — Potion of Heroism, Speed, and Invulnerability gain a sheet inventory button (they were API-only; only Potion of Resistance had one).
+
+**Description:** Closes the UI gap left by the consumable-automation arc: `_use_item_action_self_buff_potion` has driven Heroism (v2.184.0), Speed (v2.185.0), and Invulnerability (v2.190.0) since each shipped, but no inventory button triggered them — only Potion of Resistance got a sheet surface (v2.189.0). This adds a `self-buff-drink` `ITEM_ACTION_SLUGS` kind for the three: a one-click Drink button (no modal — these potions take no parameter) that POSTs `action_key: "drink"` and consumes the local row on success. MINOR — additive UI, no endpoint or schema change.
+
+### Added
+- `ITEM_ACTION_SLUGS` entries (`self-buff-drink` kind) for `potion-of-heroism` (🦁), `potion-of-speed` (⚡), and `potion-of-invulnerability` (🛡️) → a plain Drink button on each row.
+- Click-handler branch: `self-buff-drink` POSTs `action_key: "drink"` with no modal; the consumed-row sync now also fires for this kind.
+- `tests/harness_ui/test_self_buff_drink_buttons_ui.py` (2 tests): the three Drink buttons render; clicking Invulnerability POSTs `action_key: "drink"` with no `resistance_type`.
+
+### Changed
+- `docs/test-harness-coverage.md`: UI total 77 → 79; added the `test_self_buff_drink_buttons_ui.py` section.
+
 ## [2.190.0] - 2026-06-12 — "The Liquid Iron"
 
 **Schema version:** 69
