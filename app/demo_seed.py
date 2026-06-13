@@ -3740,6 +3740,14 @@ def _fighter_sheet(name: str) -> dict:
              "consumable": True, "equipped": True,
              "_slug": "potion-of-heroism",
              "desc": "Drink (action, /use_item_action drink) to gain 10 temporary hit points and the effect of Bless (no concentration) for 1 hour. RAW DMG p.187."},
+            # v2.185.0 — second self-buff potion. Potion of Speed (RAW
+            # DMG p.187, very rare). Drink → the Haste effect (+2 AC,
+            # ×2 speed, extra action, Dex-save advantage) for 1 minute,
+            # no concentration.
+            {"name": "Potion of Speed", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-speed",
+             "desc": "Drink (action, /use_item_action drink) to gain the effect of Haste (no concentration) for 1 minute. RAW DMG p.187."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

@@ -32203,6 +32203,25 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "icon": "🦁",
             "duration_rounds": 600,  # 1 hour @ 6 s/round
             "temp_hp": 10,
+            "summary_effect": "+10 temp HP and Bless for 1 hour",
+        },
+    },
+    # v2.185.0 — second self-buff potion. RAW DMG p.187 Potion of Speed
+    # (very rare): drink → the Haste effect for 1 minute, no
+    # concentration, no temp HP. Reuses the `haste` _SPELL_BUFF_MAP
+    # markers (+2 AC, ×2 speed) with concentration overridden off. The
+    # RAW lethargy backlash on expiry is GM-narrated (not modeled v1).
+    "potion-of-speed": {
+        "key": "drink",
+        "name": "Drink Potion of Speed",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "haste",
+            "buff_name": "Speed (Haste)",
+            "icon": "⚡",
+            "duration_rounds": 10,  # 1 minute @ 6 s/round
+            "summary_effect": "Haste for 1 minute",
         },
     },
 }
@@ -79319,8 +79338,8 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug == "potion-of-heroism":
-        return await _use_item_action_potion_of_heroism(
+    if slug in ("potion-of-heroism", "potion-of-speed"):
+        return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
         )
     raise HTTPException(409, "unknown item action handler")
@@ -79763,16 +79782,21 @@ async def _use_item_action_flame_tongue(
     }
 
 
-async def _use_item_action_potion_of_heroism(
+async def _use_item_action_self_buff_potion(
     db, campaign_id, char, item, sheet, catalog, inv_idx,
 ):
-    """v2.184.0 — first self-buff item action: Potion of Heroism (RAW
-    DMG p.187, rare consumable). Drinking it grants the DRINKER 10
-    temporary hit points and the Bless effect (no concentration) for
-    1 hour, then consumes the potion. Temp HP is non-stacking RAW (the
-    higher value wins). The Bless buff install is best-effort — it only
-    lands when the drinker is in an active battle; the temp HP and the
-    potion consumption apply either way.
+    """v2.184.0 (Potion of Heroism) / v2.185.0 (Potion of Speed) —
+    generic "self-buff" consumable handler. Drinking the potion buffs
+    the DRINKER per the catalog's ``self_buff`` config: an optional
+    flat (non-stacking) temp-HP grant + a buff from ``_SPELL_BUFF_MAP``
+    installed on the drinker's own combatant, then the potion is
+    consumed. The buff install is best-effort — it only lands when the
+    drinker is in an active battle; the temp HP (if any) and the potion
+    consumption apply either way.
+
+    RAW: Potion of Heroism (DMG p.187) → 10 temp HP + Bless, 1 hour,
+    no concentration. Potion of Speed (DMG p.187) → Haste, 1 minute,
+    no concentration (no temp HP).
     """
     from sqlalchemy.orm.attributes import flag_modified
 
@@ -79780,11 +79804,13 @@ async def _use_item_action_potion_of_heroism(
     temp_amount = int(spec.get("temp_hp") or 0)
 
     # 1. Temp HP (non-stacking — the higher of existing / grant wins).
+    #    Skipped entirely when the potion grants none (e.g. Speed).
     hp = dict(sheet.get("hp") or {})
-    pre_temp = int(hp.get("temp") or 0)
-    new_temp = max(pre_temp, temp_amount)
-    hp["temp"] = new_temp
-    sheet["hp"] = hp
+    new_temp = int(hp.get("temp") or 0)
+    if temp_amount > 0:
+        new_temp = max(new_temp, temp_amount)
+        hp["temp"] = new_temp
+        sheet["hp"] = hp
 
     # 2. Consume the potion (decrement qty; drop the row at 0).
     inventory = list(sheet.get("inventory") or [])
@@ -79817,8 +79843,8 @@ async def _use_item_action_potion_of_heroism(
         buff["name"] = spec.get("buff_name") or buff.get("name")
         if spec.get("icon"):
             buff["icon"] = spec["icon"]
-        # RAW: Potion of Heroism's Bless needs NO concentration and
-        # lasts 1 hour (vs. the spell's concentration + 1 minute).
+        # RAW: a potion's buff carries no concentration and runs its own
+        # duration (e.g. Heroism's Bless = 1 hour, Speed's Haste = 1 min).
         buff["concentration"] = False
         _dur = int(spec.get("duration_rounds") or buff.get("duration_rounds") or 0)
         buff["duration_rounds"] = _dur
@@ -79830,31 +79856,32 @@ async def _use_item_action_potion_of_heroism(
                 db, char.id, _get_buffs(campaign_id, char.id),
             )
 
-    # 4. Broadcasts the client reads: HP meter + feature-used log line.
-    try:
-        await hub.broadcast(campaign_id, {
-            "type": "character_hp_update",
-            "data": {
-                "character_id": char.id,
-                "hp": hp,
-                "delta": 0,
-                "source": "potion-of-heroism",
-            },
-        })
-    except Exception:
-        pass
+    # 4. Broadcasts the client reads: HP meter (only when temp HP
+    #    changed) + feature-used log line.
+    item_name = item.get("name") or "Potion"
+    if temp_amount > 0:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "character_hp_update",
+                "data": {
+                    "character_id": char.id,
+                    "hp": hp,
+                    "delta": 0,
+                    "source": str(item.get("_slug") or "self-buff-potion"),
+                },
+            })
+        except Exception:
+            pass
+    effect_text = spec.get("summary_effect") or f"the {buff_key} effect"
     try:
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
             "data": {
                 "character_id": char.id,
                 "caster_char_name": char.name,
-                "source": "item-potion-of-heroism",
-                "label": catalog.get("name") or "Drink Potion of Heroism",
-                "summary": (
-                    f"{char.name} drinks a Potion of Heroism: "
-                    f"+{temp_amount} temp HP and Bless for 1 hour."
-                ),
+                "source": f"item-{item.get('_slug') or 'self-buff-potion'}",
+                "label": catalog.get("name") or f"Drink {item_name}",
+                "summary": f"{char.name} drinks a {item_name}: {effect_text}.",
             },
         })
     except Exception:
@@ -79862,7 +79889,7 @@ async def _use_item_action_potion_of_heroism(
 
     return {
         "ok": True,
-        "item_name": item.get("name") or "Potion of Heroism",
+        "item_name": item_name,
         "action_key": catalog.get("key") or "drink",
         "temp_hp": new_temp,
         "temp_hp_granted": temp_amount,

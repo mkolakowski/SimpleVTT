@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2526 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.184.0, 2026-06-12).
+**Total tests:** 2528 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.185.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2629,6 +2629,14 @@ v2.184.0 magic-items-automation — first "self-buff" item action. Potion of Her
 | `test_drink_potion_of_heroism_grants_temp_hp_and_consumes` | 200 + `temp_hp_granted: 10`, `temp_hp >= 10` (non-stacking max), `consumed: True`, `buff_key: "bless"`, `buff_installed` is a bool. WS `character_hp_update.data.hp.temp >= 10`. Sheet reflects the temp HP and the potion row is gone (qty 1 → removed). |
 | `test_drink_potion_of_heroism_unknown_action_404` | `action_key: "quaff"` (item defines only `drink`) → 404; potion untouched. |
 | `test_use_item_action_missing_fields_400` | Omitting `action_key` → 400 (contract guard). |
+
+### `test_use_item_action_potion_of_speed.py`
+v2.185.0 — second self-buff consumable through the generic `_use_item_action_self_buff_potion` handler. Potion of Speed (RAW DMG p.187, very rare): `drink` → the Haste buff (best-effort install) for 1 minute, no concentration, NO temp HP. Exercises the no-temp-HP branch (handler skips the temp-HP grant + the HP broadcast). Garrik carries one alongside his Potion of Heroism; the fixture snapshots + restores his inventory.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_drink_potion_of_speed_grants_haste_and_consumes` | 200 + `buff_key: "haste"`, `temp_hp_granted: 0`, `consumed: True`, `buff_installed` is a bool. WS `feature_used.data.summary` names the Haste effect. Sheet: temp HP unchanged, potion row removed. |
+| `test_drink_potion_of_speed_unknown_action_404` | `action_key: "quaff"` → 404; potion untouched. |
 
 ---
 

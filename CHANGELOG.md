@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.185.0] - 2026-06-12 — "The Quickened Draught"
+
+**Schema version:** 69
+
+**Commit summary:** Potion of Speed ships as the second "self-buff" magic-item action, generalizing the v2.184.0 Heroism handler into a shared `_use_item_action_self_buff_potion` — drinking it grants the DRINKER the Haste effect (no concentration, no temp HP) for 1 minute, then consumes the potion.
+
+**Description:** v2.184.0 introduced the first self-buff consumable (Potion of Heroism: 10 temp HP + Bless). Potion of Speed (RAW DMG p.187, very rare) is the second, and the one that proves the archetype generalizes: its effect is Haste, not Bless, and crucially it grants NO temporary hit points. Rather than copy-paste the heroism handler, this commit renames it to `_use_item_action_self_buff_potion` and makes it config-driven off the catalog's `self_buff` block — `temp_hp` defaults to 0, so the temp-HP grant and the `character_hp_update` broadcast are both guarded behind `temp_amount > 0` and simply don't fire for Speed. The `feature_used` log line is now templated from a `summary_effect` string on the catalog entry, so each potion narrates its own effect ("Haste for 1 minute" vs. "+10 temp HP and Bless for 1 hour") without bespoke handler code. The `haste` buff template already lived in `_SPELL_BUFF_MAP` (ac_bonus +2, speed_multiplier ×2); the handler installs it with concentration forced off and a 10-round (1-minute) duration, matching RAW. As with Heroism the buff install is best-effort (it only lands when the drinker is in an active battle), but the consumption applies in or out of combat. Garrik Ironside carries a Potion of Speed alongside his Potion of Heroism in the demo seed. MINOR — additive endpoint behavior + new catalog/seed data, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["potion-of-speed"]`: second `self_buff` archetype (buff_key `haste`, no temp HP, 10-round duration, `consumable: True`, no attunement, `summary_effect` "Haste for 1 minute").
+- Demo seed: Garrik Ironside carries a Potion of Speed (qty 1) alongside his Potion of Heroism.
+- `tests/harness/test_use_item_action_potion_of_speed.py` (2 tests): happy path (Haste buff install + consume + `feature_used` WS line names the Haste effect + sheet temp HP unchanged), unknown-action 404. An inventory snapshot/restore fixture keeps the consume from depleting the seed across re-runs.
+
+### Changed
+- `_use_item_action_potion_of_heroism` generalized to `_use_item_action_self_buff_potion(db, campaign_id, char, item, sheet, catalog, inv_idx)`: temp-HP grant + `character_hp_update` broadcast guarded behind `temp_amount > 0`; `feature_used` summary templated from the catalog's `summary_effect`. The heroism entry gains a `summary_effect` string so its log line is unchanged.
+- `use_item_action` dispatch: the self-buff branch now matches `slug in ("potion-of-heroism", "potion-of-speed")`.
+- `docs/test-harness-coverage.md`: harness total 2526 → 2528; added the `test_use_item_action_potion_of_speed.py` section.
+
 ## [2.184.0] - 2026-06-12 — "The Drinker's Courage"
 
 **Schema version:** 69
