@@ -3045,6 +3045,23 @@ def _barbarian_beast_sheet(name: str) -> dict:
              "equippable": True, "equipped": True,
              "_slug": "bag-of-holding", "weight_lb": 15,
              "desc": "RAW DMG p.153 (uncommon, no attunement). Holds up to 500 lb (not enforced in v1). Bag weighs 15 lb regardless of contents. Tag items `_in_bag_of_holding: True` to discount their weight from the carry meter."},
+            # v2.223.0 — ability-score override Phase 2c: the legendary top
+            # tier of the Belt of Giant Strength (RAW DMG p.155, attunement).
+            # The SRD's single `belt-of-giant-strength` slug defaults to the
+            # Hill tier (STR 21) in _MAGIC_ITEM_PASSIVES; the per-item
+            # `_ability_set` override (v2.215.0) rides THIS item to the Storm
+            # tier (STR 29). Brakka (Barbarian, base STR 17 → mod +3) becomes
+            # effective STR 29 (mod +9) — a +12 swing, the largest in the demo
+            # — visible on /sheet-json `derived.effective_abilities` + a carry
+            # jump (255 → 435). She had 0 attuned items, so this is her 1st of
+            # the RAW-3 max. Completes the demonstrable tier span: Hill 21
+            # (Garrik) → Stone 23 (Zara) → Storm 29 (Brakka). See
+            # docs/plans/str-override.md.
+            {"name": "Belt of Giant Strength (Storm)", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "belt-of-giant-strength", "_ability_set": {"STR": 29},
+             "weight_lb": 0,
+             "desc": "Legendary wondrous item, attunement. While worn, your Strength score becomes 29 (Storm giant) if it isn't already higher. RAW DMG p.155."},
         ],
         "resources": [
             {

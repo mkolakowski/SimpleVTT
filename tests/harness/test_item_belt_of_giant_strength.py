@@ -62,6 +62,11 @@ async def zara(roster):
     return roster["Zara Emberfire"]
 
 
+@pytest_asyncio.fixture
+async def brakka(roster):
+    return roster["Brakka Wildmane"]
+
+
 async def test_belt_exposes_effective_str_on_sheet_json(gm_client, garrik):
     """The override surface: ``derived.effective_abilities.STR`` reports
     base 18, effective 21, modifier +5 while the belt is worn."""
@@ -187,6 +192,33 @@ async def test_belt_tier_override_raises_carry_capacity(gm_client, zara):
     carry = (data.get("derived") or {}).get("carry") or {}
     assert carry.get("carry_capacity_lb") == 345, (
         f"expected carry capacity 345 (STR 23 × 15), got: {carry!r}"
+    )
+
+
+async def test_belt_storm_tier_sets_str_29(gm_client, brakka):
+    """Phase 2c (v2.223.0): the legendary top tier. Brakka Wildmane
+    (Barbarian, base STR 17 → mod +3) wears a Belt of Storm Giant Strength
+    flagged `_ability_set: {"STR": 29}`, so her effective STR is 29 (mod +9)
+    — the catalog default (21) and the Stone tier (23) are both beaten by the
+    per-item override. The +12 swing is the largest in the demo."""
+    data = await _sheet_json(gm_client, brakka["id"])
+    eff = (data.get("derived") or {}).get("effective_abilities") or {}
+    assert "STR" in eff, f"expected an STR override entry, got: {eff!r}"
+    assert eff["STR"]["base"] == 17
+    assert eff["STR"]["effective"] == 29, (
+        "expected the Storm-tier override (29) to beat the catalog default "
+        f"(21), got: {eff['STR']!r}"
+    )
+    assert eff["STR"]["modifier"] == 9
+
+
+async def test_belt_storm_tier_raises_carry_capacity(gm_client, brakka):
+    """The Storm-tier override flows to carry capacity: 29 × 15 = 435 lb,
+    not the base 17 × 15 = 255 lb."""
+    data = await _sheet_json(gm_client, brakka["id"])
+    carry = (data.get("derived") or {}).get("carry") or {}
+    assert carry.get("carry_capacity_lb") == 435, (
+        f"expected carry capacity 435 (STR 29 × 15), got: {carry!r}"
     )
 
 

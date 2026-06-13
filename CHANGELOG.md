@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.223.0] - 2026-06-13 — "The Storm Giant's Cinch"
+
+**Schema version:** 69
+
+**Commit summary:** Ship the legendary top tier of the Belt of Giant Strength (Storm, STR 29) on a demo PC, completing the demonstrable giant-tier span.
+
+**Description:** The ability-score override engine's per-item `_ability_set` mechanism (v2.215.0) already covers all six SRD giant tiers off the single `belt-of-giant-strength` slug — the Hill tier (STR 21, Garrik) and Stone tier (STR 23, Zara) shipped in v2.212.0/v2.215.0. This commit seeds the legendary **Storm Giant** tier (STR 29) on Brakka Wildmane (Barbarian, base STR 17 → mod +3, who had no attuned items), giving the demo a worked example at the top of the table. Her effective STR becomes 29 (mod +9) — a +12 swing, the largest in the demo — which flows through the existing engine to `derived.effective_abilities.STR`, STR saves/checks, weapon attack/damage, and carry capacity (255 → 435 lb). No engine or endpoint change: this is pure demo seed + regression coverage on the shipped substrate. RAW DMG p.155 (legendary, requires attunement).
+
+### Added
+- Demo seed: Belt of Giant Strength (Storm, STR 29) on Brakka Wildmane via the per-item `_ability_set` override (her 1st of the RAW-3 attunement slots).
+- Harness: `test_belt_storm_tier_sets_str_29` + `test_belt_storm_tier_raises_carry_capacity` in `test_item_belt_of_giant_strength.py` — assert effective STR 29 (mod +9) and carry 435 lb, proving the legendary tier beats the catalog default.
+
 ## [2.222.1] - 2026-06-13 — "The Third Reading"
 
 **Schema version:** 69
