@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.225.0] - 2026-06-13 — "The Full Constellation"
+
+**Schema version:** 69
+
+**Commit summary:** Seed the remaining five Ioun Stone ability variants (Strength/Dexterity/Constitution/Wisdom/Charisma) on demo PCs, completing the six-stone span on the capped-additive engine shipped in v2.224.0.
+
+**Description:** v2.224.0 added the `ability_bonus` / `ability_bonus_cap` substrate and shipped the Ioun Stone of *Intellect* (on Magnus Hexbinder). This commit seeds the other five ability variants so the demo demonstrates the full constellation — all six share the single `ioun-stone` slug, with the variant riding the inventory item via `_ability_bonus`. No engine or endpoint change: pure demo seed + regression coverage on the v2.224.0 substrate. Each wielder was chosen for a free attunement slot AND a bumped ability that is mechanically inert to existing assertions (a dump stat, a heavy-armor DEX that doesn't touch AC, or a secondary stat), so every read is a clean pure-additive `base + 2` well under the 20 cap. Wielders: Ioun Stone of **Strength** on Lyra Sunstrider (Bard, STR 8 → 10), **Dexterity** on Sir Caelan Lightbringer (Paladin in chain mail, DEX 10 → 12 — AC unchanged), **Constitution** on Brakka Wildmane (Barbarian, CON 16 → 18 — also exercises the effective-max-HP recompute), **Wisdom** on Krieger Stonefist (Barbarian, WIS 13 → 15), **Charisma** on Rowan Quickbow (Ranger, CHA 8 → 10). RAW DMG p.176 (very rare, requires attunement). MINOR — additive demo content + tests, no schema change.
+
+### Added
+- Demo seed: five Ioun Stone ability variants (STR/DEX/CON/WIS/CHA) on Lyra / Caelan / Brakka / Krieger / Rowan respectively, each via the per-item `_ability_bonus` override on the shared `ioun-stone` slug.
+- Harness: parametrized `test_ioun_variant_exposes_effective_ability` (5 cases) in `test_item_ioun_stone.py` — asserts each PC's `derived.effective_abilities.<ABILITY>` reports the pure-additive `base + 2` with an "Ioun Stone" source.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2617 → 2622; extended the `test_item_ioun_stone.py` section with the five-variant parametrized case.
+
+### Fixed
+- `test_bag_of_holding.py`: corrected a stale carry-capacity assertion (`cap == 255`) that predated the v2.223.0 Storm Belt of Giant Strength seed on Brakka — her effective STR is 29, so the cap is 435 (29 × 15), not 255. The v2.223.0 entry already documented the 255 → 435 carry change but this assertion was missed; surfaced while running the suite for this commit.
+
 ## [2.224.0] - 2026-06-13 — "The Orbiting Prism"
 
 **Schema version:** 69

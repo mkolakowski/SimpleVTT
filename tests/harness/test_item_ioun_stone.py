@@ -20,6 +20,7 @@ equipped + attuned Ioun Stone of Intellect — his 3rd attuned item (after the
 Wand of Fear + Wand of Paralysis, RAW max 3). So effective INT 12, modifier
 +1 (a clean +1 delta with no set to confound it).
 """
+import pytest
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
@@ -97,6 +98,36 @@ async def test_ioun_stone_caps_at_20(gm_client, magnus):
             f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/sheet-fields",
             json={"abilities": snapshot},
         )
+
+
+# v2.225.0 — the remaining five Ioun ability variants, each seeded on a demo
+# PC with a free attunement slot whose bumped ability is mechanically inert to
+# existing assertions (dump stat / heavy-armor DEX / secondary stat). Every one
+# is a pure-additive read (base well under the 20 cap), proving the single
+# `ioun-stone` slug + per-item `_ability_bonus` covers all six ability variants.
+_VARIANTS = [
+    ("Lyra Sunstrider", "STR", 8, 10, 0),
+    ("Sir Caelan Lightbringer", "DEX", 10, 12, 1),
+    ("Brakka Wildmane", "CON", 16, 18, 4),
+    ("Krieger Stonefist", "WIS", 13, 15, 2),
+    ("Rowan Quickbow", "CHA", 8, 10, 0),
+]
+
+
+@pytest.mark.parametrize("name,ability,base,effective,modifier", _VARIANTS)
+async def test_ioun_variant_exposes_effective_ability(
+    gm_client, roster, name, ability, base, effective, modifier
+):
+    """Each remaining Ioun ability variant raises its PC's score by the
+    additive +2 (pure, under the cap) and reports it on `/sheet-json`."""
+    char = roster[name]
+    data = await _sheet_json(gm_client, char["id"])
+    eff = (data.get("derived") or {}).get("effective_abilities") or {}
+    assert ability in eff, f"{name}: expected {ability} override, got {eff!r}"
+    assert eff[ability]["base"] == base
+    assert eff[ability]["effective"] == effective
+    assert eff[ability]["modifier"] == modifier
+    assert "Ioun Stone" in str(eff[ability]["source"]), eff[ability]
 
 
 async def test_ioun_stone_unequip_reverts_bonus(gm_client, magnus):

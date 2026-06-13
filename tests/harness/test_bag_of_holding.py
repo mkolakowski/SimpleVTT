@@ -17,7 +17,8 @@ Brakka Wildmane (Barbarian Path of the Beast Lv 5) carries:
 Without the discount: 7 + 8 + 59 + 15 = 89 lb.
 With the discount:    7 + 8 + 15      = 30 lb (59 lb saved).
 
-Brakka's STR 17 → 255 lb cap. Either way she's well under; the
+Brakka's base STR 17, but her Storm Belt of Giant Strength sets
+effective STR 29 → 435 lb cap. Either way she's well under; the
 delta is the test.
 """
 import pytest
@@ -48,6 +49,7 @@ async def test_brakka_bag_of_holding_discounts_pack_weight(gm_client):
         f"got {weight} lb (Bag of Holding skip may have regressed)"
     )
     cap = int(carry.get("carry_capacity_lb") or 0)
-    # Brakka STR 17 → 255 lb cap.
-    assert cap == 255, f"expected cap 255 (STR 17 × 15); got {cap}"
+    # Brakka base STR 17, but her equipped+attuned Belt of Giant Strength
+    # (Storm, v2.223.0) sets effective STR to 29 → 29 × 15 = 435 lb cap.
+    assert cap == 435, f"expected cap 435 (effective STR 29 × 15); got {cap}"
     assert carry.get("is_over_capacity") is False

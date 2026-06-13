@@ -1229,6 +1229,16 @@ def _paladin_sheet(name: str) -> dict:
              "properties": "versatile (1d10), magic",
              "_slug": "dragon-slayer",
              "desc": "Rare longsword, attunement. +1 attack/damage; while attuned, deals +3d6 slashing damage to dragons (RAW DMG p.166)."},
+            # v2.225.0 — Ioun Stone of Dexterity (RAW DMG p.176, very rare,
+            # attunement). Capped-additive +2 DEX to a max of 20 (the
+            # v2.224.0 `ability_bonus` substrate). Seeded on Caelan (Paladin,
+            # DEX 10 → effective 12, mod 0 → +1) — his 2nd attuned item. He
+            # wears chain mail (heavy armor), so the DEX bump does NOT change
+            # his AC; it lands purely on DEX saves/checks, a clean read.
+            {"name": "Ioun Stone of Dexterity", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_ability_bonus": {"DEX": 2},
+             "desc": "Very rare wondrous item, attunement. This deep red sphere orbits your head and increases your Dexterity by 2, to a maximum of 20. RAW DMG p.176."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:
@@ -1697,6 +1707,16 @@ def _bard_sheet(name: str) -> dict:
              "qty": 1, "consumable": True, "weight_lb": 5,
              "_slug": "tome-of-leadership-and-influence",
              "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Charisma score by 2 (and its maximum). The tome then loses its magic for a century. RAW DMG p.208."},
+            # v2.225.0 — Ioun Stone of Strength (RAW DMG p.176, very rare,
+            # attunement). Capped-additive ability bonus (the v2.224.0
+            # `ability_bonus` substrate): +2 STR to a max of 20. Seeded on
+            # Lyra (Bard, dump STR 8 → effective 10, mod −1 → 0) — a clean
+            # pure-additive read on a non-combat stat (her attacks use DEX/
+            # CHA, so this is mechanically inert beyond STR checks/saves).
+            {"name": "Ioun Stone of Strength", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_ability_bonus": {"STR": 2},
+             "desc": "Very rare wondrous item, attunement. This pale blue rhomboid orbits your head and increases your Strength by 2, to a maximum of 20. RAW DMG p.176."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit
@@ -2693,6 +2713,16 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "gauntlets-of-ogre-power",
              "desc": "Uncommon wondrous item, attunement. Your Strength score is 19 while worn (no effect if your STR is already 19+). RAW DMG p.171."},
+            # v2.225.0 — Ioun Stone of Charisma (RAW DMG p.176, very rare,
+            # attunement). Capped-additive +2 CHA to a max of 20 (the
+            # v2.224.0 `ability_bonus` substrate). Seeded on Rowan (Ranger,
+            # dump CHA 8 → effective 10, mod −1 → 0) — his 2nd attuned item
+            # (after the Gauntlets). A pure-additive read on a non-casting
+            # stat; flows to CHA saves + Deception/Persuasion/Intimidation.
+            {"name": "Ioun Stone of Charisma", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_ability_bonus": {"CHA": 2},
+             "desc": "Very rare wondrous item, attunement. This pale lavender ellipsoid orbits your head and increases your Charisma by 2, to a maximum of 20. RAW DMG p.176."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,
@@ -2866,6 +2896,16 @@ def _barbarian_sheet(name: str) -> dict:
              "_used_today": False, "weight_lb": 2,
              "_slug": "javelin-of-lightning",
              "desc": "Uncommon thrown magic weapon. Throw + speak the command word: lightning line 5 ft × 120 ft, DC 13 DEX save each creature in line (excluding caster + target) → 4d6 lightning (half on pass). The javelin lands at the target's feet and can be retrieved. Once used, nonmagical until next dawn (long rest)."},
+            # v2.225.0 — Ioun Stone of Wisdom (RAW DMG p.176, very rare,
+            # attunement). Capped-additive +2 WIS to a max of 20 (the
+            # v2.224.0 `ability_bonus` substrate). Seeded on Krieger
+            # (Barbarian, WIS 13 → effective 15, mod +1 → +2) — his 1st
+            # attuned item (RAW max 3). A clean read on a secondary stat:
+            # the bonus flows to WIS saves + Perception/Insight/Survival.
+            {"name": "Ioun Stone of Wisdom", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_ability_bonus": {"WIS": 2},
+             "desc": "Very rare wondrous item, attunement. This incandescent blue sphere orbits your head and increases your Wisdom by 2, to a maximum of 20. RAW DMG p.176."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature
@@ -3078,6 +3118,18 @@ def _barbarian_beast_sheet(name: str) -> dict:
              "_slug": "belt-of-giant-strength", "_ability_set": {"STR": 29},
              "weight_lb": 0,
              "desc": "Legendary wondrous item, attunement. While worn, your Strength score becomes 29 (Storm giant) if it isn't already higher. RAW DMG p.155."},
+            # v2.225.0 — Ioun Stone of Constitution (RAW DMG p.176, very
+            # rare, attunement). Capped-additive +2 CON to a max of 20 (the
+            # v2.224.0 `ability_bonus` substrate). Seeded on Brakka
+            # (Barbarian, CON 16 → effective 18, mod +3 → +4) — her 2nd
+            # attuned item (after the Belt). The CON bump also demonstrates
+            # the second-order effective-max-HP recompute (DERIVED
+            # `effective_max_hp` on /sheet-json), since CON drives +mod/level
+            # HP — the same surface the Amulet of Health exercises on CON.
+            {"name": "Ioun Stone of Constitution", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_ability_bonus": {"CON": 2},
+             "desc": "Very rare wondrous item, attunement. This pink rhomboid orbits your head and increases your Constitution by 2, to a maximum of 20. RAW DMG p.176."},
         ],
         "resources": [
             {
