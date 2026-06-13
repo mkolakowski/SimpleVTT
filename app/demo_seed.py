@@ -710,6 +710,19 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True,
              "_slug": "necklace-of-fireballs",
              "desc": "Rare wondrous item. 6 fireball beads. Each thrown bead is a 3rd-level Fireball (8d6 fire, DC 15 DEX save half, 20-ft sphere). Beads don't regenerate."},
+            # v2.217.0 — the timed half of the ability-score override engine
+            # (docs/plans/str-override.md Phase 4). Potion of Hill Giant
+            # Strength (RAW DMG p.187, uncommon): drink → STR becomes 21 for
+            # 1 hour, no concentration. Seeded on Thalindra (frail Wizard,
+            # STR 8) so the boost is dramatic (mod -1 → +5) and there's no
+            # equipped STR override to confound the read. The tier rides
+            # `_ability_set` (mirrors the Belt of Giant Strength override),
+            # stamped onto the installed buff at drink time.
+            {"name": "Potion of Hill Giant Strength", "type": "consumable",
+             "qty": 1, "consumable": True, "equipped": True,
+             "_slug": "potion-of-giant-strength",
+             "_ability_set": {"STR": 21}, "weight_lb": 0.5,
+             "desc": "Drink (action, /use_item_action drink) to set your Strength score to 21 (only if higher) for 1 hour, no concentration. RAW DMG p.187 (Hill Giant tier)."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per

@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.217.0] - 2026-06-13 — "The Giant's Draught"
+
+**Schema version:** 69
+
+**Commit summary:** Ability-score override engine Phase 4 — the TIMED half of the substrate (docs/plans/str-override.md). Potion of Giant Strength (RAW DMG p.187): drink → your Strength becomes a giant's value for 1 hour (no concentration, no attunement), RAW max(base, set). Unlike the Belt of Giant Strength (an equipped-item override), the potion installs a timed `giant-strength` buff carrying `effects.ability_set`; a new fold in `_equipped_item_effects` reads buffs mirrored onto the sheet, so every override consumer picks up the timed STR set with no new read site.
+
+**Description:** This closes the override engine: Phase 1-3 covered equipped/attuned items (Belt, Amulet); Phase 4 adds the timed-buff path. The `giant-strength` template in `_SPELL_BUFF_MAP` carries `effects.ability_set {STR: 21}` (Hill default). The self-buff potion handler (`_use_item_action_self_buff_potion`) stamps the specific tier onto the installed buff from the inventory item's `_ability_set` (mirroring the Belt's per-item override — one catalog entry covers all six tiers Hill 21 → Storm 29) and takes the item name for source attribution. Because `_install_buff` mirrors the buff onto the sheet as `_buffs_active` (durations stripped, effects retained), the pure-sheet `_equipped_item_effects` walker now folds any `_buffs_active` entry carrying `effects.ability_set` into the same highest-wins map that equipped items feed — so `effective_ability_score`, sheet display, `/roll` save/check deltas, `/attack`, carry capacity, and `/sheet-json` all compose timed buffs with equipped overrides via the existing RAW max(base, set), with zero per-site changes. Thalindra Moonwhisper (Wizard Lv 7, base STR 8 → mod -1, 120 lb cap) carries a Potion of Hill Giant Strength (`_ability_set {STR: 21}`); after drinking, her effective STR is 21 (mod +5), carry capacity 315 lb, and a STR save gains the +6 modifier delta. MINOR — additive buff template + catalog entry + read fold + seed + tests, no schema change.
+
+### Added
+- `giant-strength` buff template in `_SPELL_BUFF_MAP` (`effects.ability_set {STR: 21}`, 1 hour, no concentration).
+- `potion-of-giant-strength` entry in the item-action catalog, routed to the self-buff potion handler; per-item tier stamped onto the installed buff from `_ability_set`.
+- `_equipped_item_effects` now folds `sheet._buffs_active` entries carrying `effects.ability_set` into the override map — the timed-buff read site for the whole engine.
+- Demo seed: Potion of Hill Giant Strength (STR 21) on Thalindra Moonwhisper.
+- `tests/harness/test_potion_of_giant_strength.py` (3 tests): drink → effective STR 21 on `/sheet-json`, carry capacity 315, and the +6 STR-save override delta.
+
+### Changed
+- `docs/plans/str-override.md`: Phase 4 marked shipped — the override engine plan is now complete.
+- `docs/test-harness-coverage.md`: harness total 2595 → 2598; added the `test_potion_of_giant_strength.py` section.
+
+---
+
 ## [2.216.0] - 2026-06-13 — "The Amulet of Vigor"
 
 **Schema version:** 69

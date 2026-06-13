@@ -1263,6 +1263,26 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Add 1d4 to one attack roll or saving throw before the spell ends (RAW: each affected target's roll).",
     },
+    # v2.217.0 — Giant Strength (the timed half of the ability-score
+    # override engine; see docs/plans/str-override.md Phase 4). Installed
+    # by Potion of Giant Strength: sets the drinker's STR to a giant's
+    # value for 1 hour, no concentration. `effects.ability_set` carries
+    # the set value (default Hill 21; the specific tier rides the
+    # inventory item via `_ability_set` and is stamped in at drink time).
+    # The fold in `_equipped_item_effects` reads `_buffs_active` so this
+    # composes with equipped overrides via RAW max(base, set) downstream.
+    "giant-strength": {
+        "key": "giant-strength",
+        "name": "Giant Strength",
+        "icon": "🪓",
+        "duration_rounds": 600,  # 1 hour @ 6 s/round
+        "duration_max": 600,
+        "concentration": False,
+        "effects": {
+            "ability_set": {"STR": 21},  # Hill default; per-tier override at drink time
+        },
+        "desc": "Your Strength score becomes a giant's for 1 hour.",
+    },
     # v2.97.37 — Heroism (Bard L1, also Paladin). Touch, 1 minute,
     # concentration (the JSON data layer marks it as concentration:
     # false — that's an SRD-build bug, RAW is concentration; we
@@ -32778,6 +32798,28 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             "summary_effect": "the enlarge effect for up to 1d4 hours",
         },
     },
+    # v2.217.0 — the timed half of the ability-score override engine (see
+    # docs/plans/str-override.md Phase 4). RAW DMG p.187 Potion of Giant
+    # Strength ships six tiers (Hill STR 21 → Storm STR 29): drink → your
+    # STR score becomes the giant value for 1 hour, no concentration, no
+    # attunement. Installs the `giant-strength` buff whose
+    # `effects.ability_set` feeds `effective_ability_score` via the
+    # `_buffs_active` fold. RAW "only if higher" means a low-STR PC gains a
+    # lot, a high-STR one little/none. The specific tier rides the inventory
+    # item via `_ability_set` (mirrors the Belt of Giant Strength per-item
+    # override) and is stamped onto the buff at drink time, so one catalog
+    # entry covers all six tiers.
+    "potion-of-giant-strength": {
+        "key": "drink",
+        "name": "Drink Potion of Giant Strength",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "giant-strength",
+            "duration_rounds": 600,  # 1 hour @ 6 s/round
+            "summary_effect": "your Strength becomes a giant's for 1 hour",
+        },
+    },
     # v2.195.0 — sixth self-buff potion. RAW DMG p.187 Potion of Climbing
     # (common): drink → a climbing speed equal to your walking speed +
     # advantage on Strength (Athletics) checks to climb, for 1 hour, no
@@ -33270,6 +33312,37 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if p.get("sees_in_darkness"):
                 out["sees_in_darkness"] = True
                 out["sees_in_darkness_sources"].append(item_name)
+    # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
+    # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
+    # sheet as `_buffs_active` (durations stripped, effects retained) by
+    # `_mirror_buffs_to_sheet`, so this pure-sheet walker can fold any buff
+    # carrying `effects.ability_set` into the same highest-wins map. Every
+    # override consumer (sheet display, /roll, /attack, carry capacity,
+    # /sheet-json) then picks up timed STR/CON sets for free, composing with
+    # equipped-item overrides via the RAW max(base, set) in
+    # `effective_ability_score`.
+    for b in sheet.get("_buffs_active") or []:
+        if not isinstance(b, dict):
+            continue
+        b_eff = b.get("effects")
+        if not isinstance(b_eff, dict):
+            continue
+        b_aset = b_eff.get("ability_set")
+        if not isinstance(b_aset, dict):
+            continue
+        b_name = str(b.get("name") or b.get("key") or "Buff")
+        for ab_key, ab_val in b_aset.items():
+            try:
+                ab_score = int(ab_val)
+            except (TypeError, ValueError):
+                continue
+            ab_norm = str(ab_key).strip().upper()[:3]
+            if not ab_norm:
+                continue
+            prev = out["ability_set"].get(ab_norm)
+            if prev is None or ab_score > prev:
+                out["ability_set"][ab_norm] = ab_score
+                out["ability_set_sources"][ab_norm] = b_name
     return out
 
 
@@ -80507,6 +80580,7 @@ async def use_item_action(
         "potion-of-water-breathing", "potion-of-diminution",
         "potion-of-invisibility", "potion-of-flying",
         "potion-of-clairvoyance", "potion-of-gaseous-form",
+        "potion-of-giant-strength",
     ):
         return await _use_item_action_self_buff_potion(
             db, campaign_id, char, item, sheet, catalog, inv_idx,
@@ -81037,6 +81111,19 @@ async def _use_item_action_self_buff_potion(
             buff["name"] = spec.get("buff_name") or buff.get("name")
             if spec.get("icon"):
                 buff["icon"] = spec["icon"]
+        # v2.217.0 — Potion of Giant Strength tier. RAW DMG p.187 ships six
+        # tiers (Hill STR 21 → Storm STR 29). The specific tier's STR set
+        # value rides the inventory item via `_ability_set` (mirrors the Belt
+        # of Giant Strength per-item override) and overrides the template's
+        # Hill default. RAW "only if higher" is enforced downstream in
+        # `effective_ability_score`. The buff name takes the item name so the
+        # sheet override badge attributes the boost to the actual tier.
+        item_aset = item.get("_ability_set")
+        if buff_key == "giant-strength" and isinstance(item_aset, dict) and item_aset:
+            eff = dict(buff.get("effects") or {})
+            eff["ability_set"] = dict(item_aset)
+            buff["effects"] = eff
+            buff["name"] = item.get("name") or buff.get("name")
         # RAW: a potion's buff carries no concentration and runs its own
         # duration (e.g. Heroism's Bless = 1 hour, Speed's Haste = 1 min).
         buff["concentration"] = False

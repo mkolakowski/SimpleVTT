@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2595 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.216.0, 2026-06-13).
+**Total tests:** 2598 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.217.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2781,6 +2781,15 @@ v2.192.0 — Potion of Growth (RAW DMG p.187, uncommon): the fifth self-buff pot
 |------|-----------------|
 | `test_growth_grants_advantage_on_str_save` | Garrik drinks Growth (`buff_key: "growth"`, `buff_installed: True`), then a STR-save spell aimed at him produces a `roll_request` with `base_expression == "2d20kh1"` (advantage). |
 | `test_no_growth_str_save_is_plain` | Control: without Growth, Garrik's STR save rolls plain `1d20` — proving the advantage comes from the potion, not something innate. |
+
+### `test_potion_of_giant_strength.py`
+v2.217.0 — ability-score override engine Phase 4 (docs/plans/str-override.md): the TIMED half of the substrate. Potion of Giant Strength (RAW DMG p.187): drink → STR becomes a giant's value for 1 hour, RAW max(base, set). Installs a timed `giant-strength` buff carrying `effects.ability_set`; mirrored onto the sheet as `_buffs_active`, the new fold in `_equipped_item_effects` reads it so every override consumer composes the buff with equipped overrides. The drink needs an active battle (best-effort install), so the fixture stands up a one-combatant battle, then clears the mirrored buff + restores the consumed potion on teardown. Thalindra (Wizard Lv 7, base STR 8 → mod -1, 120 lb cap) carries a Potion of Hill Giant Strength (`_ability_set {STR: 21}`) — no equipped STR override, a clean control.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_giant_strength_potion_sets_str_on_sheet_json` | Drink (`buff_key: "giant-strength"`, `buff_installed: True`), then `GET /sheet-json` → `derived.effective_abilities.STR` = `{base 8, effective 21, modifier 5}` with source naming "Giant Strength". |
+| `test_giant_strength_potion_raises_carry_capacity` | Carry capacity 120 lb (8 × 15) before drink → 315 lb (21 × 15) after — the timed STR flows into the carry engine for free. |
+| `test_giant_strength_potion_adds_str_save_override_delta` | After drinking, a `/roll` `str_save` breakdown contains "+6" and "Giant Strength" (mod +5 − base mod -1 = +6 delta, attributed to the potion). |
 
 ### `test_potion_of_climbing.py`
 v2.195.0 — Potion of Climbing (RAW DMG p.187, common): the sixth self-buff potion. Drinking installs the `climbing` template carrying `effects.advantage_on: ["str_check"]`, honoured by the generalized STR-check-advantage reader. Exercises the STR-*check* path via the `/roll` endpoint (`stat_key="str_check"`): the d20 expression swaps `1d20 → 2d20kh1` when the roller has STR-check advantage. Garrik (Fighter) has no innate STR-check advantage, so Climbing is the sole source. The climbing speed itself is GM-narrated.

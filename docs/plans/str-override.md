@@ -1,6 +1,6 @@
 # Ability-score override engine — design plan
 
-**Status:** 🟠 Phase 1 + 1b + 2 + 3 shipped. Phase 0 (plan) ✅ v2.211.0. Phase 1 (override substrate + STR saves/checks + carry capacity + Belt of Giant Strength Hill tier) ✅ v2.212.0. Phase 1b (weapon attack/damage read site on `/attack`) ✅ v2.213.0 — the `/attack` endpoint now appends the effective-STR modifier delta to both the to-hit roll and the damage expression for STR-keyed weapons. Phase 2a (sheet display of the boosted ability score with an item-boost marker) ✅ v2.214.0. Phase 2b (belt tier backfill via per-item `_ability_set` override) ✅ v2.215.0. Phase 3 (Amulet of Health: CON 19 override + display-derived max-HP) ✅ v2.216.0. Phase 4 (Potion of Giant Strength, timed) remains open.
+**Status:** ✅ Complete (Phases 0-4 shipped). Phase 0 (plan) ✅ v2.211.0. Phase 1 (override substrate + STR saves/checks + carry capacity + Belt of Giant Strength Hill tier) ✅ v2.212.0. Phase 1b (weapon attack/damage read site on `/attack`) ✅ v2.213.0 — the `/attack` endpoint now appends the effective-STR modifier delta to both the to-hit roll and the damage expression for STR-keyed weapons. Phase 2a (sheet display of the boosted ability score with an item-boost marker) ✅ v2.214.0. Phase 2b (belt tier backfill via per-item `_ability_set` override) ✅ v2.215.0. Phase 3 (Amulet of Health: CON 19 override + display-derived max-HP) ✅ v2.216.0. Phase 4 (Potion of Giant Strength, timed-buff path) ✅ v2.217.0 — the override engine is now complete.
 
 **Authors:** rolling
 **Last updated:** 2026-06-13
@@ -113,10 +113,9 @@ Shipped: two pure helpers — `_attack_override_ability(sheet, attack)` infers t
 
 Shipped: `amulet-of-health` in `_MAGIC_ITEM_PASSIVES` (`ability_set {CON: 19}`, attunement) — the CON override flows automatically into CON saves (`/roll`) and the Phase 2a boosted-ability sheet card. The max-HP second-order effect chose **option (a) display-derived**: new `_effective_max_hp_for_sheet(sheet)` computes `{base, effective, delta, level, source}` from the effective-vs-base CON modifier delta × total level (new `_sheet_total_level` helper), surfaced as `/sheet-json` `derived.effective_max_hp`. The stored `hp.max` is left untouched so combat damage math is unchanged in v1 (mutating the stored max in combat is a filed follow-up). Demo: Brother Tavik Stonebrow (Cleric Lv 8, base CON 14 → mod +2, stored max 67) → effective CON 19 (mod +4), effective max HP 83. Harness `test_item_amulet_of_health.py` (4 tests): effective CON, effective max HP +16, CON-save delta, unequip-reverts.
 
-### Phase 4 (filed) — Potion of Giant Strength (timed)
+### Phase 4 — Potion of Giant Strength (timed) ✅ v2.217.0
 
-- Timed-buff path feeding `ability_set` into `effective_ability_score`.
-- Consumable dispatch + 1-hour duration + harness test.
+Shipped: the timed half of the engine. A `giant-strength` template in `_SPELL_BUFF_MAP` carries `effects.ability_set {STR: 21}` (Hill default); the `potion-of-giant-strength` catalog entry routes through the self-buff potion handler, which stamps the specific tier onto the installed buff from the inventory item's `_ability_set` (one catalog entry covers all six tiers). Because `_install_buff` mirrors buffs onto the sheet as `_buffs_active` (durations stripped, effects retained), `_equipped_item_effects` now folds any `_buffs_active` entry carrying `effects.ability_set` into the same highest-wins map equipped items feed — so `effective_ability_score`, the sheet display, `/roll` deltas, `/attack`, carry capacity, and `/sheet-json` all compose timed buffs with equipped overrides via the existing RAW max(base, set), with zero per-site changes. Demo: Thalindra Moonwhisper (Wizard Lv 7, base STR 8 → mod -1, 120 lb cap) carries a Potion of Hill Giant Strength (`_ability_set {STR: 21}`); after drinking, effective STR 21 (mod +5), carry 315 lb, STR save +6 delta. Harness `test_potion_of_giant_strength.py` (3 tests): effective STR on `/sheet-json`, carry capacity 315, STR-save override delta.
 
 ## Non-goals (v1)
 
