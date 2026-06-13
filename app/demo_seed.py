@@ -3731,6 +3731,15 @@ def _fighter_sheet(name: str) -> dict:
              "properties": "versatile (1d10), magic",
              "_slug": "flame-tongue",
              "desc": "Rare longsword, attunement. Speak the command word (bonus action — /use_item_action ignite|extinguish) to toggle. While ablaze, +2d6 fire damage on every hit."},
+            # v2.184.0 — Magic-items: first "self-buff" consumable.
+            # Potion of Heroism (RAW DMG p.187, rare). Drink (action,
+            # /use_item_action drink) → 10 temp HP + the Bless effect
+            # (no concentration) for 1 hour, then the potion is
+            # consumed. Thematic on Garrik (front-line Fighter).
+            {"name": "Potion of Heroism", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True,
+             "_slug": "potion-of-heroism",
+             "desc": "Drink (action, /use_item_action drink) to gain 10 temporary hit points and the effect of Bless (no concentration) for 1 hour. RAW DMG p.187."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

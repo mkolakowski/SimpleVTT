@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2523 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.183.24, 2026-06-12).
+**Total tests:** 2526 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.184.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2620,6 +2620,15 @@ v2.158.88 magic-items-automation Phase 4d — Staff of Healing (RAW DMG p.202). 
 | `test_staff_lesser_restoration_wrong_charges_400` | 3 charges to `cast-lesser-restoration` → 400 (RAW fixed at 2). |
 | `test_staff_mass_cure_wounds_lv5` | `cast-mass-cure-wounds` with 5 charges → `cast_slot_level: 5`. |
 | `test_staff_unknown_action_404` | `cast-fireball` action_key on a Staff of Healing → 404 (catalog mismatch). Tests the multi-action sub-dispatch validation. |
+
+### `test_use_item_action_potion_of_heroism.py`
+v2.184.0 magic-items-automation — first "self-buff" item action. Potion of Heroism (RAW DMG p.187, rare consumable): `/use_item_action` with `action_key: "drink"` grants the DRINKER 10 temp HP + Bless (no concentration) for 1 hour, then consumes the potion. New archetype bits: `consumable: True` (dispatch skips the equipped gate + decrements qty) and a `self_buff` config (flat temp-HP grant + Bless installed on the drinker's own combatant, best-effort). Demo: Garrik Ironside carries the potion; the fixture snapshots + restores his inventory so the consume doesn't deplete the seed across re-runs.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_drink_potion_of_heroism_grants_temp_hp_and_consumes` | 200 + `temp_hp_granted: 10`, `temp_hp >= 10` (non-stacking max), `consumed: True`, `buff_key: "bless"`, `buff_installed` is a bool. WS `character_hp_update.data.hp.temp >= 10`. Sheet reflects the temp HP and the potion row is gone (qty 1 → removed). |
+| `test_drink_potion_of_heroism_unknown_action_404` | `action_key: "quaff"` (item defines only `drink`) → 404; potion untouched. |
+| `test_use_item_action_missing_fields_400` | Omitting `action_key` → 400 (contract guard). |
 
 ---
 

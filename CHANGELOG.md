@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.184.0] - 2026-06-12 — "The Drinker's Courage"
+
+**Schema version:** 69
+
+**Commit summary:** Potion of Heroism ships as the first "self-buff" magic-item action — drinking it grants the DRINKER 10 temp HP + the Bless effect (no concentration) for 1 hour, then consumes the potion.
+
+**Description:** Every item action in `_MAGIC_ITEM_ACTIONS` so far either restored a resource (Pearl), cast a spell at a target (wands/staff), toggled state (Flame Tongue), or dispatched an AoE save (Javelin/Necklace/Wand of Fear). Potion of Heroism (RAW DMG p.187, rare consumable) is the first whose effect lands on the *user*: `/use_item_action` with `action_key: "drink"` grants 10 temporary hit points (non-stacking — the higher of existing/grant wins) and installs the Bless buff on the drinker's own combatant, then consumes the potion. Two new archetype bits make it work: (1) a `consumable: True` catalog flag — the dispatch skips the equipped-slot gate (a potion isn't worn) and decrements `qty` on use, dropping the row at 0; (2) a `self_buff` config that reuses the existing `bless` `_SPELL_BUFF_MAP` markers but overrides concentration off and sets a 1-hour (600-round) duration, matching RAW. The Bless install is best-effort: it only lands when the drinker is in an active battle (the buff engine operates on combatants), but the temp HP and the consumption apply in or out of combat. Garrik Ironside (Fighter) carries one in the demo seed. MINOR — additive endpoint behavior + new catalog/seed data, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["potion-of-heroism"]`: first `self_buff` archetype (buff_key `bless`, 10 temp HP, 600-round duration, `consumable: True`, no attunement).
+- `_use_item_action_potion_of_heroism` handler: grants temp HP (non-stacking), consumes the potion (qty decrement / row removal), installs the Bless buff best-effort, broadcasts `character_hp_update` + `feature_used`.
+- Demo seed: Garrik Ironside carries a Potion of Heroism (qty 1).
+- `tests/harness/test_use_item_action_potion_of_heroism.py` (3 tests): happy path (temp HP + consume + WS HP update + sheet reflection), unknown-action 404, missing-fields 400. An inventory snapshot/restore fixture keeps the consume from depleting the seed across re-runs.
+
+### Changed
+- `use_item_action` dispatch: the equipped-slot gate is skipped for `consumable: True` items; added the `potion-of-heroism` branch.
+- `docs/test-harness-coverage.md`: harness total 2523 → 2526; added the `test_use_item_action_potion_of_heroism.py` section.
+
 ## [2.183.24] - 2026-06-12 — "The Hungry Counterpart"
 
 **Schema version:** 69

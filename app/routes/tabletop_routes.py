@@ -32184,6 +32184,27 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.184.0 — first "self-buff" archetype: a consumable potion that
+    # buffs the DRINKER rather than targeting others. RAW DMG p.187
+    # Potion of Heroism (rare): drink (action) → 10 temporary hit
+    # points + the effect of Bless (no concentration) for 1 hour. No
+    # attunement, no equip slot — the dispatch skips the equipped gate
+    # for `consumable: True` items and decrements qty on use (the
+    # potion is consumed). The buff reuses the `bless` _SPELL_BUFF_MAP
+    # markers but overrides concentration off + a 1-hour duration.
+    "potion-of-heroism": {
+        "key": "drink",
+        "name": "Drink Potion of Heroism",
+        "requires_attunement": False,
+        "consumable": True,
+        "self_buff": {
+            "buff_key": "bless",
+            "buff_name": "Heroism (Bless)",
+            "icon": "🦁",
+            "duration_rounds": 600,  # 1 hour @ 6 s/round
+            "temp_hp": 10,
+        },
+    },
 }
 
 
@@ -79238,7 +79259,9 @@ async def use_item_action(
         raise HTTPException(
             409, f"{item.get('name') or slug} requires attunement",
         )
-    if not item.get("equipped"):
+    # v2.184.0 — consumables (potions) aren't "equipped" in a slot; the
+    # catalog flags them and the dispatch skips the equip gate.
+    if not catalog.get("consumable") and not item.get("equipped"):
         raise HTTPException(
             409, f"{item.get('name') or slug} must be equipped",
         )
@@ -79295,6 +79318,10 @@ async def use_item_action(
             charges=body.get("charges"),
             campaign=campaign,
             prompt_user=user,
+        )
+    if slug == "potion-of-heroism":
+        return await _use_item_action_potion_of_heroism(
+            db, campaign_id, char, item, sheet, catalog, inv_idx,
         )
     raise HTTPException(409, "unknown item action handler")
 
@@ -79733,6 +79760,116 @@ async def _use_item_action_flame_tongue(
         "item_name": item.get("name") or slug,
         "action_key": action_key,
         "lit": desired,
+    }
+
+
+async def _use_item_action_potion_of_heroism(
+    db, campaign_id, char, item, sheet, catalog, inv_idx,
+):
+    """v2.184.0 — first self-buff item action: Potion of Heroism (RAW
+    DMG p.187, rare consumable). Drinking it grants the DRINKER 10
+    temporary hit points and the Bless effect (no concentration) for
+    1 hour, then consumes the potion. Temp HP is non-stacking RAW (the
+    higher value wins). The Bless buff install is best-effort — it only
+    lands when the drinker is in an active battle; the temp HP and the
+    potion consumption apply either way.
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    spec = catalog.get("self_buff") or {}
+    temp_amount = int(spec.get("temp_hp") or 0)
+
+    # 1. Temp HP (non-stacking — the higher of existing / grant wins).
+    hp = dict(sheet.get("hp") or {})
+    pre_temp = int(hp.get("temp") or 0)
+    new_temp = max(pre_temp, temp_amount)
+    hp["temp"] = new_temp
+    sheet["hp"] = hp
+
+    # 2. Consume the potion (decrement qty; drop the row at 0).
+    inventory = list(sheet.get("inventory") or [])
+    consumed = False
+    remaining_qty = None
+    if 0 <= inv_idx < len(inventory):
+        new_item = dict(inventory[inv_idx])
+        qty = int(new_item.get("qty") or 1)
+        remaining_qty = max(0, qty - 1)
+        consumed = True
+        if remaining_qty <= 0:
+            inventory.pop(inv_idx)
+        else:
+            new_item["qty"] = remaining_qty
+            inventory[inv_idx] = new_item
+        sheet["inventory"] = inventory
+
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # 3. Bless buff on the drinker (best-effort — needs an active battle).
+    buff_key = str(spec.get("buff_key") or "bless")
+    buff_installed = False
+    template = _SPELL_BUFF_MAP.get(buff_key) or {}
+    if template:
+        buff = dict(template)
+        buff["effects"] = dict(template.get("effects") or {})
+        buff["key"] = buff_key
+        buff["name"] = spec.get("buff_name") or buff.get("name")
+        if spec.get("icon"):
+            buff["icon"] = spec["icon"]
+        # RAW: Potion of Heroism's Bless needs NO concentration and
+        # lasts 1 hour (vs. the spell's concentration + 1 minute).
+        buff["concentration"] = False
+        _dur = int(spec.get("duration_rounds") or buff.get("duration_rounds") or 0)
+        buff["duration_rounds"] = _dur
+        buff["duration_max"] = _dur
+        buff["source_char_id"] = char.id
+        buff_installed = await _install_buff(campaign_id, char.id, buff)
+        if buff_installed:
+            _mirror_buffs_to_sheet(
+                db, char.id, _get_buffs(campaign_id, char.id),
+            )
+
+    # 4. Broadcasts the client reads: HP meter + feature-used log line.
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "character_hp_update",
+            "data": {
+                "character_id": char.id,
+                "hp": hp,
+                "delta": 0,
+                "source": "potion-of-heroism",
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": "item-potion-of-heroism",
+                "label": catalog.get("name") or "Drink Potion of Heroism",
+                "summary": (
+                    f"{char.name} drinks a Potion of Heroism: "
+                    f"+{temp_amount} temp HP and Bless for 1 hour."
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or "Potion of Heroism",
+        "action_key": catalog.get("key") or "drink",
+        "temp_hp": new_temp,
+        "temp_hp_granted": temp_amount,
+        "buff_installed": buff_installed,
+        "buff_key": buff_key,
+        "consumed": consumed,
+        "remaining_qty": remaining_qty,
     }
 
 
