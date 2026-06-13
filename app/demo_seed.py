@@ -2145,6 +2145,22 @@ def _warlock_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-paralysis",
              "desc": "RAW DMG p.213 (rare, attunement). 7 charges (regain 1d6+1 at dawn). Action: spend 1 charge to fire a ray at one creature within 60 ft — DC 15 CON save or Paralyzed for 1 min (repeat save at end of each turn). Wired via /use_item_action with action_key=\"cast-paralysis\"."},
+            # v2.224.0 — capped-additive ability-bonus engine drop-in
+            # (docs/plans/str-override.md). Ioun Stone of Intellect (RAW DMG
+            # p.176, very rare, attunement): while orbiting your head it
+            # *increases* your INT by 2, "to a maximum of 20" — a capped
+            # ADD, distinct from the Headband's set-to-19. The single SRD
+            # slug `ioun-stone` carries an empty default; the variant rides
+            # the item via `_ability_bonus: {"INT": 2}` and the +20 cap from
+            # the catalog passive. Seeded on Magnus (Warlock, base INT 10 →
+            # effective 12, mod 0 → +1) — his 3rd attuned item (RAW max 3),
+            # a pure-additive read with no set to confound it. The bonus
+            # flows to INT saves + Arcana/History/Investigation/Nature
+            # checks (/roll) automatically.
+            {"name": "Ioun Stone of Intellect", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ioun-stone", "_ability_bonus": {"INT": 2},
+             "desc": "Very rare wondrous item, attunement. This dusty rose prism orbits your head and increases your Intelligence by 2, to a maximum of 20. RAW DMG p.176."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.224.0] - 2026-06-13 — "The Orbiting Prism"
+
+**Schema version:** 69
+
+**Commit summary:** Ioun Stone of Intellect — the first capped-additive ability-bonus item. Adds an `ability_bonus` / `ability_bonus_cap` substrate to the ability-score override engine for items that RAW *increase* a score by 2 "to a maximum of 20" (distinct from the existing `ability_set` items that set a fixed value).
+
+**Description:** The override engine to date (v2.211.0–v2.222.0) modeled two kinds of ability change: equipped items that *set* a score via RAW max(base, set) (`ability_set`: Belt of Giant Strength, Amulet of Health, Headband of Intellect, Gauntlets of Ogre Power) and the Manuals/Tomes that permanently *edit* the base. The **Ioun Stone** ability variants (RAW DMG p.176, very rare, attunement) are a third kind: they *add* +2 to a score with a hard ceiling of 20 — additive, not a set. This commit adds that substrate. `_equipped_item_effects` now aggregates an `ability_bonus` map (summed across items) plus an `ability_bonus_cap` map (strictest ceiling wins), and `effective_ability_score` folds the bonus AFTER any set override: it raises the score toward the cap but never lowers it, so a score already at/above the cap gains nothing. The six SRD Ioun ability variants (Strength/Dexterity/Constitution/Intelligence/Wisdom/Charisma) share the single `ioun-stone` slug — the catalog passive carries an empty default + the +20 cap, and the specific variant rides the inventory item via a per-item `_ability_bonus: {"INT": 2}` override (mirroring the Belt's per-tier `_ability_set` pattern). Source attribution is merged across both override kinds via a new `_ability_override_sources` helper (set priority), so `/roll` breakdowns and `/sheet-json` annotate the +N with the item name. Demo: Magnus Hexbinder (Warlock, base INT 10 → effective 12, mod 0 → +1) wears an Ioun Stone of Intellect — his 3rd attuned item (RAW max 3), a pure-additive read with no set to confound it. MINOR — additive engine capability + content + seed + tests, no schema change.
+
+### Added
+- `ability_bonus` / `ability_bonus_cap` / `ability_bonus_sources` aggregation in `_equipped_item_effects`: capped-additive ability bonuses, summed across equipped+attuned items, with per-ability ceilings.
+- `_MAGIC_ITEM_PASSIVES["ioun-stone"]`: empty `ability_bonus` default + `ability_bonus_cap: 20`; the variant's ability rides the inventory item via `_ability_bonus`.
+- `_ability_override_sources` helper: merges `ability_set_sources` + `ability_bonus_sources` (set wins) for breakdown/sheet attribution.
+- Demo seed: Ioun Stone of Intellect on Magnus Hexbinder (Warlock, base INT 10 → effective 12) via per-item `_ability_bonus: {"INT": 2}`.
+- `tests/harness/test_item_ioun_stone.py` (4 tests): effective INT 12 on `/sheet-json`, +1 INT-save delta with source attribution, the RAW 20-cap (INT patched to 19 → effective 20, +1 not +2), and unequip reverting the bonus.
+
+### Changed
+- `effective_ability_score`: now composes the additive `ability_bonus` after the `ability_set` override, clamped to the per-ability cap and then 30.
+- `/roll` ability-override breakdown + `_effective_abilities_for_sheet` + `_effective_max_hp_for_sheet`: source attribution routed through `_ability_override_sources` so bonus-only overrides (no set) still name the item.
+- `docs/test-harness-coverage.md`: harness total bumped; added the `test_item_ioun_stone.py` section.
+
 ## [2.223.0] - 2026-06-13 — "The Storm Giant's Cinch"
 
 **Schema version:** 69

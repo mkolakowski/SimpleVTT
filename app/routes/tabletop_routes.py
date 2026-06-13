@@ -16933,8 +16933,7 @@ async def roll_dice(
             import copy as _copy_item_override
             result = _copy_item_override.copy(result)
             _ov_src = (
-                _equipped_item_effects(_char.sheet)
-                .get("ability_set_sources", {})
+                _ability_override_sources(_char.sheet)
                 .get(_override_ability)
             ) or f"{_override_ability} override"
             result.breakdown = (
@@ -32411,6 +32410,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "gauntlets-of-ogre-power": [
         {"ability_set": {"STR": 19}, "requires_attunement": True},
     ],
+    # v2.224.0 — Ioun Stone (RAW DMG p.176, rarity "varies", attunement;
+    # see docs/plans/str-override.md). The six ability variants (Strength,
+    # Dexterity, Constitution, Intelligence, Wisdom, Charisma — each
+    # "Very Rare") *increase* the score by 2, "to a maximum of 20" — a
+    # capped-additive bonus, NOT a fixed set. This single SRD slug carries
+    # an empty default; the specific variant's ability rides the inventory
+    # item via a per-item `_ability_bonus: {"INT": 2}` override and the
+    # cap declared here. The bonus composes AFTER any `ability_set` in
+    # `effective_ability_score` (raises toward 20, never lowers), and
+    # flows to that ability's saves/checks (/roll), and — for STR/CON —
+    # weapon attack/damage, carry capacity, and effective max-HP.
+    "ioun-stone": [
+        {"ability_bonus": {}, "ability_bonus_cap": 20, "requires_attunement": True},
+    ],
 }
 
 
@@ -33331,6 +33344,17 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # Strength (Hill, STR 21) is the first entry.
         "ability_set": {},
         "ability_set_sources": {},
+        # v2.224.0 — capped-additive ability bonus substrate (see
+        # docs/plans/str-override.md). Distinct from `ability_set`: the Ioun
+        # Stone variants (RAW DMG p.176) *increase* a score by 2 "to a maximum
+        # of 20" rather than setting it to a fixed value. `ability_bonus` maps
+        # an ability key → the SUMMED bonus across equipped+attuned items;
+        # `ability_bonus_cap` carries the per-ability ceiling (20 for Ioun
+        # Stones). `effective_ability_score` applies it AFTER any set override,
+        # raising the score toward the cap but never lowering it.
+        "ability_bonus": {},
+        "ability_bonus_cap": {},
+        "ability_bonus_sources": {},
         # v2.159.24 — sensory passives. `sees_in_darkness` is the
         # boolean union across all equipped magic-item passives; the
         # sources list lets a UI surface "darkvision via Goggles of
@@ -33421,6 +33445,40 @@ def _equipped_item_effects(sheet: dict) -> dict:
                     if prev is None or ab_score > prev:
                         out["ability_set"][ab_norm] = ab_score
                         out["ability_set_sources"][ab_norm] = item_name
+            # v2.224.0 — capped-additive ability bonus (Ioun Stones). A
+            # payload's `ability_bonus` maps ability key → additive amount;
+            # `ability_bonus_cap` is the ceiling. The Ioun Stone ships a
+            # single slug with an empty default; the variant's ability +
+            # amount rides the inventory item via `_ability_bonus`. Bonuses
+            # SUM across items; the cap is the MIN across contributing items
+            # (the strictest ceiling wins). The base/set/cap arithmetic lives
+            # in `effective_ability_score`.
+            abonus = p.get("ability_bonus")
+            item_abonus = item.get("_ability_bonus")
+            if isinstance(item_abonus, dict) and item_abonus:
+                merged = dict(abonus) if isinstance(abonus, dict) else {}
+                merged.update(item_abonus)
+                abonus = merged
+            if isinstance(abonus, dict) and abonus:
+                try:
+                    cap = int(p.get("ability_bonus_cap")) if p.get("ability_bonus_cap") is not None else None
+                except (TypeError, ValueError):
+                    cap = None
+                for ab_key, ab_val in abonus.items():
+                    try:
+                        amt = int(ab_val)
+                    except (TypeError, ValueError):
+                        continue
+                    if amt == 0:
+                        continue
+                    ab_norm = str(ab_key).strip().upper()[:3]
+                    if not ab_norm:
+                        continue
+                    out["ability_bonus"][ab_norm] = out["ability_bonus"].get(ab_norm, 0) + amt
+                    out["ability_bonus_sources"][ab_norm] = item_name
+                    if cap is not None:
+                        prev_cap = out["ability_bonus_cap"].get(ab_norm)
+                        out["ability_bonus_cap"][ab_norm] = cap if prev_cap is None else min(prev_cap, cap)
             # v2.159.24 — sensory passives. Boolean OR across passives;
             # the source name lets a UI describe which item granted
             # darkvision.
@@ -33522,21 +33580,39 @@ def _ability_score_modifier(score: int) -> int:
 
 
 def effective_ability_score(sheet: dict, ability: str) -> int:
-    """Resolve a creature's EFFECTIVE ability score: the higher of the
-    stored base and any equipped-item `ability_set` override. RAW
-    "only if higher" (Belt of Giant Strength DMG p.155, Amulet of
-    Health DMG p.150) is the max() here. Pure function on the sheet."""
+    """Resolve a creature's EFFECTIVE ability score.
+
+    Two equipped-item layers compose on top of the stored base:
+
+    1. `ability_set` — RAW "only if higher" set (Belt of Giant Strength
+       DMG p.155, Amulet of Health DMG p.150): result = max(base, set).
+    2. `ability_bonus` — RAW capped-additive (Ioun Stone of Intellect/
+       Strength/etc. DMG p.176: "increases … by 2, to a maximum of 20"):
+       applied AFTER the set, the bonus raises the score toward its cap
+       but never lowers it. A score already at/above the cap gains nothing.
+
+    Final result is clamped to 30. Pure function on the sheet."""
     canon = _normalize_ability_key(ability)
     base = _read_stored_ability(sheet, canon)
     if not canon:
         return base
     try:
-        override = _equipped_item_effects(sheet).get("ability_set", {}).get(canon)
+        eff = _equipped_item_effects(sheet)
     except Exception:
-        override = None
-    if isinstance(override, int) and override > base:
-        return min(30, override)
-    return base
+        eff = {}
+    result = base
+    override = eff.get("ability_set", {}).get(canon)
+    if isinstance(override, int) and override > result:
+        result = override
+    bonus = eff.get("ability_bonus", {}).get(canon)
+    if isinstance(bonus, int) and bonus > 0:
+        cap = eff.get("ability_bonus_cap", {}).get(canon)
+        if isinstance(cap, int):
+            headroom = max(0, cap - result)
+            result += min(bonus, headroom)
+        else:
+            result += bonus
+    return min(30, result)
 
 
 def _ability_override_delta(sheet: dict, ability: str) -> int:
@@ -33606,13 +33682,28 @@ def _pc_attack_ability_override_delta(sheet: dict, attack: dict) -> int:
     return _ability_override_delta(sheet, ability)
 
 
+def _ability_override_sources(sheet: dict) -> dict:
+    """v2.224.0 — the merged item-attribution map for an ability that an
+    equipped item raised above its base, across BOTH override kinds:
+    `ability_set` (Belt/Amulet) and `ability_bonus` (Ioun Stone). The set
+    source takes priority when an ability has both (the set is the dominant
+    layer; the bonus only tops it up toward the cap)."""
+    try:
+        eff = _equipped_item_effects(sheet)
+    except Exception:
+        return {}
+    merged = dict(eff.get("ability_bonus_sources", {}))
+    merged.update(eff.get("ability_set_sources", {}))
+    return merged
+
+
 def _effective_abilities_for_sheet(sheet: dict) -> dict:
     """v2.214.0 — build the per-ability override map the sheet UI + /sheet-json
     consume: `{ "STR": {base, effective, modifier, source} }` for any ability
     an equipped item sets above its base. Empty dict on a malformed sheet."""
     out: dict = {}
     try:
-        srcs = _equipped_item_effects(sheet).get("ability_set_sources", {})
+        srcs = _ability_override_sources(sheet)
         for ab in ("STR", "DEX", "CON", "INT", "WIS", "CHA"):
             base = _read_stored_ability(sheet, ab)
             eff = effective_ability_score(sheet, ab)
@@ -33671,7 +33762,7 @@ def _effective_max_hp_for_sheet(sheet: dict) -> dict | None:
         hp = sheet.get("hp") if isinstance(sheet.get("hp"), dict) else {}
         base_max = int(hp.get("max") or 0)
         delta = mod_delta * level
-        srcs = _equipped_item_effects(sheet).get("ability_set_sources", {})
+        srcs = _ability_override_sources(sheet)
         return {
             "base": base_max,
             "effective": base_max + delta,
