@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.189.0] - 2026-06-12 — "The Apothecary's Menu"
+
+**Schema version:** 69
+
+**Commit summary:** Sheet-UI surface for the v2.188.0 drink-time type pick — the Potion of Resistance inventory row gains a 🧪 Drink button; a generic (untyped) potion opens a damage-type dropdown that POSTs the chosen `resistance_type`.
+
+**Description:** v2.188.0 added the `/use_item_action` `resistance_type` override but left it API-only. This commit wires it into the sheet: `ITEM_ACTION_SLUGS['potion-of-resistance']` is a new `resistance-pick` kind, so the inventory row renders a 🧪 Drink button (the self-buff potions had no UI button before). A pre-typed potion (seeded `resistance_type`) drinks straight through; a generic one opens `_showResistanceTypeModal` — a string-option dropdown of the ten RAW damage types — and POSTs the chosen type as the override. On success the consumed potion is dropped/decremented from the local inventory so the button doesn't linger on a spent row. MINOR — additive UI + new modal helper, no endpoint or schema change.
+
+### Added
+- `ITEM_ACTION_SLUGS['potion-of-resistance']` (`resistance-pick` kind) → 🧪 Drink button on the Potion of Resistance inventory row.
+- `_showResistanceTypeModal()` — damage-type dropdown (ten RAW types) resolving to the chosen type string or null on cancel.
+- Click-handler branch: pre-typed potions drink straight through; generic ones prompt for the type and POST `resistance_type`. Consumed potion syncs out of the local inventory.
+- `tests/harness_ui/test_resistance_picker_ui.py` (3 tests): Drink button renders, the generic potion opens the 10-option type-picker modal, and submitting it POSTs `action_key: "drink"` + the chosen `resistance_type`.
+
+### Changed
+- `docs/test-harness-coverage.md`: UI total 74 → 77; added the `test_resistance_picker_ui.py` section.
+
 ## [2.188.0] - 2026-06-12 — "The Drinker's Choice"
 
 **Schema version:** 69

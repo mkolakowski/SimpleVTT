@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2539 in `tests/harness/` + 74 in `tests/harness_ui/` (as of v2.188.0, 2026-06-12).
+**Total tests:** 2539 in `tests/harness/` + 77 in `tests/harness_ui/` (as of v2.189.0, 2026-06-12).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3745,6 +3745,15 @@ v2.170.0 legendary-actions Phase 3c UI — the GM-facing lair-action panel. Seed
 | `test_fade_changed_shows_countdown_and_controls` | v2.182.0 — a `regional_fade_changed` WS message carrying an active fade flips the panel to a "4 / 6 days remaining" readout with `#_fade_advance_btn` + `#_fade_clear_btn` and no `#_fade_start_btn`. |
 | `test_fade_faded_state_hides_advance` | v2.182.0 — a `regional_fade_changed` with `faded:true` reads "have faded", hides `#_fade_advance_btn`, and keeps only `#_fade_clear_btn`. |
 | `test_fade_player_gets_atmospheric_cue` | v2.182.0 — a player whose `battle_update` carries an active `regional_fade` sees an italic 🕯️ "waning" cue on `#_regional_effects_panel` — no day numbers ("days remaining") and no `#_fade_advance_btn` controls. |
+
+### `test_resistance_picker_ui.py`
+v2.189.0 "The Apothecary's Menu" — the sheet-UI surface for the v2.188.0 drink-time `resistance_type` override. The HTTP harness (`test_potion_of_resistance_drink_time_pick.py`) proves the endpoint halves the chosen type; this proves the player can pick it. Garrik carries three Potion of Resistance rows (fire, cold, generic); `has_text="Potion of Resistance"` matches only the generic (untyped) row.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_generic_resistance_drink_button_renders` | The generic Potion of Resistance row shows a 🧪 Drink `.inv-item-action` button (resistance-pick kind in `ITEM_ACTION_SLUGS`, equipped consumable). |
+| `test_generic_potion_opens_type_picker_modal` | Clicking 🧪 Drink on the generic potion opens `#item-action-modal` containing "Potion of Resistance" + an `#ia-rtype` `<select>` with the ten RAW damage-type options; Cancel (`#ia-cancel`) dismisses without firing the endpoint. |
+| `test_generic_potion_drink_posts_chosen_type` | Picking "radiant" in `#ia-rtype` and clicking Drink (`#ia-confirm`) POSTs `/use_item_action` with `action_key:"drink"` + `resistance_type:"radiant"`. The POST is intercepted via `page.route` so the seeded potion isn't consumed. |
 
 ---
 
