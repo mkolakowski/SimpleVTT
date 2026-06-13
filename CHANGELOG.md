@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.187.1] - 2026-06-12 — "The Ambiguous Slug"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only fix — the v2.187.0 second typed potion (Cold Resistance) made the existing fire test's bare-slug inventory lookup ambiguous; it now keys on `resistance_type: "fire"`.
+
+**Description:** v2.187.0 seeded a second Potion of Resistance on Garrik (the cold instance) to prove the type-pick. That broke `test_drink_potion_of_resistance_grants_buff_and_consumes` in `test_use_item_action_potion_of_resistance.py`: its post-consume assertion `_slug_index(..., "potion-of-resistance") == -1` now matched the *remaining* cold potion (the fire one was consumed) and failed `assert 10 == -1`. The fix adds a `_fire_resistance_index` helper that disambiguates by `resistance_type: "fire"`, and the fixture + consume assertion now key on the fire instance specifically — so consuming fire leaves cold untouched as expected. No app code changes. PATCH.
+
+### Fixed
+- `tests/harness/test_use_item_action_potion_of_resistance.py`: fire-specific inventory lookup (`_fire_resistance_index`) so the v2.187.0 cold instance no longer makes the slug match ambiguous; the fixture and the post-consume assertion now target the fire potion.
+
 ## [2.187.0] - 2026-06-12 — "The Chosen Element"
 
 **Schema version:** 69

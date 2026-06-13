@@ -33,6 +33,20 @@ def _slug_index(inventory, slug):
     return -1
 
 
+def _fire_resistance_index(inventory):
+    """The fire instance specifically — Garrik carries a second typed
+    Potion of Resistance (cold) since v2.187.0, so a bare slug lookup is
+    ambiguous after the fire one is consumed."""
+    for i, it in enumerate(inventory):
+        if not isinstance(it, dict):
+            continue
+        if (it.get("_slug") or "") == "potion-of-resistance" and (
+            it.get("resistance_type") == "fire"
+        ):
+            return i
+    return -1
+
+
 @pytest_asyncio.fixture
 async def garrik_resistance(gm_client, roster):
     """Resolve Garrik's Potion-of-Resistance inventory index; snapshot
@@ -41,8 +55,8 @@ async def garrik_resistance(gm_client, roster):
     garrik = roster["Garrik Ironside"]
     sheet = await _sheet(gm_client, garrik["id"])
     inventory = list(sheet.get("inventory") or [])
-    idx = _slug_index(inventory, "potion-of-resistance")
-    assert idx >= 0, "Garrik must carry a seeded Potion of Resistance"
+    idx = _fire_resistance_index(inventory)
+    assert idx >= 0, "Garrik must carry a seeded Potion of Fire Resistance"
     try:
         yield {"char": garrik, "index": idx}
     finally:
@@ -84,7 +98,8 @@ async def test_drink_potion_of_resistance_grants_buff_and_consumes(
 
     sheet = await _sheet(gm_client, garrik["id"])
     assert int((sheet.get("hp") or {}).get("temp") or 0) == pre_temp
-    assert _slug_index(sheet.get("inventory") or [], "potion-of-resistance") == -1
+    # The fire instance is consumed; the cold instance (v2.187.0) remains.
+    assert _fire_resistance_index(sheet.get("inventory") or []) == -1
 
 
 async def test_drink_in_battle_installs_enforced_fire_resistance(
