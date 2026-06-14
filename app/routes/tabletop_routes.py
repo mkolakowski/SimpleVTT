@@ -32571,6 +32571,13 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-water-walking": [
         {"water_walk": True},
     ],
+    # v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement).
+    # RAW: "you have a swimming speed of 40 feet while wearing this ring."
+    # The numeric swim speed is GM-narrated in v1; the boolean flag surfaces
+    # the ability as a derived read.
+    "ring-of-swimming": [
+        {"swim_speed": True},
+    ],
 }
 
 
@@ -33604,6 +33611,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # move across any liquid surface as if it were solid ground.
         "water_walk": False,
         "water_walk_sources": [],
+        # v2.242.0 — swim-speed passive. Boolean OR across equipped items
+        # carrying the field; surfaced on `/sheet-json` derived. Ring of
+        # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
+        # 40 ft while worn (the numeric is GM-narrated in v1).
+        "swim_speed": False,
+        "swim_speed_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33846,6 +33859,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_water_walk") or p.get("water_walk"):
                 out["water_walk"] = True
                 out["water_walk_sources"].append(item_name)
+            # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
+            # p.193). Boolean OR; the flag rides the item via the
+            # `swim_speed` payload (or a per-item `_swim_speed` rider).
+            if item.get("_swim_speed") or p.get("swim_speed"):
+                out["swim_speed"] = True
+                out["swim_speed_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90930,6 +90949,12 @@ async def get_character_sheet_json(
             if _item_eff.get("water_walk"):
                 derived["water_walk"] = {
                     "sources": list(_item_eff.get("water_walk_sources") or []),
+                }
+            # v2.242.0 — swim speed (Ring of Swimming). Only present when an
+            # equipped item sets the flag.
+            if _item_eff.get("swim_speed"):
+                derived["swim_speed"] = {
+                    "sources": list(_item_eff.get("swim_speed_sources") or []),
                 }
         except Exception:
             pass

@@ -2002,6 +2002,15 @@ def _druid_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_ac_bonus": 1, "weight_lb": 0,
              "desc": "Rare wondrous item, attunement. This dusty rose prism orbits your head, granting +1 AC. RAW DMG p.176."},
+            # Ring of Swimming (RAW DMG p.193, uncommon, NO attunement):
+            # grants a swimming speed of 40 ft while worn. No attunement
+            # means it rides freely alongside Mira's full 3/3 attunement
+            # roster (Vorpal Scimitar + Headband + Ioun Protection) — the
+            # `swim_speed` passive surfaces on /sheet-json derived.
+            {"name": "Ring of Swimming", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 0,
+             "_slug": "ring-of-swimming",
+             "desc": "Uncommon ring, no attunement. You have a swimming speed of 40 feet while wearing this ring. RAW DMG p.193."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.242.0] - 2026-06-13 — "The Easy Current"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of Swimming — swim-speed passive (`derived.swim_speed`) on a new boolean-OR substrate field, riding the `ring-of-swimming` catalog payload (no attunement).
+
+**Description:** The **Ring of Swimming** (RAW DMG p.193, uncommon, no attunement) gives the wearer a swimming speed of 40 feet. It reuses the boolean-OR passive substrate: the `swim_speed` flag rides the `ring-of-swimming` catalog payload, aggregates in `_equipped_item_effects` (a new `swim_speed` field + `swim_speed_sources`), and surfaces on `/sheet-json` as `derived.swim_speed = {sources}`. No attunement — it rides alongside a full 3/3 attunement loadout. Demo: Mira Greenleaf (Druid) wears it — no attunement, so it rides alongside her Vorpal Scimitar + Headband of Intellect + Ioun Stone of Protection — fitting for a druid at home in rivers and lakes. Third of the SRD-ring batch (the last that fits the lightweight passive substrate with a free home). MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `swim_speed` / `swim_speed_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped items carrying the `swim_speed` payload or a per-item `_swim_speed` rider).
+- `/sheet-json` `derived.swim_speed = {sources}` — present only when an equipped item sets the flag.
+- `ring-of-swimming` entry in `_MAGIC_ITEM_PASSIVES` (`swim_speed: True`, no attunement).
+- Demo seed: Ring of Swimming on Mira Greenleaf (`_slug: "ring-of-swimming"`, equipped, no attunement).
+- `tests/harness/test_item_ring_of_swimming.py` (3 tests): `derived.swim_speed` lists the ring in sources; rides alongside her Headband-driven effective INT 19 (no attunement); unequip drops the flag.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2669 → 2672; added the `test_item_ring_of_swimming.py` section.
+
 ## [2.241.0] - 2026-06-13 — "The Steady Footing"
 
 **Schema version:** 69
