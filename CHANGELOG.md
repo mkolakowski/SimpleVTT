@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.277.1] - 2026-06-14 — "The Fresh Tally"
+
+**Schema version:** 69
+
+**Commit summary:** SRD 5e coverage audit refresh (2026-06-14). Adds a new dated audit section to `TODO.md` recording the charged-items plan closing all phases — wired magic items re-counted directly by AST-parsing the three registry dicts in `app/routes/tabletop_routes.py`, jumping from the stale "~49" figure to **95 distinct slugs** (~32.5% of 292 SRD). Doc-only; no code, schema, or endpoint change.
+
+**Description:** Fourth SRD audit pass, covering the window v2.222.0 → v2.277.0. The defining event is the **charged-items plan closing all phases (0–5)**, so the magic-item wiring count was re-counted from the source of truth: `_MAGIC_ITEM_ACTIONS` (47), `_MAGIC_ITEM_PASSIVES` (43), and `_MAGIC_ITEM_ATTACK_RIDERS` (8), de-duplicated across the 3 slugs that span two layers (flame-tongue, frost-brand, staff-of-power) → **95 distinct wired items**, ~32.5% of the 292 SRD items. The prior 2026-06-13 table's "~49 items wired" figure is now stale. Spells (~70%), Monsters (~85%), Conditions (~85%), Class features (~82%), and Races (~90%) showed no movement this window — those percentages are carried forward. The long pole remains the magic-item content tail (~197 of 292 still unwired), but the substrate (actions / passives / attack-riders / ability-override / buff) is complete, so each remaining item is a pure content drop-in. PATCH — doc-only.
+
+### Changed
+- `TODO.md`: new `## SRD 5e Audit (2026-06-14 refresh)` section (headline-state table, what-closed, re-prioritized gaps); quick-map pointer updated to lead with the 2026-06-14 refresh.
+
 ## [2.277.0] - 2026-06-14 — "The Watchful Wand"
 
 **Schema version:** 69

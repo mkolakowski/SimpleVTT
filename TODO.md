@@ -17,11 +17,51 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (2026-06-13 refresh)](#srd-5e-audit-2026-06-13-refresh) for the current re-prioritisation, then [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) and [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) for the prior passes. The 2026-06-13 refresh closes the 2026-06-11 audit's **NEW #1 P1 (legendary actions + lair actions)** plus legendary resistance and most of the spell-validation suite as ✅ shipped, and records the **NEW ability-score override engine** (Belt/Amulet/Headband/Gauntlets/Potion of Giant Strength + Manuals & Tomes) as a fully-shipped surface that wasn't on any prior audit.
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (2026-06-14 refresh)](#srd-5e-audit-2026-06-14-refresh) for the current re-prioritisation, then [SRD 5e Audit (2026-06-13 refresh)](#srd-5e-audit-2026-06-13-refresh), [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) and [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) for the prior passes. The 2026-06-14 refresh records the **charged-items plan closing all phases** — wired magic items jumped from ~49 → **95 distinct slugs** (~32.5% of 292 SRD). The 2026-06-13 refresh closes the 2026-06-11 audit's **NEW #1 P1 (legendary actions + lair actions)** plus legendary resistance and most of the spell-validation suite as ✅ shipped, and records the **NEW ability-score override engine** (Belt/Amulet/Headband/Gauntlets/Potion of Giant Strength + Manuals & Tomes) as a fully-shipped surface that wasn't on any prior audit.
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (2026-06-14 refresh)
+
+**Audit scope.** Fourth pass against `app/data/local/dnd5e/`, capturing the window from v2.222.0 → v2.277.0. The defining event is the **charged-items plan closing all phases (0–5)** — the magic-item wiring count was re-counted directly by AST-parsing the three registry dicts in `app/routes/tabletop_routes.py`. Excludes setting-specific / post-SRD content (Tasha's, Xanathar's-beyond-SRD, Strixhaven) and homebrew, same as prior passes.
+
+### Headline state (delta vs 2026-06-13)
+
+| Layer | SRD count | 2026-06-13 | 2026-06-14 | % | Movement |
+|---|---|---|---|---|---|
+| Magic items | 292 | ~49 wired | **95 distinct wired** | **~32.5%** | **47 `_MAGIC_ITEM_ACTIONS` + 43 `_MAGIC_ITEM_PASSIVES` + 8 `_MAGIC_ITEM_ATTACK_RIDERS`** (3 slugs span two layers). Charged-items plan ✅ closed all phases — Staff of Thunder & Lightning, Wand of Wonder, Staff of Power, Wand of the War Mage +3, Gem of Seeing, Wand of Enemy Detection, plus earlier batches. |
+| Spells | 319 | ~70% | ~70% | ~70% | No movement this window. Catalog 319/319; ~18 validation suites CI-gated. |
+| Monsters | 322 | ~85% | ~85% | ~85% | No movement. Legendary actions / resistance / lair actions all ✅. |
+| Conditions | 15 | ~85% | ~85% | ~85% | No movement. |
+| Class features | 133 | ~82% | ~82% | ~82% | No movement this window. |
+| Races | 9 | ~90% | ~90% | ~90% | No movement. |
+| Ability-score override engine | — | ✅ shipped | ✅ shipped | — | Stable. |
+
+### What closed since 2026-06-13
+
+✅ **Charged-items plan — all phases (0–5)** ([plan ✅](docs/plans/charged-items.md)) — every named item on the plan shipped on the mature charge engine (`_MAGIC_ITEM_ACTIONS` + `/use_item_action` + per-slug dispatch + the generalized `action_kind: "buff"` substrate). Final commits: Staff of Power (v2.274.0), Wand of Wonder (v2.273.0), Staff of Thunder & Lightning, Wand of the War Mage +3 (v2.276.0, completing the +1/+2/+3 tier set), Wand of Enemy Detection (v2.277.0). Zero new engine code required for the last items — pure content drop-ins.
+
+### Remaining gaps (re-prioritized)
+
+The substrate (actions / passives / attack-riders / ability-override / buff) is complete. All remaining magic-item work is content drop-ins with no new engine code.
+
+🟡 **P2 — Magic-item action backfill long tail.** ~197 of 292 SRD items still have no code-side wiring (down from ~245). Most are weightless/flavor or one-off mechanics. Pick the next ~10–15-item batch that fits an existing template (on-hit riders, charge-with-spell, passive buff, nat-20 hook, ability-override).
+
+🟡 **P2 — Ability-score engine drop-in tail (small).** Still trivially absorbed: giant-tier Belts (Stone/Frost STR 23, Fire 25, Cloud 27, Storm 29) and the Ioun Stone ability variants. Each ~1 commit on the shipped engine.
+
+🟡 **P2 — Spell-validation suite finishers.** Upcast scaling on the ~110 cast-and-broadcast-only spells.
+
+🟡 **P2 — Wizard capstone Spell Mastery / Signature Spells, Aura of Courage, Reactions v3 pending-damage state machine, Sorcerer Quickened Spell.** Unchanged.
+
+🟢 **P3 — Eldritch Knight Phase 2 read sites; class-feature ⚪ tail** (Barbarian Lv 9–20, Monk Deflect Missiles / Diamond Soul / Empty Body / Perfect Self, Ranger Lv 10–20 minus Vanish, Rogue Reliable Talent / Slippery Mind / Elusive / Stroke of Luck). Unchanged.
+
+### Out-of-scope (unchanged)
+
+Same as prior passes: Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope.
 
 ---
 
