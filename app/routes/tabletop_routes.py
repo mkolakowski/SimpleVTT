@@ -1250,6 +1250,30 @@ _SPELL_CONDITION_MAP = {
 # to read — today the bonus is applied by the GM, but the install +
 # teardown wiring + the data payload are real.
 _SPELL_BUFF_MAP: dict[str, dict] = {
+    # v2.270.0 — charged-items Phase 3: Truesight (installed by the Gem
+    # of Seeing's gaze action). A timed self-buff, no concentration. RAW
+    # truesight (DMG p.171 / PHB p.183): see in normal + magical darkness,
+    # see invisible creatures + objects, automatically detect visual
+    # illusions + succeed on saves vs them, perceive the original form of
+    # shapechangers / things transmuted by magic, and see into the
+    # Ethereal Plane — out to a fixed range for the duration. The marker
+    # effect `truesight_ft` extends the same sensory-payload shape the
+    # passive substrate already uses (Goggles of Night's `darkvision_ft`).
+    # The mechanical reads (illusion auto-detect, see-invisible) are
+    # GM-narrated in v1 — the buff badge + duration countdown is the
+    # surfaced effect.
+    "truesight": {
+        "key": "truesight",
+        "name": "Truesight",
+        "icon": "💎",
+        "duration_rounds": 100,  # 10 minutes @ 6 s/round
+        "duration_max": 100,
+        "concentration": False,
+        "effects": {
+            "truesight_ft": 60,
+        },
+        "desc": "Truesight out to 60 ft — see in darkness, see invisible creatures + objects, automatically detect visual illusions, perceive the true form of shapechangers, and see into the Ethereal Plane.",
+    },
     "bless": {
         "key": "bless",
         "name": "Bless",
@@ -33226,6 +33250,31 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                 "damage_type": "force",
                 "min_charges": 1,
                 "max_charges": 3,
+            },
+        },
+    },
+    # v2.270.0 — charged-items Phase 3: Gem of Seeing (RAW DMG p.171,
+    # rare, attunement). The first ``action_kind: "buff"`` charge action
+    # — spending a charge installs a timed self-buff instead of resolving
+    # a spell cast or an attack roll. 3 charges (regains 1d3 at dawn).
+    # Spend 1 charge to gaze through the gem and gain truesight 60 ft for
+    # 10 minutes. The gaze action routes through the new
+    # ``_use_item_action_buff`` handler, which decrements the charge and
+    # installs the ``truesight`` buff template on the wielder's combatant
+    # (best-effort — needs an active battle, same as the self-buff potions).
+    "gem-of-seeing": {
+        "requires_attunement": True,
+        "resource_key": "gem-of-seeing",
+        "actions": {
+            "gaze": {
+                "name": "Gaze (Truesight 60 ft)",
+                "feature_name": "💎 Gem of Seeing",
+                "action_kind": "buff",
+                "buff_key": "truesight",
+                "duration_rounds": 100,  # 10 minutes @ 6 s/round
+                "summary_effect": "truesight out to 60 ft for 10 minutes",
+                "min_charges": 1,
+                "max_charges": 1,
             },
         },
     },
@@ -81918,6 +81967,14 @@ async def use_item_action(
             prompt_user=user,
             slug=slug,
         )
+    if slug == "gem-of-seeing":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_buff(
+            db, campaign_id, char, item, sheet, catalog,
+            action_key, action_def,
+            charges=body.get("charges"),
+            slug=slug,
+        )
     if slug in ("wand-of-fear", "wand-of-paralysis", "staff-of-charming",
                 "eyes-of-charming"):
         action_def = catalog["actions"][action_key]
@@ -83083,6 +83140,146 @@ async def _use_item_action_javelin_of_lightning(
         "save_dc": save_dc,
         "save_ability": save_ability,
         "results": results,
+    }
+
+
+async def _use_item_action_buff(
+    db, campaign_id, char, item, sheet, catalog,
+    action_key, action_def,
+    charges=None,
+    slug="gem-of-seeing",
+):
+    """v2.270.0 — charged-items Phase 3: the first ``action_kind: "buff"``
+    charge action. Spends charges to install a timed self-buff on the
+    wielder's own combatant instead of resolving a spell cast (wand shape
+    #1), an AoE save (staff shape #2), or an attack roll (Ring of the Ram).
+
+    RAW Gem of Seeing (DMG p.171): spend 1 of 3 charges to gain truesight
+    60 ft for 10 minutes. The buff template comes from ``_SPELL_BUFF_MAP``
+    keyed by the action's ``buff_key``; the duration comes from the
+    action_def. The install is best-effort — it only lands when the
+    wielder is in an active battle (same as the self-buff potions); the
+    charge is decremented either way.
+    """
+    res_key = str(catalog.get("resource_key") or slug)
+    min_c = int(action_def.get("min_charges") or 1)
+    max_c = int(action_def.get("max_charges") or 1)
+    try:
+        n_charges = int(charges) if charges is not None else min_c
+    except (TypeError, ValueError):
+        raise HTTPException(400, "charges must be an int")
+    if n_charges < min_c or n_charges > max_c:
+        raise HTTPException(
+            400,
+            f"charges must be {min_c}..{max_c} for "
+            f"{action_def.get('name') or action_key}",
+        )
+
+    # Resource lookup + insufficient-charges gate.
+    resources = list(sheet.get("resources") or [])
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    if cur < n_charges:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "insufficient_charges",
+                "current": cur,
+                "requested": n_charges,
+                "label": item.get("name") or slug,
+            },
+        )
+
+    buff_key = str(action_def.get("buff_key") or "")
+    feature_name = str(action_def.get("feature_name") or "💎 Gem of Seeing")
+
+    # Decrement the charges first (the buff install is best-effort).
+    res_row["current"] = cur - n_charges
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install the timed self-buff on the wielder's own combatant.
+    buff_installed = False
+    template = _SPELL_BUFF_MAP.get(buff_key) or {}
+    if template:
+        buff = dict(template)
+        buff["effects"] = dict(template.get("effects") or {})
+        buff["key"] = buff_key
+        buff["concentration"] = False
+        _dur = int(
+            action_def.get("duration_rounds")
+            or buff.get("duration_rounds") or 0
+        )
+        buff["duration_rounds"] = _dur
+        buff["duration_max"] = _dur
+        buff["source_char_id"] = char.id
+        buff_installed = await _install_buff(campaign_id, char.id, buff)
+        if buff_installed:
+            _mirror_buffs_to_sheet(
+                db, char.id, _get_buffs(campaign_id, char.id),
+            )
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            },
+        })
+    except Exception:
+        pass
+    effect_text = action_def.get("summary_effect") or f"the {buff_key} effect"
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": feature_name,
+                "summary": (
+                    f"{char.name} gazes through the {item.get('name')} — "
+                    f"gains {effect_text}. "
+                    f"({n_charges} charge{'s' if n_charges > 1 else ''}; "
+                    f"{res_row['current']}/{res_max} left.)"
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "action_key": action_key,
+        "action_kind": "buff",
+        "charges_spent": n_charges,
+        "buff_key": buff_key,
+        "buff_installed": buff_installed,
+        "duration_rounds": int(action_def.get("duration_rounds") or 0),
+        "resource": {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
     }
 
 

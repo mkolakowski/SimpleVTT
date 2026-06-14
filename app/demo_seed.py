@@ -3099,6 +3099,22 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
              "_slug": "bracers-of-archery",
              "desc": "Uncommon wondrous item, attunement. While wearing these bracers, you have proficiency with the longbow and shortbow, and you gain a +2 bonus to damage rolls on ranged attacks made with such weapons. RAW DMG p.156."},
+            # v2.270.0 — Gem of Seeing (RAW DMG p.171, rare, attunement). The
+            # first `action_kind: "buff"` charged item: spend 1 of 3 charges
+            # to gaze through the gem and gain truesight out to 60 ft for 10
+            # minutes (100 rounds). Routes through /use_item_action's
+            # `gem-of-seeing` → `_use_item_action_buff` branch, which
+            # decrements the charge and installs the `truesight` buff template
+            # (`_SPELL_BUFF_MAP['truesight']`, effects {truesight_ft: 60}) on
+            # Rowan's combatant. The gem regains 1d3 charges daily at dawn
+            # (mapped to long rest via the `charge_recovery` substrate). A
+            # natural scout's boon for the demo's Ranger. Rowan's 6th attuned
+            # item — fine at seed-load since the RAW 3/3 cap is enforced only
+            # at the /attune runtime endpoint.
+            {"name": "Gem of Seeing", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
+             "_slug": "gem-of-seeing",
+             "desc": "Rare wondrous item, attunement. The gem has 3 charges. As an action, you can speak a command word and expend 1 charge — for the next 10 minutes you have truesight out to 60 feet when peering through the gem. The gem regains 1d3 expended charges daily at dawn. RAW DMG p.171."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,
@@ -3116,9 +3132,17 @@ def _ranger_sheet(name: str) -> dict:
         # a creature already below max HP — also no counter RAW. The
         # one numeric Ranger resource at this level is no resource at
         # all; spell slots cover Hunter's Mark + Pass Without Trace.
-        # Left empty intentionally; class_features carry the
-        # announce-only buttons.
-        "resources": [],
+        # class_features carry the announce-only buttons.
+        #
+        # v2.270.0 — Gem of Seeing charge pool. The gem ships with 3
+        # charges; spending 1 via /use_item_action installs the truesight
+        # buff. `charge_recovery: "1d3"` rolls 1d3 regained on the matching
+        # rest (RAW "daily at dawn" → long rest) instead of a full refill,
+        # through the v2.158.86 recharge-dice substrate.
+        "resources": [
+            {"key": "gem-of-seeing", "name": "Gem of Seeing charges",
+             "current": 3, "max": 3, "per": "long", "charge_recovery": "1d3"},
+        ],
         # v2.18.3: clickable Class abilities buttons. Each is announce-only
         # in v1 — Favored Enemy + Natural Explorer fire /use_feature and
         # log a roll-chat line; Hunter's Mark routes through /cast_spell

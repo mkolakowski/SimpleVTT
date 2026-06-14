@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0); Phase 3 in progress (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phase 4 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0); Phase 3 in progress (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live; Gem of Seeing ✅ v2.270.0 — the `action_kind: "buff"` shape is now live); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phase 4 unstarted.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -109,9 +109,15 @@ in `/use_item_action` that builds the roll inline instead of resolving a
   + `to_hit` vs the target's AC, `dice_per_charge` scaled by charges spent,
   crit doubling), recharge `"1d3"` at dawn. Seeded on Garrik Ironside
   (Fighter). The 5-ft-per-charge shove is GM-narrated in v1.
-- **Gem of Seeing** (DMG p.171, rare, attunement) — 3 charges; spend 1 for
-  truesight 60 ft for 10 min. → `action_kind: "buff"`, installs a `truesight`
-  buff template (compose with the existing buff substrate).
+- **Gem of Seeing** (DMG p.171, rare, attunement) — ✅ **shipped v2.270.0**.
+  The first `action_kind: "buff"` charge action: 3 charges; spend 1 for
+  truesight 60 ft for 10 min. Shipped the new `action_kind: "buff"` branch +
+  `_use_item_action_buff` handler (decrements the charge, installs the
+  `truesight` buff template — `effects: {truesight_ft: 60}`, 100 rounds — on
+  the wielder's own combatant via the existing `_install_buff` substrate),
+  recharge `"1d3"` at dawn. Seeded on Rowan Quickbow (Ranger). The mechanical
+  truesight reads (auto-detect illusions, see invisible, see ethereal) are
+  GM-narrated in v1.
 - **Horn of Blasting** (DMG p.174, uncommon) — thunder AoE (5d6, DC 15) + deafen;
   no charges, but a per-use "explodes on a 6 of d100" risk. → `action_kind:
   "attack"` AoE, no resource row.

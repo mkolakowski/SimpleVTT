@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.270.0] - 2026-06-14 — "The Seeing Stone"
+
+**Schema version:** 69
+
+**Commit summary:** Gem of Seeing — a second charged-items Phase 3 item and the first non-spell **buff** charge action: a new `action_kind: "buff"` branch + `_use_item_action_buff` handler in `/use_item_action` that installs a timed self-buff (60-ft truesight, 10 minutes) on the wielder's own combatant instead of resolving a spell or an attack, seeded on Rowan Quickbow (Ranger) with a 3-charge resource row, plus a `truesight` buff template, a new sheet-UI `self-buff` picker, and harness tests.
+
+**Description:** **Gem of Seeing** (RAW DMG p.171, rare, **attunement required**): "the gem has 3 charges. As an action, you can speak the gem's command word and expend 1 charge — for the next 10 minutes, you have truesight out to 60 feet when you peer through the gem. The gem regains 1d3 expended charges daily at dawn." This is the second item shipped against charged-items **Phase 3** (the non-spell charge actions) and adds the plan's second small new engine shape: an `action_kind: "buff"` branch. Where `_use_item_action_attack` (Ring of the Ram, v2.269.0) rolls a to-hit and the necklace handler resolves a save-for-half AoE, the new `_use_item_action_buff` handler decrements the charge resource and then installs a timed self-buff on the wielder's own combatant — composing with the existing buff substrate (`_install_buff` + `_mirror_buffs_to_sheet`), the same machinery the self-buff potions use. The buff template comes from `_SPELL_BUFF_MAP` keyed by the action's `buff_key`; the duration comes from the catalog `action_def`. A new `truesight` template (`effects: {truesight_ft: 60}`, 100 rounds = 10 minutes, non-concentration) extends the same sensory-payload shape the passive substrate already uses for Goggles of Night's `darkvision_ft`; the mechanical truesight reads (auto-detect illusions, see invisible, see ethereal) are GM-narrated in v1 — the surfaced effect is the buff badge + duration countdown. The install is best-effort: it only lands when the wielder is in an active battle (same as the self-buff potions), but the charge is decremented either way. Seeded on Rowan Quickbow (Wood Elf Ranger) — a natural scout's boon; seed-load bypasses the RAW 3-item attunement cap (enforced at `/attune` runtime only). The 3-charge resource row recharges 1d3 at dawn (long rest) via the existing `charge_recovery` path. The sheet gains a new `self-buff` picker flow (no target, no modal — just POST the `action_key`). MINOR — additive content + one small engine branch + tests, no schema change.
+
+### Added
+- `_use_item_action_buff` handler in `app/routes/tabletop_routes.py` — the first `action_kind: "buff"` charge action: validates the charge band, gates on the resource row (409 `insufficient_charges`), decrements the charges, then best-effort installs the `_SPELL_BUFF_MAP[buff_key]` template (non-concentration, duration from the `action_def`) on the wielder's own combatant via `_install_buff` + `_mirror_buffs_to_sheet`, broadcasts `resource_update` + `feature_used`, and returns `{ok, item_name, action_key, action_kind, charges_spent, buff_key, buff_installed, duration_rounds, resource}`.
+- `truesight` template in `_SPELL_BUFF_MAP` (`effects: {truesight_ft: 60}`, `duration_rounds` 100, non-concentration) — extends the sensory-payload shape used by Goggles of Night's `darkvision_ft`.
+- `gem-of-seeing` entry in `_MAGIC_ITEM_ACTIONS` (`gaze` action: `action_kind: buff`, `buff_key: truesight`, `duration_rounds: 100`, `min`/`max` 1) + a `gem-of-seeing` dispatch branch routing to the new handler.
+- Sheet UI: `gem-of-seeing` `ITEM_ACTION_SLUGS` mapping + a new `self-buff` picker flow (no target / no modal) rendering a `💎 Gaze (Truesight)` button.
+- Demo seed: Rowan Quickbow gains an equipped + attuned Gem of Seeing plus its 3-charge `gem-of-seeing` resource row (1d3 recharge on long rest).
+- `tests/harness/test_use_item_action_gem_of_seeing.py` (2 tests): a gaze with Rowan in an active battle → `action_kind: buff`, `buff_key: truesight`, `charges_spent: 1`, `buff_installed: True`, `duration_rounds: 100`, resource 3 → 2, with the `truesight` buff landing on Rowan's combatant; a drained gem (0 charges) returns 409 `insufficient_charges`. Resources restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 3 status — Gem of Seeing marked ✅ shipped (v2.270.0); the `action_kind: "buff"` shape is now live.
+- `docs/test-harness-coverage.md`: harness total 2766 → 2768 (+2 gem-of-seeing); added the `test_use_item_action_gem_of_seeing.py` section.
+
 ## [2.269.0] - 2026-06-14 — "The Battering Ring"
 
 **Schema version:** 69

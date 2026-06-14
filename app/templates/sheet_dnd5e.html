@@ -7355,6 +7355,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                               submit_label: 'Pick target',
                               control_label: 'Charges to spend',
                           }},
+        // v2.270.0 — charged-items Phase 3: Gem of Seeing (RAW DMG
+        // p.171). The first `action_kind: "buff"` charge action — spend 1
+        // charge to gain truesight 60 ft for 10 minutes. No target, fixed
+        // single-charge spend, so the new `self-buff` flow just POSTs the
+        // action_key (the server decrements the charge + installs the
+        // truesight buff on the wielder's combatant).
+        'gem-of-seeing': {kind: 'self-buff',
+                          action_key: 'gaze',
+                          label: '💎 Gaze (Truesight)',
+                          title: 'Gem of Seeing — spend 1 charge to gain truesight 60 ft for 10 minutes.'},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
@@ -8049,6 +8059,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 } else if (cfg.kind === 'self-buff-drink') {
                     // v2.191.0 — plain self-buff potion (Heroism / Speed /
                     // Invulnerability): no parameter, no modal — just drink.
+                    body.action_key = cfg.action_key;
+                } else if (cfg.kind === 'self-buff') {
+                    // v2.270.0 — charge-based self-buff (Gem of Seeing):
+                    // no parameter, no target, no modal. POST the
+                    // action_key; the server decrements a charge + installs
+                    // the buff on the wielder's own combatant.
                     body.action_key = cfg.action_key;
                 } else {
                     const n = await _showItemActionModal(cfg);

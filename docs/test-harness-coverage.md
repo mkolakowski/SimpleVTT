@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2766 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.269.0, 2026-06-14).
+**Total tests:** 2768 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.270.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3045,6 +3045,14 @@ v2.269.0 charged-items Phase 3 — Ring of the Ram (RAW DMG p.193, rare, attunem
 | `test_ring_of_the_ram_two_charge_strike` | A 2-charge ram-strike at a low-AC (1) target → 200 with `action_kind: "attack"`, `to_hit: 7`, `dice: "4d10"` (2d10 × 2 charges), `damage_type: "force"`, `charges_spent: 2`, `resource.current: 1` (3→1), `target_combatant_id` + `target_ac` echoed, `hit` is bool; damage > 0 on a hit (only a natural 1 misses vs AC 1). |
 | `test_ring_of_the_ram_over_max_returns_400` | POST with `charges: 4` (ram-strike is min=1/max=3) → 400 out-of-range. |
 | `test_ring_of_the_ram_empty_returns_409` | Drain the ring to 0 charges via `/sheet-fields`, then strike → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
+
+### `test_use_item_action_gem_of_seeing.py`
+v2.270.0 charged-items Phase 3 — Gem of Seeing (RAW DMG p.171, rare, attunement). The first non-spell **buff** charge action and the first item on the new `action_kind: "buff"` shape: the `_use_item_action_buff` handler decrements the charge resource and installs a timed self-buff (the `truesight` template — 60-ft truesight, 100 rounds = 10 minutes) on the wielder's own combatant via `_install_buff` + `_mirror_buffs_to_sheet`. Rowan Quickbow (Ranger) carries an equipped+attuned Gem of Seeing + a `gem-of-seeing` resource row (3/3). The fixture force-reseeds the charges to 3 and snapshots for teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_gem_of_seeing_gaze_installs_truesight` | A gaze with Rowan in an active battle → 200 with `action_kind: "buff"`, `buff_key: "truesight"`, `charges_spent: 1`, `buff_installed: True`, `duration_rounds: 100`, `resource.current: 2` (3→2); the `truesight` buff lands on Rowan's combatant (verified via `GET /battle`). |
+| `test_gem_of_seeing_empty_returns_409` | Drain the gem to 0 charges via `/sheet-fields`, then gaze → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
 
 ### `test_arrow_of_slaying.py`
 v2.159.1 magic-items-automation Phase 8a — Arrow of Slaying (Giants) (RAW DMG p.151). First ammunition-shape catalog row, extending the v2.158.102 `on_hit_save` substrate with a new `effect: "damage"` variant for save-for-half damage. Rowan Quickbow's Longbow (Arrow of Slaying — Giants) attack at attack_index 2 fires the rider via `_slug` match. New Hill Giant token template (`sheet.type="giant"`) gives the helper-resolution path a real RAW target.
