@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2732 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.258.0, 2026-06-14).
+**Total tests:** 2735 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.259.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2656,6 +2656,15 @@ v2.258.0 — Necklace of Adaptation (RAW DMG p.183, uncommon, attunement): the w
 | `test_necklace_of_adaptation_exposes_flag` | `GET /sheet-json` → `derived.env_adaptation` present with "Necklace of Adaptation" in `sources`. |
 | `test_necklace_of_adaptation_detune_drops_flag` | PATCH the necklace to `attuned: False` (still equipped) → `derived.env_adaptation` absent — the attunement gate; restores the original inventory on teardown. |
 | `test_necklace_of_adaptation_unequip_drops_flag` | PATCH the necklace to `equipped: False` → `derived.env_adaptation` absent; restores the original inventory on teardown. |
+
+### `test_item_gloves_of_swimming_and_climbing.py`
+v2.259.0 — Gloves of Swimming and Climbing (RAW DMG p.171, uncommon, attunement): climbing and swimming cost no extra movement + a +5 Athletics climb/swim bonus (GM-narrated in v1). Rides a new `climb_swim_ease` boolean-OR flag in `_equipped_item_effects` (the Ring of X-ray Vision pattern, attunement-gated): the flag rides the `gloves-of-swimming-and-climbing` catalog payload (`requires_attunement: True`), aggregates with `climb_swim_ease_sources`, and surfaces on `/sheet-json` as `derived.climb_swim_ease = {sources}` — only when equipped AND attuned. Seeded on Mira Greenleaf (Druid) in her free hand slot, completing her aquatic kit.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_gloves_of_swimming_and_climbing_exposes_flag` | `GET /sheet-json` → `derived.climb_swim_ease` present with "Gloves of Swimming and Climbing" in `sources`. |
+| `test_gloves_of_swimming_and_climbing_rides_alongside` | The attunement-gated flag rides alongside Mira's no-attunement aquatic items — `derived.water_breath` and `derived.swim_speed` still report alongside `climb_swim_ease`. |
+| `test_gloves_of_swimming_and_climbing_detune_drops_flag` | PATCH the gloves to `attuned: False` (still equipped) → `derived.climb_swim_ease` absent — the attunement gate; restores the original inventory on teardown. |
 
 ### `test_item_ring_of_free_action.py`
 v2.240.0 — Ring of Free Action (RAW DMG p.191, rare, attunement): difficult terrain costs no extra movement; magic can't reduce your speed or paralyze/restrain you. Reuses the boolean-OR passive substrate: the `free_action` flag rides the `ring-of-free-action` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.free_action = {sources}` (descriptive in v1). Brakka Wildmane (Path of the Beast Barbarian) wears it as her 3rd attuned item.

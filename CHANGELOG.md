@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.259.0] - 2026-06-14 — "The Sure Grip"
+
+**Schema version:** 69
+
+**Commit summary:** Gloves of Swimming and Climbing — an attunement-gated passive that lets the wearer climb and swim without extra movement cost (+5 Athletics climb/swim), riding a new `climb_swim_ease` boolean-OR flag in `_equipped_item_effects` surfaced on `/sheet-json derived` (the Ring of X-ray Vision pattern).
+
+**Description:** **Gloves of Swimming and Climbing** (RAW DMG p.171, uncommon, **attunement required**): "while wearing these gloves, climbing and swimming don't cost you extra movement, and you gain a +5 bonus to Strength (Athletics) checks made to climb or swim." Another clean attunement-gated boolean-flag drop-in on the established passive substrate. The engine changes: (1) a new `climb_swim_ease` field (+ `climb_swim_ease_sources`) in `_equipped_item_effects`, boolean-OR'd across equipped items carrying the flag (via the `climb_swim_ease` payload or a per-item `_climb_swim_ease` rider) — the per-payload attunement check drops the flag when worn-but-not-attuned; (2) a new `gloves-of-swimming-and-climbing` entry in `_MAGIC_ITEM_PASSIVES` (`{"climb_swim_ease": True, "requires_attunement": True}`); (3) `/sheet-json derived` surfaces `climb_swim_ease = {sources}` only when an equipped + attuned item sets the flag; (4) the demo seed gives Mira Greenleaf (Druid) the gloves attuned in her free hand slot — completing her aquatic kit alongside her Ring of Swimming + Cap of Water Breathing (seed-load bypasses the RAW 3-item cap, enforced at `/attune` runtime only). The +5 Athletics climb/swim bonus is GM-narrated in v1. MINOR — additive content + tests, no schema change.
+
+### Added
+- `climb_swim_ease` boolean-OR field (+ `climb_swim_ease_sources`) in `_equipped_item_effects`, attunement-gated via the per-payload check.
+- `gloves-of-swimming-and-climbing` entry in `_MAGIC_ITEM_PASSIVES` (`climb_swim_ease: True`, `requires_attunement: True`).
+- `/sheet-json derived.climb_swim_ease = {sources}` display mirror.
+- `tests/harness/test_item_gloves_of_swimming_and_climbing.py` (3 tests): `/sheet-json` exposes the flag naming the gloves; the flag rides alongside Mira's no-attunement aquatic items (`water_breath` + `swim_speed` still report); un-attuning the gloves (still equipped) drops the flag — the attunement gate (restores inventory on teardown).
+
+### Changed
+- Demo seed: Mira Greenleaf gains equipped + attuned Gloves of Swimming and Climbing in her free hand slot.
+- `docs/test-harness-coverage.md`: harness total 2732 → 2735 (+3 gloves-of-swimming-and-climbing); added the `test_item_gloves_of_swimming_and_climbing.py` section.
+
 ## [2.258.0] - 2026-06-14 — "The Wayfarer's Collar"
 
 **Schema version:** 69

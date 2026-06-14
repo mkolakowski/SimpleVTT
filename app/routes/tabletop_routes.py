@@ -32698,6 +32698,15 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "necklace-of-adaptation": [
         {"env_adaptation": True, "requires_attunement": True},
     ],
+    # v2.259.0 — Gloves of Swimming and Climbing (RAW DMG p.171, uncommon,
+    # attunement). RAW: "while wearing these gloves, climbing and swimming
+    # don't cost you extra movement, and you gain a +5 bonus to Strength
+    # (Athletics) checks made to climb or swim." Modeled as an attunement-
+    # gated boolean derived read (climb_swim_ease flag); the +5 Athletics
+    # climb/swim bonus is GM-narrated in v1.
+    "gloves-of-swimming-and-climbing": [
+        {"climb_swim_ease": True, "requires_attunement": True},
+    ],
     # v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement).
     # RAW: "you have a swimming speed of 40 feet while wearing this ring."
     # The numeric swim speed is GM-narrated in v1; the boolean flag surfaces
@@ -33909,6 +33918,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # (GM-narrated in v1). ATTUNEMENT-gated.
         "env_adaptation": False,
         "env_adaptation_sources": [],
+        # v2.259.0 — climb/swim-ease passive. Boolean OR across equipped items
+        # carrying the field; surfaced on `/sheet-json` derived. Gloves of
+        # Swimming and Climbing (RAW DMG p.171) is the first entry — climbing
+        # and swimming cost no extra movement + a +5 Athletics bonus to climb/
+        # swim (the +5 is GM-narrated in v1). ATTUNEMENT-gated.
+        "climb_swim_ease": False,
+        "climb_swim_ease_sources": [],
         # v2.242.0 — swim-speed passive. Boolean OR across equipped items
         # carrying the field; surfaced on `/sheet-json` derived. Ring of
         # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
@@ -34223,6 +34239,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_env_adaptation") or p.get("env_adaptation"):
                 out["env_adaptation"] = True
                 out["env_adaptation_sources"].append(item_name)
+            # v2.259.0 — climb/swim-ease passive (Gloves of Swimming and
+            # Climbing, RAW DMG p.171). Boolean OR; the flag rides the item
+            # via the `climb_swim_ease` payload (or a per-item
+            # `_climb_swim_ease` rider). Attunement-gated by the per-payload
+            # check above.
+            if item.get("_climb_swim_ease") or p.get("climb_swim_ease"):
+                out["climb_swim_ease"] = True
+                out["climb_swim_ease_sources"].append(item_name)
             # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
             # p.193). Boolean OR; the flag rides the item via the
             # `swim_speed` payload (or a per-item `_swim_speed` rider).
@@ -91413,6 +91437,12 @@ async def get_character_sheet_json(
             if _item_eff.get("env_adaptation"):
                 derived["env_adaptation"] = {
                     "sources": list(_item_eff.get("env_adaptation_sources") or []),
+                }
+            # v2.259.0 — climb/swim ease (Gloves of Swimming and Climbing).
+            # Only present when an equipped + attuned item sets the flag.
+            if _item_eff.get("climb_swim_ease"):
+                derived["climb_swim_ease"] = {
+                    "sources": list(_item_eff.get("climb_swim_ease_sources") or []),
                 }
             # v2.242.0 — swim speed (Ring of Swimming). Only present when an
             # equipped item sets the flag.

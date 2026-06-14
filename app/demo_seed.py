@@ -2089,6 +2089,20 @@ def _druid_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 0,
              "_slug": "cap-of-water-breathing",
              "desc": "Uncommon wondrous item, no attunement. While wearing this cap, you can breathe normally underwater. It has no effect on your ability to swim. RAW DMG p.157."},
+            # v2.259.0 — Gloves of Swimming and Climbing (RAW DMG p.171,
+            # uncommon, attunement). Climbing and swimming cost no extra
+            # movement + a +5 Athletics bonus to climb/swim (the +5 is GM-
+            # narrated in v1). The `climb_swim_ease` flag rides the
+            # `gloves-of-swimming-and-climbing` catalog payload and surfaces
+            # on /sheet-json as derived.climb_swim_ease. Completes Mira's
+            # aquatic kit alongside her Ring of Swimming + Cap of Water
+            # Breathing — she can swim freely AND breathe underwater. Her free
+            # hand slot homes the gloves; seed-load bypasses the RAW 3-item
+            # cap (enforced at /attune runtime only).
+            {"name": "Gloves of Swimming and Climbing", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
+             "_slug": "gloves-of-swimming-and-climbing",
+             "desc": "Uncommon wondrous item, attunement. While wearing these gloves, climbing and swimming don't cost you extra movement, and you gain a +5 bonus to Strength (Athletics) checks made to climb or swim. RAW DMG p.171. Surfaces as the derived climb_swim_ease flag."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).
