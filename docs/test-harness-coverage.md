@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2712 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.253.0, 2026-06-13).
+**Total tests:** 2717 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.254.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2597,6 +2597,17 @@ v2.253.0 — Cloak of Elvenkind (RAW DMG p.158, uncommon, attunement): the weare
 | `test_cloak_advantage_cancels_with_condition_disadvantage` | Wearer is Poisoned (ability-check disadvantage) → item adv + condition dis cancel to a straight `canceled_*` roll naming the cloak (PHB p.173). |
 | `test_cloak_detuned_drops_stealth_advantage` | Detuning the cloak via a cap-independent sheet-fields PATCH → the Stealth roll reverts to a straight roll (`roll_state_applied` None); re-attunes on teardown. |
 | `test_cloak_exposes_derived_flag` | `GET /sheet-json` → `derived.check_advantage_on` present with "stealth" in `skills` and "Cloak of Elvenkind" in `sources`. |
+
+### `test_item_eyes_of_the_eagle.py`
+v2.254.0 — Eyes of the Eagle (RAW DMG p.166, uncommon, attunement): the wearer has advantage on Wisdom (Perception) checks that rely on sight. A second item-granted *check* advantage source riding the v2.253.0 `check_advantage_on` substrate (Cloak of Elvenkind, Phase 4b) — only the skill key differs (`perception` vs. `stealth`). The wearer's equipped + attuned lenses add "perception" to `check_advantage_on` (from the `eyes-of-the-eagle` `_MAGIC_ITEM_PASSIVES` payload, attunement-gated), and `/roll` folds the advantage via the already-general `_roll_item_check_advantage`. Seeded on Mira Greenleaf (Druid, Perception-proficient, WIS 17) as a 4th attuned item.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_eyes_grant_perception_advantage` | `POST /roll` (Perception, `stat_key: "perception"`) → breakdown contains `2d20kh1` + `roll_state_applied == "auto_advantage_eyes_of_the_eagle"`. |
+| `test_eyes_do_not_help_non_perception_check` | Control: `POST /roll` (Stealth, `stat_key: "stealth"`) → no `2d20kh1`, no advantage label (the skill gate). |
+| `test_eyes_advantage_cancels_with_condition_disadvantage` | Wearer is Poisoned (ability-check disadvantage) → item adv + condition dis cancel to a straight `canceled_*` roll naming the lenses (PHB p.173). |
+| `test_eyes_detuned_drop_perception_advantage` | Detuning the lenses via a cap-independent sheet-fields PATCH → the Perception roll reverts to a straight roll (`roll_state_applied` None); re-attunes on teardown. |
+| `test_eyes_expose_derived_flag` | `GET /sheet-json` → `derived.check_advantage_on` present with "perception" in `skills` and "Eyes of the Eagle" in `sources`. |
 
 ### `test_item_ring_of_water_walking.py`
 v2.241.0 — Ring of Water Walking (RAW DMG p.193, uncommon, no attunement): stand on and move across any liquid surface as if it were solid ground. Reuses the boolean-OR passive substrate: the `water_walk` flag rides the `ring-of-water-walking` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.water_walk = {sources}`. Rowan Quickbow (Ranger) wears it — no attunement, riding alongside his full 3/3 attunement loadout.

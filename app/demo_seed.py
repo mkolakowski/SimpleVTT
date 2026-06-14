@@ -2068,6 +2068,17 @@ def _druid_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 0,
              "_slug": "ring-of-swimming",
              "desc": "Uncommon ring, no attunement. You have a swimming speed of 40 feet while wearing this ring. RAW DMG p.193."},
+            # v2.254.0 — Eyes of the Eagle (RAW DMG p.166, uncommon,
+            # attunement). Rides the check_advantage_on substrate landed in
+            # v2.253.0 (Cloak of Elvenkind, Phase 4b), keyed on Perception:
+            # the wearer's Wisdom (Perception) /roll promotes to advantage
+            # (2d20kh1). Mira is Perception-proficient (WIS 17) — a clean
+            # forest-scout fixture. 4th attuned item (cap enforced only at
+            # /attune, per the Lyra/Rowan seed-load precedent).
+            {"name": "Eyes of the Eagle", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
+             "_slug": "eyes-of-the-eagle",
+             "desc": "Uncommon wondrous item, attunement. While wearing these crystal lenses, you have advantage on Wisdom (Perception) checks that rely on sight. RAW DMG p.166."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).

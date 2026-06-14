@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.254.0] - 2026-06-13 — "The Keen-Eyed Lens"
+
+**Schema version:** 69
+
+**Commit summary:** Eyes of the Eagle — a second item-granted ability-check advantage source, riding the v2.253.0 `check_advantage_on` substrate. Wearing the attuned crystal lenses gives the wearer advantage on Wisdom (Perception) checks, wired through the same `/roll`-time equipped-item read that folds into the PHB p.173 advantage/disadvantage composition.
+
+**Description:** **Eyes of the Eagle** (RAW DMG p.166, uncommon, attunement): "while wearing these crystal lenses, you have advantage on Wisdom (Perception) checks that rely on sight." This is a pure drop-in on the Phase 4b substrate landed in v2.253.0 (Cloak of Elvenkind) — the only thing that differs is the skill key (`perception` vs. `stealth`). The engine changes: (1) a new `eyes-of-the-eagle` entry in `_MAGIC_ITEM_PASSIVES` (`{"check_advantage_on": ["perception"], "requires_attunement": True}`); (2) the demo seed gives Mira Greenleaf (Druid, Perception-proficient, WIS 17) the lenses as a 4th attuned item (fine at seed-load since the 3/3 cap is enforced only at the `/attune` runtime endpoint — Cloak of Elvenkind / Rowan precedent). No new helper or `/roll` code is needed — `_roll_item_check_advantage` + `_equipped_item_effects` + `/sheet-json derived.check_advantage_on` already generalize over the skill key, so a clean Perception roll resolves `2d20kh1` with `roll_state_applied: "auto_advantage_eyes_of_the_eagle"`, and an item advantage + any disadvantage source (e.g. Poisoned) cancels to a straight `1d20` per PHB p.173 for free. MINOR — additive content + tests, no schema change.
+
+### Added
+- `eyes-of-the-eagle` entry in `_MAGIC_ITEM_PASSIVES` (`check_advantage_on: ["perception"]`, attunement-gated).
+- `tests/harness/test_item_eyes_of_the_eagle.py` (5 tests): Perception check rolls advantage (`auto_advantage_eyes_of_the_eagle`); non-Perception (Stealth) check unaffected (skill gate); item-advantage + Poisoned condition-disadvantage cancels to a `canceled_*` straight roll (PHB p.173); detuning the lenses (via a cap-independent sheet-fields PATCH) drops the advantage (straight roll); `/sheet-json` exposes the derived flag naming the lenses.
+
+### Changed
+- Demo seed: Mira Greenleaf gains an equipped + attuned Eyes of the Eagle (her 4th attuned item).
+- `docs/test-harness-coverage.md`: harness total 2712 → 2717 (+5 eyes-of-the-eagle); added the `test_item_eyes_of_the_eagle.py` section.
+
 ## [2.253.0] - 2026-06-13 — "The Whispering Hood"
 
 **Schema version:** 69

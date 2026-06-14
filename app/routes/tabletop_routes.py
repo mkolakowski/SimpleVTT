@@ -32800,6 +32800,13 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "cloak-of-elvenkind": [
         {"check_advantage_on": ["stealth"], "requires_attunement": True},
     ],
+    # v2.254.0 — Eyes of the Eagle (RAW DMG p.166, uncommon, attunement).
+    # "While wearing these lenses, you have advantage on Wisdom (Perception)
+    # checks that rely on sight." Rides the same check_advantage_on substrate as
+    # Cloak of Elvenkind (Phase 4b), keyed on the Perception skill.
+    "eyes-of-the-eagle": [
+        {"check_advantage_on": ["perception"], "requires_attunement": True},
+    ],
 }
 
 
