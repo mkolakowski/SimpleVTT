@@ -32715,6 +32715,15 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-jumping": [
         {"jump_at_will": True, "requires_attunement": True},
     ],
+    # v2.261.0 — Bracers of Archery (RAW DMG p.156, uncommon, attunement). RAW:
+    # "while wearing these bracers, you have proficiency with the longbow and
+    # shortbow, and you gain a +2 bonus to damage rolls on ranged attacks made
+    # with such weapons." The proficiency half is GM-narrated; the +2 ranged-bow
+    # damage bonus is modeled as a flat damage uplift surfaced via
+    # ranged_bow_damage_bonus and applied in _compute_attack_auto_uplifts.
+    "bracers-of-archery": [
+        {"ranged_bow_damage_bonus": 2, "requires_attunement": True},
+    ],
     # v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement).
     # RAW: "you have a swimming speed of 40 feet while wearing this ring."
     # The numeric swim speed is GM-narrated in v1; the boolean flag surfaces
@@ -33940,6 +33949,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # v1). ATTUNEMENT-gated.
         "jump_at_will": False,
         "jump_at_will_sources": [],
+        # v2.261.0 — ranged bow damage bonus. Summed (not OR'd) across equipped
+        # items carrying the field; surfaced on `/sheet-json` derived and applied
+        # as a flat damage uplift in _compute_attack_auto_uplifts for longbow/
+        # shortbow attacks. Bracers of Archery (RAW DMG p.156) is the first entry
+        # — +2 to ranged-bow damage rolls. ATTUNEMENT-gated.
+        "ranged_bow_damage_bonus": 0,
+        "ranged_bow_damage_bonus_sources": [],
         # v2.242.0 — swim-speed passive. Boolean OR across equipped items
         # carrying the field; surfaced on `/sheet-json` derived. Ring of
         # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
@@ -34269,6 +34285,22 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_jump_at_will") or p.get("jump_at_will"):
                 out["jump_at_will"] = True
                 out["jump_at_will_sources"].append(item_name)
+            # v2.261.0 — ranged bow damage bonus (Bracers of Archery, RAW
+            # DMG p.156). Summed across equipped items; the bonus rides the
+            # item via the `ranged_bow_damage_bonus` payload (or a per-item
+            # `_ranged_bow_damage_bonus` rider). Attunement-gated by the
+            # per-payload check above. Applied to longbow/shortbow attacks in
+            # _compute_attack_auto_uplifts.
+            _rbdb = item.get("_ranged_bow_damage_bonus")
+            if _rbdb is None:
+                _rbdb = p.get("ranged_bow_damage_bonus")
+            try:
+                _rbdb = int(_rbdb or 0)
+            except (TypeError, ValueError):
+                _rbdb = 0
+            if _rbdb:
+                out["ranged_bow_damage_bonus"] += _rbdb
+                out["ranged_bow_damage_bonus_sources"].append(item_name)
             # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
             # p.193). Boolean OR; the flag rides the item via the
             # `swim_speed` payload (or a per-item `_swim_speed` rider).
@@ -84317,6 +84349,19 @@ async def use_attack(
     _dueling = _pc_dueling_bonus(sheet, attack)
     if _dueling and damage_expr_raw:
         damage_expr_raw = f"{damage_expr_raw}+{_dueling}"
+    # v2.261.0 — Bracers of Archery (RAW DMG p.156): +2 to damage rolls on
+    # ranged attacks made with a longbow or shortbow. The bonus rides an
+    # equipped + attuned item via _equipped_item_effects; gated on the attack
+    # being a ranged weapon AND the weapon name reading "bow" (but not
+    # "crossbow", which RAW excludes). Appended to the damage expression so
+    # the breakdown surfaces the +2 alongside the ability mod.
+    _bracers_bonus = int(
+        _equipped_item_effects(sheet).get("ranged_bow_damage_bonus") or 0
+    )
+    if _bracers_bonus and damage_expr_raw and _attack_is_ranged_weapon(attack):
+        _atk_name_l = str(attack.get("name") or "").lower()
+        if "bow" in _atk_name_l and "crossbow" not in _atk_name_l:
+            damage_expr_raw = f"{damage_expr_raw}+{_bracers_bonus}"
     # v2.99.87 — Fighting Style: Two-Weapon Fighting. Off-hand
     # attacks (attack.off_hand=True) by RAW don't add the ability
     # mod to damage. With the TWF style, the mod is restored —
@@ -91471,6 +91516,15 @@ async def get_character_sheet_json(
             if _item_eff.get("jump_at_will"):
                 derived["jump_at_will"] = {
                     "sources": list(_item_eff.get("jump_at_will_sources") or []),
+                }
+            # v2.261.0 — ranged bow damage bonus (Bracers of Archery). Only
+            # present when an equipped + attuned item carries the bonus.
+            if _item_eff.get("ranged_bow_damage_bonus"):
+                derived["ranged_bow_damage_bonus"] = {
+                    "bonus": int(_item_eff.get("ranged_bow_damage_bonus") or 0),
+                    "sources": list(
+                        _item_eff.get("ranged_bow_damage_bonus_sources") or []
+                    ),
                 }
             # v2.242.0 — swim speed (Ring of Swimming). Only present when an
             # equipped item sets the flag.

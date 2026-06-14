@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.261.0] - 2026-06-14 — "The Marksman's Wraps"
+
+**Schema version:** 69
+
+**Commit summary:** Bracers of Archery — an attunement-gated passive that adds +2 to damage rolls on longbow/shortbow attacks, riding a new `ranged_bow_damage_bonus` int in `_equipped_item_effects` surfaced on `/sheet-json derived` and applied at `/attack` time for ranged "bow" weapons.
+
+**Description:** **Bracers of Archery** (RAW DMG p.156, uncommon, **attunement required**): "while wearing these bracers, you have proficiency with the longbow and shortbow, and you gain a +2 bonus to damage rolls on ranged attacks made with such weapons." The first magic item on the passive substrate to feed the attack/damage path rather than a pure derived-read flag. The engine changes: (1) a new summed `ranged_bow_damage_bonus` int (+ `ranged_bow_damage_bonus_sources`) in `_equipped_item_effects`, accumulated across equipped items carrying the bonus (via the `ranged_bow_damage_bonus` payload or a per-item `_ranged_bow_damage_bonus` rider) — the per-payload attunement check drops the bonus when worn-but-not-attuned; (2) a new `bracers-of-archery` entry in `_MAGIC_ITEM_PASSIVES` (`{"ranged_bow_damage_bonus": 2, "requires_attunement": True}`); (3) at `/attack` time the bonus is appended to the damage expression (mirroring the Fighting Style: Dueling flat-bonus pattern) when the attack is a ranged weapon AND the weapon name reads "bow" but not "crossbow" (RAW excludes crossbows); (4) `/sheet-json derived` surfaces `ranged_bow_damage_bonus = {bonus, sources}` only when an equipped + attuned item carries the bonus; (5) the demo seed gives Rowan Quickbow (Ranger) the bracers attuned on his forearms — the demo's dedicated archer; the bracers sit distinct from his Gauntlets of Ogre Power (hands), so his Longbow (1d8+4) now rolls 1d8+4+2 while his off-hand Shortsword (melee) is unaffected. Rides as his 5th attuned item (seed-load bypasses the RAW 3-item cap, enforced at `/attune` runtime only). The longbow/shortbow proficiency half is GM-narrated in v1. MINOR — additive content + tests, no schema change.
+
+### Added
+- `ranged_bow_damage_bonus` summed int field (+ `ranged_bow_damage_bonus_sources`) in `_equipped_item_effects`, attunement-gated via the per-payload check.
+- `bracers-of-archery` entry in `_MAGIC_ITEM_PASSIVES` (`ranged_bow_damage_bonus: 2`, `requires_attunement: True`).
+- `/attack` damage path: appends the +2 to the damage expression for a ranged "bow" (non-crossbow) weapon.
+- `/sheet-json derived.ranged_bow_damage_bonus = {bonus, sources}` display mirror.
+- `tests/harness/test_item_bracers_of_archery.py` (5 tests): `/sheet-json` exposes the +2 naming the bracers; un-attuning the bracers (still equipped) drops the derived read — the attunement gate; unequipping drops it; a dice-seeded Longbow attack deals +2 (1d8+4+2) attuned vs. base (1d8+4) detuned; an off-hand Shortsword (melee) attack gets no bonus (the ranged-bow gate). Inventory restored on teardown.
+
+### Changed
+- Demo seed: Rowan Quickbow gains an equipped + attuned Bracers of Archery on his forearms.
+- `docs/test-harness-coverage.md`: harness total 2738 → 2743 (+5 bracers-of-archery); added the `test_item_bracers_of_archery.py` section.
+
 ## [2.260.0] - 2026-06-14 — "The Leaping Band"
 
 **Schema version:** 69

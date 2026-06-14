@@ -2965,6 +2965,22 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
              "_slug": "cloak-of-elvenkind",
              "desc": "Uncommon wondrous item, attunement. While you wear this cloak with its hood up, Wisdom (Perception) checks made to see you have disadvantage, and you have advantage on Dexterity (Stealth) checks made to hide. RAW DMG p.158."},
+            # v2.261.0 — Bracers of Archery (RAW DMG p.156, uncommon,
+            # attunement). While worn the wearer has proficiency with the
+            # longbow and shortbow and gains +2 to damage rolls on ranged
+            # attacks made with such weapons. The +2 ranged-bow damage bonus
+            # rides the `bracers-of-archery` catalog payload via
+            # `ranged_bow_damage_bonus` and is applied to Rowan's Longbow
+            # attacks at /attack time (gated on a "bow" ranged weapon that
+            # isn't a crossbow); the proficiency half is GM-narrated. On the
+            # forearms — distinct from his Gauntlets of Ogre Power (hands).
+            # Rowan's 5th attuned item; fine at seed-load since the RAW 3/3
+            # cap is enforced only at the /attune runtime endpoint. A natural
+            # boon for the demo's dedicated archer.
+            {"name": "Bracers of Archery", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
+             "_slug": "bracers-of-archery",
+             "desc": "Uncommon wondrous item, attunement. While wearing these bracers, you have proficiency with the longbow and shortbow, and you gain a +2 bonus to damage rolls on ranged attacks made with such weapons. RAW DMG p.156."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,

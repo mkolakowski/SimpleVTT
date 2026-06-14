@@ -107,10 +107,14 @@ async def test_twf_skipped_on_main_hand_attack(gm_client, gm_ws, roster):
         )
         data = await _attack(gm_client, gm_ws, rowan["id"], LONGBOW_INDEX)
         dmg_expr = data.get("damage_expr") or ""
-        # Longbow's authored damage is "1d8+4". TWF skip → unchanged.
-        assert dmg_expr == "1d8+4", (
-            f"TWF should NOT fire on non-off-hand attacks; "
-            f"got {dmg_expr!r}"
+        # Longbow's authored damage is "1d8+4"; TWF skips (not off_hand)
+        # so the only append is the v2.261.0 Bracers of Archery +2 ranged-
+        # bow bonus → "1d8+4+2". The point of this test is that the TWF
+        # off-hand ability mod is NOT added — the bracers +2 is a separate,
+        # expected ranged-bow rider.
+        assert dmg_expr == "1d8+4+2", (
+            f"TWF should NOT fire on non-off-hand attacks (only the Bracers "
+            f"of Archery +2 should append); got {dmg_expr!r}"
         )
     finally:
         await gm_client.patch(

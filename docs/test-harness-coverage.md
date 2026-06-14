@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2738 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.260.0, 2026-06-14).
+**Total tests:** 2743 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.261.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2674,6 +2674,17 @@ v2.260.0 — Ring of Jumping (RAW DMG p.191, uncommon, attunement): the wearer c
 | `test_ring_of_jumping_exposes_flag` | `GET /sheet-json` → `derived.jump_at_will` present with "Ring of Jumping" in `sources`. |
 | `test_ring_of_jumping_detune_drops_flag` | PATCH the ring to `attuned: False` (still equipped) → `derived.jump_at_will` absent — the attunement gate; restores the original inventory on teardown. |
 | `test_ring_of_jumping_unequip_drops_flag` | PATCH the ring to `equipped: False` → `derived.jump_at_will` absent; restores the original inventory on teardown. |
+
+### `test_item_bracers_of_archery.py`
+v2.261.0 — Bracers of Archery (RAW DMG p.156, uncommon, attunement): +2 to damage rolls on ranged attacks made with a longbow or shortbow. The first passive-substrate item to feed the attack/damage path rather than a pure derived flag. Rides a new summed `ranged_bow_damage_bonus` int in `_equipped_item_effects` (attunement-gated): the bonus rides the `bracers-of-archery` catalog payload (`ranged_bow_damage_bonus: 2`, `requires_attunement: True`), aggregates with `ranged_bow_damage_bonus_sources`, surfaces on `/sheet-json` as `derived.ranged_bow_damage_bonus = {bonus, sources}`, and is appended to the damage expression at `/attack` time for a ranged "bow" (non-crossbow) weapon. Seeded on Rowan Quickbow (Ranger) on his forearms — distinct from his Gauntlets of Ogre Power (hands); the proficiency half is GM-narrated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_bracers_of_archery_exposes_derived` | `GET /sheet-json` → `derived.ranged_bow_damage_bonus` present with `bonus: 2` and "Bracers of Archery" in `sources`. |
+| `test_bracers_of_archery_detune_drops_derived` | PATCH the bracers to `attuned: False` (still equipped) → `derived.ranged_bow_damage_bonus` absent — the attunement gate; restores inventory on teardown. |
+| `test_bracers_of_archery_unequip_drops_derived` | PATCH the bracers to `equipped: False` → `derived.ranged_bow_damage_bonus` absent; restores inventory on teardown. |
+| `test_bracers_of_archery_adds_longbow_damage` | Dice-seeded (d20=10 no crit, d8=5): Rowan's Longbow deals 5+4+2=11 with bracers attuned; after detune the same seed deals 5+4=9. Restores inventory on teardown. |
+| `test_bracers_of_archery_skips_melee_weapon` | Dice-seeded (d20=10, d6=4): Rowan's off-hand Shortsword (melee) deals 4 with no +2 — the ranged-bow gate. |
 
 ### `test_item_ring_of_free_action.py`
 v2.240.0 — Ring of Free Action (RAW DMG p.191, rare, attunement): difficult terrain costs no extra movement; magic can't reduce your speed or paralyze/restrain you. Reuses the boolean-OR passive substrate: the `free_action` flag rides the `ring-of-free-action` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.free_action = {sources}` (descriptive in v1). Brakka Wildmane (Path of the Beast Barbarian) wears it as her 3rd attuned item.
