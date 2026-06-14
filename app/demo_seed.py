@@ -3551,6 +3551,16 @@ def _monk_drunken_sheet(name: str) -> dict:
              "attuned": True, "weight_lb": 1,
              "_slug": "mantle-of-spell-resistance",
              "desc": "Rare wondrous item, attunement. You have advantage on saving throws against spells while you wear this cloak. RAW DMG p.180."},
+            # v2.255.0 — Boots of Elvenkind (RAW DMG p.155, uncommon, NO
+            # attunement). No-attunement companion to Cloak of Elvenkind on the
+            # same check_advantage_on ["stealth"] substrate (v2.253.0). Rides
+            # freely alongside Quan's full 3/3 attunement loadout (Belt + Ioun
+            # + Mantle) — no attunement required, like Mira's Ring of Swimming.
+            # On-theme for a soft-footed Drunken Master who slips away unseen.
+            {"name": "Boots of Elvenkind", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "boots-of-elvenkind",
+             "desc": "Uncommon wondrous item, no attunement. While you wear these boots, your steps make no sound, and you have advantage on Dexterity (Stealth) checks that rely on moving silently. RAW DMG p.155."},
         ],
         "feats": [],
         "resources": [

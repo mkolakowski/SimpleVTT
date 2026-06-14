@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.255.0] - 2026-06-13 — "The Silent Tread"
+
+**Schema version:** 69
+
+**Commit summary:** Boots of Elvenkind — a no-attunement item-granted Stealth-check advantage source, riding the v2.253.0 `check_advantage_on` substrate. Wearing the boots gives the wearer advantage on Dexterity (Stealth) checks; the payload omits `requires_attunement`, so the boots ride freely alongside a full 3/3 attunement loadout.
+
+**Description:** **Boots of Elvenkind** (RAW DMG p.155, uncommon, **no attunement**): "while you wear these boots ... you have advantage on Dexterity (Stealth) checks that rely on moving silently." The no-attunement companion to Cloak of Elvenkind (v2.253.0) on the same `check_advantage_on: ["stealth"]` substrate — the only difference is that the boots' `_MAGIC_ITEM_PASSIVES` payload omits `requires_attunement`, so they ride freely alongside a full 3/3 attunement loadout (the Ring of Swimming / Ring of Water Walking pattern). The engine changes: (1) a new `boots-of-elvenkind` entry in `_MAGIC_ITEM_PASSIVES` (`{"check_advantage_on": ["stealth"]}` — no attunement gate); (2) the demo seed gives Quan Reelstep (Drunken Master Monk, at the RAW 3/3 cap with Belt of Dwarvenkind + Ioun Stone of Mastery + Mantle of Spell Resistance) the boots, riding alongside without attunement. No new helper or `/roll` code — `_roll_item_check_advantage` + `_equipped_item_effects` + `/sheet-json derived.check_advantage_on` already generalize over the skill key and the attunement gate, so a clean Stealth roll resolves `2d20kh1` with `roll_state_applied: "auto_advantage_boots_of_elvenkind"`, and an item advantage + any disadvantage source cancels to a straight `1d20` per PHB p.173 for free. MINOR — additive content + tests, no schema change.
+
+### Added
+- `boots-of-elvenkind` entry in `_MAGIC_ITEM_PASSIVES` (`check_advantage_on: ["stealth"]`, no attunement gate).
+- `tests/harness/test_item_boots_of_elvenkind.py` (6 tests): Stealth check rolls advantage (`auto_advantage_boots_of_elvenkind`); non-Stealth (Perception) check unaffected (skill gate); item-advantage + Poisoned condition-disadvantage cancels to a `canceled_*` straight roll (PHB p.173); the advantage fires with NO attunement (Quan is at the 3/3 cap, so the boots must ride free of the gate); unequipping the boots drops the advantage (straight roll); `/sheet-json` exposes the derived flag naming the boots.
+
+### Changed
+- Demo seed: Quan Reelstep gains an equipped (no-attunement) Boots of Elvenkind, riding alongside his full 3/3 attunement loadout.
+- `docs/test-harness-coverage.md`: harness total 2717 → 2723 (+6 boots-of-elvenkind); added the `test_item_boots_of_elvenkind.py` section.
+- `docs/plans/advantage-disadvantage.md`: Boots of Elvenkind marked shipped under the Phase 4b follow-ups.
+
 ## [2.254.0] - 2026-06-13 — "The Keen-Eyed Lens"
 
 **Schema version:** 69
