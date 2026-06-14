@@ -6909,6 +6909,18 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                        title="${_esc(actionLabel)} — ${_esc(actionTitle)}"
                        style="font-size:11px;padding:3px 8px;min-height:32px;background:rgba(184,135,255,0.12);border:1px solid rgba(184,135,255,0.45);color:#b887ff;border-radius:4px;cursor:${actionDisabled ? 'not-allowed' : 'pointer'};flex-shrink:0;font-weight:600;${actionDisabled ? 'opacity:0.45;' : ''}">${_esc(actionLabel)}</button>`
             : '';
+        // v2.275.0 — multi-action items (Staff of Power) surface a
+        // secondary button per entry in itemAction.extra_actions, each
+        // carrying its own kind/action_key. The click handler resolves
+        // the right config via data-action-idx.
+        const extraActionBtns = (itemAction && Array.isArray(itemAction.extra_actions) && !isReadonly && item.equipped &&
+                          typeof CAMPAIGN_ID !== 'undefined' && typeof MY_CHAR_ID !== 'undefined')
+            ? itemAction.extra_actions.map((ea, eaIdx) =>
+                `<button type="button" class="inv-item-action" data-idx="${idx}" data-slug="${_esc(item._slug)}" data-action-idx="${eaIdx}"
+                       title="${_esc(ea.label)} — ${_esc(ea.title || '')}"
+                       style="font-size:11px;padding:3px 8px;min-height:32px;background:rgba(184,135,255,0.12);border:1px solid rgba(184,135,255,0.45);color:#b887ff;border-radius:4px;cursor:pointer;flex-shrink:0;font-weight:600;">${_esc(ea.label)}</button>`
+              ).join('')
+            : '';
 
         // Modifier badges shown only when equipped
         const modBits = [];
@@ -6943,6 +6955,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 ${modBadge}
                 ${useBtn}
                 ${actionBtn}
+                ${extraActionBtns}
                 ${qtyCtrl}
                 ${rmBtn}
             </div>
@@ -7420,7 +7433,29 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           radius_ft: 20,
                           max_range_ft: 150,
                           save_dc: 15,
-                          submit_label: '🔱 Fireball'},
+                          submit_label: '🔱 Fireball',
+                          // v2.275.0 — the Staff of Power's other two
+                          // damaging spells surface as secondary buttons
+                          // via extra_actions. Each is a full action
+                          // config with its own kind/action_key; the
+                          // click handler resolves it by data-action-idx.
+                          // All three route to the same save-for-half AoE
+                          // handler server-side (DC = the wielder's spell
+                          // save DC via the "spell" sentinel).
+                          extra_actions: [
+                            {kind: 'aoe-line', action_key: 'cast-lightning-bolt',
+                             label: '🔱 Lightning Bolt',
+                             title: 'Staff of Power — Lightning Bolt (5th level), 100-ft line, DEX save at your spell save DC: 10d6 lightning (half on a pass). Spends 5 charges.',
+                             confirm_body: '5-ft × 100-ft line. Each creature in the line must make a DEX save at your spell save DC: 10d6 lightning (half on a pass). Spends 5 charges.',
+                             width_ft: 5, max_length_ft: 100,
+                             submit_label: '🔱 Lightning'},
+                            {kind: 'aoe-cone', action_key: 'cast-cone-of-cold',
+                             label: '🔱 Cone of Cold',
+                             title: 'Staff of Power — Cone of Cold, 60-ft cone, CON save at your spell save DC: 8d8 cold (half on a pass). Spends 5 charges.',
+                             confirm_body: '60-ft cone (apex at caster). Each creature in the cone must make a CON save at your spell save DC: 8d8 cold (half on a pass). Spends 5 charges.',
+                             length_ft: 60, apex_half_angle_deg: 26.57,  // RAW PHB p.204
+                             submit_label: '🔱 Cold'},
+                          ]},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
@@ -7858,8 +7893,15 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 if (typeof CAMPAIGN_ID === 'undefined' || typeof MY_CHAR_ID === 'undefined') return;
                 const idx = +btn.dataset.idx;
                 const slug = btn.dataset.slug;
-                const cfg = ITEM_ACTION_SLUGS[slug];
+                let cfg = ITEM_ACTION_SLUGS[slug];
                 if (!cfg) return;
+                // v2.275.0 — multi-action items: a data-action-idx button
+                // resolves to one of cfg.extra_actions (a full action
+                // config) instead of the primary config.
+                if (btn.dataset.actionIdx !== undefined && Array.isArray(cfg.extra_actions)) {
+                    cfg = cfg.extra_actions[+btn.dataset.actionIdx];
+                    if (!cfg) return;
+                }
                 let body = { inventory_index: idx };
                 if (cfg.kind === 'state-toggle') {
                     body.action_key = cfg.action_key_fn(inventory[idx]);
@@ -7930,9 +7972,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // auto-picked combatants (line-edge cases).
                     const aoePicked = await window._showAoEConfirmModal({
                         title: `${cfg.label || '⚡ Hurl Lightning'}`,
-                        body: `5-ft × ${cfg.max_length_ft || 120}-ft line. Each creature in the line must make a DC 13 DEX save (half on pass).`,
+                        body: cfg.confirm_body || `5-ft × ${cfg.max_length_ft || 120}-ft line. Each creature in the line must make a DC 13 DEX save (half on pass).`,
                         combatants: lineResults,
-                        submit_label: '⚡ Fire',
+                        submit_label: cfg.submit_label || '⚡ Fire',
                     });
                     if (aoePicked === null) return;  // user canceled
                     body.action_key = cfg.action_key;
@@ -8047,9 +8089,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     } catch (e) {}
                     const aoePicked = await window._showAoEConfirmModal({
                         title: `${cfg.label || '😱 Cast Fear'}`,
-                        body: `${cfg.length_ft || 30}-ft cone (apex at caster). Each creature in the cone must make a DC 15 WIS save or be Frightened of you for 1 min.`,
+                        body: cfg.confirm_body || `${cfg.length_ft || 30}-ft cone (apex at caster). Each creature in the cone must make a DC 15 WIS save or be Frightened of you for 1 min.`,
                         combatants: coneResults,
-                        submit_label: '😱 Fire',
+                        submit_label: cfg.submit_label || '😱 Fire',
                     });
                     if (aoePicked === null) return;
                     body.action_key = cfg.action_key;

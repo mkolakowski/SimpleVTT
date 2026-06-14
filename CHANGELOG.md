@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.275.0] - 2026-06-14 — "The Triple Crown"
+
+**Schema version:** 69
+
+**Commit summary:** Surface the Staff of Power's other two damaging spells (Lightning Bolt + Cone of Cold) as dedicated sheet buttons via a new `extra_actions` array on the inventory item-action config — the first multi-action *AoE* item to render more than one button per row. The sheet now shows three 🔱 buttons on Thalindra's Staff of Power row (Fireball aoe-sphere + Lightning Bolt aoe-line + Cone of Cold aoe-cone), each routing to the already-shipped save-for-half handler. Plus a `confirm_body` override so the AoE confirm modal shows correct per-spell flavor instead of the borrowed defaults.
+
+**Description:** v2.274.0 shipped the Staff of Power with all three damaging spells API-reachable but only **Fireball** surfaced on the sheet (the inventory renders one action button per item). This commit completes the UI: the item-action config gains an optional `extra_actions` array — a list of full action configs (each with its own `kind` / `action_key` / `label` / target-picker fields) that render as **secondary buttons** alongside the primary one. The inventory render path emits one `<button class="inv-item-action" data-action-idx="N">` per extra; the click handler resolves `data-action-idx` to `cfg.extra_actions[N]` (falling back to the primary config when the attribute is absent), so each button drives its own AoE flow (`aoe-line` for Lightning Bolt's 100-ft line, `aoe-cone` for Cone of Cold's 60-ft cone). All three route to the same generalized save-for-half AoE-damage handler server-side — no new endpoint, no response-shape change. The two reused AoE confirm modals (line / cone) previously hardcoded their body copy (the line modal said "DC 13 DEX"; the cone modal said "DC 15 WIS save or be Frightened" — Wand of Fear flavor). They now prefer a `cfg.confirm_body` override and a `cfg.submit_label` when present, so the Staff of Power's modals read the correct cold/lightning damage + "your spell save DC". This is a substrate generalization: any future multi-action AoE item (a staff with several beams, a wand with multiple spells) now gets N buttons for free. MINOR — additive UI + config substrate + UI tests, no schema change, no endpoint change.
+
+### Added
+- `extra_actions` support in `app/templates/sheet_dnd5e.html` — an optional array on an `ITEM_ACTION_SLUGS` entry; the render path emits one secondary `.inv-item-action` button per entry (carrying `data-action-idx`), and the click handler resolves the button to its `extra_actions[i]` config. The Staff of Power's `extra_actions` adds Lightning Bolt (`aoe-line`, 100-ft, `cast-lightning-bolt`) + Cone of Cold (`aoe-cone`, 60-ft, `cast-cone-of-cold`).
+- `confirm_body` + `submit_label` overrides honored by the `aoe-line` and `aoe-cone` AoE confirm modals, so each action shows its own flavor text instead of the borrowed Javelin / Wand-of-Fear defaults.
+- `tests/harness_ui/test_use_item_action_buttons.py` (+2): `test_staff_of_power_renders_three_action_buttons` (asserts 3 buttons + all three labels render) and `test_staff_of_power_cone_button_fires_use_item_action` (E2E click of the Cone of Cold extra-action button → correct `cast-cone-of-cold` POST + cold-flavor modal + resource 20 → 15).
+
+### Changed
+- `docs/test-harness-coverage.md`: UI-test total 83 → 85; added the two new rows under `test_use_item_action_buttons.py`.
+
 ## [2.274.0] - 2026-06-14 — "The Archmage's Cudgel"
 
 **Schema version:** 69

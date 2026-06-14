@@ -743,6 +743,149 @@ def test_wand_of_fear_click_fires_use_item_action(
                 break
 
 
+def test_staff_of_power_renders_three_action_buttons(gm_page: Page, roster: dict):
+    """v2.275.0: the Staff of Power is the first multi-action AoE item —
+    its inventory row surfaces THREE buttons (the primary Fireball
+    aoe-sphere via the slug config + Lightning Bolt aoe-line + Cone of
+    Cold aoe-cone via the new extra_actions array). Thalindra carries it
+    equipped + attuned in the v2.274.0 seed."""
+    thalindra = roster["Thalindra Moonwhisper"]
+    page = gm_page
+    page.goto(sheet_url(thalindra["id"]))
+
+    staff_row = page.locator(".inv-row", has_text="Staff of Power")
+    expect(staff_row).to_be_visible(timeout=5000)
+
+    btns = staff_row.locator(".inv-item-action")
+    expect(btns).to_have_count(3)
+    expect(staff_row).to_contain_text("Fireball")
+    expect(staff_row).to_contain_text("Lightning Bolt")
+    expect(staff_row).to_contain_text("Cone of Cold")
+
+
+def test_staff_of_power_cone_button_fires_use_item_action(
+    gm_page: Page, roster: dict,
+):
+    """v2.275.0: end-to-end click of the Staff of Power's Cone of Cold
+    button (the second extra_action, data-action-idx=1). Proves the new
+    extra-action resolution path dispatches the right action_key
+    (cast-cone-of-cold) through the aoe-cone flow, and that the confirm
+    modal shows the overridden cold-damage body (not the Wand of Fear
+    Frightened flavor).
+
+    Stubs mirror test_wand_of_fear_click_fires_use_item_action: the
+    target picker, /battle GET, and /battle/cone-targets POST are all
+    intercepted so the test needs no live battle. The /use_item_action
+    POST is real — we assert on its body shape, then re-seed charges
+    afterward so the suite stays hermetic."""
+    import httpx, json
+    thalindra = roster["Thalindra Moonwhisper"]
+
+    # Force-reseed the staff to 20 charges so the test is hermetic.
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        sr = c.get(f"/api/campaign/1/character/{thalindra['id']}/sheet-json")
+        sheet = sr.json().get("sheet") or {}
+        resources = list(sheet.get("resources") or [])
+        for i, r in enumerate(resources):
+            if isinstance(r, dict) and r.get("key") == "staff-of-power":
+                resources[i] = {**r, "current": 20, "max": 20}
+                break
+        c.patch(
+            f"/api/campaign/1/character/{thalindra['id']}/sheet-fields",
+            json={"resources": resources},
+        )
+
+    page = gm_page
+
+    def _handle_battle(route):
+        if route.request.method == "GET":
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "battle": {
+                        "combatants": [
+                            {"id": "tok_sop_thal", "char_id": thalindra["id"], "name": thalindra["name"], "source_token_id": 1},
+                            {"id": "tok_sop_dir", "name": "Bandit", "source_token_id": 2},
+                            {"id": "tok_sop_in_cone", "name": "Goblin", "source_token_id": 3},
+                        ],
+                    },
+                }),
+            )
+        else:
+            route.continue_()
+    page.route("**/api/campaign/1/battle", _handle_battle)
+
+    def _handle_cone(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "apex_id": "tok_sop_thal",
+                "direction_id": "tok_sop_dir",
+                "length_ft": 60,
+                "apex_half_angle_deg": 26.57,
+                "results": [
+                    {"combatant_id": "tok_sop_in_cone", "name": "Goblin", "distance_ft": 18.0},
+                ],
+            }),
+        )
+    page.route("**/api/campaign/1/battle/cone-targets", _handle_cone)
+
+    page.goto(sheet_url(thalindra["id"]))
+
+    page.evaluate("""
+        window.vttOpenMultiTargetPicker = async () => ['tok_sop_dir'];
+    """)
+
+    staff_row = page.locator(".inv-row", has_text="Staff of Power")
+    expect(staff_row).to_be_visible(timeout=5000)
+    cone_btn = staff_row.locator(".inv-item-action", has_text="Cone of Cold")
+    expect(cone_btn).to_be_visible()
+
+    with page.expect_request(
+        lambda req: (
+            req.url.endswith("/use_item_action")
+            and req.method == "POST"
+        ),
+        timeout=10000,
+    ) as req_info:
+        cone_btn.click()
+        modal = page.locator("#aoe-line-confirm-modal")
+        expect(modal).to_be_visible(timeout=5000)
+        expect(modal).to_contain_text("Goblin")
+        # The overridden confirm_body shows cold-damage flavor, not the
+        # default Wand-of-Fear Frightened text.
+        expect(modal).to_contain_text("cold")
+        modal.locator("#aoe-confirm").click()
+
+    posted = req_info.value
+    payload = posted.post_data_json
+    assert payload["action_key"] == "cast-cone-of-cold", payload
+    assert payload["target_combatant_ids"] == ["tok_sop_in_cone"], payload
+
+    # Confirm the server decremented the resource (20 → 15).
+    with httpx.Client(
+        base_url="http://localhost:8013", follow_redirects=True,
+    ) as c:
+        c.post(
+            "/login",
+            data={"email": "demo-gm@example.com", "password": "demopass"},
+        )
+        sr = c.get(f"/api/campaign/1/character/{thalindra['id']}/sheet-json")
+        sheet = sr.json().get("sheet") or {}
+        for r in sheet.get("resources") or []:
+            if isinstance(r, dict) and r.get("key") == "staff-of-power":
+                assert int(r.get("current") or 0) == 15, r
+                break
+
+
 def test_wand_of_fear_use_button_renders(gm_page: Page, roster: dict):
     """v2.159.12: Magnus's Wand of Fear inventory row shows a
     😱 Cast Fear button (equipped, attuned, charge counter > 0)."""
