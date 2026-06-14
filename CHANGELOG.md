@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.251.1] - 2026-06-13 — "The Shimmering Blueprint"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only — extend the existing advantage/disadvantage plan with a Phase 4 (item-granted adv/dis) section, scoping Cloak of Displacement as the first target-side item-disadvantage drop-in and documenting the six engine changes + test plan before the v2.252.0 implementation lands.
+
+**Description:** The Phase 2 work (shipped v2.150.0–v2.157.0) automated advantage/disadvantage from **conditions** and **features**, both reading from the combatant `buffs` list / `_buffs_active` PC mirror. **Magic items** that grant adv/dis aren't yet wired into those source sets — the seeded Cloak of Displacement on Lyra Sunstrider carries only an informational reaction the GM clicks. This commit adds a **Phase 4 — Item-granted adv/dis** section to [`docs/plans/advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) documenting the next slice before code lands: a header status line, an implementation-status bullet, and a full design section. Phase 4a is Cloak of Displacement (RAW DMG p.158, rare, attunement — attacks against the wearer have disadvantage), broken down into the six engine changes (a new `incoming_attacks_have_disadvantage` boolean-OR field in `_equipped_item_effects`; a `cloak-of-displacement` row in `_MAGIC_ITEM_PASSIVES`; a `_target_wearer_imposes_attack_disadvantage()` combatant→character→sheet read helper; wiring into both `/attack` and `/npc_attack` disadvantage source sets; a `/sheet-json derived` display mirror; the demo-seed flip from informational reaction to a true attuned passive), the five-test plan, and Phase 4b+ follow-ups (suppress-after-damage, Elvenkind stealth-advantage via `/roll`, Eyes of the Eagle, Elven Accuracy out of scope). The doc is already wiki-surfaced (allowlist `plan-advantage-disadvantage` since v2.2.0), so no new allowlist row, landing-page row, or per-slug test is needed. PATCH — doc-only edit, no code, no schema, no new tests.
+
+### Changed
+- `docs/plans/advantage-disadvantage.md`: added a Phase 4 header status line, a `⚪ Phase 4 — Item-granted adv/dis` implementation-status bullet, and a full `## Phase 4 — Item-granted adv/dis` design section (Phase 4a Cloak of Displacement engine changes + test plan, Phase 4b+ follow-ups).
+
 ## [2.251.0] - 2026-06-13 — "The Riming Edge"
 
 **Schema version:** 69

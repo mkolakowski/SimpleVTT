@@ -33,7 +33,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 
 | Plan | Format | Audience | Status |
 |------|--------|----------|--------|
-| [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phases 1 + 2a–2f shipped (v2.2.0–v2.157.0); Phase 3 blocked on Maps 2.0 |
+| [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phases 1 + 2a–2f shipped (v2.2.0–v2.157.0); Phase 3 blocked on Maps 2.0; Phase 4 (item-granted adv/dis) proposed |
 | [Class / subclass / feat / race content](../plans/class-content-status.md) | Markdown (inventory) | Contributors | 🟢 / 🟠 / ⚪ living inventory |
 | [Full class-feature automation](../plans/full-feature-automation.md) | Markdown (design) | Contributors | 🟠 Phases 0–7 shipped; Phase 8 in progress (v2.158.x) |
 | [On-hit damage riders (automation Phase 2)](../plans/on-hit-riders.md) | Markdown (design) | Contributors | ✅ shipped |
