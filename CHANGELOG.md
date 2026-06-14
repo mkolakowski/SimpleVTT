@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.247.1] - 2026-06-13 — "The Steady Footing"
+
+**Schema version:** 69
+
+**Commit summary:** Test-only fix — repair `test_item_ioun_stone_sustenance.py` after the v2.247.0 Boots of the Winterlands commit detuned Rowan's Ioun Stone of Charisma.
+
+**Description:** v2.247.0 freed Rowan Quickbow's 3rd attunement slot by detuning his Ioun Stone of Charisma (kept equipped, no longer attuned) so the Boots of the Winterlands could take the slot. That regression broke a *second* consumer of Rowan's `derived.effective_abilities` that the v2.247.0 commit missed: `test_item_ioun_stone_sustenance.py::test_sustenance_coexists_with_charisma_ioun` asserted Rowan's CHA override (effective 10) composed with the no-food-or-drink flag — but with the CHA ioun detuned, `derived.effective_abilities` only carries the STR override from his still-attuned Gauntlets of Ogre Power. This PATCH renames the test to `test_sustenance_coexists_with_gauntlets_str` and rewrites it to assert the sustenance flag composes with the Gauntlets' STR set (effective 19) instead — the test's intent (distinct per-item riders surfacing together in `derived`) is preserved, just anchored to a still-live override. The module docstring is updated to match. No production code change, no schema change, harness total unchanged (test rewrite, not add). PATCH.
+
+### Fixed
+- `tests/harness/test_item_ioun_stone_sustenance.py`: renamed `test_sustenance_coexists_with_charisma_ioun` → `test_sustenance_coexists_with_gauntlets_str` and rewrote it to assert the Sustenance ioun's no-food-or-drink flag composes with the Gauntlets of Ogre Power STR override (effective 19) rather than the now-detuned Ioun Stone of Charisma. Module docstring updated to reflect the v2.247.0 detune.
+
+### Changed
+- `docs/test-harness-coverage.md`: "as of v2.247.0" → "as of v2.247.1" (total unchanged at 2685); the sustenance section now reflects the renamed `test_sustenance_coexists_with_gauntlets_str`.
+
 ## [2.247.0] - 2026-06-13 — "The Frostward Tread"
 
 **Schema version:** 69

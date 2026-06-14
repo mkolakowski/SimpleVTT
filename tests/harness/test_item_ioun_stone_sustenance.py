@@ -9,9 +9,11 @@ eat or drink. The flag rides the inventory item via `_no_food_or_drink: True`
 `derived.no_food_or_drink = {sources}`.
 
 Demo fixture: Rowan Quickbow (Ranger) wears an equipped + attuned Ioun Stone
-of Sustenance — his 3rd attuned item (after the Gauntlets of Ogre Power + Ioun
-Stone of Charisma, RAW max 3) and his second ioun stone, so the no-eat/drink
-flag and the CHA bonus compose on the one slug via distinct per-item riders.
+of Sustenance. v2.247.0 detuned his Ioun Stone of Charisma (kept equipped) to
+free a slot for the Boots of the Winterlands, so the coexistence test now
+proves the no-eat/drink flag composes with the STR override from his still-
+attuned Gauntlets of Ogre Power — distinct per-item riders surfacing together
+in `derived`.
 """
 from .conftest import CAMPAIGN_ID
 
@@ -41,18 +43,20 @@ async def test_sustenance_exposes_no_food_or_drink_on_sheet_json(gm_client, rost
     ), f"expected the stone named in sources, got: {sustenance!r}"
 
 
-async def test_sustenance_coexists_with_charisma_ioun(gm_client, roster):
-    """Rowan's two ioun stones compose: the Sustenance stone sets the no-
-    eat/drink flag while the Charisma stone still raises CHA (8 → 10),
-    proving distinct per-item riders share the one slug without
-    interfering."""
+async def test_sustenance_coexists_with_gauntlets_str(gm_client, roster):
+    """Rowan's distinct equipped items compose in `derived`: the Sustenance
+    ioun stone sets the no-eat/drink flag while his Gauntlets of Ogre Power
+    still set STR to 19 — proving per-item riders surface together without
+    interfering. (Before v2.247.0 this paired with the Ioun Stone of
+    Charisma; that stone is now detuned to free a slot for the Boots of the
+    Winterlands, so the STR override stands in.)"""
     rowan = roster["Rowan Quickbow"]
     data = await _sheet_json(gm_client, rowan["id"])
     derived = data.get("derived") or {}
     assert derived.get("no_food_or_drink") is not None, derived
     eff = derived.get("effective_abilities") or {}
-    assert "CHA" in eff, f"expected CHA override from the second stone, got {eff!r}"
-    assert eff["CHA"]["base"] == 8 and eff["CHA"]["effective"] == 10, eff["CHA"]
+    assert "STR" in eff, f"expected STR override from the gauntlets, got {eff!r}"
+    assert eff["STR"]["effective"] == 19, eff["STR"]
 
 
 async def test_sustenance_unequip_drops_flag(gm_client, roster):

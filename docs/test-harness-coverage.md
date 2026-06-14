@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2685 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.247.0, 2026-06-13).
+**Total tests:** 2685 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.247.1, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2633,12 +2633,12 @@ v2.231.0 — Ioun Stone of Awareness (RAW DMG p.176, rare, attunement): the four
 | `test_awareness_unequip_drops_flag` | PATCH the Awareness stone to `equipped: False` → `derived.cannot_be_surprised` absent; restores the original inventory on teardown. |
 
 ### `test_item_ioun_stone_sustenance.py`
-v2.230.0 — Ioun Stone of Sustenance (RAW DMG p.176, rare, attunement): the third non-ability Ioun variant on the shared `ioun-stone` slug and the first to surface a sustenance passive. The no-eat/no-drink flag rides the inventory item via `_no_food_or_drink: True` (no ability payload), aggregates in `_equipped_item_effects` (boolean OR into `no_food_or_drink`), and surfaces on `/sheet-json` as `derived.no_food_or_drink = {sources}`. Rowan Quickbow (Ranger) wears it as his 3rd attuned item and second ioun stone — the flag and the CHA bonus compose on one slug via distinct per-item riders.
+v2.230.0 — Ioun Stone of Sustenance (RAW DMG p.176, rare, attunement): the third non-ability Ioun variant on the shared `ioun-stone` slug and the first to surface a sustenance passive. The no-eat/no-drink flag rides the inventory item via `_no_food_or_drink: True` (no ability payload), aggregates in `_equipped_item_effects` (boolean OR into `no_food_or_drink`), and surfaces on `/sheet-json` as `derived.no_food_or_drink = {sources}`. Rowan Quickbow (Ranger) wears it as an attuned ioun stone; v2.247.0 detuned his Ioun Stone of Charisma to free a slot for the Boots of the Winterlands, so the coexistence test now proves the sustenance flag composes with the STR override from his still-attuned Gauntlets of Ogre Power — distinct per-item riders surfacing together in `derived`.
 
 | Test | What it asserts |
 |------|-----------------|
 | `test_sustenance_exposes_no_food_or_drink_on_sheet_json` | `GET /sheet-json` → `derived.no_food_or_drink` present with "Ioun Stone of Sustenance" in `sources`. |
-| `test_sustenance_coexists_with_charisma_ioun` | Both of Rowan's ioun stones compose: `derived.no_food_or_drink` set AND `derived.effective_abilities.CHA` = `{base 8, effective 10}` (the second stone's `_ability_bonus`). |
+| `test_sustenance_coexists_with_gauntlets_str` | Rowan's distinct riders compose: `derived.no_food_or_drink` set AND `derived.effective_abilities.STR.effective` = 19 (the Gauntlets of Ogre Power `ability_set`). |
 | `test_sustenance_unequip_drops_flag` | PATCH the Sustenance stone to `equipped: False` → `derived.no_food_or_drink` absent; restores the original inventory on teardown. |
 
 ### `test_item_ioun_stone_reserve.py`
