@@ -2180,6 +2180,17 @@ def _druid_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
              "_slug": "gloves-of-swimming-and-climbing",
              "desc": "Uncommon wondrous item, attunement. While wearing these gloves, climbing and swimming don't cost you extra movement, and you gain a +5 bonus to Strength (Athletics) checks made to climb or swim. RAW DMG p.171. Surfaces as the derived climb_swim_ease flag."},
+            # v2.268.0 — charged-items Phase 2: Staff of Swarming Insects
+            # (RAW DMG p.202, rare, attunement). 10 charges; the marquee
+            # action expends 5 to cast Insect Plague (4d10 piercing, CON
+            # save at her spell save DC, 20-ft-radius sphere). Thematic on
+            # Mira — Insect Plague is on the Druid list. Seed-load bypasses
+            # the RAW 3-item cap (enforced at /attune runtime only).
+            # Paired with the staff-of-swarming-insects resource row below.
+            {"name": "Staff of Swarming Insects", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "staff-of-swarming-insects", "weight_lb": 4,
+             "desc": "Rare staff, attunement. 10 charges. Cast Insect Plague (5 charges → 4d10 piercing, CON save, 20-ft-radius sphere) or Giant Insect (4 charges) using your spell save DC. Regains 1d6+4 charges at dawn (long rest). RAW DMG p.202."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).
@@ -2196,6 +2207,21 @@ def _druid_sheet(name: str) -> dict:
                 "class_slug": "druid",
                 "subclass_slug": "moon",
                 "desc": "Transform into a beast you've seen. Circle of the Moon: bonus-action shift, CR cap 1 at Lv 2 (scales with druid level). Two uses per short rest.",
+                "manual": False,
+            },
+            # v2.268.0 — charged-items Phase 2: Staff of Swarming Insects
+            # charge counter. 10 starting charges, regains 1d6+4 at dawn
+            # (long rest) via the Phase 4b dice-expression recharge path.
+            # The marquee Insect Plague action spends 5 from this resource.
+            # Paired with the Staff of Swarming Insects entry in Mira's
+            # inventory above.
+            {
+                "key": "staff-of-swarming-insects",
+                "name": "Staff of Swarming Insects",
+                "current": 10, "max": 10, "reset": "long",
+                "charge_recovery": "1d6+4",
+                "source": "item-staff-of-swarming-insects",
+                "desc": "10 charges. Cast Insect Plague (5 charges → 4d10 piercing, CON save) or Giant Insect (4). Regains 1d6+4 charges on long rest.",
                 "manual": False,
             },
         ],

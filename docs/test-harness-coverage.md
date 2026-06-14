@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2760 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.267.0, 2026-06-14).
+**Total tests:** 2763 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.268.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3027,6 +3027,15 @@ v2.267.0 charged-items Phase 2 — Staff of Frost (RAW DMG p.202, very rare, att
 | `test_staff_of_frost_cone_of_cold_2_targets` | Cast Cone of Cold at 2 targets with no `charges` param → 200 with `save_dc: 14` (Thalindra's spell save DC via the `"spell"` sentinel), `save_ability: "CON"`, `dice: "8d8"`, `charges_spent: 5` (defaults to min), `resource.current: 5` (10→5), both ids resolved. |
 | `test_staff_of_frost_under_min_returns_400` | POST with `charges: 1` (Cone of Cold is min=max=5) → 400 out-of-range. |
 | `test_staff_of_frost_empty_returns_409` | Drain the staff to 4 charges (below the 5-charge Cone of Cold cost) via `/sheet-fields`, then cast → 409 with `error: "insufficient_charges"` + `current: 4`. Teardown restores the snapshot. |
+
+### `test_use_item_action_staff_of_swarming_insects.py`
+v2.268.0 charged-items Phase 2 — Staff of Swarming Insects (RAW DMG p.202, rare, attunement). A second multi-action staff routed through the generalized save-for-half AoE-damage handler. v1 ships the marquee Insect Plague action (4d10 piercing, CON save, fixed 5-charge spend); the `"spell"` save-DC sentinel resolves the DC from the wielder's sheet. Mira Greenleaf (Wood Elf Druid Lv 5, WIS 17, prof +3 → spell save DC 14) carries an equipped+attuned Staff of Swarming Insects + a `staff-of-swarming-insects` resource row (10/10). The fixture force-reseeds the charges to 10 and snapshots for teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_swarming_insects_insect_plague_2_targets` | Cast Insect Plague at 2 targets with no `charges` param → 200 with `save_dc: 14` (Mira's spell save DC via the `"spell"` sentinel), `save_ability: "CON"`, `dice: "4d10"`, `charges_spent: 5` (defaults to min), `resource.current: 5` (10→5), both ids resolved. |
+| `test_swarming_insects_under_min_returns_400` | POST with `charges: 1` (Insect Plague is min=max=5) → 400 out-of-range. |
+| `test_swarming_insects_empty_returns_409` | Drain the staff to 4 charges (below the 5-charge Insect Plague cost) via `/sheet-fields`, then cast → 409 with `error: "insufficient_charges"` + `current: 4`. Teardown restores the snapshot. |
 
 ### `test_arrow_of_slaying.py`
 v2.159.1 magic-items-automation Phase 8a — Arrow of Slaying (Giants) (RAW DMG p.151). First ammunition-shape catalog row, extending the v2.158.102 `on_hit_save` substrate with a new `effect: "damage"` variant for save-for-half damage. Rowan Quickbow's Longbow (Arrow of Slaying — Giants) attack at attack_index 2 fires the rider via `_slug` match. New Hill Giant token template (`sheet.type="giant"`) gives the helper-resolution path a real RAW target.

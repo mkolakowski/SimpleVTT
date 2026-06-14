@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phases 3–4 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phases 3–4 unstarted.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -82,8 +82,12 @@ distinct action_keys + per-action charge costs.
   (4) / Wall of Ice (4) + the cold resistance are GM-narrated.
 - **Staff of Thunder and Lightning** (DMG p.202) — 5 charges; per-property
   actions (lightning, thunder, etc.).
-- **Staff of Swarming Insects** (DMG p.202) — 10 charges; giant insect (4),
-  insect plague (5).
+- **Staff of Swarming Insects** (DMG p.202, rare, attunement) — ✅ **shipped
+  v2.268.0**. 10 charges (regains 1d6+4 at dawn). v1 ships the marquee Insect
+  Plague action (5 charges → 4d10 piercing, CON save, 20-ft-radius sphere)
+  through the generalized save-for-half AoE-damage handler; `min == max == 5`,
+  `save_dc: "spell"`. Seeded on Mira Greenleaf (Druid). Giant Insect (4, the
+  summon) is GM-narrated.
 - **Staff of Power** (DMG p.202, very rare, attunement) — the big one: +2
   weapon/AC/save passive (shape #4 below) **plus** a multi-action spell list
   (cone of cold, fireball, globe of invulnerability, hold monster, levitate,

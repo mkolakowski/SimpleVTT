@@ -7273,6 +7273,21 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           title: 'Staff of Frost — Cone of Cold, 60-ft cone, CON save (your spell save DC, half on pass). Spends 5 charges.',
                           length_ft: 60,
                           apex_half_angle_deg: 26.57},  // RAW PHB p.204
+        // v2.268.0 — charged-items Phase 2: Staff of Swarming Insects
+        // (RAW DMG p.202). Marquee Insect Plague action reuses the
+        // necklace's `aoe-sphere` flow (center picker → /battle/sphere-
+        // targets → AoE confirm modal → POST). RAW Insect Plague is a
+        // fixed 5-charge spend (no upcast), so there's no charge_picker —
+        // the server defaults the spend to the action's min_charges (5).
+        // DC is the wielder's spell save DC. Giant Insect is GM-narrated.
+        'staff-of-swarming-insects': {kind: 'aoe-sphere',
+                          action_key: 'cast-insect-plague',
+                          label: '🦗 Cast Insect Plague',
+                          title: 'Staff of Swarming Insects — Insect Plague, 20-ft-radius sphere, CON save (your spell save DC, half on pass). Spends 5 charges.',
+                          radius_ft: 20,
+                          max_range_ft: 300,
+                          save_dc: 15,
+                          submit_label: '🦗 Swarm'},
         // v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear
         // (RAW DMG p.213). 30-ft cone, DC 15 WIS save or Frightened
         // for 1 minute. Flow: pick a target to define the cone

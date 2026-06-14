@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.268.0] - 2026-06-14 — "The Stinging Swarm"
+
+**Schema version:** 69
+
+**Commit summary:** Staff of Swarming Insects — a second charged-items Phase 2 (multi-action staff) drop-in: a `staff-of-swarming-insects` entry in `_MAGIC_ITEM_ACTIONS` whose marquee Insect Plague action casts through the existing `/use_item_action` + generalized `_use_item_action_necklace_of_fireballs` save-for-half AoE-damage handler, seeded on Mira Greenleaf (Druid) with a 10-charge resource row, plus harness tests and a sheet-UI sphere picker.
+
+**Description:** **Staff of Swarming Insects** (RAW DMG p.202, rare, **attunement required**): "you can use an action to expend 1 or more of its charges to cast one of the following spells from it, using your spell save DC: giant insect (4 charges) or insect plague (5 charges)." The second item shipped against the charged-items Phase 2 backlog, the same near-zero-risk content drop-in shape as the Staff of Fire (v2.210.0) / Staff of Frost (v2.267.0) — a catalog row + a dispatch-tuple membership + a sheet-UI mapping, no engine change. v1 ships the marquee **Insect Plague** action (4d10 piercing, CON save) through the generalized save-for-half AoE-damage handler: the `save_dc` "spell" sentinel resolves the DC from the wielder's sheet (Mira's spell save DC = 14), and the dice / damage type / charge cost / feature label come from the catalog `action_def`. RAW Insect Plague is a fixed 5-charge spend (no upcast), so `min_charges == max_charges == 5` and the UI sends no charge picker. Insect Plague is a 20-ft-radius sphere, so the sheet reuses the `aoe-sphere` geometry picker (the same flow as the Staff of Fire's Fireball) routed to the damage handler via the `staff-of-swarming-insects` slug. Seeded on Mira Greenleaf (Wood Elf Druid Lv 5) — Insect Plague is on the Druid list; seed-load bypasses the RAW 3-item cap (enforced at `/attune` runtime only). The 10-charge resource row recharges 1d6+4 at dawn (long rest). Giant Insect (the summon) is GM-narrated. MINOR — additive content + tests, no schema change.
+
+### Added
+- `staff-of-swarming-insects` entry in `_MAGIC_ITEM_ACTIONS` (marquee `cast-insect-plague` action: `save_dc: spell`, `save_ability: CON`, `dice: 4d10`, `damage_type: piercing`, `save_for_half: True`, `min`/`max` 5) + `staff-of-swarming-insects` added to the `_use_item_action_necklace_of_fireballs` dispatch tuple.
+- Sheet UI: `staff-of-swarming-insects` `ITEM_ACTION_SLUGS` mapping (`aoe-sphere` geometry picker, 20-ft radius) rendering a `🦗 Cast Insect Plague` button.
+- Demo seed: Mira Greenleaf gains an equipped + attuned Staff of Swarming Insects plus its 10-charge `staff-of-swarming-insects` resource row (1d6+4 recharge on long rest).
+- `tests/harness/test_use_item_action_staff_of_swarming_insects.py` (3 tests): Insect Plague at 2 targets (no charges param) defaults to the 5-charge spend, DC 14 CON, 4d10 piercing, resource 10 → 5, both ids resolved; a 1-charge request is rejected 400 (RAW fixed 5-charge spend); a drained staff (below 5) returns 409 `insufficient_charges`. Resources restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 2 status — Staff of Swarming Insects marked ✅ shipped (v2.268.0).
+- `docs/test-harness-coverage.md`: harness total 2760 → 2763 (+3 staff-of-swarming-insects); added the `test_use_item_action_staff_of_swarming_insects.py` section.
+
 ## [2.267.0] - 2026-06-14 — "The Killing Frost"
 
 **Schema version:** 69

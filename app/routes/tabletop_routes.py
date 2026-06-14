@@ -33178,6 +33178,33 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.268.0 — charged-items Phase 2: Staff of Swarming Insects (RAW
+    # DMG p.202, rare, attunement): 10 charges (regains 1d6+4 at dawn).
+    # Casts giant insect (4 charges) or insect plague (5 charges) "using
+    # your spell save DC". v1 ships the marquee Insect Plague action
+    # through the generalized save-for-half AoE-damage handler (same path
+    # as the Staff of Fire/Frost): 4d10 piercing, CON save, 20-ft-radius
+    # sphere, the DC resolved from the wielder's sheet via the "spell"
+    # sentinel. RAW Insect Plague is a fixed 5-charge spend (no upcast),
+    # so min=max=5 and the UI sends no charge picker. Giant Insect (the
+    # summon) is GM-narrated.
+    "staff-of-swarming-insects": {
+        "requires_attunement": True,
+        "resource_key": "staff-of-swarming-insects",
+        "actions": {
+            "cast-insect-plague": {
+                "name": "Cast Insect Plague (Staff)",
+                "feature_name": "🦗 Staff of Swarming Insects",
+                "save_dc": "spell",
+                "save_ability": "CON",
+                "dice": "4d10",
+                "damage_type": "piercing",
+                "save_for_half": True,
+                "min_charges": 5,
+                "max_charges": 5,
+            },
+        },
+    },
     # v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear (RAW
     # DMG p.213). 7 charges (regains 1d6+1 at dawn), spend 1 to cast
     # Fear-Cone: each creature in a 30-ft cone makes a DC 15 WIS save
@@ -81844,7 +81871,8 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug in ("necklace-of-fireballs", "staff-of-fire", "staff-of-frost"):
+    if slug in ("necklace-of-fireballs", "staff-of-fire", "staff-of-frost",
+                "staff-of-swarming-insects"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_necklace_of_fireballs(
             db, campaign_id, char, item, sheet, catalog,
