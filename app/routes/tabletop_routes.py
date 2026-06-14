@@ -32958,6 +32958,22 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
         "max_charges": 1,
         "base_slot_level": 2,
     },
+    # v2.264.0 — charged-items Phase 1: Wand of Polymorph (RAW DMG
+    # p.212, rare, attunement). 7 charges; expend exactly 1 to cast
+    # Polymorph (save DC 15) — RAW gives no upcast, so min == max == 1
+    # (base slot 4, the spell's own level). Same single-charge drop-in
+    # as Wand of Web. Regains 1d6+1 at dawn (long rest). See
+    # docs/plans/charged-items.md Phase 1.
+    "wand-of-polymorph": {
+        "key": "cast-polymorph",
+        "name": "Cast Polymorph (Wand)",
+        "resource_key": "wand-of-polymorph",
+        "spell_slug": "polymorph",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 1,
+        "base_slot_level": 4,
+    },
     # v2.158.88 — Phase 4d: first multi-action item. Different shape
     # from the wands: 3 distinct action_keys on one item, each with
     # its own charge cost + spell. Uses the ``actions`` subkey to
@@ -81711,7 +81727,8 @@ async def use_item_action(
             class_slug, inventory, inv_idx,
         )
     if slug in ("wand-of-magic-missiles", "wand-of-fireballs",
-                "wand-of-lightning-bolts", "wand-of-web"):
+                "wand-of-lightning-bolts", "wand-of-web",
+                "wand-of-polymorph"):
         return await _use_item_action_charge_wand(
             db, campaign_id, char, item, sheet, catalog, slug,
             body.get("charges"),

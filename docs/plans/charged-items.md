@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0). Phases 2–5 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0). Phases 2–5 unstarted.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -59,8 +59,10 @@ test each. No engine change.
 - **Wand of Binding** (DMG p.211, rare, attunement) — 7 charges; hold monster
   (5 charges) / hold person (1+). Could be shape #1 (hold-monster) or a
   multi-action staff if both spells are wanted. Start with hold person.
-- **Wand of Polymorph** (DMG p.212, very rare, attunement) — 7 charges, 1
-  charge casts Polymorph (DC 15).
+- **Wand of Polymorph** (DMG p.212, rare, attunement) — ✅ **shipped
+  v2.264.0**. 7 charges, 1 charge casts Polymorph (DC 15); RAW no upcast so
+  `min_charges == max_charges == 1`, `base_slot_level: 4`,
+  `charge_recovery: "1d6+1"`. Seeded on Zara Emberfire (Sorcerer).
 - **Wand of Enemy Detection / Wand of Secrets** — utility detection; ship as a
   self-targeted "reveal" chat card (no save). Lower priority (no combat math).
 

@@ -4092,6 +4092,18 @@ def _sorcerer_sheet(name: str) -> dict:
              "_slug": "belt-of-giant-strength", "_ability_set": {"STR": 23},
              "weight_lb": 0,
              "desc": "Very rare wondrous item, attunement. While worn, your Strength score becomes 23 (Stone/Frost giant) if it isn't already higher. RAW DMG p.155."},
+            # v2.264.0 — charged-items Phase 1: Wand of Polymorph (RAW
+            # DMG p.212, rare, attunement). 7 charges; expend 1 to cast
+            # Polymorph (save DC 15) — RAW no upcast, so the catalog
+            # fixes min == max == 1 at base slot 4 (the spell's own
+            # level). Polymorph is on the Sorcerer list, so Zara is a
+            # natural wielder. Her 4th attuned item (seed-load bypasses
+            # the RAW 3-item cap, enforced at /attune runtime only).
+            # Paired with the wand-of-polymorph resource row below.
+            {"name": "Wand of Polymorph", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-polymorph", "weight_lb": 1,
+             "desc": "Rare wand, attunement. 7 charges. Expend 1 charge to cast Polymorph (save DC 15) — transform a creature into a beast for the duration (WIS save negates on unwilling targets). Regains 1d6+1 charges at dawn (long rest). RAW DMG p.212."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer
@@ -4152,6 +4164,20 @@ def _sorcerer_sheet(name: str) -> dict:
                 "source": "magic item — Staff of Fire",
                 "class_slug": "item",
                 "desc": "10 charges; Fireball costs 3 (8d6 fire, 20-ft sphere, DEX save at your spell save DC). Regain 1d6+4 at dawn.",
+                "manual": False,
+            },
+            # v2.264.0 — charged-items Phase 1: Wand of Polymorph charge
+            # counter. Same 7-charge / 1d6+1 recharge shape as the Web
+            # wand; the spell + base slot live in the catalog (Polymorph
+            # + base 4, fixed single-charge spend). Paired with the Wand
+            # of Polymorph entry in Zara's inventory above.
+            {
+                "key": "wand-of-polymorph",
+                "name": "Wand of Polymorph",
+                "current": 7, "max": 7, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "item-wand-of-polymorph",
+                "desc": "7 charges. Spend 1 to cast Polymorph (DC 15) at slot level 4. Regains 1d6+1 charges on long rest.",
                 "manual": False,
             },
         ],
