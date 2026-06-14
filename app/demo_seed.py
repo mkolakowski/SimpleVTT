@@ -758,6 +758,24 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "staff-of-frost", "weight_lb": 4,
              "desc": "Very rare staff, attunement. 10 charges. Cast Cone of Cold (5 charges → 8d8 cold, CON save, 60-ft cone), Fog Cloud (1), Ice Storm (4), or Wall of Ice (4) using your spell save DC. Regains 1d6+4 charges at dawn (long rest). RAW DMG p.202."},
+            # v2.274.0 — charged-items Phase 2: Staff of Power (RAW DMG
+            # p.202, very rare, attunement) — the iconic archmage's staff.
+            # Two halves: (1) a PASSIVE +2 to AC / saving throws / spell
+            # attack rolls while held (rides _MAGIC_ITEM_PASSIVES) and (2)
+            # a 20-charge spell list. v1 ships the three save-for-half AoE
+            # spells — Fireball + Lightning Bolt (both at 5th level, 10d6)
+            # and Cone of Cold (8d8) — through the generalized handler at
+            # her spell save DC. Thalindra (Wizard) is the canonical
+            # wielder. Seed-load bypasses the RAW 3-item attunement cap
+            # (enforced at /attune runtime only). Paired with the
+            # staff-of-power resource row below. The +2 quarterstaff melee
+            # bonus, the non-damaging spells (Magic Missile / Hold Monster
+            # / Levitate / Globe of Invulnerability / Wall of Force / Ray
+            # of Enfeeblement), and Retributive Strike are GM-narrated.
+            {"name": "Staff of Power", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "staff-of-power", "weight_lb": 4,
+             "desc": "Very rare staff, attunement by a sorcerer/warlock/wizard. While held: +2 AC, +2 saving throws, +2 spell attack rolls (and a +2 magic quarterstaff). 20 charges (regain 2d8+4 at dawn). Cast Cone of Cold (5 → 8d8 cold, CON), Fireball / Lightning Bolt (5 each → 10d6, 5th-level, DEX), plus Globe of Invulnerability, Hold Monster, Levitate, Magic Missile, Ray of Enfeeblement, and Wall of Force using your spell save DC. RAW DMG p.202."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -862,6 +880,21 @@ def _wizard_sheet(name: str) -> dict:
                 "charge_recovery": "1d6+4",
                 "source": "item-staff-of-frost",
                 "desc": "10 charges. Cast Cone of Cold (5 charges → 8d8 cold, CON save), Fog Cloud (1), Ice Storm (4), or Wall of Ice (4). Regains 1d6+4 charges on long rest.",
+                "manual": False,
+            },
+            # v2.274.0 — charged-items Phase 2: Staff of Power charge
+            # counter. 20 starting charges, regains 2d8+4 at dawn (long
+            # rest) via the Phase 4b dice-expression recharge path. Each
+            # of the three marquee spells (Fireball / Lightning Bolt /
+            # Cone of Cold) spends 5 from this resource. Paired with the
+            # Staff of Power entry in Thalindra's inventory above.
+            {
+                "key": "staff-of-power",
+                "name": "Staff of Power",
+                "current": 20, "max": 20, "reset": "long",
+                "charge_recovery": "2d8+4",
+                "source": "item-staff-of-power",
+                "desc": "20 charges. Cast Fireball / Lightning Bolt (5 each → 10d6, 5th-level, DEX save) or Cone of Cold (5 → 8d8 cold, CON save) at your spell save DC; plus Globe / Hold Monster / Levitate / Magic Missile / Ray of Enfeeblement / Wall of Force. Regains 2d8+4 charges on long rest.",
                 "manual": False,
             },
         ],

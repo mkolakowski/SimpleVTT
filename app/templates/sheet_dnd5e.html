@@ -7404,6 +7404,23 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           action_key: 'wonder',
                           label: '🎲 Unleash Wonder',
                           title: 'Wand of Wonder — spend 1 charge to roll d100 on the chaos table; the result is a random wild-magic effect the GM narrates/resolves.'},
+        // v2.274.0 — charged-items Phase 2: Staff of Power (RAW DMG p.202,
+        // attunement). The first multi-action catalog entry — the server
+        // supports Fireball / Lightning Bolt / Cone of Cold (all
+        // save-for-half AoE at your spell save DC, 5 charges each). The
+        // sheet surfaces Fireball as the marquee `aoe-sphere` button (the
+        // same flow as the Staff of Fire); Lightning Bolt + Cone of Cold
+        // are API-reachable now, dedicated buttons in a follow-up. The +2
+        // AC/saves/spell-attack passive renders automatically via the
+        // passive substrate.
+        'staff-of-power': {kind: 'aoe-sphere',
+                          action_key: 'cast-fireball',
+                          label: '🔱 Fireball',
+                          title: 'Staff of Power — Fireball (5th level), 20-ft-radius sphere within 150 ft, DEX save at your spell save DC: 10d6 fire (half on a pass). Spends 5 charges.',
+                          radius_ft: 20,
+                          max_range_ft: 150,
+                          save_dc: 15,
+                          submit_label: '🔱 Fireball'},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder

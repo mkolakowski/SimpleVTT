@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.274.0] - 2026-06-14 — "The Archmage's Cudgel"
+
+**Schema version:** 69
+
+**Commit summary:** Staff of Power — the marquee charged-items Phase 2 multi-action staff: a `staff-of-power` entry in `_MAGIC_ITEM_ACTIONS` with three damaging spell actions (Fireball / Lightning Bolt 10d6 5th-level DEX, Cone of Cold 8d8 CON) routed through the generalized save-for-half AoE-damage handler at the wielder's spell save DC, a `_MAGIC_ITEM_PASSIVES` `staff-of-power` row granting +2 AC / saving throws / spell attack rolls while held, seeded on Thalindra Moonwhisper (Wizard) with a 20-charge resource row (regain 2d8+4 at dawn), plus a marquee `aoe-sphere` Fireball sheet button and harness tests.
+
+**Description:** **Staff of Power** (RAW DMG p.202, very rare, **attunement by a sorcerer/warlock/wizard**): the canonical archmage's staff — a +2 magic quarterstaff that, while held, grants **+2 to AC, saving throws, and spell attack rolls**, carries **20 charges** (regains 2d8+4 at dawn), and casts a deep spell list (cone of cold, fireball, globe of invulnerability, hold monster, levitate, lightning bolt, magic missile, ray of enfeeblement, wall of force) plus the destructive **retributive strike** break action. This is the biggest remaining charged-items **Phase 2** item, and it lands on two established substrates with **zero new engine code**. The passive bonuses fold into `_MAGIC_ITEM_PASSIVES` — the existing `ac_bonus` / `save_bonus` / `spell_attack_bonus` keys all aggregate through `_equipped_item_effects`, so the +2 reaches `_read_target_ac`, the `/roll` save path, and the `/sheet-json` derived spell-attack surface automatically. The three damaging spells route through the generalized save-for-half AoE-damage handler (the same `_use_item_action_necklace_of_fireballs` path as the Staff of Fire / Frost / Thunder and Lightning): the dice / damage type / save ability / charge cost / feature label all come from the catalog `action_def`, and the DC resolves to the wielder's spell save DC via the `save_dc: "spell"` sentinel. Each is a fixed 5-charge spend. This is the first catalog entry with **three** AoE actions — all are API-reachable now; the sheet surfaces **Fireball** as the marquee `aoe-sphere` button (inventory renders one button per item), with Lightning Bolt + Cone of Cold dedicated buttons deferred to a follow-up. Seeded on Thalindra Moonwhisper (High Elf Wizard — the canonical wielder); seed-load bypasses the RAW 3-item attunement cap (enforced at `/attune` runtime only). The non-damaging spells (Globe of Invulnerability, Hold Monster, Levitate, Magic Missile, Ray of Enfeeblement, Wall of Force) and the retributive-strike break action are GM-narrated in v1 — consistent with the rest of the staves. MINOR — additive content (passive row + catalog entry + dispatch membership) + tests, no schema change.
+
+### Added
+- `staff-of-power` entry in `_MAGIC_ITEM_ACTIONS` (`app/routes/tabletop_routes.py`) with three save-for-half AoE actions — `cast-fireball` (10d6 fire, DEX, 5 charges), `cast-lightning-bolt` (10d6 lightning, DEX, 5 charges), `cast-cone-of-cold` (8d8 cold, CON, 5 charges) — each at the wielder's spell save DC via the `save_dc: "spell"` sentinel; `requires_attunement: True`, `resource_key: staff-of-power`. Added `staff-of-power` to the necklace/staff dispatch tuple routing to the shared AoE-damage handler.
+- `staff-of-power` row in `_MAGIC_ITEM_PASSIVES` granting `ac_bonus: 2` + `save_bonus: 2` + `spell_attack_bonus: 2` while held (`requires_attunement: True`).
+- Sheet UI: `staff-of-power` `ITEM_ACTION_SLUGS` mapping (`aoe-sphere` kind) rendering a `🔱 Fireball` marquee button (20-ft radius, 150-ft range).
+- Demo seed: Thalindra Moonwhisper gains an equipped + attuned Staff of Power plus its 20-charge `staff-of-power` resource row (2d8+4 recharge on long rest).
+- `tests/harness/test_use_item_action_staff_of_power.py` (5 tests): Fireball at 2 targets → DEX / 10d6 / charges 20→15, both ids resolved; Lightning Bolt → DEX / 10d6 / 20→15; Cone of Cold → CON / 8d8 / 20→15; a drained staff (4 charges) → 409 `insufficient_charges` with `current: 4`; and a `/sheet-json` `derived.spell_attack_bonus >= 2` passive assertion. Resources restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 2 status — Staff of Power marked ✅ shipped (v2.274.0) in the header status line and the Phase 2 item list.
+- `docs/test-harness-coverage.md`: harness total 2776 → 2781 (+5 staff-of-power); added the `test_use_item_action_staff_of_power.py` section.
+
 ## [2.273.0] - 2026-06-14 — "The Wild Surge"
 
 **Schema version:** 69

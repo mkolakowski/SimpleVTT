@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2776 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.273.0, 2026-06-14).
+**Total tests:** 2781 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.274.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3079,6 +3079,17 @@ v2.273.0 charged-items Phase 4 — Wand of Wonder (RAW DMG p.213, rare, attuneme
 | `test_wand_of_wonder_roll_happy_path` | Roll with no params → 200 with `action_kind: "random_table"`, `roll` in 1..100, `charges_spent: 1`, `resource.current: 6` (7→6), non-empty `effect` + `row_key`. |
 | `test_wand_of_wonder_force_roll_fireball` | POST with `force_roll: 72` (the 70-79 band) → `roll: 72`, `row_key: "fireball"`, `"Fireball"` in `effect`, `resource.current: 6`. |
 | `test_wand_of_wonder_empty_returns_409` | Drain the wand to 0 charges via `/sheet-fields`, then roll → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
+
+### `test_use_item_action_staff_of_power.py`
+v2.274.0 charged-items Phase 2 — Staff of Power (RAW DMG p.202, very rare, attunement by a spellcaster). The marquee multi-action staff: a +2 passive to AC / saving throws / spell attack rolls (via `_MAGIC_ITEM_PASSIVES`), a 20-charge pool (regain 2d8+4 at dawn), and three damaging spell actions routed through the generalized save-for-half AoE-damage handler (`cast-fireball` 10d6 fire / DEX, `cast-lightning-bolt` 10d6 lightning / DEX, `cast-cone-of-cold` 8d8 cold / CON), each a fixed 5-charge spend at the wielder's spell save DC (the `"spell"` sentinel). Thalindra Moonwhisper (High Elf Wizard) carries an equipped+attuned Staff of Power + a `staff-of-power` resource row (20/20). The fixture force-reseeds the charges to 20 and snapshots for teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_staff_of_power_fireball_2_targets` | Cast Fireball at 2 targets with no `charges` param → 200 with `save_ability: "DEX"`, `dice: "10d6"`, `charges_spent: 5`, `resource.current: 15` (20→15), both ids resolved. |
+| `test_staff_of_power_lightning_bolt` | Cast Lightning Bolt at 1 target → `save_ability: "DEX"`, `dice: "10d6"`, `charges_spent: 5`, `resource.current: 15`. |
+| `test_staff_of_power_cone_of_cold` | Cast Cone of Cold at 1 target → `save_ability: "CON"`, `dice: "8d8"`, `charges_spent: 5`, `resource.current: 15`. |
+| `test_staff_of_power_empty_returns_409` | Drain the staff to 4 charges (below the 5-charge cost) via `/sheet-fields`, then cast → 409 with `error: "insufficient_charges"` + `current: 4`. Teardown restores the snapshot. |
+| `test_staff_of_power_passive_spell_attack_bonus` | `/sheet-json` `derived.spell_attack_bonus` includes the held staff's +2 (`>= 2`). |
 
 ### `test_arrow_of_slaying.py`
 v2.159.1 magic-items-automation Phase 8a — Arrow of Slaying (Giants) (RAW DMG p.151). First ammunition-shape catalog row, extending the v2.158.102 `on_hit_save` substrate with a new `effect: "damage"` variant for save-for-half damage. Rowan Quickbow's Longbow (Arrow of Slaying — Giants) attack at attack_index 2 fires the rider via `_slug` match. New Hill Giant token template (`sheet.type="giant"`) gives the helper-resolution path a real RAW target.

@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0, Staff of Thunder and Lightning ✅ v2.272.0); Phase 3 ✅ complete (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live; Gem of Seeing ✅ v2.270.0 — the `action_kind: "buff"` shape is now live; Horn of Blasting ✅ v2.271.0 — the first charge-less `attack_aoe` item); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0); Phase 4 ✅ (Wand of Wonder ✅ v2.273.0 — the `action_kind: "random_table"` d100-table shape is now live).
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0, Staff of Thunder and Lightning ✅ v2.272.0, Staff of Power ✅ v2.274.0); Phase 3 ✅ complete (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live; Gem of Seeing ✅ v2.270.0 — the `action_kind: "buff"` shape is now live; Horn of Blasting ✅ v2.271.0 — the first charge-less `attack_aoe` item); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0); Phase 4 ✅ (Wand of Wonder ✅ v2.273.0 — the `action_kind: "random_table"` d100-table shape is now live).
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -94,12 +94,18 @@ distinct action_keys + per-action charge costs.
   through the generalized save-for-half AoE-damage handler; `min == max == 5`,
   `save_dc: "spell"`. Seeded on Mira Greenleaf (Druid). Giant Insect (4, the
   summon) is GM-narrated.
-- **Staff of Power** (DMG p.202, very rare, attunement) — the big one: +2
-  weapon/AC/save passive (shape #4 below) **plus** a multi-action spell list
-  (cone of cold, fireball, globe of invulnerability, hold monster, levitate,
-  lightning bolt, magic missile, ray of enfeeblement, wall of force). The
-  passive bonuses fold into `_MAGIC_ITEM_PASSIVES`; the spells into shape #2.
-  Defer the "retributive strike" break action to a follow-up.
+- **Staff of Power** ✅ v2.274.0 (DMG p.202, very rare, attunement) — the big
+  one: +2 weapon/AC/save passive (shape #4 below) **plus** a multi-action spell
+  list (cone of cold, fireball, globe of invulnerability, hold monster,
+  levitate, lightning bolt, magic missile, ray of enfeeblement, wall of force).
+  The +2 AC / save / spell-attack passive bonuses fold into
+  `_MAGIC_ITEM_PASSIVES`; the three damaging spells (Fireball / Lightning Bolt
+  10d6 5th-level DEX, Cone of Cold 8d8 CON) route through shape #2's
+  save-for-half AoE handler at the wielder's spell save DC. Seeded on Thalindra
+  Moonwhisper (Wizard) with a 20-charge / 2d8+4 resource row. The marquee sheet
+  button surfaces Fireball; Lightning Bolt + Cone of Cold are API-reachable.
+  The non-damaging spells and the "retributive strike" break action are
+  GM-narrated (deferred to a follow-up).
 
 ### Phase 3 — Non-spell charge actions (NEW shape #5)
 

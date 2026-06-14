@@ -32770,6 +32770,23 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "wand-of-the-war-mage": [
         {"spell_attack_bonus": 1, "requires_attunement": True},
     ],
+    # v2.274.0 — charged-items Phase 2: Staff of Power (RAW DMG p.202, very
+    # rare, attunement). The passive half of the staff: "while holding this
+    # staff, you gain a +2 bonus to Armor Class, saving throws, and spell
+    # attack rolls" (the +2-to-attack/damage-with-the-staff melee bonus is
+    # GM-narrated in v1). All three bonuses ride existing passive-substrate
+    # keys — ac_bonus (read at _read_target_ac), save_bonus (read in /roll),
+    # and spell_attack_bonus (the v2.265.0 Wand of the War Mage key, folded
+    # in at cast resolution). "Holding" maps to equipped+attuned. The
+    # charged spell list lives in _MAGIC_ITEM_ACTIONS["staff-of-power"].
+    "staff-of-power": [
+        {
+            "ac_bonus": 2,
+            "save_bonus": 2,
+            "spell_attack_bonus": 2,
+            "requires_attunement": True,
+        },
+    ],
     # v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement).
     # RAW: "you have a swimming speed of 40 feet while wearing this ring."
     # The numeric swim speed is GM-narrated in v1; the boolean flag surfaces
@@ -33223,6 +33240,66 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                 "save_ability": "CON",
                 "dice": "4d10",
                 "damage_type": "piercing",
+                "save_for_half": True,
+                "min_charges": 5,
+                "max_charges": 5,
+            },
+        },
+    },
+    # v2.274.0 — charged-items Phase 2: Staff of Power (RAW DMG p.202,
+    # very rare, attunement by a sorcerer/warlock/wizard) — the big one.
+    # 20 charges (regains 2d8+4 at dawn). RAW it is a +2 quarterstaff that
+    # ALSO grants +2 AC / +2 saving throws / +2 spell attack rolls while
+    # held (the passive — see the _MAGIC_ITEM_PASSIVES["staff-of-power"]
+    # row), plus a spell list cast "using your spell save DC where
+    # applicable": cone of cold (5), fireball at 5th level (5), globe of
+    # invulnerability (6), hold monster (5), levitate (2), lightning bolt
+    # at 5th level (5), magic missile (1), ray of enfeeblement (1), and
+    # wall of force (5). v1 ships the THREE save-for-half AoE-damage spells
+    # — Fireball, Lightning Bolt, and Cone of Cold — through the
+    # generalized handler (same path as the Staff of Fire/Frost): the
+    # damaging spells are cast at 5th level (Fireball/Lightning Bolt =
+    # 10d6, Cone of Cold = 8d8 base), the DC resolved from the wielder's
+    # sheet via the "spell" sentinel, each a fixed 5-charge spend (no
+    # upcast). This is the first catalog entry carrying MULTIPLE actions;
+    # the sheet surfaces Fireball as the marquee button, the other two are
+    # API-reachable now (sheet buttons in a follow-up). The non-damaging
+    # spells (Magic Missile, Hold Monster, Levitate, Globe of
+    # Invulnerability, Wall of Force, Ray of Enfeeblement) and the
+    # Retributive Strike staff-break are GM-narrated in v1.
+    "staff-of-power": {
+        "requires_attunement": True,
+        "resource_key": "staff-of-power",
+        "actions": {
+            "cast-fireball": {
+                "name": "Cast Fireball (Staff of Power, 5th level)",
+                "feature_name": "🔱 Staff of Power",
+                "save_dc": "spell",
+                "save_ability": "DEX",
+                "dice": "10d6",
+                "damage_type": "fire",
+                "save_for_half": True,
+                "min_charges": 5,
+                "max_charges": 5,
+            },
+            "cast-lightning-bolt": {
+                "name": "Cast Lightning Bolt (Staff of Power, 5th level)",
+                "feature_name": "🔱 Staff of Power",
+                "save_dc": "spell",
+                "save_ability": "DEX",
+                "dice": "10d6",
+                "damage_type": "lightning",
+                "save_for_half": True,
+                "min_charges": 5,
+                "max_charges": 5,
+            },
+            "cast-cone-of-cold": {
+                "name": "Cast Cone of Cold (Staff of Power)",
+                "feature_name": "🔱 Staff of Power",
+                "save_dc": "spell",
+                "save_ability": "CON",
+                "dice": "8d8",
+                "damage_type": "cold",
                 "save_for_half": True,
                 "min_charges": 5,
                 "max_charges": 5,
@@ -82031,7 +82108,8 @@ async def use_item_action(
             prompt_user=user,
         )
     if slug in ("necklace-of-fireballs", "staff-of-fire", "staff-of-frost",
-                "staff-of-swarming-insects", "staff-of-thunder-and-lightning"):
+                "staff-of-swarming-insects", "staff-of-thunder-and-lightning",
+                "staff-of-power"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_necklace_of_fireballs(
             db, campaign_id, char, item, sheet, catalog,
