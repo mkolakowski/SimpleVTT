@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.256.0] - 2026-06-13 — "The Tideglass Cowl"
+
+**Schema version:** 69
+
+**Commit summary:** Cap of Water Breathing — a no-attunement passive that lets the wearer breathe underwater, riding a new `water_breath` boolean-OR flag in `_equipped_item_effects` surfaced on `/sheet-json derived` (the Ring of Water Walking pattern).
+
+**Description:** **Cap of Water Breathing** (RAW DMG p.157, uncommon, **no attunement**): "while wearing this cap, you can breathe normally underwater." A clean boolean-flag drop-in on the established passive substrate. The engine changes: (1) a new `water_breath` field (+ `water_breath_sources`) in `_equipped_item_effects`, boolean-OR'd across equipped items carrying the flag (via the `water_breath` payload or a per-item `_water_breath` rider); (2) a new `cap-of-water-breathing` entry in `_MAGIC_ITEM_PASSIVES` (`{"water_breath": True}` — no attunement gate); (3) `/sheet-json derived` surfaces `water_breath = {sources}` only when an equipped item sets the flag; (4) the demo seed gives Mira Greenleaf (Druid) the cap, pairing with her existing Ring of Swimming so she can both swim AND breathe underwater. MINOR — additive content + tests, no schema change.
+
+### Added
+- `water_breath` boolean-OR field (+ `water_breath_sources`) in `_equipped_item_effects`.
+- `cap-of-water-breathing` entry in `_MAGIC_ITEM_PASSIVES` (`water_breath: True`, no attunement gate).
+- `/sheet-json derived.water_breath = {sources}` display mirror.
+- `tests/harness/test_item_cap_of_water_breathing.py` (3 tests): `/sheet-json` exposes the flag naming the cap; the flag rides alongside the no-attunement Ring of Swimming (`swim_speed` still reports); unequipping the cap drops the flag (restores inventory on teardown).
+
+### Changed
+- Demo seed: Mira Greenleaf gains an equipped (no-attunement) Cap of Water Breathing alongside her Ring of Swimming.
+- `docs/test-harness-coverage.md`: harness total 2723 → 2726 (+3 cap-of-water-breathing); added the `test_item_cap_of_water_breathing.py` section.
+
 ## [2.255.0] - 2026-06-13 — "The Silent Tread"
 
 **Schema version:** 69

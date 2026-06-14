@@ -2079,6 +2079,16 @@ def _druid_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
              "_slug": "eyes-of-the-eagle",
              "desc": "Uncommon wondrous item, attunement. While wearing these crystal lenses, you have advantage on Wisdom (Perception) checks that rely on sight. RAW DMG p.166."},
+            # v2.256.0 — Cap of Water Breathing (RAW DMG p.157, uncommon, NO
+            # attunement). Rides the boolean-OR `water_breath` flag (the Ring
+            # of Water Walking pattern); surfaces on /sheet-json as
+            # derived.water_breath. Pairs with Mira's Ring of Swimming — she
+            # can both swim AND breathe underwater. No attunement, so it rides
+            # alongside her loadout freely.
+            {"name": "Cap of Water Breathing", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 0,
+             "_slug": "cap-of-water-breathing",
+             "desc": "Uncommon wondrous item, no attunement. While wearing this cap, you can breathe normally underwater. It has no effect on your ability to swim. RAW DMG p.157."},
         ],
         "feats": [],
         # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).
