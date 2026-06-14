@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.281.0] - 2026-06-14 — "The Borrowed Wings"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item movement backfill — **Wings of Flying** (RAW DMG p.214, rare, attunement) reuses the v2.238.0 Winged Boots flying-speed substrate with zero new engine code. One attunement-gated `flying_speed: True` payload surfaces on `/sheet-json` as `derived.flying_speed`; seeded as inert spare loot on Rowan Quickbow and exercised by three PATCH-in-test harness tests.
+
+**Description:** Another SRD movement item drops onto a shipped derived-flag substrate, no engine changes. **Wings of Flying** (RAW DMG p.214, rare, attunement): "the wings give you a flying speed of 60 feet ... when they disappear, you can't use them again for 1d12 hours." The `flying_speed` boolean flag rides the `wings-of-flying` catalog payload, aggregates in `_equipped_item_effects` (boolean OR), and surfaces on `/sheet-json` as `derived.flying_speed = {sources}` — the exact substrate Winged Boots landed in v2.238.0, so there is **no new engine code**. The command-word activation, 1-hour duration, and 1d12-hour cooldown are GM-narrated in v1. The cloak is seeded **unequipped / unattuned** as spare loot on Rowan Quickbow (the demo's scout-ranger, no flying baseline) so it adds zero flying speed to any PC's baseline and disturbs no existing test. Three harness tests PATCH the cloak equipped+attuned at runtime to verify the derived read (and that the attunement gate holds equipped-but-unattuned), then restore the seed inventory on teardown. MINOR — additive demo content + tests, no schema change.
+
+### Added
+- `wings-of-flying` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one attunement-gated payload carrying `flying_speed: True`, reusing the Winged Boots substrate.
+- Demo seed: Rowan Quickbow gains a spare (unequipped/unattuned) **Wings of Flying**.
+- `tests/harness/test_item_wings_of_flying.py` (3 tests): flying speed surfaces on equip with the cloak named in sources; inert baseline has none; equipped-but-unattuned yields no flag (attunement gate). Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2797 → 2800 (+3 backfill tests); added the `test_item_wings_of_flying.py` section.
+
 ## [2.280.0] - 2026-06-14 — "The Jeweled Crown"
 
 **Schema version:** 69

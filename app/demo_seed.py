@@ -3233,6 +3233,21 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
              "_slug": "gem-of-seeing",
              "desc": "Rare wondrous item, attunement. The gem has 3 charges. As an action, you can speak a command word and expend 1 charge — for the next 10 minutes you have truesight out to 60 feet when peering through the gem. The gem regains 1d3 expended charges daily at dawn. RAW DMG p.171."},
+            # v2.281.0 — Wings of Flying (RAW DMG p.214, rare, attunement).
+            # Reuses the v2.238.0 Winged Boots flying-speed substrate with
+            # zero new engine code: the `flying_speed` boolean flag rides the
+            # `wings-of-flying` catalog payload, aggregates in
+            # `_equipped_item_effects`, and surfaces on /sheet-json as
+            # `derived.flying_speed`. The command-word activation + 1-hour
+            # duration / 1d12-hour cooldown are GM-narrated in v1. Seeded as
+            # inert spare loot (unequipped/unattuned) so it adds no flying
+            # speed to Rowan's baseline and disturbs no existing test — the
+            # harness PATCHes it equipped+attuned, reads the derived flag,
+            # then restores. A flying cloak is on-theme for the demo's scout.
+            {"name": "Wings of Flying", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "wings-of-flying", "weight_lb": 0,
+             "desc": "Rare wondrous item (cloak), attunement. While wearing this cloak, you can use an action to speak its command word, turning it into bat or bird wings that give you a flying speed of 60 feet for 1 hour (or until you repeat the command word). When the wings disappear, you can't use them again for 1d12 hours. RAW DMG p.214."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,

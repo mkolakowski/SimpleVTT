@@ -32741,6 +32741,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "winged-boots": [
         {"flying_speed": True, "requires_attunement": True},
     ],
+    # v2.281.0 — Wings of Flying (RAW DMG p.214, rare, attunement). RAW:
+    # "this turns the cloak into a pair of bat wings or bird wings ... the
+    # wings give you a flying speed of 60 feet ... when they disappear, you
+    # can't use them again for 1d12 hours." Reuses the v2.238.0 Winged Boots
+    # flying-speed substrate with zero new engine code — the command-word
+    # activation + 1-hour duration / 1d12-hour cooldown are GM-narrated in v1;
+    # the boolean flag surfaces the flying-speed ability as a derived read.
+    "wings-of-flying": [
+        {"flying_speed": True, "requires_attunement": True},
+    ],
     # v2.239.0 — Boots of Speed (RAW DMG p.155, rare, attunement). RAW:
     # "while you wear these boots, you can use a bonus action and click the
     # boots' heels together. If you do, the boots double your walking speed,
