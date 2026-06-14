@@ -837,6 +837,19 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "helm-of-brilliance", "weight_lb": 3,
              "desc": "Very rare wondrous item, attunement. Set with diamonds, rubies, fire opals, and opals. While it has a ruby, you have resistance to fire damage. Gem-fueled spells (daylight, fireball, prismatic spray, wall of fire), an undead-searing aura, and a flaming-weapon rider are GM-narrated. RAW DMG p.173."},
+            # v2.287.0 — Robe of Stars (RAW DMG p.193, very rare, attunement).
+            # The clean passive — "+1 bonus to saving throws while you wear it"
+            # — rides the `save_bonus` substrate (the Cloak of Protection
+            # path). The six magic-missile stars and the Astral-Plane travel
+            # clause are GM-narrated. Spare loot (equipped=False / attuned=
+            # False): Thalindra is already past the attunement cap, so the
+            # harness test PATCHes the robe equipped+attuned, rolls a save and
+            # asserts the +1 + source attribution, then restores. A starry
+            # archmage's robe is on-theme for an Evoker with a Staff of Power.
+            {"name": "Robe of Stars", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "robe-of-stars", "weight_lb": 0,
+             "desc": "Very rare wondrous item, attunement. +1 bonus to saving throws while worn. Six stars cast magic missile (5th-level) as an action, and you can step onto the Astral Plane — both GM-narrated. RAW DMG p.193."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per

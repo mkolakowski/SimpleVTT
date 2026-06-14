@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.287.0] - 2026-06-14 — "The Starlit Mantle"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Robe of Stars** (RAW DMG p.193, very rare, attunement) lands on the mature `save_bonus` substrate with zero new engine code. The clean RAW passive ("+1 bonus to saving throws while you wear it") rides the same path as Cloak of Protection / Stone of Good Luck; seeded as inert spare loot on Thalindra Moonwhisper and exercised by three harness tests.
+
+**Description:** Another pure data drop-in on a now-mature engine. The Robe of Stars' headline passive — a flat +1 to all saving throws while worn — is exactly the v2.158.74 `save_bonus` field, already read in `/roll` (with source attribution) and aggregated in `_equipped_item_effects`. So this commit is a single registry entry (`{"save_bonus": 1, "requires_attunement": True}`), a demo-seed item, and tests. The six magic-missile stars (a charged action) and the Astral-Plane travel clause are GM-narrated in v1. The robe is seeded **unequipped/unattuned** as spare loot on Thalindra Moonwhisper (the demo's archmage Wizard — a starry robe alongside her Staff of Power is on-theme; she's already past the RAW 3-item attunement cap), so it adds zero to any PC's baseline saves. The harness PATCHes the robe equipped+attuned, rolls a saving throw and asserts the +1 plus the "Robe of Stars" source attribution, then restores the seed inventory (the boots-of-levitation spare-loot pattern). MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `robe-of-stars` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one attunement-gated payload carrying `save_bonus: 1`, on the existing save substrate.
+- Demo seed: Thalindra Moonwhisper gains a spare (unequipped/unattuned) **Robe of Stars**.
+- `tests/harness/test_item_robe_of_stars.py` (3 tests): save +1 surfaces with the robe named in the breakdown on equip; inert baseline has none; equipped-but-unattuned yields no bonus (attunement gate). Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2809 → 2812 (+3 drop-in tests); added the `test_item_robe_of_stars.py` section.
+
 ## [2.286.0] - 2026-06-14 — "The Drifting Set"
 
 **Schema version:** 69

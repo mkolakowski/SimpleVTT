@@ -32555,6 +32555,15 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "stone-of-good-luck-luckstone": [
         {"check_bonus": 1, "save_bonus": 1, "requires_attunement": True},
     ],
+    # v2.287.0 — Robe of Stars (RAW DMG p.193, very rare, attunement). The
+    # clean passive — "+1 bonus to saving throws while you wear it" — rides
+    # the v2.158.74 `save_bonus` substrate (same path as Cloak of Protection).
+    # The six magic-missile stars (a charged action) and the Astral-Plane
+    # travel clause are GM-narrated in v1. A pure data drop-in on the now-
+    # mature save-bonus engine.
+    "robe-of-stars": [
+        {"save_bonus": 1, "requires_attunement": True},
+    ],
     # v2.212.0 — Belt of Giant Strength (RAW DMG p.155, requires
     # attunement; see docs/plans/str-override.md). While worn, your STR
     # *changes* to the belt's score — but only if higher (RAW). The

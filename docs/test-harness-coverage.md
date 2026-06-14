@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2809 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.286.0, 2026-06-14).
+**Total tests:** 2812 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.287.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2805,6 +2805,15 @@ v2.284.0 — Boots of Levitation (RAW DMG p.155, rare, attunement). First item o
 | `test_boots_expose_levitate_at_will` | On equip (attuned), `derived.levitate_at_will` is present with "Boots of Levitation" in `sources`. |
 | `test_boots_baseline_has_no_levitate` | Inert (seed) state: no `derived.levitate_at_will` — proving it's item-sourced. |
 | `test_boots_require_attunement` | Equipped-but-unattuned yields NO `derived.levitate_at_will` — the attunement gate holds. |
+
+### `test_item_robe_of_stars.py`
+v2.287.0 — Robe of Stars (RAW DMG p.193, very rare, attunement). Pure data drop-in on the v2.158.74 `save_bonus` substrate (the Cloak of Protection path): +1 to saving throws while worn. Seeded as inert spare loot on Thalindra Moonwhisper (already past the attunement cap); tests PATCH it equipped+attuned, roll a save, and restore on teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_robe_grants_save_bonus` | On equip (attuned), a `wis_save` `POST /roll` breakdown names "Robe of Stars" and the summed save bonus rises by exactly 1 over the inert baseline (robust to Thalindra's co-equipped Cloak/Staff save bonuses). |
+| `test_robe_baseline_has_no_robe_bonus` | Inert (seed) state: "Robe of Stars" absent from the save breakdown — proving the +1 is robe-sourced. |
+| `test_robe_requires_attunement` | Equipped-but-unattuned yields no robe bonus in the save breakdown — the attunement gate holds. |
 
 ### `test_item_amulet_of_proof_against_detection.py`
 v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon, attunement): hidden from divination magic + magical scrying while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health): the `scry_proof` flag rides the `amulet-of-proof-against-detection` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`. Kael Brightleaf (Monk Lv 7) wears it as his 2nd attuned item.
