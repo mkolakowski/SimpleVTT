@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.266.0] - 2026-06-14 — "The Binding Word"
+
+**Schema version:** 69
+
+**Commit summary:** Wand of Binding — the third charged-items Phase 1 drop-in: a `wand-of-binding` entry in `_MAGIC_ITEM_ACTIONS` cast through the existing `/use_item_action` + `_use_item_action_charge_wand` handler, seeded on Brother Tavik Stonebrow (Cleric) with a 7-charge resource row, plus harness tests.
+
+**Description:** **Wand of Binding** (RAW DMG p.211, rare, **attunement required**): "while holding this wand, you can use an action to expend 1 of its 7 charges to cast hold person (save DC 15)." (RAW also casts hold monster for 5 charges — that spell isn't yet catalogued, so v1 ships hold person only, per the plan's "Start with hold person.") The third item shipped against the charged-items backlog (`docs/plans/charged-items.md` Phase 1), the same near-zero-risk content drop-in shape as the Wand of Web (v2.263.0) and Wand of Polymorph (v2.264.0) — a catalog row + a dispatch-tuple membership, no engine change. RAW Hold Person has no upcast on the wand, so the catalog sets `min_charges == max_charges == 1` and `base_slot_level: 2` (the spell's own level); the generalized `_use_item_action_charge_wand` handler already enforces the `[min, max]` charge band (a 2-charge request → 400) and the per-payload attunement gate (→ 409). Seeded on Brother Tavik Stonebrow (Cleric) — Hold Person is on his prepared list, so he's a natural wielder; it's his 4th attuned item (seed-load bypasses the RAW 3-item cap, enforced at `/attune` runtime only). The 7-charge resource row recharges 1d6+1 at dawn (long rest) via the existing `charge_recovery` path. Hold Person's actual save/restraint resolution routes through the standard client-side cast flow. MINOR — additive content + tests, no schema change.
+
+### Added
+- `wand-of-binding` entry in `_MAGIC_ITEM_ACTIONS` (`spell_slug: hold-person`, `min_charges`/`max_charges` 1, `base_slot_level: 2`, `requires_attunement: True`) + `wand-of-binding` added to the `_use_item_action_charge_wand` dispatch tuple.
+- Demo seed: Brother Tavik Stonebrow gains an equipped + attuned Wand of Binding plus its 7-charge `wand-of-binding` resource row (1d6+1 recharge on long rest).
+- `tests/harness/test_use_item_action_binding_wand.py` (3 tests): 1 charge casts Hold Person at Lv 2; a 2-charge request is rejected 400 (RAW fixed single-charge spend); detuning the wand (via PATCH sheet-fields) gates `/use_item_action` to 409. Inventory restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 1 status — Wand of Binding marked ✅ shipped (v2.266.0).
+- `docs/test-harness-coverage.md`: harness total 2754 → 2757 (+3 wand-of-binding); added the `test_use_item_action_binding_wand.py` section.
+
 ## [2.265.0] - 2026-06-14 — "The Practiced Hand"
 
 **Schema version:** 69

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2754 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.265.0, 2026-06-14).
+**Total tests:** 2757 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.266.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2896,6 +2896,15 @@ v2.264.0 charged-items Phase 1 — Wand of Polymorph (RAW DMG p.212, rare, attun
 | `test_polymorph_wand_single_charge_casts_lv4` | 1 charge → `cast_slot_level: 4` (base=4 + 0); `spell_slug: polymorph`, `item_name: Wand of Polymorph`, `charges_spent: 1`. |
 | `test_polymorph_wand_rejects_two_charges_400` | charges=2 is outside the `[1, 1]` band → 400 (RAW Polymorph is a fixed single-charge spend). |
 | `test_polymorph_wand_requires_attunement_409` | Detune the wand via PATCH sheet-fields; invoke /use_item_action → 409 attunement required. Restores inventory in teardown. |
+
+### `test_use_item_action_binding_wand.py`
+v2.266.0 charged-items Phase 1 — Wand of Binding (RAW DMG p.211, rare, attunement) through the same `/use_item_action` endpoint + generalized `_use_item_action_charge_wand` handler. Same single-charge drop-in shape as the Wand of Web/Polymorph: RAW gives no upcast on the wand, so the catalog sets `min_charges == max_charges == 1`, `base_slot_level: 2` (Hold Person's own level), `spell_slug: hold-person`. (RAW also casts Hold Monster for 5 charges; that spell isn't yet catalogued, so v1 ships Hold Person only.) Seeded on **Brother Tavik Stonebrow** (Cleric — Hold Person is on his prepared list; his 4th attuned item, seed-load bypasses the 3-item cap); the wand index is looked up by `_slug`. The attunement guard detunes via **PATCH sheet-fields** (cap-bypassing) rather than /attune so the teardown restore can't trip the cap.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_binding_wand_single_charge_casts_lv2` | 1 charge → `cast_slot_level: 2` (base=2 + 0); `spell_slug: hold-person`, `item_name: Wand of Binding`, `charges_spent: 1`. |
+| `test_binding_wand_rejects_two_charges_400` | charges=2 is outside the `[1, 1]` band → 400 (RAW Hold Person via the wand is a fixed single-charge spend). |
+| `test_binding_wand_requires_attunement_409` | Detune the wand via PATCH sheet-fields; invoke /use_item_action → 409 attunement required. Restores inventory in teardown. |
 
 ### `test_item_wand_of_the_war_mage.py`
 v2.265.0 charged-items Phase 5 — Wand of the War Mage, +1/+2/+3 (RAW DMG p.211, uncommon–rare, attunement). A passive (no charges) spell-attack-bonus rider on `_MAGIC_ITEM_PASSIVES` (a clone of Bracers of Archery): a summed, attunement-gated `spell_attack_bonus` int in `_equipped_item_effects` surfaced on `/sheet-json` as `derived.spell_attack_bonus = {bonus, sources}` and folded into the caster's spell attack roll at cast-resolution time. The single SRD slug defaults to +1; the +2/+3 tiers ride a per-item `_spell_attack_bonus` rider. Seeded on **Magnus** (Fiend Warlock — Eldritch Blast at +2; his 5th attuned item, seed-load bypasses the 3-item cap); the wand index is looked up by `_slug`. The attunement guard detunes via **PATCH sheet-fields** (cap-bypassing).

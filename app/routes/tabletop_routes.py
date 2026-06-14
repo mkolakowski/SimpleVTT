@@ -32996,6 +32996,24 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
         "max_charges": 1,
         "base_slot_level": 4,
     },
+    # v2.266.0 — charged-items Phase 1: Wand of Binding (RAW DMG p.211,
+    # rare, attunement). 7 charges; expend 1 to cast Hold Person (save
+    # DC 15). RAW the wand also casts Hold Monster for 5 charges — that
+    # spell is not yet in the catalog, so v1 ships Hold Person only (per
+    # the plan: "Start with hold person."). Single-charge drop-in like
+    # Wand of Web/Polymorph: min == max == 1, base slot 2 (the spell's
+    # own level), no upcast. Regains 1d6+1 at dawn (long rest). See
+    # docs/plans/charged-items.md Phase 1.
+    "wand-of-binding": {
+        "key": "cast-hold-person",
+        "name": "Cast Hold Person (Wand)",
+        "resource_key": "wand-of-binding",
+        "spell_slug": "hold-person",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 1,
+        "base_slot_level": 2,
+    },
     # v2.158.88 — Phase 4d: first multi-action item. Different shape
     # from the wands: 3 distinct action_keys on one item, each with
     # its own charge cost + spell. Uses the ``actions`` subkey to
@@ -81773,7 +81791,7 @@ async def use_item_action(
         )
     if slug in ("wand-of-magic-missiles", "wand-of-fireballs",
                 "wand-of-lightning-bolts", "wand-of-web",
-                "wand-of-polymorph"):
+                "wand-of-polymorph", "wand-of-binding"):
         return await _use_item_action_charge_wand(
             db, campaign_id, char, item, sheet, catalog, slug,
             body.get("charges"),

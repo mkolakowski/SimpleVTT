@@ -1021,6 +1021,16 @@ def _cleric_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 0,
              "_slug": "periapt-of-health",
              "desc": "Uncommon wondrous item. While wearing this pendant you are immune to contracting any disease; an existing disease's effects are suppressed while worn. RAW DMG p.184."},
+            # v2.266.0 — charged-items Phase 1: Wand of Binding (RAW DMG
+            # p.211, rare, attunement). 7 charges; expend 1 to cast Hold
+            # Person (save DC 15). Thematic on Tavik — Hold Person is on
+            # his prepared list. His 4th attuned item (seed-load bypasses
+            # the RAW 3-item cap, enforced at /attune runtime only).
+            # Paired with the wand-of-binding resource row below.
+            {"name": "Wand of Binding", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-binding", "weight_lb": 1,
+             "desc": "Rare wand, attunement. 7 charges. Expend 1 charge to cast Hold Person (save DC 15). RAW also casts Hold Monster for 5 charges. Regains 1d6+1 charges at dawn (long rest). RAW DMG p.211."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action
@@ -1080,6 +1090,20 @@ def _cleric_sheet(name: str) -> dict:
                 "charge_recovery": "1d6+4",
                 "source": "item-staff-of-healing",
                 "desc": "10 charges. Cast Cure Wounds (1-4 charges), Lesser Restoration (2), or Mass Cure Wounds (5). Regains 1d6+4 charges on long rest.",
+                "manual": False,
+            },
+            # v2.266.0 — charged-items Phase 1: Wand of Binding charge
+            # counter. Same 7-charge / 1d6+1 recharge shape as the Web
+            # wand; the spell + base slot live in the catalog (Hold
+            # Person + base 2, fixed single-charge spend). Paired with
+            # the Wand of Binding entry in Tavik's inventory above.
+            {
+                "key": "wand-of-binding",
+                "name": "Wand of Binding",
+                "current": 7, "max": 7, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "item-wand-of-binding",
+                "desc": "7 charges. Spend 1 to cast Hold Person (DC 15) at slot level 2. Regains 1d6+1 charges on long rest.",
                 "manual": False,
             },
         ],

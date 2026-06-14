@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phases 2–4 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phases 2–4 unstarted.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -56,9 +56,12 @@ test each. No engine change.
   charges, 1 charge casts Web (save DC 15); RAW no upcast so
   `min_charges == max_charges == 1`, `base_slot_level: 2`,
   `charge_recovery: "1d6+1"`. Seeded on Thalindra (Wizard).
-- **Wand of Binding** (DMG p.211, rare, attunement) — 7 charges; hold monster
-  (5 charges) / hold person (1+). Could be shape #1 (hold-monster) or a
-  multi-action staff if both spells are wanted. Start with hold person.
+- **Wand of Binding** (DMG p.211, rare, attunement) — ✅ **shipped v2.266.0**.
+  7 charges, 1 charge casts Hold Person (save DC 15); RAW no upcast on the wand
+  so `min_charges == max_charges == 1`, `base_slot_level: 2`,
+  `charge_recovery: "1d6+1"`. Seeded on Brother Tavik Stonebrow (Cleric). RAW
+  also casts Hold Monster for 5 charges — deferred until that spell is
+  catalogued (would become a shape #2 multi-action staff entry).
 - **Wand of Polymorph** (DMG p.212, rare, attunement) — ✅ **shipped
   v2.264.0**. 7 charges, 1 charge casts Polymorph (DC 15); RAW no upcast so
   `min_charges == max_charges == 1`, `base_slot_level: 4`,
