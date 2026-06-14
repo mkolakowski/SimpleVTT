@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.247.0] - 2026-06-13 — "The Frostward Tread"
+
+**Schema version:** 69
+
+**Commit summary:** Boots of the Winterlands — reuses the v2.246.0 cold substrate (`resistance_to: ["cold"]` + `cold_tolerance`) with zero new engine code, homed on Rowan by displacing his redundant Ioun Stone of Charisma.
+
+**Description:** The **Boots of the Winterlands** (RAW DMG p.156, uncommon, attunement) give the wearer resistance to cold damage, immunity to ice/snow difficult terrain, and tolerance of temperatures down to −50°F (−100 in heavy clothing). This is a pure substrate-reuse drop-in: the only engine change is a new `boots-of-the-winterlands` entry in `_MAGIC_ITEM_PASSIVES` carrying the **exact same payload** the v2.246.0 Ring of Warmth introduced — `resistance_to: ["cold"]` (folds into the aggregated `resistance_to` list that `_resistance_halve` consults in the live damage pipeline, so cold damage is halved end-to-end) + `cold_tolerance: True` (surfaced as `derived.cold_tolerance = {sources}`). No new field, no new walker block, no new derived block — proving the cold substrate composes onto a second item. The ignore-ice/snow-difficult-terrain rider is GM-narrated in v1. **Slot sourcing:** every demo PC is at the RAW 3/3 attunement cap, so this needed a lossy displacement. Rowan Quickbow's **Ioun Stone of Charisma** was the lowest-cost sacrifice — CHA-via-ioun was a dump-stat demo on a ranger. It's now detuned (kept equipped), and the boots take its slot — Rowan stays at 3/3 (Gauntlets of Ogre Power + Ioun Stone of Sustenance + Boots of the Winterlands). A ranger of the frozen wilds is a natural fit. MINOR — additive content + tests, no schema change, no new substrate.
+
+### Added
+- `boots-of-the-winterlands` entry in `_MAGIC_ITEM_PASSIVES` (`resistance_to: ["cold"]`, `cold_tolerance: True`, `requires_attunement: True`) — reuses the v2.246.0 cold substrate verbatim.
+- Demo seed: Boots of the Winterlands on Rowan Quickbow (`_slug: "boots-of-the-winterlands"`, equipped + attuned).
+- `tests/harness/test_item_boots_of_the_winterlands.py` (5 tests): `derived.resistances` lists cold + `derived.cold_tolerance` names the boots; 20 cold damage halved to 10 via `_resistance_halve`; 20 fire damage unreduced (type-specific control); detuning via /attune drops both surfaces (attunement required); unequip drops both surfaces.
+
+### Changed
+- Demo seed: Rowan's Ioun Stone of Charisma detuned (`attuned: True → False`, kept equipped) to free his 3rd attunement slot; his effective CHA reverts 10 → 8.
+- `tests/harness/test_item_ioun_stone.py`: dropped the now-detuned `("Rowan Quickbow", "CHA", ...)` row from the `_VARIANTS` parametrize (the remaining DEX/WIS rows + the INT primary test still prove the shared `ioun-stone` slug covers the ability variants).
+- `docs/test-harness-coverage.md`: harness total 2681 → 2685 (+5 boots-of-the-winterlands, −1 dropped ioun variant); added the `test_item_boots_of_the_winterlands.py` section.
+
 ## [2.246.0] - 2026-06-13 — "The Hearthbound Ring"
 
 **Schema version:** 69

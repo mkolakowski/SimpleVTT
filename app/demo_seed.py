@@ -2827,12 +2827,16 @@ def _ranger_sheet(name: str) -> dict:
              "desc": "Uncommon wondrous item, attunement. Your Strength score is 19 while worn (no effect if your STR is already 19+). RAW DMG p.171."},
             # v2.225.0 — Ioun Stone of Charisma (RAW DMG p.176, very rare,
             # attunement). Capped-additive +2 CHA to a max of 20 (the
-            # v2.224.0 `ability_bonus` substrate). Seeded on Rowan (Ranger,
-            # dump CHA 8 → effective 10, mod −1 → 0) — his 2nd attuned item
-            # (after the Gauntlets). A pure-additive read on a non-casting
-            # stat; flows to CHA saves + Deception/Persuasion/Intimidation.
+            # v2.224.0 `ability_bonus` substrate).
+            # v2.247.0 — DETUNED (kept equipped, attuned: False) to free
+            # Rowan's 3rd attunement slot for the Boots of the Winterlands
+            # below. CHA-via-ioun is a dump-stat demo on a ranger; dropping the
+            # CHA row from test_item_ioun_stone.py's _VARIANTS leaves DEX/WIS
+            # + the INT primary still proving the shared `ioun-stone` slug.
+            # Originally seeded on Rowan (Ranger, dump CHA 8 → effective 10,
+            # mod −1 → 0) — was his 2nd attuned item (after the Gauntlets).
             {"name": "Ioun Stone of Charisma", "type": "magic", "qty": 1,
-             "equippable": True, "equipped": True, "attuned": True,
+             "equippable": True, "equipped": True, "attuned": False,
              "_slug": "ioun-stone", "_ability_bonus": {"CHA": 2},
              "desc": "Very rare wondrous item, attunement. This pale lavender ellipsoid orbits your head and increases your Charisma by 2, to a maximum of 20. RAW DMG p.176."},
             # v2.230.0 — sustenance passive drop-in. Ioun Stone of
@@ -2840,10 +2844,9 @@ def _ranger_sheet(name: str) -> dict:
             # that removes the need to eat or drink while it orbits your
             # head. The flag rides the shared `ioun-stone` slug via
             # `_no_food_or_drink` (no ability payload), surfacing on
-            # `/sheet-json` derived.no_food_or_drink. Rowan's 3rd attuned
-            # item (after the Gauntlets + Ioun Stone of Charisma, RAW max 3)
-            # and his second ioun stone — a fitting boon for a ranger on
-            # long wilderness treks.
+            # `/sheet-json` derived.no_food_or_drink — a fitting boon for a
+            # ranger on long wilderness treks. (His second ioun stone; after
+            # the v2.247.0 Charisma detune it's his 2nd attuned item.)
             {"name": "Ioun Stone of Sustenance", "type": "magic", "qty": 1,
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_no_food_or_drink": True,
@@ -2859,6 +2862,20 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 0,
              "_slug": "ring-of-water-walking",
              "desc": "Uncommon wondrous item, no attunement. While wearing this ring, you can stand on and move across any liquid surface as if it were solid ground. RAW DMG p.193."},
+            # v2.247.0 — Boots of the Winterlands (RAW DMG p.156, uncommon,
+            # attunement). Rowan's 3rd attuned item (Gauntlets of Ogre Power +
+            # Ioun Stone of Sustenance + this, RAW max 3) — homed by detuning
+            # his Ioun Stone of Charisma above. Reuses the v2.246.0 Ring of
+            # Warmth cold substrate with ZERO new engine code: cold resistance
+            # via the catalog `resistance_to: ["cold"]` payload (folds into the
+            # live `_resistance_halve` pipeline) + the `cold_tolerance` boolean
+            # flag (derived.cold_tolerance). The ignore-ice/snow-difficult-
+            # terrain rider is GM-narrated in v1. A natural boon for a ranger
+            # ranging the frozen wilds.
+            {"name": "Boots of the Winterlands", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
+             "_slug": "boots-of-the-winterlands",
+             "desc": "Uncommon wondrous item, attunement. While you wear these furred boots, you have resistance to cold damage, you ignore difficult terrain created by ice or snow, and you can tolerate temperatures as low as -50 degrees Fahrenheit (or -100 in heavy clothing). RAW DMG p.156."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,

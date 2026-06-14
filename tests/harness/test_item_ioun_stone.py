@@ -115,12 +115,15 @@ async def test_ioun_stone_caps_at_20(gm_client, magnus):
 # the Ring of Warmth. CON-via-ioun is the next-most-redundant ability demo —
 # the Amulet of Health (Tavik) still covers the CON `ability_bonus` /
 # effective-max-HP surface (test_item_amulet_of_health.py), so this loses no
-# net coverage. The remaining three rows still prove the single `ioun-stone`
-# slug + per-item `_ability_bonus` covers DEX/WIS/CHA (plus INT via Magnus).
+# net coverage.
+# v2.247.0 — the Rowan "CHA" variant was dropped likewise: his Ioun Stone of
+# Charisma was detuned (kept equipped) to free his 3rd attunement slot for the
+# Boots of the Winterlands. CHA-via-ioun was a dump-stat demo on a ranger; the
+# remaining DEX/WIS rows + the INT primary test still prove the single
+# `ioun-stone` slug + per-item `_ability_bonus` covers the ability variants.
 _VARIANTS = [
     ("Sir Caelan Lightbringer", "DEX", 10, 12, 1),
     ("Krieger Stonefist", "WIS", 13, 15, 2),
-    ("Rowan Quickbow", "CHA", 8, 10, 0),
 ]
 
 

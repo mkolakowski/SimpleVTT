@@ -32611,6 +32611,19 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
         {"resistance_to": ["cold"], "cold_tolerance": True,
          "requires_attunement": True},
     ],
+    # v2.247.0 — Boots of the Winterlands (RAW DMG p.156, uncommon,
+    # attunement). RAW: "you have resistance to cold damage; you ignore
+    # difficult terrain created by ice or snow; and you can tolerate
+    # temperatures as low as -50 degrees Fahrenheit (-100 in heavy clothing)."
+    # Reuses the v2.246.0 Ring of Warmth cold substrate verbatim — cold
+    # resistance via `resistance_to: ["cold"]` (folds into the live
+    # `_resistance_halve` pipeline) + the `cold_tolerance` boolean flag. The
+    # ignore-ice/snow-difficult-terrain rider is GM-narrated in v1.
+    # Attunement-gated.
+    "boots-of-the-winterlands": [
+        {"resistance_to": ["cold"], "cold_tolerance": True,
+         "requires_attunement": True},
+    ],
 }
 
 
