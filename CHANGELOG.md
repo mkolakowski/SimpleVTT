@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.290.0] - 2026-06-14 — "The Adamant Plate"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Armor of Invulnerability** (RAW DMG p.152, legendary, attunement) lands its always-on passive ("resistance to nonmagical damage") on the v2.235.0 item-passive resistance substrate. The passive folds the full `nonmagical-<type>` token list (the gaseous-form shape), so `_resistance_halve` halves any nonmagical hit while passing magical-source damage at full; surfaces on `/sheet-json` as `derived.resistances`. The action-gated 10-minute total immunity is GM-narrated in v1. Three harness tests.
+
+**Description:** Another consumer of the mature resistance engine, no new pipeline math. The Armor of Invulnerability's headline passive — resistance to all nonmagical damage while worn — is modelled exactly like the Potion of Gaseous Form (v2.204.0): a `resistance_to` list of the thirteen `nonmagical-<type>` tokens that `_resistance_halve`'s F6-aware `_resistance_matches_damage` understands (a `nonmagical-fire` entry halves a nonmagical fire hit but a magical-source fire hit passes at full per RAW). The item-passive resistance bridge added in v2.235.0 (the Ring of Resistance path) already reads the aggregated `resistance_to` from `_equipped_item_effects`, so this commit is a single registry entry + a demo-seed item + tests. The action-gated 10-minute *total* immunity ("once used, can't be used again until the next dawn") stays GM-narrated in v1. Seeded **unequipped/unattuned** as spare loot on Garrik Ironside (Fighter) so it doesn't override his Dragon Scale Mail AC or add a baseline resistance; the harness PATCHes it equipped+attuned, reads `derived.resistances`, deals 20 nonmagical slashing (halved to 10 via the is_magical=False sheet-fields damage path), then restores the seed inventory + HP. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `armor-of-invulnerability` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one attunement-gated payload carrying the full `nonmagical-<type>` `resistance_to` list, on the existing v2.235.0 resistance substrate.
+- Demo seed: Garrik Ironside gains a spare (unequipped/unattuned) **Armor of Invulnerability**.
+- `tests/harness/test_item_armor_of_invulnerability.py` (3 tests): nonmagical resistances surface on `/sheet-json` with the armor named in sources; 20 nonmagical slashing halves to 10 end-to-end; inert baseline has no nonmagical-resistance projection. Inventory + HP restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2816 → 2819 (+3 tests); added the `test_item_armor_of_invulnerability.py` section.
+
 ## [2.289.0] - 2026-06-14 — "The Unbound Ring"
 
 **Schema version:** 69

@@ -5068,6 +5068,21 @@ def _fighter_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "periapt-of-proof-against-poison", "weight_lb": 0,
              "desc": "Rare wondrous item (no attunement). While worn, poisons have no effect on you: you are immune to the poisoned condition and have immunity to poison damage. RAW DMG p.184."},
+            # v2.290.0 — Armor of Invulnerability (RAW DMG p.152, legendary,
+            # attunement). Rides the v2.235.0 item-passive resistance substrate:
+            # the `armor-of-invulnerability` passive folds a full
+            # `nonmagical-<type>` resistance list, so `_resistance_halve` halves
+            # any nonmagical hit while passing magical-source damage at full
+            # (derived.resistances). The 10-min total-immunity action is GM-
+            # narrated in v1. Spare loot (equipped=False) so it doesn't override
+            # Garrik's Dragon Scale Mail AC or add baseline resistance — the
+            # harness PATCHes it equipped+attuned, reads the projection + deals
+            # nonmagical damage, then restores. A legendary plate fits the demo's
+            # frontline Fighter.
+            {"name": "Armor of Invulnerability", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "armor-of-invulnerability", "weight_lb": 65,
+             "desc": "Legendary armor (plate), attunement. You have resistance to nonmagical damage while you wear this armor. Additionally, you can use an action to make yourself immune to nonmagical damage for 10 minutes or until you are no longer wearing the armor; once used, it can't be used again until the next dawn. RAW DMG p.152."},
             # v2.258.0 — Necklace of Adaptation (RAW DMG p.183, uncommon,
             # attunement). The wearer can breathe normally in any environment
             # + has advantage on saves vs. harmful gases and vapors. Modeled

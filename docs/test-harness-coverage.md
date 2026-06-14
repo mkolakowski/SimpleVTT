@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2816 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.289.0, 2026-06-14).
+**Total tests:** 2819 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.290.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2824,6 +2824,15 @@ v2.288.0 — Periapt of Proof against Poison (RAW DMG p.184, rare, no attunement
 | `test_periapt_grants_poison_damage_immunity` | On equip, `derived.immunities.types` contains "poison" with "Periapt of Proof against Poison" in `sources`. |
 | `test_periapt_grants_poisoned_condition_immunity` | On equip, `derived.condition_immunities.types` contains "poisoned". |
 | `test_periapt_baseline_has_no_immunity` | Inert (seed) state: neither poison nor poisoned surfaces — proving it's item-sourced. |
+
+### `test_item_armor_of_invulnerability.py`
+v2.290.0 — Armor of Invulnerability (RAW DMG p.152, legendary, attunement). The always-on passive ("resistance to nonmagical damage") rides the v2.235.0 item-passive resistance substrate: the `armor-of-invulnerability` payload folds the full `nonmagical-<type>` `resistance_to` list (the gaseous-form shape), so `_resistance_halve`'s F6-aware compare halves a nonmagical hit of any type but passes magical-source damage at full. Surfaces on `/sheet-json` as `derived.resistances`. The 10-min total-immunity action is GM-narrated in v1. Seeded as inert spare loot on Garrik Ironside; tests PATCH it equipped+attuned and restore inventory + HP on teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_armor_exposes_nonmagical_resistances` | On equip+attune, `derived.resistances.types` contains "nonmagical-bludgeoning" with "Armor of Invulnerability" in `sources`. |
+| `test_armor_halves_nonmagical_damage` | End-to-end: 20 nonmagical slashing drops HP by only 10 via `_resistance_halve` (is_magical=False sheet-fields path). |
+| `test_armor_baseline_has_no_resistance` | Inert (seed) state: no nonmagical-resistance projection — proving it's armor-sourced. |
 
 ### `test_item_amulet_of_proof_against_detection.py`
 v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon, attunement): hidden from divination magic + magical scrying while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health): the `scry_proof` flag rides the `amulet-of-proof-against-detection` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`. Kael Brightleaf (Monk Lv 7) wears it as his 2nd attuned item.

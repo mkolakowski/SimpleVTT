@@ -32759,6 +32759,27 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_attunement": False,
         },
     ],
+    # v2.290.0 — Armor of Invulnerability (RAW DMG p.152, legendary,
+    # attunement). RAW passive: "you have resistance to nonmagical damage
+    # while you wear this armor." Rides the v2.235.0 item-passive resistance
+    # substrate — the same `nonmagical-<type>` token list the gaseous-form
+    # potion uses (so `_resistance_halve`'s F6-aware compare halves a
+    # nonmagical hit of any type but passes magical-source damage at full).
+    # The action-gated 10-minute TOTAL immunity ("can't be used again until
+    # the next dawn") is GM-narrated in v1 — only the always-on resistance
+    # half is mechanical here. Surfaces on /sheet-json as derived.resistances.
+    "armor-of-invulnerability": [
+        {
+            "resistance_to": [
+                "nonmagical-bludgeoning", "nonmagical-piercing",
+                "nonmagical-slashing", "nonmagical-fire", "nonmagical-cold",
+                "nonmagical-lightning", "nonmagical-thunder",
+                "nonmagical-acid", "nonmagical-poison", "nonmagical-necrotic",
+                "nonmagical-radiant", "nonmagical-psychic", "nonmagical-force",
+            ],
+            "requires_attunement": True,
+        },
+    ],
     # v2.238.0 — Winged Boots (RAW DMG p.214, uncommon, attunement). RAW:
     # "while you wear these boots, you have a flying speed equal to your
     # walking speed. You can use the boots to fly for up to 4 hours, all at
