@@ -32690,6 +32690,14 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-x-ray-vision": [
         {"xray_vision": True, "requires_attunement": True},
     ],
+    # v2.258.0 — Necklace of Adaptation (RAW DMG p.183, uncommon, attunement).
+    # RAW: "while wearing this necklace, you can breathe normally in any
+    # environment, and you have advantage on saving throws made against harmful
+    # gases and vapors." Modeled as an attunement-gated boolean derived read
+    # (env_adaptation flag); the gas-save advantage is GM-narrated in v1.
+    "necklace-of-adaptation": [
+        {"env_adaptation": True, "requires_attunement": True},
+    ],
     # v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement).
     # RAW: "you have a swimming speed of 40 feet while wearing this ring."
     # The numeric swim speed is GM-narrated in v1; the boolean flag surfaces
@@ -33894,6 +33902,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # solid matter (GM-narrated radius/limits in v1). ATTUNEMENT-gated.
         "xray_vision": False,
         "xray_vision_sources": [],
+        # v2.258.0 — environment-adaptation passive. Boolean OR across equipped
+        # items carrying the field; surfaced on `/sheet-json` derived. Necklace
+        # of Adaptation (RAW DMG p.183) is the first entry — breathe normally in
+        # any environment + advantage on saves vs. harmful gases/vapors
+        # (GM-narrated in v1). ATTUNEMENT-gated.
+        "env_adaptation": False,
+        "env_adaptation_sources": [],
         # v2.242.0 — swim-speed passive. Boolean OR across equipped items
         # carrying the field; surfaced on `/sheet-json` derived. Ring of
         # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
@@ -34201,6 +34216,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_xray_vision") or p.get("xray_vision"):
                 out["xray_vision"] = True
                 out["xray_vision_sources"].append(item_name)
+            # v2.258.0 — environment-adaptation passive (Necklace of
+            # Adaptation, RAW DMG p.183). Boolean OR; the flag rides the item
+            # via the `env_adaptation` payload (or a per-item `_env_adaptation`
+            # rider). Attunement-gated by the per-payload check above.
+            if item.get("_env_adaptation") or p.get("env_adaptation"):
+                out["env_adaptation"] = True
+                out["env_adaptation_sources"].append(item_name)
             # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
             # p.193). Boolean OR; the flag rides the item via the
             # `swim_speed` payload (or a per-item `_swim_speed` rider).
@@ -91385,6 +91407,12 @@ async def get_character_sheet_json(
             if _item_eff.get("xray_vision"):
                 derived["xray_vision"] = {
                     "sources": list(_item_eff.get("xray_vision_sources") or []),
+                }
+            # v2.258.0 — environment adaptation (Necklace of Adaptation). Only
+            # present when an equipped + attuned item sets the flag.
+            if _item_eff.get("env_adaptation"):
+                derived["env_adaptation"] = {
+                    "sources": list(_item_eff.get("env_adaptation_sources") or []),
                 }
             # v2.242.0 — swim speed (Ring of Swimming). Only present when an
             # equipped item sets the flag.

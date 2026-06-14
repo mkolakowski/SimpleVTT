@@ -4546,6 +4546,19 @@ def _fighter_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "belt-of-giant-strength", "weight_lb": 0,
              "desc": "Rare wondrous item, attunement. While worn, your Strength score becomes 21 (Hill giant) if it isn't already higher. RAW DMG p.155."},
+            # v2.258.0 — Necklace of Adaptation (RAW DMG p.183, uncommon,
+            # attunement). The wearer can breathe normally in any environment
+            # + has advantage on saves vs. harmful gases and vapors. Modeled
+            # as an attunement-gated boolean derived read (env_adaptation
+            # flag); the gas-save advantage is GM-narrated in v1. Seeded on
+            # Garrik (Fighter) — a frontliner who eats dragon breath weapons
+            # and inhaled poisons fits the gas-resistance flavor. Rides his
+            # free neck slot; seed-load bypasses the RAW 3-item cap (enforced
+            # at /attune runtime only).
+            {"name": "Necklace of Adaptation", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "necklace-of-adaptation", "weight_lb": 0,
+             "desc": "RAW DMG p.183 (uncommon, attunement). While worn, you can breathe normally in any environment, and you have advantage on saving throws made against harmful gases and vapors (cloudkill, stinking cloud, inhaled poisons, some dragon breath). Surfaces as the derived env_adaptation flag."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

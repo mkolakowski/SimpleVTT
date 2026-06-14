@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.258.0] - 2026-06-14 — "The Wayfarer's Collar"
+
+**Schema version:** 69
+
+**Commit summary:** Necklace of Adaptation — an attunement-gated passive that lets the wearer breathe in any environment (+ advantage on gas/vapor saves), riding a new `env_adaptation` boolean-OR flag in `_equipped_item_effects` surfaced on `/sheet-json derived` (the Ring of X-ray Vision pattern).
+
+**Description:** **Necklace of Adaptation** (RAW DMG p.183, uncommon, **attunement required**): "while wearing this necklace, you can breathe normally in any environment, and you have advantage on saving throws made against harmful gases and vapors." Another clean attunement-gated boolean-flag drop-in on the established passive substrate. The engine changes: (1) a new `env_adaptation` field (+ `env_adaptation_sources`) in `_equipped_item_effects`, boolean-OR'd across equipped items carrying the flag (via the `env_adaptation` payload or a per-item `_env_adaptation` rider) — the per-payload attunement check drops the flag when worn-but-not-attuned; (2) a new `necklace-of-adaptation` entry in `_MAGIC_ITEM_PASSIVES` (`{"env_adaptation": True, "requires_attunement": True}`); (3) `/sheet-json derived` surfaces `env_adaptation = {sources}` only when an equipped + attuned item sets the flag; (4) the demo seed gives Garrik Ironside (Fighter) the necklace attuned in his free neck slot — a frontliner who eats dragon breath weapons and inhaled poisons fits the gas-resistance flavor (seed-load bypasses the RAW 3-item cap, enforced at `/attune` runtime only). The gas/vapor save advantage is GM-narrated in v1. MINOR — additive content + tests, no schema change.
+
+### Added
+- `env_adaptation` boolean-OR field (+ `env_adaptation_sources`) in `_equipped_item_effects`, attunement-gated via the per-payload check.
+- `necklace-of-adaptation` entry in `_MAGIC_ITEM_PASSIVES` (`env_adaptation: True`, `requires_attunement: True`).
+- `/sheet-json derived.env_adaptation = {sources}` display mirror.
+- `tests/harness/test_item_necklace_of_adaptation.py` (3 tests): `/sheet-json` exposes the flag naming the necklace; un-attuning the necklace (still equipped) drops the flag — the attunement gate; unequipping the necklace drops the flag (both restore inventory on teardown).
+
+### Changed
+- Demo seed: Garrik Ironside gains an equipped + attuned Necklace of Adaptation in his free neck slot.
+- `docs/test-harness-coverage.md`: harness total 2729 → 2732 (+3 necklace-of-adaptation); added the `test_item_necklace_of_adaptation.py` section.
+
 ## [2.257.0] - 2026-06-14 — "The Piercing Gaze"
 
 **Schema version:** 69
