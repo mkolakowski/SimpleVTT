@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.241.0] - 2026-06-13 — "The Steady Footing"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of Water Walking — water-walking passive (`derived.water_walk`) on a new boolean-OR substrate field, riding the `ring-of-water-walking` catalog payload (no attunement).
+
+**Description:** The **Ring of Water Walking** (RAW DMG p.193, uncommon, no attunement) lets the wearer stand on and move across any liquid surface as if it were solid ground. It reuses the boolean-OR passive substrate: the `water_walk` flag rides the `ring-of-water-walking` catalog payload, aggregates in `_equipped_item_effects` (a new `water_walk` field + `water_walk_sources`), and surfaces on `/sheet-json` as `derived.water_walk = {sources}`. No attunement — it rides alongside a full 3/3 attunement loadout. Demo: Rowan Quickbow (Ranger) wears it — no attunement, so it rides alongside his Gauntlets of Ogre Power + two Ioun Stones — fitting for a ranger crossing rivers and marshes on the hunt. Second of the SRD-ring batch. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `water_walk` / `water_walk_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped items carrying the `water_walk` payload or a per-item `_water_walk` rider).
+- `/sheet-json` `derived.water_walk = {sources}` — present only when an equipped item sets the flag.
+- `ring-of-water-walking` entry in `_MAGIC_ITEM_PASSIVES` (`water_walk: True`, no attunement).
+- Demo seed: Ring of Water Walking on Rowan Quickbow (`_slug: "ring-of-water-walking"`, equipped, no attunement).
+- `tests/harness/test_item_ring_of_water_walking.py` (3 tests): `derived.water_walk` lists the ring in sources; rides alongside the no-attunement-free Ioun Stone of Sustenance flag; unequip drops the flag.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2666 → 2669; added the `test_item_ring_of_water_walking.py` section.
+
 ## [2.240.0] - 2026-06-13 — "The Unbound Stride"
 
 **Schema version:** 69

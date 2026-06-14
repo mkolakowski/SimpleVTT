@@ -32564,6 +32564,13 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-free-action": [
         {"free_action": True, "requires_attunement": True},
     ],
+    # v2.241.0 — Ring of Water Walking (RAW DMG p.193, uncommon, no
+    # attunement). RAW: "while wearing this ring, you can stand on and move
+    # across any liquid surface as if it were solid ground." Surfaced as a
+    # boolean derived read.
+    "ring-of-water-walking": [
+        {"water_walk": True},
+    ],
 }
 
 
@@ -33591,6 +33598,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # paralyze/restrain you (the effect is descriptive in v1).
         "free_action": False,
         "free_action_sources": [],
+        # v2.241.0 — water-walking passive. Boolean OR across equipped items
+        # carrying the field; surfaced on `/sheet-json` derived. Ring of
+        # Water Walking (RAW DMG p.193) is the first entry — stand on and
+        # move across any liquid surface as if it were solid ground.
+        "water_walk": False,
+        "water_walk_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33827,6 +33840,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_free_action") or p.get("free_action"):
                 out["free_action"] = True
                 out["free_action_sources"].append(item_name)
+            # v2.241.0 — water-walking passive (Ring of Water Walking, RAW
+            # DMG p.193). Boolean OR; the flag rides the item via the
+            # `water_walk` payload (or a per-item `_water_walk` rider).
+            if item.get("_water_walk") or p.get("water_walk"):
+                out["water_walk"] = True
+                out["water_walk_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90905,6 +90924,12 @@ async def get_character_sheet_json(
             if _item_eff.get("free_action"):
                 derived["free_action"] = {
                     "sources": list(_item_eff.get("free_action_sources") or []),
+                }
+            # v2.241.0 — water walking (Ring of Water Walking). Only present
+            # when an equipped item sets the flag.
+            if _item_eff.get("water_walk"):
+                derived["water_walk"] = {
+                    "sources": list(_item_eff.get("water_walk_sources") or []),
                 }
         except Exception:
             pass

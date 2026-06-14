@@ -2806,6 +2806,17 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_no_food_or_drink": True,
              "desc": "Rare wondrous item, attunement. This clear spindle orbits your head; while it does, you don't need to eat or drink. RAW DMG p.176."},
+            # v2.241.0 — Ring of Water Walking (RAW DMG p.193, uncommon, no
+            # attunement). Rides alongside Rowan's full 3/3 attunement
+            # loadout because it needs no attunement slot. While worn he can
+            # stand on and move across any liquid surface as if it were solid
+            # ground. The `water_walk` flag rides the `ring-of-water-walking`
+            # catalog payload and surfaces on /sheet-json as derived.water_walk
+            # — fitting for a ranger crossing rivers and marshes on the hunt.
+            {"name": "Ring of Water Walking", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 0,
+             "_slug": "ring-of-water-walking",
+             "desc": "Uncommon wondrous item, no attunement. While wearing this ring, you can stand on and move across any liquid surface as if it were solid ground. RAW DMG p.193."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,
