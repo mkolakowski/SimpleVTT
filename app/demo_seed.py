@@ -3280,28 +3280,46 @@ def _barbarian_beast_sheet(name: str) -> dict:
              "desc": "Legendary wondrous item, attunement. While worn, your Strength score becomes 29 (Storm giant) if it isn't already higher. RAW DMG p.155."},
             # v2.225.0 — Ioun Stone of Constitution (RAW DMG p.176, very
             # rare, attunement). Capped-additive +2 CON to a max of 20 (the
-            # v2.224.0 `ability_bonus` substrate). Seeded on Brakka
-            # (Barbarian, CON 16 → effective 18, mod +3 → +4) — her 2nd
+            # v2.224.0 `ability_bonus` substrate).
+            # v2.246.0 — DETUNED (kept equipped, attuned: False) to free
+            # Brakka's 3rd attunement slot for the Ring of Warmth below.
+            # CON-via-ioun is the most redundant ability demo left after the
+            # v2.245.0 STR drop — the Amulet of Health (Tavik) still covers the
+            # CON `ability_bonus`/effective-max-HP surface, so dropping the CON
+            # row from test_item_ioun_stone.py's _VARIANTS costs no net coverage.
+            # Originally seeded on Brakka (Barbarian, CON 16 → effective 18,
+            # mod +3 → +4) — was her 2nd
             # attuned item (after the Belt). The CON bump also demonstrates
             # the second-order effective-max-HP recompute (DERIVED
             # `effective_max_hp` on /sheet-json), since CON drives +mod/level
             # HP — the same surface the Amulet of Health exercises on CON.
             {"name": "Ioun Stone of Constitution", "type": "magic", "qty": 1,
-             "equippable": True, "equipped": True, "attuned": True,
+             "equippable": True, "equipped": True, "attuned": False,
              "_slug": "ioun-stone", "_ability_bonus": {"CON": 2},
              "desc": "Very rare wondrous item, attunement. This pink rhomboid orbits your head and increases your Constitution by 2, to a maximum of 20. RAW DMG p.176."},
             # v2.240.0 — Ring of Free Action (RAW DMG p.191, rare,
-            # attunement). Brakka's 3rd attuned item (after the Belt of Giant
-            # Strength + Ioun Stone of Constitution, RAW max 3). Difficult
-            # terrain costs her no extra movement, and magic can't reduce her
-            # speed or paralyze/restrain her. The `free_action` flag rides the
-            # `ring-of-free-action` catalog payload and surfaces on
-            # /sheet-json as derived.free_action — on-theme for an unrestrained
-            # beast barbarian.
+            # attunement). Difficult terrain costs her no extra movement, and
+            # magic can't reduce her speed or paralyze/restrain her. The
+            # `free_action` flag rides the `ring-of-free-action` catalog payload
+            # and surfaces on /sheet-json as derived.free_action — on-theme for
+            # an unrestrained beast barbarian.
             {"name": "Ring of Free Action", "type": "magic", "qty": 1,
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
              "_slug": "ring-of-free-action",
              "desc": "Rare wondrous item, attunement. While you wear this ring, difficult terrain doesn't cost you extra movement, and magic can neither reduce your speed nor cause you to be paralyzed or restrained. RAW DMG p.191."},
+            # v2.246.0 — Ring of Warmth (RAW DMG p.193, uncommon, attunement).
+            # Brakka's 3rd attuned item (Belt of Giant Strength + Ring of Free
+            # Action + this, RAW max 3) — homed by detuning her Ioun Stone of
+            # Constitution above. Grants resistance to cold damage (folds into
+            # the `resistance_to` list via the catalog `resistance_to: ["cold"]`
+            # payload, consulted live by `_resistance_halve` — the same surface
+            # the Ring of Resistance exercises) plus tolerance of cold
+            # environments down to −50°F (the `cold_tolerance` boolean flag,
+            # surfaced on /sheet-json as derived.cold_tolerance).
+            {"name": "Ring of Warmth", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
+             "_slug": "ring-of-warmth",
+             "desc": "Uncommon ring, attunement. While wearing this ring, you have resistance to cold damage. In addition, you and everything you wear and carry are unharmed by temperatures as low as -50 degrees Fahrenheit. RAW DMG p.193."},
         ],
         "resources": [
             {

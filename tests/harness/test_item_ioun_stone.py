@@ -109,12 +109,16 @@ async def test_ioun_stone_caps_at_20(gm_client, magnus):
 # Strength was detuned (kept equipped) in the demo seed to free her 3rd
 # attunement slot for the Ring of Mind Shielding. STR-via-ioun is the most
 # redundant ability demo (STR also rides the three Belts of Giant Strength +
-# Gauntlets of Ogre Power), so its loss costs the least coverage; the
-# remaining five rows still prove the single `ioun-stone` slug + per-item
-# `_ability_bonus` covers DEX/CON/WIS/CHA (plus INT via Magnus above).
+# Gauntlets of Ogre Power), so its loss costs the least coverage.
+# v2.246.0 — the Brakka "CON" variant was dropped likewise: her Ioun Stone of
+# Constitution was detuned (kept equipped) to free her 3rd attunement slot for
+# the Ring of Warmth. CON-via-ioun is the next-most-redundant ability demo —
+# the Amulet of Health (Tavik) still covers the CON `ability_bonus` /
+# effective-max-HP surface (test_item_amulet_of_health.py), so this loses no
+# net coverage. The remaining three rows still prove the single `ioun-stone`
+# slug + per-item `_ability_bonus` covers DEX/WIS/CHA (plus INT via Magnus).
 _VARIANTS = [
     ("Sir Caelan Lightbringer", "DEX", 10, 12, 1),
-    ("Brakka Wildmane", "CON", 16, 18, 4),
     ("Krieger Stonefist", "WIS", 13, 15, 2),
     ("Rowan Quickbow", "CHA", 8, 10, 0),
 ]

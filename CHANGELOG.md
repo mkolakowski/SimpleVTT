@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.246.0] - 2026-06-13 — "The Hearthbound Ring"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of Warmth — attunement-gated cold *resistance* (folds into the live `resistance_to` halving pipeline) + a new `cold_tolerance` boolean flag (`derived.cold_tolerance`), homed on Brakka by displacing her redundant Ioun Stone of Constitution.
+
+**Description:** The **Ring of Warmth** (RAW DMG p.193, uncommon, attunement) gives the wearer resistance to cold damage and lets them (and everything they wear and carry) tolerate temperatures as low as −50°F. It composes two existing substrates: the cold *resistance* rides the catalog payload's `resistance_to: ["cold"]`, which folds into the aggregated `resistance_to` list that `_resistance_halve` consults in the live damage pipeline (the same surface the Ring of Resistance exercises) — so cold damage to the wearer is halved end-to-end through `PATCH .../sheet-fields`, and it surfaces on `/sheet-json` as `derived.resistances`. The −50°F environmental tolerance is GM-narrated in v1, surfaced via a new boolean-OR `cold_tolerance` flag (`derived.cold_tolerance = {sources}`). Both are attunement-gated. **Slot sourcing:** every demo PC is at the RAW 3/3 attunement cap, so homing the ring required a lossy displacement. Brakka Wildmane's **Ioun Stone of Constitution** was the lowest-cost sacrifice — CON-via-ioun is the next-most-redundant ability demo after the v2.245.0 STR drop, and the Amulet of Health (Tavik) still covers the CON `ability_bonus` / effective-max-HP surface, so dropping the CON row from the ioun parametrize costs no net coverage. It's now detuned (kept equipped, so its `_ability_bonus` no longer applies), and the ring takes its slot — Brakka stays at 3/3 (Belt of Giant Strength + Ring of Free Action + Ring of Warmth). This is the last unshipped SRD attunement ring. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `cold_tolerance` / `cold_tolerance_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped items carrying the `cold_tolerance` payload or a per-item `_cold_tolerance` rider; attunement-gated via the existing per-payload `requires_attunement` check).
+- `/sheet-json` `derived.cold_tolerance = {sources}` — present only when an equipped + attuned item sets the flag. (The ring's cold resistance surfaces in the existing `derived.resistances`.)
+- `ring-of-warmth` entry in `_MAGIC_ITEM_PASSIVES` (`resistance_to: ["cold"]`, `cold_tolerance: True`, `requires_attunement: True`).
+- Demo seed: Ring of Warmth on Brakka Wildmane (`_slug: "ring-of-warmth"`, equipped + attuned).
+- `tests/harness/test_item_ring_of_warmth.py` (5 tests): `derived.resistances` lists cold + `derived.cold_tolerance` names the ring; 20 cold damage halved to 10 via `_resistance_halve`; 20 fire damage unreduced (type-specific control); detuning via /attune drops both surfaces (attunement required); unequip drops both surfaces.
+
+### Changed
+- Demo seed: Brakka's Ioun Stone of Constitution detuned (`attuned: True → False`, kept equipped) to free her 3rd attunement slot; her effective CON reverts 18 → 16.
+- `tests/harness/test_item_ioun_stone.py`: dropped the now-detuned `("Brakka Wildmane", "CON", ...)` row from the `_VARIANTS` parametrize (the remaining DEX/WIS/CHA rows + the INT primary test still prove the shared `ioun-stone` slug covers every ability variant; CON stays covered by the Amulet of Health).
+- `docs/test-harness-coverage.md`: harness total 2677 → 2681 (+5 ring-of-warmth, −1 dropped ioun variant); added the `test_item_ring_of_warmth.py` section.
+
 ## [2.245.0] - 2026-06-13 — "The Guarded Mind"
 
 **Schema version:** 69

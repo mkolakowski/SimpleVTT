@@ -32596,6 +32596,21 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-mind-shielding": [
         {"mind_shield": True, "requires_attunement": True},
     ],
+    # v2.246.0 — Ring of Warmth (RAW DMG p.193, uncommon, attunement). RAW:
+    # "while wearing this ring, you have resistance to cold damage. In
+    # addition, you and everything you wear and carry are unharmed by
+    # temperatures as low as -50 degrees Fahrenheit." The cold resistance is a
+    # REAL mechanical effect — `resistance_to: ["cold"]` folds into the
+    # aggregated `resistance_to` list that `_resistance_halve` consults in the
+    # live damage pipeline (the same surface the Ring of Resistance exercises),
+    # so cold damage to the wearer is halved. The -50°F environmental tolerance
+    # is GM-narrated in v1, surfaced via the boolean `cold_tolerance` flag as a
+    # derived read. Attunement-gated — both filtered by the walker's
+    # attunement check.
+    "ring-of-warmth": [
+        {"resistance_to": ["cold"], "cold_tolerance": True,
+         "requires_attunement": True},
+    ],
 }
 
 
@@ -33655,6 +33670,11 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # ATTUNEMENT-gated, so the walker's attunement check filters it.
         "mind_shield": False,
         "mind_shield_sources": [],
+        # v2.246.0 — cold-environment tolerance (Ring of Warmth). Boolean OR;
+        # the cold *resistance* rides the shared `resistance_to` list, this
+        # flag carries only the -50°F environmental tolerance. ATTUNEMENT-gated.
+        "cold_tolerance": False,
+        "cold_tolerance_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33917,6 +33937,16 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_mind_shield") or p.get("mind_shield"):
                 out["mind_shield"] = True
                 out["mind_shield_sources"].append(item_name)
+            # v2.246.0 — cold-environment tolerance passive (Ring of Warmth,
+            # RAW DMG p.193). Boolean OR; the flag rides the item via the
+            # `cold_tolerance` payload (or a per-item `_cold_tolerance` rider).
+            # The ring's cold *resistance* rides the shared `resistance_to`
+            # folding above (catalog `resistance_to: ["cold"]`); this flag
+            # carries only the -50°F environmental tolerance. Attunement-gated
+            # by the per-payload check above.
+            if item.get("_cold_tolerance") or p.get("cold_tolerance"):
+                out["cold_tolerance"] = True
+                out["cold_tolerance_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -91019,6 +91049,13 @@ async def get_character_sheet_json(
             if _item_eff.get("mind_shield"):
                 derived["mind_shield"] = {
                     "sources": list(_item_eff.get("mind_shield_sources") or []),
+                }
+            # v2.246.0 — cold-environment tolerance (Ring of Warmth). Only
+            # present when an equipped + attuned item sets the flag. (The ring's
+            # cold resistance surfaces in derived.resistances above.)
+            if _item_eff.get("cold_tolerance"):
+                derived["cold_tolerance"] = {
+                    "sources": list(_item_eff.get("cold_tolerance_sources") or []),
                 }
         except Exception:
             pass
