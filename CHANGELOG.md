@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.253.0] - 2026-06-13 — "The Whispering Hood"
+
+**Schema version:** 69
+
+**Commit summary:** Cloak of Elvenkind — the first ITEM-granted ability-check advantage source (advantage-disadvantage plan Phase 4b). Wearing the attuned cloak gives the wearer advantage on Dexterity (Stealth) checks, wired through a new `/roll`-time equipped-item read that folds into the existing PHB p.173 advantage/disadvantage composition.
+
+**Description:** **Cloak of Elvenkind** (RAW DMG p.158, uncommon, attunement): "while you wear this cloak with its hood up ... you have advantage on Dexterity (Stealth) checks made to hide." This is the first **item-granted check advantage** source — Phase 4a (v2.252.0, Cloak of Displacement) was the first item *attack* disadvantage; this extends the same `_equipped_item_effects` substrate to the `/roll` ability-check path (the Phase 2b condition-disadvantage machinery). The engine changes: (1) `_equipped_item_effects` gains a `check_advantage_on` union list (skill keys, e.g. `["stealth"]`) + `check_advantage_sources` map (skill → granting item name), folded from any catalogued slug's payload, attunement-gated like the other riders; (2) a new `cloak-of-elvenkind` entry in `_MAGIC_ITEM_PASSIVES` (`{"check_advantage_on": ["stealth"], "requires_attunement": True}`); (3) a new `_roll_item_check_advantage(sheet, stat_key_lc)` helper that returns an item-name-derived label key when an equipped + attuned item grants advantage on THIS check (the `stat_key` gate means only a Stealth roll fires — a Perception roll is untouched); (4) the helper's result folds into the `/roll` advantage source set *after* the Phase 2b condition-disadvantage step, so a clean Stealth roll resolves `2d20kh1` with `roll_state_applied: "auto_advantage_cloak_of_elvenkind"` — and an item advantage + any disadvantage source (e.g. Poisoned) cancels to a straight `1d20` per PHB p.173 for free; (5) `/sheet-json derived` surfaces `check_advantage_on = {skills, sources}` (display-only mirror, matching the `magic_missile_immune` / `incoming_attacks_have_disadvantage` precedent); (6) the demo seed gives Rowan Quickbow (Ranger) the cloak as a 4th attuned item (fine at seed-load since the 3/3 cap is enforced only at the `/attune` runtime endpoint — Cloak of Displacement / Lyra precedent). The "Wisdom (Perception) checks to see you have disadvantage" half is a target-side perceiver read (the `/roll` doesn't carry a perceived target) — filed Phase 4b. MINOR — additive feature + tests, no schema change.
+
+### Added
+- `check_advantage_on` union list (+ `check_advantage_sources` map) in `_equipped_item_effects`, attunement-gated.
+- `cloak-of-elvenkind` entry in `_MAGIC_ITEM_PASSIVES`.
+- `_roll_item_check_advantage()` — `/roll`-time equipped-item check-advantage read helper.
+- `/sheet-json derived.check_advantage_on = {skills, sources}` display mirror.
+- `tests/harness/test_item_cloak_of_elvenkind.py` (5 tests): Stealth check rolls advantage (`auto_advantage_cloak_of_elvenkind`); non-Stealth (Perception) check unaffected (skill gate); item-advantage + Poisoned condition-disadvantage cancels to a `canceled_*` straight roll (PHB p.173); detuning the cloak (via a cap-independent sheet-fields PATCH) drops the advantage (straight roll); `/sheet-json` exposes the derived flag naming the cloak.
+
+### Changed
+- `/roll` folds the item check-advantage read into its advantage source set + label, composing after the Phase 2b condition-disadvantage step; the readable note-suffix now covers the `auto_advantage_<item>` shape.
+- Demo seed: Rowan Quickbow gains an equipped + attuned Cloak of Elvenkind (his 4th attuned item).
+- `docs/test-harness-coverage.md`: harness total 2707 → 2712 (+5 cloak-of-elvenkind); added the `test_item_cloak_of_elvenkind.py` section.
+- `docs/plans/advantage-disadvantage.md`: Phase 4b (stealth-advantage items) marked shipped.
+
 ## [2.252.0] - 2026-06-13 — "The Borrowed Silhouette"
 
 **Schema version:** 69

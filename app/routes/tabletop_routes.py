@@ -16737,18 +16737,56 @@ async def roll_dice(
                 expr = expr.replace("1d20", "2d20kl1", 1)
                 roll_state_applied = f"auto_disadvantage_{cond_dis_key}"
 
+    # v2.253.0 — Phase 4b: item-granted check advantage (Cloak of
+    # Elvenkind → Stealth). Composes with the prior roll_state /
+    # condition-disadvantage per RAW PHB p.173: an advantage source plus
+    # ANY disadvantage source = a straight roll; advantage alone = 2d20kh1;
+    # advantage stacking on existing advantage = no-op.
+    item_adv_key = None
+    if not skip_roll_state and _char is not None:
+        item_adv_key = _roll_item_check_advantage(
+            _char.sheet or {}, stat_key_lc,
+        )
+    if item_adv_key:
+        if roll_state_applied in ("auto_advantage", "manual_advantage"):
+            # Already advantage — RAW adv/dis don't stack; no-op.
+            pass
+        elif roll_state_applied.startswith("canceled_"):
+            # A prior adv source was already canceled by a disadvantage
+            # source to a straight roll; an extra advantage source can't
+            # un-cancel the disadvantage — stays straight.
+            pass
+        elif roll_state_applied in (
+            "auto_disadvantage", "manual_disadvantage",
+        ) or roll_state_applied.startswith("auto_disadvantage_"):
+            # Disadvantage present → the item's advantage cancels it to a
+            # straight 1d20 (PHB p.173).
+            expr = _re.sub(r"(?i)\b2d20kl1\b", "1d20", expr, count=1)
+            roll_state_applied = (
+                f"canceled_advantage_{item_adv_key}_vs_{roll_state_applied}"
+            )
+        else:
+            # No prior roll_state; impose advantage now.
+            if "1d20" in expr and "2d20" not in expr:
+                expr = expr.replace("1d20", "2d20kh1", 1)
+                roll_state_applied = f"auto_advantage_{item_adv_key}"
+
     note_suffix = _roll_state_note_suffix(roll_state_applied)
     if not note_suffix and roll_state_applied.startswith(
-        ("auto_disadvantage_", "canceled_")
+        ("auto_advantage_", "auto_disadvantage_", "canceled_")
     ):
-        # Phase 2b labels carry extra context after the base label —
+        # Phase 2b/4b labels carry extra context after the base label —
         # surface a readable suffix for the new shapes too.
-        if roll_state_applied.startswith("auto_disadvantage_"):
+        if roll_state_applied.startswith("auto_advantage_"):
+            note_suffix = (
+                f" (auto advantage · {roll_state_applied.split('_', 2)[2]})"
+            )
+        elif roll_state_applied.startswith("auto_disadvantage_"):
             note_suffix = (
                 f" (auto disadvantage · {roll_state_applied.split('_', 2)[2]})"
             )
         else:
-            note_suffix = " (auto adv canceled by condition)"
+            note_suffix = " (auto adv/dis canceled)"
     if note_suffix:
         note = (note + note_suffix)[:200]
 
@@ -28597,6 +28635,33 @@ def _roll_condition_disadvantage(
     return None
 
 
+def _roll_item_check_advantage(
+    sheet: "dict | None",
+    stat_key_lc: str,
+) -> "str | None":
+    """v2.253.0 — Phase 4b. Returns a label key (item-name-derived,
+    lowercased with spaces→underscores) when an equipped + attuned magic
+    item grants the rolling PC advantage on THIS ability check, or None.
+    Cloak of Elvenkind (RAW DMG p.158) is the first source — advantage on
+    Dexterity (Stealth) checks. The ``stat_key_lc`` gate means only the
+    matching skill check fires (a Stealth item doesn't help a Perception
+    roll). Generic ``/roll`` calls without a ``stat_key`` don't fire — the
+    same conservative default as ``_roll_condition_disadvantage``.
+
+    Reads the `check_advantage_on` union from ``_equipped_item_effects``,
+    which already applies the per-payload attunement gate, so a detuned
+    cloak contributes nothing.
+    """
+    if not sheet or not stat_key_lc:
+        return None
+    eff = _equipped_item_effects(sheet)
+    skills = eff.get("check_advantage_on") or []
+    if stat_key_lc not in skills:
+        return None
+    src = (eff.get("check_advantage_sources") or {}).get(stat_key_lc)
+    return str(src or "item").strip().lower().replace(" ", "_")
+
+
 # v2.156.0 — Phase 2e. RAW PHB Appendix A: Paralyzed / Stunned /
 # Unconscious / Petrified all auto-fail STR + DEX saving throws. This
 # is a SEPARATE mechanic from adv/dis — the d20 doesn't matter; the
@@ -32725,6 +32790,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "cloak-of-displacement": [
         {"incoming_attacks_have_disadvantage": True, "requires_attunement": True},
     ],
+    # v2.253.0 — Cloak of Elvenkind (RAW DMG p.158, uncommon, attunement).
+    # "while you wear this cloak with its hood up ... you have advantage on
+    # Dexterity (Stealth) checks made to hide." The v1 model is the always-on
+    # Stealth-check advantage on the wearer's own /roll; the "Wisdom
+    # (Perception) checks to see you have disadvantage" half is a target-side
+    # perceiver read (filed Phase 4b — the /roll doesn't carry a perceived
+    # target). Read at /roll time via `_roll_item_check_advantage`.
+    "cloak-of-elvenkind": [
+        {"check_advantage_on": ["stealth"], "requires_attunement": True},
+    ],
 }
 
 
@@ -33819,6 +33894,16 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # ATTUNEMENT-gated, so the walker's attunement check filters it.
         "incoming_attacks_have_disadvantage": False,
         "incoming_attacks_have_disadvantage_sources": [],
+        # v2.253.0 — item-granted ability-check advantage (Cloak of
+        # Elvenkind, RAW DMG p.158). `check_advantage_on` is the union of
+        # skill keys (lowercased, e.g. "stealth") an equipped+attuned item
+        # grants advantage on; `check_advantage_sources` maps each skill key
+        # → the granting item name (for the roll-log label). Read at /roll
+        # time by `_roll_item_check_advantage` and folded into the existing
+        # PHB p.173 adv/dis composition. See docs/plans/advantage-disadvantage.md
+        # Phase 4b. ATTUNEMENT-gated, so the walker's attunement check filters it.
+        "check_advantage_on": [],
+        "check_advantage_sources": {},
     }
     if not isinstance(sheet, dict):
         return out
@@ -34114,6 +34199,23 @@ def _equipped_item_effects(sheet: dict) -> dict:
             ):
                 out["incoming_attacks_have_disadvantage"] = True
                 out["incoming_attacks_have_disadvantage_sources"].append(item_name)
+            # v2.253.0 — item-granted check advantage (Cloak of Elvenkind,
+            # RAW DMG p.158). A payload's `check_advantage_on` is a list of
+            # skill keys (e.g. ["stealth"]); each is folded into the union
+            # list + records the granting item for the /roll label. The
+            # per-item `_check_advantage_on` rider can override/extend the
+            # payload default. Attunement-gated by the per-payload check above.
+            _cadv = item.get("_check_advantage_on") or p.get("check_advantage_on")
+            if isinstance(_cadv, str):
+                _cadv = [_cadv]
+            if isinstance(_cadv, (list, tuple)):
+                for _sk in _cadv:
+                    _sk_norm = str(_sk or "").strip().lower()
+                    if not _sk_norm:
+                        continue
+                    if _sk_norm not in out["check_advantage_on"]:
+                        out["check_advantage_on"].append(_sk_norm)
+                    out["check_advantage_sources"].setdefault(_sk_norm, item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -91261,6 +91363,17 @@ async def get_character_sheet_json(
                         _item_eff.get(
                             "incoming_attacks_have_disadvantage_sources"
                         ) or []
+                    ),
+                }
+            # v2.253.0 — item-granted check advantage (Cloak of Elvenkind,
+            # Phase 4b). Display-only mirror of the `/roll` read: lists the
+            # skill keys an equipped + attuned item grants advantage on, with
+            # the granting item per skill. Present only when non-empty.
+            if _item_eff.get("check_advantage_on"):
+                derived["check_advantage_on"] = {
+                    "skills": list(_item_eff.get("check_advantage_on") or []),
+                    "sources": dict(
+                        _item_eff.get("check_advantage_sources") or {}
                     ),
                 }
         except Exception:

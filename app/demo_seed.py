@@ -2900,6 +2900,22 @@ def _ranger_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
              "_slug": "boots-of-the-winterlands",
              "desc": "Uncommon wondrous item, attunement. While you wear these furred boots, you have resistance to cold damage, you ignore difficult terrain created by ice or snow, and you can tolerate temperatures as low as -50 degrees Fahrenheit (or -100 in heavy clothing). RAW DMG p.156."},
+            # v2.253.0 — Cloak of Elvenkind (RAW DMG p.158, uncommon,
+            # attunement) — advantage/disadvantage Phase 4b. While worn with
+            # the hood up the wearer has advantage on Dexterity (Stealth)
+            # checks; the v1 model surfaces that always-on Stealth-check
+            # advantage through `_roll_item_check_advantage` on Rowan's /roll.
+            # Rowan's 4th attuned item — fine at seed-load since the RAW 3/3
+            # cap is enforced only at the /attune runtime endpoint (Cloak of
+            # Displacement / Lyra precedent, v2.252.0). On-theme for a forest
+            # ranger slipping through the underbrush. The "Wisdom (Perception)
+            # checks to see you have disadvantage" half is a target-side
+            # perceiver read (filed Phase 4b). Read on /sheet-json as
+            # derived.check_advantage_on.
+            {"name": "Cloak of Elvenkind", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
+             "_slug": "cloak-of-elvenkind",
+             "desc": "Uncommon wondrous item, attunement. While you wear this cloak with its hood up, Wisdom (Perception) checks made to see you have disadvantage, and you have advantage on Dexterity (Stealth) checks made to hide. RAW DMG p.158."},
         ],
         # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
         # a feats entry; mechanical effects (ignore long-range disadvantage,
