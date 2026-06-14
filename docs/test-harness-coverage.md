@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2773 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.272.0, 2026-06-14).
+**Total tests:** 2776 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.273.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3070,6 +3070,15 @@ v2.272.0 charged-items Phase 2 — Staff of Thunder and Lightning (RAW DMG p.202
 | `test_staff_of_thunder_and_lightning_thunder_2_targets` | Cast Thunder at 2 targets with no `charges` param → 200 with `save_dc: 17` (flat RAW DC), `save_ability: "CON"`, `dice: "2d6"`, `charges_spent: 2` (defaults to min), `resource.current: 3` (5→3), both ids resolved. |
 | `test_staff_of_thunder_and_lightning_under_min_returns_400` | POST with `charges: 1` (Thunder is min=max=2) → 400 out-of-range. |
 | `test_staff_of_thunder_and_lightning_empty_returns_409` | Drain the staff to 1 charge (below the 2-charge Thunder cost) via `/sheet-fields`, then cast → 409 with `error: "insufficient_charges"` + `current: 1`. Teardown restores the snapshot. |
+
+### `test_use_item_action_wand_of_wonder.py`
+v2.273.0 charged-items Phase 4 — Wand of Wonder (RAW DMG p.213, rare, attunement by a spellcaster). The first `action_kind: "random_table"` charge action: spend 1 charge → roll d100 on the `_WAND_OF_WONDER_TABLE` chaos table → return the rolled effect for the GM to narrate. The handler honors an optional `force_roll` (1-100) override for deterministic tests. Zara Emberfire (Tiefling Draconic Sorcerer) carries an equipped+attuned Wand of Wonder + a `wand-of-wonder` resource row (7/7). The fixture force-reseeds the charges to 7 and snapshots for teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_wand_of_wonder_roll_happy_path` | Roll with no params → 200 with `action_kind: "random_table"`, `roll` in 1..100, `charges_spent: 1`, `resource.current: 6` (7→6), non-empty `effect` + `row_key`. |
+| `test_wand_of_wonder_force_roll_fireball` | POST with `force_roll: 72` (the 70-79 band) → `roll: 72`, `row_key: "fireball"`, `"Fireball"` in `effect`, `resource.current: 6`. |
+| `test_wand_of_wonder_empty_returns_409` | Drain the wand to 0 charges via `/sheet-fields`, then roll → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
 
 ### `test_arrow_of_slaying.py`
 v2.159.1 magic-items-automation Phase 8a — Arrow of Slaying (Giants) (RAW DMG p.151). First ammunition-shape catalog row, extending the v2.158.102 `on_hit_save` substrate with a new `effect: "damage"` variant for save-for-half damage. Rowan Quickbow's Longbow (Arrow of Slaying — Giants) attack at attack_index 2 fires the rider via `_slug` match. New Hill Giant token template (`sheet.type="giant"`) gives the helper-resolution path a real RAW target.

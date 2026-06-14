@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0, Staff of Thunder and Lightning ✅ v2.272.0); Phase 3 ✅ complete (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live; Gem of Seeing ✅ v2.270.0 — the `action_kind: "buff"` shape is now live; Horn of Blasting ✅ v2.271.0 — the first charge-less `attack_aoe` item); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phase 4 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0, Staff of Thunder and Lightning ✅ v2.272.0); Phase 3 ✅ complete (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live; Gem of Seeing ✅ v2.270.0 — the `action_kind: "buff"` shape is now live; Horn of Blasting ✅ v2.271.0 — the first charge-less `attack_aoe` item); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0); Phase 4 ✅ (Wand of Wonder ✅ v2.273.0 — the `action_kind: "random_table"` d100-table shape is now live).
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -140,13 +140,19 @@ existing attack/heal/buff resolvers instead of the spell resolver.
 
 ### Phase 4 — Random-effect table (NEW shape #6)
 
-- **Wand of Wonder** (DMG p.213, rare, attunement) — 7 charges; each use rolls
-  d100 on a 19-row effect table (cast a random spell, slow, stinking cloud,
-  rain, butterflies, etc.). Needs a `_WAND_OF_WONDER_TABLE` data block + a
-  `action_kind: "random_table"` branch that rolls d100, picks the row, and
-  dispatches that row's sub-effect (some rows are spell casts → reuse shape #1
-  resolver; some are flavor chat cards). This is the most involved phase —
-  file it last.
+- **Wand of Wonder** (DMG p.213, rare, attunement) — ✅ **shipped v2.273.0**. 7
+  charges; each use rolls d100 on the `_WAND_OF_WONDER_TABLE` chaos table (21
+  inclusive `[lo, hi]` bands — cast a random spell, slow, stinking cloud, rain,
+  butterflies, lightning bolt, fireball, petrification, etc.). The
+  `action_kind: "random_table"` branch routes to `_use_item_action_wand_of_wonder`,
+  which decrements 1 charge, rolls d100 (or honors a `force_roll` 1-100
+  override), looks up the row, broadcasts `feature_used`, and returns
+  `{roll, row_key, effect, description, resource}`. Per-row sub-effects are
+  GM-adjudicated in v1 (the content-on-a-shape strategy) rather than auto-cast —
+  landing the random-table substrate with zero per-effect engine work. Seeded
+  on Zara Emberfire (Draconic Sorcerer); new sheet-UI `random-table` picker
+  (no target/param + a local toast of the rolled effect). Future work could
+  auto-dispatch the spell-cast rows through the shape #1 resolver.
 
 ### Phase 5 — Passive +bonus "wands" (drop into `_MAGIC_ITEM_PASSIVES`)
 

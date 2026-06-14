@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.273.0] - 2026-06-14 — "The Wild Surge"
+
+**Schema version:** 69
+
+**Commit summary:** Wand of Wonder — the first charged-items Phase 4 item and the first `action_kind: "random_table"` charge action: a `wand-of-wonder` entry in `_MAGIC_ITEM_ACTIONS` whose `wonder` action routes through the new `_use_item_action_wand_of_wonder` handler (spend 1 charge → roll d100 on the RAW chaos table, return the rolled effect), backed by a `_WAND_OF_WONDER_TABLE` module constant, seeded on Zara Emberfire (Draconic Sorcerer) with a 7-charge resource row, plus a new sheet-UI `random-table` picker and harness tests.
+
+**Description:** **Wand of Wonder** (RAW DMG p.213, rare, **attunement by a spellcaster**): "this wand has 7 charges. While holding it, you can use an action to expend 1 of its charges and choose a target within 120 feet of you... You then roll on the Wand of Wonder table to determine what happens. The wand regains 1d6 + 1 expended charges daily at dawn." This is the first item shipped against charged-items **Phase 4** and lands the plan's last new substrate shape: an `action_kind: "random_table"` branch. Where the wand handlers resolve a spell, the necklace/staff handlers resolve a save-for-half AoE, the attack handler rolls a to-hit, and the buff handler installs a timed buff, the new `_use_item_action_wand_of_wonder` handler decrements the charge resource and **rolls d100 on a chaos table** — the rolled row names the random effect (a spell cast, a damage burst, a transformation, a summoned animal…) for the GM to narrate/resolve. The d100 table (21 inclusive `[lo, hi]` bands) lives in the `_WAND_OF_WONDER_TABLE` module constant; each row carries a stable `key`, a short `effect` label, and a GM-narration `desc`. The handler honors an optional `force_roll` (1-100) override so a GM can pick the outcome and tests can assert deterministically. Per-row sub-effects are GM-adjudicated in v1 — landing the random-table substrate with zero per-effect engine work, the same content-on-a-shape strategy as the GM-narrated staff riders. Seeded on Zara Emberfire (Tiefling Draconic Sorcerer) — chaotic arcane magic is the perfect wielder; seed-load bypasses the RAW 3-item attunement cap (enforced at `/attune` runtime only). The 7-charge resource row recharges 1d6+1 at dawn (long rest). The sheet gains a new `random-table` picker flow (no target, no modal — POST the `action_key`; a local toast surfaces the rolled d100 effect, and the chat roll card mirrors it via `feature_used`). MINOR — additive content + one small engine branch + tests, no schema change.
+
+### Added
+- `_use_item_action_wand_of_wonder` handler in `app/routes/tabletop_routes.py` — the first `action_kind: "random_table"` charge action: validates the single-charge band, gates on the resource row (409 `insufficient_charges`), decrements the charge, rolls d100 (or honors `force_roll` 1-100), looks up the row in `_WAND_OF_WONDER_TABLE`, broadcasts `resource_update` + `feature_used`, and returns `{ok, item_name, action_key, action_kind, charges_spent, roll, row_key, effect, description, resource}`.
+- `_WAND_OF_WONDER_TABLE` module constant — the RAW DMG p.213 d100 chaos table (21 inclusive `[lo, hi]` bands; each row has `key`/`effect`/`desc`) + a `_wand_of_wonder_row(roll)` band lookup.
+- `wand-of-wonder` entry in `_MAGIC_ITEM_ACTIONS` (`wonder` action: `action_kind: random_table`, `min`/`max` 1; `requires_attunement: True`, `resource_key: wand-of-wonder`) + a `wand-of-wonder` dispatch branch routing to the new handler.
+- Sheet UI: `wand-of-wonder` `ITEM_ACTION_SLUGS` mapping (new `random-table` kind, no target/param) rendering a `🎲 Unleash Wonder` button + a local toast surfacing the rolled d100 effect on success.
+- Demo seed: Zara Emberfire gains an equipped + attuned Wand of Wonder plus its 7-charge `wand-of-wonder` resource row (1d6+1 recharge on long rest).
+- `tests/harness/test_use_item_action_wand_of_wonder.py` (3 tests): a roll with no params → `action_kind: random_table`, `roll` in 1..100, `charges_spent: 1`, resource 7 → 6, non-empty `effect`/`row_key`; `force_roll: 72` → the `fireball` row (70-79 band) resolves deterministically; a drained wand (0 charges) → 409 `insufficient_charges` with `current: 0`. Resources restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 4 status — Wand of Wonder marked ✅ shipped (v2.273.0).
+- `docs/test-harness-coverage.md`: harness total 2773 → 2776 (+3 wand-of-wonder); added the `test_use_item_action_wand_of_wonder.py` section.
+
 ## [2.272.0] - 2026-06-14 — "The Caged Storm"
 
 **Schema version:** 69

@@ -33340,6 +33340,30 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.273.0 — charged-items Phase 4: Wand of Wonder (RAW DMG p.213,
+    # rare, attunement by a spellcaster). 7 charges (regains 1d6+1 at
+    # dawn). The first ``action_kind: "random_table"`` item — spend 1
+    # charge and roll d100 on the chaos table; the rolled row names the
+    # effect (a spell cast, a damage burst, a transformation, etc.). v1
+    # rolls the table, decrements the charge, and reports the rolled
+    # effect for the GM to narrate/resolve — the per-row sub-effects
+    # (lightning bolt, fireball, polymorph-into-rhino, petrification…)
+    # are GM-adjudicated rather than auto-cast, so this lands the new
+    # random-table substrate with zero per-effect engine work. The d100
+    # table lives in ``_WAND_OF_WONDER_TABLE`` (module constant below).
+    "wand-of-wonder": {
+        "requires_attunement": True,
+        "resource_key": "wand-of-wonder",
+        "actions": {
+            "wonder": {
+                "name": "Unleash Wonder (d100)",
+                "feature_name": "🎲 Wand of Wonder",
+                "action_kind": "random_table",
+                "min_charges": 1,
+                "max_charges": 1,
+            },
+        },
+    },
     # v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear (RAW
     # DMG p.213). 7 charges (regains 1d6+1 at dawn), spend 1 to cast
     # Fear-Cone: each creature in a 30-ft cone makes a DC 15 WIS save
@@ -82037,6 +82061,15 @@ async def use_item_action(
             charges=body.get("charges"),
             slug=slug,
         )
+    if slug == "wand-of-wonder":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_wand_of_wonder(
+            db, campaign_id, char, item, sheet, catalog,
+            action_key, action_def,
+            charges=body.get("charges"),
+            force_roll=body.get("force_roll"),
+            slug=slug,
+        )
     if slug == "horn-of-blasting":
         action_def = catalog["actions"][action_key]
         return await _use_item_action_horn_of_blasting(
@@ -83212,6 +83245,217 @@ async def _use_item_action_javelin_of_lightning(
         "save_dc": save_dc,
         "save_ability": save_ability,
         "results": results,
+    }
+
+
+# v2.273.0 — charged-items Phase 4: the Wand of Wonder d100 chaos table
+# (RAW DMG p.213). Each row is an inclusive ``[lo, hi]`` band on a d100
+# roll; ``key`` is a stable machine slug, ``effect`` is the short label,
+# and ``desc`` is the GM-narration text. Per-row sub-effects (spell
+# casts, damage bursts, transformations) are GM-adjudicated in v1 — the
+# handler reports the rolled row and the GM resolves it.
+_WAND_OF_WONDER_TABLE = [
+    {"lo": 1, "hi": 5, "key": "slow",
+     "effect": "Slow the target",
+     "desc": "You cast slow on the target (or yourself if no creature is in range)."},
+    {"lo": 6, "hi": 10, "key": "faerie-fire",
+     "effect": "Faerie fire on the target",
+     "desc": "You cast faerie fire on the target."},
+    {"lo": 11, "hi": 15, "key": "stunned-self",
+     "effect": "You are stunned until your next turn",
+     "desc": "You are stunned until the start of your next turn, believing something awesome just happened."},
+    {"lo": 16, "hi": 20, "key": "gust-of-wind",
+     "effect": "Gust of wind",
+     "desc": "You cast gust of wind."},
+    {"lo": 21, "hi": 25, "key": "detect-thoughts",
+     "effect": "Detect thoughts on the target",
+     "desc": "You cast detect thoughts on the target. If you didn't target a creature, you take 1d6 psychic damage."},
+    {"lo": 26, "hi": 30, "key": "stinking-cloud",
+     "effect": "Stinking cloud",
+     "desc": "You cast stinking cloud."},
+    {"lo": 31, "hi": 33, "key": "heavy-rain",
+     "effect": "Heavy rain, 60-ft radius",
+     "desc": "Heavy rain falls in a 60-ft radius centered on a point within 100 ft, until the start of your next turn."},
+    {"lo": 34, "hi": 36, "key": "summon-animal",
+     "effect": "An animal appears (rhino / elephant / rat)",
+     "desc": "An animal appears within 5 ft of the target: 01-25 a rhinoceros, 26-50 an elephant, 51-100 a rat (roll d100)."},
+    {"lo": 37, "hi": 46, "key": "lightning-bolt",
+     "effect": "Lightning bolt",
+     "desc": "You cast lightning bolt."},
+    {"lo": 47, "hi": 49, "key": "butterflies",
+     "effect": "600 butterflies, 30-ft heavily obscured",
+     "desc": "A cloud of 600 large butterflies fills a 30-ft square, heavily obscuring it, for 10 minutes."},
+    {"lo": 50, "hi": 53, "key": "enlarge-target",
+     "effect": "Enlarge the target",
+     "desc": "The target enlarges, as the enlarge effect of enlarge/reduce, for 1 minute."},
+    {"lo": 54, "hi": 58, "key": "darkness",
+     "effect": "Darkness",
+     "desc": "You cast darkness."},
+    {"lo": 59, "hi": 62, "key": "grass-grows",
+     "effect": "Grass grows, 60-ft radius",
+     "desc": "Grass grows in a 60-ft radius centered on a point within 100 ft, or withers existing grass there."},
+    {"lo": 63, "hi": 65, "key": "object-ethereal",
+     "effect": "An object becomes ethereal",
+     "desc": "A nonmagical object (up to 1,000 lb, Large or smaller) within 120 ft becomes ethereal for 1 minute."},
+    {"lo": 66, "hi": 69, "key": "shrink-self",
+     "effect": "You shrink",
+     "desc": "You shrink, as the reduce effect of enlarge/reduce, for 1 minute."},
+    {"lo": 70, "hi": 79, "key": "fireball",
+     "effect": "Fireball",
+     "desc": "You cast fireball."},
+    {"lo": 80, "hi": 84, "key": "invisibility-self",
+     "effect": "Invisibility on yourself",
+     "desc": "You cast invisibility on yourself."},
+    {"lo": 85, "hi": 87, "key": "leaves-grow",
+     "effect": "Leaves grow from the target",
+     "desc": "Leaves grow from the target for 24 hours; they wither and fall off after that."},
+    {"lo": 88, "hi": 90, "key": "gem-stream",
+     "effect": "Stream of gems (bludgeoning line)",
+     "desc": "1d4 × 10 gems (1 gp each) shoot in a 30-ft line, 5 ft wide; total 1 bludgeoning damage per gem, split among creatures in the line."},
+    {"lo": 91, "hi": 95, "key": "blinding-light",
+     "effect": "Blinding light, 30-ft cone (DC 15 CON)",
+     "desc": "Colorful light bursts in a 30-ft cone; each creature there makes a DC 15 CON save or is blinded for 1 minute."},
+    {"lo": 96, "hi": 97, "key": "skin-blue",
+     "effect": "Target's skin turns blue",
+     "desc": "The target's skin turns bright blue for 1d6 days (the object's owner instead, if you rolled on an object)."},
+    {"lo": 98, "hi": 100, "key": "petrify",
+     "effect": "Petrify the target (DC 15 CON)",
+     "desc": "The target must make a DC 15 CON save or be restrained, then petrified, as it turns to stone (repeated save at the end of each of its turns; 3 failures = petrified, 3 successes = ends)."},
+]
+
+
+def _wand_of_wonder_row(roll: int) -> dict:
+    """Return the d100 table row whose inclusive band contains ``roll``."""
+    for row in _WAND_OF_WONDER_TABLE:
+        if row["lo"] <= roll <= row["hi"]:
+            return row
+    return _WAND_OF_WONDER_TABLE[-1]
+
+
+async def _use_item_action_wand_of_wonder(
+    db, campaign_id, char, item, sheet, catalog,
+    action_key, action_def,
+    charges=None,
+    force_roll=None,
+    slug="wand-of-wonder",
+):
+    """v2.273.0 — charged-items Phase 4: the first
+    ``action_kind: "random_table"`` charge action. Spends 1 charge and
+    rolls d100 on the Wand of Wonder chaos table; the rolled row names
+    the effect for the GM to narrate/resolve.
+
+    RAW Wand of Wonder (DMG p.213, rare, attunement by a spellcaster):
+    7 charges (regains 1d6+1 at dawn). ``force_roll`` (1-100) overrides
+    the random roll — used for deterministic tests and for a GM who
+    wants to pick the outcome.
+    """
+    res_key = str(catalog.get("resource_key") or slug)
+    min_c = int(action_def.get("min_charges") or 1)
+    max_c = int(action_def.get("max_charges") or 1)
+    try:
+        n_charges = int(charges) if charges is not None else min_c
+    except (TypeError, ValueError):
+        raise HTTPException(400, "charges must be an int")
+    if n_charges < min_c or n_charges > max_c:
+        raise HTTPException(
+            400,
+            f"charges must be {min_c}..{max_c} for "
+            f"{action_def.get('name') or action_key}",
+        )
+
+    # Resource lookup + insufficient-charges gate.
+    resources = list(sheet.get("resources") or [])
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    if cur < n_charges:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "insufficient_charges",
+                "current": cur,
+                "requested": n_charges,
+                "label": item.get("name") or slug,
+            },
+        )
+
+    feature_name = str(action_def.get("feature_name") or "🎲 Wand of Wonder")
+
+    # Roll d100 (or honor the force_roll override, clamped 1..100).
+    if force_roll is not None:
+        try:
+            roll = max(1, min(100, int(force_roll)))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "force_roll must be an int")
+    else:
+        import random as _rand
+        roll = _rand.randint(1, 100)
+    row = _wand_of_wonder_row(roll)
+
+    # Decrement the charge.
+    res_row["current"] = cur - n_charges
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": feature_name,
+                "summary": (
+                    f"{char.name} unleashes the {item.get('name')} — "
+                    f"d100 = {roll}: {row['effect']}. {row['desc']} "
+                    f"({res_row['current']}/{res_max} charges left.)"
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "action_key": action_key,
+        "action_kind": "random_table",
+        "charges_spent": n_charges,
+        "roll": roll,
+        "row_key": row["key"],
+        "effect": row["effect"],
+        "description": row["desc"],
+        "resource": {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
     }
 
 

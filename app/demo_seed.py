@@ -4264,6 +4264,18 @@ def _sorcerer_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-polymorph", "weight_lb": 1,
              "desc": "Rare wand, attunement. 7 charges. Expend 1 charge to cast Polymorph (save DC 15) — transform a creature into a beast for the duration (WIS save negates on unwilling targets). Regains 1d6+1 charges at dawn (long rest). RAW DMG p.212."},
+            # v2.273.0 — charged-items Phase 4: Wand of Wonder (RAW DMG
+            # p.213, rare, attunement by a spellcaster). 7 charges; expend
+            # 1 to roll d100 on the chaos table (the first
+            # action_kind: "random_table" item). A Sorcerer is the
+            # perfect wielder — Zara's chaotic Draconic magic pairs with
+            # the wand's wild-surge table. Her 5th attuned item (seed-load
+            # bypasses the RAW 3-item cap, enforced at /attune runtime
+            # only). Paired with the wand-of-wonder resource row below.
+            {"name": "Wand of Wonder", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-wonder", "weight_lb": 1,
+             "desc": "Rare wand, attunement by a spellcaster. 7 charges. Expend 1 charge to roll d100 on the Wand of Wonder chaos table — the result is a random effect (a spell, a damage burst, a transformation, a summoned animal…) that the GM narrates/resolves. Regains 1d6+1 charges at dawn (long rest). RAW DMG p.213."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer
@@ -4338,6 +4350,19 @@ def _sorcerer_sheet(name: str) -> dict:
                 "charge_recovery": "1d6+1",
                 "source": "item-wand-of-polymorph",
                 "desc": "7 charges. Spend 1 to cast Polymorph (DC 15) at slot level 4. Regains 1d6+1 charges on long rest.",
+                "manual": False,
+            },
+            # v2.273.0 — charged-items Phase 4: Wand of Wonder charge
+            # counter. 7 charges, 1d6+1 recharge at dawn. The random-table
+            # handler decrements 1 per d100 roll. Paired with the Wand of
+            # Wonder entry in Zara's inventory above.
+            {
+                "key": "wand-of-wonder",
+                "name": "Wand of Wonder",
+                "current": 7, "max": 7, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "item-wand-of-wonder",
+                "desc": "7 charges. Spend 1 to roll d100 on the Wand of Wonder chaos table — a random wild-magic effect. Regains 1d6+1 charges on long rest.",
                 "manual": False,
             },
         ],

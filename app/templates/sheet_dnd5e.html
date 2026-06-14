@@ -7395,6 +7395,15 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           title: 'Horn of Blasting — 30-ft cone, DC 15 CON save: 5d6 thunder + deafened 1 min on a fail, half + no deafen on a pass.',
                           length_ft: 30,
                           apex_half_angle_deg: 26.57},  // RAW PHB p.204
+        // v2.273.0 — charged-items Phase 4: Wand of Wonder (RAW DMG
+        // p.213, attunement by a spellcaster). The first
+        // `random-table` kind — no target, no param: POST the action_key
+        // and the server rolls d100 on the chaos table, decrements a
+        // charge, and returns {roll, effect, description}.
+        'wand-of-wonder': {kind: 'random-table',
+                          action_key: 'wonder',
+                          label: '🎲 Unleash Wonder',
+                          title: 'Wand of Wonder — spend 1 charge to roll d100 on the chaos table; the result is a random wild-magic effect the GM narrates/resolves.'},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
@@ -8096,6 +8105,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // action_key; the server decrements a charge + installs
                     // the buff on the wielder's own combatant.
                     body.action_key = cfg.action_key;
+                } else if (cfg.kind === 'random-table') {
+                    // v2.273.0 — charge-based random-table action (Wand of
+                    // Wonder): no parameter, no target, no modal. POST the
+                    // action_key; the server decrements a charge, rolls
+                    // d100, and returns {roll, effect, description}.
+                    body.action_key = cfg.action_key;
                 } else {
                     const n = await _showItemActionModal(cfg);
                     if (n === null) return;
@@ -8154,6 +8169,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             inventory[idx].qty = data.remaining_qty;
                         }
                         renderInventory();
+                    }
+                    // v2.273.0 — random-table (Wand of Wonder): surface the
+                    // rolled effect to the wielder. The chat roll card also
+                    // shows it via feature_used, but a local toast confirms
+                    // the d100 outcome immediately.
+                    if (cfg.kind === 'random-table' && typeof data.roll === 'number') {
+                        const msg = `🎲 d100 = ${data.roll}: ${data.effect}\n${data.description || ''}`;
+                        (window.showToast || function(m){ alert(m); })(msg, 'info');
                     }
                     // Roll log card will auto-update via feature_used WS.
                 } catch (e) {
