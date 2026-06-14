@@ -32624,6 +32624,18 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
         {"resistance_to": ["cold"], "cold_tolerance": True,
          "requires_attunement": True},
     ],
+    # v2.248.0 — Armor of Resistance (RAW DMG p.152, rare, attunement). RAW:
+    # "you have resistance to one type of damage while you wear this armor.
+    # The GM chooses the type or determines it randomly." Like the Ring of
+    # Resistance, each physical suit is a fixed type, so the resisted damage
+    # type rides the inventory item via the per-item `_resistance_type` rider
+    # (e.g. "fire") on the shared `armor-of-resistance` slug. The walker folds
+    # it into the aggregated `resistance_to` list that `_resistance_halve`
+    # consults in the live damage pipeline — zero new engine code, a pure
+    # substrate reuse of the v2.235.0 resistance surface. Attunement-gated.
+    "armor-of-resistance": [
+        {"requires_attunement": True},
+    ],
 }
 
 

@@ -1257,11 +1257,14 @@ def _paladin_sheet(name: str) -> dict:
             # v2.225.0 — Ioun Stone of Dexterity (RAW DMG p.176, very rare,
             # attunement). Capped-additive +2 DEX to a max of 20 (the
             # v2.224.0 `ability_bonus` substrate). Seeded on Caelan (Paladin,
-            # DEX 10 → effective 12, mod 0 → +1) — his 2nd attuned item. He
-            # wears chain mail (heavy armor), so the DEX bump does NOT change
-            # his AC; it lands purely on DEX saves/checks, a clean read.
+            # DEX 10 → effective 12, mod 0 → +1). He wears chain mail (heavy
+            # armor), so the DEX bump does NOT change his AC; it lands purely
+            # on DEX saves/checks. v2.248.0 detuned it (kept equipped) to free
+            # his 3rd attunement slot for the Armor of Resistance — the DEX
+            # bump was the lowest-value drop (heavy-armor AC unaffected, and
+            # DEX stays covered by other ability-bonus iouns).
             {"name": "Ioun Stone of Dexterity", "type": "magic", "qty": 1,
-             "equippable": True, "equipped": True, "attuned": True,
+             "equippable": True, "equipped": True, "attuned": False,
              "_slug": "ioun-stone", "_ability_bonus": {"DEX": 2},
              "desc": "Very rare wondrous item, attunement. This deep red sphere orbits your head and increases your Dexterity by 2, to a maximum of 20. RAW DMG p.176."},
             # v2.229.0 — stored-spell capacity drop-in. Ioun Stone of
@@ -1281,16 +1284,29 @@ def _paladin_sheet(name: str) -> dict:
              "_slug": "ioun-stone", "_spell_reserve_levels": 3,
              "desc": "Rare wondrous item, attunement. This pearly white spindle orbits your head and can store up to 3 levels of spells cast into it, holding them until you cast them. RAW DMG p.176."},
             # v2.244.0 — Ring of Feather Falling (RAW DMG p.191, rare,
-            # attunement). Fills the 3rd attunement slot the v2.243.0
-            # Dragon Slayer RAW-correction freed up (Caelan back to 3/3:
-            # Ioun Stone of Dexterity + Ioun Stone of Reserve + this ring).
-            # First feather-fall passive — surfaces on /sheet-json as
+            # attunement). One of Caelan's 3 attuned items (Ioun Stone of
+            # Reserve + this ring + the v2.248.0 Armor of Resistance; the DEX
+            # ioun was detuned in v2.248.0). Surfaces on /sheet-json as
             # derived.feather_fall, gated on the `attuned` flag (unlike the
             # no-attunement Ring of Water Walking / Swimming in this batch).
             {"name": "Ring of Feather Falling", "type": "magic", "qty": 1,
              "equippable": True, "equipped": True, "attuned": True,
              "weight_lb": 0, "_slug": "ring-of-feather-falling",
              "desc": "Rare ring, attunement. When you fall while wearing this ring, you descend 60 feet per round and take no damage from falling. RAW DMG p.191."},
+            # v2.248.0 — Armor of Resistance (Acid) (RAW DMG p.152, rare,
+            # attunement). Caelan's 3rd attuned item, taking the slot the
+            # detuned Ioun Stone of Dexterity freed. The acid resistance
+            # rides the per-item `_resistance_type: "acid"` rider on the
+            # shared `armor-of-resistance` slug — the same shared-slug pattern
+            # as the Ring of Resistance (Seraphine, fire). The walker folds it
+            # into the `resistance_to` list that `_resistance_halve` consults
+            # in the live damage pipeline, so acid damage to Caelan is halved
+            # while worn. A resilient suit fits a frontline Devotion paladin.
+            {"name": "Armor of Resistance (Acid)", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "weight_lb": 55,
+             "_slug": "armor-of-resistance", "_resistance_type": "acid",
+             "desc": "Rare armor (chain mail), attunement. You have resistance to acid damage while you wear this armor. RAW DMG p.152."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:

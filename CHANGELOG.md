@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.248.0] - 2026-06-13 — "The Resilient Plate"
+
+**Schema version:** 69
+
+**Commit summary:** Armor of Resistance — a pure reuse of the v2.235.0 Ring of Resistance substrate (per-item `_resistance_type` rider on a new `armor-of-resistance` slug, zero new engine code), homed on Caelan by displacing his redundant Ioun Stone of Dexterity.
+
+**Description:** The **Armor of Resistance** (RAW DMG p.152, rare, attunement) gives the wearer resistance to one type of damage while worn — "the GM chooses the type or determines it randomly." Like the Ring of Resistance, each physical suit is a fixed type, so the resisted damage type rides the inventory item via the per-item `_resistance_type` rider (here `"acid"`) on the shared `armor-of-resistance` slug. This is a pure substrate reuse: the only engine change is a new `armor-of-resistance` entry in `_MAGIC_ITEM_PASSIVES` (`requires_attunement: True`) — the v2.235.0 walker already folds any catalogued slug's `_resistance_type` rider into the aggregated `resistance_to` list that `_resistance_halve` consults in the live damage pipeline, so acid damage to the wearer is halved end-to-end through `PATCH .../sheet-fields` and surfaces on `/sheet-json` as `derived.resistances`. No new field, no new walker block, no new derived block. **Slot sourcing:** every demo PC is at the RAW 3/3 attunement cap, so this needed a lossy displacement. Sir Caelan Lightbringer's **Ioun Stone of Dexterity** was the lowest-cost sacrifice — he wears chain mail (heavy armor), so the DEX bump never touched his AC; it only fed DEX saves/checks. It's now detuned (kept equipped), and the armor takes its slot — Caelan stays at 3/3 (Ioun Stone of Reserve + Ring of Feather Falling + Armor of Resistance (Acid)). A resilient suit fits a frontline Devotion paladin. MINOR — additive content + tests, no schema change, no new substrate.
+
+### Added
+- `armor-of-resistance` entry in `_MAGIC_ITEM_PASSIVES` (`requires_attunement: True`) — the resisted type rides the per-item `_resistance_type` rider on the shared slug, reusing the v2.235.0 Ring of Resistance surface verbatim.
+- Demo seed: Armor of Resistance (Acid) on Sir Caelan Lightbringer (`_slug: "armor-of-resistance"`, `_resistance_type: "acid"`, equipped + attuned).
+- `tests/harness/test_item_armor_of_resistance.py` (5 tests): `derived.resistances` lists acid + names the armor; 20 acid damage halved to 10 via `_resistance_halve`; 20 fire damage unreduced (type-specific control); detuning via /attune drops the acid resistance (attunement required); unequip drops it.
+
+### Changed
+- Demo seed: Caelan's Ioun Stone of Dexterity detuned (`attuned: True → False`, kept equipped) to free his 3rd attunement slot; his effective DEX reverts 12 → 10.
+- `tests/harness/test_item_ioun_stone.py`: dropped the now-detuned `("Sir Caelan Lightbringer", "DEX", ...)` row from the `_VARIANTS` parametrize (the remaining WIS row + the INT primary test still prove the shared `ioun-stone` slug covers the ability variants).
+- `docs/test-harness-coverage.md`: harness total 2685 → 2689 (+5 armor-of-resistance, −1 dropped ioun variant); added the `test_item_armor_of_resistance.py` section.
+
 ## [2.247.1] - 2026-06-13 — "The Steady Footing"
 
 **Schema version:** 69

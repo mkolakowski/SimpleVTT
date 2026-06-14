@@ -118,11 +118,14 @@ async def test_ioun_stone_caps_at_20(gm_client, magnus):
 # net coverage.
 # v2.247.0 — the Rowan "CHA" variant was dropped likewise: his Ioun Stone of
 # Charisma was detuned (kept equipped) to free his 3rd attunement slot for the
-# Boots of the Winterlands. CHA-via-ioun was a dump-stat demo on a ranger; the
-# remaining DEX/WIS rows + the INT primary test still prove the single
-# `ioun-stone` slug + per-item `_ability_bonus` covers the ability variants.
+# Boots of the Winterlands. CHA-via-ioun was a dump-stat demo on a ranger.
+# v2.248.0 — the Caelan "DEX" variant was dropped likewise: his Ioun Stone of
+# Dexterity was detuned (kept equipped) to free his 3rd attunement slot for the
+# Armor of Resistance (Acid). DEX-via-ioun was the lowest-value drop — Caelan
+# wears heavy armor, so the DEX bump never touched his AC. The remaining WIS row
+# + the INT primary test still prove the single `ioun-stone` slug + per-item
+# `_ability_bonus` covers the ability variants.
 _VARIANTS = [
-    ("Sir Caelan Lightbringer", "DEX", 10, 12, 1),
     ("Krieger Stonefist", "WIS", 13, 15, 2),
 ]
 

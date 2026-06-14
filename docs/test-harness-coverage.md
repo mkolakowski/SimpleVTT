@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2685 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.247.1, 2026-06-13).
+**Total tests:** 2689 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.248.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2503,6 +2503,17 @@ v2.247.0 — Boots of the Winterlands (RAW DMG p.156, uncommon, attunement): res
 | `test_boots_do_not_halve_other_types` | Control: 20 FIRE damage applies in full (−20), proving the resistance is type-specific; restores HP on teardown. |
 | `test_boots_require_attunement` | Detuning via `POST /attune` (`attuned: False`) → cold drops from `derived.resistances` and `derived.cold_tolerance` absent (both attunement-gated); restores seed attunement on teardown. |
 | `test_boots_unequip_drops_flags` | PATCH the boots to `equipped: False` → both derived surfaces absent; restores the original inventory on teardown. |
+
+### `test_item_armor_of_resistance.py`
+v2.248.0 — Armor of Resistance (RAW DMG p.152, rare, attunement): "you have resistance to one type of damage while you wear this armor." A pure reuse of the v2.235.0 Ring of Resistance substrate — the resisted type rides the per-item `_resistance_type` rider (here "acid") on a new `armor-of-resistance` slug; the walker folds it into the aggregated `resistance_to` list that `_resistance_halve` consults in the live damage pipeline. Surfaces on `/sheet-json` as `derived.resistances`. Sir Caelan Lightbringer (Paladin) wears Armor of Resistance (Acid) as his 3rd attuned item, homed by detuning his redundant Ioun Stone of Dexterity (heavy armor meant the DEX bump never touched AC).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_armor_exposes_acid_resistance` | `GET /sheet-json` → `derived.resistances.types` contains "acid", naming "Armor of Resistance" in sources. |
+| `test_armor_halves_acid_damage` | End-to-end: 20 acid damage via `PATCH .../sheet-fields` drops HP by only 10 (`_resistance_halve` halves it); restores HP on teardown. |
+| `test_armor_does_not_halve_other_types` | Control: 20 FIRE damage applies in full (−20), proving the resistance is type-specific; restores HP on teardown. |
+| `test_armor_requires_attunement` | Detuning via `POST /attune` (`attuned: False`) → acid drops from `derived.resistances` (attunement-gated); restores seed attunement on teardown. |
+| `test_armor_unequip_drops_resistance` | PATCH the armor to `equipped: False` → acid resistance absent; restores the original inventory on teardown. |
 
 ### `test_item_ring_of_warmth.py`
 v2.246.0 — Ring of Warmth (RAW DMG p.193, uncommon, attunement): resistance to cold damage + tolerance of cold environments down to −50°F. Composes two substrates: the cold *resistance* rides the catalog payload's `resistance_to: ["cold"]`, folding into the aggregated `resistance_to` list that `_resistance_halve` consults in the live damage pipeline (so cold damage is halved end-to-end, like the Ring of Resistance), and surfaces on `/sheet-json` as `derived.resistances`; the −50°F tolerance is a new boolean-OR `cold_tolerance` flag surfaced as `derived.cold_tolerance = {sources}`. Both attunement-gated. Brakka Wildmane (Beast Barbarian) wears it — homed by detuning her redundant Ioun Stone of Constitution (kept equipped) to stay at the RAW 3/3 cap.
