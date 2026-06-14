@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.278.0] - 2026-06-14 — "The Complete Cinch"
+
+**Schema version:** 69
+
+**Commit summary:** Completes the RAW DMG p.155 Belt of Giant Strength tier table by adding the two remaining distinct tiers — Fire Giant (STR 25) and Cloud Giant (STR 27) — as spare loot in Garrik Ironside's pack. Pure content drop-in on the shipped ability-score override engine (the v2.215.0 per-item `_ability_set` tier mechanism); zero new engine code. Plus two harness tests verifying the 25/27 overrides resolve through `/sheet-json`.
+
+**Description:** The giant-belt table (RAW DMG p.155) has five Strength tiers: Hill 21, Stone/Frost 23, Fire 25, Cloud 27, Storm 29. Four of the five distinct values were already shipped and demonstrated live — Hill 21 (Garrik, v2.212.0), Stone 23 (Zara, v2.215.0), Storm 29 (Brakka, v2.223.0). This commit fills the two remaining distinct values, **Fire (STR 25)** and **Cloud (STR 27)**, completing the table. They ride the single SRD `belt-of-giant-strength` slug via the per-item `_ability_set` override that wins over the catalog Hill default — the same tier mechanism already proven at 23 and 29, so there is **no new engine code**. Both belts are seeded **unequipped / unattuned** as spare loot in Garrik's pack: only equipped+attuned items aggregate in `_equipped_item_effects`, so the spares add zero effective-STR change to any PC (Garrik's worn Hill belt keeps winning) and disturb no existing test. The two new harness tests PATCH each spare belt equipped+attuned (and the Hill belt off) at runtime to verify the override resolves — Fire → effective STR 25 (mod +7, carry 375 lb), Cloud → effective STR 27 (mod +8, carry 405 lb) — then restore the original inventory on teardown. This closes the giant-belt half of the ability-score drop-in tail (the six Ioun Stone ability variants were already complete as of v2.225.0). MINOR — additive demo content + tests, no schema change.
+
+### Added
+- Demo seed: Garrik Ironside gains two spare (unequipped/unattuned) belts — **Belt of Giant Strength (Fire)** (`_ability_set: {"STR": 25}`) and **Belt of Giant Strength (Cloud)** (`_ability_set: {"STR": 27}`) — completing the RAW DMG p.155 tier table.
+- `tests/harness/test_item_belt_of_giant_strength.py`: two tests (`test_belt_fire_tier_sets_str_25`, `test_belt_cloud_tier_sets_str_27`) that PATCH each spare belt equipped+attuned, assert the effective-STR override (25 / 27) and carry capacity (375 / 405) on `/sheet-json`, and restore inventory on teardown. Adds a `_swap_belt_tier_and_read` helper.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2785 → 2787 (+2 belt-tier tests); extended the `test_item_belt_of_giant_strength.py` section with the Fire/Cloud tier rows.
+
 ## [2.277.1] - 2026-06-14 — "The Fresh Tally"
 
 **Schema version:** 69

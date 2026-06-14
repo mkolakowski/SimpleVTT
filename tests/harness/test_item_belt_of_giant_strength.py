@@ -222,6 +222,74 @@ async def test_belt_storm_tier_raises_carry_capacity(gm_client, brakka):
     )
 
 
+async def _swap_belt_tier_and_read(gm_client, char_id, tier_name):
+    """v2.278.0 — PATCH Garrik's worn Hill belt OFF and the named spare
+    tier belt ON (equipped + attuned), read /sheet-json, then restore the
+    original inventory. Returns the post-swap derived block. Only
+    equipped+attuned items aggregate, so this isolates the named tier's
+    `_ability_set` override from the Hill default."""
+    data = await _sheet_json(gm_client, char_id)
+    inv = list((data.get("sheet") or {}).get("inventory") or [])
+    snapshot = [dict(it) if isinstance(it, dict) else it for it in inv]
+    new_inv = [dict(it) if isinstance(it, dict) else it for it in inv]
+    for it in new_inv:
+        if not isinstance(it, dict) or it.get("_slug") != _BELT_SLUG:
+            continue
+        if it.get("name") == tier_name:
+            it["equipped"], it["attuned"] = True, True
+        else:
+            it["equipped"], it["attuned"] = False, False
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json={"inventory": new_inv},
+    )
+    try:
+        data2 = await _sheet_json(gm_client, char_id)
+        return data2.get("derived") or {}
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+            json={"inventory": snapshot},
+        )
+
+
+async def test_belt_fire_tier_sets_str_25(gm_client, garrik):
+    """v2.278.0 — Fire Giant tier (STR 25). The per-item `_ability_set:
+    {"STR": 25}` override on the spare Fire belt resolves Garrik's base
+    STR 18 → effective 25 (mod +7), and carry capacity to 25 × 15 = 375."""
+    derived = await _swap_belt_tier_and_read(
+        gm_client, garrik["id"], "Belt of Giant Strength (Fire)"
+    )
+    eff = (derived.get("effective_abilities") or {}).get("STR") or {}
+    assert eff.get("base") == 18, f"unexpected base: {eff!r}"
+    assert eff.get("effective") == 25, (
+        f"expected Fire-tier override 25, got: {eff!r}"
+    )
+    assert eff.get("modifier") == 7
+    assert (derived.get("carry") or {}).get("carry_capacity_lb") == 375, (
+        "expected carry capacity 375 (STR 25 × 15)"
+    )
+
+
+async def test_belt_cloud_tier_sets_str_27(gm_client, garrik):
+    """v2.278.0 — Cloud Giant tier (STR 27). The per-item `_ability_set:
+    {"STR": 27}` override resolves Garrik's base STR 18 → effective 27
+    (mod +8), and carry capacity to 27 × 15 = 405. This completes the RAW
+    DMG p.155 giant-belt table (21 / 23 / 25 / 27 / 29)."""
+    derived = await _swap_belt_tier_and_read(
+        gm_client, garrik["id"], "Belt of Giant Strength (Cloud)"
+    )
+    eff = (derived.get("effective_abilities") or {}).get("STR") or {}
+    assert eff.get("base") == 18, f"unexpected base: {eff!r}"
+    assert eff.get("effective") == 27, (
+        f"expected Cloud-tier override 27, got: {eff!r}"
+    )
+    assert eff.get("modifier") == 8
+    assert (derived.get("carry") or {}).get("carry_capacity_lb") == 405, (
+        "expected carry capacity 405 (STR 27 × 15)"
+    )
+
+
 async def test_belt_boosts_weapon_attack_and_damage(gm_client, gm_ws, garrik):
     """Phase 1b: the belt's +1 effective-STR modifier delta flows into
     Garrik's Greatsword (a STR weapon, attack_index 0, baked +8 = STR +4 +

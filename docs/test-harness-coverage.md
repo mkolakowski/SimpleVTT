@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2785 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.277.0, 2026-06-14).
+**Total tests:** 2787 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.278.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2393,6 +2393,8 @@ v2.212.0 ability-score override engine Phase 1 (docs/plans/str-override.md) — 
 | `test_belt_tier_override_raises_carry_capacity` | Zara's `derived.carry.carry_capacity_lb` == 345 (effective STR 23 × 15, vs. base 120). Phase 2b. |
 | `test_belt_storm_tier_sets_str_29` | Brakka Wildmane (Barbarian, base STR 17) wears a Belt of **Storm** Giant Strength (`_ability_set: {"STR": 29}`) → `effective_abilities.STR` = `{base 17, effective 29, modifier 9}` — the legendary top tier beats the catalog default. Phase 2c (v2.223.0). |
 | `test_belt_storm_tier_raises_carry_capacity` | Brakka's `derived.carry.carry_capacity_lb` == 435 (effective STR 29 × 15, vs. base 255). Phase 2c (v2.223.0). |
+| `test_belt_fire_tier_sets_str_25` | v2.278.0 — PATCH Garrik's spare Belt of **Fire** Giant Strength (`_ability_set: {"STR": 25}`) equipped+attuned (Hill belt off) → `effective_abilities.STR` = `{base 18, effective 25, modifier 7}` + carry capacity 375; restores inventory on teardown. |
+| `test_belt_cloud_tier_sets_str_27` | v2.278.0 — PATCH Garrik's spare Belt of **Cloud** Giant Strength (`_ability_set: {"STR": 27}`) equipped+attuned → `effective_abilities.STR` = `{base 18, effective 27, modifier 8}` + carry capacity 405; completes the RAW DMG p.155 tier table (21/23/25/27/29); restores inventory on teardown. |
 
 ### `test_item_amulet_of_health.py`
 v2.216.0 ability-score override engine Phase 3 (docs/plans/str-override.md) — Amulet of Health (RAW DMG p.150, attunement). While worn, CON *becomes* 19 if higher (same `ability_set` substrate as the belt, on CON), and the CON change retroactively adjusts max HP. The max-HP effect is display-derived: `/sheet-json` `derived.effective_max_hp` adds the CON-modifier delta × character level to the stored max (the stored `hp.max` is left untouched in v1). Brother Tavik Stonebrow (Cleric Lv 8, base CON 14 → mod +2, stored max 67) carries an equipped+attuned Amulet of Health — his 3rd attuned item.

@@ -4906,6 +4906,27 @@ def _fighter_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "belt-of-giant-strength", "weight_lb": 0,
              "desc": "Rare wondrous item, attunement. While worn, your Strength score becomes 21 (Hill giant) if it isn't already higher. RAW DMG p.155."},
+            # v2.278.0 — ability-score override drop-in tail. The two
+            # remaining DISTINCT giant-belt tiers (Fire STR 25, Cloud STR
+            # 27) complete the RAW DMG p.155 table (Hill 21 ✅ above,
+            # Stone/Frost 23 ✅ Zara, Storm 29 ✅ Brakka). They ride the
+            # same single `belt-of-giant-strength` slug via the per-item
+            # `_ability_set` override (the v2.215.0 tier mechanism). Shipped
+            # UNEQUIPPED/UNATTUNED as spare loot in Garrik's pack so they
+            # add zero effective-STR change to any PC (only equipped+attuned
+            # items aggregate in `_equipped_item_effects`) — his worn Hill
+            # belt keeps winning. The harness test PATCHes each equipped to
+            # verify the 25/27 override resolves, then restores.
+            {"name": "Belt of Giant Strength (Fire)", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "belt-of-giant-strength", "_ability_set": {"STR": 25},
+             "weight_lb": 0,
+             "desc": "Very rare wondrous item, attunement. While worn, your Strength score becomes 25 (Fire giant) if it isn't already higher. RAW DMG p.155."},
+            {"name": "Belt of Giant Strength (Cloud)", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "belt-of-giant-strength", "_ability_set": {"STR": 27},
+             "weight_lb": 0,
+             "desc": "Legendary wondrous item, attunement. While worn, your Strength score becomes 27 (Cloud giant) if it isn't already higher. RAW DMG p.155."},
             # v2.258.0 — Necklace of Adaptation (RAW DMG p.183, uncommon,
             # attunement). The wearer can breathe normally in any environment
             # + has advantage on saves vs. harmful gases and vapors. Modeled
