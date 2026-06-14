@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.243.0] - 2026-06-13 — "The Unbound Blade"
+
+**Schema version:** 69
+
+**Commit summary:** Dragon Slayer RAW correction — the longsword requires no attunement (DMG p.166), so its conditional rider now fires whenever equipped, freeing Caelan's 3rd attunement slot.
+
+**Description:** RAW the **Dragon Slayer** (DMG p.166) requires **no attunement** — earlier seeds modeled it attunement-gated. This corrects `_MAGIC_ITEM_ATTACK_RIDERS["dragon-slayer"]["requires_attunement"]` to `False`, so the +3d6-vs-dragon rider fires whenever the weapon is equipped (the demo item drops its `attuned` flag but stays equipped + functional). Sir Caelan Lightbringer's attuned count drops 3 → 2, freeing his 3rd attunement slot — the **Ring of Feather Falling** fills it in v2.244.0. This is the slot-sourcing step for the attunement-ring batch: every demo PC was at the RAW 3/3 cap, and Dragon Slayer was the only seeded item RAW-eligible to give a slot back losslessly. (The non-SRD Demon Slayer variant keeps its attunement gate.) MINOR — a behavior change to a shipped item's attunement gate plus the test that locks it in, no schema change.
+
+### Changed
+- `_MAGIC_ITEM_ATTACK_RIDERS["dragon-slayer"].requires_attunement`: `True` → `False` (RAW DMG p.166 — Dragon Slayer needs no attunement). The rider now fires whenever the weapon is equipped, regardless of attunement.
+- Demo seed: Caelan's Dragon Slayer Longsword drops its `attuned` flag (still equipped + functional); his attuned count drops 3 → 2.
+- `tests/harness/test_dragon_slayer_rider.py`: `test_dragon_slayer_suppressed_when_detuned` rewritten as `test_dragon_slayer_fires_without_attunement` — asserts the rider still fires on a dragon target while the weapon is equipped but explicitly detuned (the inverse of the old attunement-gated assertion).
+- `docs/test-harness-coverage.md`: updated the `test_dragon_slayer_rider.py` section for the renamed test (total unchanged at 2672).
+
 ## [2.242.0] - 2026-06-13 — "The Easy Current"
 
 **Schema version:** 69

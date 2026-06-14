@@ -1238,18 +1238,22 @@ def _paladin_sheet(name: str) -> dict:
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
             # v2.158.93 — Magic-items Phase 5c demo fixture. Dragon
-            # Slayer Longsword (rare, attunement). First conditional-
-            # rider item: the +3d6 only fires when the target carries
-            # ``creature_type: "dragon"`` (any of the chromatic /
-            # metallic / gem ancestries). Paired with the attack entry
-            # above via ``_slug``. Caelan ships equipped + attuned;
-            # cap of 3 attuned unchanged (1 / 3).
+            # Slayer Longsword. First conditional-rider item: the +3d6
+            # only fires when the target carries ``creature_type:
+            # "dragon"`` (any of the chromatic / metallic / gem
+            # ancestries). Paired with the attack entry above via
+            # ``_slug``.
+            # v2.243.0 — RAW correction: Dragon Slayer (DMG p.166)
+            # requires NO attunement. Dropped the `attuned` flag so the
+            # weapon stays equipped + functional while freeing Caelan's
+            # 3rd attunement slot (the Ring of Feather Falling fills it
+            # in v2.244.0). Caelan's attuned count drops 3 → 2.
             {"name": "Dragon Slayer Longsword", "type": "weapon", "qty": 1,
-             "equippable": True, "equipped": True, "attuned": True,
+             "equippable": True, "equipped": True,
              "hands": 1, "damage": "1d8", "damage_type": "slashing",
              "properties": "versatile (1d10), magic",
              "_slug": "dragon-slayer",
-             "desc": "Rare longsword, attunement. +1 attack/damage; while attuned, deals +3d6 slashing damage to dragons (RAW DMG p.166)."},
+             "desc": "Rare longsword, no attunement. +1 attack/damage; deals +3d6 slashing damage to dragons (RAW DMG p.166)."},
             # v2.225.0 — Ioun Stone of Dexterity (RAW DMG p.176, very rare,
             # attunement). Capped-additive +2 DEX to a max of 20 (the
             # v2.224.0 `ability_bonus` substrate). Seeded on Caelan (Paladin,
@@ -1265,11 +1269,12 @@ def _paladin_sheet(name: str) -> dict:
             # spindle that holds up to 3 levels of spells cast into it.
             # The capacity rides the shared `ioun-stone` slug via
             # `_spell_reserve_levels` (no ability payload), surfacing on
-            # `/sheet-json` derived.spell_reserve. Caelan's 3rd attuned item
-            # (after the Dragon Slayer + Ioun Stone of Dexterity, RAW max 3)
-            # — and his SECOND ioun stone, showing two stones composing on
-            # the one slug with different per-item riders. The cast-into /
-            # cast-from mechanic is descriptive-only in v1.
+            # `/sheet-json` derived.spell_reserve. Caelan's 2nd attuned item
+            # (with the Ioun Stone of Dexterity — the Dragon Slayer dropped
+            # its attunement in v2.243.0) — and his SECOND ioun stone, showing
+            # two stones composing on the one slug with different per-item
+            # riders. The cast-into / cast-from mechanic is descriptive-only
+            # in v1.
             {"name": "Ioun Stone of Reserve", "type": "magic", "qty": 1,
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_spell_reserve_levels": 3,

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2672 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.242.0, 2026-06-13).
+**Total tests:** 2672 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.243.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2723,13 +2723,13 @@ v2.207.0 magic-items-automation content tail — Staff of Charming (RAW DMG p.20
 | `test_staff_of_charming_empty_returns_409` | Drain the staff to 0 via /sheet-fields; invoke → 409 `insufficient_charges`, `current: 0`. Restores in teardown. |
 
 ### `test_dragon_slayer_rider.py`
-v2.158.93 magic-items-automation Phase 5c — Dragon Slayer Longsword (RAW DMG p.166). First conditional rider: the rider catalog entry carries a `condition(target_combatant) → bool` predicate that section 6c invokes after the attunement check. Caelan's seed gets the longsword (attack_index 2, inventory_index 7, +1 attack/damage baked in, equipped + attuned). Tests use the existing battle-seed pattern (PUT a battle with a synthetic target carrying `creature_type: "dragon"` or `"humanoid"`) to exercise both branches.
+v2.158.93 magic-items-automation Phase 5c — Dragon Slayer Longsword (RAW DMG p.166). First conditional rider: the rider catalog entry carries a `condition(target_combatant) → bool` predicate that section 6c invokes after the equip check. Caelan's seed gets the longsword (attack_index 2, inventory_index 7, +1 attack/damage baked in, equipped). v2.243.0: RAW correction — Dragon Slayer needs no attunement, so the rider fires whenever equipped (the demo item dropped its `attuned` flag, freeing Caelan's 3rd slot). Tests use the existing battle-seed pattern (PUT a battle with a synthetic target carrying `creature_type: "dragon"` or `"humanoid"`) to exercise both branches.
 
 | Test | What it asserts |
 |------|-----------------|
 | `test_dragon_slayer_fires_on_dragon_target` | Attack a `creature_type: "dragon"` combatant → `auto_uplifts` carries `source: "item-dragon-slayer"`, `damage_type: "slashing"` (RAW fallback to weapon type), `expression: "3d6"`, total in [3, 36]. |
-| `test_dragon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-dragon-slayer` uplift. The condition predicate gates the rider even with the weapon equipped + attuned. |
-| `test_dragon_slayer_suppressed_when_detuned` | /attune detune of the longsword → no rider even when target is `creature_type: "dragon"`. Attunement gate runs before the condition predicate. Restores attunement in teardown. |
+| `test_dragon_slayer_silent_on_humanoid` | Attack a `creature_type: "humanoid"` → no `item-dragon-slayer` uplift. The condition predicate gates the rider even with the weapon equipped. |
+| `test_dragon_slayer_fires_without_attunement` | v2.243.0 RAW correction (DMG p.166 — no attunement): /attune detune of the longsword → rider STILL fires on a `creature_type: "dragon"` target while equipped (`expression: "3d6"`). Inverts the pre-v2.243.0 attunement-gated assertion. |
 
 ### `test_demon_slayer_rider.py`
 v2.158.97 magic-items-automation Phase 6a — Demon Slayer Rapier (RAW DMG p.166). Second conditional rider after Dragon Slayer (v2.158.93) using the same Phase 5c+5f substrate: condition predicate keys on `creature_type == "fiend"`, dice are 2d6 (vs. Dragon Slayer's 3d6). Lyra Sunstrider gets the rapier (attack_index 3, inventory_index 7, equipped + attuned, +1 attack/damage RAW baked in). Frighten-on-hit DC 15 WIS save deferred — that's a separate save-handler hook.

@@ -33324,7 +33324,12 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
     "dragon-slayer": {
         "label": "Dragon Slayer",
         "dice": "3d6",
-        "requires_attunement": True,
+        # v2.243.0 — RAW correction: Dragon Slayer (DMG p.166) requires NO
+        # attunement. Earlier seeds modeled it attunement-gated; the rider
+        # now fires whenever the weapon is equipped, freeing the wielder's
+        # attunement slot. (Demon Slayer below is a non-SRD variant and keeps
+        # its attunement gate.)
+        "requires_attunement": False,
         "condition": lambda tgt: bool(tgt) and (
             (tgt.get("creature_type") or "").strip().lower() == "dragon"
         ),

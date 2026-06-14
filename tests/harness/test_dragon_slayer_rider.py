@@ -10,9 +10,10 @@ checks; if it returns falsy, the rider is skipped. Always-on riders
 (Flame Tongue) omit the field and behave unchanged.
 
 Demo fixture: Sir Caelan Lightbringer (Paladin) gets the Dragon Slayer
-Longsword at attack_index 2 + inventory_index 7, equipped + attuned.
-Attack entry's +1 magic bonus is baked into the bonuses/damage (per
-RAW: +1 to attack/damage on top of the conditional rider).
+Longsword at attack_index 2 + inventory_index 7, equipped (no
+attunement — RAW DMG p.166; corrected in v2.243.0). Attack entry's +1
+magic bonus is baked into the bonuses/damage (per RAW: +1 to
+attack/damage on top of the conditional rider).
 
 Tests use the same battle-seed pattern as `test_attack_rider_substrate.py`:
 PUT a synthetic battle with Caelan + a target combatant whose
@@ -125,11 +126,13 @@ async def test_dragon_slayer_silent_on_humanoid(gm_client, caelan):
     )
 
 
-async def test_dragon_slayer_suppressed_when_detuned(gm_client, caelan):
-    """v2.158.93: detuning the Dragon Slayer suppresses the rider
-    even on a dragon target. The attunement check runs before the
-    condition predicate, so a detuned magic weapon is mechanically
-    mundane (RAW). Restores attunement in teardown."""
+async def test_dragon_slayer_fires_without_attunement(gm_client, caelan):
+    """v2.243.0: Dragon Slayer (RAW DMG p.166) requires NO attunement.
+    The rider's ``requires_attunement`` was corrected to False, so the
+    +3d6 fires on a dragon target whenever the weapon is equipped —
+    even with the item explicitly detuned. (Pre-v2.243.0 this asserted
+    the opposite: that detuning suppressed the rider.) Restores the
+    seed attunement state in teardown."""
     detune = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/attune",
         json={"inventory_index": CAELAN_DRAGON_SLAYER_INV_IDX,
@@ -156,13 +159,14 @@ async def test_dragon_slayer_suppressed_when_detuned(gm_client, caelan):
         )
         assert resp.status_code == 200, resp.text
         ups = _uplifts(resp.json(), "item-dragon-slayer")
-        assert ups == [], (
-            "Detuned Dragon Slayer must not fire even vs. dragons; "
-            f"got {ups!r}"
+        assert len(ups) == 1, (
+            "No-attunement Dragon Slayer must still fire vs. dragons "
+            f"while equipped; got {ups!r}"
         )
+        assert ups[0]["expression"] == "3d6"
     finally:
         await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/attune",
             json={"inventory_index": CAELAN_DRAGON_SLAYER_INV_IDX,
-                  "attuned": True},
+                  "attuned": False},
         )
