@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.285.0] - 2026-06-14 — "The Visible Hover"
+
+**Schema version:** 69
+
+**Commit summary:** Surface the v2.284.0 `levitate_at_will` derived flag on the character sheet — Boots of Levitation now render a `#levitate-badge` movement-trait chip. New `_levitate_at_will_for_sheet` helper feeds the `get_sheet` template context (mirroring the v2.214.0 `effective_abilities` pattern); two Playwright UI tests cover the rendered chip + the no-boots control.
+
+**Description:** The `levitate_at_will` flag shipped in v2.284.0 as a `/sheet-json` projection only — invisible to players on the sheet. This commit gives it a face. The `get_sheet` route now computes `levitate_at_will` via the new `_levitate_at_will_for_sheet(sheet)` helper (which reuses `_equipped_item_effects`, so the badge and the JSON agree) and passes it into the `sheet_dnd5e.html` context, exactly mirroring how v2.214.0 surfaced `effective_abilities` for the boosted-ability card. The template renders a `#levitate-badge` chip (🪶 "Levitate at will" + the source item name) right below the roll-state / death-saves card, guarded by `levitate_at_will is defined and levitate_at_will` so the monster/template render paths that don't pass the var are unaffected. The badge is server-rendered at page load and only appears when an equipped+attuned item (Boots of Levitation) sets the flag. Two Playwright UI tests: one PATCHes Magnus Hexbinder's inert spare boots equipped+attuned via httpx then asserts the chip renders and names the boots (restoring inventory on teardown), and a control asserts a PC with no boots (Garrik) renders no chip. MINOR — additive UI surface + tests, no schema change.
+
+### Added
+- `_levitate_at_will_for_sheet(sheet)` helper (`app/routes/tabletop_routes.py`) — returns `{"sources": [...]}` when an equipped+attuned item sets `levitate_at_will`, mirroring the `/sheet-json` projection.
+- `get_sheet` route passes `levitate_at_will` into the `sheet_dnd5e.html` template context.
+- `#levitate-badge` movement-trait chip in `app/templates/sheet_dnd5e.html`, rendered only when the flag is set.
+- `tests/harness_ui/test_levitate_badge.py` (2 tests): badge renders + names the boots when equipped+attuned; no badge on a PC without the boots.
+
+### Changed
+- `docs/test-harness-coverage.md`: UI total 85 → 87 (+2 Playwright tests); added the `test_levitate_badge.py` section.
+
 ## [2.284.1] - 2026-06-14 — "The Ledger Update"
 
 **Schema version:** 69

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2809 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.284.0, 2026-06-14).
+**Total tests:** 2809 in `tests/harness/` + 87 in `tests/harness_ui/` (as of v2.285.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4549,6 +4549,14 @@ v2.214.0 "The Visible Might" — ability-score override Phase 2a. The `#ab-card-
 |------|-----------------|
 | `test_garrik_str_card_shows_boosted_score` | Garrik's `.ab-score-disp[data-ab="STR"]` reads "21" (effective, not base 18), `.ab-mod-disp[data-ab="STR"]` reads "+5", and `.ab-boost-badge[data-ab="STR"]` is visible. |
 | `test_garrik_dex_card_unboosted` | DEX has no override → `.ab-score-disp[data-ab="DEX"]` reads "14" (base) and `.ab-boost-badge[data-ab="DEX"]` is hidden. |
+
+### `test_levitate_badge.py`
+v2.285.0 "The Visible Hover" — Boots of Levitation surface the server-rendered `levitate_at_will` derived flag as a `#levitate-badge` movement-trait chip on the sheet. The seed keeps the boots inert, so the tests PATCH Magnus Hexbinder's boots equipped+attuned via httpx, then drive the browser to assert the badge renders (and restore inventory on teardown). A control PC with no boots renders no badge.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_levitate_badge_renders_when_boots_attuned` | With Magnus's boots equipped+attuned, `#levitate-badge` is visible and names "Boots of Levitation". Inventory restored after. |
+| `test_no_levitate_badge_for_baseline_pc` | Garrik (no boots) renders no `#levitate-badge` — proving the chip is item-sourced. |
 
 ---
 

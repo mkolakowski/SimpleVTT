@@ -247,6 +247,18 @@
             {% include "_death_saves_tracker.html" %}
         </div>
 
+        {# v2.285.0 — movement-trait badge: Boots of Levitation surfaces the #}
+        {# `levitate_at_will` derived flag from /sheet-json. Rendered only    #}
+        {# when an equipped+attuned item sets it. #}
+        {% if levitate_at_will is defined and levitate_at_will %}
+        <div id="levitate-badge" style="display:flex;align-items:center;gap:8px;background:var(--s-input);border:1px solid var(--s-accent);border-radius:8px;padding:8px 12px;margin-bottom:12px;"
+             title="Levitate at will — {{ (levitate_at_will.sources or []) | join(', ') }} (RAW: use an action to cast levitate on yourself at will).">
+            <span style="font-size:16px;">🪶</span>
+            <span style="font-size:12px;font-weight:700;color:var(--s-fg);">Levitate at will</span>
+            <span style="font-size:11px;color:var(--s-mute);">{{ (levitate_at_will.sources or []) | join(', ') }}</span>
+        </div>
+        {% endif %}
+
         {# ── Edit panel (hidden by default) ──────────────────────────── #}
         {% if can_edit %}
         <div id="char-edit-panel" style="display:none;background:var(--s-input);border:1px solid var(--s-border);border-radius:8px;padding:12px 14px;margin-bottom:12px;">
