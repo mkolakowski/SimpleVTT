@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.289.0] - 2026-06-14 — "The Unbound Ring"
+
+**Schema version:** 69
+
+**Commit summary:** Make the **Ring of Free Action** (RAW DMG p.191, rare, attunement) MECHANICAL. Shipped in v2.240.0 as a display-only `free_action` boolean, the ring now also rides the v2.288.0 item-passive condition-immunity substrate — its passive carries `condition_immunity_to: ["paralyzed", "restrained"]`, so `_target_condition_immune` actually blocks a Hold Person / Web install on the wearer and the two conditions surface on `/sheet-json` as `derived.condition_immunities`. One harness test added.
+
+**Description:** The first non-poison consumer of the v2.288.0 condition-immunity substrate, and a genuine behaviour upgrade rather than a pure drop-in. The Ring of Free Action's RAW text — "magic can neither reduce your speed nor cause you to be paralyzed or restrained" — had been modelled since v2.240.0 only as a `free_action` boolean surfaced on `derived.free_action` (descriptive in v1). Now that the item-passive condition-immunity bridge exists (`_target_condition_immune` reads `_equipped_item_effects(...).get("condition_immunity_to")`), the ring's passive folds `condition_immunity_to: ["paralyzed", "restrained"]` alongside the existing `free_action: True`, turning the descriptive flag into a real install-gate: a worn+attuned ring blocks those two conditions from being applied to the wearer, and both surface on `/sheet-json` as `derived.condition_immunities` (`{types, sources}`). RAW the immunity is scoped to *magical* sources; we model it as full immunity to the two conditions, since nearly all paralyzed/restrained installs in-engine are spell/magic effects (Hold Person, Hold Monster, Web, the paralysis line). Demo carrier: Brakka Wildmane (Path of the Beast Barbarian) already wears the ring equipped+attuned at seed, so the projection asserts directly. MINOR — additive engine behaviour (new payload on an existing registry entry, no schema change) + one test.
+
+### Added
+- `tests/harness/test_item_ring_of_free_action.py`: `test_ring_grants_paralyzed_restrained_immunity` — Brakka's `/sheet-json` surfaces `derived.condition_immunities` with both "paralyzed" and "restrained", ring named in sources.
+
+### Changed
+- `ring-of-free-action` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): payload gains `condition_immunity_to: ["paralyzed", "restrained"]` alongside the existing `free_action` boolean — the v2.288.0 substrate now blocks those installs on the wearer.
+- `docs/test-harness-coverage.md`: harness total 2815 → 2816 (+1 test); noted the new assertion in the `test_item_ring_of_free_action.py` section.
+
 ## [2.288.0] - 2026-06-14 — "The Antivenom Brooch"
 
 **Schema version:** 69

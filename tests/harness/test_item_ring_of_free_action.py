@@ -85,3 +85,28 @@ async def test_ring_of_free_action_composes_with_str_override(gm_client, roster)
         f"expected STR effective 29 from the Belt to still report alongside "
         f"free_action, got: {eff!r}"
     )
+
+
+async def test_ring_grants_paralyzed_restrained_immunity(gm_client, roster):
+    """v2.289.0 — the mechanical half. The ring now rides the v2.288.0
+    item-passive condition-immunity substrate, so Brakka's `/sheet-json`
+    surfaces `derived.condition_immunities` with both "paralyzed" and
+    "restrained" (RAW: magic can't paralyze or restrain the wearer), naming
+    the ring in sources. This is what makes `_target_condition_immune` block
+    a Hold Person / Web install on her — not just a display flag."""
+    brakka = roster["Brakka Wildmane"]
+    data = await _sheet_json(gm_client, brakka["id"])
+    cond = (data.get("derived") or {}).get("condition_immunities")
+    assert cond is not None, (
+        f"expected derived.condition_immunities, got: {data.get('derived')!r}"
+    )
+    types = cond.get("types") or []
+    assert "paralyzed" in types, (
+        f"expected 'paralyzed' in condition-immunity types, got: {cond!r}"
+    )
+    assert "restrained" in types, (
+        f"expected 'restrained' in condition-immunity types, got: {cond!r}"
+    )
+    assert any(
+        "Ring of Free Action" in str(s) for s in cond.get("sources") or []
+    ), f"expected the ring named in sources, got: {cond!r}"

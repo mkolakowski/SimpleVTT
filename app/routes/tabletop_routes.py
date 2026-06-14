@@ -32820,9 +32820,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # v2.240.0 — Ring of Free Action (RAW DMG p.191, rare, attunement). RAW:
     # "while you wear this ring, difficult terrain doesn't cost you extra
     # movement. In addition, magic can neither reduce your speed nor cause
-    # you to be paralyzed or restrained." Surfaced as a boolean derived read.
+    # you to be paralyzed or restrained." The `free_action` boolean surfaces
+    # as a derived read; v2.289.0 makes the paralyze/restrain half MECHANICAL
+    # by riding the v2.288.0 condition-immunity substrate — `_target_condition_immune`
+    # now blocks the paralyzed/restrained buff-install on the wearer. (RAW the
+    # immunity is scoped to magical sources; we model it as full immunity to the
+    # two conditions, since nearly all paralyzed/restrained installs in-engine
+    # are spell/magic effects — Hold Person, Hold Monster, Web, etc.)
     "ring-of-free-action": [
-        {"free_action": True, "requires_attunement": True},
+        {"free_action": True,
+         "condition_immunity_to": ["paralyzed", "restrained"],
+         "requires_attunement": True},
     ],
     # v2.241.0 — Ring of Water Walking (RAW DMG p.193, uncommon, no
     # attunement). RAW: "while wearing this ring, you can stand on and move
