@@ -32557,6 +32557,13 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "boots-of-speed": [
         {"speed_doubling": True, "requires_attunement": True},
     ],
+    # v2.240.0 — Ring of Free Action (RAW DMG p.191, rare, attunement). RAW:
+    # "while you wear this ring, difficult terrain doesn't cost you extra
+    # movement. In addition, magic can neither reduce your speed nor cause
+    # you to be paralyzed or restrained." Surfaced as a boolean derived read.
+    "ring-of-free-action": [
+        {"free_action": True, "requires_attunement": True},
+    ],
 }
 
 
@@ -33577,6 +33584,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # GM-narrated in v1).
         "speed_doubling": False,
         "speed_doubling_sources": [],
+        # v2.240.0 — free-action passive. Boolean OR across equipped items
+        # carrying the field; surfaced on `/sheet-json` derived. Ring of
+        # Free Action (RAW DMG p.191) is the first entry — difficult terrain
+        # costs no extra movement, and magic can't reduce your speed or
+        # paralyze/restrain you (the effect is descriptive in v1).
+        "free_action": False,
+        "free_action_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33807,6 +33821,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_speed_doubling") or p.get("speed_doubling"):
                 out["speed_doubling"] = True
                 out["speed_doubling_sources"].append(item_name)
+            # v2.240.0 — free-action passive (Ring of Free Action, RAW DMG
+            # p.191). Boolean OR; the flag rides the item via the
+            # `free_action` payload (or a per-item `_free_action` rider).
+            if item.get("_free_action") or p.get("free_action"):
+                out["free_action"] = True
+                out["free_action_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90879,6 +90899,12 @@ async def get_character_sheet_json(
             if _item_eff.get("speed_doubling"):
                 derived["speed_doubling"] = {
                     "sources": list(_item_eff.get("speed_doubling_sources") or []),
+                }
+            # v2.240.0 — free action (Ring of Free Action). Only present when
+            # an equipped+attuned item sets the flag.
+            if _item_eff.get("free_action"):
+                derived["free_action"] = {
+                    "sources": list(_item_eff.get("free_action_sources") or []),
                 }
         except Exception:
             pass

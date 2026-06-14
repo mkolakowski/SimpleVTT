@@ -3237,6 +3237,18 @@ def _barbarian_beast_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_ability_bonus": {"CON": 2},
              "desc": "Very rare wondrous item, attunement. This pink rhomboid orbits your head and increases your Constitution by 2, to a maximum of 20. RAW DMG p.176."},
+            # v2.240.0 — Ring of Free Action (RAW DMG p.191, rare,
+            # attunement). Brakka's 3rd attuned item (after the Belt of Giant
+            # Strength + Ioun Stone of Constitution, RAW max 3). Difficult
+            # terrain costs her no extra movement, and magic can't reduce her
+            # speed or paralyze/restrain her. The `free_action` flag rides the
+            # `ring-of-free-action` catalog payload and surfaces on
+            # /sheet-json as derived.free_action — on-theme for an unrestrained
+            # beast barbarian.
+            {"name": "Ring of Free Action", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
+             "_slug": "ring-of-free-action",
+             "desc": "Rare wondrous item, attunement. While you wear this ring, difficult terrain doesn't cost you extra movement, and magic can neither reduce your speed nor cause you to be paralyzed or restrained. RAW DMG p.191."},
         ],
         "resources": [
             {

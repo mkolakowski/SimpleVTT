@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.240.0] - 2026-06-13 — "The Unbound Stride"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of Free Action — free-action passive (`derived.free_action`) on a new boolean-OR substrate field, riding the `ring-of-free-action` catalog payload (attunement-gated).
+
+**Description:** The **Ring of Free Action** (RAW DMG p.191, rare, attunement) means difficult terrain costs the wearer no extra movement, and magic can neither reduce their speed nor cause them to be paralyzed or restrained. It reuses the boolean-OR passive substrate (Sustenance / Awareness / … / Boots of Speed): the `free_action` flag rides the `ring-of-free-action` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects` (a new `free_action` field + `free_action_sources`), and surfaces on `/sheet-json` as `derived.free_action = {sources}`. The effect is descriptive in v1 — this exposes the ability as a derived read. Demo: Brakka Wildmane (Path of the Beast Barbarian) wears it as her 3rd attuned item (Belt of Giant Strength + Ioun Stone of Constitution + ring, RAW max 3) — on-theme for an unrestrained beast barbarian. First of the SRD-ring batch. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `free_action` / `free_action_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped+attuned items carrying the `free_action` payload or a per-item `_free_action` rider).
+- `/sheet-json` `derived.free_action = {sources}` — present only when an equipped+attuned item sets the flag.
+- `ring-of-free-action` entry in `_MAGIC_ITEM_PASSIVES` (`free_action: True`, `requires_attunement: True`).
+- Demo seed: Ring of Free Action on Brakka Wildmane (`_slug: "ring-of-free-action"`, equipped + attuned — her 3rd attunement slot).
+- `tests/harness/test_item_ring_of_free_action.py` (3 tests): `derived.free_action` lists the ring in sources; the flag drops when attunement is removed; composes with the Belt of Giant Strength's STR-29 override.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2663 → 2666; added the `test_item_ring_of_free_action.py` section.
+
 ## [2.239.0] - 2026-06-13 — "The Clicking Heels"
 
 **Schema version:** 69
