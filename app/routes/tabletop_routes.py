@@ -33205,6 +33205,30 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.269.0 — charged-items Phase 3: Ring of the Ram (RAW DMG p.193,
+    # rare, attunement). The FIRST non-spell charge action — it routes
+    # through the new ``action_kind: "attack"`` handler instead of the
+    # spell/save resolvers. 3 charges (regains 1d3 at dawn). Spend 1-3
+    # charges to make a ranged force attack against a target within 60 ft:
+    # +7 to hit, 2d10 force damage *per charge spent* (2d10/4d10/6d10),
+    # and on a hit the target can be shoved 5 ft per charge (the shove is
+    # GM-narrated in v1). min=1/max=3 so the UI offers a charge picker.
+    "ring-of-the-ram": {
+        "requires_attunement": True,
+        "resource_key": "ring-of-the-ram",
+        "actions": {
+            "ram-strike": {
+                "name": "Ram Strike (force)",
+                "feature_name": "💍 Ring of the Ram",
+                "action_kind": "attack",
+                "to_hit": 7,
+                "dice_per_charge": "2d10",
+                "damage_type": "force",
+                "min_charges": 1,
+                "max_charges": 3,
+            },
+        },
+    },
     # v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear (RAW
     # DMG p.213). 7 charges (regains 1d6+1 at dawn), spend 1 to cast
     # Fear-Cone: each creature in a 30-ft cone makes a DC 15 WIS save
@@ -81883,6 +81907,17 @@ async def use_item_action(
             prompt_user=user,
             slug=slug,
         )
+    if slug == "ring-of-the-ram":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_attack(
+            db, campaign_id, char, item, sheet, catalog,
+            action_key, action_def,
+            target_combatant_ids=body.get("target_combatant_ids") or [],
+            charges=body.get("charges"),
+            campaign=campaign,
+            prompt_user=user,
+            slug=slug,
+        )
     if slug in ("wand-of-fear", "wand-of-paralysis", "staff-of-charming",
                 "eyes-of-charming"):
         action_def = catalog["actions"][action_key]
@@ -83048,6 +83083,200 @@ async def _use_item_action_javelin_of_lightning(
         "save_dc": save_dc,
         "save_ability": save_ability,
         "results": results,
+    }
+
+
+async def _use_item_action_attack(
+    db, campaign_id, char, item, sheet, catalog,
+    action_key, action_def,
+    target_combatant_ids: list,
+    charges=None,
+    campaign=None,
+    prompt_user=None,
+    slug="ring-of-the-ram",
+):
+    """v2.269.0 — charged-items Phase 3: the FIRST non-spell charge
+    action (``action_kind: "attack"``). Spends charges to make a ranged
+    attack roll (1d20 + ``to_hit`` vs the target's AC) that deals
+    ``dice_per_charge`` damage *per charge spent* on a hit, instead of
+    resolving a catalogued spell cast.
+
+    RAW Ring of the Ram (DMG p.193, rare, attunement): +7 to hit, 2d10
+    force per charge (1-3 charges), 60-ft range, shove on hit (the shove
+    is GM-narrated in v1). Reuses the /attack endpoint's
+    nat-20-crit / nat-1-miss / AC-compare resolution. Single-target —
+    only the first valid id in ``target_combatant_ids`` is used.
+    """
+    res_key = str(catalog.get("resource_key") or slug)
+    min_c = int(action_def.get("min_charges") or 1)
+    max_c = int(action_def.get("max_charges") or 1)
+    try:
+        n_charges = int(charges) if charges is not None else min_c
+    except (TypeError, ValueError):
+        raise HTTPException(400, "charges must be an int")
+    if n_charges < min_c or n_charges > max_c:
+        raise HTTPException(
+            400,
+            f"charges must be {min_c}..{max_c} for "
+            f"{action_def.get('name') or action_key}",
+        )
+
+    # Resource lookup + insufficient-charges gate (mirrors the necklace
+    # handler so the contract is identical across charge shapes).
+    resources = list(sheet.get("resources") or [])
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if isinstance(r, dict) and (r.get("key") or "").lower() == res_key:
+            res_idx = i
+            break
+    if res_idx < 0:
+        raise HTTPException(
+            409,
+            f"No {res_key!r} resource row on sheet — item not bootstrapped",
+        )
+    res_row = dict(resources[res_idx])
+    cur = int(res_row.get("current") or 0)
+    res_max = int(res_row.get("max") or 0)
+    if cur < n_charges:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "insufficient_charges",
+                "current": cur,
+                "requested": n_charges,
+                "label": item.get("name") or slug,
+            },
+        )
+
+    if not isinstance(target_combatant_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
+    target_id = next(
+        (t for t in target_combatant_ids if isinstance(t, str) and t), None,
+    )
+    if not target_id:
+        raise HTTPException(400, "target_combatant_ids must be non-empty")
+    target_c = _lookup_combatant(campaign_id, target_id)
+    if not target_c:
+        raise HTTPException(404, f"target {target_id!r} not found")
+
+    to_hit = int(action_def.get("to_hit") or 0)
+    per_charge = str(action_def.get("dice_per_charge") or "2d10")
+    damage_type = str(action_def.get("damage_type") or "force")
+    feature_name = str(action_def.get("feature_name") or "💍 Ring of the Ram")
+
+    # Build the damage expression: dice_per_charge scales by charges spent
+    # (RAW 2d10 force *per charge* → 2/4/6d10).
+    _dm = _re.match(r"\s*(\d+)d(\d+)\s*$", per_charge)
+    if _dm:
+        dmg_expr = f"{int(_dm.group(1)) * n_charges}d{int(_dm.group(2))}"
+    else:
+        dmg_expr = per_charge
+
+    # To-hit roll vs the target's AC (same resolution as /attack).
+    target_ac = _read_target_ac(db, campaign_id, target_c)
+    try:
+        _ar = dice_mod.roll(f"1d20{to_hit:+d}")
+        attack_total, _abd = int(_ar.total), _ar.breakdown
+    except dice_mod.DiceParseError:
+        attack_total, _abd = 0, ""
+    _nat_m = _re.search(r"\[(\d+)\]", _abd)
+    nat = int(_nat_m.group(1)) if _nat_m else (attack_total - to_hit)
+    if nat == 20:
+        hit, crit = True, True
+    elif nat == 1:
+        hit, crit = False, False
+    else:
+        hit, crit = (attack_total >= target_ac), False
+
+    damage_dealt = 0
+    if hit:
+        roll_expr = _double_dice_for_crit(dmg_expr) if crit else dmg_expr
+        try:
+            damage_dealt = max(0, int(dice_mod.roll(roll_expr).total))
+        except dice_mod.DiceParseError:
+            damage_dealt = 0
+        if damage_dealt > 0:
+            try:
+                await _apply_damage_to_combatant(
+                    db, campaign_id, target_c,
+                    damage_amount=damage_dealt,
+                    damage_type=damage_type,
+                    is_crit=crit, is_attack=True, is_magical=True,
+                    attacker_char_id=char.id,
+                )
+            except Exception:
+                logging.exception(
+                    "Ring of the Ram damage apply failed for tid=%s",
+                    target_id,
+                )
+
+    # Decrement the charges.
+    res_row["current"] = cur - n_charges
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {
+                "character_id": char.id,
+                "key": res_key,
+                "current": res_row["current"],
+                "max": res_max,
+            },
+        })
+    except Exception:
+        pass
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": feature_name,
+                "summary": (
+                    f"{char.name} fires the {item.get('name')} at "
+                    f"{target_c.get('name') or 'the target'} — "
+                    f"{'HIT' if hit else 'MISS'}"
+                    f"{' (CRIT!)' if crit else ''} "
+                    f"(d20 {attack_total} vs AC {target_ac}). "
+                    + (
+                        f"{damage_dealt} {damage_type} damage. "
+                        if hit else ""
+                    )
+                    + f"({n_charges} charge{'s' if n_charges > 1 else ''}; "
+                    f"{res_row['current']}/{res_max} left.)"
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item.get("name") or slug,
+        "action_key": action_key,
+        "action_kind": "attack",
+        "charges_spent": n_charges,
+        "to_hit": to_hit,
+        "attack_total": attack_total,
+        "target_ac": target_ac,
+        "hit": hit,
+        "crit": crit,
+        "dice": dmg_expr,
+        "damage_type": damage_type,
+        "damage": damage_dealt,
+        "target_combatant_id": target_id,
+        "resource": {
+            "key": res_key,
+            "current": res_row["current"],
+            "max": res_max,
+        },
     }
 
 

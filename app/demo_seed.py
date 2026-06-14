@@ -4746,6 +4746,18 @@ def _fighter_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "necklace-of-adaptation", "weight_lb": 0,
              "desc": "RAW DMG p.183 (uncommon, attunement). While worn, you can breathe normally in any environment, and you have advantage on saving throws made against harmful gases and vapors (cloudkill, stinking cloud, inhaled poisons, some dragon breath). Surfaces as the derived env_adaptation flag."},
+            # v2.269.0 — charged-items Phase 3: Ring of the Ram (RAW DMG
+            # p.193, rare, attunement). The FIRST non-spell charge action
+            # — the `ram-strike` action routes through the new
+            # `action_kind: "attack"` handler (1d20+7 vs AC, 2d10 force
+            # per charge) instead of a spell cast. Thematic on Garrik (a
+            # front-line Fighter who shoves enemies). Paired with the
+            # ring-of-the-ram resource row below. Seed-load bypasses the
+            # RAW 3-item attunement cap (enforced at /attune runtime only).
+            {"name": "Ring of the Ram", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ring-of-the-ram", "weight_lb": 0,
+             "desc": "Rare ring, attunement. 3 charges. Spend 1-3 charges to make a ranged force attack (+7 to hit, 2d10 force per charge) against a creature within 60 ft; on a hit you can shove it 5 ft per charge. Regains 1d3 charges at dawn (long rest). RAW DMG p.193."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20
@@ -4824,6 +4836,20 @@ def _fighter_sheet(name: str) -> dict:
                 "charge_recovery": "1d6+1",
                 "source": "item-wand-of-lightning-bolts",
                 "desc": "7 charges. Spend 1-7 to cast Lightning Bolt at slot level 3+(N-1). Regains 1d6+1 charges on long rest.",
+                "manual": False,
+            },
+            # v2.269.0 — charged-items Phase 3: Ring of the Ram charge
+            # counter. 3 starting charges, regains 1d3 at dawn (long rest)
+            # via the Phase 4b dice-expression recharge path. The ram-strike
+            # action spends 1-3 from this resource. Paired with the Ring of
+            # the Ram entry in Garrik's inventory above.
+            {
+                "key": "ring-of-the-ram",
+                "name": "Ring of the Ram",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "item-ring-of-the-ram",
+                "desc": "3 charges. Spend 1-3 to make a ranged force attack (+7 to hit, 2d10 force per charge). Regains 1d3 charges on long rest.",
                 "manual": False,
             },
         ],

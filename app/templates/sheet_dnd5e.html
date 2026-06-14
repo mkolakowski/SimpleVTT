@@ -7336,6 +7336,25 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           title: 'Eyes of Charming — charm one humanoid within 30 ft, DC 13 WIS save or Charmed 1 hour.',
                           max_range_ft: 30,
                           save_dc: 13},
+        // v2.269.0 — charged-items Phase 3: the FIRST non-spell charge
+        // action. Ring of the Ram (RAW DMG p.193): spend 1-3 charges to
+        // make a ranged force attack (+7 to hit, 2d10 force per charge)
+        // against one creature within 60 ft. New `single-target-attack`
+        // flow: optional charge picker (1-3) → single-target picker →
+        // POST the picked id + charges. The server rolls 1d20+7 vs AC and
+        // applies the scaled force damage on a hit.
+        'ring-of-the-ram': {kind: 'single-target-attack',
+                          action_key: 'ram-strike',
+                          label: '💍 Ram Strike',
+                          title: 'Ring of the Ram — force attack at one creature within 60 ft, +7 to hit, 2d10 force per charge.',
+                          max_range_ft: 60,
+                          charge_picker: {
+                              kind: 'spinner', min: 1, max: 3,
+                              title: '💍 Ring of the Ram',
+                              body: 'Spend 1-3 charges. +7 to hit, 2d10 force damage per charge (2/4/6d10). Shoves the target 5 ft per charge on a hit (GM-narrated).',
+                              submit_label: 'Pick target',
+                              control_label: 'Charges to spend',
+                          }},
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder
@@ -8001,6 +8020,32 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     if (picked === null || !picked.length) return;
                     body.action_key = cfg.action_key;
                     body.target_combatant_ids = [picked[0]];
+                } else if (cfg.kind === 'single-target-attack') {
+                    // v2.269.0 — Phase 3 non-spell attack (Ring of the
+                    // Ram). Optional charge picker (1-3) → single-target
+                    // picker → POST the picked id + charges. Server rolls
+                    // 1d20+to_hit vs AC and applies scaled force damage.
+                    let pickedCharges = null;
+                    if (cfg.charge_picker) {
+                        pickedCharges = await _showItemActionModal(cfg.charge_picker);
+                        if (pickedCharges === null) return;
+                    }
+                    if (typeof window.vttOpenMultiTargetPicker !== 'function') {
+                        alert('Target picker unavailable. Reload the page.');
+                        return;
+                    }
+                    const picked = await window.vttOpenMultiTargetPicker({
+                        required: 1,
+                        spellName: cfg.label || 'Ring of the Ram',
+                        casterCharId: MY_CHAR_ID,
+                        rangeStr: `${cfg.max_range_ft || 60} ft`,
+                    });
+                    if (picked === null || !picked.length) return;
+                    body.action_key = cfg.action_key;
+                    body.target_combatant_ids = [picked[0]];
+                    if (pickedCharges !== null) {
+                        body.charges = pickedCharges;
+                    }
                 } else if (cfg.kind === 'self-buff-drink') {
                     // v2.191.0 — plain self-buff potion (Heroism / Speed /
                     // Invulnerability): no parameter, no modal — just drink.

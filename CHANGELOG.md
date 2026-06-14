@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.269.0] - 2026-06-14 — "The Battering Ring"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of the Ram — the first charged-items Phase 3 item and the first non-spell charge action: a new `action_kind: "attack"` branch + `_use_item_action_attack` handler in `/use_item_action` that rolls a ranged force attack (1d20+7 vs target AC, 2d10 force per charge) instead of resolving a catalogued spell, seeded on Garrik Ironside (Fighter) with a 3-charge resource row, plus a new sheet-UI `single-target-attack` picker and harness tests.
+
+**Description:** **Ring of the Ram** (RAW DMG p.193, rare, **attunement required**): "while wearing this ring, you can use an action to expend 1 to 3 of its charges to make a ranged attack against one creature within 60 feet of you. The ring produces a spectral ram's head and makes its attack roll with a +7 bonus. On a hit, for each charge you spend, the target takes 2d10 force damage and is pushed 5 feet away from you." This is the first item shipped against charged-items **Phase 3** — the non-spell charge actions — and it required the plan's one small new engine shape: an `action_kind: "attack"` branch. Where the existing handlers resolve a `spell_slug` (wand shape #1) or a save-for-half AoE (staff shape #2), the new `_use_item_action_attack` handler rolls a to-hit (1d20 + `to_hit` vs the target's AC, reusing the `/attack` endpoint's nat-20-crit / nat-1-miss / AC-compare resolution) and applies `dice_per_charge` damage scaled by the charges spent (2d10 → 2/4/6d10) on a hit, decrementing the charge resource by the number spent and broadcasting `resource_update` + `feature_used`. The shove (5 ft per charge) is GM-narrated in v1. Seeded on Garrik Ironside (Fighter) — a front-line shover — with a 3-charge resource row that recharges 1d3 at dawn (long rest) via the existing `charge_recovery` path; seed-load bypasses the RAW 3-item attunement cap (enforced at `/attune` runtime only). The sheet gains a new `single-target-attack` picker flow (optional 1-3 charge picker → single-target picker → POST). MINOR — additive content + one small engine branch + tests, no schema change.
+
+### Added
+- `_use_item_action_attack` handler in `app/routes/tabletop_routes.py` — the first `action_kind: "attack"` charge action: rolls 1d20+`to_hit` vs the target's AC, applies `dice_per_charge`-scaled damage on a hit (with crit doubling), decrements the charge resource, broadcasts `resource_update` + `feature_used`, and returns `{ok, item_name, action_key, action_kind, charges_spent, to_hit, attack_total, target_ac, hit, crit, dice, damage_type, damage, target_combatant_id, resource}`.
+- `ring-of-the-ram` entry in `_MAGIC_ITEM_ACTIONS` (`ram-strike` action: `action_kind: attack`, `to_hit: 7`, `dice_per_charge: 2d10`, `damage_type: force`, `min` 1 / `max` 3) + a `ring-of-the-ram` dispatch branch routing to the new handler.
+- Sheet UI: `ring-of-the-ram` `ITEM_ACTION_SLUGS` mapping + a new `single-target-attack` picker flow (optional 1-3 charge picker → single-target picker) rendering a `💍 Ram Strike` button.
+- Demo seed: Garrik Ironside gains an equipped + attuned Ring of the Ram plus its 3-charge `ring-of-the-ram` resource row (1d3 recharge on long rest).
+- `tests/harness/test_use_item_action_ring_of_the_ram.py` (3 tests): a 2-charge ram-strike at a low-AC target → `action_kind: attack`, `to_hit: 7`, `dice: 4d10`, resource 3 → 1, attack resolved vs AC with damage on a hit; a 4-charge request is rejected 400 (RAW 1-3 charge band); a drained ring (0 charges) returns 409 `insufficient_charges`. Resources restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 3 status — Ring of the Ram marked ✅ shipped (v2.269.0); the `action_kind: "attack"` shape is now live.
+- `docs/test-harness-coverage.md`: harness total 2763 → 2766 (+3 ring-of-the-ram); added the `test_use_item_action_ring_of_the_ram.py` section.
+
 ## [2.268.0] - 2026-06-14 — "The Stinging Swarm"
 
 **Schema version:** 69

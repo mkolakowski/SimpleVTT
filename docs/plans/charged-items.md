@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phases 3–4 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0); Phase 3 in progress (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phase 4 unstarted.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -102,9 +102,13 @@ small handler addition: an `action_kind: "attack"` / `"heal"` / `"buff"` branch
 in `/use_item_action` that builds the roll inline instead of resolving a
 `spell_slug`.
 
-- **Ring of the Ram** (DMG p.193, rare, attunement) — 3 charges; spend 1–3 to
-  make a ranged force attack (+7 to hit, 2d10 force per charge) that can shove.
-  → `action_kind: "attack"`, damage `"{n}d10"` force, recharge `"1d3"` at dawn.
+- **Ring of the Ram** (DMG p.193, rare, attunement) — ✅ **shipped v2.269.0**.
+  The first non-spell charge action: 3 charges; spend 1–3 to make a ranged
+  force attack (+7 to hit, 2d10 force per charge) that can shove. Shipped the
+  new `action_kind: "attack"` branch + `_use_item_action_attack` handler (1d20
+  + `to_hit` vs the target's AC, `dice_per_charge` scaled by charges spent,
+  crit doubling), recharge `"1d3"` at dawn. Seeded on Garrik Ironside
+  (Fighter). The 5-ft-per-charge shove is GM-narrated in v1.
 - **Gem of Seeing** (DMG p.171, rare, attunement) — 3 charges; spend 1 for
   truesight 60 ft for 10 min. → `action_kind: "buff"`, installs a `truesight`
   buff template (compose with the existing buff substrate).
