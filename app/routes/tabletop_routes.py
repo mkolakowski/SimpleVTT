@@ -32650,6 +32650,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
         {"resistance_to": ["force"], "magic_missile_immune": True,
          "requires_attunement": True},
     ],
+    # v2.250.0 — Mariner's Armor (RAW DMG p.181, uncommon, NO attunement).
+    # RAW: "while wearing this armor, you have a swimming speed equal to your
+    # walking speed. In addition, whenever you start your turn underwater with
+    # 0 hit points, the armor causes you to rise 60 feet toward the surface
+    # each round." The swimming speed reuses the v2.242.0 `swim_speed`
+    # boolean-OR passive verbatim (surfaced as `derived.swim_speed = {sources}`)
+    # — zero new engine code. The rise-to-surface clause is GM-narrated in v1.
+    # No attunement: the flag rides freely on any equipped Mariner's suit.
+    "mariners-armor": [
+        {"swim_speed": True},
+    ],
 }
 
 

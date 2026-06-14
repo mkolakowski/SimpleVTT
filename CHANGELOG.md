@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.250.0] - 2026-06-13 — "The Tide-Forged Plate"
+
+**Schema version:** 69
+
+**Commit summary:** Mariner's Armor — a pure reuse of the v2.242.0 `swim_speed` boolean-OR passive (one catalog row, zero new engine code), seeded by converting Garrik's mundane chain mail to a heavy Mariner's variant in place (same AC 16 / 55 lb, no attunement, no slot cost).
+
+**Description:** **Mariner's Armor** (RAW DMG p.181, uncommon, no attunement) gives the wearer a swimming speed equal to their walking speed, plus a rise-to-surface-at-0-HP-underwater clause (GM-narrated in v1). This is a pure substrate-reuse drop-in: the only engine change is a new `mariners-armor` entry in `_MAGIC_ITEM_PASSIVES` carrying `{"swim_speed": True}` — the exact v2.242.0 Ring of Swimming payload — which the walker already folds into `out["swim_speed"]` and surfaces on `/sheet-json` as `derived.swim_speed = {sources}`. No new field, no new walker block, no new derived block, no attunement gate. **Slot sourcing:** Mariner's Armor requires no attunement, so unlike the recent resistance/ability drop-ins this one needs **no** lossy slot displacement. It's seeded by converting Garrik Ironside's mundane chain mail to a heavy (chain-mail-base) Mariner's variant **in place** — identical AC 16 and 55 lb weight, so his AC, carry weight, and the `test_weapon_bond` index-3 "non-weapon → 400" path are all unchanged; the conversion just adds the `swim_speed` passive. A soldier who's pulled coastal duty is a natural fit. MINOR — additive content + tests, no schema change, no new substrate.
+
+### Added
+- `mariners-armor` entry in `_MAGIC_ITEM_PASSIVES` (`{"swim_speed": True}`, no attunement) — reuses the v2.242.0 Ring of Swimming `swim_speed` surface verbatim.
+- `tests/harness/test_item_mariners_armor.py` (3 tests): `derived.swim_speed` present + names the armor; the flag surfaces with no `attuned` flag (no-attunement gate holds); unequip drops the flag.
+
+### Changed
+- Demo seed: Garrik Ironside's mundane chain mail converted to Mariner's Armor (heavy, AC 16, 55 lb, `_slug: "mariners-armor"`) in place — same AC/weight, adds the `swim_speed` passive.
+- `docs/test-harness-coverage.md`: harness total 2694 → 2697 (+3 mariners-armor); added the `test_item_mariners_armor.py` section.
+
 ## [2.249.0] - 2026-06-13 — "The Warded Heart"
 
 **Schema version:** 69

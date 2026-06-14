@@ -4248,10 +4248,21 @@ def _fighter_sheet(name: str) -> dict:
              "damage": "1d10", "damage_type": "slashing",
              "range": "10 ft", "properties": "heavy, two-handed, reach",
              "_slug": "glaive", "weight_lb": 6},
-            {"name": "Chain mail", "type": "armor", "qty": 1,
+            # v2.250.0 — Mariner's Armor (RAW DMG p.181, uncommon, NO
+            # attunement): a heavy (chain-mail-base, AC 16) variant. Grants a
+            # swimming speed equal to walking speed + rise-to-surface at 0 HP
+            # underwater (the latter GM-narrated in v1). Replaces Garrik's
+            # mundane chain mail in place — same AC 16, same 55 lb, so AC,
+            # carry weight, and the test_weapon_bond index-3 "non-weapon →
+            # 400" path are all unchanged; it just adds the `swim_speed`
+            # passive on /sheet-json derived. No attunement, so it costs Garrik
+            # no slot (he's already at 3/3: Flame Tongue + Wand of Lightning
+            # Bolts + Belt of Giant Strength).
+            {"name": "Mariner's Armor", "type": "armor", "qty": 1,
              "equippable": True, "equipped": True,
              "armor_type": "heavy", "ac_value": 16,
-             "_slug": "chain-mail", "weight_lb": 55},
+             "_slug": "mariners-armor", "weight_lb": 55,
+             "desc": "Uncommon armor (heavy, chain-mail base), no attunement. While wearing it you have a swimming speed equal to your walking speed; if you start your turn underwater with 0 HP, the armor rises you 60 ft toward the surface each round. RAW DMG p.181."},
             {"name": "Explorer's pack", "type": "gear", "qty": 1,
              "weight_lb": 59,
              "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},

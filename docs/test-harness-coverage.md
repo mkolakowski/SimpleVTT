@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2694 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.249.0, 2026-06-13).
+**Total tests:** 2697 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.250.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2555,6 +2555,15 @@ v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement): grants a
 | `test_ring_of_swimming_exposes_flag` | `GET /sheet-json` → `derived.swim_speed` present with "Ring of Swimming" in `sources`. |
 | `test_ring_of_swimming_no_attunement_required` | The no-attunement flag rides alongside the Headband of Intellect — `derived.effective_abilities.INT.effective == 19` still reports alongside `swim_speed`. |
 | `test_ring_of_swimming_unequip_drops_flag` | PATCH the ring to `equipped: False` → `derived.swim_speed` absent; restores the original inventory on teardown. |
+
+### `test_item_mariners_armor.py`
+v2.250.0 — Mariner's Armor (RAW DMG p.181, uncommon, no attunement): swimming speed equal to walking speed (+ rise-to-surface-at-0-HP, GM-narrated in v1). A pure reuse of the v2.242.0 `swim_speed` boolean-OR passive — the only engine change is a new `mariners-armor` catalog entry carrying `{"swim_speed": True}`, surfacing on `/sheet-json` as `derived.swim_speed`. Garrik Ironside (Fighter) wears a heavy (chain-mail-base, AC 16) Mariner's variant in place of his mundane chain mail — same AC/weight, no attunement, no slot cost.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mariners_armor_exposes_swim_speed` | `GET /sheet-json` → `derived.swim_speed` present with "Mariner's Armor" in `sources`. |
+| `test_mariners_armor_no_attunement_required` | The flag surfaces though the item carries no `attuned` flag and Garrik's 3 slots are filled — proving the no-attunement gate holds. |
+| `test_mariners_armor_unequip_drops_flag` | PATCH the armor to `equipped: False` → `derived.swim_speed` absent; restores the original inventory on teardown. |
 
 ### `test_item_ring_of_water_walking.py`
 v2.241.0 — Ring of Water Walking (RAW DMG p.193, uncommon, no attunement): stand on and move across any liquid surface as if it were solid ground. Reuses the boolean-OR passive substrate: the `water_walk` flag rides the `ring-of-water-walking` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.water_walk = {sources}`. Rowan Quickbow (Ranger) wears it — no attunement, riding alongside his full 3/3 attunement loadout.
