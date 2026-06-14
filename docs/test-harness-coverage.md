@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2675 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.244.0, 2026-06-13).
+**Total tests:** 2677 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.245.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2456,7 +2456,7 @@ v2.224.0 capped-additive ability-bonus engine drop-in (docs/plans/str-override.m
 | `test_ioun_stone_adds_int_save_override_delta` | `POST /roll` `int_save` for Magnus → breakdown contains "+1" and "Ioun Stone" (the modifier delta annotation, proving bonus-only source attribution works). |
 | `test_ioun_stone_caps_at_20` | PATCH INT to 19 → `effective_abilities.INT.effective` == 20 (the +2 clamps to +1 at the cap, not 21); restores the original abilities on teardown. |
 | `test_ioun_stone_unequip_reverts_bonus` | PATCH the stone to `equipped: False` → `effective_abilities` drops INT; restores the original inventory on teardown. |
-| `test_ioun_variant_exposes_effective_ability` (×5, v2.225.0) | Parametrized over the other five ability variants — Strength (Lyra 8→10), Dexterity (Caelan 10→12), Constitution (Brakka 16→18), Wisdom (Krieger 13→15), Charisma (Rowan 8→10) — asserts each PC's `derived.effective_abilities.<ABILITY>` reports the pure-additive `base + 2` with an "Ioun Stone" source. Proves the single `ioun-stone` slug + per-item `_ability_bonus` covers all six variants. |
+| `test_ioun_variant_exposes_effective_ability` (×4, v2.225.0; v2.245.0 dropped the STR row) | Parametrized over four ability variants — Dexterity (Caelan 10→12), Constitution (Brakka 16→18), Wisdom (Krieger 13→15), Charisma (Rowan 8→10) — asserts each PC's `derived.effective_abilities.<ABILITY>` reports the pure-additive `base + 2` with an "Ioun Stone" source. (The Strength variant on Lyra was dropped in v2.245.0 when her Ioun Stone of Strength was detuned to free her 3rd attunement slot for the Ring of Mind Shielding; STR remains the most-covered ability via three Belts of Giant Strength + Gauntlets of Ogre Power.) Together with the INT primary test, proves the single `ioun-stone` slug + per-item `_ability_bonus` covers all six variants. |
 
 ### `test_item_belt_of_dwarvenkind.py`
 v2.226.0 — Belt of Dwarvenkind (RAW DMG p.155, rare, attunement): the first magic item whose single passive payload composes TWO existing override substrates at once — a capped-additive CON +2 (max 20, the v2.224.0 `ability_bonus` engine) AND darkvision 60 ft (the v2.159.24 `sees_in_darkness` engine). Neither needed new engine code. Quan Reelstep (Way of the Drunken Master Monk, Human, base CON 14 → effective 16, mod +2 → +3) wears it equipped+attuned (his 1st attuned item); as a non-dwarf he qualifies for the darkvision gate.
@@ -2492,6 +2492,15 @@ v2.244.0 — Ring of Feather Falling (RAW DMG p.191, rare, attunement): when you
 | `test_ring_of_feather_falling_exposes_flag` | `GET /sheet-json` → `derived.feather_fall` present with "Ring of Feather Falling" in `sources`. |
 | `test_ring_of_feather_falling_requires_attunement` | Detuning the ring via `POST /attune` (`attuned: False`) → `derived.feather_fall` absent (attunement-gated, unlike the swim/water-walk rings); restores seed attunement on teardown. |
 | `test_ring_of_feather_falling_unequip_drops_flag` | PATCH the ring to `equipped: False` → `derived.feather_fall` absent; restores the original inventory on teardown. |
+
+### `test_item_ring_of_mind_shielding.py`
+v2.245.0 — Ring of Mind Shielding (RAW DMG p.192, uncommon, attunement): while worn you are immune to magic that reads your thoughts, detects lies, or knows your alignment / creature type. Reuses the boolean-OR passive substrate: the `mind_shield` flag rides the `ring-of-mind-shielding` catalog payload (`requires_attunement: True`), aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.mind_shield = {sources}`. Attunement-gated like the Ring of Feather Falling. Lyra Sunstrider (Bard) wears it — homed by detuning her redundant Ioun Stone of Strength (kept equipped) to stay at the RAW 3/3 cap.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ring_of_mind_shielding_exposes_flag` | `GET /sheet-json` → `derived.mind_shield` present with "Ring of Mind Shielding" in `sources`. |
+| `test_ring_of_mind_shielding_requires_attunement` | Detuning the ring via `POST /attune` (`attuned: False`) → `derived.mind_shield` absent (attunement-gated); restores seed attunement on teardown. |
+| `test_ring_of_mind_shielding_unequip_drops_flag` | PATCH the ring to `equipped: False` → `derived.mind_shield` absent; restores the original inventory on teardown. |
 
 ### `test_item_ring_of_swimming.py`
 v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement): grants a swimming speed of 40 feet while worn. Reuses the boolean-OR passive substrate: the `swim_speed` flag rides the `ring-of-swimming` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.swim_speed = {sources}`. Mira Greenleaf (Druid) wears it — no attunement, riding alongside her full 3/3 attunement loadout.

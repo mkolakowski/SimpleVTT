@@ -105,8 +105,14 @@ async def test_ioun_stone_caps_at_20(gm_client, magnus):
 # existing assertions (dump stat / heavy-armor DEX / secondary stat). Every one
 # is a pure-additive read (base well under the 20 cap), proving the single
 # `ioun-stone` slug + per-item `_ability_bonus` covers all six ability variants.
+# v2.245.0 — the Lyra "STR" variant was dropped here: her Ioun Stone of
+# Strength was detuned (kept equipped) in the demo seed to free her 3rd
+# attunement slot for the Ring of Mind Shielding. STR-via-ioun is the most
+# redundant ability demo (STR also rides the three Belts of Giant Strength +
+# Gauntlets of Ogre Power), so its loss costs the least coverage; the
+# remaining five rows still prove the single `ioun-stone` slug + per-item
+# `_ability_bonus` covers DEX/CON/WIS/CHA (plus INT via Magnus above).
 _VARIANTS = [
-    ("Lyra Sunstrider", "STR", 8, 10, 0),
     ("Sir Caelan Lightbringer", "DEX", 10, 12, 1),
     ("Brakka Wildmane", "CON", 16, 18, 4),
     ("Krieger Stonefist", "WIS", 13, 15, 2),

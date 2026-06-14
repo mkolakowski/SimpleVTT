@@ -32586,6 +32586,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-feather-falling": [
         {"feather_fall": True, "requires_attunement": True},
     ],
+    # v2.245.0 — Ring of Mind Shielding (RAW DMG p.192, uncommon, attunement).
+    # RAW: while worn you are immune to magic that lets others read your
+    # thoughts, determine whether you are lying, know your alignment, or know
+    # your creature type; creatures can telepathically communicate with you
+    # only if you allow it. Attunement-gated — the boolean `mind_shield` flag
+    # is filtered by the walker's attunement check. (The soul-housing /
+    # invisibility riders are GM-narrated in v1.)
+    "ring-of-mind-shielding": [
+        {"mind_shield": True, "requires_attunement": True},
+    ],
 }
 
 
@@ -33638,6 +33648,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # check filters it.
         "feather_fall": False,
         "feather_fall_sources": [],
+        # v2.245.0 — mind-shielding passive. Boolean OR across equipped items
+        # carrying the field; surfaced on `/sheet-json` derived. Ring of Mind
+        # Shielding (RAW DMG p.192) is the first entry — immune to thought-
+        # reading / lie + alignment + creature-type detection while worn.
+        # ATTUNEMENT-gated, so the walker's attunement check filters it.
+        "mind_shield": False,
+        "mind_shield_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33893,6 +33910,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_feather_fall") or p.get("feather_fall"):
                 out["feather_fall"] = True
                 out["feather_fall_sources"].append(item_name)
+            # v2.245.0 — mind-shielding passive (Ring of Mind Shielding, RAW
+            # DMG p.192). Boolean OR; the flag rides the item via the
+            # `mind_shield` payload (or a per-item `_mind_shield` rider).
+            # Attunement-gated by the per-payload check above.
+            if item.get("_mind_shield") or p.get("mind_shield"):
+                out["mind_shield"] = True
+                out["mind_shield_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90989,6 +91013,12 @@ async def get_character_sheet_json(
             if _item_eff.get("feather_fall"):
                 derived["feather_fall"] = {
                     "sources": list(_item_eff.get("feather_fall_sources") or []),
+                }
+            # v2.245.0 — mind shielding (Ring of Mind Shielding). Only present
+            # when an equipped + attuned item sets the flag.
+            if _item_eff.get("mind_shield"):
+                derived["mind_shield"] = {
+                    "sources": list(_item_eff.get("mind_shield_sources") or []),
                 }
         except Exception:
             pass

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.245.0] - 2026-06-13 — "The Guarded Mind"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of Mind Shielding — attunement-gated `mind_shield` passive (`derived.mind_shield`) on a new boolean-OR substrate field, homed on Lyra by displacing her redundant Ioun Stone of Strength.
+
+**Description:** The **Ring of Mind Shielding** (RAW DMG p.192, uncommon, attunement) makes the wearer immune to magic that reads thoughts, detects lies, or knows alignment / creature type. It reuses the boolean-OR passive substrate: the `mind_shield` flag rides the `ring-of-mind-shielding` catalog payload (`requires_attunement: True`), aggregates in `_equipped_item_effects` (a new `mind_shield` field + `mind_shield_sources`), and surfaces on `/sheet-json` as `derived.mind_shield = {sources}`. Like the Ring of Feather Falling it is attunement-gated. **Slot sourcing:** every demo PC is at the RAW 3/3 attunement cap, so homing the ring required freeing a slot via lossy displacement. Lyra Sunstrider's **Ioun Stone of Strength** was the lowest-value sacrifice — STR-via-ioun is the most redundant ability demo (STR boosts also ride the three Belts of Giant Strength + Gauntlets of Ogre Power on four other PCs). It's now detuned (kept equipped, so its `_ability_bonus` no longer applies), and the ring takes its slot — Lyra stays at 3/3 (Demon Slayer Rapier + Staff of Charming + Ring of Mind Shielding). A mind-shielding ring fits a bard who guards her true intentions. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `mind_shield` / `mind_shield_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped items carrying the `mind_shield` payload or a per-item `_mind_shield` rider; attunement-gated via the existing per-payload `requires_attunement` check).
+- `/sheet-json` `derived.mind_shield = {sources}` — present only when an equipped + attuned item sets the flag.
+- `ring-of-mind-shielding` entry in `_MAGIC_ITEM_PASSIVES` (`mind_shield: True`, `requires_attunement: True`).
+- Demo seed: Ring of Mind Shielding on Lyra Sunstrider (`_slug: "ring-of-mind-shielding"`, equipped + attuned).
+- `tests/harness/test_item_ring_of_mind_shielding.py` (3 tests): `derived.mind_shield` lists the ring in sources; detuning via /attune drops the flag (attunement required); unequip drops the flag.
+
+### Changed
+- Demo seed: Lyra's Ioun Stone of Strength detuned (`attuned: True → False`, kept equipped) to free her 3rd attunement slot; her effective STR reverts 10 → 8.
+- `tests/harness/test_item_ioun_stone.py`: dropped the now-detuned `("Lyra Sunstrider", "STR", ...)` row from the `_VARIANTS` parametrize (the remaining DEX/CON/WIS/CHA rows + the INT primary test still prove the shared `ioun-stone` slug covers every ability variant).
+- `docs/test-harness-coverage.md`: harness total 2675 → 2677 (+3 mind-shielding, −1 dropped ioun variant); added the `test_item_ring_of_mind_shielding.py` section.
+
 ## [2.244.0] - 2026-06-13 — "The Gentle Descent"
 
 **Schema version:** 69

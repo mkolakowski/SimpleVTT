@@ -1785,14 +1785,30 @@ def _bard_sheet(name: str) -> dict:
              "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Charisma score by 2 (and its maximum). The tome then loses its magic for a century. RAW DMG p.208."},
             # v2.225.0 — Ioun Stone of Strength (RAW DMG p.176, very rare,
             # attunement). Capped-additive ability bonus (the v2.224.0
-            # `ability_bonus` substrate): +2 STR to a max of 20. Seeded on
-            # Lyra (Bard, dump STR 8 → effective 10, mod −1 → 0) — a clean
-            # pure-additive read on a non-combat stat (her attacks use DEX/
-            # CHA, so this is mechanically inert beyond STR checks/saves).
+            # `ability_bonus` substrate): +2 STR to a max of 20.
+            # v2.245.0 — detuned (kept equipped) to free Lyra's 3rd attunement
+            # slot for the Ring of Mind Shielding below. STR-via-ioun is the
+            # most redundant ability demo (STR boosts also ride Belt of Giant
+            # Strength Storm/Stone/Hill + Gauntlets of Ogre Power on 4 other
+            # PCs), so its loss costs the least demo coverage. Detuned → the
+            # `_ability_bonus` no longer applies (attunement-gated), so Lyra's
+            # effective STR reverts to her base 8.
             {"name": "Ioun Stone of Strength", "type": "magic", "qty": 1,
-             "equippable": True, "equipped": True, "attuned": True,
+             "equippable": True, "equipped": True, "attuned": False,
              "_slug": "ioun-stone", "_ability_bonus": {"STR": 2},
              "desc": "Very rare wondrous item, attunement. This pale blue rhomboid orbits your head and increases your Strength by 2, to a maximum of 20. RAW DMG p.176."},
+            # v2.245.0 — Ring of Mind Shielding (RAW DMG p.192, uncommon,
+            # attunement). First mind-shield passive — immune to magic that
+            # reads your thoughts, detects lies, or knows your alignment /
+            # creature type. Surfaces on /sheet-json as derived.mind_shield,
+            # gated on the `attuned` flag. Homed on Lyra (Bard) by displacing
+            # the redundant Ioun Stone of Strength above (she stays at the RAW
+            # 3/3 cap: Demon Slayer Rapier + Staff of Charming + this ring). A
+            # mind-shielding ring fits a bard who guards her true intentions.
+            {"name": "Ring of Mind Shielding", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "weight_lb": 0, "_slug": "ring-of-mind-shielding",
+             "desc": "Uncommon ring, attunement. While wearing this ring, you are immune to magic that allows other creatures to read your thoughts, determine whether you are lying, know your alignment, or know your creature type. Creatures can communicate telepathically with you only if you allow it. RAW DMG p.192."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit
