@@ -7365,6 +7365,19 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           action_key: 'gaze',
                           label: '💎 Gaze (Truesight)',
                           title: 'Gem of Seeing — spend 1 charge to gain truesight 60 ft for 10 minutes.'},
+        // v2.271.0 — charged-items Phase 3 (closes the phase): Horn of
+        // Blasting (RAW DMG p.174, no attunement). A 30-ft-cone CON save
+        // for 5d6 thunder + deafened on a fail — reuses the `aoe-cone`
+        // flow (pick direction → /battle/cone-targets → AoE confirm →
+        // POST target_combatant_ids). No charges / no resource row; the
+        // server's `horn-of-blasting` branch resolves the save-for-half
+        // damage + the deafen-on-fail condition.
+        'horn-of-blasting': {kind: 'aoe-cone',
+                          action_key: 'blast',
+                          label: '📯 Blow Horn',
+                          title: 'Horn of Blasting — 30-ft cone, DC 15 CON save: 5d6 thunder + deafened 1 min on a fail, half + no deafen on a pass.',
+                          length_ft: 30,
+                          apex_half_angle_deg: 26.57},  // RAW PHB p.204
     };
 
     // v2.158.89 — Phase 3c: modal UX replacement for the placeholder

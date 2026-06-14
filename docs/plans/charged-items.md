@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0); Phase 3 in progress (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live; Gem of Seeing ✅ v2.270.0 — the `action_kind: "buff"` shape is now live); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phase 4 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0); Phase 3 ✅ complete (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live; Gem of Seeing ✅ v2.270.0 — the `action_kind: "buff"` shape is now live; Horn of Blasting ✅ v2.271.0 — the first charge-less `attack_aoe` item); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phase 4 unstarted.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -118,9 +118,15 @@ in `/use_item_action` that builds the roll inline instead of resolving a
   recharge `"1d3"` at dawn. Seeded on Rowan Quickbow (Ranger). The mechanical
   truesight reads (auto-detect illusions, see invisible, see ethereal) are
   GM-narrated in v1.
-- **Horn of Blasting** (DMG p.174, uncommon) — thunder AoE (5d6, DC 15) + deafen;
-  no charges, but a per-use "explodes on a 6 of d100" risk. → `action_kind:
-  "attack"` AoE, no resource row.
+- **Horn of Blasting** (DMG p.174, uncommon, no attunement) — ✅ **shipped
+  v2.271.0**. The first charge-less item action: a 30-ft-cone DC 15 CON save
+  → 5d6 thunder + deafened 1 min on a fail, half + no deafen on a pass.
+  Shipped the `_use_item_action_horn_of_blasting` handler (`action_kind:
+  "attack_aoe"`) — reuses the necklace save-for-half AoE-damage loop but with
+  NO resource row / no charge gate, and installs the `deafened` condition only
+  on a failed save (via `_resolve_feature_save`'s `condition_buff`). Seeded on
+  Krieger Stonefist (Barbarian). The RAW 20% self-destruct per blow is
+  GM-narrated in v1. **Closes Phase 3.**
 
 The new shape is the minimal generalization: the dispatch already knows the
 slug + action_key + charge spend; this just routes the *effect* through the

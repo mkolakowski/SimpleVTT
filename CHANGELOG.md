@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.271.0] - 2026-06-14 — "The Thunderous Call"
+
+**Schema version:** 69
+
+**Commit summary:** Horn of Blasting — closes charged-items Phase 3: a save-for-half AoE-damage charge action with **no charges / no resource row** (the first such item) — a `horn-of-blasting` entry in `_MAGIC_ITEM_ACTIONS` whose `blast` action routes through the new `_use_item_action_horn_of_blasting` handler (30-ft cone, DC 15 CON save → 5d6 thunder + deafened on a fail, half on a pass), seeded on Krieger Stonefist (Barbarian), plus a sheet-UI `aoe-cone` mapping and harness tests.
+
+**Description:** **Horn of Blasting** (RAW DMG p.174, uncommon, **no attunement**): "you can use an action to speak the horn's command word and then blow the horn, which emits a thunderous blast in a 30-foot cone. Each creature in that area must make a DC 15 Constitution saving throw. On a failed save, a creature takes 5d6 thunder damage and is deafened for 1 minute. On a successful save, a creature takes half as much damage and isn't deafened." This is the third item shipped against charged-items **Phase 3** and **closes the phase**. It reuses the established save-for-half AoE-damage shape (the Necklace of Fireballs / Staff of Fire / Staff of Frost / Staff of Swarming Insects path) but is the **first charge-less item**: the horn has no charges, so the new `_use_item_action_horn_of_blasting` handler has no resource row, no charge gate, and emits no `resource_update` broadcast. It adds one RAW-faithful wrinkle over the necklace handler — a `deafened` condition rides the same `_resolve_feature_save` call via `condition_buff`, so it installs **only on a failed save** (a passing creature takes half damage and is not deafened). The RAW 20% self-destruct per blow (10d6 fire to the user, horn destroyed) is GM-narrated in v1, consistent with the Ring of the Ram's GM-narrated shove. Seeded on Krieger Stonefist (Half-Orc Barbarian) — a war horn for a bellowing bruiser; because it needs no attunement, it doesn't compete for his 3/3 attunement cap. The sheet reuses the `aoe-cone` picker flow (pick direction → `/battle/cone-targets` → AoE confirm → POST `target_combatant_ids`). MINOR — additive content + one small charge-less handler + tests, no schema change.
+
+### Added
+- `_use_item_action_horn_of_blasting` handler in `app/routes/tabletop_routes.py` — the first charge-less item action: resolves a per-target save in a 30-ft cone (DC + ability from the `action_def`), applies save-for-half damage, installs the `deafened` condition only on a failed save (via `_resolve_feature_save`'s `condition_buff`), broadcasts `feature_used` (no `resource_update` — there are no charges), and returns `{ok, item_name, action_key, action_kind, dice, save_dc, save_ability, damage_type, condition_key, results:[{combatant_id, name, passed, damage_dealt, deafened}]}`.
+- `horn-of-blasting` entry in `_MAGIC_ITEM_ACTIONS` (`blast` action: `action_kind: attack_aoe`, `save_dc: 15`, `save_ability: CON`, `dice: 5d6`, `damage_type: thunder`, `save_for_half: True`, `condition_key: deafened`; no `resource_key`, no `requires_attunement`) + a `horn-of-blasting` dispatch branch routing to the new handler.
+- Sheet UI: `horn-of-blasting` `ITEM_ACTION_SLUGS` mapping (`aoe-cone` picker, 30-ft cone) rendering a `📯 Blow Horn` button.
+- Demo seed: Krieger Stonefist gains an equipped Horn of Blasting (no attunement, no resource row).
+- `tests/harness/test_use_item_action_horn_of_blasting.py` (2 tests): a blast at 2 targets → `action_kind: attack_aoe`, `save_dc: 15` CON, `dice: 5d6`, `damage_type: thunder`, `condition_key: deafened`, both ids resolved with per-target `passed`/`damage_dealt`/`deafened` fields (deafened iff the save failed) and no `resource` field; a 25-target list is rejected 400 (the 24-target cone cap).
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 3 status — Horn of Blasting marked ✅ shipped (v2.271.0); **Phase 3 is now complete**.
+- `docs/test-harness-coverage.md`: harness total 2768 → 2770 (+2 horn-of-blasting); added the `test_use_item_action_horn_of_blasting.py` section.
+
 ## [2.270.0] - 2026-06-14 — "The Seeing Stone"
 
 **Schema version:** 69

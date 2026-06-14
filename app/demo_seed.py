@@ -3345,6 +3345,21 @@ def _barbarian_sheet(name: str) -> dict:
              "_slug": "brooch-of-shielding",
              "_resistance_type": "force",
              "desc": "Uncommon wondrous item, attunement. While wearing this brooch you have resistance to force damage and immunity to the magic missile spell. RAW DMG p.156."},
+            # v2.271.0 — Horn of Blasting (RAW DMG p.174, uncommon, NO
+            # attunement). Closes charged-items Phase 3: a save-for-half
+            # AoE-damage charge action with NO resource row (the horn has
+            # no charges — it's at-will, with a RAW 20% self-destruct risk
+            # per blow that is GM-narrated in v1). The `blast` action
+            # routes through /use_item_action's `horn-of-blasting` →
+            # `_use_item_action_horn_of_blasting` branch: each creature in
+            # a 30-ft cone makes a DC 15 CON save → 5d6 thunder + deafened
+            # 1 minute on a fail, half damage + no deafen on a pass. No
+            # attunement → it doesn't compete for Krieger's 3/3 cap. A war
+            # horn is on-theme for a bellowing Half-Orc Barbarian.
+            {"name": "Horn of Blasting", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 2,
+             "_slug": "horn-of-blasting",
+             "desc": "Uncommon wondrous item (no attunement). As an action, blow the horn to emit a thunderous blast in a 30-foot cone. Each creature in that area makes a DC 15 Constitution saving throw — on a fail, 5d6 thunder damage and deafened for 1 minute; on a success, half damage and no deafen. RAW DMG p.174: each time you blow it there is a 20% chance the horn explodes (10d6 fire to you, horn destroyed) — GM-narrated."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature

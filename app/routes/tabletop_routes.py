@@ -33278,6 +33278,39 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.271.0 — charged-items Phase 3 (closes the phase): Horn of Blasting
+    # (RAW DMG p.174, uncommon, NO attunement). A save-for-half AoE-damage
+    # action with NO resource row — the horn has no charges, it's at-will
+    # (the RAW 20% self-destruct per blow is GM-narrated in v1). The
+    # ``blast`` action routes through the new ``_use_item_action_horn_of_
+    # blasting`` handler, which resolves a DC 15 CON save per target in a
+    # 30-ft cone → 5d6 thunder + deafened 1 minute on a fail, half damage +
+    # no deafen on a pass (the deafen condition installs only on a failed
+    # save, the RAW-correct behaviour). No ``resource_key`` / no
+    # ``requires_attunement`` — both are intentional omissions.
+    "horn-of-blasting": {
+        "actions": {
+            "blast": {
+                "name": "Blast (30-ft cone)",
+                "feature_name": "📯 Horn of Blasting",
+                "action_kind": "attack_aoe",
+                "save_dc": 15,
+                "save_ability": "CON",
+                "dice": "5d6",
+                "damage_type": "thunder",
+                "save_for_half": True,
+                "target_shape": "cone",
+                "condition_key": "deafened",
+                "condition_label": "Deafened",
+                "condition_icon": "🔇",
+                "condition_effects": [
+                    "can't hear, automatically fails any ability check that "
+                    "requires hearing",
+                ],
+                "condition_duration_rounds": 10,  # 1 minute
+            },
+        },
+    },
     # v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear (RAW
     # DMG p.213). 7 charges (regains 1d6+1 at dawn), spend 1 to cast
     # Fear-Cone: each creature in a 30-ft cone makes a DC 15 WIS save
@@ -81975,6 +82008,16 @@ async def use_item_action(
             charges=body.get("charges"),
             slug=slug,
         )
+    if slug == "horn-of-blasting":
+        action_def = catalog["actions"][action_key]
+        return await _use_item_action_horn_of_blasting(
+            db, campaign_id, char, item, sheet, catalog,
+            action_key, action_def,
+            target_combatant_ids=body.get("target_combatant_ids") or [],
+            campaign=campaign,
+            prompt_user=user,
+            slug=slug,
+        )
     if slug in ("wand-of-fear", "wand-of-paralysis", "staff-of-charming",
                 "eyes-of-charming"):
         action_def = catalog["actions"][action_key]
@@ -83474,6 +83517,162 @@ async def _use_item_action_attack(
             "current": res_row["current"],
             "max": res_max,
         },
+    }
+
+
+async def _use_item_action_horn_of_blasting(
+    db, campaign_id, char, item, sheet, catalog,
+    action_key, action_def,
+    target_combatant_ids: list,
+    campaign=None,
+    prompt_user=None,
+    slug="horn-of-blasting",
+):
+    """v2.271.0 — charged-items Phase 3 (closes the phase): Horn of
+    Blasting handler. RAW DMG p.174 (uncommon, NO attunement): blow the
+    horn to emit a thunderous blast in a 30-ft cone; each creature makes a
+    DC 15 CON save → 5d6 thunder + deafened 1 minute on a fail, half
+    damage + no deafen on a pass.
+
+    Mirrors ``_use_item_action_necklace_of_fireballs``'s save-for-half
+    AoE-damage loop but with two differences: (1) the horn has NO charges
+    — there is no resource row, no charge gate, no ``resource_update``
+    broadcast (the RAW 20% self-destruct per blow is GM-narrated in v1);
+    (2) a ``deafened`` condition rides the same ``_resolve_feature_save``
+    call via ``condition_buff``, so it installs only on a FAILED save (the
+    RAW-correct behaviour — a passing creature takes half damage and is
+    NOT deafened).
+    """
+    if not isinstance(target_combatant_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
+    if len(target_combatant_ids) > 24:
+        raise HTTPException(400, "Too many targets for Horn of Blasting")
+
+    raw_dc = action_def.get("save_dc")
+    if isinstance(raw_dc, str) and raw_dc.strip().lower() == "spell":
+        save_dc = _compute_spell_save_dc_from_sheet(sheet)
+    else:
+        save_dc = int(raw_dc or 15)
+    save_ability = str(action_def.get("save_ability") or "CON").upper()
+    dice = str(action_def.get("dice") or "5d6")
+    damage_type = str(action_def.get("damage_type") or "thunder")
+    save_for_half = bool(action_def.get("save_for_half", True))
+    feature_name = str(action_def.get("feature_name") or "📯 Horn of Blasting")
+    item_name = item.get("name") or slug
+
+    cond_key = str(action_def.get("condition_key") or "deafened")
+    cond_label = str(action_def.get("condition_label") or "Deafened")
+    cond_icon = str(action_def.get("condition_icon") or "🔇")
+    cond_dur = int(action_def.get("condition_duration_rounds") or 10)
+    cond_effects = action_def.get("condition_effects") or [
+        "can't hear, automatically fails any ability check requiring hearing",
+    ]
+    condition_buff = {
+        "key": cond_key,
+        "name": f"{cond_label} ({item_name} — {char.name})",
+        "icon": cond_icon,
+        "duration_rounds": cond_dur,
+        "duration_max": cond_dur,
+        "concentration": False,
+        "source_item": slug,
+        "effects": list(cond_effects),
+    }
+
+    results = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        target_c = _lookup_combatant(campaign_id, tid)
+        if not target_c:
+            results.append({"combatant_id": tid, "reason": "not_found"})
+            continue
+        try:
+            sr = await _resolve_feature_save(
+                db, campaign_id,
+                caster_char_id=int(char.id),
+                caster_char_name=str(char.name or ""),
+                target_combatant=target_c,
+                save_ability=save_ability,
+                dc=save_dc,
+                note_label=f"{item_name} (DC {save_dc} {save_ability})",
+                condition_buff=condition_buff,
+                repeated_save=False,
+                source=f"item-{slug}-save",
+                campaign=campaign,
+                prompt_user=prompt_user,
+                feature_name=feature_name,
+            )
+        except Exception:
+            logging.exception(
+                "Horn of Blasting save resolve failed for tid=%s", tid,
+            )
+            results.append({"combatant_id": tid, "reason": "save_error"})
+            continue
+
+        damage_dealt = 0
+        if sr.get("passed") is not None:
+            try:
+                r = dice_mod.roll(dice)
+                base = int(r.total)
+            except dice_mod.DiceParseError:
+                base = 0
+            if base > 0:
+                if sr.get("passed"):
+                    if save_for_half:
+                        damage_dealt = base // 2
+                else:
+                    damage_dealt = base
+            if damage_dealt > 0:
+                try:
+                    await _apply_damage_to_combatant(
+                        db, campaign_id, target_c,
+                        damage_amount=damage_dealt,
+                        damage_type=damage_type,
+                        is_attack=False, is_magical=True,
+                        attacker_char_id=char.id,
+                    )
+                except Exception:
+                    logging.exception(
+                        "Horn of Blasting damage apply failed for tid=%s", tid,
+                    )
+        results.append({
+            "combatant_id": tid,
+            "name": target_c.get("name") or "Target",
+            "passed": sr.get("passed"),
+            "damage_dealt": damage_dealt,
+            # RAW: deafened installs only on a failed save.
+            "deafened": (sr.get("passed") is False),
+        })
+
+    try:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "caster_char_name": char.name,
+                "source": f"item-{slug}",
+                "label": feature_name,
+                "summary": (
+                    f"{char.name} sounds the {item_name} — DC {save_dc} "
+                    f"{save_ability} 30-ft cone, {dice} {damage_type} + "
+                    f"deafened on a fail ({len(results)} save(s) resolved)."
+                ),
+            },
+        })
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "item_name": item_name,
+        "action_key": action_key,
+        "action_kind": "attack_aoe",
+        "dice": dice,
+        "save_dc": save_dc,
+        "save_ability": save_ability,
+        "damage_type": damage_type,
+        "condition_key": cond_key,
+        "results": results,
     }
 
 

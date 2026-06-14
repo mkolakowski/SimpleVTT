@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2768 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.270.0, 2026-06-14).
+**Total tests:** 2770 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.271.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3053,6 +3053,14 @@ v2.270.0 charged-items Phase 3 — Gem of Seeing (RAW DMG p.171, rare, attunemen
 |------|-----------------|
 | `test_gem_of_seeing_gaze_installs_truesight` | A gaze with Rowan in an active battle → 200 with `action_kind: "buff"`, `buff_key: "truesight"`, `charges_spent: 1`, `buff_installed: True`, `duration_rounds: 100`, `resource.current: 2` (3→2); the `truesight` buff lands on Rowan's combatant (verified via `GET /battle`). |
 | `test_gem_of_seeing_empty_returns_409` | Drain the gem to 0 charges via `/sheet-fields`, then gaze → 409 with `error: "insufficient_charges"` + `current: 0`. Teardown restores the snapshot. |
+
+### `test_use_item_action_horn_of_blasting.py`
+v2.271.0 charged-items Phase 3 (closes the phase) — Horn of Blasting (RAW DMG p.174, uncommon, no attunement). The first charge-less item action: `_use_item_action_horn_of_blasting` resolves a 30-ft-cone DC 15 CON save → 5d6 thunder + deafened on a fail, half + no deafen on a pass (deafen installs only on a failed save). No resource row, no charge gate, no `resource_update`. Krieger Stonefist (Barbarian) carries an equipped Horn of Blasting (no attunement).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_horn_of_blasting_blast_2_targets` | A blast at 2 targets in an active battle → 200 with `action_kind: "attack_aoe"`, `save_dc: 15`, `save_ability: "CON"`, `dice: "5d6"`, `damage_type: "thunder"`, `condition_key: "deafened"`, no `resource` field; both ids resolved with per-target `passed`/`damage_dealt` (int)/`deafened` (bool, true iff the save failed). |
+| `test_horn_of_blasting_too_many_targets_returns_400` | A 25-target `target_combatant_ids` list → 400 (the 24-target cone cap). |
 
 ### `test_arrow_of_slaying.py`
 v2.159.1 magic-items-automation Phase 8a — Arrow of Slaying (Giants) (RAW DMG p.151). First ammunition-shape catalog row, extending the v2.158.102 `on_hit_save` substrate with a new `effect: "damage"` variant for save-for-half damage. Rowan Quickbow's Longbow (Arrow of Slaying — Giants) attack at attack_index 2 fires the rider via `_slug` match. New Hill Giant token template (`sheet.type="giant"`) gives the helper-resolution path a real RAW target.
