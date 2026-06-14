@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.262.0] - 2026-06-14 — "The Charged Backlog"
+
+**Schema version:** 69
+
+**Commit summary:** Files `docs/plans/charged-items.md` — a design plan cataloguing the remaining SRD 5e charged magic items as drop-ins on the **existing** charge/action/recharge substrate, grouped by which production shape each fits (single-spell wand, multi-action staff, passive bonus) plus two small new shapes (non-spell charge action, random-effect table). Surfaced through `/wiki`.
+
+**Description:** With the pure-flag/derived-read magic-item well now exhausted (the v2.26x run shipped Ring of X-ray Vision, Ring of Jumping, Bracers of Archery, etc.), the next content frontier is the **charged** items — but the engine for those already exists and is load-bearing: `_MAGIC_ITEM_ACTIONS` + `/use_item_action` already power single-spell wands (Magic Missiles / Fireballs / Lightning Bolts), multi-action staves (Healing / Fire / Charming), state-toggles (Flame Tongue), per-item charge resource rows, RAW dice recharge (`charge_recovery`, e.g. `1d6+1` at dawn → long rest, shipped v2.158.86), and the passive `_MAGIC_ITEM_PASSIVES` bonus rail. This plan is therefore a **content backlog**, not an engine design: it groups the remaining SRD charged items (Wand of Web/Binding/Polymorph, Staff of Frost/Power/Thunder-and-Lightning/Swarming-Insects, Ring of the Ram, Gem of Seeing, Horn of Blasting, Wand of Wonder, Wand of the War Mage) by shape-fit, flags which are zero-risk drop-ins vs. which need one small new `action_kind` branch (non-spell charge attack/heal/buff) or a `random_table` shape (Wand of Wonder), and proposes a phase order that front-loads the near-zero-risk content. Doc-and-plan commit — no engine change ships here. Surfaced through the wiki per the surface-every-doc rule. MINOR — additive doc + wiki entry + tests.
+
+### Added
+- `docs/plans/charged-items.md` — the charged-items backlog plan (Phases 0–5).
+- Wiki surface: `plan-charged-items` in `_DOC_ALLOWLIST`; "Charged magic items" rows in the `wiki.html` design-plans table + `docs/wiki/README.md`.
+- `tests/harness/test_wiki.py`: `test_wiki_doc_serves_charged_items_plan` asserts the slug renders 200 with the H1 + nav menu; `test_wiki_home_renders` extended to assert the landing-page link.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2743 → 2744 (+1 charged-items wiki smoke test).
+
 ## [2.261.0] - 2026-06-14 — "The Marksman's Wraps"
 
 **Schema version:** 69

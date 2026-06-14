@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2743 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.261.0, 2026-06-14).
+**Total tests:** 2744 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.262.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3969,6 +3969,7 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_carrying_capacity_plan` | v2.159.26: `GET /wiki/doc/plan-carrying-capacity` → 200, body contains "carrying capacity" + the nav menu. Resolves through the allowlist to `docs/plans/carrying-capacity.md` (filed to unblock Bag of Holding — needed an STR × 15 carry-capacity engine to discount). |
 | `test_wiki_doc_serves_legendary_actions_plan` | v2.159.32: `GET /wiki/doc/plan-legendary-actions` → 200, body contains "legendary actions" + the nav menu. Resolves through the allowlist to `docs/plans/legendary-actions.md` (top P1 of the 2026-06-11 SRD audit refresh — 15 SRD monsters carry legendary-action data in their unified `actions` array but the engine has no `/use_legendary_action` dispatch). |
 | `test_wiki_doc_serves_str_override_plan` | v2.211.0: `GET /wiki/doc/plan-str-override` → 200, body contains "ability-score override" + the nav menu. Resolves through the allowlist to `docs/plans/str-override.md` (filed to unblock Belt of Giant Strength / Amulet of Health / Potion of Giant Strength — needs an effective-ability-score override substrate with RAW `max(base, set)` semantics). |
+| `test_wiki_doc_serves_charged_items_plan` | v2.262.0: `GET /wiki/doc/plan-charged-items` → 200, body contains "charged magic items" + the nav menu. Resolves through the allowlist to `docs/plans/charged-items.md` (backlog plan for extending the existing charge/recharge substrate to remaining SRD charged items — Staff of Power, Ring of the Ram, Gem of Seeing, Wand of Wonder). |
 | `test_wiki_doc_unknown_slug_404` | v2.49.9: a slug that isn't in `_DOC_ALLOWLIST` → 404. Important security guarantee — the allowlist is the only way to reach a file outside `docs/wiki/`. |
 | `test_wiki_doc_traversal_blocked` | v2.49.9: directory-traversal characters in the doc slug → 404 / 400, rejected by the slug guard before the allowlist lookup. |
 

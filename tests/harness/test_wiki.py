@@ -58,6 +58,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-legendary-actions" in resp.text
     # v2.211.0: ability-score override plan listed (unblocks Belt of Giant Strength).
     assert "/wiki/doc/plan-str-override" in resp.text
+    # v2.262.0: charged-items backlog plan listed.
+    assert "/wiki/doc/plan-charged-items" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.49.168: targeting system visual guide listed.
@@ -611,6 +613,21 @@ async def test_wiki_doc_serves_str_override_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "ability-score override" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_charged_items_plan():
+    """v2.262.0: GET /wiki/doc/plan-charged-items — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/charged-items.md``. Backlog plan
+    for extending the existing charge/recharge substrate to the
+    remaining SRD charged items (Staff of Power, Ring of the Ram,
+    Gem of Seeing, Wand of Wonder, etc.)."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-charged-items")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "charged magic items" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 
