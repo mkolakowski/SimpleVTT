@@ -27,13 +27,13 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 ## SRD 5e Audit (2026-06-14 refresh)
 
-**Audit scope.** Fourth pass against `app/data/local/dnd5e/`, capturing the window from v2.222.0 → v2.277.0. The defining event is the **charged-items plan closing all phases (0–5)** — the magic-item wiring count was re-counted directly by AST-parsing the three registry dicts in `app/routes/tabletop_routes.py`. Excludes setting-specific / post-SRD content (Tasha's, Xanathar's-beyond-SRD, Strixhaven) and homebrew, same as prior passes.
+**Audit scope.** Fourth pass against `app/data/local/dnd5e/`, capturing the window from v2.222.0 → v2.284.0. The defining event is the **charged-items plan closing all phases (0–5)** — the magic-item wiring count was re-counted directly by AST-parsing the three registry dicts in `app/routes/tabletop_routes.py`. The tail of the window (v2.280.0–v2.284.0) closed the **SRD movement/levitation item family** on the passive substrate. Excludes setting-specific / post-SRD content (Tasha's, Xanathar's-beyond-SRD, Strixhaven) and homebrew, same as prior passes.
 
 ### Headline state (delta vs 2026-06-13)
 
 | Layer | SRD count | 2026-06-13 | 2026-06-14 | % | Movement |
 |---|---|---|---|---|---|
-| Magic items | 292 | ~49 wired | **95 distinct wired** | **~32.5%** | **47 `_MAGIC_ITEM_ACTIONS` + 43 `_MAGIC_ITEM_PASSIVES` + 8 `_MAGIC_ITEM_ATTACK_RIDERS`** (3 slugs span two layers). Charged-items plan ✅ closed all phases — Staff of Thunder & Lightning, Wand of Wonder, Staff of Power, Wand of the War Mage +3, Gem of Seeing, Wand of Enemy Detection, plus earlier batches. |
+| Magic items | 292 | ~49 wired | **100 distinct wired** | **~34%** | **47 `_MAGIC_ITEM_ACTIONS` + 48 `_MAGIC_ITEM_PASSIVES` + 8 `_MAGIC_ITEM_ATTACK_RIDERS`** (3 slugs span two layers). Charged-items plan ✅ closed all phases; the v2.280.0–v2.284.0 tail closed the movement/levitation family — Helm of Brilliance (fire resistance), Wings of Flying, Broom of Flying, Carpet of Flying (all on the `flying_speed` flag), and Boots of Levitation (NEW `levitate_at_will` flag). |
 | Spells | 319 | ~70% | ~70% | ~70% | No movement this window. Catalog 319/319; ~18 validation suites CI-gated. |
 | Monsters | 322 | ~85% | ~85% | ~85% | No movement. Legendary actions / resistance / lair actions all ✅. |
 | Conditions | 15 | ~85% | ~85% | ~85% | No movement. |
@@ -44,6 +44,8 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 ### What closed since 2026-06-13
 
 ✅ **Charged-items plan — all phases (0–5)** ([plan ✅](docs/plans/charged-items.md)) — every named item on the plan shipped on the mature charge engine (`_MAGIC_ITEM_ACTIONS` + `/use_item_action` + per-slug dispatch + the generalized `action_kind: "buff"` substrate). Final commits: Staff of Power (v2.274.0), Wand of Wonder (v2.273.0), Staff of Thunder & Lightning, Wand of the War Mage +3 (v2.276.0, completing the +1/+2/+3 tier set), Wand of Enemy Detection (v2.277.0). Zero new engine code required for the last items — pure content drop-ins.
+
+✅ **SRD movement/levitation item family** (v2.280.0–v2.284.0) — closed the passive-flag movement items on the shipped `flying_speed` substrate (v2.238.0 Winged Boots) plus one new flag. Helm of Brilliance (fire resistance via the resistance substrate, v2.280.0); Wings of Flying (attunement), Broom of Flying (no attunement), Carpet of Flying (no attunement) — all on `flying_speed` with zero new engine code (v2.281.0–v2.283.0); Boots of Levitation (v2.284.0) landed the **NEW `levitate_at_will` boolean derived flag** (init / walker boolean-OR / `/sheet-json` projection), the reusable surface for future "cast X at will" items. Each shipped as inert spare loot on a thematically-fit demo PC + 3 harness tests.
 
 ### Remaining gaps (re-prioritized)
 

@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.284.1] - 2026-06-14 — "The Ledger Update"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only — refresh the 2026-06-14 SRD audit in `TODO.md` to record the movement/levitation item family closed this session (v2.280.0–v2.284.0). Widens the audit window to v2.284.0, bumps the magic-item wired count 95 → 100 distinct (43 → 48 `_MAGIC_ITEM_PASSIVES`), and adds a "what closed" bullet for the family.
+
+**Description:** Bookkeeping pass so the SRD audit reflects reality after the flying/levitation backfill. Updated the headline Magic-items row (100 distinct wired, ~34%; 47 actions + 48 passives + 8 attack-riders) and the audit-scope line (window now v2.222.0 → v2.284.0). Added a "what closed since 2026-06-13" bullet covering Helm of Brilliance (fire resistance), Wings / Broom / Carpet of Flying (all on the `flying_speed` flag, zero new engine code), and Boots of Levitation (the NEW `levitate_at_will` derived flag). No code or schema change. PATCH — doc-only.
+
+### Changed
+- `TODO.md`: 2026-06-14 SRD audit — widened scope window to v2.284.0, bumped magic-item wired count 95 → 100 distinct (passives 43 → 48), added a movement/levitation "what closed" bullet.
+
 ## [2.284.0] - 2026-06-14 — "The Floating Step"
 
 **Schema version:** 69
