@@ -32941,6 +32941,23 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
         "max_charges": 7,
         "base_slot_level": 3,
     },
+    # v2.263.0 — charged-items Phase 1: Wand of Web (RAW DMG p.213,
+    # rare, attunement). 7 charges; expend exactly 1 to cast Web (save
+    # DC 15) — RAW gives no upcast, so min == max == 1 (base slot 2,
+    # the spell's own level). Drops straight into the generalized
+    # _use_item_action_charge_wand handler; the only deviation from the
+    # damage wands is the fixed single-charge spend. Regains 1d6+1 at
+    # dawn (long rest). See docs/plans/charged-items.md Phase 1.
+    "wand-of-web": {
+        "key": "cast-web",
+        "name": "Cast Web (Wand)",
+        "resource_key": "wand-of-web",
+        "spell_slug": "web",
+        "requires_attunement": True,
+        "min_charges": 1,
+        "max_charges": 1,
+        "base_slot_level": 2,
+    },
     # v2.158.88 — Phase 4d: first multi-action item. Different shape
     # from the wands: 3 distinct action_keys on one item, each with
     # its own charge cost + spell. Uses the ``actions`` subkey to
@@ -81694,7 +81711,7 @@ async def use_item_action(
             class_slug, inventory, inv_idx,
         )
     if slug in ("wand-of-magic-missiles", "wand-of-fireballs",
-                "wand-of-lightning-bolts"):
+                "wand-of-lightning-bolts", "wand-of-web"):
         return await _use_item_action_charge_wand(
             db, campaign_id, char, item, sheet, catalog, slug,
             body.get("charges"),

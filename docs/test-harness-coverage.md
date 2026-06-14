@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2744 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.262.0, 2026-06-14).
+**Total tests:** 2747 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.263.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2878,6 +2878,15 @@ v2.205.0 magic-items-automation content tail — Wand of Lightning Bolts (RAW DM
 | `test_lightning_wand_single_charge_casts_lv3` | 1 charge → `cast_slot_level: 3` (base=3 + 0); `spell_slug: lightning-bolt`, `item_name: Wand of Lightning Bolts`. |
 | `test_lightning_wand_multi_charge_casts_higher` | 3 charges → `cast_slot_level: 5` (base=3 + 2). |
 | `test_lightning_wand_requires_attunement_409` | Detune the wand via /attune; invoke /use_item_action → 409 attunement required. Restores attunement in teardown. |
+
+### `test_use_item_action_web_wand.py`
+v2.263.0 charged-items Phase 1 — Wand of Web (RAW DMG p.213, rare, attunement) through the same `/use_item_action` endpoint + generalized `_use_item_action_charge_wand` handler. RAW gives no upcast, so the catalog sets `min_charges == max_charges == 1`, `base_slot_level: 2` (Web's own level), `spell_slug: web`. Seeded on **Thalindra** (Wizard — Web is a wizard spell; her 4th attuned item, seed-load bypasses the 3-item cap); the wand index is looked up by `_slug`. The attunement guard detunes via **PATCH sheet-fields** (cap-bypassing) rather than /attune so the teardown restore can't trip the cap.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_web_wand_single_charge_casts_lv2` | 1 charge → `cast_slot_level: 2` (base=2 + 0); `spell_slug: web`, `item_name: Wand of Web`, `charges_spent: 1`. |
+| `test_web_wand_rejects_two_charges_400` | charges=2 is outside the `[1, 1]` band → 400 (RAW Web is a fixed single-charge spend). |
+| `test_web_wand_requires_attunement_409` | Detune the wand via PATCH sheet-fields; invoke /use_item_action → 409 attunement required. Restores inventory in teardown. |
 
 ### `test_use_item_action_wand_of_paralysis.py`
 v2.206.0 magic-items-automation content tail — Wand of Paralysis (RAW DMG p.213, rare, attunement) through the same `/use_item_action` endpoint + the **generalized** `_use_item_action_wand_of_fear` save-condition handler. The handler now reads the condition (key/label/icon/effects), save DC/ability, feature name, duration, and target shape from the catalog `action_def`; the Paralysis entry overrides the Fear defaults with DC 15 CON → Paralyzed, a 60-ft ray, 1-minute duration. Seeded on **Magnus** (his second attuned wand, 2/3 against the cap); the wand index is looked up by `_slug`. The `single-target-save` `ITEM_ACTION_SLUGS` kind renders a `💫 Paralyze` button.

@@ -734,6 +734,19 @@ def _wizard_sheet(name: str) -> dict:
              "_slug": "potion-of-giant-strength",
              "_ability_set": {"STR": 21}, "weight_lb": 0.5,
              "desc": "Drink (action, /use_item_action drink) to set your Strength score to 21 (only if higher) for 1 hour, no concentration. RAW DMG p.187 (Hill Giant tier)."},
+            # v2.263.0 — charged-items Phase 1. Wand of Web (RAW DMG
+            # p.213, rare, attunement). 7 charges; expend exactly 1 to
+            # cast Web (DC 15, 20-ft cube, restrained on a failed DEX
+            # save). No upcast RAW (min == max == 1). Seeded on
+            # Thalindra (Wizard) — Web is a wizard spell and she already
+            # carries the Fireballs wand, so two charge wands on one
+            # caster is on-theme. Her 4th attuned item (seed-load
+            # bypasses the RAW 3-item cap, enforced at /attune runtime
+            # only). Paired with the wand-of-web resource row below.
+            {"name": "Wand of Web", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-web",
+             "desc": "Rare wand, attunement. 7 charges. Expend 1 charge to cast Web (save DC 15) — a 20-ft cube of sticky webbing; a creature that fails a DEX save is restrained. Regains 1d6+1 charges at dawn (long rest). RAW DMG p.213."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -809,6 +822,20 @@ def _wizard_sheet(name: str) -> dict:
                 "current": 6, "max": 6, "reset": "none",
                 "source": "item-necklace-of-fireballs",
                 "desc": "6 fireball beads. Each thrown bead is a Lv 3 Fireball (DC 15 DEX save, 8d6 fire, 20-ft sphere). No regeneration.",
+                "manual": False,
+            },
+            # v2.263.0 — charged-items Phase 1: Wand of Web charge
+            # counter. Same 7-charge / 1d6+1 recharge shape as the
+            # Fireballs wand; the spell + base slot live in the catalog
+            # (Web + base 2, fixed single-charge spend). Paired with the
+            # Wand of Web entry in Thalindra's inventory above.
+            {
+                "key": "wand-of-web",
+                "name": "Wand of Web",
+                "current": 7, "max": 7, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "item-wand-of-web",
+                "desc": "7 charges. Spend 1 to cast Web (DC 15) at slot level 2. Regains 1d6+1 charges on long rest.",
                 "manual": False,
             },
         ],

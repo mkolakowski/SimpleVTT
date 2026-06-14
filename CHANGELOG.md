@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.263.0] - 2026-06-14 — "The Sticky Snare"
+
+**Schema version:** 69
+
+**Commit summary:** Wand of Web — the first charged-items Phase 1 drop-in: a `wand-of-web` entry in `_MAGIC_ITEM_ACTIONS` cast through the existing `/use_item_action` + `_use_item_action_charge_wand` handler, seeded on Thalindra (Wizard) with a 7-charge resource row, plus harness tests.
+
+**Description:** **Wand of Web** (RAW DMG p.213, rare, **attunement required**): "while holding this wand you can use an action to expend 1 of its 7 charges to cast the web spell (save DC 15) from it." The first item shipped against the charged-items backlog (`docs/plans/charged-items.md` Phase 1) — a pure content drop-in on the existing charge substrate, zero engine change beyond a catalog row + a dispatch-tuple membership. Unlike the damage wands (Magic Missiles / Fireballs / Lightning Bolts, which scale slot level with charges), RAW Web has no upcast, so the catalog sets `min_charges == max_charges == 1` and `base_slot_level: 2` (the spell's own level); the generalized `_use_item_action_charge_wand` handler already enforces the `[min, max]` charge band (a 2-charge request → 400) and the per-payload attunement gate (→ 409). Seeded on Thalindra Moonwhisper (Wizard) — Web is a wizard spell and she already carries the Wand of Fireballs, so two charge wands on one caster reads naturally; the wand is her 4th attuned item (seed-load bypasses the RAW 3-item cap, enforced at `/attune` runtime only). The 7-charge resource row recharges 1d6+1 at dawn (long rest) via the existing `charge_recovery` path. The Web spell's actual AoE/restraint resolution routes through the standard client-side cast flow. MINOR — additive content + tests, no schema change.
+
+### Added
+- `wand-of-web` entry in `_MAGIC_ITEM_ACTIONS` (`spell_slug: web`, `min_charges`/`max_charges` 1, `base_slot_level: 2`, `requires_attunement: True`) + `wand-of-web` added to the `_use_item_action_charge_wand` dispatch tuple.
+- Demo seed: Thalindra Moonwhisper gains an equipped + attuned Wand of Web plus its 7-charge `wand-of-web` resource row (1d6+1 recharge on long rest).
+- `tests/harness/test_use_item_action_web_wand.py` (3 tests): 1 charge casts Web at Lv 2; a 2-charge request is rejected 400 (RAW fixed single-charge spend); detuning the wand (via PATCH sheet-fields) gates `/use_item_action` to 409. Inventory restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 1 status — Wand of Web marked ✅ shipped (v2.263.0).
+- `docs/test-harness-coverage.md`: harness total 2744 → 2747 (+3 wand-of-web); added the `test_use_item_action_web_wand.py` section.
+
 ## [2.262.0] - 2026-06-14 — "The Charged Backlog"
 
 **Schema version:** 69
