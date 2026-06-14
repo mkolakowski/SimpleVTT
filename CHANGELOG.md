@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.288.0] - 2026-06-14 — "The Antivenom Brooch"
+
+**Schema version:** 69
+
+**Commit summary:** New item-passive **immunity** substrate (the parallel of the v2.235.0 resistance substrate) + its first consumer, **Periapt of Proof against Poison** (RAW DMG p.184, rare, no attunement). Equipped(+attuned) items can now declare `immunity_to` (damage) and `condition_immunity_to` (conditions); the periapt grants poison-damage immunity + poisoned-condition immunity. Three harness tests.
+
+**Description:** The resistance engine has shipped item-sourced damage resistance since v2.235.0 (Ring of Resistance → `_resistance_halve` reads the aggregated `resistance_to` from `_equipped_item_effects`). This commit builds the missing parallel for **immunity**, which had only existed at the buff-effects layer (`effects.immunity_to` / `effects.condition_immunity_to`). The `_equipped_item_effects` walker now folds two new payload fields — `immunity_to` (a damage-type list) and `condition_immunity_to` (a condition list) — into aggregated lists with source attribution. `_immunity_zero` gains an item-passive read block (mirroring the v2.235.0 resistance bridge) so a worn item zeroes the named damage type in the live damage pipeline, and `_target_condition_immune` gains the same bridge so a worn item blocks the named condition's buff-install. Both lists surface on `/sheet-json` as `derived.immunities` and `derived.condition_immunities` (the same `{types, sources}` shape as `derived.resistances`). The first consumer is the **Periapt of Proof against Poison** (RAW DMG p.184, rare, NO attunement): `immunity_to: ["poison"]` + `condition_immunity_to: ["poisoned"]`. Seeded as inert spare loot on Garrik Ironside (Fighter — a frontliner who soaks dragon breath and inhaled toxins, no poison-immunity baseline); the harness PATCHes it equipped, reads the derived projections, then restores. MINOR — additive engine substrate + a new registry entry + demo content + tests, no schema change.
+
+### Added
+- Item-passive **immunity substrate** in `_equipped_item_effects` (`app/routes/tabletop_routes.py`): `immunity_to` + `condition_immunity_to` payload folds (with `*_sources`), mirroring the v2.235.0 resistance fold.
+- `_immunity_zero` reads item-passive `immunity_to` (live damage pipeline); `_target_condition_immune` reads item-passive `condition_immunity_to` (buff-install gate) — both mirror the v2.235.0 item-resistance bridge.
+- `/sheet-json` derived projection: `derived.immunities` + `derived.condition_immunities` (`{types, sources}`).
+- `periapt-of-proof-against-poison` entry in `_MAGIC_ITEM_PASSIVES` — poison damage immunity + poisoned-condition immunity, no attunement.
+- Demo seed: Garrik Ironside gains a spare (unequipped) **Periapt of Proof against Poison**.
+- `tests/harness/test_item_periapt_of_proof_against_poison.py` (3 tests): poison damage immunity + poisoned-condition immunity surface on equip with source attribution; inert baseline has neither. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2812 → 2815 (+3 tests); added the `test_item_periapt_of_proof_against_poison.py` section.
+
 ## [2.287.0] - 2026-06-14 — "The Starlit Mantle"
 
 **Schema version:** 69

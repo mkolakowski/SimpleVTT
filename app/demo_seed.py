@@ -5055,6 +5055,19 @@ def _fighter_sheet(name: str) -> dict:
              "_slug": "dragon-scale-mail", "_resistance_type": "lightning",
              "ac_value": 14, "weight_lb": 45,
              "desc": "Very rare armor (scale mail), attunement. +1 AC; resistance to lightning damage (Blue dragon scales); advantage on saves vs. dragon Frightful Presence and breath weapons. RAW DMG p.165."},
+            # v2.288.0 — Periapt of Proof against Poison (RAW DMG p.184, rare,
+            # NO attunement). First item on the v2.288.0 item-passive IMMUNITY
+            # substrate: poison damage immunity (`_immunity_zero`) + poisoned-
+            # condition immunity (`_target_condition_immune`), both surfaced on
+            # /sheet-json (derived.immunities / condition_immunities). Spare
+            # loot (equipped=False) — Garrik has no poison-immunity baseline, so
+            # the harness test PATCHes it equipped, reads the derived
+            # projections, then restores. A poison-warding brooch fits a
+            # frontliner who soaks dragon breath and inhaled toxins.
+            {"name": "Periapt of Proof against Poison", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "periapt-of-proof-against-poison", "weight_lb": 0,
+             "desc": "Rare wondrous item (no attunement). While worn, poisons have no effect on you: you are immune to the poisoned condition and have immunity to poison damage. RAW DMG p.184."},
             # v2.258.0 — Necklace of Adaptation (RAW DMG p.183, uncommon,
             # attunement). The wearer can breathe normally in any environment
             # + has advantage on saves vs. harmful gases and vapors. Modeled

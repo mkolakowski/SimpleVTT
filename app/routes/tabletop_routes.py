@@ -32741,6 +32741,24 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "helm-of-brilliance": [
         {"resistance_to": "fire", "requires_attunement": True},
     ],
+    # v2.288.0 — Periapt of Proof against Poison (RAW DMG p.184, rare, NO
+    # attunement). RAW: "while you wear this brooch, poisons have no effect on
+    # you. You are immune to the poisoned condition and have immunity to poison
+    # damage." First item on the v2.288.0 item-passive IMMUNITY substrate:
+    # `immunity_to: ["poison"]` folds into the aggregated `immunity_to` list
+    # that `_immunity_zero` consults (zeroes poison damage), and
+    # `condition_immunity_to: ["poisoned"]` folds into the list that
+    # `_target_condition_immune` consults (blocks the poisoned buff-install).
+    # Both surface on `/sheet-json` (derived.immunities / condition_immunities).
+    # Mirrors the v2.235.0 resistance substrate exactly — zero new pipeline
+    # math, just the parallel immunity bridges.
+    "periapt-of-proof-against-poison": [
+        {
+            "immunity_to": ["poison"],
+            "condition_immunity_to": ["poisoned"],
+            "requires_attunement": False,
+        },
+    ],
     # v2.238.0 — Winged Boots (RAW DMG p.214, uncommon, attunement). RAW:
     # "while you wear these boots, you have a flying speed equal to your
     # walking speed. You can use the boots to fly for up to 4 hours, all at
@@ -34368,6 +34386,18 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # rider on the shared `ring-of-resistance` slug.
         "resistance_to": [],
         "resistance_sources": [],
+        # v2.288.0 — damage/condition-immunity passive. Aggregated lists of
+        # damage types + conditions made immune across equipped(+attuned)
+        # items; the damage list is consulted by `_immunity_zero` (live damage
+        # pipeline) and the condition list by `_target_condition_immune` (buff-
+        # install gate), both surfaced on `/sheet-json` derived. Periapt of
+        # Proof against Poison (RAW DMG p.184) is the first entry — poison
+        # damage immunity + poisoned-condition immunity. Mirrors the v2.235.0
+        # resistance substrate exactly.
+        "immunity_to": [],
+        "immunity_sources": [],
+        "condition_immunity_to": [],
+        "condition_immunity_sources": [],
         # v2.236.0 — spell-save-advantage passive. Boolean OR across
         # equipped+attuned items carrying the field; surfaced on
         # `/sheet-json` derived. Mantle of Spell Resistance (RAW DMG p.180)
@@ -34722,6 +34752,22 @@ def _equipped_item_effects(sheet: dict) -> dict:
                 if _rt_norm and _rt_norm not in out["resistance_to"]:
                     out["resistance_to"].append(_rt_norm)
                     out["resistance_sources"].append(item_name)
+            # v2.288.0 — damage/condition-immunity passive (Periapt of Proof
+            # against Poison, RAW DMG p.184). Folded into the aggregated
+            # `immunity_to` list (consulted by `_immunity_zero` in the live
+            # damage pipeline) and `condition_immunity_to` list (consulted by
+            # `_target_condition_immune` at buff-install time). Mirrors the
+            # v2.235.0 resistance fold.
+            for _im in (p.get("immunity_to") or []):
+                _im_norm = str(_im or "").strip().lower()
+                if _im_norm and _im_norm not in out["immunity_to"]:
+                    out["immunity_to"].append(_im_norm)
+                    out["immunity_sources"].append(item_name)
+            for _ci in (p.get("condition_immunity_to") or []):
+                _ci_norm = str(_ci or "").strip().lower()
+                if _ci_norm and _ci_norm not in out["condition_immunity_to"]:
+                    out["condition_immunity_to"].append(_ci_norm)
+                    out["condition_immunity_sources"].append(item_name)
             # v2.236.0 — spell-save-advantage passive (Mantle of Spell
             # Resistance, RAW DMG p.180). Boolean OR; the flag rides the
             # item via the `spell_save_advantage` payload (or a per-item
@@ -40333,6 +40379,17 @@ def _target_condition_immune(
         normalized = {(str(r) or "").strip().lower() for r in sheet_cond}
         if "all" in normalized or buff_key_l in normalized:
             return True
+    # v2.288.0 — equipped-item condition immunity (Periapt of Proof against
+    # Poison → poisoned). Aggregated from equipped(+attuned) inventory items
+    # via `_equipped_item_effects`; mirrors the item-resistance/immunity
+    # bridges. Read after the sheet-level list, before buffs.
+    try:
+        _item_cond = _equipped_item_effects(target_sheet).get("condition_immunity_to") or []
+    except Exception:
+        _item_cond = []
+    _item_cond_set = {(str(r) or "").strip().lower() for r in _item_cond}
+    if "all" in _item_cond_set or buff_key_l in _item_cond_set:
+        return True
     for b in target_sheet.get("_buffs_active") or []:
         if not isinstance(b, dict):
             continue
@@ -40987,6 +41044,18 @@ def _immunity_zero(
             return 0, True
         if damage_type_l in normalized:
             return 0, True
+    # v2.288.0 — equipped-item damage immunity (Periapt of Proof against
+    # Poison, RAW DMG p.184). Aggregated from equipped(+attuned) inventory
+    # items via `_equipped_item_effects`; mirrors the v2.235.0 item-resistance
+    # bridge in `_resistance_halve`. Read after the sheet-level list, before
+    # buffs, so a worn periapt zeroes poison damage even without an active buff.
+    try:
+        _item_immunes = _equipped_item_effects(target_sheet).get("immunity_to") or []
+    except Exception:
+        _item_immunes = []
+    _item_immune_set = {(str(r) or "").strip().lower() for r in _item_immunes}
+    if "all" in _item_immune_set or damage_type_l in _item_immune_set:
+        return 0, True
     for b in (target_sheet or {}).get("_buffs_active") or []:
         if not isinstance(b, dict):
             continue
@@ -92771,6 +92840,21 @@ async def get_character_sheet_json(
                 derived["resistances"] = {
                     "types": _item_resist_types,
                     "sources": list(_item_eff.get("resistance_sources") or []),
+                }
+            # v2.288.0 — equipped-item damage/condition immunity (Periapt of
+            # Proof against Poison). Only present when an equipped(+attuned)
+            # item makes at least one damage type / condition immune.
+            _item_immune_types = list(_item_eff.get("immunity_to") or [])
+            if _item_immune_types:
+                derived["immunities"] = {
+                    "types": _item_immune_types,
+                    "sources": list(_item_eff.get("immunity_sources") or []),
+                }
+            _item_cond_immune = list(_item_eff.get("condition_immunity_to") or [])
+            if _item_cond_immune:
+                derived["condition_immunities"] = {
+                    "types": _item_cond_immune,
+                    "sources": list(_item_eff.get("condition_immunity_sources") or []),
                 }
             # v2.236.0 — spell-save advantage (Mantle of Spell Resistance).
             # Only present when an equipped+attuned item sets the flag.
