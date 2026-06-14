@@ -7288,6 +7288,23 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           max_range_ft: 300,
                           save_dc: 15,
                           submit_label: '🦗 Swarm'},
+        // v2.272.0 — charged-items Phase 2: Staff of Thunder and
+        // Lightning (RAW DMG p.202). Marquee Thunder action reuses the
+        // necklace's `aoe-sphere` flow (center picker → /battle/sphere-
+        // targets → AoE confirm modal → POST). RAW Thunder is centered on
+        // the wielder (60-ft radius) and a fixed 2-charge spend (no
+        // upcast), so there's no charge_picker — the server defaults the
+        // spend to the action's min_charges (2). DC is a flat 17. The
+        // deafen-on-fail rider + the staff's other properties are
+        // GM-narrated.
+        'staff-of-thunder-and-lightning': {kind: 'aoe-sphere',
+                          action_key: 'thunderclap',
+                          label: '⚡ Thunder',
+                          title: 'Staff of Thunder and Lightning — Thunder, 60-ft-radius thunderclap centered on you, DC 17 CON save (half on a pass). Spends 2 charges. Deafen-on-fail GM-narrated.',
+                          radius_ft: 60,
+                          max_range_ft: 0,
+                          save_dc: 17,
+                          submit_label: '⚡ Thunder'},
         // v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear
         // (RAW DMG p.213). 30-ft cone, DC 15 WIS save or Frightened
         // for 1 minute. Flow: pick a target to define the cone

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.272.0] - 2026-06-14 — "The Caged Storm"
+
+**Schema version:** 69
+
+**Commit summary:** Staff of Thunder and Lightning — a charged-items Phase 2 multi-action staff: a `staff-of-thunder-and-lightning` entry in `_MAGIC_ITEM_ACTIONS` whose marquee `thunderclap` action routes through the generalized save-for-half AoE-damage handler (60-ft-radius thunderclap, DC 17 CON save → 2d6 thunder, half on a pass, fixed 2-charge spend), seeded on Magnus Hexbinder (Bronze Dragonborn Warlock) with a 5-charge resource row, plus a sheet-UI `aoe-sphere` mapping and harness tests. Pure content on shape #2 — zero engine change.
+
+**Description:** **Staff of Thunder and Lightning** (RAW DMG p.202, very rare, **attunement required**): a magic quarterstaff with 5 charges (regains 1d6+1 at dawn) exposing five properties — Lightning, Thunder, Lightning Strike, a Thunderclap-on-attack rider, and the combined Thunder and Lightning. v1 ships the marquee **Thunder** property — "you can use an action and expend 2 charges to cause the staff to issue a deafening thunderclap... each creature within 60 feet of you (other than you) must make a DC 17 Constitution saving throw. On a failed save, a creature takes 2d6 thunder damage and becomes deafened for 1 minute. On a successful save, a creature takes half as much damage and isn't deafened." This is the fourth item shipped against charged-items **Phase 2** (multi-action staves) and is **pure content on the established save-for-half AoE-damage shape** — the same `_use_item_action_necklace_of_fireballs` path as the Staff of Fire / Frost / Swarming Insects: the dice / damage type / charge cost / feature label all come from the catalog `action_def` (2d6 thunder, CON save, fixed 2-charge spend, no upcast). Unlike those staves the DC is a flat RAW 17 (not the wielder's "spell save DC" sentinel). Adding the staff is a catalog row + dispatch-tuple membership + demo seed + sheet-UI mapping + tests — no handler change. Seeded on Magnus Hexbinder (Bronze Dragonborn Warlock — lightning resistance, the demo's eldritch blaster) as an on-theme wielder; seed-load bypasses the RAW 3-item attunement cap (enforced at `/attune` runtime only). The RAW deafen-1-minute-on-fail rider and the staff's other four properties (the single-target Lightning attack, the Lightning Strike burst, and the combined 5-charge property) are GM-narrated in v1 — consistent with how the Staff of Frost's Fog Cloud / Ice Storm / Wall of Ice and the Staff of Swarming Insects' Giant Insect are GM-narrated. The sheet reuses the `aoe-sphere` picker flow (center picker → `/battle/sphere-targets` → AoE confirm → POST `target_combatant_ids`). MINOR — additive content + tests, no schema change.
+
+### Added
+- `staff-of-thunder-and-lightning` entry in `_MAGIC_ITEM_ACTIONS` (`thunderclap` action: `save_dc: 17`, `save_ability: CON`, `dice: 2d6`, `damage_type: thunder`, `save_for_half: True`, `min`/`max` 2; `requires_attunement: True`, `resource_key: staff-of-thunder-and-lightning`) + membership in the necklace-handler dispatch tuple in `app/routes/tabletop_routes.py`.
+- Sheet UI: `staff-of-thunder-and-lightning` `ITEM_ACTION_SLUGS` mapping (`aoe-sphere` picker, 60-ft radius, flat DC 17) rendering a `⚡ Thunder` button.
+- Demo seed: Magnus Hexbinder gains an equipped + attuned Staff of Thunder and Lightning plus its 5-charge `staff-of-thunder-and-lightning` resource row (1d6+1 recharge on long rest).
+- `tests/harness/test_use_item_action_staff_of_thunder_and_lightning.py` (3 tests): a Thunder at 2 targets with no charges param → flat `save_dc: 17` CON, `dice: 2d6`, `charges_spent: 2`, resource 5 → 3, both ids resolved; asking for 1 charge (below the fixed 2) → 400; a drained staff (below 2) → 409 `insufficient_charges` with `current: 1`. Resources restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 2 status — Staff of Thunder and Lightning marked ✅ shipped (v2.272.0).
+- `docs/test-harness-coverage.md`: harness total 2770 → 2773 (+3 staff-of-thunder-and-lightning); added the `test_use_item_action_staff_of_thunder_and_lightning.py` section.
+
 ## [2.271.0] - 2026-06-14 — "The Thunderous Call"
 
 **Schema version:** 69

@@ -2484,6 +2484,22 @@ def _warlock_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-the-war-mage", "_spell_attack_bonus": 2,
              "desc": "Rare wand, attunement. While holding this wand you gain a +2 bonus to spell attack rolls and ignore half cover when making a spell attack. RAW DMG p.211."},
+            # v2.272.0 — charged-items Phase 2: Staff of Thunder and
+            # Lightning (RAW DMG p.202, very rare, attunement). 5 charges
+            # (regain 1d6+1 at dawn). v1 surfaces the marquee Thunder
+            # action — a 60-ft-radius thunderclap centered on the wielder,
+            # DC 17 CON save → 2d6 thunder (half on a pass) — through the
+            # generalized save-for-half AoE-damage handler. Magnus (Bronze
+            # Dragonborn — lightning resistance, eldritch blaster) is the
+            # on-theme wielder; his 6th attuned item (seed-load bypasses
+            # the RAW 3-item cap, enforced at /attune runtime only). The
+            # RAW deafen-1-min-on-fail rider + the Lightning / Lightning
+            # Strike / combined 5-charge properties are GM-narrated in v1.
+            # Paired with the staff-of-thunder-and-lightning resource row.
+            {"name": "Staff of Thunder and Lightning", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "staff-of-thunder-and-lightning", "weight_lb": 4,
+             "desc": "Very rare staff, attunement. 5 charges (regain 1d6+1 at dawn). Thunder (2 charges): each creature within 60 ft makes a DC 17 CON save — 2d6 thunder + deafened 1 min on a fail, half + no deafen on a pass. Also a magic quarterstaff with Lightning / Lightning Strike / combined properties (GM-narrated). RAW DMG p.202."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's
@@ -2786,6 +2802,20 @@ def _warlock_sheet(name: str) -> dict:
                 "source": "magic item — Wand of Paralysis",
                 "class_slug": "item",
                 "desc": "RAW DMG p.213. 7 charges. Spend 1 via /use_item_action (cast-paralysis): ray at one creature within 60 ft, DC 15 CON save or Paralyzed 1 min. Recovers 1d6+1 at dawn.",
+                "manual": False,
+            },
+            # v2.272.0 — Staff of Thunder and Lightning charge counter
+            # (RAW DMG p.202): 5 charges, regain 1d6+1 at dawn (the
+            # long-rest path reads ``charge_recovery``). The generalized
+            # save-for-half AoE-damage handler decrements 2 per Thunder.
+            {
+                "key": "staff-of-thunder-and-lightning",
+                "name": "Staff of Thunder and Lightning",
+                "current": 5, "max": 5, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "magic item — Staff of Thunder and Lightning",
+                "class_slug": "item",
+                "desc": "5 charges; Thunder costs 2 (2d6 thunder, 60-ft-radius thunderclap, DC 17 CON save, half on a pass). Regain 1d6+1 at dawn.",
                 "manual": False,
             },
         ],

@@ -33311,6 +33311,35 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.272.0 — charged-items Phase 2: Staff of Thunder and Lightning
+    # (RAW DMG p.202, very rare, attunement). 5 charges (regains 1d6+1 at
+    # dawn). RAW exposes five properties (Lightning, Thunder, Lightning
+    # Strike, Thunderclap-on-attack, and the combined Thunder and Lightning).
+    # v1 ships the marquee Thunder action — a 60-ft-radius thunderclap
+    # centered on the wielder, DC 17 CON save → 2d6 thunder, half on a pass
+    # — through the generalized save-for-half AoE-damage handler (the same
+    # path as the Staff of Fire/Frost/Swarming Insects). Thunder is a fixed
+    # 2-charge spend (no upcast), so min == max == 2 and the UI sends no
+    # charge picker. The RAW deafened-1-minute-on-fail rider, the single-
+    # target Lightning attack, the Lightning Strike burst, and the combined
+    # 5-charge property are GM-narrated in v1.
+    "staff-of-thunder-and-lightning": {
+        "requires_attunement": True,
+        "resource_key": "staff-of-thunder-and-lightning",
+        "actions": {
+            "thunderclap": {
+                "name": "Thunderclap (Staff)",
+                "feature_name": "⚡ Staff of Thunder and Lightning",
+                "save_dc": 17,
+                "save_ability": "CON",
+                "dice": "2d6",
+                "damage_type": "thunder",
+                "save_for_half": True,
+                "min_charges": 2,
+                "max_charges": 2,
+            },
+        },
+    },
     # v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear (RAW
     # DMG p.213). 7 charges (regains 1d6+1 at dawn), spend 1 to cast
     # Fear-Cone: each creature in a 30-ft cone makes a DC 15 WIS save
@@ -81978,7 +82007,7 @@ async def use_item_action(
             prompt_user=user,
         )
     if slug in ("necklace-of-fireballs", "staff-of-fire", "staff-of-frost",
-                "staff-of-swarming-insects"):
+                "staff-of-swarming-insects", "staff-of-thunder-and-lightning"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_necklace_of_fireballs(
             db, campaign_id, char, item, sheet, catalog,

@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0); Phase 3 ✅ complete (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live; Gem of Seeing ✅ v2.270.0 — the `action_kind: "buff"` shape is now live; Horn of Blasting ✅ v2.271.0 — the first charge-less `attack_aoe` item); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phase 4 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0, Staff of Swarming Insects ✅ v2.268.0, Staff of Thunder and Lightning ✅ v2.272.0); Phase 3 ✅ complete (Ring of the Ram ✅ v2.269.0 — the `action_kind: "attack"` shape is now live; Gem of Seeing ✅ v2.270.0 — the `action_kind: "buff"` shape is now live; Horn of Blasting ✅ v2.271.0 — the first charge-less `attack_aoe` item); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phase 4 unstarted.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -80,8 +80,14 @@ distinct action_keys + per-action charge costs.
   generalized save-for-half AoE-damage handler; `min == max == 5`, `save_dc:
   "spell"`. Seeded on Thalindra Moonwhisper (Wizard). Fog Cloud (1) / Ice Storm
   (4) / Wall of Ice (4) + the cold resistance are GM-narrated.
-- **Staff of Thunder and Lightning** (DMG p.202) — 5 charges; per-property
-  actions (lightning, thunder, etc.).
+- **Staff of Thunder and Lightning** (DMG p.202, very rare, attunement) —
+  ✅ **shipped v2.272.0**. 5 charges (regains 1d6+1 at dawn). v1 ships the
+  marquee Thunder action (2 charges → 2d6 thunder, CON save, 60-ft-radius
+  thunderclap centered on the wielder) through the generalized save-for-half
+  AoE-damage handler; `min == max == 2`, flat `save_dc: 17` (RAW Thunder is
+  DC 17, not the `"spell"` sentinel). Seeded on Magnus Hexbinder (Bronze
+  Dragonborn Warlock). The deafen-1-min-on-fail rider + the Lightning /
+  Lightning Strike / combined 5-charge properties are GM-narrated.
 - **Staff of Swarming Insects** (DMG p.202, rare, attunement) — ✅ **shipped
   v2.268.0**. 10 charges (regains 1d6+4 at dawn). v1 ships the marquee Insect
   Plague action (5 charges → 4d10 piercing, CON save, 20-ft-radius sphere)
