@@ -747,6 +747,17 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-web",
              "desc": "Rare wand, attunement. 7 charges. Expend 1 charge to cast Web (save DC 15) — a 20-ft cube of sticky webbing; a creature that fails a DEX save is restrained. Regains 1d6+1 charges at dawn (long rest). RAW DMG p.213."},
+            # v2.267.0 — charged-items Phase 2: Staff of Frost (RAW DMG
+            # p.202, very rare, attunement). 10 charges; the marquee
+            # action expends 5 to cast Cone of Cold (8d8 cold, CON save
+            # at her spell save DC, 60-ft cone). Thematic on Thalindra —
+            # Cone of Cold is on the Wizard list. Her 5th attuned item
+            # (seed-load bypasses the RAW 3-item cap, enforced at /attune
+            # runtime only). Paired with the staff-of-frost resource row.
+            {"name": "Staff of Frost", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "staff-of-frost", "weight_lb": 4,
+             "desc": "Very rare staff, attunement. 10 charges. Cast Cone of Cold (5 charges → 8d8 cold, CON save, 60-ft cone), Fog Cloud (1), Ice Storm (4), or Wall of Ice (4) using your spell save DC. Regains 1d6+4 charges at dawn (long rest). RAW DMG p.202."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -836,6 +847,21 @@ def _wizard_sheet(name: str) -> dict:
                 "charge_recovery": "1d6+1",
                 "source": "item-wand-of-web",
                 "desc": "7 charges. Spend 1 to cast Web (DC 15) at slot level 2. Regains 1d6+1 charges on long rest.",
+                "manual": False,
+            },
+            # v2.267.0 — charged-items Phase 2: Staff of Frost charge
+            # counter. 10 starting charges, regains 1d6+4 at dawn (long
+            # rest) via the Phase 4b dice-expression recharge path. The
+            # marquee Cone of Cold action spends 5 from this resource.
+            # Paired with the Staff of Frost entry in Thalindra's
+            # inventory above.
+            {
+                "key": "staff-of-frost",
+                "name": "Staff of Frost",
+                "current": 10, "max": 10, "reset": "long",
+                "charge_recovery": "1d6+4",
+                "source": "item-staff-of-frost",
+                "desc": "10 charges. Cast Cone of Cold (5 charges → 8d8 cold, CON save), Fog Cloud (1), Ice Storm (4), or Wall of Ice (4). Regains 1d6+4 charges on long rest.",
                 "manual": False,
             },
         ],

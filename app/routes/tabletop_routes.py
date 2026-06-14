@@ -33151,6 +33151,33 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.267.0 — charged-items Phase 2: Staff of Frost (RAW DMG p.202,
+    # very rare, attunement): 10 charges (regains 1d6+4 at dawn). Casts
+    # cone of cold (5 charges), fog cloud (1), ice storm (4), or wall of
+    # ice (4) "using your spell save DC". v1 ships the marquee Cone of
+    # Cold action through the generalized save-for-half AoE-damage handler
+    # (same path as the Staff of Fire / Necklace of Fireballs): 8d8 cold,
+    # CON save, the DC resolved from the wielder's sheet via the "spell"
+    # sentinel. RAW Cone of Cold is a fixed 5-charge spend (no upcast), so
+    # min=max=5 and the UI sends no charge picker. Fog Cloud + Ice Storm
+    # + Wall of Ice and the cold resistance are GM-narrated.
+    "staff-of-frost": {
+        "requires_attunement": True,
+        "resource_key": "staff-of-frost",
+        "actions": {
+            "cast-cone-of-cold": {
+                "name": "Cast Cone of Cold (Staff)",
+                "feature_name": "❄️ Staff of Frost",
+                "save_dc": "spell",
+                "save_ability": "CON",
+                "dice": "8d8",
+                "damage_type": "cold",
+                "save_for_half": True,
+                "min_charges": 5,
+                "max_charges": 5,
+            },
+        },
+    },
     # v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear (RAW
     # DMG p.213). 7 charges (regains 1d6+1 at dawn), spend 1 to cast
     # Fear-Cone: each creature in a 30-ft cone makes a DC 15 WIS save
@@ -81817,7 +81844,7 @@ async def use_item_action(
             campaign=campaign,
             prompt_user=user,
         )
-    if slug in ("necklace-of-fireballs", "staff-of-fire"):
+    if slug in ("necklace-of-fireballs", "staff-of-fire", "staff-of-frost"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_necklace_of_fireballs(
             db, campaign_id, char, item, sheet, catalog,

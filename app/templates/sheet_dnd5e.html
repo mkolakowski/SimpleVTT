@@ -7258,6 +7258,21 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           max_range_ft: 120,
                           save_dc: 15,
                           submit_label: '🔥 Fire'},
+        // v2.267.0 — charged-items Phase 2: Staff of Frost (RAW DMG
+        // p.202). Marquee Cone of Cold action reuses the cone geometry
+        // picker (like Wand of Fear) — pick a target to define the cone
+        // direction → /battle/cone-targets → AoE confirm modal → POST
+        // /use_item_action — but routes to the save-for-half AoE-damage
+        // handler (8d8 cold, CON save, the wielder's spell save DC). RAW
+        // Cone of Cold is a fixed 5-charge spend (no upcast), so there's
+        // no charge_picker. Fog Cloud + Ice Storm + Wall of Ice are
+        // GM-narrated.
+        'staff-of-frost': {kind: 'aoe-cone',
+                          action_key: 'cast-cone-of-cold',
+                          label: '❄️ Cast Cone of Cold',
+                          title: 'Staff of Frost — Cone of Cold, 60-ft cone, CON save (your spell save DC, half on pass). Spends 5 charges.',
+                          length_ft: 60,
+                          apex_half_angle_deg: 26.57},  // RAW PHB p.204
         // v2.159.11 — Phase 8k: first cone-AoE item. Wand of Fear
         // (RAW DMG p.213). 30-ft cone, DC 15 WIS save or Frightened
         // for 1 minute. Flow: pick a target to define the cone

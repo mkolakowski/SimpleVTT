@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phases 2–4 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0, Wand of Binding ✅ v2.266.0); Phase 2 in progress (Staff of Frost ✅ v2.267.0); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phases 3–4 unstarted.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -74,8 +74,12 @@ test each. No engine change.
 Each is one `actions` sub-map commit. The staff substrate already handles N
 distinct action_keys + per-action charge costs.
 
-- **Staff of Frost** (DMG p.202, very rare, attunement) — 10 charges; cone of
-  cold (5), fog cloud (1), ice storm (4), wall of ice (4).
+- **Staff of Frost** (DMG p.202, very rare, attunement) — ✅ **shipped
+  v2.267.0**. 10 charges (regains 1d6+4 at dawn). v1 ships the marquee Cone of
+  Cold action (5 charges → 8d8 cold, CON save, 60-ft cone) through the
+  generalized save-for-half AoE-damage handler; `min == max == 5`, `save_dc:
+  "spell"`. Seeded on Thalindra Moonwhisper (Wizard). Fog Cloud (1) / Ice Storm
+  (4) / Wall of Ice (4) + the cold resistance are GM-narrated.
 - **Staff of Thunder and Lightning** (DMG p.202) — 5 charges; per-property
   actions (lightning, thunder, etc.).
 - **Staff of Swarming Insects** (DMG p.202) — 10 charges; giant insect (4),

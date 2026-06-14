@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.267.0] - 2026-06-14 — "The Killing Frost"
+
+**Schema version:** 69
+
+**Commit summary:** Staff of Frost — the first charged-items Phase 2 (multi-action staff) drop-in: a `staff-of-frost` entry in `_MAGIC_ITEM_ACTIONS` whose marquee Cone of Cold action casts through the existing `/use_item_action` + generalized `_use_item_action_necklace_of_fireballs` save-for-half AoE-damage handler, seeded on Thalindra Moonwhisper (Wizard) with a 10-charge resource row, plus harness tests and a sheet-UI cone picker.
+
+**Description:** **Staff of Frost** (RAW DMG p.202, very rare, **attunement required**): "you can use an action to expend 1 or more of its charges to cast one of the following spells from it, using your spell save DC: cone of cold (5 charges), fog cloud (1 charge), ice storm (4 charges), or wall of ice (4 charges)." The first item shipped against the charged-items Phase 2 (multi-action staves) backlog, the same near-zero-risk content drop-in shape as the Staff of Fire (v2.210.0) — a catalog row + a dispatch-tuple membership + a sheet-UI mapping, no engine change. v1 ships the marquee **Cone of Cold** action (8d8 cold, CON save) through the generalized save-for-half AoE-damage handler: the `save_dc` "spell" sentinel resolves the DC from the wielder's sheet (Thalindra's spell save DC = 14), and the dice / damage type / charge cost / feature label come from the catalog `action_def`. RAW Cone of Cold is a fixed 5-charge spend (no upcast), so `min_charges == max_charges == 5` and the UI sends no charge picker. Because Cone of Cold is a 60-ft cone (not a sphere), the sheet uses the `aoe-cone` geometry picker (the same flow as the Wand of Fear) but routes to the damage handler via the `staff-of-frost` slug. Seeded on Thalindra Moonwhisper (Wizard) — Cone of Cold is on the Wizard list; it's her 5th attuned item (seed-load bypasses the RAW 3-item cap, enforced at `/attune` runtime only). The 10-charge resource row recharges 1d6+4 at dawn (long rest). Fog Cloud + Ice Storm + Wall of Ice and the always-on cold resistance are GM-narrated. MINOR — additive content + tests, no schema change.
+
+### Added
+- `staff-of-frost` entry in `_MAGIC_ITEM_ACTIONS` (marquee `cast-cone-of-cold` action: `save_dc: spell`, `save_ability: CON`, `dice: 8d8`, `damage_type: cold`, `save_for_half: True`, `min`/`max` 5) + `staff-of-frost` added to the `_use_item_action_necklace_of_fireballs` dispatch tuple.
+- Sheet UI: `staff-of-frost` `ITEM_ACTION_SLUGS` mapping (`aoe-cone` geometry picker, 60-ft cone, RAW apex angle) rendering an `❄️ Cast Cone of Cold` button.
+- Demo seed: Thalindra Moonwhisper gains an equipped + attuned Staff of Frost plus its 10-charge `staff-of-frost` resource row (1d6+4 recharge on long rest).
+- `tests/harness/test_use_item_action_staff_of_frost.py` (3 tests): Cone of Cold at 2 targets (no charges param) defaults to the 5-charge spend, DC 14 CON, 8d8 cold, resource 10 → 5, both ids resolved; a 1-charge request is rejected 400 (RAW fixed 5-charge spend); a drained staff (below 5) returns 409 `insufficient_charges`. Resources restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 2 status — Staff of Frost marked ✅ shipped (v2.267.0).
+- `docs/test-harness-coverage.md`: harness total 2757 → 2760 (+3 staff-of-frost); added the `test_use_item_action_staff_of_frost.py` section.
+
 ## [2.266.0] - 2026-06-14 — "The Binding Word"
 
 **Schema version:** 69
