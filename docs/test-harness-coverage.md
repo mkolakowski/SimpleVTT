@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2689 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.248.0, 2026-06-13).
+**Total tests:** 2694 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.249.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2456,7 +2456,7 @@ v2.224.0 capped-additive ability-bonus engine drop-in (docs/plans/str-override.m
 | `test_ioun_stone_adds_int_save_override_delta` | `POST /roll` `int_save` for Magnus → breakdown contains "+1" and "Ioun Stone" (the modifier delta annotation, proving bonus-only source attribution works). |
 | `test_ioun_stone_caps_at_20` | PATCH INT to 19 → `effective_abilities.INT.effective` == 20 (the +2 clamps to +1 at the cap, not 21); restores the original abilities on teardown. |
 | `test_ioun_stone_unequip_reverts_bonus` | PATCH the stone to `equipped: False` → `effective_abilities` drops INT; restores the original inventory on teardown. |
-| `test_ioun_variant_exposes_effective_ability` (×2, v2.225.0; v2.245.0 dropped STR, v2.246.0 dropped CON, v2.247.0 dropped CHA) | Parametrized over two ability variants — Dexterity (Caelan 10→12), Wisdom (Krieger 13→15) — asserts each PC's `derived.effective_abilities.<ABILITY>` reports the pure-additive `base + 2` with an "Ioun Stone" source. (The STR variant on Lyra was dropped in v2.245.0, CON on Brakka in v2.246.0, and CHA on Rowan in v2.247.0, each when the stone was detuned to free a 3rd attunement slot for a ring/boots; STR stays covered by three Belts of Giant Strength + Gauntlets of Ogre Power, CON by the Amulet of Health, CHA was a dump-stat demo.) Together with the INT primary test, proves the single `ioun-stone` slug + per-item `_ability_bonus` covers the ability variants. |
+| `test_ioun_variant_exposes_effective_ability` — REMOVED v2.249.0 | The parametrized ability-variant test was removed when its last row (Krieger WIS) was detuned to free a 3rd attunement slot for the Brooch of Shielding. Earlier rows were dropped one at a time: STR (Lyra, v2.245.0), CON (Brakka, v2.246.0), CHA (Rowan, v2.247.0), DEX (Caelan, v2.248.0), each when the stone was detuned for a ring/boots/armor. With the variant list empty, the test was deleted. The Magnus INT primary deep-dive above + the dedicated set-based ability item tests (Headband of Intellect, Gauntlets of Ogre Power, three Belts of Giant Strength, Amulet of Health) still prove the single `ioun-stone` slug + per-item `_ability_bonus` substrate. |
 
 ### `test_item_belt_of_dwarvenkind.py`
 v2.226.0 — Belt of Dwarvenkind (RAW DMG p.155, rare, attunement): the first magic item whose single passive payload composes TWO existing override substrates at once — a capped-additive CON +2 (max 20, the v2.224.0 `ability_bonus` engine) AND darkvision 60 ft (the v2.159.24 `sees_in_darkness` engine). Neither needed new engine code. Quan Reelstep (Way of the Drunken Master Monk, Human, base CON 14 → effective 16, mod +2 → +3) wears it equipped+attuned (his 1st attuned item); as a non-dwarf he qualifies for the darkvision gate.
@@ -2514,6 +2514,18 @@ v2.248.0 — Armor of Resistance (RAW DMG p.152, rare, attunement): "you have re
 | `test_armor_does_not_halve_other_types` | Control: 20 FIRE damage applies in full (−20), proving the resistance is type-specific; restores HP on teardown. |
 | `test_armor_requires_attunement` | Detuning via `POST /attune` (`attuned: False`) → acid drops from `derived.resistances` (attunement-gated); restores seed attunement on teardown. |
 | `test_armor_unequip_drops_resistance` | PATCH the armor to `equipped: False` → acid resistance absent; restores the original inventory on teardown. |
+
+### `test_item_brooch_of_shielding.py`
+v2.249.0 — Brooch of Shielding (RAW DMG p.156, uncommon, attunement): "resistance to force damage and immunity to the magic missile spell." Two surfaces compose on one item. The force *resistance* reuses the v2.235.0 Ring of Resistance substrate — the resisted type rides the per-item `_resistance_type` rider ("force") on a new `brooch-of-shielding` slug, folding into the aggregated `resistance_to` list `_resistance_halve` consults in the live damage pipeline; surfaces on `/sheet-json` as `derived.resistances`. The magic-missile *immunity* is the only new engine work: a new boolean-OR `magic_missile_immune` flag (catalog payload + walker accumulator + derived block) surfaced as `derived.magic_missile_immune = {sources}` (advisory in v1). Both attunement-gated. Krieger Stonefist (Barbarian) wears it as his 3rd attuned item, homed by detuning his Ioun Stone of Wisdom (last in the ability-ioun sacrifice series; WIS was a secondary-stat read).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_brooch_exposes_force_resistance` | `GET /sheet-json` → `derived.resistances.types` contains "force", naming "Brooch of Shielding" in sources. |
+| `test_brooch_exposes_magic_missile_immunity` | `GET /sheet-json` → `derived.magic_missile_immune` present with "Brooch of Shielding" in sources (the new boolean substrate). |
+| `test_brooch_halves_force_damage` | End-to-end: 20 force damage via `PATCH .../sheet-fields` drops HP by only 10 (`_resistance_halve` halves it); restores HP on teardown. |
+| `test_brooch_does_not_halve_other_types` | Control: 20 FIRE damage applies in full (−20), proving the resistance is type-specific; restores HP on teardown. |
+| `test_brooch_requires_attunement` | Detuning via `POST /attune` (`attuned: False`) → force drops from `derived.resistances` and `derived.magic_missile_immune` absent (both attunement-gated); restores seed attunement on teardown. |
+| `test_brooch_unequip_drops_both_surfaces` | PATCH the brooch to `equipped: False` → both derived surfaces absent; restores the original inventory on teardown. |
 
 ### `test_item_ring_of_warmth.py`
 v2.246.0 — Ring of Warmth (RAW DMG p.193, uncommon, attunement): resistance to cold damage + tolerance of cold environments down to −50°F. Composes two substrates: the cold *resistance* rides the catalog payload's `resistance_to: ["cold"]`, folding into the aggregated `resistance_to` list that `_resistance_halve` consults in the live damage pipeline (so cold damage is halved end-to-end, like the Ring of Resistance), and surfaces on `/sheet-json` as `derived.resistances`; the −50°F tolerance is a new boolean-OR `cold_tolerance` flag surfaced as `derived.cold_tolerance = {sources}`. Both attunement-gated. Brakka Wildmane (Beast Barbarian) wears it — homed by detuning her redundant Ioun Stone of Constitution (kept equipped) to stay at the RAW 3/3 cap.
@@ -2640,7 +2652,7 @@ v2.231.0 — Ioun Stone of Awareness (RAW DMG p.176, rare, attunement): the four
 | Test | What it asserts |
 |------|-----------------|
 | `test_awareness_exposes_cannot_be_surprised_on_sheet_json` | `GET /sheet-json` → `derived.cannot_be_surprised` present with "Ioun Stone of Awareness" in `sources`. |
-| `test_awareness_coexists_with_wisdom_ioun` | Both of Krieger's ioun stones compose: `derived.cannot_be_surprised` set AND `derived.effective_abilities.WIS` = `{base 13, effective 15}` (the second stone's `_ability_bonus`). |
+| `test_awareness_coexists_with_brooch_resistance` (v2.249.0; was `test_awareness_coexists_with_wisdom_ioun`) | Krieger's attuned items compose: `derived.cannot_be_surprised` set AND `derived.resistances.types` contains "force" (the Brooch of Shielding). Repointed in v2.249.0 — the Ioun Stone of Wisdom was detuned to free the slot for the brooch, so the old WIS-effective assertion no longer applies. |
 | `test_awareness_unequip_drops_flag` | PATCH the Awareness stone to `equipped: False` → `derived.cannot_be_surprised` absent; restores the original inventory on teardown. |
 
 ### `test_item_ioun_stone_sustenance.py`

@@ -3068,11 +3068,15 @@ def _barbarian_sheet(name: str) -> dict:
             # v2.225.0 — Ioun Stone of Wisdom (RAW DMG p.176, very rare,
             # attunement). Capped-additive +2 WIS to a max of 20 (the
             # v2.224.0 `ability_bonus` substrate). Seeded on Krieger
-            # (Barbarian, WIS 13 → effective 15, mod +1 → +2) — his 1st
-            # attuned item (RAW max 3). A clean read on a secondary stat:
-            # the bonus flows to WIS saves + Perception/Insight/Survival.
+            # (Barbarian, WIS 13 → effective 15, mod +1 → +2).
+            # v2.249.0 — DETUNED (attuned: True → False, kept equipped) to
+            # free Krieger's 3rd attunement slot (RAW max 3) for the Brooch
+            # of Shielding below. Last in the ability-ioun sacrifice series
+            # (STR→CON→CHA→DEX→WIS). The stone still orbits his head but no
+            # longer grants the +2 WIS while detuned; its slug stays
+            # catalogued so a future re-attune is a one-flag flip.
             {"name": "Ioun Stone of Wisdom", "type": "magic", "qty": 1,
-             "equippable": True, "equipped": True, "attuned": True,
+             "equippable": True, "equipped": True, "attuned": False,
              "_slug": "ioun-stone", "_ability_bonus": {"WIS": 2},
              "desc": "Very rare wondrous item, attunement. This incandescent blue sphere orbits your head and increases your Wisdom by 2, to a maximum of 20. RAW DMG p.176."},
             # v2.231.0 — awareness passive drop-in. Ioun Stone of Awareness
@@ -3099,6 +3103,17 @@ def _barbarian_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
              "_slug": "boots-of-speed",
              "desc": "Rare wondrous item, attunement. Bonus action to click the heels together: your walking speed doubles and opportunity attacks against you have disadvantage, for up to 10 minutes. RAW DMG p.155."},
+            # v2.249.0 — Brooch of Shielding (RAW DMG p.156, uncommon,
+            # attunement). Reuses the v2.235.0 `resistance_to` live-halving
+            # substrate for force damage plus a new `magic_missile_immune`
+            # boolean surfaced on /sheet-json derived. Krieger's 3rd attuned
+            # item (RAW max 3) — homed in the slot freed by detuning his
+            # Ioun Stone of Wisdom above. Weightless (a small brooch).
+            {"name": "Brooch of Shielding", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
+             "_slug": "brooch-of-shielding",
+             "_resistance_type": "force",
+             "desc": "Uncommon wondrous item, attunement. While wearing this brooch you have resistance to force damage and immunity to the magic missile spell. RAW DMG p.156."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature

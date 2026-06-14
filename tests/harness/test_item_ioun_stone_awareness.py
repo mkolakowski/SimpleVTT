@@ -9,9 +9,12 @@ surprised. The flag rides the inventory item via `_cannot_be_surprised: True`
 `derived.cannot_be_surprised = {sources}`.
 
 Demo fixture: Krieger Stonefist (Barbarian) wears an equipped + attuned Ioun
-Stone of Awareness — his 2nd attuned item (after the Ioun Stone of Wisdom,
-RAW max 3) and his second ioun stone, so the can't-be-surprised flag and the
-WIS bonus compose on the one slug via distinct per-item riders.
+Stone of Awareness, so the can't-be-surprised flag surfaces.
+
+v2.249.0 — the Ioun Stone of Wisdom was detuned (kept equipped) to free
+Krieger's 3rd attunement slot for the Brooch of Shielding, so the old
+"coexists with the WIS ioun" assertion was repointed to prove the Awareness
+flag now composes with the Brooch's force resistance instead.
 """
 from .conftest import CAMPAIGN_ID
 
@@ -41,18 +44,21 @@ async def test_awareness_exposes_cannot_be_surprised_on_sheet_json(gm_client, ro
     ), f"expected the stone named in sources, got: {awareness!r}"
 
 
-async def test_awareness_coexists_with_wisdom_ioun(gm_client, roster):
-    """Krieger's two ioun stones compose: the Awareness stone sets the
-    can't-be-surprised flag while the Wisdom stone still raises WIS (13 →
-    15), proving distinct per-item riders share the one slug without
-    interfering."""
+async def test_awareness_coexists_with_brooch_resistance(gm_client, roster):
+    """Krieger's attuned items compose: the Awareness stone sets the
+    can't-be-surprised flag while the Brooch of Shielding adds force
+    resistance, proving distinct items surface independent derived effects
+    without interfering. (The Ioun Stone of Wisdom was detuned in v2.249.0 to
+    free the slot, so its WIS bonus no longer applies.)"""
     krieger = roster["Krieger Stonefist"]
     data = await _sheet_json(gm_client, krieger["id"])
     derived = data.get("derived") or {}
     assert derived.get("cannot_be_surprised") is not None, derived
-    eff = derived.get("effective_abilities") or {}
-    assert "WIS" in eff, f"expected WIS override from the second stone, got {eff!r}"
-    assert eff["WIS"]["base"] == 13 and eff["WIS"]["effective"] == 15, eff["WIS"]
+    resistances = derived.get("resistances") or {}
+    types = [str(t).lower() for t in (resistances.get("types") or [])]
+    assert "force" in types, (
+        f"expected force resistance from the Brooch, got: {resistances!r}"
+    )
 
 
 async def test_awareness_unequip_drops_flag(gm_client, roster):

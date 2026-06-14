@@ -32636,6 +32636,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "armor-of-resistance": [
         {"requires_attunement": True},
     ],
+    # v2.249.0 — Brooch of Shielding (RAW DMG p.156, uncommon, attunement).
+    # RAW: "while wearing this brooch, you have resistance to force damage,
+    # and you are immune to damage from the magic missile spell." Composes two
+    # surfaces: the force *resistance* rides the catalog payload's
+    # `resistance_to: ["force"]` (folds into the aggregated `resistance_to`
+    # list that `_resistance_halve` consults in the live damage pipeline, the
+    # same surface the Ring/Armor of Resistance exercise) + a new boolean
+    # `magic_missile_immune` flag (surfaced as `derived.magic_missile_immune =
+    # {sources}`; the magic-missile-specific damage negation is GM-narrated in
+    # v1). Both attunement-gated.
+    "brooch-of-shielding": [
+        {"resistance_to": ["force"], "magic_missile_immune": True,
+         "requires_attunement": True},
+    ],
 }
 
 
@@ -33700,6 +33714,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # flag carries only the -50°F environmental tolerance. ATTUNEMENT-gated.
         "cold_tolerance": False,
         "cold_tolerance_sources": [],
+        # v2.249.0 — magic-missile immunity (Brooch of Shielding, RAW DMG
+        # p.156). Boolean OR across equipped items carrying the field; surfaced
+        # on `/sheet-json` derived. The brooch's force *resistance* rides the
+        # shared `resistance_to` list; this flag carries only the "immune to
+        # damage from the magic missile spell" rider. ATTUNEMENT-gated, so the
+        # walker's attunement check filters it.
+        "magic_missile_immune": False,
+        "magic_missile_immune_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33972,6 +33994,16 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_cold_tolerance") or p.get("cold_tolerance"):
                 out["cold_tolerance"] = True
                 out["cold_tolerance_sources"].append(item_name)
+            # v2.249.0 — magic-missile immunity (Brooch of Shielding, RAW DMG
+            # p.156). Boolean OR; the flag rides the item via the
+            # `magic_missile_immune` payload (or a per-item
+            # `_magic_missile_immune` rider). The brooch's force *resistance*
+            # is handled by the `resistance_to` folding above (catalog
+            # `resistance_to: ["force"]`). Attunement-gated by the per-payload
+            # check above.
+            if item.get("_magic_missile_immune") or p.get("magic_missile_immune"):
+                out["magic_missile_immune"] = True
+                out["magic_missile_immune_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -91081,6 +91113,15 @@ async def get_character_sheet_json(
             if _item_eff.get("cold_tolerance"):
                 derived["cold_tolerance"] = {
                     "sources": list(_item_eff.get("cold_tolerance_sources") or []),
+                }
+            # v2.249.0 — magic-missile immunity (Brooch of Shielding). Present
+            # only when an equipped + attuned item sets the flag. (The brooch's
+            # force resistance surfaces in derived.resistances above.)
+            if _item_eff.get("magic_missile_immune"):
+                derived["magic_missile_immune"] = {
+                    "sources": list(
+                        _item_eff.get("magic_missile_immune_sources") or []
+                    ),
                 }
         except Exception:
             pass

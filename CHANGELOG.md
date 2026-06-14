@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.249.0] - 2026-06-13 — "The Warded Heart"
+
+**Schema version:** 69
+
+**Commit summary:** Brooch of Shielding — force resistance (a pure reuse of the v2.235.0 resistance substrate) plus one small new boolean `magic_missile_immune` surfaced on `/sheet-json` derived, homed on Krieger by displacing his redundant Ioun Stone of Wisdom.
+
+**Description:** The **Brooch of Shielding** (RAW DMG p.156, uncommon, attunement) gives the wearer resistance to force damage and immunity to the *magic missile* spell. Two surfaces compose on the one item. The **force resistance** reuses the v2.235.0 Ring of Resistance substrate verbatim — the resisted type rides the inventory item via the per-item `_resistance_type` rider (`"force"`) on the new `brooch-of-shielding` slug, and the walker already folds any catalogued slug's rider into the aggregated `resistance_to` list that `_resistance_halve` consults in the live damage pipeline, so force damage to the wearer is halved end-to-end through `PATCH .../sheet-fields` and surfaces on `/sheet-json` as `derived.resistances`. The **magic-missile immunity** is the only new engine work: a new boolean-OR passive `magic_missile_immune` (out-dict defaults + walker accumulator + a derived block), surfaced on `/sheet-json` as `derived.magic_missile_immune = {sources}` — the catalog payload sets `magic_missile_immune: True`. The immunity is advisory in v1 (it surfaces for the GM; the magic-missile spell resolver doesn't yet auto-zero damage). **Slot sourcing:** every demo PC is at the RAW 3/3 attunement cap, so this needed a lossy displacement. Krieger Stonefist's **Ioun Stone of Wisdom** was the chosen sacrifice — last in the established ability-ioun sacrifice series (STR→CON→CHA→DEX→WIS); the WIS bump was a secondary-stat read. It's now detuned (kept equipped), and the brooch takes its slot — Krieger stays at 3/3 (Ioun Stone of Awareness + Boots of Speed + Brooch of Shielding). MINOR — additive content + one new boolean substrate + tests, no schema change.
+
+### Added
+- `magic_missile_immune` boolean-OR passive in `_equipped_item_effects` (out-dict defaults `magic_missile_immune` / `magic_missile_immune_sources`, walker accumulator, and a `/sheet-json` `derived.magic_missile_immune = {sources}` block surfaced only when truthy).
+- `brooch-of-shielding` entry in `_MAGIC_ITEM_PASSIVES` (`resistance_to: ["force"]`, `magic_missile_immune: True`, `requires_attunement: True`).
+- Demo seed: Brooch of Shielding on Krieger Stonefist (`_slug: "brooch-of-shielding"`, `_resistance_type: "force"`, equipped + attuned).
+- `tests/harness/test_item_brooch_of_shielding.py` (6 tests): `derived.resistances` lists force + names the brooch; `derived.magic_missile_immune` names the brooch; 20 force damage halved to 10 via `_resistance_halve`; 20 fire damage unreduced (type-specific control); detuning via /attune drops both surfaces (attunement required); unequip drops both surfaces.
+
+### Changed
+- Demo seed: Krieger's Ioun Stone of Wisdom detuned (`attuned: True → False`, kept equipped) to free his 3rd attunement slot; his effective WIS reverts 15 → 13.
+- `tests/harness/test_item_ioun_stone.py`: removed the now-empty `_VARIANTS` parametrize and its `test_ioun_variant_exposes_effective_ability` test (the last Krieger WIS row was detuned). The Magnus INT primary deep-dive + the dedicated set-based ability item tests still prove the shared `ioun-stone` slug + per-item `_ability_bonus` substrate. Dropped the now-unused `import pytest`.
+- `tests/harness/test_item_ioun_stone_awareness.py`: repointed `test_awareness_coexists_with_wisdom_ioun` → `test_awareness_coexists_with_brooch_resistance` (the WIS ioun was detuned), asserting the Awareness flag now composes with the Brooch's force resistance.
+- `docs/test-harness-coverage.md`: harness total 2689 → 2694 (+6 brooch-of-shielding, −1 removed ioun variant); added the `test_item_brooch_of_shielding.py` section.
+
 ## [2.248.0] - 2026-06-13 — "The Resilient Plate"
 
 **Schema version:** 69

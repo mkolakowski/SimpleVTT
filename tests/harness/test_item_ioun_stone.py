@@ -20,7 +20,6 @@ equipped + attuned Ioun Stone of Intellect — his 3rd attuned item (after the
 Wand of Fear + Wand of Paralysis, RAW max 3). So effective INT 12, modifier
 +1 (a clean +1 delta with no set to confound it).
 """
-import pytest
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
@@ -122,28 +121,15 @@ async def test_ioun_stone_caps_at_20(gm_client, magnus):
 # v2.248.0 — the Caelan "DEX" variant was dropped likewise: his Ioun Stone of
 # Dexterity was detuned (kept equipped) to free his 3rd attunement slot for the
 # Armor of Resistance (Acid). DEX-via-ioun was the lowest-value drop — Caelan
-# wears heavy armor, so the DEX bump never touched his AC. The remaining WIS row
-# + the INT primary test still prove the single `ioun-stone` slug + per-item
-# `_ability_bonus` covers the ability variants.
-_VARIANTS = [
-    ("Krieger Stonefist", "WIS", 13, 15, 2),
-]
-
-
-@pytest.mark.parametrize("name,ability,base,effective,modifier", _VARIANTS)
-async def test_ioun_variant_exposes_effective_ability(
-    gm_client, roster, name, ability, base, effective, modifier
-):
-    """Each remaining Ioun ability variant raises its PC's score by the
-    additive +2 (pure, under the cap) and reports it on `/sheet-json`."""
-    char = roster[name]
-    data = await _sheet_json(gm_client, char["id"])
-    eff = (data.get("derived") or {}).get("effective_abilities") or {}
-    assert ability in eff, f"{name}: expected {ability} override, got {eff!r}"
-    assert eff[ability]["base"] == base
-    assert eff[ability]["effective"] == effective
-    assert eff[ability]["modifier"] == modifier
-    assert "Ioun Stone" in str(eff[ability]["source"]), eff[ability]
+# wears heavy armor, so the DEX bump never touched his AC.
+# v2.249.0 — the last remaining Krieger "WIS" variant was dropped likewise: his
+# Ioun Stone of Wisdom was detuned (kept equipped) to free his 3rd attunement
+# slot for the Brooch of Shielding. With the parametrized variant list now
+# empty, the parametrized test was removed entirely — the Magnus INT primary
+# deep-dive above (exposure + save-delta + the +to-20 cap + unequip-reverts)
+# plus the dedicated set-based ability item tests (Headband of Intellect,
+# Gauntlets of Ogre Power, the three Belts of Giant Strength, Amulet of Health)
+# still prove the single `ioun-stone` slug + per-item `_ability_bonus` substrate.
 
 
 async def test_ioun_stone_unequip_reverts_bonus(gm_client, magnus):
