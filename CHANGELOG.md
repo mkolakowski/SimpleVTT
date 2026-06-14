@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.252.0] - 2026-06-13 — "The Borrowed Silhouette"
+
+**Schema version:** 69
+
+**Commit summary:** Cloak of Displacement — the first ITEM-granted advantage/disadvantage source (advantage-disadvantage plan Phase 4a). Attacks against the wearer auto-roll at disadvantage, wired through a new target-side equipped-item read that resolves the target combatant → character → sheet at attack time and folds into the existing /attack + /npc_attack disadvantage source set.
+
+**Description:** **Cloak of Displacement** (RAW DMG p.158, rare, attunement) makes the wearer appear to stand near their actual location, "causing any creature to have disadvantage on attack rolls against you." This is the first **item-granted** adv/dis source — the Phase 2 substrate (v2.150.0–v2.157.0) automated adv/dis from **conditions** and **features**, both read from combatant `buffs`; a cloak is a **passive on the wearer's character sheet**, so a new attack-time read is needed. The engine changes: (1) `_equipped_item_effects` gains a boolean-OR `incoming_attacks_have_disadvantage` field (+ `_sources`), folded from any catalogued slug's payload, attunement-gated like the other riders; (2) a new `cloak-of-displacement` entry in `_MAGIC_ITEM_PASSIVES` (`{"incoming_attacks_have_disadvantage": True, "requires_attunement": True}`); (3) a new `_target_wearer_imposes_attack_disadvantage(db, campaign_id, target_combatant_id)` helper that resolves the target combatant → `char_id` → `Character.sheet`, runs `_equipped_item_effects`, and returns the source item name (or None) — NPC combatants (no `char_id`) can't wear PC items so they return None; (4) the helper's result folds into the **disadvantage** source set in BOTH `/attack` (bonused + bonusless branches) and `/npc_attack`, so attacks against the wearer roll `2d20kl1` with `roll_state_applied: "disadvantage_cloak_of_displacement"` — and the existing PHB p.173 cancel logic turns adv+dis into a straight `canceled_*` roll for free; (5) `/sheet-json derived` surfaces `incoming_attacks_have_disadvantage = {sources}` (display-only mirror, matching the `magic_missile_immune` precedent); (6) the demo seed flips Lyra Sunstrider's existing flavor-only cloak to a true attuned passive (`attuned: True`). Lyra was already at the RAW 3/3 cap (Demon Slayer Rapier + Staff of Charming + Ring of Mind Shielding); the cloak is a 4th attuned item, fine at seed-load since the 3/3 cap is enforced only at the `/attune` runtime endpoint (Garrik / Frost Brand precedent, v2.251.0). The informational reaction is kept as a fallback for the suppressed-after-damage clause (filed Phase 4b). MINOR — additive feature + tests, no schema change.
+
+### Added
+- `incoming_attacks_have_disadvantage` boolean-OR field (+ `_sources`) in `_equipped_item_effects`, attunement-gated.
+- `cloak-of-displacement` entry in `_MAGIC_ITEM_PASSIVES`.
+- `_target_wearer_imposes_attack_disadvantage()` — target combatant → character → sheet read helper.
+- `/sheet-json derived.incoming_attacks_have_disadvantage = {sources}` display mirror.
+- `tests/harness/test_item_cloak_of_displacement.py` (5 tests): PC attacker rolls disadvantage (`disadvantage_cloak_of_displacement`); NPC attacker symmetric via `/npc_attack`; attacker-advantage cancels to a `canceled_*` straight roll (PHB p.173); detuning the cloak (via a cap-independent sheet-fields PATCH) drops the disadvantage (straight roll); `/sheet-json` exposes the derived flag naming the cloak.
+
+### Changed
+- `/attack` (both branches) and `/npc_attack` fold the cloak read into their disadvantage source set + label.
+- Demo seed: Lyra Sunstrider's Cloak of Displacement flipped from flavor-only (`attunement: True`, informational reaction) to a true attuned passive (`attuned: True`).
+- `docs/test-harness-coverage.md`: harness total 2702 → 2707 (+5 cloak-of-displacement); added the `test_item_cloak_of_displacement.py` section.
+- `docs/plans/advantage-disadvantage.md`: Phase 4a marked shipped.
+
 ## [2.251.1] - 2026-06-13 — "The Shimmering Blueprint"
 
 **Schema version:** 69

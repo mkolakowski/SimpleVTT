@@ -28936,6 +28936,45 @@ def _target_grants_advantage_to_attackers(
     return False
 
 
+def _target_wearer_imposes_attack_disadvantage(
+    db: Session, campaign_id: int, target_combatant_id: str | None,
+) -> str | None:
+    """v2.252.0 — Phase 4a (item-granted adv/dis; see
+    docs/plans/advantage-disadvantage.md). Returns the source item name
+    if the target combatant is a PC wearing an equipped + attuned item
+    that imposes disadvantage on incoming attack rolls (Cloak of
+    Displacement, RAW DMG p.158), else None.
+
+    Unlike the condition/feature target-side reads
+    (``_target_grants_advantage_to_attackers`` etc.) which inspect the
+    target *combatant's* hub buffs, this one resolves the combatant →
+    character → sheet and runs ``_equipped_item_effects`` to read the
+    ``incoming_attacks_have_disadvantage`` boolean (attunement-gated in
+    the walker). NPC combatants (no ``char_id``) can't wear PC inventory
+    items, so they return None.
+    """
+    if not target_combatant_id:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    char_id = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant_id:
+            char_id = c.get("char_id")
+            break
+    if not char_id:
+        return None
+    char = db.query(Character).filter(Character.id == int(char_id)).first()
+    if not char:
+        return None
+    eff = _equipped_item_effects(char.sheet or {})
+    if not eff.get("incoming_attacks_have_disadvantage"):
+        return None
+    sources = eff.get("incoming_attacks_have_disadvantage_sources") or []
+    return sources[0] if sources else "Cloak of Displacement"
+
+
 def _attacker_sacred_weapon_attack_bonus(
     campaign_id: int, attacker_char_id: int, attacker_sheet: dict,
 ) -> int:
@@ -32675,6 +32714,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "frost-brand": [
         {"resistance_to": ["fire"], "requires_attunement": True},
     ],
+    # v2.252.0 — Cloak of Displacement (RAW DMG p.158, rare, attunement).
+    # "the cloak ... projects an illusion that makes you appear to be standing
+    # in a place near your actual location, causing any creature to have
+    # disadvantage on attack rolls against you." The v1 model is the always-on
+    # disadvantage; the "ceases until your next turn after you take damage" and
+    # "suppressed while incapacitated/restrained" clauses are GM-narrated
+    # follow-ups (filed Phase 4b). Read at attack time via
+    # `_target_wearer_imposes_attack_disadvantage`.
+    "cloak-of-displacement": [
+        {"incoming_attacks_have_disadvantage": True, "requires_attunement": True},
+    ],
 }
 
 
@@ -33761,6 +33811,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # walker's attunement check filters it.
         "magic_missile_immune": False,
         "magic_missile_immune_sources": [],
+        # v2.252.0 — incoming-attack disadvantage (Cloak of Displacement, RAW
+        # DMG p.158). Boolean OR across equipped items carrying the field;
+        # read at attack time by `_target_wearer_imposes_attack_disadvantage`
+        # (combatant→character→sheet) so attacks AGAINST the wearer roll at
+        # disadvantage. See docs/plans/advantage-disadvantage.md Phase 4a.
+        # ATTUNEMENT-gated, so the walker's attunement check filters it.
+        "incoming_attacks_have_disadvantage": False,
+        "incoming_attacks_have_disadvantage_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -34043,6 +34101,19 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_magic_missile_immune") or p.get("magic_missile_immune"):
                 out["magic_missile_immune"] = True
                 out["magic_missile_immune_sources"].append(item_name)
+            # v2.252.0 — incoming-attack disadvantage (Cloak of Displacement,
+            # RAW DMG p.158). Boolean OR; the flag rides the item via the
+            # `incoming_attacks_have_disadvantage` payload (or a per-item
+            # `_incoming_attacks_have_disadvantage` rider). Attunement-gated by
+            # the per-payload check above. The attack-time read resolves the
+            # target combatant → character → sheet and folds this into the
+            # /attack + /npc_attack disadvantage source set.
+            if (
+                item.get("_incoming_attacks_have_disadvantage")
+                or p.get("incoming_attacks_have_disadvantage")
+            ):
+                out["incoming_attacks_have_disadvantage"] = True
+                out["incoming_attacks_have_disadvantage_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -84139,6 +84210,13 @@ async def use_attack(
     target_pfeag_blocks_type = _target_pfeag_blocks_attacker_type(
         campaign_id, target_combatant_id, _attacker_type,
     )
+    # v2.252.0 — Phase 4a: target wears Cloak of Displacement (or any
+    # equipped + attuned item with `incoming_attacks_have_disadvantage`)
+    # → attacks against it roll at disadvantage. Source name (or None);
+    # folds into both branches' disadvantage source set below.
+    target_cloak_dis = _target_wearer_imposes_attack_disadvantage(
+        db, campaign_id, target_combatant_id,
+    )
 
     # v2.97.53 — Sanctuary ends-on-offense trigger. Closes the second
     # of the v2.97.45-filed Sanctuary mechanical halves. RAW: "The
@@ -84392,6 +84470,7 @@ async def use_attack(
             or _attacker_cant_see or _ap_marked_vs_other
             or _um_marked_vs_other
             or bool(_attacker_dis_condition)
+            or bool(target_cloak_dis)
         )
         dis_label = (
             "dodging" if target_dodging else
@@ -84400,7 +84479,8 @@ async def use_attack(
             "ancestral_protectors_vs_other" if _ap_marked_vs_other else
             "unwavering_mark_vs_other" if _um_marked_vs_other else
             f"attacker_{_attacker_dis_condition}"
-            if _attacker_dis_condition else ""
+            if _attacker_dis_condition else
+            "cloak_of_displacement" if target_cloak_dis else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -84518,6 +84598,7 @@ async def use_attack(
             or _attacker_cant_see or _ap_marked_vs_other
             or _um_marked_vs_other
             or bool(_attacker_dis_condition)
+            or bool(target_cloak_dis)
         )
         dis_label = (
             "dodging" if target_dodging else
@@ -84526,7 +84607,8 @@ async def use_attack(
             "ancestral_protectors_vs_other" if _ap_marked_vs_other else
             "unwavering_mark_vs_other" if _um_marked_vs_other else
             f"attacker_{_attacker_dis_condition}"
-            if _attacker_dis_condition else ""
+            if _attacker_dis_condition else
+            "cloak_of_displacement" if target_cloak_dis else ""
         )
         if has_adv and has_dis:
             attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -85944,6 +86026,11 @@ async def use_npc_attack(
     _npc_target_adv_condition = _target_has_condition_advantage(
         campaign_id, target_combatant_id,
     )
+    # v2.252.0 — Phase 4a: target wears Cloak of Displacement → the NPC
+    # attacker rolls at disadvantage. Symmetric with the PC /attack path.
+    target_cloak_dis = _target_wearer_imposes_attack_disadvantage(
+        db, campaign_id, target_combatant_id,
+    )
 
     # Build the d20 attack expression. Accept "+5", "5", or "" (flat).
     attack_total = None
@@ -85979,11 +86066,13 @@ async def use_npc_attack(
     has_dis = (
         target_dodging
         or bool(_npc_attacker_dis_condition)
+        or bool(target_cloak_dis)
     )
     dis_label = (
         "dodging" if target_dodging else
         f"attacker_{_npc_attacker_dis_condition}"
-        if _npc_attacker_dis_condition else ""
+        if _npc_attacker_dis_condition else
+        "cloak_of_displacement" if target_cloak_dis else ""
     )
     if has_adv and has_dis:
         attack_roll_state_applied = f"canceled_{adv_label}_vs_{dis_label}"
@@ -91160,6 +91249,18 @@ async def get_character_sheet_json(
                 derived["magic_missile_immune"] = {
                     "sources": list(
                         _item_eff.get("magic_missile_immune_sources") or []
+                    ),
+                }
+            # v2.252.0 — incoming-attack disadvantage (Cloak of Displacement).
+            # Display-only mirror; the attack pipeline reads the flag directly
+            # via _target_wearer_imposes_attack_disadvantage. Present only when
+            # an equipped + attuned item sets the flag.
+            if _item_eff.get("incoming_attacks_have_disadvantage"):
+                derived["incoming_attacks_have_disadvantage"] = {
+                    "sources": list(
+                        _item_eff.get(
+                            "incoming_attacks_have_disadvantage_sources"
+                        ) or []
                     ),
                 }
         except Exception:

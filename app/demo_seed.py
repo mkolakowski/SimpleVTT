@@ -1738,13 +1738,21 @@ def _bard_sheet(name: str) -> dict:
             # property ceases to function until the start of your next
             # turn. This property is suppressed while you are
             # incapacitated, restrained, or otherwise unable to move."
-            # v1 surfaces the v2.78.0 generic item-reaction option on
-            # the attack_targeted trigger so the GM can apply
-            # disadvantage retroactively when the cloak hasn't been
-            # suppressed yet. Auto-resolution + the "suppressed for 1
-            # round on damage" tracking are filed for v3.
+            # v2.252.0 — Phase 4a: the cloak is now a true attuned passive
+            # (`attuned: True`). `_equipped_item_effects` sets
+            # `incoming_attacks_have_disadvantage` (attunement-gated), and the
+            # /attack + /npc_attack pipelines read it via
+            # `_target_wearer_imposes_attack_disadvantage` so attacks against
+            # Lyra auto-roll at disadvantage (no GM click needed). The
+            # informational reaction below is kept as a fallback for the
+            # suppressed-after-damage clause (Phase 4b). Lyra is already at the
+            # RAW 3/3 attuned cap (Demon Slayer + Staff of Charming + Ring of
+            # Mind Shielding); this is a 4th attuned item — fine at seed-load
+            # since the 3/3 cap is enforced only at the /attune runtime endpoint
+            # (Garrik / Frost Brand precedent, v2.251.0), not in the walker.
             {"name": "Cloak of Displacement", "type": "wondrous", "qty": 1,
              "equippable": True, "equipped": True, "attunement": True,
+             "attuned": True,
              "_slug": "cloak-of-displacement",
              "_reactions": [
                  {

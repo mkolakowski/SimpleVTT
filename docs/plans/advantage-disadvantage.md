@@ -8,7 +8,7 @@
 **Phase 2e shipped in v2.156.0** — auto-fail STR/DEX saves from Paralyzed / Stunned / Unconscious / Petrified per RAW PHB Appendix A. Separate mechanic from adv/dis — the d20 still rolls (broadcast remains transparent) but the outcome is forced FAIL regardless of total. One shared helper `_saver_auto_fails_strdex_save(buffs_iter, stat_key_lc)` works on both PC `_buffs_active` and NPC `combatant.buffs`. Wired into the PC-save resolver (`respond_roll_request`) + all six NPC-save construction sites.
 **Phase 2f shipped in v2.157.0** — NPC `/roll` parity for ability checks + saves. The unified mini-sheet's NPC stat-block buttons now pass `combatant_id` into the `/roll` body when the click originated from an init-tracker entry; the server's `/roll` handler reads it as an NPC fallback that mirrors Phase 2b's PC composition (Poisoned/Frightened → check dis; Restrained → DEX-save dis) via a new hub-state helper `_npc_roll_condition_disadvantage`.
 **Phase 3 still deferred** — needs Maps 2.0 positional awareness for 5-ft prone-melee advantage / prone-ranged disadvantage. See [Implementation status](#implementation-status) below for the per-phase breakdown.
-**Phase 4 proposed (v2.252.0+)** — **item-granted adv/dis**. The condition/feature substrate (Phase 2a–2f) reads adv/dis sources from combatant `buffs` (hub) / `_buffs_active` (PC mirror); magic items that grant adv/dis (Cloak of Displacement → incoming attacks have disadvantage; later Cloak/Boots of Elvenkind stealth-advantage, Eyes of the Eagle, etc.) don't yet feed those source sets. Phase 4a wires the first **target-side item disadvantage** — Cloak of Displacement — by teaching the existing `/attack` + `/npc_attack` target-side reads to also consult the *wearer's* equipped-item effects (`_equipped_item_effects` → a new `incoming_attacks_have_disadvantage` boolean) via a combatant→character→sheet resolution. See [Phase 4 — Item-granted adv/dis](#phase-4--item-granted-advdis) below.
+**Phase 4a shipped in v2.252.0** — **item-granted adv/dis (Cloak of Displacement)**. The first target-side item disadvantage: an equipped + attuned Cloak of Displacement (RAW DMG p.158) sets `incoming_attacks_have_disadvantage` in `_equipped_item_effects`, and the `/attack` + `/npc_attack` pipelines read it at attack time via `_target_wearer_imposes_attack_disadvantage` (target combatant → character → sheet), folding it into the existing disadvantage source set. Attacks against the wearer roll `2d20kl1`; the PHB p.173 cancel logic handles adv+dis for free. Phase 4b+ (suppress-after-damage, Elvenkind stealth-advantage via `/roll`, Eyes of the Eagle) remain filed. See [Phase 4 — Item-granted adv/dis](#phase-4--item-granted-advdis) below.
 **Tracked in:** [`TODO.md`](../../TODO.md) → Combat → Advantage & Disadvantage Tracking.
 
 ---
@@ -28,7 +28,7 @@
 - ⏸ **Phase 3 — Context-aware rolls** — deferred. 5-ft-melee advantage on prone targets / prone-ranged disadvantage depends on Maps 2.0 grid-distance awareness, also not yet shipped. The prone-attacker disadvantage half DID ship in Phase 2a (PHB p.292 — prone melee + ranged are both disadvantaged from the attacker's side).
 - ❌ **Elven Accuracy / 3d20kh1** — explicitly out of scope from day one; deferred to a feats-action follow-up.
 - ❌ **NPC / monster token adv/dis** — out of scope from day one. Partially addressed in v2.3.18: monster mini-sheet rolls pass `skip_roll_state: true` so the GM's own char's pill never bleeds into monster checks, but monsters themselves still don't have a settable pill.
-- ⚪ **Phase 4 — Item-granted adv/dis** — proposed (v2.252.0+). The first slice (4a) is Cloak of Displacement: attacks against the wearer have disadvantage. The substrate is already there on the attacker side (the `/attack` + `/npc_attack` adv/dis source sets, the dice `kh1`/`kl1` swap, the PHB p.173 cancel logic) — the only new wiring is a target-side read that consults the *wearer's* equipped-item effects. See [Phase 4 — Item-granted adv/dis](#phase-4--item-granted-advdis).
+- 🟠 **Phase 4 — Item-granted adv/dis** — Phase 4a shipped v2.252.0 (Cloak of Displacement: attacks against the wearer have disadvantage, wired through a target-side equipped-item read). Phase 4b+ (suppress-after-damage, Elvenkind stealth-advantage via `/roll`, Eyes of the Eagle) still filed. See [Phase 4 — Item-granted adv/dis](#phase-4--item-granted-advdis).
 
 ---
 
@@ -203,7 +203,7 @@ Single MINOR commit. Roughly: 1 helper function, 1 new endpoint, 1 new partial, 
 
 ## Phase 4 — Item-granted adv/dis
 
-**Status:** ⚪ proposed (Phase 4a targeted for v2.252.0).
+**Status:** 🟠 Phase 4a shipped v2.252.0 (Cloak of Displacement). Phase 4b+ filed.
 
 The Phase 2 work automated adv/dis from **conditions** (Blinded, Restrained, …) and **features** (Rage, Reckless, Vow of Enmity, …). Both read from the combatant `buffs` list (hub state) / `_buffs_active` (PC sheet mirror). **Magic items** that grant adv/dis are not yet wired into those source sets — the seeded Cloak of Displacement (`app/demo_seed.py`, on Lyra Sunstrider) carries only an *informational* `_reactions` entry the GM clicks to declare disadvantage retroactively; nothing is auto-applied.
 
