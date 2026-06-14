@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.251.0] - 2026-06-13 — "The Riming Edge"
+
+**Schema version:** 69
+
+**Commit summary:** Frost Brand — a double-substrate magic-sword drop-in with zero new engine code: the +1d6 cold-on-hit reuses the unconditional attack-rider shape (Sun Blade minus the condition predicate) and the fire resistance reuses the v2.235.0 `resistance_to` passive, seeded as a second attuned sword on Garrik (the weapon-rider showcase Fighter).
+
+**Description:** **Frost Brand** (RAW DMG p.171, very rare, attunement) is a magic sword that deals an extra **1d6 cold** damage on every hit and grants the wielder **resistance to fire damage** while held (it also sheds light and extinguishes nonmagical flames — GM-narrated in v1). Both halves are pure substrate reuse with **zero new engine code**. The **cold rider** is a new `frost-brand` row in `_MAGIC_ITEM_ATTACK_RIDERS` shaped exactly like the v2.158.104 Sun Blade rider but with the `condition` predicate dropped — so it fires unconditionally on every hit while the sword is equipped + attuned, surfacing in the `/attack` response's `auto_uplifts` with source `item-frost-brand`. The **fire resistance** is a new `frost-brand` entry in `_MAGIC_ITEM_PASSIVES` carrying `{"resistance_to": ["fire"]}` — the walker already folds any catalogued slug's `resistance_to` payload into the aggregated list that `_resistance_halve` consults in the live damage pipeline, so fire damage to the wielder is halved end-to-end through `PATCH .../sheet-fields` and surfaces on `/sheet-json` as `derived.resistances`. Both halves are attunement-gated; detuning suppresses the rider AND the resistance, leaving a mundane longsword. **Slot sourcing:** Frost Brand is seeded as an additional attuned sword on Garrik Ironside (the weapon-rider showcase Fighter who already wields the fire-themed Flame Tongue) — the demo seed predates strict cap enforcement (the RAW 3/3 cap lives only on the `/attune` runtime endpoint, not at seed-load or in the passive walker), so no lossy displacement was needed. Pairing a cold-themed sword with his fire-themed one keeps both weapon riders on one PC. MINOR — additive content + tests, no schema change, no new substrate.
+
+### Added
+- `frost-brand` entry in `_MAGIC_ITEM_ATTACK_RIDERS` (`1d6` cold, unconditional, `requires_attunement: True`) — the Sun Blade rider shape minus the condition predicate.
+- `frost-brand` entry in `_MAGIC_ITEM_PASSIVES` (`resistance_to: ["fire"]`, `requires_attunement: True`) — reuses the v2.235.0 resistance surface verbatim.
+- Demo seed: Frost Brand Longsword on Garrik Ironside (attack entry at `attack_index 4` + an equipped + attuned inventory item, both `_slug: "frost-brand"`).
+- `tests/harness/test_item_frost_brand.py` (5 tests): cold rider fires on any hit (`auto_uplifts` source `item-frost-brand`, `1d6` cold); `derived.resistances` lists fire + names the sword; 20 fire damage halved to 10; 20 cold damage unaffected (control); detune suppresses BOTH the rider and the fire resistance.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2697 → 2702 (+5 frost-brand); added the `test_item_frost_brand.py` section.
+
 ## [2.250.0] - 2026-06-13 — "The Tide-Forged Plate"
 
 **Schema version:** 69

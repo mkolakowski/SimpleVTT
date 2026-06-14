@@ -32661,6 +32661,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "mariners-armor": [
         {"swim_speed": True},
     ],
+    # v2.251.0 — Frost Brand (RAW DMG p.171, very rare, attunement). RAW: a
+    # magic sword that deals an extra 1d6 cold damage on a hit (the cold rider
+    # lives in `_MAGIC_ITEM_ATTACK_RIDERS` below), AND "you have resistance to
+    # fire damage" while you hold it. The fire-resistance half reuses the
+    # v2.235.0 `resistance_to` surface verbatim — folds into the aggregated
+    # `resistance_to` list that `_resistance_halve` consults in the live damage
+    # pipeline, surfaced on `/sheet-json derived.resistances`. Zero new engine
+    # code on either half: cold-on-hit = an unconditional attack rider (Sun
+    # Blade shape minus the condition predicate); fire resistance = a passive
+    # `resistance_to` payload. The sheds-light / extinguishes-nonmagical-flames
+    # clauses are GM-narrated in v1. Attunement-gated on both halves.
+    "frost-brand": [
+        {"resistance_to": ["fire"], "requires_attunement": True},
+    ],
 }
 
 
@@ -33501,6 +33515,20 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
         "condition": lambda tgt: bool(tgt) and (
             (tgt.get("creature_type") or "").strip().lower() == "undead"
         ),
+    },
+    # v2.251.0 — Frost Brand (RAW DMG p.171, very rare, attunement). RAW: "when
+    # you hit with an attack using this magic sword, the target takes an extra
+    # 1d6 cold damage." Pure substrate reuse of the Sun Blade (Phase 7d) rider
+    # shape MINUS the condition predicate — the cold rider is unconditional, so
+    # it fires on every hit while the sword is equipped + attuned. The fire-
+    # resistance half rides `_MAGIC_ITEM_PASSIVES["frost-brand"]` above. No
+    # `requires_lit` gate (unlike Flame Tongue) — RAW Frost Brand has no
+    # ignite/extinguish toggle; the cold is always live while attuned.
+    "frost-brand": {
+        "label": "Frost Brand",
+        "dice": "1d6",
+        "damage_type": "cold",
+        "requires_attunement": True,
     },
     # v2.159.1 — Phase 8a: first ammunition-shape catalog row. Arrow of
     # Slaying (RAW DMG p.151) is a magic arrow keyed to a specific

@@ -4222,6 +4222,18 @@ def _fighter_sheet(name: str) -> dict:
              "damage": "1d8+4", "damage_type": "slashing",
              "range": "5 ft", "_slug": "flame-tongue",
              "desc": "Rare longsword, attunement. 1d8+4 slashing + 2d6 fire on hit (always-on while attuned)."},
+            # v2.251.0 — Magic-items: Frost Brand (RAW DMG p.171, very
+            # rare, attunement). Second weapon-rider on Garrik (the
+            # weapon-rider showcase Fighter), pairing the fire-themed
+            # Flame Tongue with a cold-themed sword. The ``_slug`` gate
+            # matches the equipped+attuned inventory Frost Brand below to
+            # fire the unconditional +1d6 cold uplift at /attack time.
+            # While held it also grants resistance to fire damage (the
+            # passive half rides _MAGIC_ITEM_PASSIVES["frost-brand"]).
+            {"name": "Frost Brand Longsword", "attack_bonus": "+8",
+             "damage": "1d8+4", "damage_type": "slashing",
+             "range": "5 ft", "_slug": "frost-brand",
+             "desc": "Very rare longsword, attunement. 1d8+4 slashing + 1d6 cold on every hit (always-on while attuned). Grants resistance to fire damage while held."},
         ],
         # Fighter is non-casting RAW (Champion subclass doesn't grant
         # spells either). No spells / spell_slots fields needed.
@@ -4293,6 +4305,24 @@ def _fighter_sheet(name: str) -> dict:
              "properties": "versatile (1d10), magic",
              "_slug": "flame-tongue",
              "desc": "Rare longsword, attunement. Speak the command word (bonus action — /use_item_action ignite|extinguish) to toggle. While ablaze, +2d6 fire damage on every hit."},
+            # v2.251.0 — Frost Brand Longsword (RAW DMG p.171, very rare,
+            # attunement). Pair-bound with the attack entry above via the
+            # ``_slug``. The cold rider fires only when (a) the attack
+            # carries _slug="frost-brand", AND (b) this item is equipped +
+            # attuned (the double-gate). Detuning via /attune suppresses
+            # BOTH the +1d6 cold rider AND the passive fire resistance,
+            # leaving a mundane longsword. Unlike Flame Tongue there's no
+            # _lit toggle — RAW Frost Brand's cold is always live while
+            # attuned. Seeded as an additional attuned item on Garrik (the
+            # seed predates strict cap enforcement, which lives only on the
+            # /attune runtime endpoint, not at seed-load or in the passive
+            # walker).
+            {"name": "Frost Brand Longsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "hands": 1, "damage": "1d8", "damage_type": "slashing",
+             "properties": "versatile (1d10), magic",
+             "_slug": "frost-brand",
+             "desc": "Very rare longsword, attunement. +1d6 cold on every hit while attuned; grants resistance to fire damage while held. Sheds light + extinguishes nonmagical flames (GM-narrated). RAW DMG p.171."},
             # v2.184.0 — Magic-items: first "self-buff" consumable.
             # Potion of Heroism (RAW DMG p.187, rare). Drink (action,
             # /use_item_action drink) → 10 temp HP + the Bless effect
