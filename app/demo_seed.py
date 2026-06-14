@@ -3765,6 +3765,19 @@ def _monk_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
              "_slug": "winged-boots",
              "desc": "Uncommon wondrous item, attunement. While you wear these boots, you have a flying speed equal to your walking speed. You can fly for up to 4 hours, all at once or in shorter flights. RAW DMG p.214."},
+            # v2.260.0 — Ring of Jumping (RAW DMG p.191, uncommon, attunement).
+            # Cast Jump on yourself at will as a bonus action (the tripled jump
+            # distance is GM-narrated in v1). The `jump_at_will` flag rides the
+            # `ring-of-jumping` catalog payload and surfaces on /sheet-json as
+            # derived.jump_at_will. On-theme for Kael — his Step of the Wind Ki
+            # option already doubles his jump distance, and the ring stacks
+            # flavorfully. His free ring finger homes it; seed-load bypasses the
+            # RAW 3-item cap (enforced at /attune runtime only), so it rides as
+            # his 4th attuned item.
+            {"name": "Ring of Jumping", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
+             "_slug": "ring-of-jumping",
+             "desc": "Uncommon wondrous item, attunement. While wearing this ring, you can cast the jump spell from it as a bonus action at will, but can target only yourself when you do so. RAW DMG p.191. Surfaces as the derived jump_at_will flag."},
         ],
         "feats": [],
         # v2.18.0: Ki counter (max = monk level). Refreshes on short rest.

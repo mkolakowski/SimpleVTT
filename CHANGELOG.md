@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.260.0] - 2026-06-14 — "The Leaping Band"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of Jumping — an attunement-gated passive that lets the wearer cast Jump on themselves at will, riding a new `jump_at_will` boolean-OR flag in `_equipped_item_effects` surfaced on `/sheet-json derived` (the Ring of X-ray Vision pattern).
+
+**Description:** **Ring of Jumping** (RAW DMG p.191, uncommon, **attunement required**): "while wearing this ring, you can cast the jump spell from it as a bonus action at will, but can target only yourself when you do so." Another clean attunement-gated boolean-flag drop-in on the established passive substrate. The engine changes: (1) a new `jump_at_will` field (+ `jump_at_will_sources`) in `_equipped_item_effects`, boolean-OR'd across equipped items carrying the flag (via the `jump_at_will` payload or a per-item `_jump_at_will` rider) — the per-payload attunement check drops the flag when worn-but-not-attuned; (2) a new `ring-of-jumping` entry in `_MAGIC_ITEM_PASSIVES` (`{"jump_at_will": True, "requires_attunement": True}`); (3) `/sheet-json derived` surfaces `jump_at_will = {sources}` only when an equipped + attuned item sets the flag; (4) the demo seed gives Kael Brightleaf (Monk) the ring attuned in his free ring finger — on-theme alongside his Step of the Wind Ki option (which already doubles his jump distance), riding as his 4th attuned item (seed-load bypasses the RAW 3-item cap, enforced at `/attune` runtime only). The tripled jump distance is GM-narrated in v1. MINOR — additive content + tests, no schema change.
+
+### Added
+- `jump_at_will` boolean-OR field (+ `jump_at_will_sources`) in `_equipped_item_effects`, attunement-gated via the per-payload check.
+- `ring-of-jumping` entry in `_MAGIC_ITEM_PASSIVES` (`jump_at_will: True`, `requires_attunement: True`).
+- `/sheet-json derived.jump_at_will = {sources}` display mirror.
+- `tests/harness/test_item_ring_of_jumping.py` (3 tests): `/sheet-json` exposes the flag naming the ring; un-attuning the ring (still equipped) drops the flag — the attunement gate; unequipping the ring drops the flag (both restore inventory on teardown).
+
+### Changed
+- Demo seed: Kael Brightleaf gains an equipped + attuned Ring of Jumping in his free ring finger.
+- `docs/test-harness-coverage.md`: harness total 2735 → 2738 (+3 ring-of-jumping); added the `test_item_ring_of_jumping.py` section.
+
 ## [2.259.0] - 2026-06-14 — "The Sure Grip"
 
 **Schema version:** 69

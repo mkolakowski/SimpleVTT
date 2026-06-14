@@ -32707,6 +32707,14 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "gloves-of-swimming-and-climbing": [
         {"climb_swim_ease": True, "requires_attunement": True},
     ],
+    # v2.260.0 — Ring of Jumping (RAW DMG p.191, uncommon, attunement). RAW:
+    # "while wearing this ring, you can cast the jump spell from it as a bonus
+    # action at will, but can target only yourself when you do so." Modeled as
+    # an attunement-gated boolean derived read (jump_at_will flag); the tripled
+    # jump distance is GM-narrated in v1.
+    "ring-of-jumping": [
+        {"jump_at_will": True, "requires_attunement": True},
+    ],
     # v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement).
     # RAW: "you have a swimming speed of 40 feet while wearing this ring."
     # The numeric swim speed is GM-narrated in v1; the boolean flag surfaces
@@ -33925,6 +33933,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # swim (the +5 is GM-narrated in v1). ATTUNEMENT-gated.
         "climb_swim_ease": False,
         "climb_swim_ease_sources": [],
+        # v2.260.0 — jump-at-will passive. Boolean OR across equipped items
+        # carrying the field; surfaced on `/sheet-json` derived. Ring of
+        # Jumping (RAW DMG p.191) is the first entry — cast Jump on yourself at
+        # will as a bonus action (the tripled jump distance is GM-narrated in
+        # v1). ATTUNEMENT-gated.
+        "jump_at_will": False,
+        "jump_at_will_sources": [],
         # v2.242.0 — swim-speed passive. Boolean OR across equipped items
         # carrying the field; surfaced on `/sheet-json` derived. Ring of
         # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
@@ -34247,6 +34262,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_climb_swim_ease") or p.get("climb_swim_ease"):
                 out["climb_swim_ease"] = True
                 out["climb_swim_ease_sources"].append(item_name)
+            # v2.260.0 — jump-at-will passive (Ring of Jumping, RAW DMG
+            # p.191). Boolean OR; the flag rides the item via the
+            # `jump_at_will` payload (or a per-item `_jump_at_will` rider).
+            # Attunement-gated by the per-payload check above.
+            if item.get("_jump_at_will") or p.get("jump_at_will"):
+                out["jump_at_will"] = True
+                out["jump_at_will_sources"].append(item_name)
             # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
             # p.193). Boolean OR; the flag rides the item via the
             # `swim_speed` payload (or a per-item `_swim_speed` rider).
@@ -91443,6 +91465,12 @@ async def get_character_sheet_json(
             if _item_eff.get("climb_swim_ease"):
                 derived["climb_swim_ease"] = {
                     "sources": list(_item_eff.get("climb_swim_ease_sources") or []),
+                }
+            # v2.260.0 — jump at will (Ring of Jumping). Only present when an
+            # equipped + attuned item sets the flag.
+            if _item_eff.get("jump_at_will"):
+                derived["jump_at_will"] = {
+                    "sources": list(_item_eff.get("jump_at_will_sources") or []),
                 }
             # v2.242.0 — swim speed (Ring of Swimming). Only present when an
             # equipped item sets the flag.
