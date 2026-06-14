@@ -247,15 +247,21 @@
             {% include "_death_saves_tracker.html" %}
         </div>
 
-        {# v2.285.0 — movement-trait badge: Boots of Levitation surfaces the #}
-        {# `levitate_at_will` derived flag from /sheet-json. Rendered only    #}
-        {# when an equipped+attuned item sets it. #}
-        {% if levitate_at_will is defined and levitate_at_will %}
-        <div id="levitate-badge" style="display:flex;align-items:center;gap:8px;background:var(--s-input);border:1px solid var(--s-accent);border-radius:8px;padding:8px 12px;margin-bottom:12px;"
-             title="Levitate at will — {{ (levitate_at_will.sources or []) | join(', ') }} (RAW: use an action to cast levitate on yourself at will).">
-            <span style="font-size:16px;">🪶</span>
-            <span style="font-size:12px;font-weight:700;color:var(--s-fg);">Levitate at will</span>
-            <span style="font-size:11px;color:var(--s-mute);">{{ (levitate_at_will.sources or []) | join(', ') }}</span>
+        {# v2.286.0 — movement-trait badge strip: item-sourced derived movement #}
+        {# flags (flying speed / levitate at will / spider climb / speed       #}
+        {# doubling) from /sheet-json, computed server-side. Each chip renders  #}
+        {# only when an equipped (+attuned where required) item sets the flag.  #}
+        {% if movement_traits is defined and movement_traits %}
+        <div id="movement-traits" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            {% for t in movement_traits %}
+            <div class="movement-trait-badge" id="movement-trait-{{ t.key }}" data-trait="{{ t.key }}"
+                 style="display:flex;align-items:center;gap:8px;background:var(--s-input);border:1px solid var(--s-accent);border-radius:8px;padding:8px 12px;"
+                 title="{{ t.title }}{% if t.sources %} — {{ t.sources | join(', ') }}{% endif %}">
+                <span style="font-size:16px;">{{ t.icon }}</span>
+                <span style="font-size:12px;font-weight:700;color:var(--s-fg);">{{ t.label }}</span>
+                {% if t.sources %}<span style="font-size:11px;color:var(--s-mute);">{{ t.sources | join(', ') }}</span>{% endif %}
+            </div>
+            {% endfor %}
         </div>
         {% endif %}
 

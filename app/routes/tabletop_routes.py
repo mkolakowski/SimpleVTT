@@ -35142,18 +35142,42 @@ def _effective_abilities_for_sheet(sheet: dict) -> dict:
     return out
 
 
-def _levitate_at_will_for_sheet(sheet: dict) -> dict | None:
-    """v2.285.0 — surface the `levitate_at_will` derived flag for the sheet UI.
-    Returns `{"sources": [...]}` when an equipped+attuned item (Boots of
-    Levitation) sets the flag, else None. Mirrors the /sheet-json
-    `derived.levitate_at_will` projection so the badge and the JSON agree."""
+# v2.286.0 — movement-trait badge defs: (flag key, sources key, icon, label,
+# title). Each item-sourced derived movement flag renders as a chip on the
+# sheet. Mirrors the /sheet-json derived projections so badge + JSON agree.
+_MOVEMENT_TRAIT_DEFS: list[tuple[str, str, str, str, str]] = [
+    ("flying_speed", "flying_speed_sources", "🕊️", "Flying speed",
+     "Flying speed from an equipped item (RAW)."),
+    ("levitate_at_will", "levitate_at_will_sources", "🪶", "Levitate at will",
+     "Use an action to cast levitate on yourself at will (RAW)."),
+    ("spider_climb", "spider_climb_sources", "🕷️", "Spider climb",
+     "Move on vertical surfaces & ceilings hands-free (RAW)."),
+    ("speed_doubling", "speed_doubling_sources", "⚡", "Speed can double",
+     "A bonus action can double your walking speed (RAW)."),
+]
+
+
+def _movement_traits_for_sheet(sheet: dict) -> list[dict]:
+    """v2.286.0 — surface item-sourced movement derived flags for the sheet UI
+    as a list of badge dicts `{key, icon, label, title, sources}`. Returns the
+    flags an equipped (+attuned where required) item sets, in display order.
+    Mirrors the /sheet-json `derived.*` projections so the badges and the JSON
+    agree. Empty list on a malformed sheet."""
+    out: list[dict] = []
     try:
         eff = _equipped_item_effects(sheet)
-        if eff.get("levitate_at_will"):
-            return {"sources": list(eff.get("levitate_at_will_sources") or [])}
     except Exception:
-        return None
-    return None
+        return out
+    for key, src_key, icon, label, title in _MOVEMENT_TRAIT_DEFS:
+        if eff.get(key):
+            out.append({
+                "key": key,
+                "icon": icon,
+                "label": label,
+                "title": title,
+                "sources": list(eff.get(src_key) or []),
+            })
+    return out
 
 
 def _sheet_total_level(sheet: dict) -> int:
@@ -92258,11 +92282,12 @@ def get_sheet(
     effective_abilities = (
         _effective_abilities_for_sheet(sheet) if char.template == "dnd5e" else {}
     )
-    # v2.285.0 — surface the levitate-at-will derived flag (Boots of
-    # Levitation) so the sheet renders a movement-trait badge. Mirrors the
-    # /sheet-json `derived.levitate_at_will` projection.
-    levitate_at_will = (
-        _levitate_at_will_for_sheet(sheet) if char.template == "dnd5e" else None
+    # v2.286.0 — surface item-sourced movement derived flags (flying speed,
+    # levitate at will, spider climb, speed doubling) so the sheet renders a
+    # movement-trait badge strip. Mirrors the /sheet-json `derived.*`
+    # projections.
+    movement_traits = (
+        _movement_traits_for_sheet(sheet) if char.template == "dnd5e" else []
     )
     return templates.TemplateResponse(
         template_name,
@@ -92275,7 +92300,7 @@ def get_sheet(
             "campaign": campaign,
             "class_roster": class_levels_summary(sheet) if char.template == "dnd5e" else [],
             "effective_abilities": effective_abilities,
-            "levitate_at_will": levitate_at_will,
+            "movement_traits": movement_traits,
             "animate_gifs": user.animate_gifs,
         },
     )
@@ -93676,9 +93701,9 @@ def character_sheet_page(
                 _effective_abilities_for_sheet(page_sheet)
                 if char.template == "dnd5e" else {}
             ),
-            "levitate_at_will": (
-                _levitate_at_will_for_sheet(page_sheet)
-                if char.template == "dnd5e" else None
+            "movement_traits": (
+                _movement_traits_for_sheet(page_sheet)
+                if char.template == "dnd5e" else []
             ),
             "animate_gifs": user.animate_gifs,
         },

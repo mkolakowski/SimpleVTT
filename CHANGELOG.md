@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.286.0] - 2026-06-14 — "The Drifting Set"
+
+**Schema version:** 69
+
+**Commit summary:** Generalize the v2.285.0 single levitate chip into a `#movement-traits` badge strip covering all four item-sourced movement derived flags — flying speed, levitate at will, spider climb, speed doubling. New `_movement_traits_for_sheet` helper replaces `_levitate_at_will_for_sheet` and feeds both sheet render routes; five Playwright UI tests replace the two levitate-only tests.
+
+**Description:** v2.285.0 surfaced `levitate_at_will` alone, but three sibling movement flags (`flying_speed` from v2.238.0, `spider_climb` from v2.237.0, `speed_doubling` from v2.239.0) already had `/sheet-json` projections and `_sources` lists — they just had no face on the sheet. This commit collapses the one-off levitate chip into a generic `#movement-traits` strip driven by `_MOVEMENT_TRAIT_DEFS` (one row per flag: key, sources-key, icon, label, title). The new `_movement_traits_for_sheet(sheet)` helper walks `_equipped_item_effects` once and emits a chip dict for every set flag, so the badge and the JSON always agree. Both sheet render paths now pass `movement_traits`: `get_sheet` (`/api/.../character/{id}`) and `character_sheet_page` (`/campaign/.../sheet`, which `{% include %}`s the same template). Each chip renders `#movement-trait-<flag>` with its icon, label, and the source item name. Most demo carriers wear their item equipped+attuned at seed, so the chips render on a plain page load: Kael Brightleaf (Winged Boots → flying), Pip Quickfingers (Slippers of Spider Climbing → spider climb), Krieger Stonefist (Boots of Speed → speed doubling). Magnus's Boots of Levitation are inert spare loot, exercised by a PATCH-then-restore. MINOR — additive UI surface + tests, no schema change.
+
+### Added
+- `_MOVEMENT_TRAIT_DEFS` + `_movement_traits_for_sheet(sheet)` helper (`app/routes/tabletop_routes.py`) — returns a chip dict per set movement flag, reusing `_equipped_item_effects` so the strip and `/sheet-json` agree.
+- `#movement-traits` badge strip in `app/templates/sheet_dnd5e.html` — one `#movement-trait-<flag>` chip per flag, rendered only when at least one flag is set.
+- `tests/harness_ui/test_movement_trait_badges.py` (5 tests): flying (Kael), spider climb (Pip), speed doubling (Krieger) render on plain load; levitate (Magnus) via PATCH-then-restore; no strip on a plain PC (Garrik).
+
+### Changed
+- Both `get_sheet` and `character_sheet_page` routes pass `movement_traits` into the template context (replacing the v2.285.0 single `levitate_at_will` var).
+- `docs/test-harness-coverage.md`: UI total 87 → 90 (+3 net Playwright tests); replaced the `test_levitate_badge.py` section with `test_movement_trait_badges.py`.
+
+### Removed
+- `_levitate_at_will_for_sheet` helper and the standalone `#levitate-badge` chip (superseded by the generic strip).
+- `tests/harness_ui/test_levitate_badge.py` (folded into `test_movement_trait_badges.py`).
+
 ## [2.285.0] - 2026-06-14 — "The Visible Hover"
 
 **Schema version:** 69
