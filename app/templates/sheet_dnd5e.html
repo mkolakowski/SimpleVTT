@@ -7395,6 +7395,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                           action_key: 'gaze',
                           label: '💎 Gaze (Truesight)',
                           title: 'Gem of Seeing — spend 1 charge to gain truesight 60 ft for 10 minutes.'},
+        // v2.277.0 — charged-items Phase 1 (closes the plan): Wand of
+        // Enemy Detection (RAW DMG p.211). The same `self-buff` flow as
+        // Gem of Seeing — spend 1 charge to install the enemy-detection
+        // self-buff (direction of nearest hostile within 60 ft for 1 min).
+        'wand-of-enemy-detection': {kind: 'self-buff',
+                          action_key: 'detect',
+                          label: '🧭 Detect Enemies',
+                          title: 'Wand of Enemy Detection — spend 1 charge to sense the direction of the nearest hostile within 60 ft for 1 minute.'},
         // v2.271.0 — charged-items Phase 3 (closes the phase): Horn of
         // Blasting (RAW DMG p.174, no attunement). A 30-ft-cone CON save
         // for 5d6 thunder + deafened on a fail — reuses the `aoe-cone`

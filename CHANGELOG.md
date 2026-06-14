@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.277.0] - 2026-06-14 — "The Watchful Wand"
+
+**Schema version:** 69
+
+**Commit summary:** Wand of Enemy Detection — the last named item in the charged-items plan, closing Phase 1 and the whole plan. A utility `action_kind: "buff"` charge action (the Gem of Seeing shape): spend 1 of 7 charges to install a self-buff that senses the direction of the nearest hostile within 60 ft for 1 minute. New `enemy-detection` buff template + a `wand-of-enemy-detection` catalog entry routed through the shared `_use_item_action_buff` handler (now with a `summary_verb` override), seeded on Pip Quickfingers (Rogue) with a 7-charge resource row, plus a `self-buff` sheet button and harness tests.
+
+**Description:** **Wand of Enemy Detection** (RAW DMG p.211, rare, **attunement**): "this wand has 7 charges. While holding it, you can use an action and expend 1 charge to speak its command word. For 1 minute, you know the direction of the nearest creature hostile to you within 60 feet, but not its distance — even invisible, ethereal, disguised, or hidden ones." This is the **last named item** in `docs/plans/charged-items.md` (the Phase 1 utility-detection tail), and it lands on the existing `action_kind: "buff"` substrate shipped for Gem of Seeing (v2.270.0) with **zero new engine code** — just content plus one default-preserving handler tweak. A new `enemy-detection` buff template joins `_SPELL_BUFF_MAP` (marker effect `detect_hostiles_ft: 60`, 10-round duration, non-concentration — the RAW per-turn bonus-action maintenance is GM-narrated). The `wand-of-enemy-detection` catalog entry's `detect` action routes through the shared `_use_item_action_buff` handler, which decrements the charge and installs the self-buff on the wielder's combatant. The handler gained a `summary_verb` override so the chat card reads "Pip *activates* the Wand…" instead of the gem's hardcoded "gazes through" (Gem of Seeing's output is unchanged — it falls back to the default). Seeded on Pip Quickfingers (Halfling Rogue scout — an on-theme lookout) with a 7-charge / 1d6+1 resource row; seed-load bypasses the RAW 3-item attunement cap (enforced at `/attune` runtime only). The sheet surfaces a `🧭 Detect Enemies` button via the existing `self-buff` picker (no target, fixed 1-charge spend). The direction read + per-turn maintenance are GM-narrated in v1 — the surfaced effect is the buff badge + duration countdown. **This closes the charged-items plan: every named Phase 1/2/3/4/5 item is now shipped.** MINOR — additive content + one small default-preserving handler override + tests, no schema change.
+
+### Added
+- `enemy-detection` buff template in `_SPELL_BUFF_MAP` (`app/routes/tabletop_routes.py`) — marker effect `detect_hostiles_ft: 60`, 10-round (1-minute) duration, non-concentration; the same sensory-payload shape as `truesight` / `darkvision`.
+- `wand-of-enemy-detection` entry in `_MAGIC_ITEM_ACTIONS` (`detect` action: `action_kind: "buff"`, `buff_key: "enemy-detection"`, `summary_verb: "activates"`, `requires_attunement: True`, `resource_key: wand-of-enemy-detection`) + a dispatch branch routing to the shared `_use_item_action_buff` handler.
+- `summary_verb` override in `_use_item_action_buff` — defaults to "gazes through" (Gem of Seeing unchanged); the wand sets "activates".
+- Sheet UI: `wand-of-enemy-detection` `ITEM_ACTION_SLUGS` mapping (`self-buff` kind) rendering a `🧭 Detect Enemies` button.
+- Demo seed: Pip Quickfingers gains an equipped + attuned Wand of Enemy Detection plus its 7-charge `wand-of-enemy-detection` resource row (1d6+1 recharge on long rest).
+- `tests/harness/test_use_item_action_wand_of_enemy_detection.py` (2 tests): happy path (detect with Pip in an active battle → `action_kind: "buff"`, `buff_key: "enemy-detection"`, `charges_spent: 1`, `buff_installed: True`, `duration_rounds: 10`, resource 7 → 6, buff lands on Pip's combatant) and a drained wand (0 charges) → 409 `insufficient_charges`. Resources restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: status line → ✅ complete; Wand of Enemy Detection marked ✅ shipped (v2.277.0), closing Phase 1 and the plan.
+- `docs/test-harness-coverage.md`: harness total 2783 → 2785 (+2 Wand of Enemy Detection); added the `test_use_item_action_wand_of_enemy_detection.py` section.
+
 ## [2.276.0] - 2026-06-14 — "The Archmage's Aim"
 
 **Schema version:** 69

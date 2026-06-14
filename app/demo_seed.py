@@ -437,9 +437,35 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": True,
              "_slug": "slippers-of-spider-climbing",
              "desc": "Uncommon wondrous item, no attunement. While you wear these light shoes, you can move up, down, and across vertical surfaces and upside down along ceilings, while leaving your hands free. You have a climbing speed equal to your walking speed. RAW DMG p.199."},
+            # v2.277.0 — charged-items Phase 1 (closes the plan): Wand of
+            # Enemy Detection (RAW DMG p.211, rare, attunement). The last
+            # named plan item — a utility `action_kind: "buff"` charge action
+            # (the Gem of Seeing shape): spend 1 of 7 charges to sense the
+            # direction of the nearest hostile within 60 ft for 1 minute.
+            # On-theme for Pip (Halfling Rogue scout / lookout). Her 4th
+            # attuned item (seed-load bypasses the RAW 3-item cap, enforced
+            # at /attune runtime only). Paired with the
+            # wand-of-enemy-detection resource row below.
+            {"name": "Wand of Enemy Detection", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-enemy-detection", "weight_lb": 1,
+             "desc": "Rare wand, attunement. 7 charges. Expend 1 charge to sense the direction (not distance) of the nearest creature hostile to you within 60 ft for 1 minute — even invisible, ethereal, disguised, or hidden ones. Regains 1d6+1 charges at dawn (long rest). RAW DMG p.211."},
         ],
         "feats": [],
-        "resources": [],
+        "resources": [
+            # v2.277.0 — Wand of Enemy Detection charge pool: 7 charges,
+            # regain 1d6+1 at dawn (long rest). The buff handler decrements
+            # 1 per Detect Enemies activation.
+            {
+                "key": "wand-of-enemy-detection",
+                "name": "Wand of Enemy Detection",
+                "current": 7, "max": 7, "reset": "long",
+                "charge_recovery": "1d6+1",
+                "source": "item-wand-of-enemy-detection",
+                "desc": "7 charges. Spend 1 to sense the direction of the nearest hostile within 60 ft for 1 minute. Regains 1d6+1 charges on long rest.",
+                "manual": False,
+            },
+        ],
         # v2.6.0 (action-economy Phase 3): clickable class-feature
         # entries. The Class abilities section of sheet_dnd5e.html
         # renders each row as an expandable button; clicking an option

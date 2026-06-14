@@ -1274,6 +1274,27 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "Truesight out to 60 ft — see in darkness, see invisible creatures + objects, automatically detect visual illusions, perceive the true form of shapechangers, and see into the Ethereal Plane.",
     },
+    # v2.277.0 — Wand of Enemy Detection (DMG p.211): for 1 minute the
+    # wielder knows the *direction* of the nearest hostile creature within
+    # 60 ft (not its distance), even if it's invisible, ethereal, disguised,
+    # or hidden — blocked by the same materials as truesight. The marker
+    # effect `detect_hostiles_ft` rides the same sensory-payload shape as
+    # `truesight_ft` / `darkvision_ft`. RAW the property is sustained by a
+    # bonus action each turn (NOT concentration), so `concentration` is
+    # False; the per-turn maintenance + the direction read are GM-narrated
+    # in v1 — the surfaced effect is the buff badge + duration countdown.
+    "enemy-detection": {
+        "key": "enemy-detection",
+        "name": "Enemy Detection",
+        "icon": "🧭",
+        "duration_rounds": 10,  # 1 minute @ 6 s/round
+        "duration_max": 10,
+        "concentration": False,
+        "effects": {
+            "detect_hostiles_ft": 60,
+        },
+        "desc": "Sense the direction (not distance) of the nearest creature hostile to you within 60 ft for 1 minute — even invisible, ethereal, disguised, or hidden ones. Blocked by 1 ft of stone / 1 in. of common metal / a thin sheet of lead / 3 ft of wood or dirt. RAW: sustained by a bonus action each turn (GM-narrated).",
+    },
     "bless": {
         "key": "bless",
         "name": "Bless",
@@ -33350,6 +33371,32 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                 "buff_key": "truesight",
                 "duration_rounds": 100,  # 10 minutes @ 6 s/round
                 "summary_effect": "truesight out to 60 ft for 10 minutes",
+                "min_charges": 1,
+                "max_charges": 1,
+            },
+        },
+    },
+    # v2.277.0 — charged-items Phase 1 (closes the plan): Wand of Enemy
+    # Detection (RAW DMG p.211, rare, attunement). The last named plan
+    # item — a utility ``action_kind: "buff"`` charge action, the same
+    # shape as Gem of Seeing (a self-buff install, no save/damage). 7
+    # charges (regains 1d6+1 at dawn); spend 1 to sense the direction of
+    # the nearest hostile within 60 ft for 1 minute. Routes through the
+    # shared ``_use_item_action_buff`` handler — the ``summary_verb``
+    # override makes the chat card read "activates" instead of the gem's
+    # "gazes through".
+    "wand-of-enemy-detection": {
+        "requires_attunement": True,
+        "resource_key": "wand-of-enemy-detection",
+        "actions": {
+            "detect": {
+                "name": "Detect Enemies (60 ft, 1 min)",
+                "feature_name": "🧭 Wand of Enemy Detection",
+                "action_kind": "buff",
+                "buff_key": "enemy-detection",
+                "duration_rounds": 10,  # 1 minute @ 6 s/round
+                "summary_effect": "enemy detection out to 60 ft for 1 minute",
+                "summary_verb": "activates",
                 "min_charges": 1,
                 "max_charges": 1,
             },
@@ -82131,7 +82178,7 @@ async def use_item_action(
             prompt_user=user,
             slug=slug,
         )
-    if slug == "gem-of-seeing":
+    if slug in ("gem-of-seeing", "wand-of-enemy-detection"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_buff(
             db, campaign_id, char, item, sheet, catalog,
@@ -83641,6 +83688,7 @@ async def _use_item_action_buff(
     except Exception:
         pass
     effect_text = action_def.get("summary_effect") or f"the {buff_key} effect"
+    verb = str(action_def.get("summary_verb") or "gazes through")
     try:
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
@@ -83650,7 +83698,7 @@ async def _use_item_action_buff(
                 "source": f"item-{slug}",
                 "label": feature_name,
                 "summary": (
-                    f"{char.name} gazes through the {item.get('name')} — "
+                    f"{char.name} {verb} the {item.get('name')} — "
                     f"gains {effect_text}. "
                     f"({n_charges} charge{'s' if n_charges > 1 else ''}; "
                     f"{res_row['current']}/{res_max} left.)"
