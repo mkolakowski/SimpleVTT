@@ -32578,6 +32578,14 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-swimming": [
         {"swim_speed": True},
     ],
+    # v2.244.0 — Ring of Feather Falling (RAW DMG p.191, rare, attunement).
+    # RAW: "when you fall while wearing this ring, you descend 60 feet per
+    # round and take no damage from falling." Unlike the other rings in this
+    # batch this one REQUIRES attunement — the boolean `feather_fall` flag is
+    # gated on the `attuned` flag by the walker's attunement check.
+    "ring-of-feather-falling": [
+        {"feather_fall": True, "requires_attunement": True},
+    ],
 }
 
 
@@ -33622,6 +33630,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # 40 ft while worn (the numeric is GM-narrated in v1).
         "swim_speed": False,
         "swim_speed_sources": [],
+        # v2.244.0 — feather-fall passive. Boolean OR across equipped items
+        # carrying the field; surfaced on `/sheet-json` derived. Ring of
+        # Feather Falling (RAW DMG p.191) is the first entry — descend 60 ft
+        # per round and take no falling damage while worn. ATTUNEMENT-gated
+        # (unlike the other rings in this batch), so the walker's attunement
+        # check filters it.
+        "feather_fall": False,
+        "feather_fall_sources": [],
     }
     if not isinstance(sheet, dict):
         return out
@@ -33870,6 +33886,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_swim_speed") or p.get("swim_speed"):
                 out["swim_speed"] = True
                 out["swim_speed_sources"].append(item_name)
+            # v2.244.0 — feather-fall passive (Ring of Feather Falling, RAW
+            # DMG p.191). Boolean OR; the flag rides the item via the
+            # `feather_fall` payload (or a per-item `_feather_fall` rider).
+            # Attunement-gated by the per-payload check above.
+            if item.get("_feather_fall") or p.get("feather_fall"):
+                out["feather_fall"] = True
+                out["feather_fall_sources"].append(item_name)
     # v2.217.0 — timed ability-score buffs (Potion of Giant Strength; see
     # docs/plans/str-override.md Phase 4). Active buffs are mirrored onto the
     # sheet as `_buffs_active` (durations stripped, effects retained) by
@@ -90960,6 +90983,12 @@ async def get_character_sheet_json(
             if _item_eff.get("swim_speed"):
                 derived["swim_speed"] = {
                     "sources": list(_item_eff.get("swim_speed_sources") or []),
+                }
+            # v2.244.0 — feather falling (Ring of Feather Falling). Only
+            # present when an equipped + attuned item sets the flag.
+            if _item_eff.get("feather_fall"):
+                derived["feather_fall"] = {
+                    "sources": list(_item_eff.get("feather_fall_sources") or []),
                 }
         except Exception:
             pass

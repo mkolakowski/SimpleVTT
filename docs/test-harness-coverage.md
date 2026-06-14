@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2672 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.243.1, 2026-06-13).
+**Total tests:** 2675 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.244.0, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2483,6 +2483,15 @@ v2.228.0 — Ioun Stone of Protection (RAW DMG p.176, rare, attunement): the fir
 |------|-----------------|
 | `test_ioun_stone_protection_grants_ac_bonus` | Krieger swings at Mira → `target_ac == 16` (15 base + stone +1). |
 | `test_ioun_stone_protection_unequip_reverts_ac` | PATCH the stone to `equipped: False` → `target_ac == 15` (base, no bonus); restores the original inventory on teardown. |
+
+### `test_item_ring_of_feather_falling.py`
+v2.244.0 — Ring of Feather Falling (RAW DMG p.191, rare, attunement): when you fall while wearing it, you descend 60 feet per round and take no falling damage. Reuses the boolean-OR passive substrate: the `feather_fall` flag rides the `ring-of-feather-falling` catalog payload (`requires_attunement: True`), aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.feather_fall = {sources}`. Unlike the swim/water-walk rings this one is attunement-gated. Sir Caelan Lightbringer (Paladin) wears it — fills the slot the v2.243.0 Dragon Slayer correction freed (back to 3/3).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ring_of_feather_falling_exposes_flag` | `GET /sheet-json` → `derived.feather_fall` present with "Ring of Feather Falling" in `sources`. |
+| `test_ring_of_feather_falling_requires_attunement` | Detuning the ring via `POST /attune` (`attuned: False`) → `derived.feather_fall` absent (attunement-gated, unlike the swim/water-walk rings); restores seed attunement on teardown. |
+| `test_ring_of_feather_falling_unequip_drops_flag` | PATCH the ring to `equipped: False` → `derived.feather_fall` absent; restores the original inventory on teardown. |
 
 ### `test_item_ring_of_swimming.py`
 v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement): grants a swimming speed of 40 feet while worn. Reuses the boolean-OR passive substrate: the `swim_speed` flag rides the `ring-of-swimming` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.swim_speed = {sources}`. Mira Greenleaf (Druid) wears it — no attunement, riding alongside her full 3/3 attunement loadout.

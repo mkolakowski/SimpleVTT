@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.244.0] - 2026-06-13 — "The Gentle Descent"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of Feather Falling — feather-fall passive (`derived.feather_fall`) on a new boolean-OR substrate field, riding the `ring-of-feather-falling` catalog payload (attunement-gated), homed on the slot the v2.243.0 Dragon Slayer correction freed.
+
+**Description:** The **Ring of Feather Falling** (RAW DMG p.191, rare, attunement) means that when you fall while wearing it, you descend 60 feet per round and take no falling damage. It reuses the boolean-OR passive substrate: the `feather_fall` flag rides the `ring-of-feather-falling` catalog payload, aggregates in `_equipped_item_effects` (a new `feather_fall` field + `feather_fall_sources`), and surfaces on `/sheet-json` as `derived.feather_fall = {sources}`. Unlike the no-attunement Ring of Water Walking / Ring of Swimming earlier in this batch, this ring **requires attunement** — the payload carries `requires_attunement: True`, so the walker's per-payload attunement check filters the flag when the item is detuned. Demo: Sir Caelan Lightbringer (Paladin) wears it — it fills the 3rd attunement slot freed by the v2.243.0 Dragon Slayer RAW correction, putting him back at 3/3 (Ioun Stone of Dexterity + Ioun Stone of Reserve + this ring). First attunement-gated ring of the SRD-ring batch. MINOR — additive substrate field + derived exposure + content + tests, no schema change.
+
+### Added
+- `feather_fall` / `feather_fall_sources` aggregation in `_equipped_item_effects` (boolean OR across equipped items carrying the `feather_fall` payload or a per-item `_feather_fall` rider; attunement-gated via the existing per-payload `requires_attunement` check).
+- `/sheet-json` `derived.feather_fall = {sources}` — present only when an equipped + attuned item sets the flag.
+- `ring-of-feather-falling` entry in `_MAGIC_ITEM_PASSIVES` (`feather_fall: True`, `requires_attunement: True`).
+- Demo seed: Ring of Feather Falling on Sir Caelan Lightbringer (`_slug: "ring-of-feather-falling"`, equipped + attuned), filling the slot the Dragon Slayer correction freed → Caelan back to 3/3.
+- `tests/harness/test_item_ring_of_feather_falling.py` (3 tests): `derived.feather_fall` lists the ring in sources; detuning via /attune drops the flag (attunement required); unequip drops the flag.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2672 → 2675; added the `test_item_ring_of_feather_falling.py` section.
+
 ## [2.243.1] - 2026-06-13 — "The Honest Counter"
 
 **Schema version:** 69

@@ -1269,9 +1269,10 @@ def _paladin_sheet(name: str) -> dict:
             # spindle that holds up to 3 levels of spells cast into it.
             # The capacity rides the shared `ioun-stone` slug via
             # `_spell_reserve_levels` (no ability payload), surfacing on
-            # `/sheet-json` derived.spell_reserve. Caelan's 2nd attuned item
-            # (with the Ioun Stone of Dexterity — the Dragon Slayer dropped
-            # its attunement in v2.243.0) — and his SECOND ioun stone, showing
+            # `/sheet-json` derived.spell_reserve. One of Caelan's three
+            # attuned items (Ioun Stone of Dexterity + this + the v2.244.0
+            # Ring of Feather Falling — the Dragon Slayer dropped its
+            # attunement in v2.243.0) — and his SECOND ioun stone, showing
             # two stones composing on the one slug with different per-item
             # riders. The cast-into / cast-from mechanic is descriptive-only
             # in v1.
@@ -1279,6 +1280,17 @@ def _paladin_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_spell_reserve_levels": 3,
              "desc": "Rare wondrous item, attunement. This pearly white spindle orbits your head and can store up to 3 levels of spells cast into it, holding them until you cast them. RAW DMG p.176."},
+            # v2.244.0 — Ring of Feather Falling (RAW DMG p.191, rare,
+            # attunement). Fills the 3rd attunement slot the v2.243.0
+            # Dragon Slayer RAW-correction freed up (Caelan back to 3/3:
+            # Ioun Stone of Dexterity + Ioun Stone of Reserve + this ring).
+            # First feather-fall passive — surfaces on /sheet-json as
+            # derived.feather_fall, gated on the `attuned` flag (unlike the
+            # no-attunement Ring of Water Walking / Swimming in this batch).
+            {"name": "Ring of Feather Falling", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "weight_lb": 0, "_slug": "ring-of-feather-falling",
+             "desc": "Rare ring, attunement. When you fall while wearing this ring, you descend 60 feet per round and take no damage from falling. RAW DMG p.191."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:
