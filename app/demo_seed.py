@@ -4399,6 +4399,25 @@ def _sorcerer_sheet(name: str) -> dict:
              "_slug": "wand-of-the-war-mage", "_spell_attack_bonus": 3,
              "weight_lb": 1,
              "desc": "Very rare wand, attunement. While holding this wand you gain a +3 bonus to spell attack rolls and ignore half cover when making a spell attack. RAW DMG p.211."},
+            # v2.282.0 — Broom of Flying (RAW DMG p.156, uncommon, NO
+            # attunement). Reuses the v2.238.0 Winged Boots flying-speed
+            # substrate with zero new engine code: the `flying_speed` boolean
+            # flag rides the `broom-of-flying` catalog payload, aggregates in
+            # `_equipped_item_effects`, and surfaces on /sheet-json as
+            # `derived.flying_speed`. Unlike the Wings/Winged Boots (both
+            # attunement items), the broom needs NO attunement — its payload
+            # omits `requires_attunement`, so it surfaces while merely
+            # equipped. The command-word ride + 50-ft speed / 400-lb capacity
+            # are GM-narrated in v1. Seeded as inert spare loot
+            # (unequipped/unattuned) so it adds no flying speed to Zara's
+            # baseline and disturbs no existing test — the harness PATCHes it
+            # equipped (no attune needed), reads the derived flag, then
+            # restores. A flying broom is on-theme for the demo's chaotic
+            # Draconic Sorcerer.
+            {"name": "Broom of Flying", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "broom-of-flying", "weight_lb": 3,
+             "desc": "Uncommon wondrous item, no attunement. Stand astride the broom and speak its command word to ride it in the air at a flying speed of 50 feet (30 feet while carrying over 200 lb; 400-lb max). It stops hovering when you land, and can be sent to or summoned from up to 1 mile away. RAW DMG p.156."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer

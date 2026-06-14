@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.282.0] - 2026-06-14 — "The Witch's Commute"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item movement backfill — **Broom of Flying** (RAW DMG p.156, uncommon, NO attunement) reuses the v2.238.0 Winged Boots flying-speed substrate with zero new engine code. The `flying_speed: True` payload omits `requires_attunement` (the broom needs none), so the flag surfaces while merely equipped; seeded as inert spare loot on Zara Emberfire and exercised by three harness tests. Closes the SRD flying-item cluster (Winged Boots / Wings of Flying / Broom of Flying).
+
+**Description:** The last unwired SRD flying item drops onto the shipped derived-flag substrate, no engine changes. **Broom of Flying** (RAW DMG p.156, uncommon): "stand astride it and speak its command word ... it has a flying speed of 50 feet." The `flying_speed` boolean flag rides the `broom-of-flying` catalog payload, aggregates in `_equipped_item_effects` (boolean OR), and surfaces on `/sheet-json` as `derived.flying_speed = {sources}` — the exact substrate Winged Boots landed in v2.238.0, so there is **no new engine code**. The distinguishing RAW detail: unlike the Wings of Flying (v2.281.0) and Winged Boots (both attunement items), the broom requires **no attunement** — its payload omits `requires_attunement`, so the flag surfaces while merely *equipped*. The command-word ride, 50-ft speed, and 400-lb capacity are GM-narrated in v1. The broom is seeded **unequipped / unattuned** as spare loot on Zara Emberfire (the demo's chaotic Draconic Sorcerer, no flying baseline) so it adds zero flying speed to any PC's baseline and disturbs no existing test. Three harness tests PATCH the broom equipped at runtime to verify the derived read — including a test asserting the no-attunement path (equipped-but-unattuned still surfaces the flag) — then restore the seed inventory on teardown. This closes the SRD flying-item cluster. MINOR — additive demo content + tests, no schema change.
+
+### Added
+- `broom-of-flying` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one payload carrying `flying_speed: True` with **no** `requires_attunement` gate, reusing the Winged Boots substrate.
+- Demo seed: Zara Emberfire gains a spare (unequipped/unattuned) **Broom of Flying**.
+- `tests/harness/test_item_broom_of_flying.py` (3 tests): flying speed surfaces on equip with the broom named in sources; inert baseline has none; equipped-but-unattuned still surfaces the flag (no-attunement path). Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2800 → 2803 (+3 backfill tests); added the `test_item_broom_of_flying.py` section.
+
 ## [2.281.0] - 2026-06-14 — "The Borrowed Wings"
 
 **Schema version:** 69

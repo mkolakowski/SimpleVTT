@@ -32751,6 +32751,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "wings-of-flying": [
         {"flying_speed": True, "requires_attunement": True},
     ],
+    # v2.282.0 — Broom of Flying (RAW DMG p.156, uncommon, NO attunement).
+    # RAW: "stand astride it and speak its command word ... it has a flying
+    # speed of 50 feet." Reuses the v2.238.0 Winged Boots flying-speed
+    # substrate with zero new engine code. Unlike the Wings of Flying / Winged
+    # Boots, the broom needs NO attunement — the payload omits
+    # `requires_attunement`, so the flag surfaces while merely equipped. The
+    # command-word ride + 50-ft speed / 400-lb capacity are GM-narrated in v1.
+    "broom-of-flying": [
+        {"flying_speed": True},
+    ],
     # v2.239.0 — Boots of Speed (RAW DMG p.155, rare, attunement). RAW:
     # "while you wear these boots, you can use a bonus action and click the
     # boots' heels together. If you do, the boots double your walking speed,
