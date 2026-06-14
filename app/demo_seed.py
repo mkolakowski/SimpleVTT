@@ -2606,6 +2606,23 @@ def _warlock_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "staff-of-thunder-and-lightning", "weight_lb": 4,
              "desc": "Very rare staff, attunement. 5 charges (regain 1d6+1 at dawn). Thunder (2 charges): each creature within 60 ft makes a DC 17 CON save — 2d6 thunder + deafened 1 min on a fail, half + no deafen on a pass. Also a magic quarterstaff with Lightning / Lightning Strike / combined properties (GM-narrated). RAW DMG p.202."},
+            # v2.284.0 — Boots of Levitation (RAW DMG p.155, rare,
+            # attunement). The first item on the NEW `levitate_at_will`
+            # boolean substrate: while worn you can use an action to cast the
+            # levitate spell on yourself at will. The flag rides the
+            # `boots-of-levitation` catalog payload, aggregates in
+            # `_equipped_item_effects` (boolean OR), and surfaces on
+            # /sheet-json as `derived.levitate_at_will`. The action cost + the
+            # spell's vertical-move / 20-min-concentration mechanics are
+            # GM-narrated in v1. Seeded as inert spare loot
+            # (unequipped/unattuned) so it adds no flag to Magnus's baseline
+            # and disturbs no existing test — the harness PATCHes it
+            # equipped+attuned, reads the derived flag, then restores. A
+            # hovering Fiend-pact Warlock is on-theme.
+            {"name": "Boots of Levitation", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "boots-of-levitation", "weight_lb": 1,
+             "desc": "Rare wondrous item, attunement. While you wear these boots, you can use an action to cast the levitate spell on yourself at will. RAW DMG p.155."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's

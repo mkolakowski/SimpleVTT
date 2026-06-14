@@ -32771,6 +32771,15 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "carpet-of-flying": [
         {"flying_speed": True},
     ],
+    # v2.284.0 — Boots of Levitation (RAW DMG p.155, rare, attunement). RAW:
+    # "while you wear these boots, you can use an action to cast the levitate
+    # spell on yourself at will." The new `levitate_at_will` boolean flag
+    # aggregates in `_equipped_item_effects` (boolean OR) and surfaces on
+    # /sheet-json as `derived.levitate_at_will`. The action cost + the spell's
+    # own mechanics (vertical move, 20-min concentration) are GM-narrated.
+    "boots-of-levitation": [
+        {"levitate_at_will": True, "requires_attunement": True},
+    ],
     # v2.239.0 — Boots of Speed (RAW DMG p.155, rare, attunement). RAW:
     # "while you wear these boots, you can use a bonus action and click the
     # boots' heels together. If you do, the boots double your walking speed,
@@ -34372,6 +34381,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # is GM-narrated in v1).
         "flying_speed": False,
         "flying_speed_sources": [],
+        # v2.284.0 — levitate-at-will passive. Boolean OR across equipped
+        # items carrying the field; surfaced on `/sheet-json` derived. Boots
+        # of Levitation (RAW DMG p.155) is the first entry — while worn you
+        # can cast the levitate spell on yourself at will (the action cost is
+        # GM-narrated in v1).
+        "levitate_at_will": False,
+        "levitate_at_will_sources": [],
         # v2.239.0 — speed-doubling passive. Boolean OR across equipped
         # items carrying the field; surfaced on `/sheet-json` derived.
         # Boots of Speed (RAW DMG p.155) is the first entry — a bonus
@@ -34716,6 +34732,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_flying_speed") or p.get("flying_speed"):
                 out["flying_speed"] = True
                 out["flying_speed_sources"].append(item_name)
+            # v2.284.0 — levitate-at-will passive (Boots of Levitation, RAW
+            # DMG p.155). Boolean OR; the flag rides the item via the
+            # `levitate_at_will` payload (or a per-item `_levitate_at_will`
+            # rider). Attunement-gated by the per-payload check above.
+            if item.get("_levitate_at_will") or p.get("levitate_at_will"):
+                out["levitate_at_will"] = True
+                out["levitate_at_will_sources"].append(item_name)
             # v2.239.0 — speed-doubling passive (Boots of Speed, RAW DMG
             # p.155). Boolean OR; the flag rides the item via the
             # `speed_doubling` payload (or a per-item `_speed_doubling` rider).
@@ -92711,6 +92734,12 @@ async def get_character_sheet_json(
             if _item_eff.get("flying_speed"):
                 derived["flying_speed"] = {
                     "sources": list(_item_eff.get("flying_speed_sources") or []),
+                }
+            # v2.284.0 — levitate at will (Boots of Levitation). Only present
+            # when an equipped+attuned item sets the flag.
+            if _item_eff.get("levitate_at_will"):
+                derived["levitate_at_will"] = {
+                    "sources": list(_item_eff.get("levitate_at_will_sources") or []),
                 }
             # v2.239.0 — speed doubling (Boots of Speed). Only present when
             # an equipped+attuned item sets the flag.

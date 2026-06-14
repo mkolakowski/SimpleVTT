@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.284.0] - 2026-06-14 — "The Floating Step"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item movement backfill — **Boots of Levitation** (RAW DMG p.155, rare, attunement) lands the **NEW `levitate_at_will` derived flag**. The boolean substrate mirrors the v2.238.0 flying-speed pattern (init / walker boolean-OR / `/sheet-json` projection) so future "cast X at will" items compose for free; seeded as inert spare loot on Magnus Hexbinder and exercised by three harness tests.
+
+**Description:** The flying-item cluster closed in v2.282.0, but levitation needed its own surface — "you can use an action to cast the levitate spell on yourself at will" is not flight, so it gets a dedicated derived flag rather than overloading `flying_speed`. **Boots of Levitation** (RAW DMG p.155, rare, attunement) is the first item on the **new `levitate_at_will` boolean substrate**, which mirrors the shipped flying-speed pattern exactly: a field init in `_equipped_item_effects` (`levitate_at_will` / `levitate_at_will_sources`), a walker branch that boolean-ORs the flag from the `boots-of-levitation` catalog payload (`levitate_at_will: True`, `requires_attunement: True`), and a `/sheet-json` projection to `derived.levitate_at_will = {sources}`. The action cost and the levitate spell's vertical-move / 20-min-concentration mechanics are GM-narrated in v1. The boots are seeded **unequipped / unattuned** as spare loot on Magnus Hexbinder (the demo's Fiend-pact Warlock, no levitation baseline — a hovering warlock is on-theme) so they add zero flags to any PC's baseline and disturb no existing test. Three harness tests PATCH the boots equipped+attuned at runtime to verify the derived read (and that the attunement gate holds equipped-but-unattuned), then restore the seed inventory on teardown. MINOR — additive demo content + tests + a new derived flag, no schema change.
+
+### Added
+- **NEW `levitate_at_will` derived flag** in `_equipped_item_effects` (`app/routes/tabletop_routes.py`) — field init, walker boolean-OR branch, and `/sheet-json` projection (`derived.levitate_at_will = {sources}`), modeled on the v2.238.0 flying-speed substrate so future at-will-spell items reuse it.
+- `boots-of-levitation` entry in `_MAGIC_ITEM_PASSIVES` — one attunement-gated payload carrying `levitate_at_will: True`.
+- Demo seed: Magnus Hexbinder gains a spare (unequipped/unattuned) **Boots of Levitation**.
+- `tests/harness/test_item_boots_of_levitation.py` (3 tests): levitate-at-will surfaces on equip with the boots named in sources; inert baseline has none; equipped-but-unattuned yields no flag (attunement gate). Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2806 → 2809 (+3 backfill tests); added the `test_item_boots_of_levitation.py` section.
+
 ## [2.283.0] - 2026-06-14 — "The Magic Carpet Ride"
 
 **Schema version:** 69
