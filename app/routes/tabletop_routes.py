@@ -19653,6 +19653,14 @@ async def cast_spell(
                 (caster_sheet_atk.get("abilities") or {}).get(caster_spc_atk, 10)
             )
             spell_atk_bonus = caster_prof_atk + ((caster_ab_atk - 10) // 2)
+            # v2.265.0 — Wand of the War Mage (RAW DMG p.211): +X to
+            # spell attack rolls while held + attuned. Read the summed,
+            # attunement-gated passive from the equipped-item effects and
+            # fold it into the spell attack bonus (charged-items Phase 5).
+            _war_mage_atk = int(
+                _equipped_item_effects(caster_sheet_atk).get("spell_attack_bonus") or 0
+            )
+            spell_atk_bonus += _war_mage_atk
             auto_attack_target_ac = _read_target_ac(db, campaign_id, target_combatant)
             # Resolve damage dice from the action.
             _dmg_scaling = None
@@ -32724,6 +32732,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "bracers-of-archery": [
         {"ranged_bow_damage_bonus": 2, "requires_attunement": True},
     ],
+    # v2.265.0 — Wand of the War Mage, +1/+2/+3 (RAW DMG p.211,
+    # uncommon–rare, attunement). RAW: "while holding this wand, you gain
+    # a bonus to spell attack rolls determined by the wand's rarity. In
+    # addition, you ignore half cover when making a spell attack." The +X
+    # spell-attack bonus is modeled as a summed int surfaced via
+    # spell_attack_bonus and added to the caster's spell attack bonus at
+    # cast-resolution time (charged-items Phase 5 — a passive clone of
+    # Bracers of Archery). The single SRD slug carries the +1 (uncommon)
+    # base; the +2/+3 tiers ride the item via a per-item
+    # `_spell_attack_bonus` rider (mirrors the Ioun Stone `_ability_bonus`
+    # tier pattern). The ignore-half-cover clause is GM-narrated in v1.
+    "wand-of-the-war-mage": [
+        {"spell_attack_bonus": 1, "requires_attunement": True},
+    ],
     # v2.242.0 — Ring of Swimming (RAW DMG p.193, uncommon, no attunement).
     # RAW: "you have a swimming speed of 40 feet while wearing this ring."
     # The numeric swim speed is GM-narrated in v1; the boolean flag surfaces
@@ -33989,6 +34011,13 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # — +2 to ranged-bow damage rolls. ATTUNEMENT-gated.
         "ranged_bow_damage_bonus": 0,
         "ranged_bow_damage_bonus_sources": [],
+        # v2.265.0 — spell-attack bonus. Summed (not OR'd) across equipped
+        # items carrying the field; surfaced on `/sheet-json` derived and
+        # added to the caster's spell attack bonus at cast-resolution
+        # time. Wand of the War Mage (RAW DMG p.211) is the first entry —
+        # +1/+2/+3 to spell attack rolls. ATTUNEMENT-gated.
+        "spell_attack_bonus": 0,
+        "spell_attack_bonus_sources": [],
         # v2.242.0 — swim-speed passive. Boolean OR across equipped items
         # carrying the field; surfaced on `/sheet-json` derived. Ring of
         # Swimming (RAW DMG p.193) is the first entry — a swimming speed of
@@ -34334,6 +34363,22 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if _rbdb:
                 out["ranged_bow_damage_bonus"] += _rbdb
                 out["ranged_bow_damage_bonus_sources"].append(item_name)
+            # v2.265.0 — spell-attack bonus (Wand of the War Mage, RAW
+            # DMG p.211). Summed across equipped items; the bonus rides
+            # the item via the `spell_attack_bonus` payload (or a per-item
+            # `_spell_attack_bonus` rider for the +2/+3 tiers).
+            # Attunement-gated by the per-payload check above. Added to
+            # the caster's spell attack bonus in the cast-resolution path.
+            _sab = item.get("_spell_attack_bonus")
+            if _sab is None:
+                _sab = p.get("spell_attack_bonus")
+            try:
+                _sab = int(_sab or 0)
+            except (TypeError, ValueError):
+                _sab = 0
+            if _sab:
+                out["spell_attack_bonus"] += _sab
+                out["spell_attack_bonus_sources"].append(item_name)
             # v2.242.0 — swim-speed passive (Ring of Swimming, RAW DMG
             # p.193). Boolean OR; the flag rides the item via the
             # `swim_speed` payload (or a per-item `_swim_speed` rider).
@@ -91558,6 +91603,15 @@ async def get_character_sheet_json(
                     "bonus": int(_item_eff.get("ranged_bow_damage_bonus") or 0),
                     "sources": list(
                         _item_eff.get("ranged_bow_damage_bonus_sources") or []
+                    ),
+                }
+            # v2.265.0 — spell attack bonus (Wand of the War Mage). Only
+            # present when an equipped + attuned item carries the bonus.
+            if _item_eff.get("spell_attack_bonus"):
+                derived["spell_attack_bonus"] = {
+                    "bonus": int(_item_eff.get("spell_attack_bonus") or 0),
+                    "sources": list(
+                        _item_eff.get("spell_attack_bonus_sources") or []
                     ),
                 }
             # v2.242.0 — swim speed (Ring of Swimming). Only present when an

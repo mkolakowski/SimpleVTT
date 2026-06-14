@@ -2393,6 +2393,21 @@ def _warlock_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ring-of-x-ray-vision",
              "desc": "RAW DMG p.193 (rare, attunement). Action: see into and through solid objects within 30 ft for 1 minute (blocked by 1 ft of stone / 1 in. of metal / 3 ft of wood or dirt). Using it again before a long rest risks 1 level of exhaustion (GM-narrated). Surfaces as the derived xray_vision flag."},
+            # v2.265.0 — charged-items Phase 5: Wand of the War Mage, +2
+            # (RAW DMG p.211, rare, attunement). A passive spell-attack
+            # rider — no charges. The single SRD slug defaults to +1
+            # (uncommon) in _MAGIC_ITEM_PASSIVES; this item rides the +2
+            # (rare) tier via the per-item `_spell_attack_bonus` override
+            # (mirrors the Ioun Stone `_ability_bonus` tier pattern). The
+            # bonus folds into Magnus's Eldritch Blast (and any spell
+            # attack) to-hit at cast time; the ignore-half-cover clause is
+            # GM-narrated. Magnus (Fiend Warlock — the demo's blaster) is
+            # the natural wielder; his 5th attuned item (seed-load bypasses
+            # the RAW 3-item cap, enforced at /attune runtime only).
+            {"name": "Wand of the War Mage, +2", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-the-war-mage", "_spell_attack_bonus": 2,
+             "desc": "Rare wand, attunement. While holding this wand you gain a +2 bonus to spell attack rolls and ignore half cover when making a spell attack. RAW DMG p.211."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's

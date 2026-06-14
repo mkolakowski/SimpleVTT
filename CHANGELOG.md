@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.265.0] - 2026-06-14 — "The Practiced Hand"
+
+**Schema version:** 69
+
+**Commit summary:** Wand of the War Mage (+1/+2/+3) — charged-items Phase 5: a passive spell-attack-bonus rider on the `_MAGIC_ITEM_PASSIVES` rail (a clone of Bracers of Archery), adding a summed, attunement-gated `spell_attack_bonus` int that folds into the caster's spell attack roll at cast-resolution time. Seeded on Magnus Hexbinder (Warlock) at the +2 tier, plus harness tests.
+
+**Description:** **Wand of the War Mage, +1/+2/+3** (RAW DMG p.211, uncommon–rare, **attunement required**): "while holding this wand, you gain a bonus to spell attack rolls determined by the wand's rarity. In addition, you ignore half cover when making a spell attack." The first charged-items Phase 5 item — a passive (no charges) that feeds the spell-attack path, the same shape as Bracers of Archery (v2.261.0) feeding the weapon-attack path. The engine changes: (1) a new summed `spell_attack_bonus` int (+ `spell_attack_bonus_sources`) in `_equipped_item_effects`, accumulated across equipped items (via the `spell_attack_bonus` payload or a per-item `_spell_attack_bonus` rider for the +2/+3 tiers, mirroring the Ioun Stone `_ability_bonus` tier pattern) — the per-payload attunement check drops the bonus when worn-but-not-attuned; (2) a new `wand-of-the-war-mage` entry in `_MAGIC_ITEM_PASSIVES` (`{"spell_attack_bonus": 1, "requires_attunement": True}` — the +1 uncommon base); (3) at spell-cast-resolution time the bonus is added to `spell_atk_bonus` (caster prof + spellcasting mod) before the 1d20 attack roll, covering every `attack_roll: true` spell (Fire Bolt, Eldritch Blast, Guiding Bolt, etc.); (4) `/sheet-json derived` surfaces `spell_attack_bonus = {bonus, sources}` only when an equipped + attuned item carries the bonus; (5) the demo seed gives Magnus Hexbinder (Fiend Warlock — the demo's blaster) the +2 wand attuned, so his Eldritch Blast now rolls +2 to hit. Rides as his 5th attuned item (seed-load bypasses the RAW 3-item cap, enforced at `/attune` runtime only). The ignore-half-cover clause is GM-narrated in v1. MINOR — additive content + tests, no schema change.
+
+### Added
+- `spell_attack_bonus` summed int field (+ `spell_attack_bonus_sources`) in `_equipped_item_effects`, attunement-gated via the per-payload check; supports a per-item `_spell_attack_bonus` rider for the +2/+3 tiers.
+- `wand-of-the-war-mage` entry in `_MAGIC_ITEM_PASSIVES` (`spell_attack_bonus: 1`, `requires_attunement: True`).
+- Spell-cast-resolution path: the bonus is folded into the caster's spell attack roll for every `attack_roll: true` spell.
+- `/sheet-json derived.spell_attack_bonus = {bonus, sources}` display mirror.
+- Demo seed: Magnus Hexbinder gains an equipped + attuned Wand of the War Mage, +2 (via the `_spell_attack_bonus: 2` per-item rider).
+- `tests/harness/test_item_wand_of_the_war_mage.py` (4 tests): `/sheet-json` exposes the +2 naming the wand; un-attuning (still equipped) drops the derived read — the attunement gate; unequipping drops it; an Eldritch Blast attack roll carries +2 more flat to-hit modifier attuned vs detuned. Inventory restored on teardown.
+
+### Changed
+- `docs/plans/charged-items.md`: Phase 5 status — Wand of the War Mage marked ✅ shipped (v2.265.0).
+- `docs/test-harness-coverage.md`: harness total 2750 → 2754 (+4 wand-of-the-war-mage); added the `test_item_wand_of_the_war_mage.py` section.
+
 ## [2.264.0] - 2026-06-14 — "The Borrowed Shape"
 
 **Schema version:** 69

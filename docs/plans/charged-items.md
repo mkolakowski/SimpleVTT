@@ -1,6 +1,6 @@
 # Charged magic items — design plan
 
-**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0). Phases 2–5 unstarted.
+**Status:** 🟠 partial — Phase 0 ✅ (doc filed + wiki surface, v2.262.0); Phase 1 in progress (Wand of Web ✅ v2.263.0, Wand of Polymorph ✅ v2.264.0); Phase 5 in progress (Wand of the War Mage ✅ v2.265.0). Phases 2–4 unstarted.
 
 **Authors:** rolling
 **Last updated:** 2026-06-14
@@ -121,8 +121,12 @@ No charges at all — these are attack/AC riders, identical in shape to Bracers
 of Archery (v2.261.0). One flag field + accumulator + attack-path read each.
 
 - **Wand of the War Mage, +1/+2/+3** (DMG p.211, uncommon–rare, attunement) —
-  +X to spell attack rolls; ignores half cover. → a `spell_attack_bonus`
-  summed-int passive read at spell-attack resolution time.
+  ✅ **shipped v2.265.0**. +X to spell attack rolls; ignores half cover. A
+  `spell_attack_bonus` summed-int passive in `_equipped_item_effects` (the
+  slug defaults to +1; the +2/+3 tiers ride a per-item `_spell_attack_bonus`
+  rider), surfaced on `/sheet-json derived` and folded into the caster's
+  spell attack roll at cast-resolution time. Seeded on Magnus Hexbinder
+  (Warlock) at +2. The ignore-half-cover clause is GM-narrated in v1.
 
 ## Phasing & commit cadence
 
