@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2794 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.279.0, 2026-06-14).
+**Total tests:** 2797 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.280.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2760,6 +2760,15 @@ v2.279.0 — Dragon Scale Mail (RAW DMG p.165, very rare, attunement): +1 AC (de
 | `test_dragon_scale_mail_baseline_has_no_lightning_resistance` | Inert (seed) state: no lightning resistance — proving it's item-sourced. |
 | `test_dragon_scale_mail_halves_lightning_damage` | 20 lightning damage drops HP by only 10 via `_resistance_halve`; restores inventory + HP on teardown. |
 | `test_dragon_scale_mail_does_not_halve_other_types` | Control: 20 cold damage applies in full (−20) — Blue scales resist only lightning; restores inventory + HP on teardown. |
+
+### `test_item_helm_of_brilliance.py`
+v2.280.0 — Helm of Brilliance (RAW DMG p.173, very rare, attunement): v1 wires the clean passive — "as long as the helm has at least one ruby, you have resistance to fire damage." The flat `resistance_to: "fire"` payload aggregates in `_equipped_item_effects` (the Ring of Resistance / Dragon Scale Mail substrate) and surfaces as `derived.resistances`. The gem spells, undead aura, flaming-weapon rider, and gem-burst hazard are GM-narrated. Seeded as inert spare loot on Thalindra Moonwhisper (past her attunement cap, no fire-resistance baseline); tests PATCH it equipped+attuned, then restore inventory/HP on teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_helm_exposes_fire_resistance` | On equip, `derived.resistances.types` contains "fire" with "Helm of Brilliance" in `sources`. |
+| `test_helm_baseline_has_no_fire_resistance` | Inert (seed) state: no fire resistance — proving it's item-sourced. |
+| `test_helm_halves_fire_damage` | 20 fire damage drops HP by only 10 via `_resistance_halve`; restores inventory + HP on teardown. |
 
 ### `test_item_amulet_of_proof_against_detection.py`
 v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon, attunement): hidden from divination magic + magical scrying while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health): the `scry_proof` flag rides the `amulet-of-proof-against-detection` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`. Kael Brightleaf (Monk Lv 7) wears it as his 2nd attuned item.

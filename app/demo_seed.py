@@ -802,6 +802,23 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "staff-of-power", "weight_lb": 4,
              "desc": "Very rare staff, attunement by a sorcerer/warlock/wizard. While held: +2 AC, +2 saving throws, +2 spell attack rolls (and a +2 magic quarterstaff). 20 charges (regain 2d8+4 at dawn). Cast Cone of Cold (5 → 8d8 cold, CON), Fireball / Lightning Bolt (5 each → 10d6, 5th-level, DEX), plus Globe of Invulnerability, Hold Monster, Levitate, Magic Missile, Ray of Enfeeblement, and Wall of Force using your spell save DC. RAW DMG p.202."},
+            # v2.280.0 — Helm of Brilliance (RAW DMG p.173, very rare,
+            # attunement). RAW grants several benefits; v1 wires only the
+            # clean passive — "as long as the helm has at least one ruby, you
+            # have resistance to fire damage" — via the `resistance_to: "fire"`
+            # payload (the Ring of Resistance / Dragon Scale Mail substrate).
+            # The gem-fueled spells (daylight / fireball / prismatic spray /
+            # wall of fire), the undead-radiant aura, the flaming-weapon rider,
+            # and the gem-burst hazard are GM-narrated. Spare loot (equipped=
+            # False / attuned=False): Thalindra is already past the attunement
+            # cap and has no fire-resistance baseline, so the harness test
+            # PATCHes the helm equipped+attuned, reads the fire
+            # `derived.resistances`, then restores. A bejeweled archmage's helm
+            # is on-theme for an Evoker who already wields a Staff of Power.
+            {"name": "Helm of Brilliance", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "helm-of-brilliance", "weight_lb": 3,
+             "desc": "Very rare wondrous item, attunement. Set with diamonds, rubies, fire opals, and opals. While it has a ruby, you have resistance to fire damage. Gem-fueled spells (daylight, fireball, prismatic spray, wall of fire), an undead-searing aura, and a flaming-weapon rider are GM-narrated. RAW DMG p.173."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per

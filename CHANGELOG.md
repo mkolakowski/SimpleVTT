@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.280.0] - 2026-06-14 — "The Jeweled Crown"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item resistance backfill — **Helm of Brilliance** (RAW DMG p.173, very rare, attunement) drops onto the shipped resistance substrate with zero new engine code. One passive payload carries `resistance_to: "fire"`, attunement-gated; seeded as inert spare loot on Thalindra Moonwhisper and exercised by three PATCH-in-test harness tests asserting `derived.resistances` and the live `_resistance_halve` damage pipeline.
+
+**Description:** Another SRD magic item rides the resistance substrate, no engine changes. **Helm of Brilliance** (RAW DMG p.173, very rare, attunement) has several benefits; v1 wires the clean passive: "as long as the helm has at least one ruby, you have resistance to fire damage." The flat `resistance_to: "fire"` payload folds into the aggregated `resistance_to` list `_resistance_halve` consults in the live damage pipeline (the Ring of Resistance / Dragon Scale Mail substrate) and surfaces on `/sheet-json` as `derived.resistances = {types, sources}`. The gem-fueled spells (daylight / fireball / prismatic spray / wall of fire), the undead-searing radiant aura, the flaming-weapon rider, and the gem-burst hazard are GM-narrated. The helm is seeded **unequipped / unattuned** as spare loot on Thalindra Moonwhisper — she's already past the RAW 3-item attunement cap and has no fire-resistance baseline (her Wand/Necklace of Fireballs *deal* fire, they don't resist it) — so it adds zero resistance to any PC's baseline and disturbs no existing test. Three harness tests PATCH the helm equipped+attuned at runtime to verify the derived read + damage-halving, then restore the seed inventory (and HP) on teardown. MINOR — additive demo content + tests, no schema change.
+
+### Added
+- `helm-of-brilliance` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one attunement-gated payload carrying `resistance_to: "fire"`.
+- Demo seed: Thalindra Moonwhisper gains a spare (unequipped/unattuned) **Helm of Brilliance**.
+- `tests/harness/test_item_helm_of_brilliance.py` (3 tests): fire resistance surfaces on equip with the helm named in sources; inert baseline has none; 20 fire damage halved to 10 through `_resistance_halve`. Inventory + HP restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2794 → 2797 (+3 backfill tests); added the `test_item_helm_of_brilliance.py` section.
+
 ## [2.279.0] - 2026-06-14 — "The Silken Ward"
 
 **Schema version:** 69

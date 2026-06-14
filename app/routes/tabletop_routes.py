@@ -32721,6 +32721,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "cloak-of-arachnida": [
         {"resistance_to": "poison", "spider_climb": True, "requires_attunement": True},
     ],
+    # v2.280.0 — Helm of Brilliance (RAW DMG p.173, very rare, attunement).
+    # Of its several benefits, v1 wires the clean passive: "as long as the
+    # helm has at least one ruby, you have resistance to fire damage" — a flat
+    # `resistance_to: "fire"` payload folded into the live `_resistance_halve`
+    # damage pipeline (the Ring of Resistance / Dragon Scale Mail substrate).
+    # The gem-fueled spells (daylight / fireball / prismatic spray / wall of
+    # fire), the undead-radiant aura, the flaming-weapon rider, and the
+    # gem-burst hazard are GM-narrated.
+    "helm-of-brilliance": [
+        {"resistance_to": "fire", "requires_attunement": True},
+    ],
     # v2.238.0 — Winged Boots (RAW DMG p.214, uncommon, attunement). RAW:
     # "while you wear these boots, you have a flying speed equal to your
     # walking speed. You can use the boots to fly for up to 4 hours, all at
