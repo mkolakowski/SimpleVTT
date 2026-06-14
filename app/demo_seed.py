@@ -1910,6 +1910,18 @@ def _bard_sheet(name: str) -> dict:
              "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+            # v2.279.0 — Cloak of Arachnida (RAW DMG p.158, very rare,
+            # attunement). Spare loot: equipped=False / attuned=False because
+            # Lyra is already at the RAW 3-item attunement cap (Cloak of
+            # Displacement + Demon Slayer + Staff of Charming) and already
+            # wears a cloak. Seeded inert so it disrupts no existing assertion;
+            # the harness test PATCHes it equipped+attuned, reads the poison
+            # `derived.resistances` + `derived.spider_climb`, then restores the
+            # seed state (the v2.278.0 spare-loot + PATCH-in-test pattern).
+            {"name": "Cloak of Arachnida", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "cloak-of-arachnida", "weight_lb": 0,
+             "desc": "Very rare wondrous item, attunement. Resistance to poison damage; a climbing speed equal to your walking speed (move across vertical surfaces and ceilings hands-free); can't be caught in webs. Can cast web (DC 13, double area) once per dawn. RAW DMG p.158."},
             # v2.158.97 — Magic-items Phase 6a demo fixture. Demon
             # Slayer Rapier (rare, attunement). Paired with the
             # attack entry above via ``_slug``. Lyra now wears 2
@@ -4927,6 +4939,23 @@ def _fighter_sheet(name: str) -> dict:
              "_slug": "belt-of-giant-strength", "_ability_set": {"STR": 27},
              "weight_lb": 0,
              "desc": "Legendary wondrous item, attunement. While worn, your Strength score becomes 27 (Cloud giant) if it isn't already higher. RAW DMG p.155."},
+            # v2.279.0 — Dragon Scale Mail (Blue, RAW DMG p.165, very rare,
+            # attunement). The resisted type is dragon-color-keyed — Blue →
+            # lightning — riding the `_resistance_type` rider (the Ring-of-
+            # Resistance shared-slug pattern). Blue (not Red/fire) deliberately:
+            # Garrik already carries a Frost Brand Longsword that grants FIRE
+            # resistance, so a lightning type keeps the harness assertion clean.
+            # Spare loot: equipped=False / attuned=False so it adds zero
+            # resistance to Garrik's baseline (only equipped+attuned items
+            # aggregate) and leaves his belt/luckstone tests untouched. The
+            # harness test PATCHes it equipped+attuned, reads the lightning
+            # `derived.resistances`, then restores. The +1 AC half is
+            # descriptive in v1 (armor AC isn't surfaced on /sheet-json yet).
+            {"name": "Dragon Scale Mail (Blue)", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "dragon-scale-mail", "_resistance_type": "lightning",
+             "ac_value": 14, "weight_lb": 45,
+             "desc": "Very rare armor (scale mail), attunement. +1 AC; resistance to lightning damage (Blue dragon scales); advantage on saves vs. dragon Frightful Presence and breath weapons. RAW DMG p.165."},
             # v2.258.0 — Necklace of Adaptation (RAW DMG p.183, uncommon,
             # attunement). The wearer can breathe normally in any environment
             # + has advantage on saves vs. harmful gases and vapors. Modeled

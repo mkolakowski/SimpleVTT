@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.279.0] - 2026-06-14 — "The Silken Ward"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item backfill batch — two SRD wondrous/armor items that ride existing resistance + derived-flag substrate with zero new engine code: **Cloak of Arachnida** (poison resistance + spider climb) and **Dragon Scale Mail** (Blue — color-keyed lightning resistance). Both seeded as inert spare loot (Lyra / Garrik) and exercised by PATCH-in-test harness tests asserting `derived.resistances`, `derived.spider_climb`, and the live `_resistance_halve` damage pipeline.
+
+**Description:** Two more SRD magic items drop onto the shipped resistance + passive-flag substrate, no engine changes. **Cloak of Arachnida** (RAW DMG p.158, very rare, attunement): "you have resistance to poison damage [and] a climbing speed equal to your walking speed." Both halves compose in **one** passive payload — the poison `resistance_to` folds into the aggregated list `_resistance_halve` consults in the live damage pipeline (the Ring of Resistance substrate), and `spider_climb` surfaces on `/sheet-json` as `derived.spider_climb` (the Slippers of Spider Climbing substrate). The web-spell action + can't-be-webbed clause are GM-narrated. **Dragon Scale Mail** (RAW DMG p.165, very rare, attunement): "resistance to one damage type determined by the kind of dragon that provided the scales" — the type is color-keyed (Blue → lightning), so it rides the per-item `_resistance_type` rider on the shared `dragon-scale-mail` slug, the same pattern as Ring of Resistance and the Ioun Stone variants. The +1 AC half is descriptive in v1 (armor AC isn't surfaced on `/sheet-json` yet); the advantage-vs-dragon-breath clause is GM-narrated. Both items are seeded **unequipped / unattuned** as spare loot — Cloak on Lyra Sunstrider (already at the RAW 3-item attunement cap), Dragon Scale Mail (Blue, lightning — chosen over Red because Garrik's Frost Brand already grants fire resistance) on Garrik Ironside — so they add zero resistance to any PC's baseline and disturb no existing test. Five harness tests PATCH each item equipped+attuned at runtime to verify the derived reads + damage-halving, then restore the seed inventory (and HP) on teardown. MINOR — additive demo content + tests, no schema change.
+
+### Added
+- `cloak-of-arachnida` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one payload combining `resistance_to: "poison"` + `spider_climb: True`, attunement-gated.
+- `dragon-scale-mail` entry in `_MAGIC_ITEM_PASSIVES` — attunement-gated; the resisted type rides the per-item `_resistance_type` rider (Blue → `"lightning"`).
+- Demo seed: Lyra Sunstrider gains a spare (unequipped/unattuned) **Cloak of Arachnida**; Garrik Ironside gains a spare **Dragon Scale Mail (Blue)** (`_resistance_type: "lightning"`).
+- `tests/harness/test_item_cloak_of_arachnida.py` (3 tests): poison resistance + spider_climb surface on equip; inert baseline has neither; 20 poison damage halved to 10 through `_resistance_halve`. Inventory + HP restored on teardown.
+- `tests/harness/test_item_dragon_scale_mail.py` (4 tests): lightning resistance surfaces on equip; inert baseline has none; 20 lightning damage halved to 10; 20 cold damage unaffected (color-keyed control). Inventory + HP restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2787 → 2794 (+7 backfill tests); added the `test_item_cloak_of_arachnida.py` and `test_item_dragon_scale_mail.py` sections.
+
 ## [2.278.0] - 2026-06-14 — "The Complete Cinch"
 
 **Schema version:** 69

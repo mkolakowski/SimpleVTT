@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2787 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.278.0, 2026-06-14).
+**Total tests:** 2794 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.279.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2741,6 +2741,25 @@ v2.235.0 — Ring of Resistance (RAW DMG p.192, rare, attunement): resistance to
 | `test_ring_exposes_resistances_on_sheet_json` | `GET /sheet-json` → `derived.resistances.types` contains "fire" with "Ring of Resistance" in `sources`. |
 | `test_ring_halves_matching_damage` | 20 fire damage to the fire-resisted wearer drops HP by only 10 — `_resistance_halve` halves it; restores HP on teardown. |
 | `test_ring_does_not_halve_other_types` | Control: 20 cold damage applies in full (−20) — the resistance is type-specific; restores HP on teardown. |
+
+### `test_item_cloak_of_arachnida.py`
+v2.279.0 — Cloak of Arachnida (RAW DMG p.158, very rare, attunement): resistance to poison damage AND a climbing speed equal to walking speed. Two existing substrates compose in one passive payload — the poison `resistance_to` folds into the aggregated list `_resistance_halve` consults (surfaced as `derived.resistances`), and `spider_climb` surfaces as `derived.spider_climb` (the Slippers substrate). Seeded as inert spare loot on Lyra Sunstrider (already at the 3-item attunement cap); tests PATCH it equipped+attuned, then restore inventory/HP on teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cloak_exposes_poison_resistance_and_spider_climb` | On equip, `derived.resistances.types` contains "poison" and `derived.spider_climb.sources` both name "Cloak of Arachnida". |
+| `test_cloak_unequipped_baseline_has_no_poison_resistance` | Inert (seed) state: no poison resistance and no spider_climb in `derived` — both are item-sourced. |
+| `test_cloak_halves_poison_damage` | 20 poison damage to the cloak-wearer drops HP by only 10 via `_resistance_halve`; restores inventory + HP on teardown. |
+
+### `test_item_dragon_scale_mail.py`
+v2.279.0 — Dragon Scale Mail (RAW DMG p.165, very rare, attunement): +1 AC (descriptive in v1) + resistance to one color-keyed damage type (Blue → lightning). The type rides the per-item `_resistance_type` rider on the shared `dragon-scale-mail` slug (the Ring of Resistance pattern), surfaced as `derived.resistances`. Seeded as inert spare loot on Garrik Ironside (Blue/lightning chosen because his Frost Brand already grants fire resistance); tests PATCH it equipped+attuned, then restore inventory/HP on teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_dragon_scale_mail_exposes_lightning_resistance` | On equip, `derived.resistances.types` contains "lightning" with "Dragon Scale Mail" in `sources`. |
+| `test_dragon_scale_mail_baseline_has_no_lightning_resistance` | Inert (seed) state: no lightning resistance — proving it's item-sourced. |
+| `test_dragon_scale_mail_halves_lightning_damage` | 20 lightning damage drops HP by only 10 via `_resistance_halve`; restores inventory + HP on teardown. |
+| `test_dragon_scale_mail_does_not_halve_other_types` | Control: 20 cold damage applies in full (−20) — Blue scales resist only lightning; restores inventory + HP on teardown. |
 
 ### `test_item_amulet_of_proof_against_detection.py`
 v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon, attunement): hidden from divination magic + magical scrying while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health): the `scry_proof` flag rides the `amulet-of-proof-against-detection` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`. Kael Brightleaf (Monk Lv 7) wears it as his 2nd attuned item.

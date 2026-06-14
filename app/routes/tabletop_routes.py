@@ -32678,6 +32678,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-resistance": [
         {"requires_attunement": True},
     ],
+    # v2.279.0 — Dragon Scale Mail (RAW DMG p.165, very rare, attunement).
+    # RAW: "while wearing this armor, you gain a +1 bonus to AC ... and you have
+    # resistance to one damage type that is determined by the kind of dragon
+    # that provided the scales." The resisted type is dragon-color-keyed (Red →
+    # fire, White → cold, Green → poison, etc.) so it rides the inventory item
+    # via the per-item `_resistance_type` rider (e.g. Blue → "lightning") — the
+    # same shared-slug pattern as Ring of Resistance and the Ioun Stone
+    # variants. The +1 AC half is
+    # descriptive in v1 (armor AC isn't surfaced on /sheet-json yet; the combat-
+    # time `_read_target_ac` walker reads `ac_bonus`, but no demo armor exercises
+    # it). The advantage-vs-dragon-breath clause is GM-narrated.
+    "dragon-scale-mail": [
+        {"requires_attunement": True},
+    ],
     # v2.236.0 — Mantle of Spell Resistance (RAW DMG p.180, rare,
     # attunement). RAW: "you have advantage on saving throws against
     # spells while you wear this cloak." A descriptive-only advantage in
@@ -32694,6 +32708,18 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # (same as Potion of Climbing); the boolean flag surfaces the ability.
     "slippers-of-spider-climbing": [
         {"spider_climb": True},
+    ],
+    # v2.279.0 — Cloak of Arachnida (RAW DMG p.158, very rare, attunement).
+    # RAW: "you have resistance to poison damage. You have a climbing speed
+    # equal to your walking speed [and] can move up, down, and across vertical
+    # surfaces and upside down along ceilings, while leaving your hands free."
+    # Two existing substrates compose in one payload: the poison `resistance_to`
+    # folds into the aggregated list `_resistance_halve` consults in the live
+    # damage pipeline (same as Ring of Resistance), and `spider_climb` surfaces
+    # on /sheet-json as `derived.spider_climb` (same as Slippers). The web-spell
+    # action + can't-be-webbed clause are GM-narrated in v1.
+    "cloak-of-arachnida": [
+        {"resistance_to": "poison", "spider_climb": True, "requires_attunement": True},
     ],
     # v2.238.0 — Winged Boots (RAW DMG p.214, uncommon, attunement). RAW:
     # "while you wear these boots, you have a flying speed equal to your
