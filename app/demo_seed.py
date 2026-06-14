@@ -4309,6 +4309,26 @@ def _sorcerer_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-wonder", "weight_lb": 1,
              "desc": "Rare wand, attunement by a spellcaster. 7 charges. Expend 1 charge to roll d100 on the Wand of Wonder chaos table — the result is a random effect (a spell, a damage burst, a transformation, a summoned animal…) that the GM narrates/resolves. Regains 1d6+1 charges at dawn (long rest). RAW DMG p.213."},
+            # v2.276.0 — charged-items Phase 5: Wand of the War Mage, +3
+            # (RAW DMG p.211, very rare, attunement) — the top tier of the
+            # spell-attack-bonus wand. A passive (no charges): while held it
+            # grants +3 to spell attack rolls (and the wielder ignores half
+            # cover on a spell attack — GM-narrated). The single SRD slug
+            # defaults to +1 (uncommon) in _MAGIC_ITEM_PASSIVES; this item
+            # rides the very-rare +3 tier via the per-item
+            # `_spell_attack_bonus` override (mirrors the +2 wand on Magnus,
+            # v2.265.0, and the Ioun Stone `_ability_bonus` tier pattern).
+            # The +3 folds into Zara's Fire Bolt (and every spell attack)
+            # to-hit at cast time. Zara (Draconic Sorcerer — a CHA blaster
+            # with no other spell-attack item) is the natural wielder, so
+            # her derived.spell_attack_bonus reads a clean +3. Her 6th
+            # attuned item (seed-load bypasses the RAW 3-item cap, enforced
+            # at /attune runtime only).
+            {"name": "Wand of the War Mage, +3", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "wand-of-the-war-mage", "_spell_attack_bonus": 3,
+             "weight_lb": 1,
+             "desc": "Very rare wand, attunement. While holding this wand you gain a +3 bonus to spell attack rolls and ignore half cover when making a spell attack. RAW DMG p.211."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer

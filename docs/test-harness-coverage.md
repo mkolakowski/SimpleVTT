@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2781 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.275.0, 2026-06-14).
+**Total tests:** 2783 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.276.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2907,7 +2907,7 @@ v2.266.0 charged-items Phase 1 — Wand of Binding (RAW DMG p.211, rare, attunem
 | `test_binding_wand_requires_attunement_409` | Detune the wand via PATCH sheet-fields; invoke /use_item_action → 409 attunement required. Restores inventory in teardown. |
 
 ### `test_item_wand_of_the_war_mage.py`
-v2.265.0 charged-items Phase 5 — Wand of the War Mage, +1/+2/+3 (RAW DMG p.211, uncommon–rare, attunement). A passive (no charges) spell-attack-bonus rider on `_MAGIC_ITEM_PASSIVES` (a clone of Bracers of Archery): a summed, attunement-gated `spell_attack_bonus` int in `_equipped_item_effects` surfaced on `/sheet-json` as `derived.spell_attack_bonus = {bonus, sources}` and folded into the caster's spell attack roll at cast-resolution time. The single SRD slug defaults to +1; the +2/+3 tiers ride a per-item `_spell_attack_bonus` rider. Seeded on **Magnus** (Fiend Warlock — Eldritch Blast at +2; his 5th attuned item, seed-load bypasses the 3-item cap); the wand index is looked up by `_slug`. The attunement guard detunes via **PATCH sheet-fields** (cap-bypassing).
+v2.265.0 charged-items Phase 5 — Wand of the War Mage, +1/+2/+3 (RAW DMG p.211, uncommon–rare/very-rare, attunement). A passive (no charges) spell-attack-bonus rider on `_MAGIC_ITEM_PASSIVES` (a clone of Bracers of Archery): a summed, attunement-gated `spell_attack_bonus` int in `_equipped_item_effects` surfaced on `/sheet-json` as `derived.spell_attack_bonus = {bonus, sources}` and folded into the caster's spell attack roll at cast-resolution time. The single SRD slug defaults to +1; the +2/+3 tiers ride a per-item `_spell_attack_bonus` rider. Seeded on **Magnus** (Fiend Warlock — Eldritch Blast at +2; his 5th attuned item, seed-load bypasses the 3-item cap) and, since v2.276.0, the **+3** very-rare tier on **Zara Emberfire** (Draconic Sorcerer — Fire Bolt at +3, a clean read with no other spell-attack item). The wand index is looked up by `_slug`; the attunement guard detunes via **PATCH sheet-fields** (cap-bypassing).
 
 | Test | What it asserts |
 |------|-----------------|
@@ -2915,6 +2915,8 @@ v2.265.0 charged-items Phase 5 — Wand of the War Mage, +1/+2/+3 (RAW DMG p.211
 | `test_war_mage_detune_drops_derived` | Un-attuning the wand (still equipped) removes `derived.spell_attack_bonus` — the attunement gate. Restores inventory in teardown. |
 | `test_war_mage_unequip_drops_derived` | Unequipping the wand removes `derived.spell_attack_bonus`. Restores inventory in teardown. |
 | `test_war_mage_adds_spell_attack_to_hit` | An Eldritch Blast attack roll carries +2 more flat to-hit modifier attuned vs detuned (delta == 2). Restores inventory in teardown. |
+| `test_war_mage_plus_three_exposes_derived` | Zara's `/sheet-json derived.spell_attack_bonus` is a clean `{bonus: 3, sources: [...War Mage...]}` (the very-rare +3 tier; no other spell-attack item confounds the read). |
+| `test_war_mage_plus_three_adds_spell_attack_to_hit` | Zara's Fire Bolt attack roll carries +3 more flat to-hit modifier attuned vs detuned (delta == 3). Restores inventory in teardown. |
 
 ### `test_use_item_action_wand_of_paralysis.py`
 v2.206.0 magic-items-automation content tail — Wand of Paralysis (RAW DMG p.213, rare, attunement) through the same `/use_item_action` endpoint + the **generalized** `_use_item_action_wand_of_fear` save-condition handler. The handler now reads the condition (key/label/icon/effects), save DC/ability, feature name, duration, and target shape from the catalog `action_def`; the Paralysis entry overrides the Fear defaults with DC 15 CON → Paralyzed, a 60-ft ray, 1-minute duration. Seeded on **Magnus** (his second attuned wand, 2/3 against the cap); the wand index is looked up by `_slug`. The `single-target-save` `ITEM_ACTION_SLUGS` kind renders a `💫 Paralyze` button.

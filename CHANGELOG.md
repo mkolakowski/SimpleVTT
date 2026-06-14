@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.276.0] - 2026-06-14 — "The Archmage's Aim"
+
+**Schema version:** 69
+
+**Commit summary:** Wand of the War Mage, +3 — the very-rare top tier of the spell-attack-bonus wand. Lands on Zara Emberfire (Draconic Sorcerer) as an equipped + attuned passive item riding the per-item `_spell_attack_bonus: 3` override, completing the +1/+2/+3 tier set (the +1 base lives in `_MAGIC_ITEM_PASSIVES`, the +2 already ships on Magnus Hexbinder from v2.265.0). Plus two harness tests on the new wielder.
+
+**Description:** The Wand of the War Mage engine has been complete since v2.265.0: a passive (no charges) `spell_attack_bonus` that aggregates through `_equipped_item_effects`, surfaces on `/sheet-json` as `derived.spell_attack_bonus = {bonus, sources}`, and folds into the caster's spell-attack to-hit at cast-resolution time. The single SRD slug defaults to **+1** (uncommon) in `_MAGIC_ITEM_PASSIVES`; the **+2** (rare) tier already rode the per-item `_spell_attack_bonus` override on Magnus Hexbinder (the Ioun Stone `_ability_bonus` tier pattern). This commit ships the missing **+3** (very rare) tier — pure content on the existing substrate, **zero new engine code**. It lands on **Zara Emberfire** (Tiefling Draconic Sorcerer — a CHA blaster who carries no other spell-attack item), so her `derived.spell_attack_bonus` reads a clean **+3** and the bonus folds into her Fire Bolt (and every spell attack) to-hit. Seed-load bypasses the RAW 3-item attunement cap (enforced at `/attune` runtime only). The ignore-half-cover clause is GM-narrated, consistent with the +1/+2 tiers. MINOR — additive demo content + tests, no schema change, no endpoint change, no response-shape change.
+
+### Added
+- Demo seed: Zara Emberfire gains an equipped + attuned **Wand of the War Mage, +3** (`_slug: wand-of-the-war-mage`, `_spell_attack_bonus: 3`) — the very-rare top tier of the wand.
+- `tests/harness/test_item_wand_of_the_war_mage.py` (+2): `test_war_mage_plus_three_exposes_derived` (Zara's `/sheet-json` reports a clean `derived.spell_attack_bonus.bonus == 3` with the wand named in its sources) and `test_war_mage_plus_three_adds_spell_attack_to_hit` (E2E: Zara's Fire Bolt carries +3 more flat to-hit modifier attuned vs detuned, delta == 3). Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2781 → 2783 (+2 War Mage +3 tier); updated the `test_item_wand_of_the_war_mage.py` section.
+
 ## [2.275.0] - 2026-06-14 — "The Triple Crown"
 
 **Schema version:** 69

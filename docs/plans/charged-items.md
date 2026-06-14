@@ -171,7 +171,9 @@ of Archery (v2.261.0). One flag field + accumulator + attack-path read each.
   slug defaults to +1; the +2/+3 tiers ride a per-item `_spell_attack_bonus`
   rider), surfaced on `/sheet-json derived` and folded into the caster's
   spell attack roll at cast-resolution time. Seeded on Magnus Hexbinder
-  (Warlock) at +2. The ignore-half-cover clause is GM-narrated in v1.
+  (Warlock) at +2; the very-rare **+3** tier ships on Zara Emberfire
+  (Sorcerer) as of v2.276.0, completing the +1/+2/+3 set. The
+  ignore-half-cover clause is GM-narrated in v1.
 
 ## Phasing & commit cadence
 
