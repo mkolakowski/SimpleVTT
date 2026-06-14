@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2726 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.256.0, 2026-06-13).
+**Total tests:** 2729 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.257.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2638,6 +2638,15 @@ v2.256.0 — Cap of Water Breathing (RAW DMG p.157, uncommon, no attunement): th
 | `test_cap_of_water_breathing_exposes_flag` | `GET /sheet-json` → `derived.water_breath` present with "Cap of Water Breathing" in `sources`. |
 | `test_cap_of_water_breathing_no_attunement_required` | The no-attunement flag rides alongside the Ring of Swimming — `derived.swim_speed` still reports alongside `water_breath`. |
 | `test_cap_of_water_breathing_unequip_drops_flag` | PATCH the cap to `equipped: False` → `derived.water_breath` absent; restores the original inventory on teardown. |
+
+### `test_item_ring_of_x_ray_vision.py`
+v2.257.0 — Ring of X-ray Vision (RAW DMG p.193, rare, attunement): the wearer can see into and through solid matter (30-ft radius; blocked by 1 ft of stone / 1 in. of metal / 3 ft of wood or dirt). Rides a new `xray_vision` boolean-OR flag in `_equipped_item_effects` (the Cap of Water Breathing pattern, attunement-gated): the flag rides the `ring-of-x-ray-vision` catalog payload (`requires_attunement: True`), aggregates with `xray_vision_sources`, and surfaces on `/sheet-json` as `derived.xray_vision = {sources}` — only when equipped AND attuned. Seeded on Magnus Hexbinder (Warlock) as his 4th attuned item (seed-load bypasses the RAW 3-item cap).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ring_of_x_ray_vision_exposes_flag` | `GET /sheet-json` → `derived.xray_vision` present with "Ring of X-ray Vision" in `sources`. |
+| `test_ring_of_x_ray_vision_detune_drops_flag` | PATCH the ring to `attuned: False` (still equipped) → `derived.xray_vision` absent — the attunement gate; restores the original inventory on teardown. |
+| `test_ring_of_x_ray_vision_unequip_drops_flag` | PATCH the ring to `equipped: False` → `derived.xray_vision` absent; restores the original inventory on teardown. |
 
 ### `test_item_ring_of_free_action.py`
 v2.240.0 — Ring of Free Action (RAW DMG p.191, rare, attunement): difficult terrain costs no extra movement; magic can't reduce your speed or paralyze/restrain you. Reuses the boolean-OR passive substrate: the `free_action` flag rides the `ring-of-free-action` catalog payload (with `requires_attunement`), aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.free_action = {sources}` (descriptive in v1). Brakka Wildmane (Path of the Beast Barbarian) wears it as her 3rd attuned item.

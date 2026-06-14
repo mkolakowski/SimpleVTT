@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.257.0] - 2026-06-14 — "The Piercing Gaze"
+
+**Schema version:** 69
+
+**Commit summary:** Ring of X-ray Vision — an attunement-gated passive that lets the wearer see through solid matter, riding a new `xray_vision` boolean-OR flag in `_equipped_item_effects` surfaced on `/sheet-json derived` (the Cap of Water Breathing pattern, plus the per-payload attunement gate).
+
+**Description:** **Ring of X-ray Vision** (RAW DMG p.193, rare, **attunement required**): "you can see into and through solid matter" within 30 ft (blocked by 1 ft of stone / 1 in. of metal / 3 ft of wood or dirt). Another clean boolean-flag drop-in on the established passive substrate, this time attunement-gated. The engine changes: (1) a new `xray_vision` field (+ `xray_vision_sources`) in `_equipped_item_effects`, boolean-OR'd across equipped items carrying the flag (via the `xray_vision` payload or a per-item `_xray_vision` rider) — the per-payload attunement check drops the flag when the ring is worn-but-not-attuned; (2) a new `ring-of-x-ray-vision` entry in `_MAGIC_ITEM_PASSIVES` (`{"xray_vision": True, "requires_attunement": True}`); (3) `/sheet-json derived` surfaces `xray_vision = {sources}` only when an equipped + attuned item sets the flag; (4) the demo seed gives Magnus Hexbinder (Warlock) the ring attuned as his 4th attuned item — seed-load bypasses the RAW 3-item cap (enforced at `/attune` runtime only), and arcane sight is on-theme alongside his Devil's Sight invocation. The 30-ft radius + overuse-exhaustion clause are GM-narrated in v1. MINOR — additive content + tests, no schema change.
+
+### Added
+- `xray_vision` boolean-OR field (+ `xray_vision_sources`) in `_equipped_item_effects`, attunement-gated via the per-payload check.
+- `ring-of-x-ray-vision` entry in `_MAGIC_ITEM_PASSIVES` (`xray_vision: True`, `requires_attunement: True`).
+- `/sheet-json derived.xray_vision = {sources}` display mirror.
+- `tests/harness/test_item_ring_of_x_ray_vision.py` (3 tests): `/sheet-json` exposes the flag naming the ring; un-attuning the ring (still equipped) drops the flag — the attunement gate; unequipping the ring drops the flag (both restore inventory on teardown).
+
+### Changed
+- Demo seed: Magnus Hexbinder gains an equipped + attuned Ring of X-ray Vision (his 4th attuned item, alongside Wand of Fear, Wand of Paralysis, Ioun Stone of Intellect).
+- `docs/test-harness-coverage.md`: harness total 2726 → 2729 (+3 ring-of-x-ray-vision); added the `test_item_ring_of_x_ray_vision.py` section.
+
 ## [2.256.0] - 2026-06-13 — "The Tideglass Cowl"
 
 **Schema version:** 69

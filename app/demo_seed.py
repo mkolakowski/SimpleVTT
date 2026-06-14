@@ -2338,6 +2338,20 @@ def _warlock_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ioun-stone", "_ability_bonus": {"INT": 2},
              "desc": "Very rare wondrous item, attunement. This dusty rose prism orbits your head and increases your Intelligence by 2, to a maximum of 20. RAW DMG p.176."},
+            # v2.257.0 — Ring of X-ray Vision (RAW DMG p.193, rare,
+            # attunement). The wearer can see into and through solid
+            # matter (30-ft radius; blocked by 1 ft of stone / 1 in. of
+            # metal / 3 ft of wood or dirt). Modeled as an attunement-
+            # gated boolean derived read (xray_vision flag); the radius
+            # + overuse-exhaustion clause are GM-narrated in v1. Seeded
+            # on Magnus as his 4th attuned item — seed-load bypasses the
+            # RAW 3-item cap (the cap is enforced at /attune runtime
+            # only), and arcane sight is on-theme alongside his Devil's
+            # Sight invocation.
+            {"name": "Ring of X-ray Vision", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True,
+             "_slug": "ring-of-x-ray-vision",
+             "desc": "RAW DMG p.193 (rare, attunement). Action: see into and through solid objects within 30 ft for 1 minute (blocked by 1 ft of stone / 1 in. of metal / 3 ft of wood or dirt). Using it again before a long rest risks 1 level of exhaustion (GM-narrated). Surfaces as the derived xray_vision flag."},
         ],
         # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
         # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's
