@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2672 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.243.0, 2026-06-13).
+**Total tests:** 2672 in `tests/harness/` + 83 in `tests/harness_ui/` (as of v2.243.1, 2026-06-13).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2640,8 +2640,8 @@ v2.158.79 magic-items-automation Phase 2 — `POST /api/campaign/{cid}/character
 | Test | What it asserts |
 |------|-----------------|
 | `test_attune_toggle_off_drops_ac` | Toggle Pip's Cloak attunement off → `target_ac == 15` (Ring still gives +1). Proves the catalog walker re-reads the `attuned` flag at attack-time. |
-| `test_attune_cap_blocks_fourth` | Pip starts with 2 attuned; attune Shortsword (3rd) → 200; attune Dagger (4th) → 409 with `error: attunement_cap`, `max_attuned: 3`, `current_attuned: 3`. |
-| `test_attune_toggle_existing_no_spurious_409` | Cap counts OTHER attuned items so target index is excluded — re-setting `attuned=True` on an already-attuned item at the cap returns 200. Prevents spurious 409 on sheet re-saves. |
+| `test_attune_cap_blocks_fourth` | Pip seeds at the 3/3 cap (Cloak + Ring + Sword of Sharpness, v2.158.103); detune the Sharpness → 2/3, attune Shortsword (3rd) → 200; attune Dagger (4th) → 409 with `error: attunement_cap`, `max_attuned: 3`, `current_attuned: 3`. (v2.243.1 fix: previously assumed a 2/3 seed.) |
+| `test_attune_toggle_existing_no_spurious_409` | Detune Pip's seed Sharpness → 2/3, push to exactly 3 (Cloak + Ring + Shortsword); re-setting `attuned=True` on an already-attuned item at the cap returns 200. Cap counts OTHER attuned items so target index is excluded — prevents spurious 409 on sheet re-saves. (v2.243.1 fix.) |
 | `test_attune_missing_fields_400` | Empty body → 400. |
 | `test_attune_unknown_char_404` | Unknown char_id → 404. |
 | `test_attune_index_out_of_range_400` | `inventory_index: 999` past end → 400. |

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.243.1] - 2026-06-13 — "The Honest Counter"
+
+**Schema version:** 69
+
+**Commit summary:** Fix the stale `test_attune_cap_blocks_fourth` / `test_attune_toggle_existing_no_spurious_409` harness tests — Pip seeds at 3/3, not 2/3, since the Sword of Sharpness landed attuned in v2.158.103.
+
+**Description:** Two cap-path tests in `tests/harness/test_attune_item.py` had gone stale. They assumed Pip Quickfingers starts at 2 attuned items (Cloak + Ring), but since v2.158.103 her seed loadout also carries an attuned **Sword of Sharpness** (inventory index 9) — putting her at the RAW DMG p.138 3/3 cap on boot. `test_attune_cap_blocks_fourth` then got a `409 attunement_cap` on what it expected to be a successful 3rd attunement. The failure went unnoticed because recent ring-batch commits each ran only their own new test file. Fix is test-only: both cap tests now detune the Sword of Sharpness first to drop Pip to 2/3 before exercising the 3rd/4th transitions, and the `restore_pip_attunement` fixture re-attunes the Sharpness in teardown to restore the seed 3/3. No production code touched. PATCH — test-only correction, no behavior or schema change.
+
+### Fixed
+- `tests/harness/test_attune_item.py`: `test_attune_cap_blocks_fourth` and `test_attune_toggle_existing_no_spurious_409` now detune Pip's Sword of Sharpness (idx 9) first so she drops from her 3/3 seed cap to 2/3 before the 3rd/4th attunement assertions. The `restore_pip_attunement` fixture re-attunes the Sharpness in teardown. Module docstring + index comments updated to reflect Pip's 3/3 seed state; added `PIP_SHARPNESS_IDX = 9`.
+
+### Changed
+- `docs/test-harness-coverage.md`: refreshed the `test_attune_item.py` section for the 3/3-seed correction (total unchanged at 2672).
+
 ## [2.243.0] - 2026-06-13 — "The Unbound Blade"
 
 **Schema version:** 69

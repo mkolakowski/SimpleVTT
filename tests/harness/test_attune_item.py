@@ -5,28 +5,34 @@ server-side enforcement of the RAW DMG p.138 3-item attunement cap.
 The Phase 1 catalog walker (``_equipped_item_effects``) already gates
 passive payloads on the ``attuned`` flag — this endpoint is the
 player/GM-facing surface that flips it. Today the flag is set in the
-demo seed for Pip (Cloak + Ring), Thalindra (Cloak), Tavik (Ring),
-and Kael (Bracers); Phase 2 lets the gate be flipped at runtime.
+demo seed for Pip (Cloak + Ring + Sword of Sharpness), Thalindra
+(Cloak), Tavik (Ring), and Kael (Bracers); Phase 2 lets the gate be
+flipped at runtime.
+
+As of v2.158.103 Pip sits at the RAW DMG p.138 cap (3/3: Cloak + Ring
++ Sword of Sharpness). The cap tests below detune the Sword of
+Sharpness first to drop her to 2/3 before exercising the 3rd/4th
+attunement transitions.
 
 Tests:
   - happy: toggle Pip's Cloak off → AC drops; toggle back on → AC
     restores.
-  - cap: Pip starts with 2 attuned items (Cloak + Ring). Attune a 3rd
+  - cap: detune Sharpness → Pip at 2/3 (Cloak + Ring). Attune a 3rd
     item (her Shortsword — non-magic but attunement is a per-item
     flag independent of item type, so the cap test exercises it
-    cleanly). Attune a 4th → 409.
+    cleanly) → 200. Attune a 4th → 409.
   - error paths: missing fields → 400, unknown char_id → 404,
     out-of-range inventory_index → 400.
 
 Teardown: every test restores Pip's seed state (Shortsword/Dagger
-unattuned, Cloak + Ring re-attuned).
+unattuned; Cloak + Ring + Sword of Sharpness re-attuned).
 """
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
 
 
-# Pip's seed inventory indices (as of v2.158.78):
+# Pip's seed inventory indices (as of v2.158.103):
 #   0  Shortsword
 #   1  Dagger (×2)
 #   2  Studded leather
@@ -36,8 +42,10 @@ from .conftest import CAMPAIGN_ID
 #   6  Potion of Healing (×2)
 #   7  Cloak of Protection (attuned: True)
 #   8  Ring of Protection  (attuned: True)
+#   9  Sword of Sharpness  (attuned: True)  ← Pip at 3/3 cap
 PIP_CLOAK_IDX = 7
 PIP_RING_IDX = 8
+PIP_SHARPNESS_IDX = 9
 PIP_SHORTSWORD_IDX = 0
 PIP_DAGGER_IDX = 1
 PIP_STUDDED_LEATHER_IDX = 2
@@ -70,12 +78,14 @@ async def _seed_battle_with(gm_client, char_specs: list[dict]) -> None:
 
 @pytest_asyncio.fixture
 async def restore_pip_attunement(gm_client, roster):
-    """Restore Pip's seed attunement state (Cloak + Ring attuned;
-    everything else unattuned) after a test that mutates it."""
+    """Restore Pip's seed attunement state (Cloak + Ring + Sword of
+    Sharpness attuned; everything else unattuned) after a test that
+    mutates it."""
     pip = roster["Pip Quickfingers"]
     yield pip
-    # Best-effort teardown — restore Cloak + Ring to attuned, and
-    # un-attune any other item the test may have flipped.
+    # Best-effort teardown — un-attune any item a test may have flipped
+    # on, THEN restore the seed 3/3 (Cloak + Ring + Sharpness). The
+    # un-attune pass runs first so re-attuning never trips the cap.
     for idx in (
         PIP_SHORTSWORD_IDX, PIP_DAGGER_IDX, PIP_STUDDED_LEATHER_IDX,
     ):
@@ -83,7 +93,7 @@ async def restore_pip_attunement(gm_client, roster):
             f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/attune",
             json={"inventory_index": idx, "attuned": False},
         )
-    for idx in (PIP_CLOAK_IDX, PIP_RING_IDX):
+    for idx in (PIP_CLOAK_IDX, PIP_RING_IDX, PIP_SHARPNESS_IDX):
         await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/attune",
             json={"inventory_index": idx, "attuned": True},
@@ -141,10 +151,19 @@ async def test_attune_toggle_off_drops_ac(
 async def test_attune_cap_blocks_fourth(
     gm_client, roster, restore_pip_attunement,
 ):
-    """v2.158.79 cap path: Pip starts with 2 attuned items (Cloak +
-    Ring). Attune a 3rd item (Shortsword) → 200. Attune a 4th
-    (Dagger) → 409 ``attunement_cap``. RAW DMG p.138."""
+    """v2.158.79 cap path (v2.243.1: Pip seeds at 3/3 since the Sword
+    of Sharpness landed in v2.158.103). Detune the Sharpness to drop
+    her to 2/3 (Cloak + Ring), attune a 3rd item (Shortsword) → 200,
+    then attune a 4th (Dagger) → 409 ``attunement_cap``. RAW DMG
+    p.138."""
     pip = restore_pip_attunement
+
+    # Drop Pip from her 3/3 seed cap to 2/3 by detuning the Sharpness.
+    resp_detune = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/attune",
+        json={"inventory_index": PIP_SHARPNESS_IDX, "attuned": False},
+    )
+    assert resp_detune.status_code == 200, resp_detune.text
 
     # 3rd attunement (Shortsword) → 200, total 3.
     resp_3 = await gm_client.post(
@@ -174,7 +193,12 @@ async def test_attune_toggle_existing_no_spurious_409(
     Otherwise re-saving a sheet would spuriously fail."""
     pip = restore_pip_attunement
 
-    # Push Pip to exactly 3 attuned (Cloak + Ring + Shortsword).
+    # Drop Pip from her 3/3 seed cap to 2/3 by detuning the Sharpness,
+    # then push back to exactly 3 (Cloak + Ring + Shortsword).
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/attune",
+        json={"inventory_index": PIP_SHARPNESS_IDX, "attuned": False},
+    )
     await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/attune",
         json={"inventory_index": PIP_SHORTSWORD_IDX, "attuned": True},
