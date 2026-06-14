@@ -32761,6 +32761,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "broom-of-flying": [
         {"flying_speed": True},
     ],
+    # v2.283.0 — Carpet of Flying (RAW DMG p.157, very rare, NO attunement).
+    # RAW: "speak the carpet's command word as an action to make the carpet
+    # hover and fly ... four sizes exist" (30-80 ft speed by size). Reuses the
+    # v2.238.0 Winged Boots flying-speed substrate with zero new engine code.
+    # Like the Broom of Flying it needs NO attunement — the payload omits
+    # `requires_attunement`, so the flag surfaces while merely equipped. The
+    # command-word ride + size-keyed speed/capacity are GM-narrated in v1.
+    "carpet-of-flying": [
+        {"flying_speed": True},
+    ],
     # v2.239.0 — Boots of Speed (RAW DMG p.155, rare, attunement). RAW:
     # "while you wear these boots, you can use a bonus action and click the
     # boots' heels together. If you do, the boots double your walking speed,

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.283.0] - 2026-06-14 — "The Magic Carpet Ride"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item movement backfill — **Carpet of Flying** (RAW DMG p.157, very rare, NO attunement) reuses the v2.238.0 Winged Boots flying-speed substrate with zero new engine code. The `flying_speed: True` payload omits `requires_attunement`, so the flag surfaces while merely equipped; seeded as inert spare loot on Pip Quickfingers and exercised by three harness tests.
+
+**Description:** Another SRD flying item drops onto the shipped derived-flag substrate, no engine changes. **Carpet of Flying** (RAW DMG p.157, very rare): "speak the carpet's command word as an action to make the carpet hover and fly ... four sizes exist" (30-80 ft speed by size). The `flying_speed` boolean flag rides the `carpet-of-flying` catalog payload, aggregates in `_equipped_item_effects` (boolean OR), and surfaces on `/sheet-json` as `derived.flying_speed = {sources}` — the exact substrate Winged Boots landed in v2.238.0, so there is **no new engine code**. Like the Broom of Flying (v2.282.0), the carpet requires **no attunement** — its payload omits `requires_attunement`, so the flag surfaces while merely *equipped*. The command-word ride, size-keyed speed, and 200-800 lb capacity are GM-narrated in v1. The carpet is seeded **unequipped / unattuned** as spare loot on Pip Quickfingers (the demo's larcenous Halfling Rogue, no flying baseline) so it adds zero flying speed to any PC's baseline and disturbs no existing test. Three harness tests PATCH the carpet equipped at runtime to verify the derived read — including the no-attunement path (equipped-but-unattuned still surfaces the flag) — then restore the seed inventory on teardown. MINOR — additive demo content + tests, no schema change.
+
+### Added
+- `carpet-of-flying` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — one payload carrying `flying_speed: True` with **no** `requires_attunement` gate, reusing the Winged Boots substrate.
+- Demo seed: Pip Quickfingers gains a spare (unequipped/unattuned) **Carpet of Flying**.
+- `tests/harness/test_item_carpet_of_flying.py` (3 tests): flying speed surfaces on equip with the carpet named in sources; inert baseline has none; equipped-but-unattuned still surfaces the flag (no-attunement path). Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2803 → 2806 (+3 backfill tests); added the `test_item_carpet_of_flying.py` section.
+
 ## [2.282.0] - 2026-06-14 — "The Witch's Commute"
 
 **Schema version:** 69

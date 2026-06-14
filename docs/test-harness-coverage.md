@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2803 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.282.0, 2026-06-14).
+**Total tests:** 2806 in `tests/harness/` + 85 in `tests/harness_ui/` (as of v2.283.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2787,6 +2787,15 @@ v2.282.0 — Broom of Flying (RAW DMG p.156, uncommon, NO attunement): grants a 
 | `test_broom_exposes_flying_speed` | On equip, `derived.flying_speed` is present with "Broom of Flying" in `sources`. |
 | `test_broom_baseline_has_no_flying_speed` | Inert (seed) state: no `derived.flying_speed` — proving it's item-sourced. |
 | `test_broom_needs_no_attunement` | Equipped-but-unattuned STILL surfaces `derived.flying_speed` — the broom is a no-attunement item (unlike Wings of Flying / Winged Boots). |
+
+### `test_item_carpet_of_flying.py`
+v2.283.0 — Carpet of Flying (RAW DMG p.157, very rare, NO attunement): grants a size-keyed flying speed (30-80 ft) while ridden. Reuses the v2.238.0 Winged Boots `flying_speed` boolean substrate with zero new engine code — the flag rides the `carpet-of-flying` payload (no `requires_attunement`), so it surfaces while merely equipped. The command-word ride + size-keyed speed/capacity are GM-narrated. Seeded as inert spare loot on Pip Quickfingers; tests PATCH it equipped, then restore inventory on teardown.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_carpet_exposes_flying_speed` | On equip, `derived.flying_speed` is present with "Carpet of Flying" in `sources`. |
+| `test_carpet_baseline_has_no_flying_speed` | Inert (seed) state: no `derived.flying_speed` — proving it's item-sourced. |
+| `test_carpet_needs_no_attunement` | Equipped-but-unattuned STILL surfaces `derived.flying_speed` — the carpet is a no-attunement item (like the Broom of Flying). |
 
 ### `test_item_amulet_of_proof_against_detection.py`
 v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon, attunement): hidden from divination magic + magical scrying while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness / Periapt of Health): the `scry_proof` flag rides the `amulet-of-proof-against-detection` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`. Kael Brightleaf (Monk Lv 7) wears it as his 2nd attuned item.

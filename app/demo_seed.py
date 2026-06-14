@@ -450,6 +450,24 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-enemy-detection", "weight_lb": 1,
              "desc": "Rare wand, attunement. 7 charges. Expend 1 charge to sense the direction (not distance) of the nearest creature hostile to you within 60 ft for 1 minute — even invisible, ethereal, disguised, or hidden ones. Regains 1d6+1 charges at dawn (long rest). RAW DMG p.211."},
+            # v2.283.0 — Carpet of Flying (RAW DMG p.157, very rare, NO
+            # attunement). Reuses the v2.238.0 Winged Boots flying-speed
+            # substrate with zero new engine code: the `flying_speed` boolean
+            # flag rides the `carpet-of-flying` catalog payload, aggregates in
+            # `_equipped_item_effects`, and surfaces on /sheet-json as
+            # `derived.flying_speed`. Like the Broom of Flying (v2.282.0) it
+            # needs NO attunement — its payload omits `requires_attunement`,
+            # so it surfaces while merely equipped. The command-word ride +
+            # size-keyed 30-80 ft speed / 200-800 lb capacity are GM-narrated
+            # in v1. Seeded as inert spare loot (unequipped/unattuned) so it
+            # adds no flying speed to Pip's baseline and disturbs no existing
+            # test — the harness PATCHes it equipped (no attune needed), reads
+            # the derived flag, then restores. An exotic flying carpet is
+            # on-theme for the demo's larcenous Halfling Rogue.
+            {"name": "Carpet of Flying", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "_slug": "carpet-of-flying", "weight_lb": 0,
+             "desc": "Very rare wondrous item, no attunement. Speak its command word as an action to make the carpet hover and fly, moving by your spoken directions while you're within 30 ft of it. Four sizes exist (GM's choice), with flying speeds of 30-80 ft and 200-800 lb capacity. It can carry double its capacity at half speed. RAW DMG p.157."},
         ],
         "feats": [],
         "resources": [
