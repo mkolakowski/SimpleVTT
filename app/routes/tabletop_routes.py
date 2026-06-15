@@ -33803,7 +33803,9 @@ for _rem_slug, _rem_attune in [
     ("pipes-of-haunting", False), ("sword-of-wounding", True),
     ("trident-of-fish-command", True), ("staff-of-striking", True),
     ("staff-of-the-magi", True), ("staff-of-the-python", True),
-    ("staff-of-the-woodlands", True), ("staff-of-withering", True),
+    ("staff-of-the-woodlands", True),
+    # staff-of-withering promoted to a mechanical attack rider (+2d10
+    # necrotic) in v2.346.0 — registered via `_MAGIC_ITEM_ATTACK_RIDERS`.
 ]:
     _MAGIC_ITEM_PASSIVES.setdefault(
         _rem_slug, [{"requires_attunement": _rem_attune}],
@@ -35105,6 +35107,23 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
         "label": "Frost Brand",
         "dice": "1d6",
         "damage_type": "cold",
+        "requires_attunement": True,
+    },
+    # v2.346.0 — Staff of Withering (RAW DMG p.202, rare, attunement by
+    # cleric/druid/warlock). The clean mechanical part rides the Frost
+    # Brand always-on dice-uplift: on a hit the wielder deals +2d10
+    # necrotic (section 6c). RAW the +2d10 costs 1 of the staff's 3
+    # charges and the target must also make a DC 15 CON save or have
+    # disadvantage on STR/CON checks + saves for 1 hour — BOTH the
+    # charge limit AND the ability-drain save are GM-narrated in v1
+    # (the disadvantage rider needs the `disadvantage_on` intercept
+    # generalized from STR-checks-only to CON checks + STR/CON saves
+    # across all four roll-construction sites; filed). Same always-on
+    # convention as Frost Brand / Flame Tongue.
+    "staff-of-withering": {
+        "label": "Staff of Withering",
+        "dice": "2d10",
+        "damage_type": "necrotic",
         "requires_attunement": True,
     },
     # v2.159.1 — Phase 8a: first ammunition-shape catalog row. Arrow of

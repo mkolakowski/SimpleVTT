@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.346.0] - 2026-06-15 — "The Withering Touch"
+
+**Schema version:** 69
+
+**Commit summary:** Second magic-item-content commit off the v2.344.5 stub triage (Bucket C — on-hit weapon rider). **Staff of Withering** (RAW DMG p.202, rare, attunement) promoted from a v2.344.0 "Armory's Remainder" catalog stub to a mechanical attack rider: on a hit it now deals **+2d10 necrotic**, riding the Frost Brand / Flame Tongue always-on dice-uplift (`_MAGIC_ITEM_ATTACK_RIDERS`, section 6c). Seeded as a weapon attack on Magnus Hexbinder; two harness tests.
+
+**Description:** Zero new engine code — the +2d10 necrotic reuses the unconditional dice-rider shape (`{dice, damage_type, requires_attunement}`) that surfaces in the /attack response's `auto_uplifts` with source `item-staff-of-withering`, gated on the inventory item being equipped+attuned. Added a "Staff of Withering" weapon row (+0 magic quarterstaff, 1d6+1) to Magnus's sheet carrying the `_slug`; removed the slug from the Armory's Remainder passive `setdefault` loop (it's an attack rider now, not a bare passive). **v1 simplifications (GM-narrated, documented in the catalog comment + seed desc):** the 3-charge limit and the DC 15 CON save-or-disadvantage-on-STR/CON-checks-and-saves rider. The latter is deferred because the `disadvantage_on` intercept currently only fires on STR *checks* (the enlarge/reduce "diminution" path) — modeling "STR/CON checks AND saves" needs it generalized across all four roll-construction sites (filed). MINOR — additive item mechanic + content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ATTACK_RIDERS["staff-of-withering"]` — `{label, dice: "2d10", damage_type: "necrotic", requires_attunement: True}` (Frost Brand pattern).
+- Demo seed: a "Staff of Withering" weapon attack row on Magnus Hexbinder (carries `_slug`); the inventory item stays inert spare loot (seeded v2.344.0).
+- `tests/harness/test_item_staff_of_withering.py` — 2 tests (the +2d10 necrotic uplift fires on a hit when equipped+attuned; the attunement gate suppresses it when equipped-but-unattuned).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2997 → 2999 (+2 Staff of Withering tests); new `test_item_staff_of_withering.py` section.
+
 ## [2.345.1] - 2026-06-15 — "The Recounted Hoard"
 
 **Schema version:** 69

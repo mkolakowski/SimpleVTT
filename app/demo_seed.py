@@ -3218,6 +3218,17 @@ def _warlock_sheet(name: str) -> dict:
             {"name": "Eldritch Blast (cantrip)", "attack_bonus": "+6", "damage": "1d10",
              "damage_type": "force", "range": "120 ft",
              "desc": "Two beams at Lv 5 (Eldritch Blast scales: Lv 5 = 2 beams). Agonizing Blast invocation adds CHA mod (+3) to each beam's damage — auto-applied at /attack time. Spell attack, not weapon."},
+            # v2.346.0 — Staff of Withering (RAW DMG p.202, rare, attunement
+            # cleric/druid/warlock). A +0 magic quarterstaff (1d6+1 from STR,
+            # no +N to attack/damage RAW). On a hit it adds +2d10 necrotic via
+            # the `_MAGIC_ITEM_ATTACK_RIDERS["staff-of-withering"]` Frost-Brand-
+            # style always-on rider (gated on the inventory item being
+            # equipped+attuned). The 3-charge limit and the DC 15 CON
+            # ability-drain save are GM-narrated in v1. On-theme for a warlock.
+            {"name": "Staff of Withering", "attack_bonus": "+4", "damage": "1d6+1",
+             "damage_type": "bludgeoning", "range": "5 ft",
+             "_slug": "staff-of-withering",
+             "desc": "Rare quarterstaff, attunement. On a hit, +2d10 necrotic (RAW: 1 of 3 charges; charge limit GM-narrated). RAW the target also makes a DC 15 CON save or has disadvantage on STR/CON checks + saves for 1 hour — GM-narrated in v1."},
         ],
         # Warlock spells: known list (not prepared). Lv 5 = 6 known
         # spells + 3 known cantrips. All slots at L3 (Pact Magic table).
