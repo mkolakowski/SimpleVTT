@@ -56,15 +56,41 @@ async def pip(roster):
     return roster["Pip Quickfingers"]
 
 
+async def _patch_attuned_via_sheet_fields(gm_client, char_id, inv_idx, attuned):
+    """v2.320.3 (B15 fix): toggle the `attuned` flag on a specific inventory
+    index via /sheet-fields PATCH instead of /attune. /sheet-fields bypasses
+    the RAW 3-item /attune cap, which silently 409s when the carrier PC is
+    seeded over-cap (Pip / Mira are both at 4 seed-attuned items, so a
+    detune-then-restore via /attune leaves the item detuned for the next
+    test — masking the rider). Snapshot is returned so the caller can
+    restore exactly via a second PATCH if needed."""
+    resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    assert resp.status_code == 200, resp.text
+    inv = list((resp.json().get("sheet") or {}).get("inventory") or [])
+    new_inv = [dict(it) if isinstance(it, dict) else it for it in inv]
+    assert 0 <= inv_idx < len(new_inv), f"index {inv_idx} out of range"
+    assert isinstance(new_inv[inv_idx], dict), new_inv[inv_idx]
+    new_inv[inv_idx]["attuned"] = attuned
+    r = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json={"inventory": new_inv},
+    )
+    assert r.status_code == 200, r.text
+
+
 async def test_sharpness_no_rider_when_detuned(gm_client, pip):
     """v2.158.103: detuning the Sword of Sharpness suppresses the
     nat-20 rider — even if the d20 lands 20, no +4d6 broadcast.
-    Re-attunes in teardown."""
-    detune = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/attune",
-        json={"inventory_index": PIP_SHARPNESS_INV_IDX, "attuned": False},
+    Re-attunes in teardown.
+
+    v2.320.3 — B15 fix: detune + restore go through /sheet-fields PATCH
+    (bypasses the /attune cap) instead of /attune POST (which silently
+    409s on restore because Pip is seeded at 4 attuned items)."""
+    await _patch_attuned_via_sheet_fields(
+        gm_client, pip["id"], PIP_SHARPNESS_INV_IDX, attuned=False,
     )
-    assert detune.status_code == 200, detune.text
 
     try:
         await _seed_dice(gm_client, 5)  # d20=20 on first
@@ -85,9 +111,8 @@ async def test_sharpness_no_rider_when_detuned(gm_client, pip):
         )
         assert resp.status_code == 200, resp.text
     finally:
-        await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/attune",
-            json={"inventory_index": PIP_SHARPNESS_INV_IDX, "attuned": True},
+        await _patch_attuned_via_sheet_fields(
+            gm_client, pip["id"], PIP_SHARPNESS_INV_IDX, attuned=True,
         )
         await _seed_dice(gm_client, None)
 

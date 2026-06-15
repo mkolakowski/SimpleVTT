@@ -37,7 +37,7 @@ Skipped: `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py::t
 ### B9 — Latent test coupling: a Caelan level-bump breaks `test_attack_divine_smite_spends_slot` · 🟡 P2 · OPEN
 **Source:** was `TODO.md` › Class Features. Sir Caelan Lightbringer is seeded at Lv 7. Bumping him to Lv 9+ (e.g. for Aura of Courage) flips proficiency +3 → +4, so his Longsword attack bonus goes +6 → +7, which **breaks** the hardcoded assertion in `tests/harness/test_attack.py::test_attack_divine_smite_spends_slot`. Not broken today — but any commit that bumps Caelan must audit-and-fix this test in the same change. Filed here so it isn't a surprise.
 
-### B15 — Sharpness + Vorpal nat-20 tests silently regressed by /attune cap on finally-restore · 🔴 P1 · OPEN
+### B15 — Sharpness + Vorpal nat-20 tests silently regressed by /attune cap on finally-restore · 🔴 P1 · FIXED (v2.320.3)
 **Source:** Discovered while shipping the magic-item content tail (v2.318.x–v2.320.x, 2026-06-15). Filed v2.320.2.
 **Symptom:** `tests/harness/test_sword_of_sharpness.py::test_sharpness_nat_20_extra_damage` and `tests/harness/test_vorpal_decap.py::test_vorpal_decap_on_nat_20` fail with `"Nat 20 landed on seed N but no [Sharpness|decap] broadcast. Sources seen: []"`. Reproduces on a fresh container at every version checked: v2.317.0, v2.318.0, v2.318.1, v2.319.0, v2.320.0, v2.320.1.
 **Root cause:** the file-mate detune test (`test_sharpness_no_rider_when_detuned` / `test_vorpal_no_decap_when_detuned`) detunes the rider's inventory item via `/attune` and re-attunes in a `finally` block. The carrier PCs are seeded **at 4 attuned items** (Pip: Cloak + Ring + Sharpness + Wand of Enemy Detection; Mira: Vorpal + Headband + Ioun Protection + Eyes of the Eagle — both bypass the 3-cap at seed-load per the long-standing seed precedent). When the test detunes the target item, OTHER attuned count drops to 3; the `/attune` re-attune call's cap check (`if attuned_count >= 3: 409`) fires and **silently returns 409** (the finally block ignores the response). The target item stays detuned, the subsequent nat-20 test runs against a detuned weapon, and the on_nat_20 rider's attunement gate suppresses the broadcast. The "Sources seen: []" trace confirms zero feature_used events were broadcast across the seed-iteration loop — the rider never fired.
@@ -48,6 +48,8 @@ Skipped: `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py::t
 3. **Drop one of the carrier's seed-attuned items** to 3 (e.g. detune Pip's Wand of Enemy Detection in seed) so the cap math works on /attune restore — but this changes other tests that assume the wand is attuned.
 4. **Lift the seed-load cap bypass** by enforcing 3/3 at seed-load — invasive; would break the 8 carriers currently seeded over-cap, and the v2.243.1 fix already documents the cap as a `/attune`-only invariant.
 **Recommendation:** path 1 (PATCH the two finally blocks). Done as its own commit alongside the next magic-item ship that touches one of those test files, or earlier if a sweep of pre-existing flakes is wanted.
+
+**Resolution (v2.320.3):** Applied fix path 1 — both detune-test finally blocks now route through a new `_patch_attuned_via_sheet_fields` helper that fetches `/sheet-json`, mutates the target inventory index's `attuned` flag, and PATCHes `/sheet-fields` (which bypasses the `/attune` cap check). Detune and restore both use the same helper for symmetry. `test_sharpness_nat_20_extra_damage` and `test_vorpal_decap_on_nat_20` now pass locally. Move this entry to `TODONE.md` on close.
 
 ---
 

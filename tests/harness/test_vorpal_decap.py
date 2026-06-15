@@ -94,14 +94,40 @@ async def test_vorpal_no_decap_on_construct(gm_client, mira):
     # against the rider firing on construct WHEN d20 IS 20.
 
 
+async def _patch_attuned_via_sheet_fields(gm_client, char_id, inv_idx, attuned):
+    """v2.320.3 (B15 fix): toggle the `attuned` flag on a specific inventory
+    index via /sheet-fields PATCH instead of /attune. /sheet-fields bypasses
+    the RAW 3-item /attune cap, which silently 409s when the carrier PC is
+    seeded over-cap (Mira is at 4 seed-attuned: Vorpal + Headband + Ioun
+    Protection + Eyes of the Eagle), so a detune-then-restore via /attune
+    leaves Vorpal detuned for `test_vorpal_decap_on_nat_20` — masking the
+    rider with a phantom 'no decap broadcast' failure."""
+    resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-json",
+    )
+    assert resp.status_code == 200, resp.text
+    inv = list((resp.json().get("sheet") or {}).get("inventory") or [])
+    new_inv = [dict(it) if isinstance(it, dict) else it for it in inv]
+    assert 0 <= inv_idx < len(new_inv), f"index {inv_idx} out of range"
+    assert isinstance(new_inv[inv_idx], dict), new_inv[inv_idx]
+    new_inv[inv_idx]["attuned"] = attuned
+    r = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json={"inventory": new_inv},
+    )
+    assert r.status_code == 200, r.text
+
+
 async def test_vorpal_no_decap_when_detuned(gm_client, mira):
     """v2.158.101: detune Vorpal → no decap even on nat 20 vs. a
-    valid target. Re-attunes in teardown."""
-    detune = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/attune",
-        json={"inventory_index": MIRA_VORPAL_INV_IDX, "attuned": False},
+    valid target. Re-attunes in teardown.
+
+    v2.320.3 — B15 fix: detune + restore go through /sheet-fields PATCH
+    (bypasses the /attune cap) instead of /attune POST (which silently
+    409s on restore because Mira is seeded at 4 attuned items)."""
+    await _patch_attuned_via_sheet_fields(
+        gm_client, mira["id"], MIRA_VORPAL_INV_IDX, attuned=False,
     )
-    assert detune.status_code == 200, detune.text
 
     try:
         await _seed_dice(gm_client, 5)
@@ -126,9 +152,8 @@ async def test_vorpal_no_decap_when_detuned(gm_client, mira):
         # die from the normal swing (1d6+6 vs 11 HP can drop it), but
         # the source on dropping it is the base attack not the rider.
     finally:
-        await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/attune",
-            json={"inventory_index": MIRA_VORPAL_INV_IDX, "attuned": True},
+        await _patch_attuned_via_sheet_fields(
+            gm_client, mira["id"], MIRA_VORPAL_INV_IDX, attuned=True,
         )
         await _seed_dice(gm_client, None)
 

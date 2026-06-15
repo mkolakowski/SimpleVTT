@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.320.3] - 2026-06-15 — "The Loud Restore"
+
+**Schema version:** 69
+
+**Commit summary:** Fix **B15** (filed v2.320.2) — the Sharpness + Vorpal nat-20 tests silently regressed by a `/attune` cap-409 on the detune-test's `finally` restore. Swap both `test_sword_of_sharpness.py::test_sharpness_no_rider_when_detuned` and `test_vorpal_decap.py::test_vorpal_no_decap_when_detuned` from `/attune` POST to a new `_patch_attuned_via_sheet_fields` helper that goes through `/sheet-fields` PATCH (bypasses the cap). Both `test_sharpness_nat_20_extra_damage` and `test_vorpal_decap_on_nat_20` now pass locally.
+
+**Description:** Pip Quickfingers and Mira Greenleaf are both seeded at 4 attuned items (seed-load bypasses the RAW 3-cap per long-standing precedent). When the detune-test's `finally` block calls `/attune ... attuned=True` to restore, the cap check fires (OTHER attuned count = 3 ≥ cap 3) and returns 409. The original code didn't assert on the restore call's status, so the 409 cascaded silently: the target rider's item stayed detuned, and the file-mate nat-20 test ran against a detuned weapon → the on_nat_20 dispatcher's attunement gate suppressed the broadcast → "Sources seen: []" failure. Both tests now route detune + restore through a new module-local `_patch_attuned_via_sheet_fields` helper (mirrors the v2.318.1 Sword of Life Stealing pattern): fetches `/sheet-json`, mutates the target inventory index's `attuned` flag, PATCHes `/sheet-fields`. `/sheet-fields` accepts arbitrary inventory snapshots without the cap check, so the restore lands cleanly. The helper is added locally to each file (rather than promoted to `conftest.py`) to keep blast radius minimal; future detune-restore tests can lift it to shared scope. PATCH — bug fix; no engine/schema change.
+
+### Changed
+- `tests/harness/test_sword_of_sharpness.py::test_sharpness_no_rider_when_detuned`: detune + restore swapped to `/sheet-fields` PATCH via a new `_patch_attuned_via_sheet_fields` helper.
+- `tests/harness/test_vorpal_decap.py::test_vorpal_no_decap_when_detuned`: same swap with the same helper.
+- `BUGS.md` — **B15** flipped 🔴 P1 OPEN → 🔴 P1 FIXED (v2.320.3) with resolution note.
+
 ## [2.320.2] - 2026-06-15 — "The Silent Restore"
 
 **Schema version:** 69
