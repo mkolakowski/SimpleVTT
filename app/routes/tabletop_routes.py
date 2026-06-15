@@ -34572,6 +34572,30 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             "exempt_creature_types": ["construct", "undead"],
         },
     },
+    # v2.319.0 — Mace of Disruption (RAW DMG p.179, rare, attunement). Sun
+    # Blade-shape conditional rider (the v2.158.93 Dragon Slayer / v2.158.104
+    # Sun Blade `dice + condition` shape), but with TWO creature types in the
+    # predicate instead of one — the first multi-type conditional rider in the
+    # catalog. RAW: "when you hit a fiend or an undead with this magic weapon,
+    # that creature takes an extra 2d6 radiant damage." The fires-from-
+    # `_compute_attack_auto_uplifts` block 6c gates the rider on (a)
+    # attack._slug == "mace-of-disruption", (b) the wielder's matching item
+    # equipped + attuned, and (c) the condition lambda — passes when the target's
+    # creature_type is "fiend" or "undead" (resolved via the v2.158.96 Phase 5f
+    # helper if the combatant dict lacks it). The "destroy if target HP ≤ 25"
+    # RAW clause and the "fear save on successful destroy-check" rider are
+    # GM-narrated in v1 — neither composes cleanly on a generalized substrate.
+    # The "sheds bright light in a 20-ft radius" half is descriptive.
+    "mace-of-disruption": {
+        "label": "Mace of Disruption",
+        "dice": "2d6",
+        "damage_type": "radiant",
+        "requires_attunement": True,
+        "condition": lambda tgt: bool(tgt) and (
+            (tgt.get("creature_type") or "").strip().lower()
+            in ("fiend", "undead")
+        ),
+    },
 }
 
 

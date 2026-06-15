@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2901 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.318.1, 2026-06-15).
+**Total tests:** 2904 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.319.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3409,13 +3409,22 @@ v2.158.103 magic-items-automation Phase 7c — Sword of Sharpness +4d6 slashing 
 | `test_sharpness_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 on Pip's first attack; asserts `feature_used` with `source: "item-sword-of-sharpness-nat20"` fires and `hp_dealt` is in [4, 24] (4d6 range). |
 
 ### `test_sword_of_life_stealing.py`
-v2.318.0 magic-items — Sword of Life Stealing +3d6 necrotic on natural 20 (RAW DMG p.206, rare, attunement). Third item on the `on_nat_20` `effect: "damage"` branch (Sharpness precedent), and the first to compose `exempt_creature_types` with a damage rider (Vorpal uses the same list with `effect: "decap"`). Construct and undead targets are exempt; the dispatcher short-circuits before rolling the rider dice. Demo fixture: Pip Quickfingers carries it at `attack_index 3` + inventory tail, equipped + attuned. The RAW temp-HP-equal-to-extra-damage clause is GM-narrated in v1.
+v2.318.0 magic-items — Sword of Life Stealing +3d6 necrotic on natural 20 (RAW DMG p.206, rare, attunement). Third item on the `on_nat_20` `effect: "damage"` branch (Sharpness precedent), and the first to compose `exempt_creature_types` with a damage rider (Vorpal uses the same list with `effect: "decap"`). Construct and undead targets are exempt; the dispatcher short-circuits before rolling the rider dice. Demo fixture: Pip Quickfingers carries it at `attack_index 3` + inventory tail; **v2.318.1** reseated as inert spare loot — tests PATCH equipped+attuned via `/sheet-fields` (bypassing the `/attune` 3-item cap) then restore. The RAW temp-HP-equal-to-extra-damage clause is GM-narrated in v1.
 
 | Test | What it asserts |
 |------|-----------------|
 | `test_life_stealing_no_rider_on_construct` | Iterates seeds 0-199 to land d20=20 on a `creature_type: "construct"` target; asserts the `item-sword-of-life-stealing-nat20` broadcast did NOT fire (first exempt slot). |
 | `test_life_stealing_no_rider_on_undead` | Iterates seeds 0-199 to land d20=20 on a `creature_type: "undead"` target; asserts the broadcast did NOT fire (second exempt slot). |
 | `test_life_stealing_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 vs. a humanoid; asserts `feature_used` with `source: "item-sword-of-life-stealing-nat20"` fires and `hp_dealt` is in [3, 18] (3d6 range). |
+
+### `test_mace_of_disruption.py`
+v2.319.0 magic-items — Mace of Disruption (RAW DMG p.179, rare, attunement). Sun Blade-shape conditional rider with TWO creature types in the predicate (fiend OR undead) — first multi-type conditional rider in the catalog. +2d6 radiant on hit when the target is a fiend or undead. Carrier: Brother Tavik Stonebrow at `attack_index 2` + inventory tail, seeded inert (v2.318.1 spare-loot pattern). The "destroy if HP ≤ 25" + fear-save-on-pass RAW clauses are GM-narrated.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mace_fires_on_fiend_target` | PATCH equipped+attuned; attack a `creature_type: "fiend"` Quasit → `auto_uplifts` carries one entry with `source: "item-mace-of-disruption"`, `expression: "2d6"`, `damage_type: "radiant"`, `total` in [2, 24] (crit-doubled). |
+| `test_mace_fires_on_undead_target` | Same shape vs. a `creature_type: "undead"` Skeleton — proves the lambda's `in (...)` membership check, not a single-type equality. |
+| `test_mace_silent_on_humanoid` | Vs. a humanoid Bandit → no `item-mace-of-disruption` uplift in `auto_uplifts`. |
 
 ### `test_demon_slayer_frighten.py`
 v2.158.102 magic-items-automation Phase 7b — Demon Slayer DC 15 WIS save-or-frightened on every fiend hit (RAW DMG p.166). Second post-hit hook type via `on_hit_save: {dc, ability, effect, duration_rounds}` catalog field. New helper `_apply_magic_item_on_hit_save_effect` delegates to v2.99.406 `_resolve_feature_save` which auto-rolls NPC saves + installs frightened buff on failure. New Quasit (CR 1 fiend) NPC template (`sheet.type='fiend'`) provides the test fiend target.

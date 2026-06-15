@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.319.0] - 2026-06-15 — "The Cleansing Toll"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Mace of Disruption** (RAW DMG p.179, rare, attunement). When you hit a fiend or an undead with this magic weapon, that creature takes an extra 2d6 radiant damage. First multi-type conditional rider in the catalog — Sun Blade (v2.158.104) and Dragon Slayer (v2.158.93) precedents take a single creature type; this one composes two (`fiend OR undead`) in the same `condition` lambda. Seeded inert on Brother Tavik Stonebrow; three harness tests.
+
+**Description:** Pure substrate reuse — zero new engine code. The catalog row hooks into `_compute_attack_auto_uplifts`'s block 6c: it gates on (a) attack `_slug == "mace-of-disruption"`, (b) wielder's matching item equipped + attuned, and (c) the condition predicate (the v2.158.93 `condition` lambda receiving the target combatant, returning True when `creature_type` resolves to "fiend" or "undead"). The v2.158.96 Phase 5f helper auto-resolves `creature_type` from NPC token templates when the combatant dict lacks it. On a pass, the auto-uplifts list grows by a `{label, expression: "2d6", damage_type: "radiant", source: "item-mace-of-disruption"}` entry, doubled on a crit. Tavik (Life Cleric Lv 8) carries the mace at `attack_index 2` + inventory tail as inert spare loot (`equipped: False, attuned: False`) per the v2.318.1 spare-loot precedent — the harness PATCHes it equipped+attuned via `/sheet-fields` (bypassing the `/attune` 3-item cap, since Tavik is already at 4 seed-attuned items), runs the rider assertion, then restores. The RAW "destroy if target HP ≤ 25" + fear-save-on-pass clauses don't compose cleanly on the generalized substrate and stay GM-narrated in v1, along with the "sheds bright light in a 20-ft radius" flavor. MINOR — additive content drop-in on the existing conditional-rider substrate, no engine change, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ATTACK_RIDERS["mace-of-disruption"]` (`app/routes/tabletop_routes.py`) — `{dice: "2d6", damage_type: "radiant", requires_attunement: True, condition: lambda tgt: creature_type in ("fiend", "undead")}`.
+- Demo seed: Brother Tavik Stonebrow gains a **Mace of Disruption** (`_slug: mace-of-disruption`) at `attack_index 2` + inventory tail, seeded inert (`equipped: False, attuned: False`).
+- `tests/harness/test_mace_of_disruption.py` — 3 tests (fires vs. fiend, fires vs. undead, silent vs. humanoid). PATCHes inventory via `/sheet-fields` per test + restores on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2901 → 2904 (+3 Mace of Disruption tests); new `test_mace_of_disruption.py` section.
+
 ## [2.318.1] - 2026-06-15 — "The Sheathed Blade"
 
 **Schema version:** 69

@@ -1158,6 +1158,22 @@ def _cleric_sheet(name: str) -> dict:
             {"name": "Sacred Flame (cantrip)", "save_dc": 14, "save_ability": "DEX",
              "damage": "2d8", "damage_type": "radiant", "range": "60 ft",
              "desc": "Cleric cantrip — target makes a DEX save or takes radiant damage."},
+            # v2.319.0 — Magic-items: Mace of Disruption (RAW DMG p.179, rare,
+            # attunement). Sun Blade-shape conditional rider with TWO creature
+            # types in the predicate (fiend OR undead). The +2d6 radiant rider
+            # fires from the auto-uplifts block when the wielder is attacking
+            # one of those creature types and the inventory item is equipped +
+            # attuned. The HP-25-destroy and fear-save RAW clauses are
+            # GM-narrated in v1. The inventory item is seeded INERT (spare
+            # loot) so the harness PATCHes it equipped+attuned per test (the
+            # v2.318.1 Sword of Life Stealing pattern); when the PATCH is in
+            # effect, Tavik's seed Warhammer attack still uses bludgeoning
+            # damage — this row exists so the test can target attack_index 2
+            # and hit the mace's `_slug` gate.
+            {"name": "Mace of Disruption", "attack_bonus": "+5",
+             "damage": "1d6+2", "damage_type": "bludgeoning",
+             "range": "5 ft", "_slug": "mace-of-disruption",
+             "desc": "Rare mace, attunement. 1d6+2 bludgeoning; +2d6 radiant on hit vs. fiends and undead (RAW DMG p.179). Sheds bright light in a 20-ft radius. The HP-25-destroy / fear save clauses are GM-narrated in v1."},
         ],
         # v2.4.15: Life Domain grants 6 domain spells unlocked by Cleric Lv 5
         # — Bless / Cure Wounds (L1), Lesser Restoration / Spiritual Weapon
@@ -1322,6 +1338,26 @@ def _cleric_sheet(name: str) -> dict:
              "qty": 1, "consumable": True, "weight_lb": 5,
              "_slug": "tome-of-understanding",
              "desc": "Very rare wondrous item. Studying it for 48 hours over 6 days permanently increases your Wisdom score by 2 (and its maximum). The tome then loses its magic for a century. RAW DMG p.208."},
+            # v2.319.0 — Mace of Disruption (RAW DMG p.179, rare, attunement).
+            # Paired with the attack entry above via `_slug`. Sun Blade-shape
+            # conditional rider but with TWO creature types in the predicate
+            # (fiend OR undead) — the first multi-type conditional rider in the
+            # catalog. Seeded INERT (equipped=False, attuned=False) per the
+            # v2.318.1 spare-loot precedent — the harness PATCHes it
+            # equipped+attuned via /sheet-fields (bypassing the /attune 3-item
+            # cap, since Tavik is already at 4 seed-attuned items), runs the
+            # rider tests, then restores. Thematic on Tavik (Life Cleric — a
+            # divine mace that disrupts undead and fiends is RAW-canonical for
+            # a sun-worshipping cleric). When the PATCH is in effect, attacks
+            # via attack_index 2 surface the +2d6 radiant uplift on fiend /
+            # undead targets and stay silent on humanoid targets. The
+            # HP-25-destroy + fear-save RAW clauses are GM-narrated in v1.
+            {"name": "Mace of Disruption", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "hands": 1, "damage": "1d6", "damage_type": "bludgeoning",
+             "properties": "magic",
+             "_slug": "mace-of-disruption", "weight_lb": 4,
+             "desc": "Rare mace, attunement. When you hit a fiend or an undead with this magic weapon, that creature takes an extra 2d6 radiant damage. If the target has 25 HP or fewer after taking this damage, it must succeed on a DC 15 WIS save or be destroyed; on a successful save, the creature becomes frightened of you until the end of your next turn (GM-narrated in v1). While held, sheds bright light in a 20-ft radius and dim light 20 ft beyond. RAW DMG p.179."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action
