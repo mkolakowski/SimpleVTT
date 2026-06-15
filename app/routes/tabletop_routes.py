@@ -32676,6 +32676,13 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "amulet-of-proof-against-detection": [
         {"scry_proof": True, "requires_attunement": True},
     ],
+    # v2.294.0 — Amulet of Proof against Detection and Location (RAW DMG
+    # p.150, uncommon, attunement). The "and Location" sibling of the
+    # v2.234.0 amulet above — identical RAW text, identical `scry_proof`
+    # boolean substrate. A verbatim payload clone on the new slug.
+    "amulet-of-proof-against-detection-and-location": [
+        {"scry_proof": True, "requires_attunement": True},
+    ],
     # v2.235.0 — Ring of Resistance (RAW DMG p.192, rare, attunement).
     # RAW: "you have resistance to one damage type while wearing this ring.
     # The gem in the ring indicates the type." Each physical ring is a fixed

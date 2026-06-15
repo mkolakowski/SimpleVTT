@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2830 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.293.0, 2026-06-14).
+**Total tests:** 2833 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.294.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2871,6 +2871,15 @@ v2.234.0 — Amulet of Proof against Detection (RAW DMG p.150, uncommon, attunem
 | `test_amulet_exposes_scry_proof_on_sheet_json` | `GET /sheet-json` → `derived.scry_proof` present with "Amulet of Proof against Detection" in `sources`. |
 | `test_amulet_coexists_with_bracers_ac` | The scry-proof flag rides alongside Kael's Bracers of Defense (still in inventory) — the new boolean field composes with the existing AC-bonus item. |
 | `test_amulet_unequip_drops_flag` | PATCH the amulet to `equipped: False` → `derived.scry_proof` absent; restores the original inventory on teardown. |
+
+### `test_item_amulet_of_proof_against_detection_and_location.py`
+v2.294.0 — Amulet of Proof against Detection and Location (RAW DMG p.150, uncommon, attunement): the "and Location" sibling of the v2.234.0 amulet — identical RAW text + the same `scry_proof` boolean substrate. A verbatim payload clone on the new slug (`amulet-of-proof-against-detection-and-location`). Seeded as inert spare loot (unequipped/unattuned) on Thalindra Moonshadow (Wizard, no other scry-proof item, so the baseline cleanly proves the source); tests PATCH it equipped+attuned, read the projection, then restore.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_amulet_exposes_scry_proof` | Equipped+attuned via PATCH → `GET /sheet-json` `derived.scry_proof` present with "Amulet of Proof against Detection and Location" in `sources`. Restored on teardown. |
+| `test_amulet_requires_attunement` | Equipped-but-unattuned → no `scry_proof` flag (the attunement gate). Restored on teardown. |
+| `test_amulet_baseline_has_no_flag` | Control: inert seed (equipped=False) → no `scry_proof` flag (proves it's amulet-sourced). |
 
 ### `test_item_periapt_of_health.py`
 v2.233.0 — Periapt of Health (RAW DMG p.184, uncommon, no attunement): immunity to contracting disease while worn. Reuses the boolean-OR passive substrate (Sustenance / Awareness): the `disease_immune` flag rides the `periapt-of-health` catalog payload, aggregates in `_equipped_item_effects`, and surfaces on `/sheet-json` as `derived.disease_immune = {sources}`. Brother Tavik Stonebrow (Cleric Lv 8) wears it — no attunement, so it composes with his three attuned items without exceeding the RAW cap.

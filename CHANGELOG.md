@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.294.0] - 2026-06-14 — "The Hidden Sigil"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Amulet of Proof against Detection and Location** (RAW DMG p.150, uncommon, attunement) lands on the v2.234.0 `scry_proof` boolean substrate as a verbatim payload clone of the already-wired Amulet of Proof against Detection. One registry entry, a demo-seed item on Thalindra Moonshadow, and three harness tests.
+
+**Description:** The lowest-risk drop-in possible — the "and Location" sibling of the Amulet of Proof against Detection has byte-for-byte identical RAW text ("while wearing this amulet, you are hidden from divination magic; you can't be targeted by such magic or perceived through magical scrying sensors") and rides the same `scry_proof` boolean field landed in v2.234.0. So this commit is a single registry entry (`{"scry_proof": True, "requires_attunement": True}`, cloned from the existing amulet), a demo-seed item, and tests. The flag aggregates in `_equipped_item_effects` (boolean OR into `scry_proof` + `scry_proof_sources`) and surfaces on `/sheet-json` as `derived.scry_proof = {sources}`; divination/scrying mechanics stay descriptive in v1. Seeded **unequipped/unattuned** as spare loot on Thalindra Moonshadow (the demo's Evoker Wizard — a cautious archmage warding off scrying is on-theme), specifically on a carrier with no other scry-proof item so the inert baseline cleanly proves the amulet is the source (the original amulet lives on Kael, already at 3/3 attuned). The harness PATCHes it equipped+attuned, reads `derived.scry_proof` and asserts the source attribution, then restores the seed inventory; an attunement-gate test and an inert-baseline control round it out. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `amulet-of-proof-against-detection-and-location` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — a verbatim `scry_proof` clone of the v2.234.0 amulet on the new slug.
+- Demo seed: Thalindra Moonshadow gains a spare (unequipped/unattuned) **Amulet of Proof against Detection and Location**.
+- `tests/harness/test_item_amulet_of_proof_against_detection_and_location.py` (3 tests): `derived.scry_proof` surfaces with the amulet named in sources on equip+attune; equipped-but-unattuned yields none (attunement gate); inert baseline has none. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2830 → 2833 (+3 drop-in tests); added the `test_item_amulet_of_proof_against_detection_and_location.py` section.
+
 ## [2.293.0] - 2026-06-14 — "The Leather Wings"
 
 **Schema version:** 69

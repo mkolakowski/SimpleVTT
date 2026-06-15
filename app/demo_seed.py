@@ -862,6 +862,20 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "robe-of-stars", "weight_lb": 0,
              "desc": "Very rare wondrous item, attunement. +1 bonus to saving throws while worn. Six stars cast magic missile (5th-level) as an action, and you can step onto the Astral Plane — both GM-narrated. RAW DMG p.193."},
+            # v2.294.0 — Amulet of Proof against Detection and Location (RAW
+            # DMG p.150, uncommon, attunement). The "and Location" sibling of
+            # the v2.234.0 Amulet of Proof against Detection — identical RAW
+            # text ("hidden from divination magic; can't be targeted by such
+            # magic or perceived through magical scrying sensors") and the same
+            # `scry_proof` boolean substrate. Seeded as inert spare loot
+            # (unequipped/unattuned) so it adds no flag to Thalindra's baseline
+            # (she carries no other scry-proof item) — the harness PATCHes it
+            # equipped+attuned, reads derived.scry_proof, then restores. A
+            # cautious archmage warding off scrying is on-theme.
+            {"name": "Amulet of Proof against Detection and Location", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False, "weight_lb": 0,
+             "_slug": "amulet-of-proof-against-detection-and-location",
+             "desc": "Uncommon wondrous item, attunement. While wearing this amulet, you are hidden from divination magic. You can't be targeted by such magic or perceived through magical scrying sensors. RAW DMG p.150."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
