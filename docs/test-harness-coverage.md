@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2904 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.319.0, 2026-06-15).
+**Total tests:** 2907 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.320.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3425,6 +3425,15 @@ v2.319.0 magic-items — Mace of Disruption (RAW DMG p.179, rare, attunement). S
 | `test_mace_fires_on_fiend_target` | PATCH equipped+attuned; attack a `creature_type: "fiend"` Quasit → `auto_uplifts` carries one entry with `source: "item-mace-of-disruption"`, `expression: "2d6"`, `damage_type: "radiant"`, `total` in [2, 24] (crit-doubled). |
 | `test_mace_fires_on_undead_target` | Same shape vs. a `creature_type: "undead"` Skeleton — proves the lambda's `in (...)` membership check, not a single-type equality. |
 | `test_mace_silent_on_humanoid` | Vs. a humanoid Bandit → no `item-mace-of-disruption` uplift in `auto_uplifts`. |
+
+### `test_vicious_weapon.py`
+v2.320.0 magic-items — Vicious Weapon (RAW DMG p.209, rare, NO attunement). First `on_nat_20` item to (a) `requires_attunement: False` (the dispatcher's wielder check skips the equipped/attuned gate — slug match alone fires) and (b) omit `damage_type` from its catalog row (the dispatcher falls back to the attack's own weapon type — "slashing" for Krieger's Greataxe, "bludgeoning" for a future Vicious Mace, etc.). Demo: Krieger Stonefist (Half-Orc Barbarian) at `attack_index 2`, equipped Vicious Greataxe.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_vicious_nat_20_extra_damage` | Iterates seeds 0-199 finding one that lands d20=20 on Krieger's first Vicious Greataxe swing; asserts `feature_used` with `source: "item-vicious-weapon-nat20"` fires, `damage_type: "slashing"` (the weapon-type fallback, NOT declared on the catalog row), and `hp_dealt` in [2, 12] (2d6 range). |
+| `test_vicious_slug_gate_blocks_vanilla_greataxe` | Nat 20 on Krieger's vanilla Greataxe (`attack_index 0`, no `_slug`) → no Vicious Weapon broadcast (slug gate). |
+| `test_vicious_no_attunement_required` | /sheet-json carries the vicious-weapon item with `equipped: True` and NO `attuned: True` field — matches the RAW no-attunement contract. |
 
 ### `test_demon_slayer_frighten.py`
 v2.158.102 magic-items-automation Phase 7b — Demon Slayer DC 15 WIS save-or-frightened on every fiend hit (RAW DMG p.166). Second post-hit hook type via `on_hit_save: {dc, ability, effect, duration_rounds}` catalog field. New helper `_apply_magic_item_on_hit_save_effect` delegates to v2.99.406 `_resolve_feature_save` which auto-rolls NPC saves + installs frightened buff on failure. New Quasit (CR 1 fiend) NPC template (`sheet.type='fiend'`) provides the test fiend target.

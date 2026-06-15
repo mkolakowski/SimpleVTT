@@ -34596,6 +34596,28 @@ _MAGIC_ITEM_ATTACK_RIDERS: dict[str, dict] = {
             in ("fiend", "undead")
         ),
     },
+    # v2.320.0 — Vicious Weapon (RAW DMG p.209, rare, NO attunement). The first
+    # on_nat_20 item that (a) requires NO attunement (the rider gate skips the
+    # equipped/attuned check for `requires_attunement: False` items — slug
+    # match is sufficient), and (b) deliberately OMITS `damage_type` so the
+    # dispatcher's fallback picks up the wielding weapon's own damage type
+    # (e.g. Krieger's Vicious Greataxe → "slashing"; a Vicious Mace would →
+    # "bludgeoning"). RAW: "When you roll a 20 on your attack roll with this
+    # magic weapon, your critical hit deals an extra 2d6 damage of the
+    # weapon's type." The "any weapon" RAW shape is honored by the
+    # weapon-type-fallback (no per-weapon catalog rows needed). No exempt
+    # creature types — every target eats the +2d6 on a nat 20.
+    "vicious-weapon": {
+        "label": "Vicious Weapon",
+        "requires_attunement": False,
+        "on_nat_20": {
+            "effect": "damage",
+            "label": "🪓 Vicious Weapon",
+            "dice": "2d6",
+            # `damage_type` deliberately omitted — falls through to the
+            # attack's own `damage_type` in `_apply_magic_item_nat_20_effect`.
+        },
+    },
 }
 
 

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.320.0] - 2026-06-15 — "The Savage Mark"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Vicious Weapon** (RAW DMG p.209, rare, NO attunement). On a natural 20 attack roll the target takes an extra 2d6 damage of the weapon's type. First `on_nat_20` catalog row to (a) `requires_attunement: False` — the dispatcher's wielder check skips the equipped/attuned gate, so a slug match alone fires the rider — and (b) deliberately omit `damage_type` so the dispatcher's fallback picks up the wielding weapon's own damage type (RAW's "any weapon" shape). Seeded as a Vicious Greataxe on Krieger Stonefist; three harness tests.
+
+**Description:** Pure substrate reuse on the v2.158.103 `on_nat_20` `effect: "damage"` branch — zero new engine code. The catalog row carries `dice: "2d6"` and omits `damage_type`, so the dispatcher (`_apply_magic_item_nat_20_effect` in `app/routes/tabletop_routes.py`) falls back to the attack's own `damage_type` ("slashing" for Krieger's Greataxe; a future Vicious Mace seed would fall back to "bludgeoning", a Vicious Dagger to "piercing", etc.). `requires_attunement: False` flips the wielder check: it just confirms an inventory item with the matching `_slug` exists — `equipped`/`attuned` aren't gated, which matches the RAW "while wielding it" semantics for a no-attunement uncommon weapon. No exempt creature types, no condition predicate — every target eats the +2d6 on a nat 20. Krieger (Half-Orc Barbarian) carries it at `attack_index 2` + inventory tail, equipped (the no-attunement gate makes the equip state irrelevant to the rider but kept True for carry-weight + inventory-view consistency); on theme because his Half-Orc Savage Attacks already adds +1 weapon die on crits, so a nat-20 swing now stacks Greataxe damage + Savage Attacks die + Vicious Weapon +2d6. MINOR — additive content drop-in on the existing on_nat_20 substrate, no engine change, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ATTACK_RIDERS["vicious-weapon"]` (`app/routes/tabletop_routes.py`) — `{requires_attunement: False, on_nat_20: {effect: "damage", label: "🪓 Vicious Weapon", dice: "2d6"}}`. `damage_type` deliberately omitted to exercise the dispatcher's weapon-type fallback.
+- Demo seed: Krieger Stonefist gains a **Vicious Greataxe** (`_slug: vicious-weapon`) at `attack_index 2` + inventory tail, equipped (no attunement required).
+- `tests/harness/test_vicious_weapon.py` — 3 tests (nat-20 fires with `damage_type: "slashing"` from weapon fallback, vanilla-Greataxe slug-gate, no-attunement smoke).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2904 → 2907 (+3 Vicious Weapon tests); new `test_vicious_weapon.py` section.
+
 ## [2.319.0] - 2026-06-15 — "The Cleansing Toll"
 
 **Schema version:** 69

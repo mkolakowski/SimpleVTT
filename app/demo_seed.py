@@ -3787,6 +3787,19 @@ def _barbarian_sheet(name: str) -> dict:
             {"name": "Javelin", "attack_bonus": "+7", "damage": "1d6+4",
              "damage_type": "piercing", "range": "30/120 ft",
              "desc": "Thrown. Krieger carries 4 — has both melee and ranged options without dropping the Greataxe (he can stash it for the throw)."},
+            # v2.320.0 — Magic-items: Vicious Greataxe (RAW DMG p.209 — Vicious
+            # Weapon variant, rare, NO attunement). On a natural 20 attack the
+            # `_apply_magic_item_nat_20_effect` post-hit handler rolls an extra
+            # 2d6 damage of the weapon's type (slashing here, falls through
+            # from the attack's `damage_type`). Stacks compositionally with
+            # Krieger's Half-Orc Savage Attacks (+1 weapon die on a crit) for
+            # a savage nat-20 burst. The `_slug` field is the rider gate; no
+            # attunement check needed (substrate skips it for
+            # `requires_attunement: False` items).
+            {"name": "Vicious Greataxe", "attack_bonus": "+7",
+             "damage": "1d12+4", "damage_type": "slashing",
+             "range": "5 ft", "_slug": "vicious-weapon",
+             "desc": "Rare greataxe, no attunement. 1d12+4 slashing; on a natural 20 attack roll, deal +2d6 slashing (RAW DMG p.209). Two-handed, heavy."},
         ],
         # Barbarian is non-casting RAW; no spells / spell_slots fields.
         "inventory": [
@@ -3896,6 +3909,25 @@ def _barbarian_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 2,
              "_slug": "horn-of-blasting",
              "desc": "Uncommon wondrous item (no attunement). As an action, blow the horn to emit a thunderous blast in a 30-foot cone. Each creature in that area makes a DC 15 Constitution saving throw — on a fail, 5d6 thunder damage and deafened for 1 minute; on a success, half damage and no deafen. RAW DMG p.174: each time you blow it there is a 20% chance the horn explodes (10d6 fire to you, horn destroyed) — GM-narrated."},
+            # v2.320.0 — Vicious Greataxe (RAW DMG p.209 — Vicious Weapon
+            # variant, rare, NO attunement). Paired with the attack entry
+            # above via `_slug`. Seeded equipped=True (the substrate skips the
+            # equipped/attuned check for no-attunement items — slug match
+            # alone is sufficient), but the equip state matters for the
+            # carry-weight + inventory-view shape. The nat-20 +2d6 rider fires
+            # from the post-hit handler when the d20 lands natural 20 — no
+            # creature exempt list, no condition predicate. Pairs nicely with
+            # Krieger's Half-Orc Savage Attacks (+1 weapon die on a crit) for
+            # a savage nat-20 burst. No attunement → no impact on Krieger's
+            # 3/3 attunement count (Ioun Stone of Awareness + Boots of Speed
+            # + Brooch of Shielding, RAW max). Heavier than the seed Greataxe
+            # to reflect the magic-imbued weight increase (8 lb vs 7).
+            {"name": "Vicious Greataxe", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True,
+             "hands": 2, "damage": "1d12", "damage_type": "slashing",
+             "properties": "heavy, two-handed, magic",
+             "_slug": "vicious-weapon", "weight_lb": 8,
+             "desc": "Rare greataxe, no attunement. When you roll a 20 on your attack roll with this magic weapon, your critical hit deals an extra 2d6 damage of the weapon's type (slashing). RAW DMG p.209 (Vicious Weapon variant)."},
         ],
         # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
         # p.168): reaction-based melee attack against a creature
