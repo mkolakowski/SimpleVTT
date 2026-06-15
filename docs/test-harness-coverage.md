@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2891 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.309.0, 2026-06-14).
+**Total tests:** 2893 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.310.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2772,6 +2772,14 @@ v2.305.0 — Ring of Elemental Command (Fire) (RAW DMG p.190, legendary, attunem
 | `test_ring_halves_fire_damage_when_attuned` | Equip+attune → 20 fire drops HP by only 10 via `_resistance_halve`. Restores on teardown. |
 | `test_ring_requires_attunement` | Attunement gate: equipped-but-un-attuned → 20 fire applies in full (−20). Restores on teardown. |
 | `test_ring_exposes_resistances_on_sheet_json` | Equip+attune → `derived.resistances.types` contains "fire" with "Ring of Elemental Command" in `sources`. Restores on teardown. |
+
+### `test_item_manual_of_quickness_of_action.py`
+v2.310.0 — Manual of Quickness of Action (RAW DMG p.176, very rare, no attunement): the third permanent ability-increase consumable, completing the physical-ability manual trio (STR/CON/DEX). Pure reuse of the v2.308.0 `use_kind: "ability_increase"` dispatch — no DEX-specific branch, every DEX-derived read (AC, initiative, saves, Stealth/Acrobatics) flows from the stored score via `effective_ability_score`. Seeded on Garrik Ironside (Fighter) alongside the other two manuals; the fixture snapshots + restores inventory AND abilities.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_manual_raises_stored_dex_and_consumes` | POST `/use_item` (override) → body `ability_increase` = {ability:DEX, amount:2, new_score:before+2}; `character_update` WS; sheet stored DEX +2, manual row consumed. Restores inventory+abilities on teardown. |
+| `test_manual_baseline_dex_unchanged` | Control: before use, stored DEX equals the seed value — proving the bump is manual-sourced. |
 
 ### `test_item_manual_of_bodily_health.py`
 v2.309.0 — Manual of Bodily Health (RAW DMG p.176, very rare, no attunement): the second permanent ability-increase consumable, riding the v2.308.0 `use_kind: "ability_increase"` dispatch. The CON branch ALSO recomputes max HP — a Constitution-modifier bump retroactively raises max HP by 1 per level (RAW PHB p.173), so the handler bumps both `hp.max` and `hp.current` by `mod_delta × level` and returns an `hp_gain` field. Seeded on Garrik Ironside (Fighter); the fixture snapshots + restores inventory, abilities, AND hp because the mutation is permanent.

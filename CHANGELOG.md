@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.310.0] - 2026-06-14 — "The Sudden Reflex"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Manual of Quickness of Action** (RAW DMG p.176, very rare, no attunement) is the third permanent ability-increase consumable, completing the physical-ability manual trio (STR/CON/DEX). Pure reuse of the v2.308.0 `use_kind: "ability_increase"` dispatch — no new engine code. A demo seed on Garrik Ironside and two harness tests.
+
+**Description:** Quickness of Action is the simplest of the three manuals — study 48 hours over 6 days → DEX +2, its maximum +2 too — and unlike the CON manual it needs no special branch: every DEX-derived read (AC, initiative, DEX saves, Stealth/Acrobatics) flows from the stored score through `effective_ability_score`, so the one-time stored write propagates to all of them automatically. The handler (unchanged from v2.308.0) writes the stored DEX, consumes the manual, logs a `📖 Studied …` feature card, and broadcasts `character_update`. Seeded on Garrik Ironside (the demo's Champion Fighter) alongside his Gainful Exercise (STR) and Bodily Health (CON) manuals — the three physical-ability manuals now all live on one carrier. MINOR — additive demo content + tests, no engine change, no schema change.
+
+### Added
+- Demo seed: Garrik Ironside gains a **Manual of Quickness of Action** (`use_kind: "ability_increase"`, `ability: "DEX"`, `ability_increase: 2`).
+- `tests/harness/test_item_manual_of_quickness_of_action.py` (2 tests): using the manual writes stored DEX +2, consumes the row, returns the payload, broadcasts `character_update`; a baseline control asserting DEX is unchanged before use. Inventory + abilities restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2891 → 2893 (+2 drop-in tests); added the `test_item_manual_of_quickness_of_action.py` section.
+
 ## [2.309.0] - 2026-06-14 — "The Iron Constitution"
 
 **Schema version:** 69

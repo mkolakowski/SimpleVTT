@@ -5255,6 +5255,20 @@ def _fighter_sheet(name: str) -> dict:
              "ability": "CON", "ability_increase": 2, "weight_lb": 5,
              "_slug": "manual-of-bodily-health",
              "desc": "Study 48 hours over 6 days (/use_item) to permanently increase your Constitution score by 2 — its maximum rises by 2 as well, and your hit point maximum increases retroactively — then the manual loses its magic for a century. RAW DMG p.176."},
+            # v2.310.0 — Manual of Quickness of Action (RAW DMG p.176, very
+            # rare, no attunement): study 48 hours over 6 days → DEX +2, its
+            # maximum +2 too. Pure reuse of the v2.308.0 `ability_increase`
+            # dispatch — no DEX-specific branch needed: every DEX-derived read
+            # (AC, initiative, DEX saves, Stealth/Acrobatics) flows from the
+            # stored score via effective_ability_score, so the one-time write
+            # propagates automatically. Completes the three physical-ability
+            # manuals on Garrik (STR/CON/DEX). Harness snapshots + restores
+            # inventory + abilities.
+            {"name": "Manual of Quickness of Action", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True, "use_kind": "ability_increase",
+             "ability": "DEX", "ability_increase": 2, "weight_lb": 5,
+             "_slug": "manual-of-quickness-of-action",
+             "desc": "Study 48 hours over 6 days (/use_item) to permanently increase your Dexterity score by 2 — its maximum rises by 2 as well — then the manual loses its magic for a century. RAW DMG p.176."},
             # v2.205.0 — third charge-tracked wand (RAW DMG p.213, rare,
             # attunement). Same template as the Wand of Fireballs (7
             # charges, base slot level 3, 1d6+1 recharge) but casts
