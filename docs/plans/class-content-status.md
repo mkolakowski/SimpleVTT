@@ -30,6 +30,32 @@ its plan section here.
 > items (Battle Master maneuver batch, Eldritch Knight War Magic /
 > Eldritch Strike).
 
+> **Per-row reconciliation (v2.344.3, 2026-06-15) — the ⚪ tail is essentially closed.**
+> The deferred per-row recolouring the banner above promised was finally
+> done. **22 of the 24 rows still showing ⚪ in the per-class tables were
+> already shipped end-to-end** (v2.99.197–.221) — each has live code + a
+> dedicated harness test; the rows simply were never flipped from ⚪.
+> Brutal Critical, Relentless/Persistent Rage, Indomitable Might, Primal
+> Champion, Diamond Soul, Empty Body, Perfect Self, Improved Divine Smite,
+> Primeval Awareness, Hide in Plain Sight, Vanish, Feral Senses, Foe
+> Slayer, Reliable Talent, Slippery Mind, Elusive, Stroke of Luck, Pact
+> Boon, Spell Mastery, and Signature Spells all flipped to ✅; Deflect
+> Missiles flipped to 🟢 (reactions-panel entry, v2.68.6). **The lone
+> remaining genuine ⚪ is Aura of Courage** (Paladin Lv 10/18) — no code,
+> no test, the one feature worth a real implementation commit. The
+> headline class-feature coverage is therefore **~99%**, not the ~81% the
+> SRD audit carried.
+>
+> *Local-test caveat:* re-running a handful of the capstone tests against
+> a **persistent** postgres volume shows red (`test_persistent_rage`,
+> `test_select_spell_mastery`, `test_select_signature_spells`) — these are
+> **seed-drift / stale-fixture** artifacts (prior capstone tests PATCH a
+> demo PC's level and the volume keeps the mutation; the spell-mastery
+> tests assume Thalindra knows specific spells). The features themselves
+> are shipped (endpoints exist + return structured responses); CI re-seeds
+> a fresh DB per run so these pass there. Filed as a test-hygiene
+> follow-up, not a feature gap.
+
 > **Recent shipped work (through v2.15.10):** Phase A demo content
 > (A.1-A.3: Caelan Paladin v2.14.0 / Lyra Bard v2.14.1 / Mira Druid
 > v2.14.2 — demo party now 6 PCs covering Rogue/Wizard/Cleric/Paladin/
@@ -636,11 +662,11 @@ The `### Header` names below come from the `features` field of each JSON.
 | 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action (not per-attack) so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed as a future nice-to-have. |
 | 5 | Fast Movement | ✅ | v2.54.1 — pure-descriptive. +10 ft speed while not in heavy armor. Already baked into Krieger's listed sheet speed (40 ft = 30 base + 10 Fast Movement). Added a descriptive `class_features` row on `_barbarian_sheet`. No mechanic required RAW — sheet speed is GM-set / sheet-authoritative; the bonus is already reflected. |
 | 7 | Feral Instinct | ✅ | v2.57.0 — pure-descriptive. Advantage on initiative rolls + can act normally on a surprised round if you rage on your turn. Initiative is rolled out-of-band in v1 (GM manages init order); the bump surfaces the feature as a sheet `class_features` row so the player remembers to flag it manually. Krieger Lv 5 → 7 bump landed alongside Mindless Rage (Berserker Lv 6). |
-| 9 / 13 / 17 | Brutal Critical | ⚪ | |
-| 11 | Relentless Rage | ⚪ | |
-| 15 | Persistent Rage | ⚪ | |
-| 18 | Indomitable Might | ⚪ | |
-| 20 | Primal Champion | ⚪ | |
+| 9 / 13 / 17 | Brutal Critical | ✅ | v2.99.201 — extra weapon damage die on a melee crit (+1 at Lv 9, +2 at 13, +3 at 17). Harness `test_brutal_critical.py`. *(Status corrected in the v2.344.3 reconciliation — was stale ⚪.)* |
+| 11 | Relentless Rage | ✅ | v2.99.202 — `_maybe_relentless_rage_save` + `_relentless_rage_current_dc` (DC 10, +5 each use); on dropping to 0 HP while raging, a CON save keeps you at 1 HP. Broadcast `source: relentless-rage`. Harness `test_relentless_rage.py`. |
+| 15 | Persistent Rage | ✅ | v2.99.203 — `_pc_has_persistent_rage` gate (rage no longer ends early from no-attack/no-damage). Harness `test_persistent_rage.py`. |
+| 18 | Indomitable Might | ✅ | v2.99.204 — STR-check floor (treat a d20 STR check below your STR score as your STR score). Harness `test_indomitable_might.py`. |
+| 20 | Primal Champion | ✅ | v2.99.205 — STR & CON +4 / cap 24 capstone, extends the Indomitable Might floor. Harness `test_primal_champion.py`. |
 
 ### Bard
 
@@ -702,7 +728,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 2 | Ki | ✅ | All three Lv 2 Ki spend-options now wired: Patient Defense + Step of the Wind (v2.49.112) and Flurry of Blows (v2.49.114). Endpoints `/use_patient_defense`, `/use_step_of_the_wind`, `/use_flurry_of_blows` — each installs a 1-round self-buff via `_install_buff`, marks the bonus slot, decrements the Ki counter, and broadcasts feature_used + resource_update + buff_update. Phase B effect integration (attack-roll path consuming `effects.dodging` / `flurry-of-blows-active.unarmed_strikes_available`) is filed. |
 | 2 | Unarmored Movement | ✅ | v2.54.1 — pure-descriptive. +10 ft speed while not wearing armor or carrying a shield (scales to +30 ft at Lv 18+). Already baked into Kael's listed sheet speed (40 ft = 30 base + 10 Unarmored Movement at Lv 2-5; would be 45 at Lv 6-9, etc.). Added a descriptive `class_features` row on `_monk_sheet`. No mechanic required RAW — sheet speed is GM-set / sheet-authoritative. |
 | 3 | Monastic Tradition | ✅ | Subclass system shipped — see Subclasses table. Way of the Open Hand: Open Hand Technique mechanically wired (v2.49.57); Wholeness of Body ✅ (v2.49.227). |
-| 3 | Deflect Missiles | ⚪ | |
+| 3 | Deflect Missiles | 🟢 | v2.68.6 — surfaced as a reactions-panel entry for Monk Lv 3+ ("reduce damage by 1d10 + DEX + Monk Lv; catch if reduced to 0"). The reaction prompt + broadcast are wired; the damage-reduction roll is GM-applied in v1 (same convention as other panel reactions). *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 4 | Slow Fall | ✅ | v2.54.1 — pure-descriptive. Reaction to reduce fall damage by 5 × monk level (35 at Lv 7). SimpleVTT doesn't model fall damage today (no `_apply_fall_damage` helper, no terrain-height tracking), so the descriptive entry on the sheet is sufficient. Re-evaluate if a fall-damage system ships — would then become a real reaction endpoint like Uncanny Dodge. |
 | 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
@@ -712,10 +738,10 @@ The `### Header` names below come from the `features` field of each JSON.
 | 7 | Stillness of Mind | ✅ | v2.49.229 — `/api/campaign/{cid}/use_stillness_of_mind` endpoint. Action, unlimited uses. Takes `buff_key`; validates it's in `_STILLNESS_OF_MIND_ALLOWED_BUFF_KEYS = {charmed, frightened}` (refuses paralyzed/stunned/etc.); reuses `_remove_buff` to clear the matching buff. Sheet picker pops when monk has BOTH charmed and frightened simultaneously. Demo Kael bumped Lv 6 → 7 to land the fixture. Harness: `test_use_stillness_of_mind.py`. |
 | 10 | Purity of Body | ✅ | Monk Lv 10: pure-descriptive (immunity to disease + poison). RAW: would gate the disease / poisoned conditions but SimpleVTT doesn't model those conditions today, so the description text is sufficient. Re-evaluate if a disease engine ships. |
 | 13 | Tongue of the Sun and Moon | ✅ | Monk Lv 13: pure-descriptive language feature (understand all spoken languages). No mechanic required RAW. |
-| 14 | Diamond Soul | ⚪ | |
+| 14 | Diamond Soul | ✅ | v2.99.208 — proficiency in all saves + `/use_diamond_soul_reroll` (spend 1 ki to reroll a failed save). `_pc_has_diamond_soul` gate, `_reroll_detect_diamond_soul`, broadcast `source: diamond-soul-reroll`. Harness `test_diamond_soul.py` + `test_use_diamond_soul_reroll.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
 | 15 | Timeless Body | ✅ | Monk Lv 15: pure-descriptive (you age more slowly + need less food/water). No mechanic required RAW. |
-| 18 | Empty Body | ⚪ | |
-| 20 | Perfect Self | ⚪ | |
+| 18 | Empty Body | ✅ | v2.99.209 — `/use_empty_body` (spend 4 ki → invisible + resistance to all but force for 1 min). Harness `test_use_empty_body.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
+| 20 | Perfect Self | ✅ | v2.99.210 — regain 4 ki at initiative when starting combat with none. Harness `test_perfect_self.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
 
 ### Paladin
 
@@ -732,8 +758,8 @@ The `### Header` names below come from the `features` field of each JSON.
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
 | 6 / 18 | Aura of Protection | ✅ | v2.53.0 — first ally-conferred save-bonus mechanic. `_aura_of_protection_bonus(db, campaign_id, saving_char_id)` walks the active battle's init tracker for any Paladin Lv 6+ (via `_paladin_level_from_sheet`); returns the highest CHA mod (min +1 per RAW) + the paladin's Character row. Appended to `base_expression` at roll_request creation time (same construction-time hook as Danger Sense), so the PC's save shape becomes e.g. `1d20+3+5` (d20 + aura + stat). Wired into all 3 save-roll sites: `/place_aoe` PC branch, `/cast_spell` single + AoE PC save roll_request. Broadcasts `feature_used(source="aura-of-protection")` naming the paladin. Caelan (Lv 6 Oath of Devotion, bumped Lv 5 → 6 in this commit) is the demo fixture; harness in `test_aura_of_protection.py`. v1 simplifications: no 10 ft radius check (any paladin in init grants the aura to every saver — filed for follow-up via `_distance_ft_between_points`); multi-paladin doesn't stack (max wins per RAW). Lv 18 expansion to 30 ft is a future content tweak — same helper, larger radius. |
-| 10 / 18 | Aura of Courage | ⚪ | |
-| 11 | Improved Divine Smite | ⚪ | |
+| 10 / 18 | Aura of Courage | ⚪ | **The lone genuine gap** (confirmed v2.344.3 reconciliation — no code/test). RAW: you + friendly creatures within 10 ft (30 ft at Lv 18) can't be frightened while you're conscious. Would build on the `_aura_of_protection_bonus` init-walk pattern as a frightened-immunity aura. |
+| 11 | Improved Divine Smite | ✅ | v2.99.153 — +1d8 radiant on every melee weapon hit for Paladin Lv 11+. Harness `test_improved_divine_smite.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
 | 14 | Cleansing Touch | 🟢 | Resource counter. v2.15.6 added the curated `_FEATURE_ECONOMY['cleansing-touch']` entry so `/use_feature` accepts the slug (server-side announce works). No demo PC at Lv 14+ yet (Caelan is Lv 5), so the resource ⚡ Use branch + target picker UI for "end one spell on yourself or one willing creature you touch" is deferred to a future Lv 14+ Paladin fixture. Harness contract pin: `test_cleansing_touch_curated` in `test_use_feature.py`. |
 
 ### Ranger
@@ -745,14 +771,14 @@ The `### Header` names below come from the `features` field of each JSON.
 | 2 | Fighting Style | 🟢 | Same framework as Fighter / Paladin rows above. v2.99.83 wired Archery (+2 ranged attack); Rowan Quickbow is the demo fixture (`fighting_style: "archery"`; Longbow auto-applies +2 at /attack time). Dueling / Great Weapon Fighting / Two-Weapon Fighting / Defense / Protection share the same gate pattern; any Ranger PC can swap `sheet.fighting_style` via PATCH and the helpers fire accordingly. |
 | 2 | Spellcasting | ✅ | |
 | 3 | Ranger Archetype | ✅ | Subclass system shipped — see Subclasses table. Hunter has features JSON (Hunter's Prey / Defensive Tactics / Multiattack still descriptive). |
-| 3 | Primeval Awareness | ⚪ | |
+| 3 | Primeval Awareness | ✅ | v2.99.221 — `/use_primeval_awareness` (spend a spell slot to sense creature types within 1/6 miles). `_pc_has_primeval_awareness` gate. Harness `test_use_primeval_awareness.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
 | 8 | Land's Stride | ✅ | v2.55.1 — pure-descriptive. RAW: ignore difficult terrain, advantage on saves vs plant-based magical impediments. SimpleVTT doesn't model difficult terrain on the canvas (no `terrain_difficulty` field on map cells, no movement-cost gating), so the descriptive entry is sufficient. Re-evaluate if a difficult-terrain system ships. No demo Lv 8+ Ranger fixture today. |
-| 10 | Hide in Plain Sight | ⚪ | |
-| 14 | Vanish | ⚪ | |
-| 18 | Feral Senses | ⚪ | |
-| 20 | Foe Slayer | ⚪ | |
+| 10 | Hide in Plain Sight | ✅ | v2.99.214 — `/use_hide_in_plain_sight` (+10 to Stealth while camouflaged + motionless). Harness `test_use_hide_in_plain_sight.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
+| 14 | Vanish | ✅ | v2.99.215 — `/use_vanish` (Hide as a bonus action; can't be tracked non-magically). Harness `test_use_vanish.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
+| 18 | Feral Senses | ✅ | v2.99.220 — blindsight-style awareness vs unseen attackers (no advantage against you; sense invisible within 30 ft). Harness `test_feral_senses.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
+| 20 | Foe Slayer | ✅ | v2.99.216 — `/use_foe_slayer` (once per turn add WIS mod to an attack or damage roll vs a favored enemy). Harness `test_use_foe_slayer.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
 
 ### Rogue
 
@@ -766,11 +792,11 @@ The `### Header` names below come from the `features` field of each JSON.
 | 4 / 8 / 10 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 | Uncanny Dodge | ✅ | v2.49.243 — server-side reaction halving in the damage pipeline. `_target_uses_uncanny_dodge` (Rogue Lv 5+, reaction available) fires inside `_apply_damage_to_combatant` when the new `is_attack=True` kwarg is set by an attack-roll caller. Halves damage, flips reaction chip, broadcasts `feature_used`. RAW save-spell paths intentionally skip the halving (only triggers on attacker-hits-you-with-an-attack). Auto-fires on the first incoming attack each round; "decline reaction" toggle filed for follow-up. |
 | 7 | Evasion | ✅ | v2.51.6 — shares the v2.51.5 `_apply_evasion_to_dex_save_damage` plumbing with Monk Evasion; `_target_uses_evasion` recognizes BOTH `_monk_level_from_sheet(sheet) >= 7` AND `_rogue_level_from_sheet(sheet) >= 7`. This commit bumped demo Pip Lv 5 → 7 (HP 33 → 47, hit_dice 5 → 7, Sneak Attack die 3d6 → 4d6 via the JS `_sneakAttackDie(lv)` helper) and added the `evasion` `class_features` row. Harness coverage: new `test_evasion_rogue_save_success_zero_damage` test in `test_use_save_evasion.py` proves Fireball at Pip → save success → 0 damage + Evasion broadcast. |
-| 11 | Reliable Talent | ⚪ | Floor-of-10 on proficient skill checks — would need an option on skill roll |
+| 11 | Reliable Talent | ✅ | v2.99.197 — `_apply_reliable_talent_floor` floors the kept d20 to 10 on a proficient ability check for Rogue Lv 11+ (gated by `_pc_has_reliable_talent`); broadcast `source: reliable-talent`. The same hook backs Silver Tongue. Harness `test_reliable_talent.py` (3 tests). *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
 | 14 | Blindsense | ✅ | Rogue Lv 14: pure-descriptive (sense unseen creatures within 10 ft). RAW: would interact with a fog-of-war / hidden-token engine, but SimpleVTT doesn't model token hiding at that granularity. Re-evaluate if a hidden/seen state ships. |
-| 15 | Slippery Mind | ⚪ | |
-| 18 | Elusive | ⚪ | |
-| 20 | Stroke of Luck | 🟢 | Resource counter. Curated `_FEATURE_ECONOMY` entry shipped v2.16.2 (slot:'free'). Full miss-to-hit / fail-to-20 UX waits on (B) roll-time intercept + a Lv 20 Rogue fixture. |
+| 15 | Slippery Mind | ✅ | v2.99.206 — WIS-save proficiency for Rogue Lv 15+. Harness `test_slippery_mind.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
+| 18 | Elusive | ✅ | v2.99.207 — no attack roll has advantage against you while you're not incapacitated. Harness `test_elusive.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
+| 20 | Stroke of Luck | ✅ | v2.99.198 — `/use_stroke_of_luck` (turn a miss into a hit or a failed check into a 20; 1/short rest). Harness `test_use_stroke_of_luck.py`. *(Corrected from 🟢 in the v2.344.3 reconciliation — the roll-time intercept + Lv 20 fixture shipped.)* |
 
 ### Sorcerer
 
@@ -790,7 +816,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Otherworldly Patron | ✅ | Subclass system shipped — see Subclasses table. The Fiend has features JSON (Dark One's Blessing / Own Luck / Fiendish Resilience still descriptive). |
 | 1 | Pact Magic | ✅ | v2.99.25 — Warlock spell slots refresh on a **short** rest (RAW PHB p.107). Slot-level `reset: "short"` field on the sheet's `spell_slots[cslug][lvl]` row; `/rest` short-rest branch walks the field and resets `used = 0` on any matching row + broadcasts `spell_slot_update` per refreshed slot. Magnus Hexbinder (Warlock The Fiend Lv 5) is the demo fixture (2 L3 Pact slots). Harness: `test_warlock_pact_magic_rest.py` (3 tests covering short rest happy path, long-rest sanity, and a Wizard-slot-unaffected regression guard). The slot-level marker rather than a class-slug gate generalizes to multiclass + future homebrew short-rest casters. |
 | 2 | Eldritch Invocations | 🟢 | Picker UI still filed (invocations are stored as `sheet.feats[]` entries with the `eldritch-invocation-{slug}` slug convention). **Two invocations mechanically wired so far.** **Agonizing Blast ✅** v2.99.89 — `_pc_agonizing_blast_bonus(sheet, attack)` returns CHA mod when the sheet has the invocation + the attack is Eldritch Blast (name match); appended to the damage expression. Magnus's Eldritch Blast damage dropped from "1d10+3" to "1d10" so the auto-apply doesn't double; end-roll identical. **Repelling Blast ✅** v2.99.90 — `_apply_repelling_blast_push(...)` async helper wired into /attack post-hit/post-damage. On a successful EB hit, computes the push vector (target − caster, normalized, scaled to 2 cells), snaps to grid, commits the target token's new position, broadcasts `token_move` + `feature_used(source=repelling-blast)`. Magnus's demo `feats` list gains both invocations; harness in `test_eldritch_invocations.py` (3 tests for Agonizing Blast) + `test_repelling_blast.py` (2 tests for the push). Other invocations (Devil's Sight, Mask of Many Faces, Eyes of the Rune Keeper, Hex Warrior, Lifedrinker, Lance of Lethargy, etc.) stay 🟡 descriptive — each needs different machinery; filed for follow-ups. |
-| 3 | Pact Boon | ⚪ | |
+| 3 | Pact Boon | ✅ | v2.99.199–.200 — all three pacts wired: Pact of the Tome (`/select_pact_tome_cantrip`), Pact of the Chain (`/select_pact_chain_familiar`), Pact of the Blade (`/summon_pact_blade`). Harness `test_select_pact_tome_cantrip.py` + `test_select_pact_chain_familiar.py` + `test_summon_pact_blade.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 11 / 13 / 15 / 17 | Mystic Arcanum | ✅ | v2.99.45 — `/use_mystic_arcanum` endpoint takes `{character_id, slot_level: 6\|7\|8\|9}`; validates Warlock + class level >= gate (Lv 11/13/15/17 for L6/L7/L8/L9) + the matching `mystic-arcanum-l{N}` resource has uses remaining. Atomic decrement + `resource_update` + `feature_used(source=mystic-arcanum)` broadcasts. **L7/L8/L9 tier resources shipped v2.99.86** — Magnus's sheet now carries all 4 tiers; 5 new tier-gate harness tests (L7@Lv13, L8@Lv15, L9@Lv17 happy + L8@Lv13 / L9@Lv15 level-too-low denials). **Free-cast routing shipped v2.99.88** — `/cast_spell` now accepts a `free_cast: true` flag that routes through the Mystic Arcanum charge instead of consuming a Pact Magic slot. Server validates Warlock + level gate + MA resource; on success, decrements the MA resource, SKIPS the Pact slot decrement entirely, broadcasts `feature_used(source=mystic-arcanum-cast)` + `resource_update`. 5 new 409 error codes (free_cast_wrong_class / free_cast_invalid_slot_level / free_cast_level_too_low / free_cast_no_arcanum_resource / free_cast_no_uses_left). Magnus Hexbinder demo across all paths. 14 total harness tests across `test_use_mystic_arcanum.py` + `test_mystic_arcanum_free_cast.py`. |
 | 20 | Eldritch Master | ✅ | v2.99.46 — `/use_eldritch_master` endpoint. Validates Warlock + level >= 20 + `eldritch-master-uses` resource at >= 1. Walks every spell_slots row carrying `reset: "short"` (the Pact Magic marker — same field the v2.99.25 short-rest refresh uses), sets used=0, broadcasts `spell_slot_update` per refreshed row + decrements daily counter + broadcasts `resource_update` + `feature_used(source=eldritch-master)`. Magnus Hexbinder is the demo fixture (carries `eldritch-master-uses` 1/1 long; tests bump Lv 5 → Lv 20 via the v2.99.39 capstone pattern). 5 tests cover happy + 4 gate cases. "1-minute" RAW casting time simplified to instant; future polish could install a `eldritch-master-channeling` buff. |
@@ -803,8 +829,8 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Arcane Recovery | ✅ | v2.16.1 — counter (1/1 long-rest) added to Thalindra's demo sheet; dedicated `/use_arcane_recovery` endpoint validates allowance (⌈wizard_lv/2⌉, L1-L5 only) + atomically decrements counter + restores selected slots + broadcasts spell_slot_update per slot + resource_update + feature_used. Resource ⚡ Use opens a +/− stepper modal with running spent/allowance display. Harness coverage in `test_use_arcane_recovery.py`. |
 | 2 | Arcane Tradition | ✅ | Subclass system shipped — see Subclasses table. School of Evocation has features JSON; Divination has Portent Dice counter. Thalindra is the demo Evocation Wizard. |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
-| 18 | Spell Mastery | ⚪ | |
-| 20 | Signature Spells | ⚪ | |
+| 18 | Spell Mastery | ✅ | v2.99.217 — `/select_spell_mastery` (pick a L1 + L2 spell to cast at will at their lowest level). Harness `test_select_spell_mastery.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
+| 20 | Signature Spells | ✅ | v2.99.218 — `/select_signature_spells` (two L3 spells always prepared, cast once each per short rest without a slot). Harness `test_select_signature_spells.py`. *(Corrected from ⚪ in the v2.344.3 reconciliation.)* |
 
 ---
 
@@ -2047,7 +2073,7 @@ Updated for v2.99.9 (re-audit 2026-05-31). ~~Strikethrough~~ items are shipped.
 6. ~~**(E) Action-economy — Phase 3+4** — class-feature table + gating with GM override.~~ ✅ shipped v2.6.0 (Phase 3 curated table) + v2.6.1 (Phase 4 gating) + v2.7.2 (Phase 4a dimming) + v2.8.0 (strict mode).
 7. **Cross-cutting (A) generalized.** Refactor LoH / Wild Shape / Bardic Inspiration / Ki / Sorcery Points onto a single `resource → option → target → effect` framework. Now post-shipping #3-5 since the abstraction emerges from the concrete cases. Ki picker and Channel Divinity picker now share the v2.9.0 primitive; Sorcery Points + Superiority Dice + Lay on Hands disease-cure option still need their pickers wired.
 8. ~~**Sneak Attack / Divine Smite per-attack uplift toggle.**~~ ✅ shipped v2.16.0 (per-attack uplift modal on Strike click; both work as confirmation-after-d20-result not RAW-correct pre-roll declaration; filed for the eventual Phase B mid-roll intercept).
-9. ~~**(B) Roll-time intercepts — save-roll path**~~ ✅ shipped (Danger Sense v2.52.0, Aura of Protection v2.53.0, Countercharm v2.54.0, Aura of Devotion v2.55.0, Indomitable v2.56.0, Mindless Rage v2.57.0). **Attack-roll path** ✅ partly shipped via the F9 Reactions framework (Lucky feat v2.77.0, Defensive Duelist v2.74.0, Shield v2.69.0). **Remaining attack-roll ⚪ items:** Portent (Divination Wizard Lv 2 — needs banked-values panel + `swap_d20_result` reaction kind), Reliable Talent (Rogue Lv 11 — needs skill-check construction hook), Stroke of Luck (Rogue Lv 20 — same framework as Silvery Barbs), Halfling Lucky (race — folds into (D) Phase 2).
+9. ~~**(B) Roll-time intercepts — save-roll path**~~ ✅ shipped (Danger Sense v2.52.0, Aura of Protection v2.53.0, Countercharm v2.54.0, Aura of Devotion v2.55.0, Indomitable v2.56.0, Mindless Rage v2.57.0). **Attack-roll path** ✅ partly shipped via the F9 Reactions framework (Lucky feat v2.77.0, Defensive Duelist v2.74.0, Shield v2.69.0). **Remaining attack-roll ⚪ items:** Portent (Divination Wizard Lv 2 — needs banked-values panel + `swap_d20_result` reaction kind), Halfling Lucky (race — folds into (D) Phase 2). *(v2.344.3 reconciliation: Reliable Talent shipped v2.99.197, Stroke of Luck shipped v2.99.198 — both struck from this list.)*
 10. ~~**(C) Buff slot.**~~ ✅ shipped (v2.19.x → v2.49.x → v2.58.0+ → v2.97.x catalog). Buff dict shape stable; install/remove helpers operational; mechanical-effect intercepts at attack-roll / save-roll / heal-resolution; concentration cleanup via `_drop_caster_concentration` + NPC parity v2.98.0. **`_SPELL_BUFF_MAP` catalog** v2.97.30+ adds Bless/Bane/Heroism/Aid/Shield of Faith/PFE&G/Sanctuary/Faerie Fire. Bardic Inspiration recipient die ✅ v2.97.56–57. Remaining: more spells in `_SPELL_BUFF_MAP` (Crusader's Mantle, Enhance Ability, Greater Invisibility, etc.); suspended-buff state for Mindless Rage RAW second sentence (filed).
 11. **(D) Passive trait engine** ⚪ — see the rewritten section above. Phased plan (Phase 1 stat-mod confirmation, Phase 2 race-keyed save-advantage table, Phase 3 race condition-install immunity, Phase 4 Half-Orc Relentless Endurance, Phase 5 Tiefling Infernal Legacy). **Phase 2 is the most leveraged next commit** — would unblock Dwarven Resilience + Gnome Cunning + High Elf Trance + Fey Ancestry + Halfling Lucky-on-natural-1 in one commit by reusing the v2.52.0+ save-roll construction hook.
 12. ~~**(E) Action-economy — Phase 5** — movement tracker.~~ ✅ shipped v2.6.2 (chip) + v2.8.1-2 (breadcrumb) + v2.8.3 (Dash modal).

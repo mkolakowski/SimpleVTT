@@ -27,7 +27,7 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 ## SRD 5e Audit (v2.344.1 refresh)
 
-**Audit scope.** Recomputed directly from the content JSON (`app/data/local/dnd5e/items/`, 294 equipment files) + the three magic-item registry dicts in `app/routes/tabletop_routes.py` as of v2.344.1, after the v2.316.0→v2.344.0 magic-item content sprint (Sword of Life Stealing through "The Armory's Remainder"). This pass records that **the magic-item content tail is now closed**. A follow-up correction in **v2.344.2** found the spell upcast dice/heal scaling is *also* effectively complete (the prose parser covers it — see the Spells row), so the top remaining SRD-automation lever is now the **class-feature ⚪ tail** (24 rows).
+**Audit scope.** Recomputed directly from the content JSON (`app/data/local/dnd5e/items/`, 294 equipment files) + the three magic-item registry dicts in `app/routes/tabletop_routes.py` as of v2.344.1, after the v2.316.0→v2.344.0 magic-item content sprint (Sword of Life Stealing through "The Armory's Remainder"). This pass records that **the magic-item content tail is now closed**. A follow-up correction in **v2.344.2** found the spell upcast dice/heal scaling is *also* effectively complete (the prose parser covers it — see the Spells row). A further reconciliation in **v2.344.3** found the **class-feature ⚪ tail was likewise stale** — 22 of 24 rows were already shipped (v2.99.197–.221) and just never flipped. After all three corrections the SRD ruleset is **~88% automated**, and the single remaining genuine gap is **Aura of Courage** (Paladin Lv 10/18).
 
 ### Per-category coverage (the headline numbers)
 
@@ -36,11 +36,12 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 | Races | 9 | **~90%** | Unchanged from v2.315.0. |
 | Monsters | 322 | **~85%** | Unchanged. |
 | Conditions | 15 | **~85%** | Unchanged. |
-| Class features | **222 rows** | **~81%** | Unchanged — Barbarian Lv 9–20, Monk capstones, Ranger Lv 10–20, Rogue Reliable Talent / Stroke of Luck still ⚪. |
+| Class features | **222 rows** | **~99%** | **Reconciliation correction (v2.344.3):** the prior ~81% / "24 ⚪ rows" was stale doc-status, not missing code. 22 of those 24 rows were already shipped end-to-end (v2.99.197–.221, each with a dedicated harness test) but never flipped from ⚪ in [`class-content-status.md`](plans/class-content-status.md). All flipped to ✅ (Deflect Missiles → 🟢). **The lone genuine ⚪ is Aura of Courage** (Paladin Lv 10/18) — no code/test. |
+
 | Spells | 319 | **~72%** | **Upcast scaling correction (v2.344.2):** the prior "~110 lack upcast scaling" figure counted spells lacking the *structured field*, not spells lacking *scaling* — the v2.125.0 prose parser derives per-slot dice from `higher_level` at cast time. Of 73 leveled spells with a modeled base, **39 dice-scale automatically** (32 structured + 7 parser); the other 34 carry no per-slot dice clause because RAW they don't dice-scale (Finger of Death, Meteor Swarm, Sunburst) or scale by count/duration/area handled elsewhere. **Dice/heal upcast scaling is effectively complete.** The remaining spell gap is area-effect automation + cast-and-broadcast utility spells, not upcast. |
 | Magic items | **235 / 239 wired** | **~98%** | **Up from 123/239 (~51%) at v2.315.0.** The v2.316–v2.344 content sprint wired the entire tail. The only 4 unwired are the generic/meta slugs (`potion-of-healing`, `spell-scroll`, `weapon-1-2-or-3`, `wand-of-the-war-mage-1-2-or-3`) — intentionally **not** discrete collectibles. Effectively **100% of discrete SRD magic items** are now wired. |
 
-**Overall ~83%** automated across the SRD ruleset (up from ~75% — the magic-item jump from ~51% → ~98% is the mover).
+**Overall ~88%** automated across the SRD ruleset (up from ~75% at v2.315.0 — the magic-item jump from ~51% → ~98% and the class-feature correction from ~81% → ~99% are the movers).
 
 ### How the count was computed
 
@@ -50,11 +51,12 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 The engine substrate is complete; everything below is content/scaling-data, not engine code.
 
-1. 🔴 **P1 — Class-feature ⚪ tail (24 rows).** *Promoted from P2 now that both magic items and spell-upcast scaling are closed.* Barbarian Lv 9–20, Monk Deflect Missiles / Diamond Soul / Empty Body / Perfect Self, Ranger Lv 10–20 (minus Vanish), Rogue Reliable Talent / Slippery Mind / Elusive / Stroke of Luck.
-2. 🟡 **P2 — Spell area-effect + utility automation.** With dice/heal upcast scaling complete (below), the remaining spell lever is automating area-of-effect targeting and the cast-and-broadcast-only utility spells. Lower leverage than the class-feature tail.
-3. 🟢 **P3 — Generalize bespoke upcast +targets/HP-pool math.** Migrate Sleep / Hold Person / Hold Monster off per-endpoint constants onto a shared structured `upcast` param field (a refactor — the last spell-upcast *engine* item). See [`spell-upcasting.md`](plans/spell-upcasting.md).
-4. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete via structured fields + the v2.125.0 prose parser (39/73 modeled-base leveled spells dice-scale; the rest are RAW non-scalers or count/duration scalers). Corrected v2.344.2 — see the Spells row above.
-5. ✅ **DONE — Magic-item content tail.** Closed across v2.316.0–v2.344.0. Only the 4 generic/meta slugs remain, which are intentionally out of scope.
+1. 🔴 **P1 — Aura of Courage (Paladin Lv 10/18).** The single remaining genuine ⚪ class feature after the v2.344.3 reconciliation. RAW: the paladin + friendly creatures within 10 ft (30 ft at Lv 18) can't be frightened while the paladin is conscious. Build it on the `_aura_of_protection_bonus` init-walk pattern as a frightened-immunity aura + a `feature_used(source=aura-of-courage)` broadcast. One real code commit + harness test.
+2. 🟡 **P2 — Spell area-effect + utility automation.** With dice/heal upcast scaling complete (below), the remaining spell lever is automating area-of-effect targeting and the cast-and-broadcast-only utility spells.
+3. 🟢 **P3 — Class-feature test-hygiene + bespoke upcast refactor.** (a) Fix the seed-drift / stale-fixture capstone tests (`test_persistent_rage`, `test_select_spell_mastery`, `test_select_signature_spells`) that pass in CI but go red against a persistent local DB. (b) Migrate Sleep / Hold Person / Hold Monster off per-endpoint constants onto a shared structured `upcast` param field. See [`spell-upcasting.md`](plans/spell-upcasting.md).
+4. ✅ **DONE — Class-feature ⚪ tail.** Reconciled v2.344.3 — 22 of 24 "⚪" rows were already shipped (v2.99.197–.221); flipped to ✅ in [`class-content-status.md`](plans/class-content-status.md). Only Aura of Courage remains (now P1 above).
+5. ✅ **DONE — Spell upcast dice/heal scaling.** Effectively complete via structured fields + the v2.125.0 prose parser (39/73 modeled-base leveled spells dice-scale; the rest are RAW non-scalers or count/duration scalers). Corrected v2.344.2 — see the Spells row above.
+6. ✅ **DONE — Magic-item content tail.** Closed across v2.316.0–v2.344.0. Only the 4 generic/meta slugs remain, which are intentionally out of scope.
 
 ### Out-of-scope (unchanged)
 

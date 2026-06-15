@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.344.3] - 2026-06-15 — "The Mustering Roll"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only reconciliation of [`class-content-status.md`](docs/plans/class-content-status.md) + [`TODO.md`](TODO.md) recording that **the class-feature ⚪ tail was almost entirely already shipped** — the SRD audit's "~81% / 24 rows unstarted" was stale doc-status, not missing code. 22 of the 24 rows still showing ⚪ in the per-class tables had live code + a dedicated harness test (v2.99.197–.221) and simply were never flipped from ⚪.
+
+**Description:** Cross-checked every ⚪ row against the codebase and the harness suite. Flipped to ✅: Brutal Critical, Relentless Rage, Persistent Rage, Indomitable Might, Primal Champion (Barbarian); Diamond Soul, Empty Body, Perfect Self (Monk); Improved Divine Smite (Paladin); Primeval Awareness, Hide in Plain Sight, Vanish, Feral Senses, Foe Slayer (Ranger); Reliable Talent, Slippery Mind, Elusive, Stroke of Luck (Rogue, the last from 🟢); Pact Boon (Warlock); Spell Mastery, Signature Spells (Wizard). Deflect Missiles flipped ⚪ → 🟢 (reactions-panel entry, v2.68.6). The **lone remaining genuine ⚪ is Aura of Courage** (Paladin Lv 10/18) — no code, no test — now the documented P1. Class-feature coverage corrected ~81% → ~99%; overall SRD automation ~83% → ~88%. Also struck Reliable Talent + Stroke of Luck from the stale "remaining attack-roll ⚪ items" audit note. PATCH — doc-only, no code or schema change; both docs already wiki-surfaced. **Local-test caveat (filed P3):** three capstone tests (`test_persistent_rage`, `test_select_spell_mastery`, `test_select_signature_spells`) go red against a *persistent* local postgres volume due to seed-drift / stale fixtures — the features are shipped (endpoints return structured responses) and CI re-seeds fresh, so this is test-hygiene, not a feature gap.
+
+### Changed
+- `docs/plans/class-content-status.md`: 22 per-class ⚪ rows flipped to ✅ / 🟢 with version + harness-test references; new v2.344.3 reconciliation banner; stale attack-roll ⚪ audit note corrected.
+- `TODO.md`: SRD-audit Class-features row ~81% → ~99%, overall ~83% → ~88%; remaining-gaps list re-pointed at Aura of Courage (P1) + the test-hygiene/refactor follow-ups (P3).
+
 ## [2.344.2] - 2026-06-15 — "The Parser's Reach"
 
 **Schema version:** 69
