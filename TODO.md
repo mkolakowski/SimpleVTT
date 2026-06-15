@@ -17,11 +17,46 @@ When the assistant offers a single-option "what's next?" via `AskUserQuestion` a
 
 **Quick map of where to look:**
 
-- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.315.0 refresh)](#srd-5e-audit-v23150-refresh) for the current per-category coverage table and re-prioritisation, then [SRD 5e Audit (2026-06-14 refresh)](#srd-5e-audit-2026-06-14-refresh), [SRD 5e Audit (2026-06-13 refresh)](#srd-5e-audit-2026-06-13-refresh), [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) and [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) for the prior passes. The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are **123 / 239 wired (~51%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor), so the percentage was understated; and class features are **222 per-row entries (~81%)**, not the stale "133". Overall SRD automation is **~75%**.
+- **SRD 5e (CC BY 4.0) audit findings** → see [SRD 5e Audit (v2.344.1 refresh)](#srd-5e-audit-v23441-refresh) for the current per-category coverage table and re-prioritisation (magic-item content tail **closed**), then [SRD 5e Audit (v2.315.0 refresh)](#srd-5e-audit-v23150-refresh) for the prior pass, then [SRD 5e Audit (2026-06-14 refresh)](#srd-5e-audit-2026-06-14-refresh), [SRD 5e Audit (2026-06-13 refresh)](#srd-5e-audit-2026-06-13-refresh), [SRD 5e Audit (2026-06-11 refresh)](#srd-5e-audit-2026-06-11-refresh) and [SRD 5e Audit (2026-06-10)](#srd-5e-audit-2026-06-10) for the prior passes. The v2.315.0 refresh **corrects two denominators** that all prior passes got wrong: magic items are **123 / 239 wired (~51%)** — the old "292" figure counted total equipment (239 magic + 37 mundane weapons + 18 mundane armor), so the percentage was understated; and class features are **222 per-row entries (~81%)**, not the stale "133". Overall SRD automation is **~75%**.
 - **Active class-feature automation backlog** → see [Full Class-Feature Automation — remaining backlog](#full-class-feature-automation--remaining-backlog) (just Phase 8 + a few per-feature Phase-2 finishers remain after v2.149.1).
 - **Design plans with deferred phases** → see [Design Plans Backlog](#design-plans-backlog) (every `docs/plans/*.md` indexed with a priority tag).
 - **One-off bugs + UI polish that don't have a design plan** → see [Manually Added](#manually-added).
 - **Big feature buckets that aren't tracked by a plan** → see the topic sections below (Character Sheet, GM Tools, Combat, Maps, Media, Player Features, UI/Mobile, Rules Reference, Legal & Compliance, Test Infrastructure, Integrations, Visual, Class Features (next cycle)). The priority legend doesn't apply to these — they're topic-grouped, not P-tagged.
+
+---
+
+## SRD 5e Audit (v2.344.1 refresh)
+
+**Audit scope.** Recomputed directly from the content JSON (`app/data/local/dnd5e/items/`, 294 equipment files) + the three magic-item registry dicts in `app/routes/tabletop_routes.py` as of v2.344.1, after the v2.316.0→v2.344.0 magic-item content sprint (Sword of Life Stealing through "The Armory's Remainder"). This pass exists to record that **the P1 magic-item content tail is now closed** and to re-point the top SRD-automation lever at spell upcast scaling (the new P1).
+
+### Per-category coverage (the headline numbers)
+
+| Category | SRD count | Automated | Notes |
+|---|---|---|---|
+| Races | 9 | **~90%** | Unchanged from v2.315.0. |
+| Monsters | 322 | **~85%** | Unchanged. |
+| Conditions | 15 | **~85%** | Unchanged. |
+| Class features | **222 rows** | **~81%** | Unchanged — Barbarian Lv 9–20, Monk capstones, Ranger Lv 10–20, Rogue Reliable Talent / Stroke of Luck still ⚪. |
+| Spells | 319 | **~70%** | Unchanged — ~110 cast-and-broadcast-only spells still lack upcast scaling. |
+| Magic items | **235 / 239 wired** | **~98%** | **Up from 123/239 (~51%) at v2.315.0.** The v2.316–v2.344 content sprint wired the entire tail. The only 4 unwired are the generic/meta slugs (`potion-of-healing`, `spell-scroll`, `weapon-1-2-or-3`, `wand-of-the-war-mage-1-2-or-3`) — intentionally **not** discrete collectibles. Effectively **100% of discrete SRD magic items** are now wired. |
+
+**Overall ~83%** automated across the SRD ruleset (up from ~75% — the magic-item jump from ~51% → ~98% is the mover).
+
+### How the count was computed
+
+294 equipment files = 239 magic items + 37 mundane weapons + 18 mundane armor (the mundane rows need no magic wiring). Distinct wired slugs across `_MAGIC_ITEM_PASSIVES` (176) + `_MAGIC_ITEM_ACTIONS` (51) + `_MAGIC_ITEM_ATTACK_RIDERS` (17) = 241, of which 235 map onto SRD item files. 239 − 235 = 4 unwired, all generic/meta. Most are catalog-stub passives (mechanics GM-narrated in v1); ~70 have full mechanical handlers (on-hit riders, charge-with-spell, nat-20 hooks, ability-overrides, action dispatchers).
+
+### Remaining gaps (priority order — toward full SRD automation)
+
+The engine substrate is complete; everything below is content/scaling-data, not engine code.
+
+1. 🔴 **P1 — Spell upcast scaling (~110 spells).** *Promoted from P2 now that magic items are closed.* Add `damage_per_slot` / scaling data to the cast-and-broadcast-only spells so higher-slot casts scale automatically. Moves Spells from ~70% → ~90%+ and is now the single biggest lever on the overall %.
+2. 🟢 **P2 — Class-feature ⚪ tail (24 rows).** Barbarian Lv 9–20, Monk Deflect Missiles / Diamond Soul / Empty Body / Perfect Self, Ranger Lv 10–20 (minus Vanish), Rogue Reliable Talent / Slippery Mind / Elusive / Stroke of Luck.
+3. ✅ **DONE — Magic-item content tail.** Closed across v2.316.0–v2.344.0. Only the 4 generic/meta slugs remain, which are intentionally out of scope.
+
+### Out-of-scope (unchanged)
+
+Tasha's, Xanathar's-beyond-SRD, Strixhaven, post-SRD feats, backgrounds beyond Acolyte stay future-3.x scope.
 
 ---
 

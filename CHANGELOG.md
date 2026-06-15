@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.344.1] - 2026-06-15 — "The Honest Tally"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only SRD-audit refresh in [`TODO.md`](TODO.md) recording that the **magic-item content tail is closed**. New "SRD 5e Audit (v2.344.1 refresh)" section: magic items are now **235 / 239 wired (~98%)**, up from 123/239 (~51%) at v2.315.0 — the v2.316.0→v2.344.0 content sprint wired the entire tail. The only 4 unwired slugs (`potion-of-healing`, `spell-scroll`, `weapon-1-2-or-3`, `wand-of-the-war-mage-1-2-or-3`) are generic/meta and intentionally not discrete collectibles.
+
+**Description:** Recomputed the magic-item coverage directly from the 294 equipment JSON files (239 magic + 37 mundane weapons + 18 mundane armor) cross-referenced with the three registry dicts (`_MAGIC_ITEM_PASSIVES` 176 + `_MAGIC_ITEM_ACTIONS` 51 + `_MAGIC_ITEM_ATTACK_RIDERS` 17 = 241 distinct slugs, 235 mapping onto SRD item files). Promotes **spell upcast scaling (~110 spells)** from P2 to **P1** as the new top SRD-automation lever, demotes the class-feature ⚪ tail to P2, and marks the magic-item tail DONE. Overall SRD automation recomputed ~75% → ~83%. PATCH — doc-only, no code or schema change. TODO.md is already surfaced via the wiki allowlist (`todo`).
+
+### Changed
+- `TODO.md`: new "SRD 5e Audit (v2.344.1 refresh)" section at the top of the audit stack; quick-map pointer updated to lead with it; magic-item tail marked closed and spell upcast promoted to P1.
+
 ## [2.344.0] - 2026-06-15 — "The Armory's Remainder"
 
 **Schema version:** 69
