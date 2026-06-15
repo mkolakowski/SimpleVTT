@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.309.0] - 2026-06-14 — "The Iron Constitution"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in + dispatch extension — **Manual of Bodily Health** (RAW DMG p.176, very rare, no attunement) is the second permanent ability-increase consumable, riding the v2.308.0 `use_kind: "ability_increase"` dispatch. The CON branch ALSO recomputes max HP: a Constitution-modifier bump retroactively raises max HP by 1 per level (RAW PHB p.173). One dispatch extension, a demo seed on Garrik Ironside, and two harness tests.
+
+**Description:** Bodily Health is Gainful Exercise's twin — study 48 hours over 6 days → CON +2, its maximum +2 too — but a CON increase has a downstream consequence the STR manual didn't: when your Constitution modifier rises, your hit point maximum increases by 1 for each level you've attained (RAW PHB p.173). So the `ability_increase` dispatch grows a CON-specific branch: after writing the stored CON, it computes the modifier delta `(new // 2) - (old // 2)`, multiplies by character level, and bumps BOTH `hp.max` and `hp.current` by that amount so the new ceiling is immediately usable. The `📖 Studied …` feature card appends `· max HP +N` and the `ability_increase` return payload carries an `hp_gain` field. Everything else is inherited from v2.308.0: the stored CON write flows to every read site (`effective_ability_score`, `/roll` CON saves, concentration checks), the manual is consumed, and `character_update` re-renders open sheets. Seeded on Garrik Ironside (the demo's Champion Fighter) alongside his Gainful Exercise manual. MINOR — additive dispatch branch + demo content + tests, no schema change.
+
+### Added
+- CON branch in the `use_kind: "ability_increase"` dispatch (`app/routes/tabletop_routes.py`) — after the stored CON write, recomputes max HP by `mod_delta × level` and bumps both `hp.max` and `hp.current`; surfaces an `hp_gain` field on the `ability_increase` payload and appends `· max HP +N` to the feature card.
+- Demo seed: Garrik Ironside gains a **Manual of Bodily Health** (`use_kind: "ability_increase"`, `ability: "CON"`, `ability_increase: 2`).
+- `tests/harness/test_item_manual_of_bodily_health.py` (2 tests): using the manual writes stored CON +2, raises max HP by the modifier-delta × level, consumes the row, returns the payload (with `hp_gain`), broadcasts `character_update`; a baseline control asserting CON + max HP are unchanged before use. Inventory + abilities + hp restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2889 → 2891 (+2 drop-in tests); added the `test_item_manual_of_bodily_health.py` section.
+
 ## [2.308.0] - 2026-06-14 — "The Disciplined Body"
 
 **Schema version:** 69

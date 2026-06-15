@@ -5242,6 +5242,19 @@ def _fighter_sheet(name: str) -> dict:
              "ability": "STR", "ability_increase": 2, "weight_lb": 5,
              "_slug": "manual-of-gainful-exercise",
              "desc": "Study 48 hours over 6 days (/use_item) to permanently increase your Strength score by 2 — its maximum rises by 2 as well — then the manual loses its magic for a century. RAW DMG p.176."},
+            # v2.309.0 — Manual of Bodily Health (RAW DMG p.176, very rare,
+            # no attunement): study 48 hours over 6 days → CON +2, its maximum
+            # +2 too. Rides the same `use_kind: "ability_increase"` dispatch as
+            # the Gainful Exercise manual, but the CON branch ALSO recomputes
+            # max HP: a CON-modifier bump raises max HP by 1 per level (RAW PHB
+            # p.173). Seeded on Garrik (Fighter): stored CON + 2, and his max +
+            # current HP gain by mod_delta × level on use. The harness snapshots
+            # inventory + abilities + hp and restores all three.
+            {"name": "Manual of Bodily Health", "type": "consumable", "qty": 1,
+             "consumable": True, "equipped": True, "use_kind": "ability_increase",
+             "ability": "CON", "ability_increase": 2, "weight_lb": 5,
+             "_slug": "manual-of-bodily-health",
+             "desc": "Study 48 hours over 6 days (/use_item) to permanently increase your Constitution score by 2 — its maximum rises by 2 as well, and your hit point maximum increases retroactively — then the manual loses its magic for a century. RAW DMG p.176."},
             # v2.205.0 — third charge-tracked wand (RAW DMG p.213, rare,
             # attunement). Same template as the Wand of Fireballs (7
             # charges, base slot level 3, 1d6+1 recharge) but casts

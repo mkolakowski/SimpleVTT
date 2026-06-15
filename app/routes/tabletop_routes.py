@@ -22728,6 +22728,22 @@ async def use_item(
             ability_increase_info = {
                 "ability": canon, "amount": inc, "new_score": new_val,
             }
+            # v2.309.0 — a CON increase retroactively raises max HP by the
+            # CON-modifier delta per level (RAW PHB p.173: "whenever your
+            # Constitution modifier increases ... your hit point maximum
+            # increases by 1 for each level you have attained"). We bump
+            # BOTH max and current by mod_delta × level so the new ceiling
+            # is immediately usable. Manual of Bodily Health rides this.
+            if canon == "CON":
+                mod_delta = (new_val // 2) - (cur // 2)
+                level = int(sheet.get("level") or 1)
+                hp_gain = mod_delta * max(1, level)
+                if hp_gain:
+                    hp = dict(sheet.get("hp") or {})
+                    hp["max"] = int(hp.get("max") or 0) + hp_gain
+                    hp["current"] = int(hp.get("current") or 0) + hp_gain
+                    sheet["hp"] = hp
+                    ability_increase_info["hp_gain"] = hp_gain
         char.sheet = sheet
     else:
         char.sheet = sheet
@@ -22796,6 +22812,10 @@ async def use_item(
             f"{ability_increase_info['amount']} "
             f"(now {ability_increase_info['new_score']})"
         )
+        if ability_increase_info.get("hp_gain"):
+            feature_desc += (
+                f" · max HP +{ability_increase_info['hp_gain']}"
+            )
     else:
         feature_label = f"🧪 Used {item_name}"
         feature_desc = (item.get("desc") or "").strip()[:400]
