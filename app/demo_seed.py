@@ -876,6 +876,20 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False, "weight_lb": 0,
              "_slug": "amulet-of-proof-against-detection-and-location",
              "desc": "Uncommon wondrous item, attunement. While wearing this amulet, you are hidden from divination magic. You can't be targeted by such magic or perceived through magical scrying sensors. RAW DMG p.150."},
+            # v2.298.0 — Robe of the Archmagi (RAW DMG p.193, legendary,
+            # attunement). Lands on the v2.297.0 `spell_save_advantage`
+            # substrate: "advantage on saving throws against spells and other
+            # magical effects." Spare loot (equipped=False / attuned=False):
+            # Thalindra carries no other spell-save-advantage item so her
+            # baseline cleanly proves the robe is the source — the harness
+            # PATCHes it equipped+attuned, rolls a vs_spell save and asserts the
+            # 2d20kh1 advantage + source, then restores. Base AC 15+Dex (worn
+            # unarmored) and +2 spell save DC / spell attack are GM-narrated. An
+            # archmage's robe is on-theme for an Evoker with a Staff of Power.
+            {"name": "Robe of the Archmagi", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False, "weight_lb": 0,
+             "_slug": "robe-of-the-archmagi",
+             "desc": "Legendary wondrous item, attunement. While wearing the robe: base AC 15 + your Dexterity modifier if unarmored; advantage on saving throws against spells and other magical effects; and your spell save DC and spell attack bonus each increase by 2. RAW DMG p.193."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per

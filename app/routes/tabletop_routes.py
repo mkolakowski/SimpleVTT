@@ -32701,6 +32701,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_attunement": True,
         },
     ],
+    # v2.298.0 — Robe of the Archmagi (RAW DMG p.193, legendary, attunement).
+    # Lands its testable benefit on the v2.297.0 `spell_save_advantage`
+    # substrate: "You have advantage on saving throws against spells and other
+    # magical effects." Folded at /roll time by
+    # `_roll_item_spell_save_advantage` when the caller flags `vs_spell`. The
+    # robe's other benefits — base AC 15 + Dex while unarmored, and +2 to spell
+    # save DC / spell attack bonus — lack clean substrates and are GM-narrated
+    # in v1 (the alignment-matched attunement restriction likewise).
+    "robe-of-the-archmagi": [
+        {
+            "spell_save_advantage": True,
+            "requires_attunement": True,
+        },
+    ],
     # v2.295.0 — Robe of Eyes (RAW DMG p.193, rare, attunement). Composes
     # THREE existing substrate fields in one payload: advantage on Wisdom
     # (Perception) checks (the v2.253.0 `check_advantage_on` substrate),
