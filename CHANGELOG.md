@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.312.0] - 2026-06-14 — "The Mended Ledger"
+
+**Schema version:** 69
+
+**Commit summary:** Reconciliation Phase 1 (see [permanent-ability-increase-reconciliation.md](docs/plans/permanent-ability-increase-reconciliation.md)) — port the **CON max-HP recompute** into the v2.222.0 `permanent_boost` handler (`/use_item_action`), closing the correctness gap where reading a Manual of Bodily Health via that path raised CON but silently skipped the max-HP bump (RAW PHB p.173). One handler edit + one harness test.
+
+**Description:** The chosen reconciliation path (Option 2a) converges both permanent-ability-increase systems on the older `permanent_boost` archetype. Before retiring this session's parallel `/use_item` `ability_increase` branch (Phase 3) and completing the Tome trio (Phase 2), Phase 1 brings the survivor up to parity: `_use_item_action_permanent_boost` now applies the same CON max-HP recompute the v2.309.0 `/use_item` branch added — when CON rises, max HP increases by 1 per level (RAW PHB p.173), so the handler bumps both `hp.max` and `hp.current` by `mod_delta × level`, appends `; max HP +N` to the broadcast summary, and returns an `hp_gain` field. Non-CON books are unchanged (`hp_gain: 0`). MINOR — additive engine change to a shared handler, no schema change.
+
+### Added
+- CON max-HP recompute in `_use_item_action_permanent_boost` (`app/routes/tabletop_routes.py`) — `mod_delta × level` added to `hp.max` + `hp.current`; surfaced as an `hp_gain` field on the response and appended to the `feature_used` summary.
+- `tests/harness/test_item_manual_of_ability.py::test_reading_bodily_health_raises_con_and_max_hp` — Garrik reads the Manual of Bodily Health via `/use_item_action`; asserts CON +2 AND max HP +`mod_delta × level`. Restores abilities + inventory + hp on teardown.
+
+### Changed
+- `docs/plans/permanent-ability-increase-reconciliation.md`: Phase 1 marked shipped.
+- `docs/test-harness-coverage.md`: harness total 2894 → 2895 (+1 reconciliation test).
+
 ## [2.311.0] - 2026-06-14 — "The Twice-Written Page"
 
 **Schema version:** 69

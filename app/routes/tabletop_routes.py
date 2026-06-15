@@ -83479,6 +83479,23 @@ async def _use_item_action_permanent_boost(
     abilities[ability] = new_score
     sheet["abilities"] = abilities
 
+    # v2.312.0 — a CON increase retroactively raises max HP by the
+    # CON-modifier delta per level (RAW PHB p.173). Bump BOTH max and
+    # current by mod_delta × level so the new ceiling is immediately usable.
+    # (Ported from the v2.309.0 /use_item ability_increase branch as Phase 1
+    # of the permanent-ability-increase reconciliation; see
+    # docs/plans/permanent-ability-increase-reconciliation.md.)
+    hp_gain = 0
+    if ability == "CON":
+        mod_delta = (new_score // 2) - (old_score // 2)
+        level = int(sheet.get("level") or 1)
+        hp_gain = mod_delta * max(1, level)
+        if hp_gain:
+            hp = dict(sheet.get("hp") or {})
+            hp["max"] = int(hp.get("max") or 0) + hp_gain
+            hp["current"] = int(hp.get("current") or 0) + hp_gain
+            sheet["hp"] = hp
+
     # Consume the book (decrement qty; drop the row at 0).
     inventory = list(sheet.get("inventory") or [])
     consumed = False
@@ -83502,6 +83519,8 @@ async def _use_item_action_permanent_boost(
     item_name = item.get("name") or "Book"
     feature_name = spec.get("feature_name") or catalog.get("name") or f"Read {item_name}"
     effect_text = spec.get("summary_effect") or f"{ability} permanently +{amount}"
+    if hp_gain:
+        effect_text = f"{effect_text}; max HP +{hp_gain}"
     try:
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
@@ -83541,6 +83560,7 @@ async def _use_item_action_permanent_boost(
         "amount": amount,
         "old_score": old_score,
         "new_score": new_score,
+        "hp_gain": hp_gain,
         "consumed": consumed,
         "remaining_qty": remaining_qty,
     }

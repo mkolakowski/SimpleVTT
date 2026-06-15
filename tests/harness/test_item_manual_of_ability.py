@@ -89,6 +89,63 @@ async def test_reading_tome_permanently_raises_cha(gm_client, lyra):
         await _restore(gm_client, lyra["id"], abilities_snapshot, inv_snapshot)
 
 
+_BODILY_HEALTH_SLUG = "manual-of-bodily-health"
+
+
+def _find_slug(sheet, slug):
+    inv = list((sheet or {}).get("inventory") or [])
+    for i, it in enumerate(inv):
+        if isinstance(it, dict) and it.get("_slug") == slug:
+            return i, inv
+    return None, inv
+
+
+@pytest_asyncio.fixture
+async def garrik(roster):
+    return roster["Garrik Ironside"]
+
+
+async def test_reading_bodily_health_raises_con_and_max_hp(gm_client, garrik):
+    """v2.312.0 — Phase 1 of the permanent-ability-increase reconciliation:
+    the permanent_boost handler now ports the CON max-HP recompute (RAW PHB
+    p.173). Garrik reads the Manual of Bodily Health via /use_item_action:
+    base CON +2 AND max HP rises by the CON-modifier delta × level."""
+    data = await _sheet_json(gm_client, garrik["id"])
+    sheet = data.get("sheet") or {}
+    abilities_snapshot = dict(sheet.get("abilities") or {})
+    hp_snapshot = dict(sheet.get("hp") or {})
+    idx, inv_snapshot = _find_slug(sheet, _BODILY_HEALTH_SLUG)
+    assert idx is not None, "Garrik has no Manual of Bodily Health"
+    old_con = int(abilities_snapshot.get("CON") or 0)
+    old_max = int(hp_snapshot.get("max") or 0)
+    level = int(sheet.get("level") or 1)
+    assert old_con > 0, "fixture precondition: Garrik should have a CON score"
+    expected_mod_delta = ((old_con + 2) // 2) - (old_con // 2)
+    expected_hp_gain = expected_mod_delta * max(1, level)
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/use_item_action",
+            json={"inventory_index": idx, "action_key": "read"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["ok"] is True
+        assert body["ability"] == "CON"
+        assert body["new_score"] == old_con + 2
+        assert body["hp_gain"] == expected_hp_gain
+
+        after = await _sheet_json(gm_client, garrik["id"])
+        after_sheet = after.get("sheet") or {}
+        assert int((after_sheet.get("abilities") or {}).get("CON") or 0) == old_con + 2
+        assert int((after_sheet.get("hp") or {}).get("max") or 0) == old_max + expected_hp_gain
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/sheet-fields",
+            json={"abilities": abilities_snapshot, "inventory": inv_snapshot,
+                  "hp": hp_snapshot},
+        )
+
+
 async def test_wrong_action_key_on_tome_404s(gm_client, lyra):
     """Guard: the tome's only action is `read`; a mismatched action_key
     (`drink`) returns 404 without mutating the sheet."""
