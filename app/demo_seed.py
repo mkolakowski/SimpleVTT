@@ -1581,6 +1581,28 @@ def _paladin_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "ac_value": 2, "weight_lb": 6, "_slug": "spellguard-shield",
              "desc": "Very rare shield, attunement. While holding this shield, you have advantage on saving throws against spells and other magical effects, and spell attacks have disadvantage against you. RAW DMG p.201."},
+            # v2.303.0 — Boots of Striding and Springing (RAW DMG p.156,
+            # uncommon, attunement). RAW: walking speed becomes 30 ft (if
+            # not already higher), speed isn't reduced by encumbrance or
+            # heavy armor, and you can jump three times the normal distance.
+            # The tripled-jump half rides the v2.260.0 `jump_at_will`
+            # boolean substrate (the Ring of Jumping flag) — aggregates in
+            # `_equipped_item_effects` (boolean OR) and surfaces on
+            # /sheet-json as derived.jump_at_will = {sources}. The
+            # 30-ft-floor walking speed + ignore-encumbrance/heavy-armor
+            # clause is GM-narrated in v1. Attunement-gated (the payload
+            # carries requires_attunement), so worn-but-not-attuned grants
+            # nothing. Seeded inert (unequipped/unattuned) as spare loot so
+            # it adds no flag to Caelan's baseline (he carries no other
+            # jump_at_will item — his Ring of Feather Falling is the
+            # distinct feather_fall flag) — the harness PATCHes it
+            # equipped+attuned, reads the derived flag, then restores.
+            # Springy boots fit a heavy-armor Paladin who shrugs off the
+            # speed penalty.
+            {"name": "Boots of Striding and Springing", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "weight_lb": 1, "_slug": "boots-of-striding-and-springing",
+             "desc": "Uncommon wondrous item, attunement. While you wear these boots, your walking speed becomes 30 ft (unless already higher), and your speed isn't reduced if you are encumbered or wearing heavy armor. In addition, you can jump three times the normal distance, though no farther than your remaining movement allows. RAW DMG p.156."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:

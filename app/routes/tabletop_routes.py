@@ -33060,6 +33060,16 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "ring-of-jumping": [
         {"jump_at_will": True, "requires_attunement": True},
     ],
+    # v2.303.0 — Boots of Striding and Springing (RAW DMG p.156, uncommon,
+    # attunement). RAW: walking speed becomes 30 ft (if not higher), speed
+    # isn't reduced by encumbrance/heavy armor, and you can jump three times
+    # the normal distance. The tripled-jump half rides the same
+    # `jump_at_will` boolean substrate as the Ring of Jumping (v2.260.0) —
+    # boolean-OR into the derived.jump_at_will flag with source attribution.
+    # The 30-ft-floor speed + ignore-encumbrance clause is GM-narrated in v1.
+    "boots-of-striding-and-springing": [
+        {"jump_at_will": True, "requires_attunement": True},
+    ],
     # v2.261.0 — Bracers of Archery (RAW DMG p.156, uncommon, attunement). RAW:
     # "while wearing these bracers, you have proficiency with the longbow and
     # shortbow, and you gain a +2 bonus to damage rolls on ranged attacks made

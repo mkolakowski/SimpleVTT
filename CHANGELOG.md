@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.303.0] - 2026-06-14 — "The Springing Step"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Boots of Striding and Springing** (RAW DMG p.156, uncommon, attunement) lands its tripled-jump benefit on the v2.260.0 `jump_at_will` boolean substrate (the Ring of Jumping flag). One registry entry, a demo-seed item on Sir Caelan Lightbringer, and four harness tests.
+
+**Description:** The boots' testable benefit — "you can jump three times the normal distance" — rides the v2.260.0 `jump_at_will` boolean substrate: an attunement-gated `jump_at_will: True` payload that aggregates in `_equipped_item_effects` (boolean OR into `jump_at_will` + `jump_at_will_sources`) and surfaces on `/sheet-json` as `derived.jump_at_will = {sources}`. So this commit needs no new engine code — a single boolean registry payload reusing the Ring of Jumping field, a demo seed, and tests. The other clauses — walking speed becomes 30 ft (unless higher) and speed isn't reduced by encumbrance or heavy armor — are GM-narrated in v1 (the engine tracks no encumbrance speed penalty). Attunement-gated (the payload carries `requires_attunement`), so worn-but-not-attuned grants nothing. Seeded **unequipped/unattuned** as spare loot on Sir Caelan Lightbringer (the demo's heavy-armor Devotion Paladin — springy boots that shrug off the heavy-armor speed penalty are on-theme), specifically on a carrier with no other `jump_at_will` item so the inert baseline cleanly proves the boots are the source (his Ring of Feather Falling is the distinct `feather_fall` flag; Kael holds the Ring of Jumping). The harness PATCHes them equipped+attuned, asserts the derived flag names the boots, then restores the seed inventory; an attunement-gate (detune) test, an inert-baseline control, and an unequip-drops-flag test round it out. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `boots-of-striding-and-springing` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — `jump_at_will: True`, attunement-gated.
+- Demo seed: Sir Caelan Lightbringer gains a spare (unequipped/unattuned) **Boots of Striding and Springing**.
+- `tests/harness/test_item_boots_of_striding_and_springing.py` (4 tests): equip+attune surfaces `derived.jump_at_will` naming the boots; detune (equipped, un-attuned) drops the flag; inert baseline control (no flag); unequip drops the flag. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2867 → 2871 (+4 drop-in tests); added the `test_item_boots_of_striding_and_springing.py` section.
+
 ## [2.302.0] - 2026-06-14 — "The Dwarf-Forged Plate"
 
 **Schema version:** 69
