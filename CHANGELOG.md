@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.311.0] - 2026-06-14 — "The Twice-Written Page"
+
+**Schema version:** 69
+
+**Commit summary:** Design plan + wiki surface — `docs/plans/permanent-ability-increase-reconciliation.md` documents that **two parallel permanent-ability-increase systems** now coexist: the v2.222.0 `permanent_boost` archetype on `/use_item_action` (covers all six Manuals & Tomes in catalog + dispatch) and this session's v2.308.0 `use_kind: "ability_increase"` dispatch on `/use_item` (the three Manuals). The plan lays out the overlap, the CON max-HP correctness gap, and three reconciliation options before any further book content lands. Surfaced through the wiki per the surface-every-doc rule.
+
+**Description:** While preparing the Tome trio (INT/WIS/CHA), discovered that commit `0caf41ec` (v2.222.0 "The Studied Page", the day before) already shipped a complete `permanent_boost` system handling all six books — including the three Manuals this session re-implemented on a new `ability_increase` dispatch. The consequence: Garrik's seeded Manuals resolve via BOTH endpoints, the CON max-HP recompute (RAW PHB p.173) lives only in the newer path, and the two paths return different response shapes + broadcasts. Rather than compound the divergence by adding the two missing tomes to either path blind, this plan documents both systems precisely (endpoints, dispatch sites, catalog locations, behaviors, demo seeds, tests), enumerates the four consequences of the overlap, and proposes three options — (1) complete the trio on the existing path and defer cleanup, (2) converge on one canonical path, (3) keep both with a documented boundary — recommending Option 2a (keep `permanent_boost`, port the CON max-HP fix, retire the newer path) sequenced so the Tome-trio ask is still satisfied. No engine code changes in this commit. MINOR — a new reader-facing doc reachable at a new `/wiki/doc/...` URL.
+
+### Added
+- `docs/plans/permanent-ability-increase-reconciliation.md` — the reconciliation design plan (Phase 0, proposed).
+- `plan-permanent-ability-increase-reconciliation` entry in `_DOC_ALLOWLIST` (`app/routes/wiki_routes.py`); design-plans rows in `app/templates/wiki.html` + `docs/wiki/README.md`.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_permanent_ability_increase_reconciliation_plan` (per-slug smoke test); the slug added to `test_wiki_home_renders`'s landing-page assertion list.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2893 → 2894 (+1 wiki smoke test).
+
 ## [2.310.0] - 2026-06-14 — "The Sudden Reflex"
 
 **Schema version:** 69

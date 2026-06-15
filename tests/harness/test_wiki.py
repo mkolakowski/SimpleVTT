@@ -60,6 +60,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-str-override" in resp.text
     # v2.262.0: charged-items backlog plan listed.
     assert "/wiki/doc/plan-charged-items" in resp.text
+    # v2.311.0: permanent ability-increase reconciliation plan listed.
+    assert "/wiki/doc/plan-permanent-ability-increase-reconciliation" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.49.168: targeting system visual guide listed.
@@ -628,6 +630,22 @@ async def test_wiki_doc_serves_charged_items_plan():
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "charged magic items" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_permanent_ability_increase_reconciliation_plan():
+    """v2.311.0: GET /wiki/doc/plan-permanent-ability-increase-reconciliation
+    — 200 + body contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/permanent-ability-increase-reconciliation.md``.
+    Reconciles the two parallel Manuals & Tomes dispatch paths (v2.222.0
+    permanent_boost vs. v2.308.0 ability_increase)."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get(
+            "/wiki/doc/plan-permanent-ability-increase-reconciliation",
+        )
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "permanent ability-increase reconciliation" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

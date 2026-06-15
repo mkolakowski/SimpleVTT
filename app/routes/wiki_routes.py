@@ -95,6 +95,7 @@ _DOC_ALLOWLIST: dict[str, Path] = {
     "plan-legendary-actions": Path("docs") / "plans" / "legendary-actions.md",
     "plan-str-override": Path("docs") / "plans" / "str-override.md",
     "plan-charged-items": Path("docs") / "plans" / "charged-items.md",
+    "plan-permanent-ability-increase-reconciliation": Path("docs") / "plans" / "permanent-ability-increase-reconciliation.md",
     "plan-encounters": Path("docs") / "encounters-plan.md",
     "plan-multi-system-refactor": Path("docs") / "multi-system-refactor.md",
 }
