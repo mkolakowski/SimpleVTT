@@ -122,14 +122,13 @@ async def test_vicious_nat_20_extra_damage(gm_client, gm_ws, krieger):
     )
     msg_data = vicious_msgs[-1].get("data") or {}
     assert "Vicious Weapon" in (msg_data.get("feature_name") or "")
-    # Damage type fallback: catalog row omits `damage_type`, so the dispatcher
-    # falls back to the attack's own damage type — "slashing" for the Greataxe.
-    # The broadcast embeds damage_type in `feature_desc` ("…extra slashing
-    # damage."), not as a top-level field — assert on the desc substring.
-    feature_desc = (msg_data.get("feature_desc") or "").lower()
-    assert "slashing" in feature_desc, (
-        f"Vicious Weapon feature_desc must mention 'slashing' "
-        f"(weapon-type fallback); got {feature_desc!r}"
+    # v2.320.1 — `damage_type` is a top-level field on the broadcast (no
+    # longer only in `feature_desc` prose). Catalog row omits `damage_type`,
+    # so the dispatcher falls back to the attack's own damage type
+    # ("slashing" for the Greataxe).
+    assert msg_data.get("damage_type") == "slashing", (
+        f"Vicious Weapon damage_type must fall through to weapon "
+        f"(slashing); got {msg_data.get('damage_type')!r}"
     )
     # 2d6 → [2, 12]. Not crit-doubled (post-hit rider rolls its own dice).
     hp_dealt = int(msg_data.get("hp_dealt") or 0)

@@ -87246,6 +87246,17 @@ async def use_attack(
                             "target_combatant_id": vorpal_result["target_combatant_id"],
                             "target_name": vorpal_result["target_name"],
                             "hp_dealt": vorpal_result["hp_dealt"],
+                            # v2.320.1 — surface the rider's resolved
+                            # damage_type as a top-level broadcast field. Prior
+                            # to this, damage_type only appeared inside the
+                            # `feature_desc` prose ("...extra slashing
+                            # damage."), so tests had to substring-match the
+                            # desc instead of reading a field. Now it's
+                            # straight off the dispatcher's return value
+                            # (`vorpal_result["damage_type"]`), which already
+                            # captures the catalog override OR the attack-row
+                            # fallback used by Vicious Weapon (v2.320.0).
+                            "damage_type": vorpal_result["damage_type"],
                         },
                     })
             except Exception:

@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.320.1] - 2026-06-15 — "The Untangled Field"
+
+**Schema version:** 69
+
+**Commit summary:** One-line additive engine improvement — surface `damage_type` as a top-level field on the `feature_used` WebSocket broadcast emitted by `_apply_magic_item_nat_20_effect` (Vorpal / Sword of Sharpness / Sun Blade-of-Sharpness / Sword of Life Stealing / Vicious Weapon and any future on_nat_20 damage rider). Disentangles the damage type from the prose-only `feature_desc` text where it was buried; downstream consumers (test assertions, client roll-log UI) can now read the field directly.
+
+**Description:** The `_apply_magic_item_nat_20_effect` helper already resolves and returns `damage_type` (catalog override → attack-row fallback → "slashing" default) in its result dict, but the `/attack` route's `feature_used` broadcast only used `hp_dealt`, `label`, `target_name`, etc. — the `damage_type` got dropped on the floor and only re-appeared inside the human-readable `feature_desc` prose (e.g. "...the blade flares with arcane light, dealing 12 extra slashing damage."). That meant `tests/harness/test_vicious_weapon.py` (v2.320.0) had to substring-match the desc instead of reading a structured field. This commit adds `"damage_type": vorpal_result["damage_type"]` to the broadcast `data` dict (the catalog row's resolved type, NOT the prose) and switches the Vicious Weapon test to read it. Strictly additive — no existing consumer reads this field today, so no client/test contract breaks. PATCH — single-key broadcast extension + one test re-assertion.
+
+### Added
+- `feature_used` broadcast `data.damage_type` for on_nat_20 magic-item rider events — surfaced from `_apply_magic_item_nat_20_effect`'s return value (`app/routes/tabletop_routes.py`).
+
+### Changed
+- `tests/harness/test_vicious_weapon.py::test_vicious_nat_20_extra_damage`: assertion now reads `msg_data["damage_type"] == "slashing"` (the v2.320.0 desc-substring shim is removed).
+
 ## [2.320.0] - 2026-06-15 — "The Savage Mark"
 
 **Schema version:** 69
