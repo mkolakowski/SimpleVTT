@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.325.0] - 2026-06-15 — "The Telltale Wand"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Wand of Secrets** (RAW DMG p.211, uncommon, no attunement). 3 charges, regain 1d3 at dawn. Action: expend 1 charge → the wand whispers the distance and direction of any secret door or trap within 30 ft. Direct clone of v2.324.0 Wand of Magic Detection's `action_kind: "buff"` substrate — only the buff_key (`secrets-detection`) and duration (1 round = single whisper) differ. Seeded equipped on Pip Quickfingers (Halfling Rogue scout); three harness tests. Zero new engine code (handler + dispatcher just gain the new slug).
+
+**Description:** The third item on the v2.277.0 Wand of Enemy Detection `_use_item_action_buff` substrate (joining Wand of Enemy Detection and Wand of Magic Detection). Lands as `_MAGIC_ITEM_ACTIONS["wand-of-secrets"]` with `requires_attunement: False`, a new `secrets-detection` buff template (1-round duration to mirror the RAW "single whisper per charge" semantic), and a one-line addition to the dispatcher slug-tuple that routes through `_use_item_action_buff`. The actual "what secret door / trap is within 30 ft" is GM-narrated — the engine surfaces the buff badge + the chat-card announce, the GM narrates the reveal. On theme for Pip (Halfling Rogue scout); no attunement, so it doesn't bump her seed roster. MINOR — additive content drop-in, no engine change beyond substrate registration.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["wand-of-secrets"]` (`app/routes/tabletop_routes.py`) — Wand of Magic Detection clone with `buff_key: "secrets-detection"` + `duration_rounds: 1`.
+- `secrets-detection` buff template (`{key, name, icon, duration_rounds: 1, concentration: False, effects: {detect_secrets_ft: 30}, desc: ...}`).
+- `/use_item_action` dispatch: `wand-of-secrets` added to the slug-tuple that routes through `_use_item_action_buff`.
+- Demo seed: Pip Quickfingers gains a **Wand of Secrets** (`_slug: wand-of-secrets`) at the inventory tail + a 3-charge `wand-of-secrets` resource row (1d3 long-rest recharge).
+- `tests/harness/test_use_item_action_wand_of_secrets.py` — 3 tests (happy-path buff install + charge tick, drained-wand 409, no-attunement contract).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2920 → 2923 (+3 Wand of Secrets tests); new `test_use_item_action_wand_of_secrets.py` section.
+
 ## [2.324.0] - 2026-06-15 — "The Aurahound"
 
 **Schema version:** 69

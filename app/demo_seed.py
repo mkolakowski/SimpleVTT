@@ -537,6 +537,17 @@ def _rogue_sheet(name: str) -> dict:
              "properties": "finesse, light, magic",
              "_slug": "sword-of-life-stealing", "weight_lb": 2,
              "desc": "Rare shortsword, attunement. When you attack a creature with this magic weapon and roll a 20 on the attack roll, that target takes an extra 3d6 necrotic damage, provided the target isn't a construct or undead. You also gain temporary hit points equal to the extra damage dealt (GM-narrated). RAW DMG p.206."},
+            # v2.325.0 — Wand of Secrets (RAW DMG p.211, uncommon, no
+            # attunement). Direct clone of v2.324.0 Wand of Magic Detection's
+            # action_kind: "buff" substrate; only buff_key + duration_rounds
+            # (1 = single whisper, vs Detect Magic's 100-round concentration)
+            # differ. 3 charges, regain 1d3/dawn. On theme for Pip — a Halfling
+            # Rogue scout who hunts traps and hidden doors. No attunement so
+            # it doesn't bump her seed-attuned roster.
+            {"name": "Wand of Secrets", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "wand-of-secrets",
+             "desc": "Uncommon wand, no attunement. 3 charges. Action: expend 1 charge — the wand whispers the distance and direction of any secret door or trap within 30 ft. Regains 1d3 charges on long rest. RAW DMG p.211."},
         ],
         "feats": [],
         "resources": [
@@ -550,6 +561,18 @@ def _rogue_sheet(name: str) -> dict:
                 "charge_recovery": "1d6+1",
                 "source": "item-wand-of-enemy-detection",
                 "desc": "7 charges. Spend 1 to sense the direction of the nearest hostile within 60 ft for 1 minute. Regains 1d6+1 charges on long rest.",
+                "manual": False,
+            },
+            # v2.325.0 — Wand of Secrets charge pool: 3 charges, regain 1d3
+            # at dawn (long rest). Each charge triggers a single-round
+            # secrets-detection whisper (30-ft radius secret-door & trap).
+            {
+                "key": "wand-of-secrets",
+                "name": "Wand of Secrets",
+                "current": 3, "max": 3, "reset": "long",
+                "charge_recovery": "1d3",
+                "source": "item-wand-of-secrets",
+                "desc": "3 charges. Spend 1 to sense the distance and direction of any secret door or trap within 30 ft (single whisper). Regains 1d3 charges on long rest.",
                 "manual": False,
             },
         ],

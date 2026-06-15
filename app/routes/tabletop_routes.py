@@ -1314,6 +1314,25 @@ _SPELL_BUFF_MAP: dict[str, dict] = {
         },
         "desc": "For the duration, you sense the presence of magic within 30 ft. If you sense magic in this way, you can use your action to see a faint aura around any visible creature or object in the area that bears magic, and you learn its school of magic, if any. RAW PHB p.231 (Detect Magic).",
     },
+    # v2.325.0 — Secrets Detection buff (Wand of Secrets action; RAW DMG
+    # p.211). Sister of `enemy-detection` / `magic-detection` above. RAW: the
+    # wand whispers in the wielder's ear the distance and direction of any
+    # secret door or trap within 30 ft. v1 surface: a single-round buff
+    # (effectively an announce) — the chat-card shows the activation; the GM
+    # narrates what the wand reveals. The marker effect `detect_secrets_ft`
+    # rides the same sensory-payload shape as the other detect-style buffs.
+    "secrets-detection": {
+        "key": "secrets-detection",
+        "name": "Secrets Detection",
+        "icon": "🗝️",
+        "duration_rounds": 1,  # RAW: a single whisper per charge
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "detect_secrets_ft": 30,
+        },
+        "desc": "The wand whispers in your ear the distance and direction of any secret door or trap within 30 ft, if any. The whisper resolves once per charge expended (GM narrates the revealed door/trap). RAW DMG p.211.",
+    },
     "bless": {
         "key": "bless",
         "name": "Bless",
@@ -33857,6 +33876,30 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
                 "buff_key": "magic-detection",
                 "duration_rounds": 100,  # 10 minutes @ 6 s/round
                 "summary_effect": "magic detection out to 30 ft for 10 minutes",
+                "summary_verb": "activates",
+                "min_charges": 1,
+                "max_charges": 1,
+            },
+        },
+    },
+    # v2.325.0 — Wand of Secrets (RAW DMG p.211, uncommon, NO attunement).
+    # Direct clone of v2.324.0 Wand of Magic Detection — only the buff_key
+    # ("secrets-detection") and the duration (1 round = single whisper, vs
+    # Detect Magic's 100-round concentration) differ. 3 charges, regain 1d3
+    # at dawn. Action: expend 1 → wand whispers the distance & direction of
+    # any secret door or trap within 30 ft. The actual "what was found" is
+    # GM-narrated.
+    "wand-of-secrets": {
+        "requires_attunement": False,
+        "resource_key": "wand-of-secrets",
+        "actions": {
+            "reveal": {
+                "name": "Reveal Secrets (30 ft)",
+                "feature_name": "🗝️ Wand of Secrets",
+                "action_kind": "buff",
+                "buff_key": "secrets-detection",
+                "duration_rounds": 1,  # single-whisper-per-charge
+                "summary_effect": "secret-door & trap detection out to 30 ft",
                 "summary_verb": "activates",
                 "min_charges": 1,
                 "max_charges": 1,
@@ -82913,6 +82956,9 @@ async def use_item_action(
         # `_use_item_action_buff` handler (its `detect` action_kind: "buff"
         # installs a 100-round magic-detection self-buff for 1 charge).
         "wand-of-magic-detection",
+        # v2.325.0 — Wand of Secrets — same buff-handler shape with a
+        # 1-round single-whisper buff.
+        "wand-of-secrets",
     ):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_buff(
