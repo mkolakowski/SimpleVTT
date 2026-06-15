@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.302.0] - 2026-06-14 — "The Dwarf-Forged Plate"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Dwarven Plate** (RAW DMG p.150, very rare, NO attunement) lands its "+2 bonus to AC while you wear this armor" on the same `ac_bonus` substrate the Elven Chain (v2.301.0) and the Cloak/Ring of Protection feed into `_read_target_ac`. One registry entry, a demo-seed item on Garrik Ironside, and three harness tests.
+
+**Description:** The plate's headline testable benefit — "while wearing this armor, you gain a +2 bonus to AC" — rides the `ac_bonus` field that already exists on the passive engine: `_read_target_ac` sums the `_equipped_item_effects` walker's `ac_bonus` into a target's AC at attack hit-determination time, so an equipped Dwarven Plate reads as `target_ac = base + 2`. So this commit needs no new engine code — a single one-field registry payload (`ac_bonus: 2`), a demo seed, and tests. No attunement (the payload omits `requires_attunement`, so the +2 applies while merely equipped, exactly as RAW); the "use your reaction to reduce forced movement along the ground by up to 10 ft" clause is GM-narrated in v1. Seeded **unequipped** as spare loot on Garrik Ironside (the demo's heavy-armor frontline Fighter — dwarf-forged plate is on-theme). Garrik carries no other `ac_bonus` item (his Dragon Scale Mail's +1 AC is descriptive, not wired to the substrate), so the harness measures the *delta*: read `target_ac` with the plate inert, PATCH it equipped, read again, and assert it rose by exactly 2. A no-attunement assertion and an unequip-returns-to-baseline test round it out, with the inventory restored on teardown. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `dwarven-plate` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — a one-field payload: `ac_bonus: 2`, no attunement gate.
+- Demo seed: Garrik Ironside gains a spare (unequipped) **Dwarven Plate**.
+- `tests/harness/test_item_dwarven_plate.py` (3 tests): equipping raises Garrik's `target_ac` by exactly 2 vs the inert baseline (via `/attack` with `override: True`); no attunement required (un-attuned still grants the +2); unequip returns `target_ac` to baseline. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2864 → 2867 (+3 drop-in tests); added the `test_item_dwarven_plate.py` section.
+
 ## [2.301.0] - 2026-06-14 — "The Silver Mesh"
 
 **Schema version:** 69

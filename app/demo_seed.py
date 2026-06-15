@@ -5281,6 +5281,24 @@ def _fighter_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False, "weight_lb": 2,
              "_slug": "rod-of-alertness",
              "desc": "Very rare rod, attunement. While holding the rod you have advantage on Wisdom (Perception) checks and on initiative rolls; you can cast detect evil and good, detect magic, detect poison and disease, or see invisibility from it; and you can plant it to create a 60-ft bright-light protective aura (+1 AC and saving throws, sense invisible foes) for 10 min. RAW DMG p.193."},
+            # v2.302.0 — Dwarven Plate (RAW DMG p.150, very rare, NO
+            # attunement). "While wearing this armor, you gain a +2 bonus
+            # to AC." Rides the same `ac_bonus` substrate the Elven Chain
+            # (v2.301.0) and Cloak/Ring of Protection feed into
+            # `_read_target_ac` — an equipped Dwarven Plate reads as
+            # target_ac = base + 2 at attack hit-determination time, with
+            # zero new engine code. No attunement (the payload omits
+            # `requires_attunement`). The reaction "reduce forced movement
+            # by 10 ft" clause is GM-narrated in v1. Seeded inert
+            # (unequipped) so it adds nothing to Garrik's baseline AC and
+            # disturbs no existing test — the harness PATCHes it equipped,
+            # reads the +2 target_ac delta, then restores. Dwarf-forged
+            # plate fits the demo's heavy-armor frontline Fighter.
+            {"name": "Dwarven Plate", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "armor_type": "heavy", "ac_value": 18,
+             "_slug": "dwarven-plate", "weight_lb": 65,
+             "desc": "Very rare heavy armor (plate), no attunement. While wearing this armor, you gain a +2 bonus to AC. In addition, if an effect moves you against your will along the ground, you can use your reaction to reduce the distance you are moved by up to 10 feet. RAW DMG p.150."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20

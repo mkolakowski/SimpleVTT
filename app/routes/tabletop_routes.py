@@ -32566,6 +32566,15 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "elven-chain": [
         {"ac_bonus": 1},
     ],
+    # v2.302.0 — Dwarven Plate (RAW DMG p.150, very rare, NO attunement).
+    # Heavy armor granting "+2 bonus to AC while you wear this armor."
+    # Same `ac_bonus` field the Elven Chain / Cloak / Ring / Bracers feed
+    # into `_read_target_ac`, so an equipped Dwarven Plate reads as
+    # `target_ac = base + 2`. No attunement gate. The "reduce forced
+    # movement by 10 ft" reaction clause is GM-narrated in v1.
+    "dwarven-plate": [
+        {"ac_bonus": 2},
+    ],
     # v2.159.24 — first sensory-passive item. Goggles of Night (RAW
     # DMG p.172, uncommon, no attunement). While worn, the wearer
     # has darkvision out to 60 ft — composes with `_pc_sees_in_darkness`
