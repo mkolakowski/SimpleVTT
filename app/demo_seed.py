@@ -1664,6 +1664,28 @@ def _paladin_sheet(name: str) -> dict:
              "armor_type": "heavy", "ac_value": 18, "weight_lb": 65,
              "_slug": "armor-of-vulnerability",
              "desc": "Rare armor (plate), attunement. CURSED. While wearing this armor you have resistance to slashing damage — but the curse gives you vulnerability to bludgeoning and piercing damage. Attuning curses you until targeted by remove curse; removing the armor doesn't end the curse. RAW DMG p.152."},
+            # v2.315.0 — Scimitar of Speed (RAW DMG p.197, very rare,
+            # attunement). RAW: +2 to attack and damage rolls with this magic
+            # weapon, AND you can make one attack with it as a bonus action on
+            # each of your turns. The marquee bonus-action-attack half rides
+            # the v2.315.0 `bonus_action_attack` boolean substrate — aggregates
+            # in `_equipped_item_effects` (boolean OR) and surfaces on
+            # /sheet-json as derived.bonus_action_attack = {sources}. The +2
+            # attack/damage half is RAW-described here and baked onto the
+            # wielder's attack row when equipped (Dragon Slayer / Vorpal
+            # precedent); the actual extra-attack action-economy is GM-narrated
+            # in v1. Attunement-gated (the payload carries requires_attunement),
+            # so worn-but-not-attuned grants nothing. Seeded inert
+            # (unequipped/unattuned) as spare loot so it adds no flag to
+            # Caelan's baseline — the harness PATCHes it equipped+attuned,
+            # reads the derived flag, then restores. A captured fey blade is
+            # plausible loot for a frontline Devotion paladin.
+            {"name": "Scimitar of Speed", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "hands": 1, "damage": "1d6", "damage_type": "slashing",
+             "properties": "finesse, light, magic", "weight_lb": 3,
+             "_slug": "scimitar-of-speed",
+             "desc": "Very rare scimitar, attunement. You gain a +2 bonus to attack and damage rolls made with this magic weapon. In addition, you can make one attack with it as a bonus action on each of your turns. RAW DMG p.197."},
         ],
         # v2.99.24 — Caelan is a Variant Human (RAW: free Lv 1 feat).
         # Sentinel fits his Paladin Devotion frontline-protector role:

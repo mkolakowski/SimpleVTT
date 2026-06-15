@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2893 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.314.0, 2026-06-14).
+**Total tests:** 2897 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.315.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2964,6 +2964,16 @@ v2.303.0 — Boots of Striding and Springing (RAW DMG p.156, uncommon, attunemen
 | `test_boots_detune_drops_flag` | Attunement gate: equipped-but-un-attuned → no `jump_at_will`. Restored on teardown. |
 | `test_boots_baseline_has_no_flag` | Control: inert seed (equipped=False) → no `jump_at_will` (proves boots-sourced). |
 | `test_boots_unequip_drops_flag` | Equip+attune → flag present; unequip → removed. Restored on teardown. |
+
+### `test_item_scimitar_of_speed.py`
+v2.315.0 — Scimitar of Speed (RAW DMG p.197, very rare, attunement): +2 attack/damage (baked on the wielder's attack row, Dragon Slayer / Vorpal precedent) AND one bonus-action attack per turn, riding the new v2.315.0 `bonus_action_attack` boolean substrate (mirrors telepathy / jump_at_will / feather_fall) surfaced on `/sheet-json` as `derived.bonus_action_attack = {sources}`. The extra-attack action-economy is GM-narrated. Seeded as inert spare loot (unequipped/unattuned) on Sir Caelan Lightbringer (Paladin, no other `bonus_action_attack` item); tests PATCH it equipped+attuned, read the derived flag, then restore.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_scimitar_equipped_exposes_flag` | Equip+attune via PATCH → `GET /sheet-json` `derived.bonus_action_attack` present, naming "Scimitar of Speed" in `sources`. Restored on teardown. |
+| `test_scimitar_detune_drops_flag` | Attunement gate: equipped-but-un-attuned → no `bonus_action_attack`. Restored on teardown. |
+| `test_scimitar_baseline_has_no_flag` | Control: inert seed (equipped=False) → no `bonus_action_attack` (proves scimitar-sourced). |
+| `test_scimitar_unequip_drops_flag` | Equip+attune → flag present; unequip → removed. Restored on teardown. |
 
 ### `test_item_demon_armor.py`
 v2.304.0 — Demon Armor (RAW DMG p.158, very rare, attunement): "+1 bonus to AC", riding the same `ac_bonus` substrate the Dwarven Plate / Elven Chain / Cloak of Protection feed into `_read_target_ac` (so equipped+attuned reads as `target_ac = base + 1`). Attunement-gated (the payload carries `requires_attunement`). Abyssal speech, magic clawed-gauntlet unarmed strikes, and the can't-doff curse are GM-narrated. Seeded as inert spare loot (unequipped/unattuned) on Dame Seraphine Vael (Vengeance Paladin, no other `ac_bonus` item); tests measure the inert-vs-equipped delta via `/attack` `target_ac`, then restore.

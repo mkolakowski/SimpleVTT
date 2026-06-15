@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.315.0] - 2026-06-14 — "The Second Strike"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Scimitar of Speed** (RAW DMG p.197, very rare, attunement). Its marquee "one attack as a bonus action on each of your turns" half is surfaced as a new `bonus_action_attack` boolean derived flag on `/sheet-json`, mirroring the telepathy / jump_at_will / feather_fall passive substrate. Seeded as inert spare loot on Sir Caelan Lightbringer; four harness tests.
+
+**Description:** The Scimitar of Speed has two RAW halves: a +2 bonus to attack and damage rolls (baked onto the wielder's attack row when equipped — the Dragon Slayer / Vorpal precedent for magic +X weapons), and one bonus-action attack per turn. The action-economy bonus attack is the marquee bit; it lands as the always-on `bonus_action_attack` boolean flag — a new `{bonus_action_attack: True, requires_attunement: True}` payload in `_MAGIC_ITEM_PASSIVES` that aggregates in `_equipped_item_effects` (boolean OR into `bonus_action_attack` + `bonus_action_attack_sources`) and surfaces on `/sheet-json` as `derived.bonus_action_attack = {sources}`, attunement-gated by the per-payload check. The actual extra-attack economy is GM-narrated in v1. The scimitar is seeded as inert spare loot (unequipped/unattuned) on Sir Caelan Lightbringer (Paladin) alongside his existing PATCH-tested spare-loot cluster; the harness PATCHes it equipped+attuned, reads the derived flag, then restores. MINOR — additive passive-flag wiring + demo content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES["scimitar-of-speed"]` — `{bonus_action_attack: True, requires_attunement: True}` (`app/routes/tabletop_routes.py`).
+- `bonus_action_attack` boolean substrate: default flag pair in `_equipped_item_effects`, boolean-OR aggregation if-block, and the `/sheet-json` derived surfacing if-block (`derived.bonus_action_attack = {sources}`).
+- Demo seed: Sir Caelan Lightbringer gains a **Scimitar of Speed** (`_slug: scimitar-of-speed`) as inert spare loot.
+- `tests/harness/test_item_scimitar_of_speed.py` — 4 tests (equipped exposes flag, detune drops it, inert baseline control, unequip drops it). PATCH-then-restore.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2893 → 2897 (+4 Scimitar of Speed tests).
+
 ## [2.314.0] - 2026-06-14 — "The Single Source"
 
 **Schema version:** 69

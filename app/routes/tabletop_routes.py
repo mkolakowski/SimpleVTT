@@ -33188,6 +33188,20 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "helm-of-telepathy": [
         {"telepathy": True, "requires_attunement": True},
     ],
+    # v2.315.0 — Scimitar of Speed (RAW DMG p.197, very rare, attunement).
+    # RAW: "you gain a +2 bonus to attack and damage rolls made with this
+    # magic weapon. In addition, you can make one attack with it as a bonus
+    # action on each of your turns." The +2 attack/damage half is baked into
+    # the wielder's seeded attack entry (Dragon Slayer / Vorpal precedent —
+    # magic +X bonuses live on the attack row, not as a rider). The marquee
+    # bonus-action-attack half is surfaced as the always-on `bonus_action_attack`
+    # boolean flag on `/sheet-json` derived, mirroring the telepathy /
+    # feather_fall / jump_at_will flag substrate. The actual extra-attack
+    # action-economy is GM-narrated in v1. Attunement-gated by the per-payload
+    # check.
+    "scimitar-of-speed": [
+        {"bonus_action_attack": True, "requires_attunement": True},
+    ],
     # v2.246.0 — Ring of Warmth (RAW DMG p.193, uncommon, attunement). RAW:
     # "while wearing this ring, you have resistance to cold damage. In
     # addition, you and everything you wear and carry are unharmed by
@@ -34800,6 +34814,12 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # walker's attunement check filters it.
         "telepathy": False,
         "telepathy_sources": [],
+        # v2.315.0 — bonus-action-attack passive (Scimitar of Speed, RAW DMG
+        # p.197). Boolean OR across equipped items carrying the field;
+        # surfaced on `/sheet-json` derived. ATTUNEMENT-gated, so the
+        # walker's attunement check filters it.
+        "bonus_action_attack": False,
+        "bonus_action_attack_sources": [],
         # v2.246.0 — cold-environment tolerance (Ring of Warmth). Boolean OR;
         # the cold *resistance* rides the shared `resistance_to` list, this
         # flag carries only the -50°F environmental tolerance. ATTUNEMENT-gated.
@@ -35203,6 +35223,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
             if item.get("_telepathy") or p.get("telepathy"):
                 out["telepathy"] = True
                 out["telepathy_sources"].append(item_name)
+            # v2.315.0 — bonus-action-attack passive (Scimitar of Speed, RAW
+            # DMG p.197). Boolean OR; the flag rides the item via the
+            # `bonus_action_attack` payload (or a per-item
+            # `_bonus_action_attack` rider). Attunement-gated by the
+            # per-payload check above.
+            if item.get("_bonus_action_attack") or p.get("bonus_action_attack"):
+                out["bonus_action_attack"] = True
+                out["bonus_action_attack_sources"].append(item_name)
             # v2.246.0 — cold-environment tolerance passive (Ring of Warmth,
             # RAW DMG p.193). Boolean OR; the flag rides the item via the
             # `cold_tolerance` payload (or a per-item `_cold_tolerance` rider).
@@ -93314,6 +93342,12 @@ async def get_character_sheet_json(
             if _item_eff.get("telepathy"):
                 derived["telepathy"] = {
                     "sources": list(_item_eff.get("telepathy_sources") or []),
+                }
+            # v2.315.0 — bonus-action-attack (Scimitar of Speed). Only present
+            # when an equipped + attuned item sets the flag.
+            if _item_eff.get("bonus_action_attack"):
+                derived["bonus_action_attack"] = {
+                    "sources": list(_item_eff.get("bonus_action_attack_sources") or []),
                 }
             # v2.246.0 — cold-environment tolerance (Ring of Warmth). Only
             # present when an equipped + attuned item sets the flag. (The ring's
