@@ -9,9 +9,11 @@
 
 ---
 
-## Phase 9.1 — stub triage (v2.344.5)
+## Phase 9.1 — stub triage (v2.344.5, corrected v2.345.1)
 
-After the v2.316–v2.344 content sprint, **235/239 SRD magic items are wired** (registered + collectible). 133 carry a real engine mechanic (51 actions + 17 attack riders + 68 mechanical passives); the other **108 are bare catalog stubs** (`requires_attunement` only — effect GM-narrated in v1). This triage buckets those 108 into "automatable via an existing Phase 1–8 template" vs "inherently GM-narrated." The actionable subset is **~26 items** across three buckets; the remaining **~82 stay announce-only by design** (archetype J — summons, planar travel, wish, one-shot consumables, containers, capture/imprison, exploration utility). Counts are approximate at the margins (a few items straddle two buckets).
+After the v2.316–v2.344 content sprint, **235/239 SRD magic items are wired** (registered + collectible).
+
+> **Count correction (v2.345.1).** The original v2.344.5 figures ("133 mechanical / 108 bare stubs / ~26 automatable") were computed by inspecting only the *static* `_MAGIC_ITEM_PASSIVES` catalog payload. That under-counted the items wired via a **per-instance seed rider** — where the catalog entry is intentionally generic (`requires_attunement` only) and the specifics ride the inventory item (`_resistance_type`, `_ability_set`, `_ac_bonus`, …). Four items flagged as "bare stubs" are in fact already mechanically live + tested via the `_resistance_type` rider: **`armor-of-resistance`, `ring-of-resistance`, `dragon-scale-mail`, `ring-of-elemental-command`** (each has a `test_item_<slug>.py`). Plus **`luck-blade`** was wired in v2.345.0 (Bucket B). Corrected counts (post-v2.345.0): of 241 wired slugs, **138 are functional** (134 catalog-mechanical + 4 rider-only) and **103 are genuinely-bare GM-narrated stubs**. The actionable subset drops to **~21 items**; the remaining **~82 stay announce-only by design** (archetype J — summons, planar travel, wish, one-shot consumables, containers, capture/imprison, exploration utility). Counts are approximate at the margins (a few items straddle two buckets).
 
 ### Bucket A — charge-cast a save/attack spell → `_MAGIC_ITEM_ACTIONS` cast-spell template (~10)
 
@@ -32,19 +34,19 @@ The strongest template (the Wand of Fear / charged-wand pattern already shipped)
 
 ### Bucket B — passive numeric buff → mechanical `_MAGIC_ITEM_PASSIVES` (`effects.*`) (~9)
 
-Always-on bonuses the engine already reads (resistance via `_resistance_halve`, save/AC/stat passives). **Cleanest first batch** — the resistance trio especially.
+Always-on bonuses the engine already reads (resistance via `_resistance_halve`, save/AC/stat passives).
 
-| Slug | RAW effect | Wire as |
-|---|---|---|
-| `armor-of-resistance` | resistance to one damage type | `effects.resistance_to` |
-| `ring-of-resistance` | resistance to one damage type | `effects.resistance_to` |
-| `dragon-scale-mail` | resistance to the dragon's damage type | `effects.resistance_to` |
-| `adamantine-armor` | crits against you become normal hits | `effects.crits_become_normal` (new) |
-| `luck-blade` | +1 to all saves (the +1 weapon is baked) | `effects.save_bonus` |
-| `staff-of-the-magi` | +2 spell attack & save DC | `effects.spell_attack_bonus` / `spell_dc_bonus` |
-| `staff-of-the-woodlands` | +2 spell attack & save DC | same |
-| `arrow-catching-shield` | +2 AC vs ranged attacks | conditional AC passive |
-| `shield-of-missile-attraction` | resistance to ranged-weapon damage + curse | `effects.resistance_to` (conditional) |
+| Slug | RAW effect | Wire as | Status |
+|---|---|---|---|
+| `armor-of-resistance` | resistance to one damage type | `_resistance_type` rider | ✅ already live (mis-counted) |
+| `ring-of-resistance` | resistance to one damage type | `_resistance_type` rider | ✅ already live (mis-counted) |
+| `dragon-scale-mail` | resistance to the dragon's damage type | `_resistance_type` rider | ✅ already live (mis-counted) |
+| `luck-blade` | +1 to all saves (the +1 weapon is baked) | `effects.save_bonus` | ✅ shipped v2.345.0 |
+| `adamantine-armor` | crits against you become normal hits | `effects.crits_become_normal` (new) | ⚪ |
+| `staff-of-the-magi` | +2 spell attack & save DC | `effects.spell_attack_bonus` / `spell_dc_bonus` (new) | ⚪ |
+| `staff-of-the-woodlands` | +2 spell attack & save DC | same | ⚪ |
+| `arrow-catching-shield` | +2 AC vs ranged attacks | conditional AC passive | ⚪ |
+| `shield-of-missile-attraction` | resistance to ranged-weapon damage + curse | `_resistance_type` rider (conditional) | ⚪ |
 
 ### Bucket C — on-hit / crit weapon rider → `_MAGIC_ITEM_ATTACK_RIDERS` (~7)
 
@@ -72,7 +74,7 @@ No clean engine template; the effect is narrative, out-of-combat, or needs syste
 - **Exploration / utility:** chime-of-opening, immovable-rod, rope-of-climbing, horseshoes-of-a-zephyr, horseshoes-of-speed, lantern-of-revealing, rod-of-lordly-might, apparatus-of-the-crab, cube-of-force, crystal-ball, helm-of-comprehending-languages, pipes-of-the-sewers, candle-of-invocation, necklace-of-prayer-beads
 - **Reaction / spell-store / regen / misc:** rod-of-absorption, gloves-of-missile-snaring, ring-of-evasion, ring-of-spell-storing, ring-of-regeneration, ring-of-telekinesis, ring-of-invisibility, defender, hammer-of-thunderbolts, mithral-armor
 
-**Recommended batch order:** (1) Bucket B resistance trio (`armor-of-resistance` / `ring-of-resistance` / `dragon-scale-mail`) — one shared `effects.resistance_to` passive the engine already honors; (2) Bucket C `staff-of-withering` + `staff-of-striking` (the `damage_condition` / `bonus_dice` riders already shipped for Dagger of Venom / Dwarven Thrower); (3) Bucket A condition-casters (`pipes-of-haunting`, `rod-of-rulership`, `rope-of-entanglement`) reusing the `frighten` / save-to-condition dispatch.
+**Recommended batch order (updated v2.345.1):** ~~Bucket B resistance trio~~ (already live via `_resistance_type`) and ~~`luck-blade`~~ (shipped v2.345.0) are done. Next: (1) Bucket C `staff-of-withering` + `staff-of-striking` (the `damage_condition` / `bonus_dice` riders already shipped for Dagger of Venom / Dwarven Thrower); (2) Bucket A condition-casters (`pipes-of-haunting`, `rod-of-rulership`, `rope-of-entanglement`) reusing the `frighten` / save-to-condition dispatch; (3) Bucket B `adamantine-armor` (needs a new `crits_become_normal` passive) + the two `staff-of-the-*` spell-DC items (need a new `spell_attack_bonus`/`spell_dc_bonus` passive).
 
 ---
 

@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.345.1] - 2026-06-15 — "The Recounted Hoard"
+
+**Schema version:** 69
+
+**Commit summary:** Doc-only correction of the v2.344.5 stub-triage counts in [`magic-items-automation.md`](docs/plans/magic-items-automation.md). The original figures inspected only the static `_MAGIC_ITEM_PASSIVES` catalog payload and so under-counted items wired via a **per-instance seed rider** (generic catalog entry + `_resistance_type`/`_ability_set`/… on the inventory item).
+
+**Description:** A focused re-audit (catalog payload + `test_item_<slug>.py` presence + demo-seed rider keys) found **exactly 4** items flagged "bare stub" that are in fact already mechanically live and tested via the `_resistance_type` rider: `armor-of-resistance`, `ring-of-resistance`, `dragon-scale-mail`, `ring-of-elemental-command`. Combined with `luck-blade` (shipped v2.345.0), the corrected accounting (post-v2.345.0) is: of 241 wired slugs, **138 functional** (134 catalog-mechanical + 4 rider-only) and **103 genuinely-bare GM-narrated stubs** (was "133 / 108"). The actionable subset drops from ~26 to **~21**. Marked the resistance trio ✅ already-live and Luck Blade ✅ shipped in the Bucket B table; rewrote the recommended batch order to lead with the Bucket C staff riders. PATCH — doc-only; plan doc already wiki-surfaced (`plan-magic-items-automation`).
+
+### Changed
+- `docs/plans/magic-items-automation.md`: Phase 9.1 count-correction banner; Bucket B status column (resistance trio + Luck Blade marked done); recommended batch order updated.
+
 ## [2.345.0] - 2026-06-15 — "The Fortunate Edge"
 
 **Schema version:** 69
