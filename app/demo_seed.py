@@ -2454,6 +2454,20 @@ def _bard_sheet(name: str) -> dict:
              "armor_type": "light", "ac_value": 12,
              "_slug": "glamoured-studded-leather", "weight_lb": 13,
              "desc": "Rare light armor (studded leather), no attunement. You gain a +1 bonus to AC while wearing this armor. Bonus action: speak the command word to make the armor appear as a normal set of clothing or some other kind of armor (illusion, GM-narrated). RAW DMG p.172."},
+            # v2.326.0 — Gem of Brightness (RAW DMG p.172, uncommon, no
+            # attunement). 50 charges (no recharge — when depleted, becomes a
+            # non-magical 50 gp jewel). v1 wires only the "beam" mode: a
+            # single-target 60-ft ray, expend 1 charge → CON save DC 15 or
+            # blinded for 1 minute. Pure substrate reuse of the v2.206.0 Wand
+            # of Paralysis pipe (ray + save + condition install). Modes 1 (no-
+            # charge bright-light radius) and 3 (5-charge cone) are GM-narrated.
+            # Thematic on Lyra (Bard, stage-light flair + concealed-strike
+            # support combo with her Vicious Mockery + Demon Slayer kit). No
+            # attunement, so it doesn't bump her seed-attuned roster.
+            {"name": "Gem of Brightness", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "gem-of-brightness",
+             "desc": "Uncommon wondrous item, no attunement. 50 charges. Action: expend 1 charge to fire a brilliant beam at one creature within 60 ft — CON save DC 15 or blinded for 1 minute (repeated saves at end of each turn). When depleted, the gem becomes a non-magical 50 gp jewel. Two other modes (sheds bright light; 5-charge cone) are GM-narrated. RAW DMG p.172."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit
@@ -2495,6 +2509,18 @@ def _bard_sheet(name: str) -> dict:
                 "source": "magic item — Staff of Charming",
                 "class_slug": "item",
                 "desc": "10 charges; expend 1 to cast charm person / command / comprehend languages using your spell save DC. Regain 1d8+2 at dawn.",
+                "manual": False,
+            },
+            # v2.326.0 — Gem of Brightness charge pool (RAW DMG p.172): 50
+            # charges, NO recharge (reset: "none") — when the gem is depleted
+            # it becomes a non-magical 50 gp jewel. Each beam use decrements
+            # 1 charge (mode 3 cone — not yet wired in v1 — would consume 5).
+            {
+                "key": "gem-of-brightness",
+                "name": "Gem of Brightness",
+                "current": 50, "max": 50, "reset": "none",
+                "source": "item-gem-of-brightness",
+                "desc": "50 charges. Spend 1 to fire a brilliant beam (60 ft, CON save DC 15, blinded 1 min). When depleted, the gem becomes a non-magical 50 gp jewel.",
                 "manual": False,
             },
         ],

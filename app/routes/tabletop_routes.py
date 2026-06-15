@@ -34047,6 +34047,40 @@ _MAGIC_ITEM_ACTIONS: dict[str, dict] = {
             },
         },
     },
+    # v2.326.0 — Gem of Brightness (RAW DMG p.172, uncommon, NO attunement).
+    # 50 charges (no recharge — when depleted the gem becomes a non-magical
+    # 50 gp jewel). v1 wires only the "beam" mode (the second of three RAW
+    # command words): single-target ray, 60-ft range, expend 1 charge → CON
+    # save DC 15 or blinded for 1 minute (repeated save at end of each of
+    # the target's turns ends the effect on a success). Pure clone of the
+    # v2.206.0 Wand of Paralysis substrate — only the slug, condition_key,
+    # label/icon, and feature_name differ. Mode 1 (sheds bright light in a
+    # 30-ft radius, no charge) and Mode 3 (5-charge 30-ft cone, same blinded
+    # save) are GM-narrated in v1.
+    "gem-of-brightness": {
+        "requires_attunement": False,
+        "resource_key": "gem-of-brightness",
+        "actions": {
+            "beam": {
+                "name": "Brilliant Beam (60 ft, blind)",
+                "save_dc": 15,
+                "save_ability": "CON",
+                "min_charges": 1,
+                "max_charges": 1,
+                "duration_rounds": 10,  # 1 minute
+                "target_shape": "ray",
+                "condition_key": "blinded",
+                "condition_label": "Blinded",
+                "condition_icon": "🌟",
+                "condition_effects": [
+                    "can't see — automatically fails any ability check that requires sight",
+                    "attack rolls against the creature have advantage",
+                    "the creature's attack rolls have disadvantage",
+                ],
+                "feature_name": "🌟 Gem of Brightness",
+            },
+        },
+    },
     # v2.207.0 — third save-condition item through the generalized
     # wand-of-fear handler. Staff of Charming (RAW DMG p.201, rare,
     # attunement): 10 charges (regain 1d8+2 at dawn). The marquee
@@ -82987,7 +83021,12 @@ async def use_item_action(
             slug=slug,
         )
     if slug in ("wand-of-fear", "wand-of-paralysis", "staff-of-charming",
-                "eyes-of-charming"):
+                "eyes-of-charming",
+                # v2.326.0 — Gem of Brightness Mode 2 ("beam") shares the
+                # single-target save-condition handler shape with Wand of
+                # Paralysis — the only knobs are the slug, the condition_key
+                # ("blinded" vs "paralyzed"), and the save ability (CON).
+                "gem-of-brightness"):
         action_def = catalog["actions"][action_key]
         return await _use_item_action_wand_of_fear(
             db, campaign_id, char, item, sheet, catalog,

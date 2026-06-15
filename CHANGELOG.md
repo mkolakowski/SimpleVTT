@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.326.0] - 2026-06-15 — "The Blinding Beam"
+
+**Schema version:** 69
+
+**Commit summary:** SRD magic-item drop-in — **Gem of Brightness** (RAW DMG p.172, uncommon, no attunement). 50 charges, no recharge (when depleted, becomes a non-magical 50 gp jewel). v1 wires the **beam mode** (the second of three RAW command words): single-target 60-ft ray, expend 1 charge → CON save DC 15 or blinded for 1 minute. Pure clone of the v2.206.0 Wand of Paralysis substrate — only the slug, condition_key (`blinded` vs `paralyzed`), save ability (CON vs CON — same here), and labels differ. Seeded on Lyra Sunstrider; three harness tests. Modes 1 (no-charge bright-light radius) and 3 (5-charge cone of the same beam) stay GM-narrated in v1.
+
+**Description:** Lands as `_MAGIC_ITEM_ACTIONS["gem-of-brightness"]` with `requires_attunement: False`, a single `beam` action carrying `target_shape: "ray"` + `condition_key: "blinded"` + `save_dc: 15` + `save_ability: "CON"`, and a one-line addition to the dispatcher slug-tuple that routes through the existing `_use_item_action_wand_of_fear` save-condition handler. The "blinded" condition is already wired in the engine's condition catalog (used by spells like Sunbeam, Blindness/Deafness), so the install on a failed save flows through the existing PHB-p.290 condition machinery. Resource row carries `reset: "none"` per the RAW "no recharge" semantics. Lyra (Bard) is the canonical wielder — the gem's stage-light flair fits her College of Lore performer aesthetic, and the blinded-then-Vicious-Mockery combo is on theme. MINOR — additive content drop-in on the existing save-condition handler, no engine change, no schema change.
+
+### Added
+- `_MAGIC_ITEM_ACTIONS["gem-of-brightness"]` (`app/routes/tabletop_routes.py`) — Wand of Paralysis substrate clone with `condition_key: "blinded"` + `feature_name: "🌟 Gem of Brightness"`.
+- `/use_item_action` dispatch: `gem-of-brightness` added to the slug-tuple that routes through `_use_item_action_wand_of_fear` (alongside `wand-of-fear`, `wand-of-paralysis`, `staff-of-charming`, `eyes-of-charming`).
+- Demo seed: Lyra Sunstrider gains a **Gem of Brightness** (`_slug: gem-of-brightness`) at the inventory tail + a 50-charge `gem-of-brightness` resource row (`reset: "none"`).
+- `tests/harness/test_use_item_action_gem_of_brightness.py` — 3 tests (happy-path beam at 2 targets + charge tick, drained-gem 409, no-attunement contract).
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2923 → 2926 (+3 Gem of Brightness tests); new `test_use_item_action_gem_of_brightness.py` section.
+
 ## [2.325.0] - 2026-06-15 — "The Telltale Wand"
 
 **Schema version:** 69

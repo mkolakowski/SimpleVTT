@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2923 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.325.0, 2026-06-15).
+**Total tests:** 2926 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.326.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3214,6 +3214,15 @@ v2.206.0 magic-items-automation content tail — Wand of Paralysis (RAW DMG p.21
 | `test_wand_of_paralysis_cast_2_targets` | Cast at 2 NPC targets → 200; `save_dc: 15`, `save_ability: CON`, `charges_spent: 1`, resource 7→6, both target ids in `results`. |
 | `test_wand_of_paralysis_over_cap_returns_400` | `charges: 2` when catalog max=1 → 400 (shared min/max charge validator). |
 | `test_wand_of_paralysis_empty_returns_409` | Drain the wand to 0 via /sheet-fields; invoke → 409 `insufficient_charges`, `current: 0`. Restores in teardown. |
+
+### `test_use_item_action_gem_of_brightness.py`
+v2.326.0 — Gem of Brightness Mode 2 ("beam"; RAW DMG p.172, uncommon, NO attunement). Pure Wand of Paralysis substrate clone — only the slug, condition_key (`blinded`), and feature label/icon differ. 50 charges, no recharge (RAW: when depleted, becomes a non-magical 50 gp jewel — resource row carries `reset: "none"`). Mode 1 (no-charge bright-light radius) and Mode 3 (5-charge 30-ft cone) are GM-narrated in v1. Seeded on **Lyra Sunstrider** (Bard, no attunement gate) with a 50-charge `gem-of-brightness` resource row.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_gem_of_brightness_beam_2_targets` | Beam at 2 NPC targets → 200; `save_dc: 15`, `save_ability: CON`, `charges_spent: 1`, resource 50→49, both target ids in `results`. |
+| `test_gem_of_brightness_empty_returns_409` | Drain the gem to 0 via /sheet-fields; invoke → 409 `insufficient_charges`, `current: 0`. Restores in teardown. |
+| `test_gem_of_brightness_no_attunement_required` | The seed inventory entry has `equipped: True` and no `attuned: True` flag, matching the RAW no-attunement contract. |
 
 ### `test_use_item_action_eyes_of_charming.py`
 v2.208.0 magic-items-automation content tail — Eyes of Charming (RAW DMG p.168, uncommon, attunement) through the same `/use_item_action` endpoint + the generalized `_use_item_action_wand_of_fear` save-condition handler. Near drop-in of the Staff of Charming: fixed DC 13 (vs the staff's `"spell"` sentinel), a 3-charge pool, charm person (WIS → Charmed, 30-ft single target, 1-hour). Seeded on **Zara Emberfire** (Draconic Sorcerer, Charlatan — a CHA face with no other attuned items, 1/3 cap); the item index is looked up by `_slug`.
