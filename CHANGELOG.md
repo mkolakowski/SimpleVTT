@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.301.0] - 2026-06-14 — "The Silver Mesh"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Elven Chain** (RAW DMG p.150, rare, NO attunement) lands its "+1 bonus to AC while you wear this armor" on the existing `ac_bonus` substrate the Cloak/Ring of Protection and Bracers of Defense already feed into `_read_target_ac`. One registry entry, a demo-seed item on Pip Quickfingers, and three harness tests.
+
+**Description:** The chain's entire testable benefit — "you gain a +1 bonus to AC while you wear this armor" — rides the `ac_bonus` field that already exists on the passive engine: `_read_target_ac` sums the `_equipped_item_effects` walker's `ac_bonus` into a target's AC at attack hit-determination time, so an equipped Elven Chain reads as `target_ac = base + 1`. So this commit needs no new engine code — a single one-field registry payload, a demo seed, and tests. Unlike the wondrous Cloak/Ring/Bracers it needs NO attunement (the payload omits `requires_attunement`, so the +1 applies while merely equipped, exactly as RAW); the "proficient even without medium-armor proficiency" clause is GM-narrated in v1. Seeded **unequipped** as spare loot on Pip Quickfingers (the demo's Halfling Rogue — a finely woven silver-mesh shirt is on-theme for a stealthy thief). Because Pip already wears a Cloak + Ring of Protection (+1/+1 each), her absolute AC isn't a clean assertion target — so the harness measures the *delta*: read `target_ac` with the chain inert, PATCH it equipped, read again, and assert it rose by exactly 1. A no-attunement assertion and an unequip-returns-to-baseline test round it out, with the inventory restored on teardown. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `elven-chain` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — a one-field payload: `ac_bonus: 1`, no attunement gate.
+- Demo seed: Pip Quickfingers gains a spare (unequipped) **Elven Chain**.
+- `tests/harness/test_item_elven_chain.py` (3 tests): equipping raises Pip's `target_ac` by exactly 1 vs the inert baseline (via `/attack` with `override: True`); no attunement required (un-attuned still grants the +1); unequip returns `target_ac` to baseline. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2861 → 2864 (+3 drop-in tests); added the `test_item_elven_chain.py` section.
+
 ## [2.300.0] - 2026-06-14 — "The Manta's Glide"
 
 **Schema version:** 69

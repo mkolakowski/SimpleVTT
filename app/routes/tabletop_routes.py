@@ -32555,6 +32555,17 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_no_shield": True,
         },
     ],
+    # v2.301.0 — Elven Chain (RAW DMG p.150, rare, NO attunement). Armor
+    # rather than a wondrous slot item: "+1 bonus to AC while you wear
+    # this armor." Reuses the same `ac_bonus` field the Cloak/Ring/Bracers
+    # feed into `_read_target_ac`, so an equipped Elven Chain reads as
+    # `target_ac = base + 1` at attack hit-determination time. No
+    # attunement gate (the payload omits `requires_attunement`) — the +1
+    # applies while merely equipped, exactly as RAW. The "proficient even
+    # without medium-armor proficiency" clause is GM-narrated in v1.
+    "elven-chain": [
+        {"ac_bonus": 1},
+    ],
     # v2.159.24 — first sensory-passive item. Goggles of Night (RAW
     # DMG p.172, uncommon, no attunement). While worn, the wearer
     # has darkvision out to 60 ft — composes with `_pc_sees_in_darkness`

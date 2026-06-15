@@ -480,6 +480,22 @@ def _rogue_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "carpet-of-flying", "weight_lb": 0,
              "desc": "Very rare wondrous item, no attunement. Speak its command word as an action to make the carpet hover and fly, moving by your spoken directions while you're within 30 ft of it. Four sizes exist (GM's choice), with flying speeds of 30-80 ft and 200-800 lb capacity. It can carry double its capacity at half speed. RAW DMG p.157."},
+            # v2.301.0 — Elven Chain (RAW DMG p.150, rare, NO attunement).
+            # A shirt of finely woven silver mesh: "+1 bonus to AC while you
+            # wear this armor" — rides the existing `ac_bonus` substrate
+            # (cloak/ring/bracers precedent) with zero new engine code. Its
+            # payload omits `requires_attunement`, so the +1 applies while
+            # merely equipped. The "proficient even without medium-armor
+            # proficiency" RAW clause is GM-narrated in v1. Seeded inert
+            # (unequipped) so it adds nothing to Pip's baseline AC and
+            # disturbs no existing test — the harness PATCHes it equipped,
+            # reads the +1 target_ac delta, then restores. A silvery elven
+            # mesh shirt is on-theme for the demo's stealthy Halfling Rogue.
+            {"name": "Elven Chain", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False,
+             "armor_type": "medium", "ac_value": 14,
+             "_slug": "elven-chain", "weight_lb": 20,
+             "desc": "Rare medium armor (chain shirt), no attunement. You gain a +1 bonus to AC while you wear this armor. You are considered proficient with this armor even if you lack proficiency with medium armor. RAW DMG p.150."},
         ],
         "feats": [],
         "resources": [
