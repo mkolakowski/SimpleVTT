@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2841 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.296.0, 2026-06-14).
+**Total tests:** 2847 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.297.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -2890,6 +2890,18 @@ v2.296.0 — Rod of Alertness (RAW DMG p.193, very rare, attunement): advantage 
 | `test_rod_requires_attunement` | Equipped-but-unattuned → no `2d20kh1`, no `roll_state_applied` (the attunement gate). Restored on teardown. |
 | `test_rod_baseline_has_no_advantage` | Control: inert seed (equipped=False) → straight `1d20`, no advantage (proves it's rod-sourced). |
 | `test_rod_exposes_derived_flag` | Equipped+attuned → `GET /sheet-json` `derived.check_advantage_on` has "perception" in `skills` and "Rod of Alertness" in `sources`. Restored on teardown. |
+
+### `test_item_spell_save_advantage_roll.py`
+v2.297.0 — spell-save advantage as a live `/roll` effect. Upgrades the v2.236.0 `spell_save_advantage` substrate (Mantle of Spell Resistance, Spellguard Shield) from a descriptive `/sheet-json` flag into a real roll effect: `_roll_item_spell_save_advantage` folds a `2d20kh1` advantage source into the PHB p.173 composition at `/roll` time, gated on the caller passing `vs_spell: true`. Also lands Scarab of Protection (RAW DMG p.199) as inert spare loot on Dame Seraphine Vael. Carriers: Quan Reelstep (Mantle equipped+attuned in seed, no PATCH) + Seraphine (Scarab via PATCH, restored on teardown).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mantle_grants_advantage_on_vs_spell_save` | Quan (Mantle equipped+attuned in seed), battle seeded → `POST /roll` WIS save with `vs_spell: true` → breakdown contains `2d20kh1` and `roll_state_applied == auto_advantage_mantle_of_spell_resistance`. |
+| `test_mantle_no_advantage_without_vs_spell_flag` | The `vs_spell` gate: same WIS save WITHOUT the flag → straight `1d20`, no `roll_state_applied` (a plain save, e.g. vs grapple, must not pick up the spell-only advantage). |
+| `test_scarab_grants_advantage_on_vs_spell_save` | Scarab equipped+attuned via PATCH → `vs_spell` save breakdown contains `2d20kh1` and `roll_state_applied == auto_advantage_scarab_of_protection`. Restored on teardown. |
+| `test_scarab_requires_attunement` | Scarab equipped-but-unattuned → no `2d20kh1`, no `roll_state_applied` (the attunement gate). Restored on teardown. |
+| `test_scarab_baseline_has_no_advantage` | Control: inert seed (equipped=False) → `vs_spell` save is straight `1d20`, no advantage (proves it's scarab-sourced). |
+| `test_scarab_exposes_derived_flag` | Equipped+attuned → `GET /sheet-json` `derived.spell_save_advantage` names "Scarab of Protection" in `sources` (the v2.236.0 descriptive mirror). Restored on teardown. |
 
 ### `test_item_robe_of_eyes.py`
 v2.295.0 — Robe of Eyes (RAW DMG p.193, rare, attunement): advantage on sight-based Wisdom (Perception) checks via the v2.253.0 `check_advantage_on` substrate, the first 3-field composite (also carries `sees_in_darkness` + `darkvision_ft: 120`, the Belt of Dwarvenkind shape). Seeded as inert spare loot (unequipped/unattuned) on Tavik Stormcrown (Cleric, no other perception-advantage item, so the baseline cleanly proves the source); tests PATCH it equipped+attuned, roll a Perception check, then restore.

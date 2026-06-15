@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.297.0] - 2026-06-14 — "The Living Ward"
+
+**Schema version:** 69
+
+**Commit summary:** Upgrades the v2.236.0 `spell_save_advantage` substrate from a descriptive `/sheet-json` flag into a **live `/roll` effect**, and lands a new carrier — **Scarab of Protection** (RAW DMG p.199, legendary, attunement). A saving throw the caller flags `vs_spell: true` now folds a `2d20kh1` advantage source into the PHB p.173 composition when the saver wears a spell-save-advantage item.
+
+**Description:** Since v2.236.0 the `spell_save_advantage` substrate (Mantle of Spell Resistance, Spellguard Shield) only surfaced a descriptive `derived.spell_save_advantage` flag on `/sheet-json` — it had no effect on actual rolls. This commit closes that gap: a new `_roll_item_spell_save_advantage(sheet, stat_key_lc, vs_spell)` helper reads the already-aggregated `spell_save_advantage` flag from `_equipped_item_effects` (which applies the per-payload attunement gate) and returns a normalized source key, which the `/roll` handler folds into the same composition block as the v2.253.0 item check-advantage path — producing a `2d20kh1` breakdown + `roll_state_applied: auto_advantage_<source>`. The effect is **gated on the caller passing `vs_spell: true`**: the generic `/roll` save can't know whether a given save is against a spell, and RAW scopes the advantage to saves vs spells / magical effects, so a plain save (e.g. vs a grapple) must not pick it up. The benefit now lands live for the already-seeded Mantle of Spell Resistance (Quan Reelstep, equipped+attuned) and Spellguard Shield (Caelan), plus the new **Scarab of Protection** seeded as spare loot on Dame Seraphine Vael — chosen because she carries no other spell-save item, so the inert baseline cleanly proves the scarab is the source. The scarab's 12-charge necromancy-save reaction remains GM-narrated in v1. MINOR — additive roll effect + a new registry entry + demo content + tests, no schema change.
+
+### Added
+- `_roll_item_spell_save_advantage` helper (`app/routes/tabletop_routes.py`) + `/roll` wiring — folds item-granted spell-save advantage into the PHB p.173 composition when the caller flags `vs_spell: true`.
+- `scarab-of-protection` entry in `_MAGIC_ITEM_PASSIVES` — `spell_save_advantage: True`, attunement-gated.
+- Demo seed: Dame Seraphine Vael gains a spare (unequipped/unattuned) **Scarab of Protection**.
+- `tests/harness/test_item_spell_save_advantage_roll.py` (6 tests): Mantle on Quan grants `2d20kh1` + `auto_advantage_mantle_of_spell_resistance` on a `vs_spell` save (no PATCH); the `vs_spell` gate (same save without the flag is straight `1d20`); Scarab on Seraphine grants advantage on equip+attune; attunement gate; inert baseline control; `derived.spell_save_advantage` projection. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2841 → 2847 (+6 tests); added the `test_item_spell_save_advantage_roll.py` section.
+
 ## [2.296.0] - 2026-06-14 — "The Watchful Rod"
 
 **Schema version:** 69

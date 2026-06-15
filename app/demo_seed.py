@@ -1791,6 +1791,23 @@ def _paladin_vengeance_sheet(name: str) -> dict:
              "hands": 0, "weight_lb": 0,
              "_slug": "ring-of-resistance", "_resistance_type": "fire",
              "desc": "Rare ring, attunement. You have resistance to fire damage while wearing this ring. RAW DMG p.192."},
+            # v2.297.0 — Scarab of Protection (RAW DMG p.199, legendary,
+            # attunement). Lands on the v2.236.0 `spell_save_advantage`
+            # substrate, now upgraded this commit from a descriptive
+            # /sheet-json flag into a live /roll effect: when the caller flags
+            # a saving throw as `vs_spell`, `_roll_item_spell_save_advantage`
+            # folds a 2d20kh1 advantage source into the roll. The scarab's
+            # second benefit (12 charges; reaction to turn a failed necromancy
+            # / undead-effect save into a success, then crumbles) is GM-narrated
+            # in v1. Seeded as inert spare loot (unequipped/unattuned) so it
+            # adds no flag to Seraphine's baseline (she carries no other
+            # spell-save item) — the harness PATCHes it equipped+attuned, rolls
+            # a vs_spell save, then restores. A holy ward against hostile magic
+            # befits a Vengeance paladin.
+            {"name": "Scarab of Protection", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False, "weight_lb": 0,
+             "_slug": "scarab-of-protection",
+             "desc": "Legendary wondrous item, attunement. While on your person you have advantage on saving throws against spells. The scarab has 12 charges: when you fail a save against a necromancy spell or a harmful undead effect you can use your reaction to expend 1 charge and turn the failure into a success; it crumbles to powder when the last charge is used. RAW DMG p.199."},
         ],
         "resources": [
             {

@@ -16792,6 +16792,15 @@ async def roll_dice(
         item_adv_key = _roll_item_check_advantage(
             _char.sheet or {}, stat_key_lc,
         )
+    # v2.297.0 — item-granted spell-save advantage (Scarab of Protection /
+    # Robe of the Archmagi). A saving throw (not a skill check) flagged
+    # `vs_spell` by the caller. Mutually exclusive with the check-advantage
+    # source above (a roll is a check OR a save), so it shares the same RAW
+    # PHB p.173 composition block below.
+    if item_adv_key is None and not skip_roll_state and _char is not None:
+        item_adv_key = _roll_item_spell_save_advantage(
+            _char.sheet or {}, stat_key_lc, bool(body.get("vs_spell")),
+        )
     if item_adv_key:
         if roll_state_applied in ("auto_advantage", "manual_advantage"):
             # Already advantage — RAW adv/dis don't stack; no-op.
@@ -28715,6 +28724,38 @@ def _roll_item_check_advantage(
     return str(src or "item").strip().lower().replace(" ", "_")
 
 
+def _roll_item_spell_save_advantage(
+    sheet, stat_key_lc: str, vs_spell: bool,
+) -> "str | None":
+    """v2.297.0 — item-granted advantage on saving throws against spells
+    (Scarab of Protection, RAW DMG p.199; Robe of the Archmagi p.193).
+
+    Returns a normalized source key (lowercased, spaces→underscores) when:
+    - the caller flagged the save as being against a spell (``vs_spell``), AND
+    - the roll is classified as a saving throw (``stat_key`` ends ``_save``), AND
+    - the saver has an equipped+attuned item carrying ``spell_save_advantage``.
+
+    The ``vs_spell`` gate is required because the generic ``/roll`` save can't
+    know whether a given save is against a spell — only the caller does. RAW
+    scopes the advantage to saves vs spells / magical effects, so a plain STR
+    save (e.g. vs a grapple) must NOT pick it up. Returns None otherwise.
+
+    Reads the aggregated ``spell_save_advantage`` flag from
+    ``_equipped_item_effects``, which already applies the per-payload
+    attunement gate, so a detuned scarab contributes nothing.
+    """
+    if not sheet or not vs_spell:
+        return None
+    if not stat_key_lc or not stat_key_lc.endswith("_save"):
+        return None
+    eff = _equipped_item_effects(sheet)
+    if not eff.get("spell_save_advantage"):
+        return None
+    srcs = eff.get("spell_save_advantage_sources") or []
+    src = srcs[0] if srcs else "item"
+    return str(src or "item").strip().lower().replace(" ", "_")
+
+
 # v2.156.0 — Phase 2e. RAW PHB Appendix A: Paralyzed / Stunned /
 # Unconscious / Petrified all auto-fail STR + DEX saving throws. This
 # is a SEPARATE mechanic from adv/dis — the d20 doesn't matter; the
@@ -32641,6 +32682,22 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "ability_bonus_cap": 20,
             "sees_in_darkness": True,
             "darkvision_ft": 60,
+            "requires_attunement": True,
+        },
+    ],
+    # v2.297.0 — Scarab of Protection (RAW DMG p.199, legendary, attunement).
+    # First item on the new `spell_save_advantage` substrate: "You have
+    # advantage on saving throws against spells." The flag aggregates in
+    # `_equipped_item_effects` (boolean OR) and is read at /roll time by
+    # `_roll_item_spell_save_advantage` when the caller flags the save as
+    # `vs_spell` — folding a 2d20kh1 advantage source into the PHB p.173
+    # composition exactly like the check-advantage substrate. The scarab's
+    # second benefit (12 charges; reaction to turn a failed necromancy /
+    # undead-effect save into a success, then crumbles after the 12th) is
+    # GM-narrated in v1.
+    "scarab-of-protection": [
+        {
+            "spell_save_advantage": True,
             "requires_attunement": True,
         },
     ],
