@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.318.1] - 2026-06-15 — "The Sheathed Blade"
+
+**Schema version:** 69
+
+**Commit summary:** Follow-up to v2.318.0 — reseat Pip Quickfingers' Sword of Life Stealing as **inert spare loot** (`equipped: False, attuned: False`) and rewrite the three harness tests to PATCH the inventory equipped+attuned via `/sheet-fields` at test start, then restore on teardown. Aligns the v2.318.0 ship-on-Pip with the recent spare-loot precedent (v2.315.0 Scimitar of Speed on Caelan, v2.279.0 Cloak of Arachnida on Lyra, v2.303.0 Boots of Striding and Springing on Caelan) instead of pushing Pip to a 5th seed-attuned item.
+
+**Description:** v2.318.0 seeded the Sword of Life Stealing equipped+attuned on Pip, taking her to 5 seed-attuned (Cloak + Ring + Sharpness + Wand + Life Stealing). That follows the older Garrik / Lyra over-cap seed precedent, but the recent house pattern is "seed inert, PATCH-in-test" — every other-than-trivial attack-rider / passive item added since v2.279.0 has used it. This PATCH brings Life Stealing in line: the seed item is now inert and the three tests in `test_sword_of_life_stealing.py` use a `_patch_inv` / `_restore_inv` helper pair (the v2.315.0 Scimitar-of-Speed shape) to drive equipped+attuned via `/sheet-fields` (which bypasses the `/attune` 3-item cap) on each test, then restore on teardown. Keeps Pip's seed at the same 4-attuned shape she had pre-v2.318.0, so any future detune-restore flow on her other riders behaves identically before and after this patch. The catalog row, attack entry, broadcast contract, and RAW behaviour are unchanged — only the seed equip/attune state and test setup pattern move. (Separately: `test_sword_of_sharpness.py::test_sharpness_nat_20_extra_damage` + `test_vorpal_decap.py::test_vorpal_decap_on_nat_20` fail locally on both v2.317.0 and v2.318.0, so they're a pre-existing flake unrelated to this commit — filed for `BUGS.md` follow-up.) PATCH — alignment with the spare-loot precedent; no behaviour change to the rider itself.
+
+### Changed
+- Demo seed: Pip Quickfingers' Sword of Life Stealing flipped to inert spare loot (`equipped: False, attuned: False`); the v2.318.0 comment expanded with the spare-loot precedent note.
+- `tests/harness/test_sword_of_life_stealing.py`: tests gain a `_patch_inv` / `_restore_inv` helper pair (the v2.315.0 Scimitar-of-Speed shape) and wrap each assertion in a PATCH-then-restore try/finally.
+
 ## [2.318.0] - 2026-06-15 — "The Hungering Blade"
 
 **Schema version:** 69

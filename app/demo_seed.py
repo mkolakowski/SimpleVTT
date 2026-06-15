@@ -516,17 +516,23 @@ def _rogue_sheet(name: str) -> dict:
             # nat-20 +3d6 necrotic rider fires from the v2.158.101 on_nat_20
             # post-hit handler when (a) the d20 lands natural 20, (b) the item
             # is equipped + attuned, and (c) the target isn't a construct or
-            # undead. Pip now wears 5 attuned items (Cloak of Protection + Ring
-            # of Protection + Sword of Sharpness + Wand of Enemy Detection +
-            # this) — seed-load bypasses the RAW 3-item cap (enforced only at
-            # /attune runtime, per the Lyra/Garrik/Carpet seed-load precedent).
-            # Two on_nat_20 swords on one PC stress the catalog's per-slug
-            # dispatch — Sharpness fires its +4d6 slashing on a Sharpness swing,
-            # Life Stealing fires its +3d6 necrotic on a Life Stealing swing,
-            # and each is gated independently by the wielder's matching attuned
-            # inventory item via the attack's `_slug`.
+            # undead. v2.318.1 — reseated INERT (equipped=False, attuned=False)
+            # as spare loot, aligning with the recent house pattern (v2.315.0
+            # Scimitar of Speed on Caelan, v2.279.0 Cloak of Arachnida on Lyra,
+            # v2.303.0 Boots of Striding and Springing on Caelan). The earlier
+            # v2.318.0 seed-attuned shape followed the older Garrik / Lyra
+            # over-cap seed precedent, but seed-inert is now the preferred
+            # default — the harness PATCHes the inventory equipped+attuned via
+            # /sheet-fields (which bypasses the /attune 3-item cap), runs the
+            # rider tests, then restores. Pip stays at the same 4 seed-attuned
+            # items she had pre-v2.318.0 (Cloak + Ring + Sharpness + Wand).
+            # When the test does PATCH it active, two on_nat_20 swords on one PC
+            # stress the catalog's per-slug dispatch — Sharpness fires its +4d6
+            # slashing on a Sharpness swing, Life Stealing fires its +3d6
+            # necrotic on a Life Stealing swing, each gated independently by
+            # the attack's `_slug` matching its inventory item.
             {"name": "Sword of Life Stealing", "type": "weapon", "qty": 1,
-             "equippable": True, "equipped": True, "attuned": True,
+             "equippable": True, "equipped": False, "attuned": False,
              "hands": 1, "damage": "1d6", "damage_type": "piercing",
              "properties": "finesse, light, magic",
              "_slug": "sword-of-life-stealing", "weight_lb": 2,
