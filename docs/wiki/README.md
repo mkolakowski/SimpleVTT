@@ -17,7 +17,7 @@ How much of the SRD 5.1 ruleset SimpleVTT mechanically automates, by content cat
 | Spells | 319 | ~70% |
 | Magic items | 123 / 239 wired | ~51% |
 
-**Overall ~75%.** Top automation gaps, in priority order: finish the magic-item content tail (116 SRD items still GM-narrated), then spell upcast scaling (~110 cast-and-broadcast-only spells), then the 24 ⚪ class-feature rows. Known defects are tracked in [TODO](../../TODO.md).
+**Overall ~75%.** Top automation gaps, in priority order: finish the magic-item content tail (116 SRD items still GM-narrated), then spell upcast scaling (~110 cast-and-broadcast-only spells), then the 24 ⚪ class-feature rows. Known defects are tracked in [BUGS](../../BUGS.md).
 
 ## Available guides
 
@@ -108,6 +108,7 @@ Canonical top-level documents at the repo root. Mirrored through the wiki so the
 | [CREDITS & attribution](../../CREDITS.md) | Markdown (license) | All | ✅ shipped |
 | [TODO — planned features backlog](../../TODO.md) | Markdown (backlog) | Contributors | ✅ shipped · living |
 | [TODONE — completed to-do archive](../../TODONE.md) | Markdown (archive) | Contributors | ✅ shipped · living |
+| [BUGS — known-defect tracker](../../BUGS.md) | Markdown (tracker) | Contributors | ✅ shipped · living |
 
 ## TODO — guides to write
 

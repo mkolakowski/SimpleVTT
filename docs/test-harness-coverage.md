@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2897 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.315.0, 2026-06-14).
+**Total tests:** 2898 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.317.0, 2026-06-14).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -4362,6 +4362,7 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_simulacrum_plan` | v2.49.68: `GET /wiki/doc/plan-player-simulacrum` → 200, body contains "simulacrum" + the nav menu. Resolves through the allowlist to `docs/plans/player-simulacrum.md`. |
 | `test_wiki_doc_serves_root_doc` | v2.49.9: `GET /wiki/doc/claude` → 200, body contains CLAUDE.md's H1 ("Claude Code guidelines") + the nav menu. Resolves through the allowlist to the repo-root `CLAUDE.md`. |
 | `test_wiki_doc_serves_automation_coverage` | v2.99.447: `GET /wiki/doc/automation-coverage` → 200, body contains "automation coverage" + the nav menu. Resolves through the allowlist to `docs/automation-coverage.md` (the Phase 0 audit doc). |
+| `test_wiki_doc_serves_bugs` | v2.316.2: `GET /wiki/doc/bugs` → 200, body contains "bug tracker" + the nav menu. Resolves through the allowlist to the repo-root `BUGS.md` (the consolidated known-defect tracker). |
 | `test_wiki_doc_serves_magic_items_automation_plan` | v2.158.71: `GET /wiki/doc/plan-magic-items-automation` → 200, body contains "magic-item automation" + "pearl of power" + the nav menu. Resolves through the allowlist to `docs/plans/magic-items-automation.md` (the SRD-audit P1 plan). |
 | `test_wiki_doc_serves_exhaustion_levels_plan` | v2.158.72: `GET /wiki/doc/plan-exhaustion-levels` → 200, body contains "exhaustion levels" + the nav menu. Resolves through the allowlist to `docs/plans/exhaustion-levels.md` (the SRD-audit P1 plan to replace single-flag exhaustion with RAW 6-level tracking). |
 | `test_wiki_doc_serves_carrying_capacity_plan` | v2.159.26: `GET /wiki/doc/plan-carrying-capacity` → 200, body contains "carrying capacity" + the nav menu. Resolves through the allowlist to `docs/plans/carrying-capacity.md` (filed to unblock Bag of Holding — needed an STR × 15 carry-capacity engine to discount). |

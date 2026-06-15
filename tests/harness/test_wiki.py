@@ -97,6 +97,8 @@ async def test_wiki_home_renders():
     # v2.316.0: SRD automation-coverage banner rendered at top of landing page.
     assert "SRD 5e automation coverage" in resp.text
     assert 'id="srd-coverage"' in resp.text
+    # v2.317.0 (assert tag): BUGS known-defect tracker listed in Repo documentation.
+    assert "/wiki/doc/bugs" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -545,6 +547,19 @@ async def test_wiki_doc_serves_todone():
     assert "text/html" in resp.headers.get("content-type", "")
     # The archive's H1 is "SimpleVTT — Completed To-Dos".
     assert "completed to-dos" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_bugs():
+    """v2.317.0: GET /wiki/doc/bugs — 200 + body contains the tracker's
+    H1 + the nav menu. Resolves through the _DOC_ALLOWLIST to ``BUGS.md``
+    at the repo root. The tracker consolidates known defects that used to
+    be scattered across TODO.md and inline plan-doc status notes."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/bugs")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "bug tracker" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.317.0] - 2026-06-14 — "The Glass Jar"
+
+**Schema version:** 69
+
+**Commit summary:** New `BUGS.md` known-defect tracker at the repo root, surfaced through the wiki. Consolidates every bug that was scattered across `TODO.md`'s "Test Infrastructure" / "Class Features" sections and inline `**Status:**` notes in `docs/plans/*.md` into one scannable list with severity (P1/P2/P3), status (OPEN / NEEDS-VERIFY / WONTFIX / FIXED), repro, and fix paths.
+
+**Description:** Closes the third deliverable of the SRD-audit request. `BUGS.md` catalogs 14 defects (B1–B14) plus two borderline-resolved items (M1, M4): CI test skips (skull-overlay emoji font B1, Garrik-not-tokenized B2), encounter-sim coverage gaps (B4, B8), a latent test-coupling hazard (a Caelan level-bump breaking `test_attack_divine_smite_spends_slot`, B9), rules-engine divergences (Quickened Spell announce-only B6, partial reaction spells B7, Indomitable RAW-bent B10, roll-log GM-roll collapse B3), and stale-doc bugs (B5, B11–B14). The TODO "Test Infrastructure" bug entries are removed and replaced with a pointer to the tracker; the Class Features B9/B10 notes now cross-reference `BUGS.md`. The doc is surfaced per the wiki rule: `bugs` allowlist entry in `wiki_routes.py`, a "Repo documentation" row in `wiki.html` + `docs/wiki/README.md`, a `test_wiki_doc_serves_bugs` harness test, and the `test_wiki_home_renders` assertion list extended. The v2.316.0 coverage banner's "Known defects" link is re-pointed from TODO to BUGS. MINOR — new wiki-reachable document + harness test, no schema/endpoint change.
+
+### Added
+- `BUGS.md` — consolidated known-defect tracker (B1–B14 + M1/M4 borderline), with severity legend + status vocabulary.
+- `app/routes/wiki_routes.py`: `"bugs": Path("BUGS.md")` in `_DOC_ALLOWLIST`.
+- `app/templates/wiki.html` + `docs/wiki/README.md`: "BUGS — known-defect tracker" row in the Repo documentation table.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_bugs` — asserts `/wiki/doc/bugs` serves the tracker H1 + nav.
+
+### Changed
+- `TODO.md`: "Test Infrastructure" bug entries removed → pointer to `BUGS.md`; Class Features B9/B10 notes cross-reference the tracker.
+- `app/templates/wiki.html` + `docs/wiki/README.md`: SRD coverage banner "Known defects" link re-pointed TODO → BUGS.
+- `tests/harness/test_wiki.py::test_wiki_home_renders`: asserts the BUGS row renders.
+- `docs/test-harness-coverage.md`: harness total 2897 → 2898 (+1 BUGS wiki test).
+
 ## [2.316.1] - 2026-06-14 — "The Reconciled Ledger"
 
 **Schema version:** 69

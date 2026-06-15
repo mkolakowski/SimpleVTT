@@ -457,29 +457,7 @@ Output: a `CREDITS.md` file at the repo root listing every third-party asset, it
 
 ## Test Infrastructure
 
-### Install emoji font in CI for the skull-overlay test (or rework the assertion)
-**Filed 2026-05-25 (v2.49.241).** `tests/encounter_sim/level_3_edge_cases/death_saves/test_skull_overlay_at_zero_hp.py::test_skull_overlay_renders_on_zero_hp_token` is skipped pending font diagnosis. CI's Playwright Chromium consistently samples `[66, 66, 66, 255]` (gray tofu) at the token center — the ☠ emoji isn't rendering because the runner image lacks an emoji font. Locally (macOS) the skull renders fine.
-
-**Fix paths:**
-1. Add `fonts-noto-color-emoji` (or equivalent) install step to the Playwright job in `.github/workflows/test-harness.yml` before `playwright install --with-deps chromium`. Quick win — just a `sudo apt-get install -y fonts-noto-color-emoji` line.
-2. Change the test's assertion from "sample a canvas pixel" to "check window.battle + a draw-fired flag." Decouples the test from font availability entirely.
-3. Rewrite the skull overlay itself to use an SVG/HTML element on top of the canvas. Most invasive but easiest to test against.
-
-Path (1) is the smallest commit; path (2) is the most resilient long-term. The v2.49.4 regression class this test catches IS still covered locally (where macOS has the font).
-
-### Re-tokenize Garrik Ironside (or change tokenized-six lineup to include a Fighter)
-**Filed 2026-05-25 (v2.49.236 CI cleanup).** Two encounter-sim Playwright tests are skipped pending this fix:
-- `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py::test_tavern_brawl_3_pcs_3_npcs_round_cycle`
-- `tests/encounter_sim/level_3_edge_cases/action_economy/test_action_surge_refunds_chip.py::test_action_surge_refunds_action_chip`
-
-Both seed Garrik (Fighter) into the init tracker via direct localStorage / `seed_battle_into_page`, but the tabletop's orphan-cleanup at `tabletop.html:4807` drops any combatant whose `char_id` isn't tokenized in the demo seed. v2.49.172's demo slim from 12 → 6 tokenized PCs removed Garrik (and Sir Caelan / Lyra / Mira / Kael / Rowan) from `seed_tokens()`, but didn't update these tests.
-
-**Fix paths:**
-1. Add Garrik back to `seed_tokens()` (one `tokens.append(Token(...))` block; needs a map position + image_url). Cascades: maybe also need to add him to the pre-rolled initiative in `seed_battle_state`. Cheapest if no other tokenized PC is a Fighter.
-2. Swap the test fixtures to use a currently-tokenized PC (Krieger = Barbarian, Pip = Rogue, etc.). Works for the tavern brawl test (just init-tracker rendering) but NOT for the Action Surge test (needs a tokenized Fighter — none exist in the tokenized six today).
-3. Change the demo's tokenized-six lineup to swap one of Pip/Thalindra/Tavik/Zara/Krieger/Magnus for Garrik. Plan-doc impact: `class-content-status.md` Phase-A demo-roster notes.
-
-Backbone Kristen (`tests/harness/test_use_action_surge.py`) still covers the Action Surge chip-refund contract via direct PUT `/battle`; only the Playwright UI assertion is gated on the missing token.
+> **Bugs moved to [`BUGS.md`](BUGS.md).** The skull-overlay CI emoji-font skip (B1) and the Garrik-not-tokenized encounter-sim skips (B2) now live in the bug tracker with their repro + fix paths. This section is kept for non-bug test-infra *features* if any are filed later.
 
 ---
 
@@ -507,12 +485,12 @@ Performance note from v2.49.139: each `backdrop-filter` element triggers a compo
 ### Paladin Aura of Courage (Lv 10)
 Same shape as Aura of Protection (v2.53.0) and Aura of Devotion (v2.55.0) — `_ally_has_aura_of_courage(db, campaign_id, saving_char_id)` walks init for any Paladin Lv 10+ in any oath. RAW: "you and friendly creatures within 10 feet of you can't be frightened while you are conscious." This is a **condition-install immunity** gate matching the Aura of Devotion pattern, just with "frightened" as the blocked condition key (instead of "charmed"). Wire the same way: gate at `/roll_request/{id}/respond`'s PC-failed-save condition-install block, skip install + broadcast `feature_used(source=aura-of-courage)` when `cond.key == "frightened"` and a Paladin Lv 10+ is in init.
 
-**Caelan bump**: 7 → 10. **Three levels** of cascading changes — prof bonus +3 → +4 (changes at Lv 9), HP +24, Lay on Hands pool 35 → 50, spell slots gain L3 (4/3/2 instead of 4/3/0). The prof bump breaks existing attack-bonus assertions in `test_attack.py::test_attack_divine_smite_spends_slot` (Longsword +6 → +7 because STR +3 + prof +4 = +7) — needs an audit-and-fix pass. **Recommended scope**: bundle Aura of Courage with the Caelan bump so the slot-pool / damage-die scaling lands once. Defer Aura of Devotion's Lv 18 30-ft radius expansion — same helper, larger gate, different commit.
+**Caelan bump**: 7 → 10. **Three levels** of cascading changes — prof bonus +3 → +4 (changes at Lv 9), HP +24, Lay on Hands pool 35 → 50, spell slots gain L3 (4/3/2 instead of 4/3/0). The prof bump breaks existing attack-bonus assertions in `test_attack.py::test_attack_divine_smite_spends_slot` (Longsword +6 → +7 because STR +3 + prof +4 = +7) — needs an audit-and-fix pass; this latent test-coupling hazard is tracked as **B9 in [`BUGS.md`](BUGS.md)**. **Recommended scope**: bundle Aura of Courage with the Caelan bump so the slot-pool / damage-die scaling lands once. Defer Aura of Devotion's Lv 18 30-ft radius expansion — same helper, larger gate, different commit.
 
 Filed by v2.55.0 when the user picked Indomitable as the next implementation target. Pick this up after Indomitable ships.
 
 ### Fighter Indomitable (Lv 9+) — IN PROGRESS as v2.56.0 "Iron Will"
-Garrik bump 7 → 9 (prof +3 → +4, HP +14, Second Wind 1d10+9). New `/use_indomitable` endpoint installs a single-use `indomitable-armed` self-buff; the save-roll construction hook reads the buff, swaps `1d20 → 2d20kh1`, and removes the buff from the combatant so the consumption is per-save (RAW: one specific reroll). RAW-bent v1: advantage on the next save rather than reroll-on-failure, since the post-roll reroll flow needs an undo-and-reapply path for installed conditions which is its own substantial commit. Filed for follow-up: the precise post-roll reroll with consequence-undo.
+Garrik bump 7 → 9 (prof +3 → +4, HP +14, Second Wind 1d10+9). New `/use_indomitable` endpoint installs a single-use `indomitable-armed` self-buff; the save-roll construction hook reads the buff, swaps `1d20 → 2d20kh1`, and removes the buff from the combatant so the consumption is per-save (RAW: one specific reroll). RAW-bent v1: advantage on the next save rather than reroll-on-failure, since the post-roll reroll flow needs an undo-and-reapply path for installed conditions which is its own substantial commit. The accepted divergence + the precise post-roll reroll follow-up is tracked as **B10 in [`BUGS.md`](BUGS.md)**.
 
 ---
 
