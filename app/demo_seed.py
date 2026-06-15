@@ -1063,6 +1063,20 @@ def _wizard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 2,
              "_slug": "marvelous-pigments",
              "desc": "Very rare wondrous item, no attunement. 2-lb wooden box: 1d4 paint pots + a fine brush. Action over 10 min: paint a 2D image on a flat surface — up to 1000 cubic feet of representational content. Next round the painted object becomes real and persists until destroyed normally. RAW DMG p.183."},
+            # v2.334.0 — "The Diviner's Hoard" bundle: Cubic Gate (RAW DMG
+            # p.165, legendary, no attunement). 3-in. cube with six faces,
+            # each keyed to a different plane of existence. Action: press
+            # a face to attune the cube to that plane; press it again to
+            # cast Gate (DC 17) targeting that plane (consumes the cube's
+            # daily charge — once per day per face). Stub catalog row; the
+            # planar targeting + travel mechanic is GM-narrated. Thematic
+            # on Thalindra (Wizard Evoker — six-plane gate fits her
+            # research scholar aesthetic and pairs with her Cone of Cold
+            # / Frost Brand cold/elemental theme for outer-plane visits).
+            {"name": "Cubic Gate", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 0.5,
+             "_slug": "cubic-gate",
+             "desc": "Legendary wondrous item, no attunement. 3-in. cube with six faces (each keyed to a different plane). Action: press a face to attune the cube; press again to cast Gate (DC 17) targeting that plane. Each face has 1 daily charge (regain all at dawn). RAW DMG p.165."},
         ],
         "feats": [],
         # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
@@ -1474,6 +1488,21 @@ def _cleric_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 2,
              "_slug": "decanter-of-endless-water",
              "desc": "Uncommon wondrous item, no attunement. 2-lb stoppered flask. Action: speak one of three command words to produce water — `stream` (1 gallon/round, 10 ft), `fountain` (5-ft length, 5 gallons/round), or `geyser` (30-ft × 1-ft, 30 gallons/round, knockdown attack). RAW DMG p.161."},
+            # v2.334.0 — "The Diviner's Hoard" bundle: Candle of Invocation
+            # (RAW DMG p.157, very rare, attunement). A taper keyed to a
+            # specific alignment; while burning near a creature of the
+            # matching alignment it grants a +2 luck-style aid (RAW: the
+            # candle's spells / planar-ally summon are alignment-gated).
+            # Lighting it lets the attuned wielder cast Gate (1/use) to a
+            # plane matching the candle's alignment. Stub catalog row; the
+            # alignment gating + Gate cast are GM-narrated. Thematic on
+            # Tavik (Life Cleric — a consecrated invocation candle fits his
+            # divine-ritual aesthetic; pairs with his Decanter of Endless
+            # Water for a "sacred vessel + sacred flame" altar kit).
+            {"name": "Candle of Invocation", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
+             "_slug": "candle-of-invocation",
+             "desc": "Very rare wondrous item, attunement. A taper keyed to a specific alignment. While burning, creatures of the matching alignment near it gain a benefit and the wielder can use the flame to cast Gate (consuming the candle). Spells / planar-ally effects are alignment-gated. RAW DMG p.157."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action
@@ -2574,6 +2603,19 @@ def _bard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "portable-hole",
              "desc": "Rare wondrous item, no attunement. 6-ft-diameter circle of black cloth (folds to handkerchief weight). Action: unfold on a horizontal surface to open a 10-ft-deep extradimensional pit; re-fold the cloth to close. A creature inside can crawl up out of the unfolded hole. The hole can hold creatures or objects within its extradimensional volume. RAW DMG p.185."},
+            # v2.334.0 — "The Diviner's Hoard" bundle: Crystal Ball (RAW DMG
+            # p.159, very rare or legendary, attunement by a spellcaster).
+            # 3-lb sphere of polished crystal. Action: cast Scrying (DC
+            # 17) through the orb, scrying a creature you know or have an
+            # image of. Higher-rarity variants add Detect Thoughts /
+            # Telepathy / Read Thoughts modes. Stub catalog row; the spell
+            # cast + per-rarity modes are GM-narrated. Thematic on Lyra
+            # (College of Lore Bard — divination lore + scrying fits her
+            # research aesthetic).
+            {"name": "Crystal Ball", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 3,
+             "_slug": "crystal-ball",
+             "desc": "Very rare wondrous item, attunement by a spellcaster. 3-lb polished crystal sphere. Action: cast Scrying (DC 17) through the orb. Higher-rarity variants (legendary) add detect thoughts / telepathy / read thoughts modes. RAW DMG p.159."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit

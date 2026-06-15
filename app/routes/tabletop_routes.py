@@ -32784,6 +32784,21 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "robe-of-useful-items": [
         {"requires_attunement": False},
     ],
+    # v2.334.0 — "The Diviner's Hoard" bundle (eighth stub bundle). Three
+    # SRD high-power divination / planar-travel wondrous items shipped as
+    # catalog-stub passives. Two require attunement (Crystal Ball, Candle
+    # of Invocation); Cubic Gate doesn't. Their RAW mechanics
+    # (scry-through-orb, six-planar-cubic-gate, alignment-keyed wish-
+    # candle) are GM-narrated in v1; the catalog rows register the slugs.
+    "crystal-ball": [
+        {"requires_attunement": True},
+    ],
+    "cubic-gate": [
+        {"requires_attunement": False},
+    ],
+    "candle-of-invocation": [
+        {"requires_attunement": True},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the

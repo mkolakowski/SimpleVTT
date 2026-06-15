@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.334.0] - 2026-06-15 — "The Diviner's Hoard"
+
+**Schema version:** 69
+
+**Commit summary:** Eighth SRD magic-item **bundle** — three high-power divination / planar-travel wondrous items shipped together as catalog-stub passives: **Crystal Ball** (DMG p.159), **Cubic Gate** (DMG p.165), **Candle of Invocation** (DMG p.157). Two require attunement (Crystal Ball + Candle of Invocation — the catalog rows declare `requires_attunement: True`); Cubic Gate does not. Seeded on thematic carriers (Lyra / Thalindra / Tavik); three smoke tests in `test_diviners_hoard.py`.
+
+**Description:** Continues the bundling pattern. Each item's RAW mechanic (scry-through-orb, six-face planar gate, alignment-keyed invocation candle) stays GM-narrated. Crystal Ball + Candle both carry the attunement contract verified by the tests asserting `attuned: True` on the seed. Thalindra's Cubic Gate pairs with her existing planar-research kit; Tavik's Candle of Invocation joins his Decanter of Endless Water for a "sacred vessel + sacred flame" altar set; Lyra's Crystal Ball fits her College of Lore divination aesthetic. MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): three new stub catalog rows — `crystal-ball` (`requires_attunement: True`), `cubic-gate`, `candle-of-invocation` (`requires_attunement: True`).
+- Demo seed: Lyra Sunstrider gains a **Crystal Ball** (equipped + attuned), Thalindra Moonwhisper gains a **Cubic Gate**, Brother Tavik Stonebrow gains a **Candle of Invocation** (equipped + attuned) — each appended at the inventory tail.
+- `tests/harness/test_diviners_hoard.py` — 3 smoke tests; the Crystal Ball + Candle tests additionally assert `attuned: True`.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2948 → 2951 (+3 Diviner's Hoard tests); new `test_diviners_hoard.py` section.
+
 ## [2.333.0] - 2026-06-15 — "The Artisan's Spread"
 
 **Schema version:** 69
