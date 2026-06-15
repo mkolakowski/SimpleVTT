@@ -32660,6 +32660,19 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_attunement": True,
         },
     ],
+    # v2.296.0 — Rod of Alertness (RAW DMG p.193, very rare, attunement).
+    # The "Alertness" property grants advantage on Wisdom (Perception) checks
+    # (folded here via the v2.253.0 `check_advantage_on` substrate, keyed on
+    # the perception skill, attunement-gated — same shape as Robe of Eyes /
+    # Eyes of the Eagle) plus advantage on initiative rolls (GM-narrated in
+    # v1). The four detect/see-invisibility spells and the planted protective
+    # aura (+1 AC/saves, sense invisibles) are GM-narrated.
+    "rod-of-alertness": [
+        {
+            "check_advantage_on": ["perception"],
+            "requires_attunement": True,
+        },
+    ],
     # v2.227.0 — Periapt of Wound Closure (RAW DMG p.184, uncommon,
     # attunement). RAW: "whenever you roll a Hit Die to regain hit points,
     # double the number of hit points it restores." The `double_hit_die_

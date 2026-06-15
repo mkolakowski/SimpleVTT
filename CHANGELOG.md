@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.296.0] - 2026-06-14 — "The Watchful Rod"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Rod of Alertness** (RAW DMG p.193, very rare, attunement) lands its Alertness/Perception-advantage benefit on the v2.253.0 `check_advantage_on` substrate, keyed on the Perception skill. One registry entry, a demo-seed item on Garrik Ironside, and four harness tests.
+
+**Description:** The rod's "Alertness" property grants advantage on Wisdom (Perception) checks (and on initiative rolls) while held. The Perception half rides the same `check_advantage_on` substrate as the Cloak/Boots of Elvenkind, Eyes of the Eagle/Minute Seeing, Cloak of the Bat, and Robe of Eyes: an attunement-gated `["perception"]` skill key that `_roll_item_check_advantage` folds into the PHB p.173 composition at `/roll` time (producing `2d20kh1` + `roll_state_applied: auto_advantage_rod_of_alertness`) and that `/sheet-json` surfaces as `derived.check_advantage_on`. The initiative-roll advantage, the four detect/see-invisibility spells the rod casts, and the planted +1 AC/saves protective aura remain GM-narrated in v1. Seeded **unequipped/unattuned** as spare loot on Garrik Ironside (the demo's Champion Fighter — a watchful front-line soldier), specifically on a carrier with no other perception-advantage item so the inert baseline cleanly proves the rod is the source (Eyes of the Eagle lives on Mira, Robe of Eyes spare-loots on Tavik). The harness PATCHes it equipped+attuned, rolls a Perception check, asserts the advantage breakdown + source, then restores the seed inventory; an attunement-gate test, an inert-baseline control, and a `derived.check_advantage_on` projection test round it out. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `rod-of-alertness` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — `check_advantage_on: ["perception"]`, attunement-gated.
+- Demo seed: Garrik Ironside gains a spare (unequipped/unattuned) **Rod of Alertness**.
+- `tests/harness/test_item_rod_of_alertness.py` (4 tests): Perception advantage `2d20kh1` + `auto_advantage_rod_of_alertness` on equip+attune; attunement gate (equipped-but-unattuned yields straight `1d20`); inert baseline control; `derived.check_advantage_on` surfaces "perception" with the rod named in sources. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2837 → 2841 (+4 drop-in tests); added the `test_item_rod_of_alertness.py` section.
+
 ## [2.295.0] - 2026-06-14 — "The All-Seeing Robe"
 
 **Schema version:** 69

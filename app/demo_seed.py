@@ -5184,6 +5184,26 @@ def _fighter_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "ring-of-the-ram", "weight_lb": 0,
              "desc": "Rare ring, attunement. 3 charges. Spend 1-3 charges to make a ranged force attack (+7 to hit, 2d10 force per charge) against a creature within 60 ft; on a hit you can shove it 5 ft per charge. Regains 1d3 charges at dawn (long rest). RAW DMG p.193."},
+            # v2.296.0 — Rod of Alertness (RAW DMG p.193, very rare,
+            # attunement). RAW "Alertness" property: while holding the rod you
+            # have advantage on Wisdom (Perception) checks and on initiative
+            # rolls. The Perception-check advantage rides the v2.253.0
+            # `check_advantage_on` substrate (keyed on the perception skill,
+            # attunement-gated) exactly like Robe of Eyes / Eyes of the Eagle:
+            # `_roll_item_check_advantage` folds a 2d20kh1 advantage source
+            # into the /roll composition and `/sheet-json` surfaces it as
+            # derived.check_advantage_on. The initiative-roll advantage, the
+            # four detect/see-invisibility spells, and the planted protective
+            # aura (+1 AC/saves, sense invisibles) are GM-narrated in v1.
+            # Seeded as inert spare loot (unequipped/unattuned) so it adds no
+            # flag to Garrik's baseline (he carries no other perception-
+            # advantage item) — the harness PATCHes it equipped+attuned, rolls
+            # a Perception check, then restores. A watchful rod befits a Lv 9
+            # soldier on the front line.
+            {"name": "Rod of Alertness", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False, "weight_lb": 2,
+             "_slug": "rod-of-alertness",
+             "desc": "Very rare rod, attunement. While holding the rod you have advantage on Wisdom (Perception) checks and on initiative rolls; you can cast detect evil and good, detect magic, detect poison and disease, or see invisibility from it; and you can plant it to create a 60-ft bright-light protective aura (+1 AC and saving throws, sense invisible foes) for 10 min. RAW DMG p.193."},
         ],
         # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
         # 3 luck points / long rest; reaction-style "roll a new d20
