@@ -2505,6 +2505,20 @@ def _bard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "weight_lb": 1,
              "_slug": "gem-of-brightness",
              "desc": "Uncommon wondrous item, no attunement. 50 charges. Action: expend 1 charge to fire a brilliant beam at one creature within 60 ft — CON save DC 15 or blinded for 1 minute (repeated saves at end of each turn). When depleted, the gem becomes a non-magical 50 gp jewel. Two other modes (sheds bright light; 5-charge cone) are GM-narrated. RAW DMG p.172."},
+            # v2.330.0 — "The Engineer's Set" bundle: Portable Hole (RAW DMG
+            # p.185, rare, no attunement). 6-ft-diameter circle of black
+            # cloth (folds to handkerchief weight). Unfold on any surface
+            # to open a 10-ft-deep extradimensional pit; a creature can
+            # crawl in and out. Re-fold the cloth to close (objects inside
+            # remain in the pocket dimension). Stub catalog row; the
+            # extradimensional storage + interaction with Bag of Holding /
+            # Bag of Devouring rifts are GM-narrated. Thematic on Lyra
+            # (Bard, College of Lore — a hidden stash for performance
+            # gear, secret manuscripts, or quick stage-trap entrances).
+            {"name": "Portable Hole", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 1,
+             "_slug": "portable-hole",
+             "desc": "Rare wondrous item, no attunement. 6-ft-diameter circle of black cloth (folds to handkerchief weight). Action: unfold on a horizontal surface to open a 10-ft-deep extradimensional pit; re-fold the cloth to close. A creature inside can crawl up out of the unfolded hole. The hole can hold creatures or objects within its extradimensional volume. RAW DMG p.185."},
         ],
         # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
         # (PHB p.166): reaction-based +PB AC against one melee hit
@@ -4763,6 +4777,21 @@ def _monk_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True, "weight_lb": 0,
              "_slug": "ring-of-jumping",
              "desc": "Uncommon wondrous item, attunement. While wearing this ring, you can cast the jump spell from it as a bonus action at will, but can target only yourself when you do so. RAW DMG p.191. Surfaces as the derived jump_at_will flag."},
+            # v2.330.0 — "The Engineer's Set" bundle: Apparatus of the Crab
+            # (RAW DMG p.151, legendary, no attunement). 2-ft × 1-ft sealed
+            # iron barrel; 5 lb. Touch a control rune to transform into a
+            # 12-ft × 6-ft × 8-ft armored crab-walker (AC 20, 200 HP, swim
+            # 30 ft, walking 30 ft, 11 levers operating waterproof seal,
+            # claws, propulsion, light, and lift). Holds 2 medium creatures.
+            # Pure GM-narrated mechanic; catalog stub. Thematic on Kael
+            # (Wood Elf Monk — a mechanical contraption fits his
+            # contemplative tinkering / hermit background, and the
+            # ten-day-air-supply submersible is on-theme for a wandering
+            # explorer).
+            {"name": "Apparatus of the Crab", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "weight_lb": 5,
+             "_slug": "apparatus-of-the-crab",
+             "desc": "Legendary wondrous item, no attunement. 5-lb sealed iron barrel (2 ft × 1 ft) that transforms via a rune-control surface into a 12 × 6 × 8-ft armored crab-walker submersible — AC 20, 200 HP, swim 30, walk 30, 11 levers for sealed propulsion / claws / lift / lights / hatch. Holds 2 medium creatures (10 days of air). RAW DMG p.151."},
         ],
         "feats": [],
         # v2.18.0: Ki counter (max = monk level). Refreshes on short rest.
@@ -5111,6 +5140,21 @@ def _sorcerer_sheet(name: str) -> dict:
              "equippable": True, "equipped": False, "attuned": False,
              "_slug": "ring-of-spell-turning", "weight_lb": 0,
              "desc": "Legendary ring, attunement. While wearing this ring, you have advantage on saving throws against any spell that targets only you (not in an area of effect). If you roll a 20 for the save and the spell is 7th level or lower, the spell has no effect on you and instead targets the caster (GM-narrated). RAW DMG p.193."},
+            # v2.330.0 — "The Engineer's Set" bundle: Cube of Force (RAW DMG
+            # p.165, rare, attunement). 1-in. metal cube; bonus action to
+            # speak one of six face-keyed command words to project an
+            # invisible 5-ft cube barrier around yourself. Each command
+            # selects which solid/incorporeal/spell categories the barrier
+            # blocks; cube has 36 charges (1d6 spent per use), regaining
+            # 1d20 at dawn. Stub catalog row; the per-face barrier modes
+            # and energy-dispersal mechanic are GM-narrated. Thematic on
+            # Zara (Tiefling Sorcerer — defensive arcane field for a
+            # frail-frame blaster, and her first ATTUNEMENT-required stub
+            # item).
+            {"name": "Cube of Force", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": True, "attuned": True, "weight_lb": 1,
+             "_slug": "cube-of-force",
+             "desc": "Rare wondrous item, attunement. 1-in. metal cube. Bonus action: speak one of six face-keyed command words to project an invisible 5-ft cube barrier around yourself selectively blocking solids / incorporeals / spells / etc. 36 charges (regain 1d20 at dawn); each command spends a per-face cost. Energy-dispersal interactions are GM-narrated. RAW DMG p.165."},
         ],
         "feats": [],
         # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer

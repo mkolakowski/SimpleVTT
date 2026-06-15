@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 2935 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.329.0, 2026-06-15).
+**Total tests:** 2938 in `tests/harness/` + 90 in `tests/harness_ui/` (as of v2.330.0, 2026-06-15).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 
 > **Spell-validation suite marker (Phase 5, v2.183.23).** The 260-test spell-validation suite (the `test_spell_*` catalog iterators + the `test_cast_*` per-spell deep-dives + `test_ac_buff_spells.py`) carries the `spell_catalog` marker, auto-applied by filename in `tests/harness/conftest.py`. Run just that suite with `python3 -m pytest tests/harness/ -m spell_catalog`. The dedicated `spell-catalog` job in `.github/workflows/test-harness.yml` is its CI gate (runs serially — the shared single-stack harness precludes safe pytest-xdist; see [the plan](plans/spell-validation-suite.md) Phase 5).
@@ -3214,6 +3214,15 @@ v2.206.0 magic-items-automation content tail — Wand of Paralysis (RAW DMG p.21
 | `test_wand_of_paralysis_cast_2_targets` | Cast at 2 NPC targets → 200; `save_dc: 15`, `save_ability: CON`, `charges_spent: 1`, resource 7→6, both target ids in `results`. |
 | `test_wand_of_paralysis_over_cap_returns_400` | `charges: 2` when catalog max=1 → 400 (shared min/max charge validator). |
 | `test_wand_of_paralysis_empty_returns_409` | Drain the wand to 0 via /sheet-fields; invoke → 409 `insufficient_charges`, `current: 0`. Restores in teardown. |
+
+### `test_engineers_set.py`
+v2.330.0 — "The Engineer's Set" bundle (fourth after Wayfarer's / Inventor's / Captor's): three mechanical-contraption SRD wondrous items shipped as catalog-stub passives. Cube of Force is the first stub bundle item to declare `requires_attunement: True` (descriptive in v1; the test asserts `attuned: True` on the seed entry).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_kael_carries_apparatus_of_the_crab` | Kael's `/sheet-json` inventory carries `_slug: "apparatus-of-the-crab"`, type `magic`, `equipped: True`, no `attuned` flag. |
+| `test_zara_carries_cube_of_force` | Zara's `/sheet-json` inventory carries `_slug: "cube-of-force"`, type `magic`, `equipped: True`, AND `attuned: True` (the first stub item to require attunement). |
+| `test_lyra_carries_portable_hole` | Lyra's `/sheet-json` inventory carries `_slug: "portable-hole"`, type `magic`, `equipped: True`, no `attuned` flag. |
 
 ### `test_captors_cache.py`
 v2.329.0 — "The Captor's Cache" bundle (third after v2.327.0 Wayfarer's Trio + v2.328.0 Inventor's Trio): three SRD capture/trap wondrous items shipped as pure catalog-stub passives. Smoke tests verify each is seeded on its thematic carrier and surfaces via `/sheet-json`. Actual mechanics (thrown restraining sphere, WIS-save creature-trapping flask, CHA-save life-trapping mirror) are GM-narrated.

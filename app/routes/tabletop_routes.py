@@ -32719,6 +32719,22 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     "mirror-of-life-trapping": [
         {"requires_attunement": False},
     ],
+    # v2.330.0 — "The Engineer's Set" bundle (fourth stub bundle after the
+    # Wayfarer's / Inventor's / Captor's trios). Three mechanical-contraption
+    # SRD wondrous items shipped as catalog-stub passives. Cube of Force is
+    # the first stub item that DOES require attunement — its catalog row
+    # declares `requires_attunement: True`, but with no other passive payload
+    # the attunement gate is purely descriptive (until a future commit adds
+    # a real mechanical surface to gate on it).
+    "apparatus-of-the-crab": [
+        {"requires_attunement": False},
+    ],
+    "cube-of-force": [
+        {"requires_attunement": True},
+    ],
+    "portable-hole": [
+        {"requires_attunement": False},
+    ],
     # v2.209.0 — Stone of Good Luck (Luckstone, RAW DMG p.207,
     # uncommon, attunement). While the stone is on your person you gain
     # +1 to ability checks AND saving throws. The `save_bonus` rides the

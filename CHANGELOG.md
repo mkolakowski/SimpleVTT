@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.330.0] - 2026-06-15 — "The Engineer's Set"
+
+**Schema version:** 69
+
+**Commit summary:** Fourth SRD magic-item **bundle** (after Wayfarer's / Inventor's / Captor's) — three mechanical-contraption wondrous items shipped together as catalog-stub passives: **Apparatus of the Crab** (DMG p.151), **Cube of Force** (DMG p.165), **Portable Hole** (DMG p.185). Cube of Force is the **first stub bundle item to declare `requires_attunement: True`** — the gate is descriptive in v1 since the stub has no other payload, but the catalog row carries the contract for future mechanical extensions. Seeded on thematic carriers (Kael / Zara / Lyra); three smoke tests in `test_engineers_set.py`.
+
+**Description:** Continues the bundling pattern. Each item's actual mechanic (rune-controlled submersible crab-walker, 36-charge selective-blocking force barrier, 10-ft extradimensional pit) stays GM-narrated. The Cube of Force's attunement contract is verified by the test asserting `cube.attuned is True` from the seed — proves the contract loads correctly through `/sheet-json` even on stub catalog rows. Distribution targets PCs who hadn't received a stub item yet: Kael (Wood Elf Monk — explorer + tinker), Zara (Tiefling Sorcerer — defensive force field), Lyra (College of Lore Bard — hidden stash). MINOR — additive content + tests, no schema change.
+
+### Added
+- `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`): three new stub catalog rows — `apparatus-of-the-crab`, `cube-of-force` (`requires_attunement: True`), `portable-hole`.
+- Demo seed: Kael Brightleaf gains an **Apparatus of the Crab**, Zara Emberfire gains a **Cube of Force** (equipped + attuned), Lyra Sunstrider gains a **Portable Hole** — each appended at the inventory tail.
+- `tests/harness/test_engineers_set.py` — 3 smoke tests; the Cube of Force test additionally asserts `attuned: True` to confirm the attunement contract.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2935 → 2938 (+3 Engineer's Set tests); new `test_engineers_set.py` section.
+
 ## [2.329.0] - 2026-06-15 — "The Captor's Cache"
 
 **Schema version:** 69
