@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.295.0] - 2026-06-14 — "The All-Seeing Robe"
+
+**Schema version:** 69
+
+**Commit summary:** Magic-item drop-in — **Robe of Eyes** (RAW DMG p.193, rare, attunement) lands as the first 3-field composite passive: advantage on sight-based Perception checks (v2.253.0 `check_advantage_on` substrate) plus `sees_in_darkness` + `darkvision_ft: 120` (the v2.159.24 Goggles of Night / v2.226.0 Belt of Dwarvenkind shape). One registry entry, a demo-seed item on Tavik Stormcrown, and four harness tests.
+
+**Description:** The robe's headline testable benefit — advantage on Wisdom (Perception) checks that rely on sight — rides the same `check_advantage_on` substrate as the Cloak/Boots of Elvenkind, Eyes of the Eagle/Minute Seeing, and Cloak of the Bat: an attunement-gated `["perception"]` skill key that `_roll_item_check_advantage` folds into the PHB p.173 composition at `/roll` time (producing `2d20kh1` + `roll_state_applied: auto_advantage_robe_of_eyes`) and that `/sheet-json` surfaces as `derived.check_advantage_on`. Following the Belt of Dwarvenkind precedent of composing multiple fields in one payload, the same registry entry also carries `sees_in_darkness: True` + `darkvision_ft: 120` (the robe's darkvision clause) — `sees_in_darkness` already folds in the walker and feeds the darkness-blinded attack-disadvantage path (covered by the goggles/belt tests). The see-invisible / Ethereal-sight (120 ft) and the light/daylight-blind CON-save clause remain GM-narrated in v1. Seeded **unequipped/unattuned** as spare loot on Tavik Stormcrown (the demo's Life Cleric — an all-seeing robe is on-theme for a watchful priest), specifically on a carrier with no other perception-advantage item so the inert baseline cleanly proves the robe is the source (Eyes of the Eagle lives on Mira). The harness PATCHes it equipped+attuned, rolls a Perception check, asserts the advantage breakdown + source, then restores the seed inventory; an attunement-gate test, an inert-baseline control, and a `derived.check_advantage_on` projection test round it out. MINOR — additive demo content + a new registry entry + tests, no schema change.
+
+### Added
+- `robe-of-eyes` entry in `_MAGIC_ITEM_PASSIVES` (`app/routes/tabletop_routes.py`) — a 3-field composite payload: `check_advantage_on: ["perception"]` + `sees_in_darkness: True` + `darkvision_ft: 120`, all attunement-gated.
+- Demo seed: Tavik Stormcrown gains a spare (unequipped/unattuned) **Robe of Eyes**.
+- `tests/harness/test_item_robe_of_eyes.py` (4 tests): Perception advantage `2d20kh1` + `auto_advantage_robe_of_eyes` on equip+attune; attunement gate (equipped-but-unattuned yields straight `1d20`); inert baseline control; `derived.check_advantage_on` surfaces "perception" with the robe named in sources. Inventory restored on teardown.
+
+### Changed
+- `docs/test-harness-coverage.md`: harness total 2833 → 2837 (+4 drop-in tests); added the `test_item_robe_of_eyes.py` section.
+
 ## [2.294.0] - 2026-06-14 — "The Hidden Sigil"
 
 **Schema version:** 69

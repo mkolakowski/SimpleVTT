@@ -1190,6 +1190,24 @@ def _cleric_sheet(name: str) -> dict:
              "equippable": True, "equipped": True, "attuned": True,
              "_slug": "wand-of-binding", "weight_lb": 1,
              "desc": "Rare wand, attunement. 7 charges. Expend 1 charge to cast Hold Person (save DC 15). RAW also casts Hold Monster for 5 charges. Regains 1d6+1 charges at dawn (long rest). RAW DMG p.211."},
+            # v2.295.0 — Robe of Eyes (RAW DMG p.193, rare, attunement). The
+            # first item to compose THREE existing substrate fields in one
+            # payload: advantage on Wisdom (Perception) checks that rely on
+            # sight (the v2.253.0 check_advantage_on substrate, keyed on
+            # perception), all-around vision + see-in-darkness (the v2.159.24
+            # sees_in_darkness substrate, consumed by the darkness-blinded
+            # attack path), and darkvision 120 ft (the descriptive darkvision_ft
+            # field — Belt of Dwarvenkind shape). The see-invisible / Ethereal-
+            # sight (120 ft) and the light/daylight-blind CON-save clause are
+            # GM-narrated in v1. Seeded as inert spare loot (unequipped/
+            # unattuned) so it adds no flag to Tavik's baseline (he carries no
+            # perception-advantage or darkvision item) — the harness PATCHes it
+            # equipped+attuned, rolls a Perception check, then restores. An
+            # all-seeing robe is on-theme for a watchful Life Cleric.
+            {"name": "Robe of Eyes", "type": "magic", "qty": 1,
+             "equippable": True, "equipped": False, "attuned": False, "weight_lb": 0,
+             "_slug": "robe-of-eyes",
+             "desc": "Rare wondrous item, attunement. While wearing the robe you see in all directions and have advantage on Wisdom (Perception) checks that rely on sight; darkvision 120 ft; see invisible creatures/objects and into the Ethereal Plane out to 120 ft. A light/daylight spell on or near the robe blinds you (CON save to end). RAW DMG p.193."},
         ],
         # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
         # p.170): the reaction part lets Tavik cast a 1-action

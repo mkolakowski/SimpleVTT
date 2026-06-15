@@ -32644,6 +32644,22 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
             "requires_attunement": True,
         },
     ],
+    # v2.295.0 — Robe of Eyes (RAW DMG p.193, rare, attunement). Composes
+    # THREE existing substrate fields in one payload: advantage on Wisdom
+    # (Perception) checks (the v2.253.0 `check_advantage_on` substrate),
+    # all-around / see-in-darkness vision (the v2.159.24 `sees_in_darkness`
+    # substrate, consumed by the darkness-blinded attack path), and
+    # darkvision 120 ft (the descriptive `darkvision_ft` field — Belt of
+    # Dwarvenkind shape). The see-invisible / Ethereal-sight (120 ft) and
+    # the light/daylight-blind CON-save clause are GM-narrated in v1.
+    "robe-of-eyes": [
+        {
+            "check_advantage_on": ["perception"],
+            "sees_in_darkness": True,
+            "darkvision_ft": 120,
+            "requires_attunement": True,
+        },
+    ],
     # v2.227.0 — Periapt of Wound Closure (RAW DMG p.184, uncommon,
     # attunement). RAW: "whenever you roll a Hit Die to regain hit points,
     # double the number of hit points it restores." The `double_hit_die_
